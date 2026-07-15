@@ -105,6 +105,10 @@ export class BinderRoom {
       if (!THEMES.includes(patch.theme)) return "bad theme";
       next.theme = patch.theme;
     }
+    if ("bubbleMsgs" in patch) {
+      if (!Array.isArray(patch.bubbleMsgs) || patch.bubbleMsgs.length > 5) return "bad bubble messages";
+      next.bubbleMsgs = patch.bubbleMsgs.map((m) => String(m ?? "").slice(0, 220).trim()).filter(Boolean);
+    }
     if ("adEnabled" in patch) next.adEnabled = !!patch.adEnabled;
     if ("adText" in patch) next.adText = String(patch.adText).slice(0, 300);
     if ("reviewUrl" in patch) {

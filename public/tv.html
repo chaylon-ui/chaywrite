@@ -3,7 +3,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Exor Games — Featured Singles</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&family=Caveat:wght@600;700&family=Cutive+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&family=Caveat:wght@600;700&family=Cutive+Mono&family=Bangers&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{--bg:#08080a;--panel:#0d0d10;--sleeve:#15151a;--stitch:#2c2c34;--ember:#b5651d;--ember-bright:#d9822b;--ember-deep:#7a3b12;--ink:#efe9dd;--muted:#8b8b96;--ok:#3f9d5a;
@@ -190,6 +190,17 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
   background:linear-gradient(180deg,transparent 0 4.6vh,#e0472f 4.6vh calc(4.6vh + 1.5px),transparent calc(4.6vh + 1.5px)),repeating-linear-gradient(180deg,transparent 0 calc(3.4vh - 1px),rgba(70,120,220,.3) calc(3.4vh - 1px) 3.4vh),#fbfaf3}
 .zoomtv .cue .cu-name{font-family:'Caveat',cursive;font-weight:700;font-size:3.4vh;line-height:4.4vh;color:#123bbf;filter:url(#ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .zoomtv .cue .cu-line{font-family:'Caveat',cursive;font-weight:600;font-size:2.7vh;line-height:3.4vh;color:#123bbf;filter:url(#ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Comic-book shopkeeper speech bubble on the LEFT of the featured card:
+   fat black outline, hard offset shadow, halftone dots, tail at the card. */
+.zoomtv .bubble{position:absolute;right:calc(50% + 32vh);top:22%;width:34vh;z-index:6;padding:2vh 2.2vh;transform:rotate(-2deg);
+  font-family:'Bangers','Comic Sans MS','Chalkboard SE',cursive;font-size:3vh;line-height:1.22;letter-spacing:.05em;color:#101010;text-align:center;
+  border:.55vh solid #101010;border-radius:2.6vh;
+  background:radial-gradient(circle,rgba(16,16,16,.055) .9px,transparent 1.4px) 0 0/1vh 1vh,#fffef4;
+  box-shadow:.9vh 1.1vh 0 rgba(16,16,16,.88);animation:bpop .38s cubic-bezier(.34,1.56,.64,1)}
+.zoomtv .bubble .bn{color:#b5301d;-webkit-text-stroke:.4px #101010}
+.zoomtv .bubble::before{content:"";position:absolute;right:-3.4vh;top:60%;border:1.6vh solid transparent;border-left:3.4vh solid #101010;transform:rotate(-10deg)}
+.zoomtv .bubble::after{content:"";position:absolute;right:-1.7vh;top:61.5%;border:1.15vh solid transparent;border-left:2.5vh solid #fffef4;transform:rotate(-10deg)}
+@keyframes bpop{0%{transform:scale(.4) rotate(-9deg);opacity:0}70%{transform:scale(1.09) rotate(-1deg)}100%{transform:scale(1) rotate(-2deg);opacity:1}}
 /* Featured card inside its top-loader: art full-bleed, sleeve OUTSIDE. */
 .zoomtv .zc.intl{overflow:visible;background:transparent}
 .zoomtv .zc.intl .scan{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;border-radius:3%/2%;box-shadow:0 3px 12px rgba(0,0,0,.6)}
@@ -220,7 +231,7 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
   <div class="case" id="case">
     <div class="caseInner" id="caseInner"></div>
     <div class="glass"></div>
-    <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div></div>
+    <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div></div>
   </div>
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
   <div class="tv-cart hide" id="tvCart"><span class="lbl">Cart</span><div class="items" id="tvCartItems"></div><span class="total" id="tvCartTotal">$0.00</span></div>
@@ -372,6 +383,12 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  const treatment=c.foil?(GAME==='pokemon'?'Holofoil':'Foil'):(GAME==='pokemon'?'Non-holo':'Non-foil');
  zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
  document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div><div class="cu-line">${H(treatment)}</div><div class="cu-line">${H(c.set||'—')}</div>`;
+ /* Comic shopkeeper bubble — one random line per preview, {card} = card name. */
+ const bub=document.getElementById('zbub'),msgs=(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
+ if(msgs.length){const m=msgs[Math.floor(Math.random()*msgs.length)];
+  bub.innerHTML=m.split('{card}').map(H).join('<span class="bn">'+H(c.name)+'</span>');
+  bub.style.display='';bub.style.animation='none';void bub.offsetWidth;bub.style.animation='';}
+ else bub.style.display='none';
  z.classList.add('open');}
 function unzoom(){document.getElementById('ztv').classList.remove('open')}
 function findCard(n){return CARDS.find(c=>c.name===n)}
@@ -453,7 +470,10 @@ setInterval(()=>{if(BUILD.startsWith('__')||wasPaired||Date.now()-BOOT<3e5)retur
   .then(j=>{if(j&&j.v&&j.v!==BUILD&&!wasPaired)location.reload();}).catch(()=>{});},3e5);
 /* Admin-editable display settings (header text, case theme, top-loaders).
    Game tabs live on the PHONE now — the TV just follows settings broadcasts. */
-let SETTINGS={header:'',theme:'mtg',topLoaders:false},TOPLOAD=false,CUR_COLLECTION=null;
+let SETTINGS={header:'',theme:'mtg',topLoaders:false,
+ bubbleMsgs:["Wanna buy {card}, kid? I can ring it up if you add it to your cart!",
+  "You gonna look all day, or you gonna buy it? I got customers waiting!",
+  "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"]},TOPLOAD=false,CUR_COLLECTION=null;
 function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;

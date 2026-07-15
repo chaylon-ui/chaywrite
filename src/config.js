@@ -17,6 +17,15 @@ export const DEFAULT_SETTINGS = {
     { label: "Yu-Gi-Oh!", collection: "yu-gi-oh-singles-new-arrivals", theme: "yugioh",  game: "yugioh" },
   ],
 
+  // Comic-book speech bubble on the featured-card preview. {card} becomes the
+  // card's name. One line is picked at random each time; edit them in /admin
+  // (clear all three to hide the bubble).
+  bubbleMsgs: [
+    "Wanna buy {card}, kid? I can ring it up if you add it to your cart!",
+    "You gonna look all day, or you gonna buy it? I got customers waiting!",
+    "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!",
+  ],
+
   // Ad + Google-review card on the phone (toggle from /admin).
   adEnabled: false,
   adText: "Got cards? Exor Games buys singles, collections & sealed — cash or store credit.",

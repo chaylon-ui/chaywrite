@@ -66,6 +66,19 @@ a.tvlink:hover{color:var(--ember)}
 
     <div class="row"><input id="topLoaders" type="checkbox"><label for="topLoaders">Show each card in a top-loader (TV)</label></div>
 
+    <!-- Comic speech bubble on the featured-card preview. One line is picked
+         at random per preview; {card} becomes the card's name. -->
+    <div class="group">
+      <div class="gtitle">Shopkeeper speech bubble</div>
+      <label for="bub1">Line 1</label>
+      <input id="bub1" type="text" maxlength="220" placeholder="Wanna buy {card}, kid? I can ring it up if you add it to your cart!">
+      <label for="bub2">Line 2</label>
+      <input id="bub2" type="text" maxlength="220" placeholder="You gonna look all day, or you gonna buy it? I got customers waiting!">
+      <label for="bub3">Line 3</label>
+      <input id="bub3" type="text" maxlength="220" placeholder="Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!">
+      <div class="hint">Shown comic-book style next to the featured card. Write <code>{card}</code> where the card's name should appear. Clear all three to hide the bubble.</div>
+    </div>
+
     <label for="reviewUrl">Google review link</label>
     <input id="reviewUrl" type="text" placeholder="https://g.page/r/…/review">
     <div class="hint">Your Google review URL — shown as a friendly button on the phone. Leave blank to hide it.</div>
@@ -94,6 +107,8 @@ const GAME_TABS=[ // labels/themes fixed; only the collection handle is editable
 ];
 async function loadSettings(){try{const s=await (await fetch('/settings',{cache:'no-store'})).json();
   $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;
+  const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
+  $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
   const tabs=Array.isArray(s.tabs)?s.tabs:[];
   GAME_TABS.forEach(g=>{const t=tabs.find(x=>x.game===g.game)||tabs.find(x=>x.theme===g.theme);
@@ -111,6 +126,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,
     collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,
+    bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;
   const {ok,j}=await post(patch);
