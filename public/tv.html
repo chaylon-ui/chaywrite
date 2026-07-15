@@ -11,11 +11,7 @@
 *{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
 body{background:radial-gradient(circle at 50% 30%,#131318,#08080a 70%);color:var(--ink);font-family:'Inter',system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column;height:100vh}
 header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex-shrink:0}
-/* NOTE: the original build inlined the Exor Games PNG logo as a base64 <img>.
-   Swap the .logo div below for your original <img src="data:image/png;base64,…"> line
-   if you prefer the graphic logo. */
-.logo{font-family:'Cinzel',serif;font-weight:700;font-size:1.3rem;letter-spacing:.14em;white-space:nowrap;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
-.logo span{color:var(--ember-bright)}
+.logo{height:54px;width:auto;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
 .sub{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}.sub b{color:var(--ink)}
 .stage{flex:1;display:flex;align-items:center;justify-content:center;position:relative;padding:0 1.3rem 1.3rem;min-height:0}
 /* ---- Top-down glass showcase (woodgrain case) ---- */
@@ -225,7 +221,7 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
 .conn .d{width:7px;height:7px;border-radius:50%;background:#555}.conn.on .d{background:var(--ok);box-shadow:0 0 6px var(--ok)}
 @media (prefers-reduced-motion:reduce){.leaf{transition:none}.zoomtv .zc{animation:none}.zoomtv .zc.foil .shim{animation:none;opacity:.25}.foil-badge{animation:none}.oil{animation:none}}
 </style></head><body>
-<header><div class="logo">EXOR<span>·</span>GAMES</div><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span></header>
+<header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span></header>
 <div class="stage">
   <div class="conn" id="conn"><span class="d"></span><span id="connT">connecting…</span></div>
   <svg class="inkdefs" width="0" height="0" aria-hidden="true"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>

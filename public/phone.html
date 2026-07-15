@@ -8,13 +8,9 @@
 :root{--bg:#0a0a0d;--ember:#b5651d;--ember-bright:#d9822b;--ember-deep:#7a3b12;--ink:#efe9dd;--muted:#8b8b96;--ok:#3f9d5a;--bad:#c0483a;
 --W:#efe7cb;--U:#3d78b8;--B:#3a3a44;--R:#b53a2c;--G:#2f7d4f;--M:#c9a227;--C:#9aa0a8;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:radial-gradient(circle at 50% 12%,#16161c,#0a0a0d 70%);color:var(--ink);font-family:'Inter',system-ui,sans-serif;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+body{background:radial-gradient(circle at 50% 12%,#16161c,#0a0a0d 70%);color:var(--ink);font-family:'Inter',system-ui,sans-serif;height:100vh;height:100svh;overflow:hidden;display:flex;flex-direction:column}
 .top{padding:.6rem 1rem .45rem;text-align:center;border-bottom:1px solid #1c1c22}
-/* NOTE: the original build inlined the Exor Games PNG logo as a base64 <img>.
-   Swap the .plogo div below for your original <img src="data:image/png;base64,…">
-   line if you prefer the graphic logo. */
-.plogo{font-family:'Cinzel',serif;font-weight:700;font-size:1.05rem;letter-spacing:.14em}
-.plogo span{color:var(--ember-bright)}
+.plogo{height:38px;width:auto;display:block;margin:0 auto}
 .view{flex:1;min-height:0;display:none;flex-direction:column;padding:.7rem 1rem 1rem}.view.active{display:flex}
 .center{align-items:center;justify-content:center;text-align:center;gap:1rem}
 h3{font-family:'Cinzel',serif}
@@ -70,14 +66,14 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .deckclutter{position:relative;z-index:7;width:100%;margin-top:calc(var(--ch) * -0.5);background:linear-gradient(180deg,rgba(18,12,6,0),#120c06 13%,#0f0a05)}
 .deckclutter.adwrap{padding:calc(var(--ch) * 0.5 + .8rem) 1rem 1.1rem}
 .adcard{text-align:center}
-.adcard .adlogo{font-family:'Cinzel',serif;font-weight:700;font-size:1.05rem;letter-spacing:.06em;color:var(--ember-bright)}
+.adcard .adlogo{height:54px;width:auto;display:block;margin:0 auto .35rem}
 .adcard .adtxt{font-size:.86rem;color:var(--ink);line-height:1.45;margin:.45rem auto .9rem;max-width:22rem}
 .adcard .adg{display:block;background:linear-gradient(180deg,#ffd23f,#e0a800);color:#1a1400;font-weight:700;font-size:.86rem;padding:.75rem 1rem;border-radius:12px;text-decoration:none;box-shadow:0 3px 12px rgba(245,197,24,.28)}
 .adcard .adg:active{transform:scale(.99)}
 .clut{position:absolute;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
 .clut svg{width:100%;height:100%;display:block}
-.actionbar{border-top:1px solid #1c1c22;padding-top:.7rem;margin-top:auto}
-.actionbar .hint{text-align:center;color:var(--muted);font-size:.72rem;padding:.55rem 0}
+.actionbar{border-top:1px solid #1c1c22;padding-top:.5rem;margin-top:auto}
+.actionbar .hint{text-align:center;color:var(--muted);font-size:.7rem;padding:.35rem 0}
 .actsel{display:none}.actionbar.has .actsel{display:block}.actionbar.has .hint{display:none}
 .actsel .an{font-family:'Cinzel',serif;font-size:1.02rem;text-align:center}
 .actsel .ap{text-align:center;font-size:.74rem;color:var(--muted);margin:.1rem 0 .7rem}
@@ -88,7 +84,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .ic.bad{background:rgba(192,72,58,.15);border:1px solid var(--bad)}.ic.ok{background:rgba(63,157,90,.15);border:1px solid var(--ok)}
 .toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%) translateY(160%);background:linear-gradient(180deg,#1a1a20,#101014);border:1px solid var(--ember);color:var(--ink);padding:.7rem 1.1rem;border-radius:11px;z-index:99;font-size:.85rem;transition:transform .35s cubic-bezier(.2,1.2,.3,1)}.toast.show{transform:translateX(-50%) translateY(0)}
 </style></head><body>
-<div class="top"><div class="plogo">EXOR<span>·</span>GAMES</div></div>
+<div class="top"><img class="plogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"></div>
 
 <div class="view center active" id="v-connect"><div class="ic ok" style="animation:none">⟳</div><h3>Connecting…</h3><p>Pairing with the showcase.</p></div>
 
@@ -171,7 +167,7 @@ function phoneGrime(seed){const rng=mulberry32((seed*40503)^0x1234);let s='<svg 
 /* Bottom of the deck: an Exor Games ad + Google-review card when enabled,
    otherwise dead flies + desk clutter. Either way it covers the last card row. */
 function adHTML(){const rev=PSET.reviewUrl?`<a class="adg" href="${H(PSET.reviewUrl)}" target="_blank" rel="noopener">★★★★★&nbsp;&nbsp;Loved the visit? Leave us a Google review</a>`:'';
- return `<div class="adcard"><div class="adlogo">EXOR GAMES</div><div class="adtxt">${H(PSET.adText||'')}</div>${rev}</div>`;}
+ return `<div class="adcard"><img class="adlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><div class="adtxt">${H(PSET.adText||'')}</div>${rev}</div>`;}
 function deckExtras(nCards,seed){const empty=Math.max(0,TRAY-nCards);const rng=mulberry32((seed*2246822519)^0xabcdef);
  if(PSET.adEnabled)return `<div class="deckclutter adwrap">${adHTML()}</div>`;
  const hvw=empty>0?Math.min(74,26+Math.ceil(empty/COLS)*16):30;let inner='';
