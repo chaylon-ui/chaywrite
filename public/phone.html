@@ -106,7 +106,8 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
   <div class="co-list" id="coList"></div>
   <div class="co-total"><span>Total</span><span class="v" id="coTotal">$0.00</span></div>
   <button class="btn btn-primary" onclick="CHECKOUT('phone')">Check out on my phone</button>
-  <button class="btn btn-sub" onclick="CHECKOUT('counter')" style="margin-top:.5rem">Send to counter to pay</button>
+  <!-- Send-to-counter is disabled for now (owner request) — greyed out, no action. -->
+  <button class="btn btn-sub" disabled style="margin-top:.5rem;opacity:.4;cursor:not-allowed">Send to counter to pay <span style="font-size:.72rem;color:var(--muted)">· coming soon</span></button>
   <button class="btn btn-ghost" onclick="SHOW('v-ctrl')" style="margin-top:.5rem">Keep browsing</button>
 </div>
 
