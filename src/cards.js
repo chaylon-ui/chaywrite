@@ -150,11 +150,13 @@ export async function serveSearch(request) {
         const pr = await fetch(`${HOST}/products/${h.handle}.js`, { headers });
         if (!pr.ok) return null;
         const p = await pr.json();
-        // Normalise /products/{handle}.js (type + cent prices) to the
-        // products.json shape buildCards expects.
+        // Normalise /products/{handle}.js (type + cent prices + protocol-
+        // relative image URLs) to the products.json shape buildCards expects.
+        const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
+        const imgs = (p.images && p.images.length ? p.images : [p.featured_image]).filter(Boolean);
         return {
           title: p.title, handle: p.handle, product_type: p.type, tags: p.tags || [],
-          images: (p.images || []).map((src) => ({ src })),
+          images: imgs.map((src) => ({ src: abs(src) })),
           variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, price: (v.price / 100).toFixed(2), available: !!v.available })),
         };
       } catch { return null; }

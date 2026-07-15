@@ -9,39 +9,39 @@
 --W:#efe7cb;--U:#3d78b8;--B:#3a3a44;--R:#b53a2c;--G:#2f7d4f;--M:#c9a227;--C:#9aa0a8;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:radial-gradient(circle at 50% 12%,#16161c,#0a0a0d 70%);color:var(--ink);font-family:'Inter',system-ui,sans-serif;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
-.top{padding:1.1rem 1rem .7rem;text-align:center;border-bottom:1px solid #1c1c22}
+.top{padding:.6rem 1rem .45rem;text-align:center;border-bottom:1px solid #1c1c22}
 /* NOTE: the original build inlined the Exor Games PNG logo as a base64 <img>.
    Swap the .plogo div below for your original <img src="data:image/png;base64,…">
    line if you prefer the graphic logo. */
 .plogo{font-family:'Cinzel',serif;font-weight:700;font-size:1.05rem;letter-spacing:.14em}
 .plogo span{color:var(--ember-bright)}
-.view{flex:1;min-height:0;display:none;flex-direction:column;padding:1.1rem}.view.active{display:flex}
+.view{flex:1;min-height:0;display:none;flex-direction:column;padding:.7rem 1rem 1rem}.view.active{display:flex}
 .center{align-items:center;justify-content:center;text-align:center;gap:1rem}
 h3{font-family:'Cinzel',serif}
 p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .btn{font-family:'Inter';font-weight:600;font-size:1rem;border:none;border-radius:13px;padding:.95rem 1rem;cursor:pointer;width:100%;letter-spacing:.02em}
 .btn:active{transform:scale(.98)}.btn-primary{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff}
 .btn-ghost{background:transparent;border:1px solid #2a2a34;color:var(--ink)}.btn-sub{background:#17171d;border:1px solid #2a2a34;color:var(--ink)}
-.status{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);display:flex;align-items:center;gap:.4rem;justify-content:center}.status .d{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
-.idle{text-align:center;font-size:.66rem;color:var(--muted);margin:.3rem 0 .7rem;font-variant-numeric:tabular-nums}
+.status{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);display:flex;align-items:center;gap:.4rem;justify-content:center;margin-bottom:.55rem}.status .d{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.status .sidle{color:var(--muted);font-variant-numeric:tabular-nums}
 /* Game tabs — moved here from the TV. Tap to switch the whole display. */
-.ptabs{display:flex;gap:.45rem;justify-content:center;margin-bottom:.8rem;flex-wrap:wrap}
+.ptabs{display:flex;gap:.4rem;justify-content:center;margin-bottom:.5rem;flex-wrap:wrap}
 .ptabs:empty{display:none}
-.ptab{font-family:'Inter',sans-serif;font-weight:600;font-size:.82rem;letter-spacing:.02em;padding:.5rem 1rem;border-radius:22px;border:1px solid #3a3a44;background:#17171d;color:var(--muted);cursor:pointer;transition:all .15s}
+.ptab{font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;letter-spacing:.02em;padding:.42rem .9rem;border-radius:20px;border:1px solid #3a3a44;background:#17171d;color:var(--muted);cursor:pointer;transition:all .15s}
 .ptab:active{transform:scale(.97)}
 .ptab.on{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(217,130,43,.35)}
 .ptab:disabled{opacity:.5}
 /* In-stock singles search (admin toggle). Results become the deck until ✕. */
-.srch{display:none;gap:.45rem;margin-bottom:.7rem}
+.srch{display:none;gap:.4rem;margin-bottom:.5rem}
 .srch.on{display:flex}
-.srch input{flex:1;min-width:0;background:#101016;border:1px solid #2a2a34;border-radius:12px;padding:.7rem .8rem;color:var(--ink);font-size:.95rem;font-family:inherit}
+.srch input{flex:1;min-width:0;background:#101016;border:1px solid #2a2a34;border-radius:11px;padding:.55rem .7rem;color:var(--ink);font-size:.92rem;font-family:inherit}
 .srch input:focus{outline:none;border-color:var(--ember)}
 .srch button{border:none;border-radius:12px;padding:0 1rem;font-family:'Inter';font-weight:700;font-size:.88rem;background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;cursor:pointer}
 .srch button:disabled{opacity:.5}
 .srch #sx{background:#17171d;border:1px solid #2a2a34;color:var(--ink);font-size:1.05rem;padding:0 .85rem}
 .srch #sx.hide{display:none}
-.flip{display:flex;gap:.7rem;margin-bottom:1rem}.flip button{flex:1;background:#15151b;border:1px solid #2a2a34;border-radius:15px;padding:1.3rem 0;color:var(--ink);font-size:1.4rem}.flip button:active{background:var(--ember-deep);border-color:var(--ember)}.flip button:disabled{opacity:.3}
-.pcur{text-align:center;font-size:.66rem;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:1rem}
+.flip{display:flex;gap:.6rem;margin-bottom:.55rem}.flip button{flex:1;background:#15151b;border:1px solid #2a2a34;border-radius:13px;padding:.85rem 0;color:var(--ink);font-size:1.15rem}.flip button:active{background:var(--ember-deep);border-color:var(--ember)}.flip button:disabled{opacity:.3}
+.pcur{text-align:center;font-size:.62rem;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:.55rem}
 /* ---- Phone showcase: shingled cards, bottoms hidden by the next card ---- */
 .sheet{flex:1;overflow-y:auto;min-height:0;padding:.2rem .1rem .4rem;-webkit-overflow-scrolling:touch;
   background:linear-gradient(180deg,#1b130b,#100b06);border-radius:12px}
@@ -93,8 +93,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 <div class="view center active" id="v-connect"><div class="ic ok" style="animation:none">⟳</div><h3>Connecting…</h3><p>Pairing with the showcase.</p></div>
 
 <div class="view" id="v-ctrl">
-  <div class="status"><span class="d"></span>You're driving the showcase</div>
-  <div class="idle">auto-disconnects after 2 min idle · <span id="phIdle">2:00</span></div>
+  <div class="status"><span class="d"></span>You're driving the showcase<span class="sidle"> · frees in <span id="phIdle">2:00</span></span></div>
   <div class="srch" id="srch"><input id="sq" type="search" maxlength="60" placeholder="Search all in-stock singles…"><button id="sgo" onclick="DOSEARCH()">Search</button><button id="sx" class="hide" onclick="ENDSEARCH(true)">✕</button></div>
   <div class="ptabs" id="ptabs"></div>
   <div class="flip"><button id="phPrev" onclick="EV('prev')">‹ Prev case</button><button id="phNext" onclick="EV('next')">Next case ›</button></div>

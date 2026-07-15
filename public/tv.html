@@ -296,7 +296,7 @@ function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
  return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),type:String(d.type||'').slice(0,70),
   color:(ART[d.color]?d.color:'C'),price:money(d.price),foil:!!d.foil,
   condition:String(d.condition||'').slice(0,60),
-  image:(typeof d.image==='string'&&d.image.indexOf('https://cdn.shopify.com/')===0)?d.image:null,
+  image:(typeof d.image==='string'&&/^https:\/\/(cdn\.shopify\.com|exorgames\.com\/cdn)\//.test(d.image))?d.image:null,
   variantId:String(d.variantId||'').replace(/\D/g,'')||null};}
 /* Pokémon players say "Holo", everyone else says "foil". */
 let GAME='mtg';
