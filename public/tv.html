@@ -72,11 +72,13 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .psticker .pink{display:block;font-family:'Cutive Mono','Courier New',monospace;font-weight:700;font-size:calc(var(--cw)*.12);line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
 .fsticker{position:absolute;right:8%;top:24%;z-index:8;transform:rotate(4deg);background:#fbfbf4;padding:.2em .5em .32em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
 .fsticker .fink{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:calc(var(--cw)*.135);line-height:.75;color:#123bbf;filter:url(#ink)}
-/* Oily rainbow film over foil/holo card art — slow iridescent drift. */
-.oil{position:absolute;inset:0;z-index:5;pointer-events:none;border-radius:inherit;mix-blend-mode:screen;opacity:.55;
-  background:linear-gradient(115deg,rgba(255,90,90,.13) 4%,rgba(255,190,60,.15) 18%,rgba(248,255,120,.12) 33%,rgba(95,255,155,.15) 48%,rgba(80,190,255,.17) 63%,rgba(165,95,255,.15) 78%,rgba(255,95,215,.13) 93%);
-  background-size:230% 230%;animation:oily 7s ease-in-out infinite alternate}
+/* Oily rainbow film over foil/holo card art — strong iridescent drift with a
+   slow hue cycle so the colours crawl like oil on water. */
+.oil{position:absolute;inset:0;z-index:5;pointer-events:none;border-radius:inherit;mix-blend-mode:hard-light;opacity:.85;
+  background:linear-gradient(115deg,rgba(255,90,90,.3) 4%,rgba(255,190,60,.33) 18%,rgba(248,255,120,.27) 33%,rgba(95,255,155,.33) 48%,rgba(80,190,255,.36) 63%,rgba(165,95,255,.33) 78%,rgba(255,95,215,.3) 93%);
+  background-size:230% 230%;animation:oily 7s ease-in-out infinite alternate,oilhue 13s linear infinite}
 @keyframes oily{from{background-position:0% 0%}to{background-position:100% 100%}}
+@keyframes oilhue{to{filter:hue-rotate(360deg)}}
 /* --- Top-loader (clear rigid sleeve) — TV only, toggled in settings --- */
 /* Full-bleed art: the img keeps the normal card treatment (its own radius +
    shadow), and the sleeve is painted by ::before/::after EXTENDING BEYOND
@@ -159,9 +161,9 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
   55%{transform:translateY(.4%) rotateX(2deg) rotateY(8deg)}
   80%{transform:translateY(-1%) rotateX(-3deg) rotateY(-4deg)}}
 .zoomtv .zc .card-frame{padding:4%}.zoomtv .zc .ct{font-size:1.7rem}.zoomtv .zc .cty{font-size:1.1rem;padding:5px 10px}.zoomtv .zc .ptag .mk{font-size:.9rem;padding:6px 8px}.zoomtv .zc .ptag .am{font-size:1.6rem;padding:6px 13px}
-.shim{position:absolute;inset:0;border-radius:inherit;z-index:9;pointer-events:none;background-size:280% 280%,240% 240%;opacity:0;mix-blend-mode:screen;background:
-  linear-gradient(115deg,transparent 30%,rgba(255,255,255,.42) 48%,rgba(200,240,255,.45) 51%,transparent 66%),
-  linear-gradient(75deg,rgba(255,90,90,.14) 4%,rgba(255,190,60,.16) 18%,rgba(248,255,120,.13) 33%,rgba(95,255,155,.16) 48%,rgba(80,190,255,.18) 63%,rgba(165,95,255,.16) 78%,rgba(255,95,215,.14) 93%)}
+.shim{position:absolute;inset:0;border-radius:inherit;z-index:9;pointer-events:none;background-size:280% 280%,240% 240%;opacity:0;mix-blend-mode:hard-light;background:
+  linear-gradient(115deg,transparent 30%,rgba(255,255,255,.5) 48%,rgba(200,240,255,.52) 51%,transparent 66%),
+  linear-gradient(75deg,rgba(255,90,90,.3) 4%,rgba(255,190,60,.34) 18%,rgba(248,255,120,.28) 33%,rgba(95,255,155,.34) 48%,rgba(80,190,255,.38) 63%,rgba(165,95,255,.34) 78%,rgba(255,95,215,.3) 93%)}
 .zoomtv .zc.foil .shim{opacity:1;animation:sweep 2.6s ease-in-out infinite}@keyframes sweep{0%{background-position:180% 0}55%,100%{background-position:-80% 0}}
 /* Featured card: sticker price at the bottom-right of the art, foil above it */
 .zoomtv .zc .psticker{top:auto;bottom:46%;right:5%;z-index:12}
