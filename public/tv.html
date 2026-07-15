@@ -109,7 +109,7 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .grime{position:absolute;inset:0;z-index:2;pointer-events:none}
 .grime svg{position:absolute;inset:0;width:100%;height:100%}
 .clutter{position:absolute;inset:0;z-index:3;pointer-events:none}
-.clut{position:absolute;filter:drop-shadow(0 4px 6px rgba(0,0,0,.55))}
+.clut{position:absolute;aspect-ratio:100/140;filter:drop-shadow(0 4px 6px rgba(0,0,0,.55))}
 .clut svg{width:100%;height:100%;display:block}
 .card-frame{position:absolute;inset:0;border-radius:inherit;padding:5% 5% 6%;display:flex;flex-direction:column;box-shadow:inset 0 0 0 2px rgba(0,0,0,.6)}
 .ct{font-family:'Cinzel',serif;font-weight:600;font-size:.6rem;line-height:1.05;display:flex;justify-content:space-between;gap:2px}
@@ -248,13 +248,25 @@ function cardHTML(c){if(!c)return '';
 function fillTray(el,cards){const rows=[];for(let i=0;i<cards.length;i+=COLS)rows.push(cards.slice(i,i+COLS));
  el.innerHTML=rows.map(row=>'<div class="shelf">'+row.map(cardHTML).join('')+'</div>').join('');}
 function fly(x,y,r){return `<g transform="rotate(${r} ${x} ${y})"><ellipse cx="${x}" cy="${y}" rx="5.5" ry="9" fill="#17181c"/><ellipse cx="${x}" cy="${y-7}" rx="3.6" ry="3.6" fill="#101115"/><ellipse cx="${x-7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.5)" transform="rotate(-25 ${x-7} ${y-1})"/><ellipse cx="${x+7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.5)" transform="rotate(25 ${x+7} ${y-1})"/><g stroke="#0c0d10" stroke-width="1" fill="none"><path d="M${x-4} ${y+4} l-6 5"/><path d="M${x+4} ${y+4} l6 5"/><path d="M${x-4} ${y+8} l-5 3"/><path d="M${x+4} ${y+8} l5 3"/></g></g>`;}
-/* Felt clutter props: elastics, a trio of flies, a wood token + paper clip.
+/* Felt clutter props: elastics, a wood token + paper clip.
    (Pencils, calculators and staplers were retired by owner request.) */
 function PROP_SVG(n){const P=[
   `<svg viewBox="0 0 100 140" fill="none" stroke-width="5"><ellipse cx="46" cy="72" rx="30" ry="21" stroke="#b9633b" transform="rotate(-14 46 72)"/><ellipse cx="55" cy="70" rx="29" ry="19" stroke="#c9a24a" transform="rotate(10 55 70)"/><ellipse cx="50" cy="66" rx="27" ry="17" stroke="#7f4326" transform="rotate(26 50 66)"/></svg>`,
-  `<svg viewBox="0 0 100 140">${fly(38,58,-20)}${fly(60,84,35)}${fly(45,98,10)}</svg>`,
   `<svg viewBox="0 0 100 140"><circle cx="40" cy="82" r="15" fill="#bd7f40"/><circle cx="40" cy="82" r="15" fill="none" stroke="#8a5a28" stroke-width="2.4"/><g transform="rotate(-18 62 56)"><rect x="55" y="40" width="14" height="34" rx="7" fill="none" stroke="#c6cad1" stroke-width="2.6"/><rect x="58.5" y="46" width="7" height="22" rx="3.5" fill="none" stroke="#c6cad1" stroke-width="2.6"/></g></svg>`,
  ];return P[n%P.length];}
+/* Dice — a bone-white d6, a deep-red d20, a blue d10. */
+function DIE_SVG(n){const D=[
+  `<svg viewBox="0 0 100 140"><g transform="rotate(-8 50 70)"><rect x="22" y="42" width="56" height="56" rx="11" fill="#f2ede2"/><rect x="22" y="42" width="56" height="56" rx="11" fill="none" stroke="rgba(70,60,44,.4)" stroke-width="2"/><rect x="25" y="45" width="50" height="24" rx="9" fill="rgba(255,255,255,.55)"/><g fill="#1d1e24"><circle cx="36" cy="56" r="4.6"/><circle cx="64" cy="56" r="4.6"/><circle cx="50" cy="70" r="4.6"/><circle cx="36" cy="84" r="4.6"/><circle cx="64" cy="84" r="4.6"/></g></g></svg>`,
+  `<svg viewBox="0 0 100 140"><g transform="rotate(9 50 70)"><polygon points="50,26 88,48 88,92 50,114 12,92 12,48" fill="#8a2f2a"/><polygon points="50,26 88,48 88,92 50,114 12,92 12,48" fill="none" stroke="#571b17" stroke-width="2.2"/><polygon points="50,46 72,84 28,84" fill="#a83b34" stroke="#571b17" stroke-width="1.6"/><g stroke="#571b17" stroke-width="1.6"><line x1="50" y1="26" x2="50" y2="46"/><line x1="88" y1="48" x2="72" y2="84"/><line x1="12" y1="48" x2="28" y2="84"/><line x1="88" y1="92" x2="72" y2="84"/><line x1="12" y1="92" x2="28" y2="84"/><line x1="50" y1="114" x2="72" y2="84"/><line x1="50" y1="114" x2="28" y2="84"/></g><text x="50" y="76" font-size="16" font-weight="700" fill="#f2e6d8" text-anchor="middle" font-family="Georgia,serif">20</text></g></svg>`,
+  `<svg viewBox="0 0 100 140"><g transform="rotate(-13 50 70)"><polygon points="50,28 84,60 70,106 30,106 16,60" fill="#2f5f8e"/><polygon points="50,28 84,60 70,106 30,106 16,60" fill="none" stroke="#1c3c5c" stroke-width="2.2"/><polygon points="50,44 68,72 50,98 32,72" fill="#3d74a8" stroke="#1c3c5c" stroke-width="1.6"/><g stroke="#1c3c5c" stroke-width="1.6"><line x1="50" y1="28" x2="50" y2="44"/><line x1="84" y1="60" x2="68" y2="72"/><line x1="16" y1="60" x2="32" y2="72"/><line x1="70" y1="106" x2="50" y2="98"/><line x1="30" y1="106" x2="50" y2="98"/></g><text x="50" y="77" font-size="15" font-weight="700" fill="#e8f0f8" text-anchor="middle" font-family="Georgia,serif">10</text></g></svg>`,
+ ];return D[n%D.length];}
+/* Canadian pocket change: a quarter (maple leaf) and a little dime. */
+function COIN_SVG(n){const C=[
+  `<svg viewBox="0 0 100 140"><circle cx="50" cy="70" r="27" fill="#c8ccd4"/><circle cx="50" cy="70" r="27" fill="none" stroke="#8f96a2" stroke-width="2.4"/><circle cx="50" cy="70" r="23" fill="none" stroke="rgba(96,102,114,.55)" stroke-width="1.2" stroke-dasharray="2.2 2.4"/><path d="M50 52 l2.6 5.4 5.6-1.8-1.8 5.4 5.4 2.8-4.6 3.6 1.8 5.4-5.4-1.6-3.6 5.4-3.6-5.4-5.4 1.6 1.8-5.4-4.6-3.6 5.4-2.8-1.8-5.4 5.6 1.8z" fill="#7d8390"/><text x="50" y="90" font-size="9" font-weight="700" fill="#6f7582" text-anchor="middle" font-family="Georgia,serif">25</text></svg>`,
+  `<svg viewBox="0 0 100 140"><circle cx="50" cy="70" r="18" fill="#d3d6dc"/><circle cx="50" cy="70" r="18" fill="none" stroke="#9aa0ab" stroke-width="2"/><g stroke="#7d8390" stroke-width="1.6" fill="none"><path d="M40 76 q10 4 20 0"/><line x1="50" y1="60" x2="50" y2="75"/><path d="M50 62 l8 10 h-8z" fill="#7d8390"/></g><text x="50" y="86" font-size="7.5" font-weight="700" fill="#6f7582" text-anchor="middle" font-family="Georgia,serif">10</text></svg>`,
+ ];return C[n%C.length];}
+/* A die-cut Pikachu-style sticker, slightly askew. */
+const STICKER_SVG=`<svg viewBox="0 0 100 140"><g transform="rotate(7 50 72)" paint-order="stroke fill"><polygon points="33,62 20,30 44,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="67,62 80,30 56,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="24,34 20,30 31,44 27,46" fill="#26262c"/><polygon points="76,34 80,30 69,44 73,46" fill="#26262c"/><ellipse cx="50" cy="80" rx="25" ry="22" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7"/><g fill="#26262c"><circle cx="41" cy="76" r="3.6"/><circle cx="59" cy="76" r="3.6"/></g><g fill="#fff"><circle cx="42.2" cy="74.8" r="1.2"/><circle cx="60.2" cy="74.8" r="1.2"/></g><circle cx="33" cy="87" r="4.8" fill="#e5533a"/><circle cx="67" cy="87" r="4.8" fill="#e5533a"/><path d="M45 86 q2.5 3 5 0 q2.5 3 5 0" stroke="#26262c" stroke-width="1.6" fill="none" stroke-linecap="round"/></g></svg>`;
 /* Deterministic per-case RNG so clutter/grime stay put across re-renders. */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function cobweb(cx,cy){const dx=cx===0?1:-1,dy=cy===0?1:-1,ang=[12,34,57,80];let s='<g stroke="rgba(228,222,210,.14)" stroke-width=".28" fill="none">';
@@ -271,12 +283,18 @@ function decorate(slab,idx){const rng=mulberry32((idx*2654435761)^0x9e3779b9);
  decorateGrime(slab.querySelector('.grime'),rng);
  const inner=document.getElementById('caseInner'),IR=inner.getBoundingClientRect(),Hh=IR.height,Wt=IR.width;
  const rects=[...slab.querySelectorAll('.tray .card')].map(el=>{const r=el.getBoundingClientRect();return{l:r.left-IR.left,t:r.top-IR.top,r2:r.right-IR.left,b:r.bottom-IR.top};});
- const onFelt=(cx,cy)=>{for(const q of rects){if(cx>q.l-5&&cx<q.r2+5&&cy>q.t-5&&cy<q.b-5)return false;}return true;};
+ const onFelt=(cx,cy,m)=>{for(const q of rects){if(cx>q.l-m&&cx<q.r2+m&&cy>q.t-m&&cy<q.b+m)return false;}return true;};
  const items=[];
- const place=(svg,w,minX,spanX,minY,spanY,tries)=>{for(let k=0;k<tries;k++){const cx=Wt*(minX+rng()*spanX),cy=Hh*(minY+rng()*spanY);if(!onFelt(cx,cy))continue;items.push({svg,x:(cx/Wt)*100,y:(cy/Hh)*100,w,rot:(rng()*40-20)|0});return;}};
- const nf=3+Math.floor(rng()*3);for(let i=0;i<nf;i++)place(`<svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg>`,2.6+rng()*1.6,0.05,0.9,0.12,0.78,60);
- const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(9,Math.round(empty*0.55));
- for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*3)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
+ /* Collision margin covers the prop's full rotated footprint (props are
+    w × 1.4w, tilted up to ±20°), so nothing — dice included — ever pokes
+    underneath a card. */
+ const place=(svg,w,minX,spanX,minY,spanY,tries)=>{const m=(w/100)*Wt*0.87+4;for(let k=0;k<tries;k++){const cx=Wt*(minX+rng()*spanX),cy=Hh*(minY+rng()*spanY);if(!onFelt(cx,cy,m))continue;items.push({svg,x:(cx/Wt)*100,y:(cy/Hh)*100,w,rot:(rng()*40-20)|0});return;}};
+ for(let i=0;i<2;i++)place(`<svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg>`,2.6+rng()*1.6,0.05,0.9,0.12,0.78,60); // a couple of dead flies per case
+ const nd=2+Math.floor(rng()*3);for(let i=0;i<nd;i++)place(DIE_SVG(Math.floor(rng()*3)),3.6+rng()*1.2,0.05,0.9,0.12,0.8,220); // d6/d20/d10 scattered on bare felt
+ const nc=1+Math.floor(rng()*2);for(let i=0;i<nc;i++)place(COIN_SVG(Math.floor(rng()*2)),2.7+rng()*.9,0.05,0.9,0.12,0.8,220);   // quarter / dime
+ place(STICKER_SVG,5+rng()*1.6,0.06,0.88,0.14,0.76,220); // one stray Pikachu sticker
+ const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(6,Math.round(empty*0.4));
+ for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*2)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
  slab.querySelector('.clutter').innerHTML=items.map(it=>`<div class="clut" style="left:${it.x.toFixed(1)}%;top:${it.y.toFixed(1)}%;width:${it.w.toFixed(1)}%;transform:translate(-50%,-50%) rotate(${it.rot}deg)">${it.svg}</div>`).join('');}
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
  slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
