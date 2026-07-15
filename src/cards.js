@@ -7,7 +7,7 @@ const PER_LANE = 12;    // cards kept per lane (8-col trays hold 24)
 const MIN_PRICE = 10;   // strictly over $10, like the MTG feed always was
 const MAX_PRICE = 1e5;
 const TTL_S = 600;
-const TRAY = 24;        // 3 shelves × 8 columns — keep in sync with tv/phone
+const TRAY = 40;        // 5 shelves × 8 columns — keep in sync with tv/phone
 
 /* ---------------- Game lane schemes ----------------
    Each game defines: how to recognise its products, its lanes (display

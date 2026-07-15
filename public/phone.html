@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Exor Games — Binder Remote</title>
+<title>Exor Games — Showcase Remote</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&family=Caveat:wght@600;700&family=Cutive+Mono&display=swap" rel="stylesheet">
 <style>
@@ -81,10 +81,10 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 </style></head><body>
 <div class="top"><div class="plogo">EXOR<span>·</span>GAMES</div></div>
 
-<div class="view center active" id="v-connect"><div class="ic ok" style="animation:none">⟳</div><h3>Connecting…</h3><p>Pairing with the binder.</p></div>
+<div class="view center active" id="v-connect"><div class="ic ok" style="animation:none">⟳</div><h3>Connecting…</h3><p>Pairing with the showcase.</p></div>
 
 <div class="view" id="v-ctrl">
-  <div class="status"><span class="d"></span>You're driving the binder</div>
+  <div class="status"><span class="d"></span>You're driving the showcase</div>
   <div class="idle">auto-disconnects after 2 min idle · <span id="phIdle">2:00</span></div>
   <div class="ptabs" id="ptabs"></div>
   <div class="flip"><button id="phPrev" onclick="EV('prev')">‹ Prev case</button><button id="phNext" onclick="EV('next')">Next case ›</button></div>
@@ -110,7 +110,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
   <button class="btn btn-ghost" onclick="SHOW('v-ctrl')" style="margin-top:.5rem">Keep browsing</button>
 </div>
 
-<div class="view center" id="v-reject"><div class="ic bad">🔒</div><h3 id="rjT">Someone's using this binder</h3><p id="rjP">Another customer is driving right now. Try again in a moment.</p></div>
+<div class="view center" id="v-reject"><div class="ic bad">🔒</div><h3 id="rjT">Someone's using this showcase</h3><p id="rjP">Another customer is driving right now. Try again in a moment.</p></div>
 <div class="view center" id="v-done"><div class="ic ok">✓</div><h3 id="doneT"></h3><p id="doneP"></p></div>
 
 <div class="toast" id="toast"></div>
@@ -127,7 +127,7 @@ let CARDS, CN;
 const ART={W:'radial-gradient(circle at 50% 40%,#fff8e0,#cdbf90)',U:'radial-gradient(circle at 50% 40%,#7db4e8,#254a72)',B:'radial-gradient(circle at 50% 40%,#4a4a56,#0c0c10)',R:'radial-gradient(circle at 50% 40%,#e08a5a,#7a1f16)',G:'radial-gradient(circle at 50% 40%,#7fc88f,#1c5030)',M:'radial-gradient(circle at 50% 40%,#f0d878,#8a6f18)',C:'radial-gradient(circle at 50% 40%,#c8ced6,#5c626b)',
 Grass:'radial-gradient(circle at 50% 40%,#8fd08f,#2f7d4f)',Fire:'radial-gradient(circle at 50% 40%,#f0946a,#8a2a12)',Water:'radial-gradient(circle at 50% 40%,#7db4e8,#22537a)',Lightning:'radial-gradient(circle at 50% 40%,#f6da62,#a8861a)',Psychic:'radial-gradient(circle at 50% 40%,#d29ae6,#6a3391)',Fighting:'radial-gradient(circle at 50% 40%,#d09a6a,#7a4a22)',Darkness:'radial-gradient(circle at 50% 40%,#5a5a68,#17171f)',Metal:'radial-gradient(circle at 50% 40%,#d0d8e0,#767e88)',Dragon:'radial-gradient(circle at 50% 40%,#d6bd7a,#6e5a24)',Colorless:'radial-gradient(circle at 50% 40%,#c8ced6,#5c626b)',Trainer:'radial-gradient(circle at 50% 40%,#efe6d0,#a89878)',
 Spell:'radial-gradient(circle at 50% 40%,#6cc4b0,#1d5e50)',Trap:'radial-gradient(circle at 50% 40%,#dd7ab4,#7a2a5a)',Dark:'radial-gradient(circle at 50% 40%,#7a6aa0,#241a3a)',Light:'radial-gradient(circle at 50% 40%,#f6ecc0,#b8a860)',Earth:'radial-gradient(circle at 50% 40%,#b8a080,#5a4a30)',Wind:'radial-gradient(circle at 50% 40%,#9ad2aa,#3a7a52)',Divine:'radial-gradient(circle at 50% 40%,#f0d878,#8a6f18)',Monster:'radial-gradient(circle at 50% 40%,#c8a468,#6a4a28)'};
-const TRAY=24,COLS=3;let trays=[],spreads=0,spread=0,selected=null,cart=[];
+const TRAY=40,COLS=3;let trays=[],spreads=0,spread=0,selected=null,cart=[];
 function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 applyCards(window.BINDER_CARDS);
 const token=location.pathname.split('/c/')[1]||'';
@@ -192,7 +192,7 @@ function connect(){
    if(m.type==='claimed'){SHOW('v-ctrl');drawSpread();}
    else if(m.type==='rejected'){SHOW('v-reject');if(m.reason==='expired'){document.getElementById('rjT').textContent='This code expired';document.getElementById('rjP').textContent='Codes refresh every 2 minutes. Scan the current code on the TV.';}}
    else if(m.type==='idle'){document.getElementById('phIdle').textContent=Math.floor(m.idleLeft/60)+':'+String(m.idleLeft%60).padStart(2,'0');}
-   else if(m.type==='dropped'){if(!checkedOut){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent=m.reason==='idle'?'No activity for 2 minutes, so the binder freed up for the next customer.':'Disconnected.';}}
+   else if(m.type==='dropped'){if(!checkedOut){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent=m.reason==='idle'?'No activity for 2 minutes, so the showcase freed up for the next customer.':'Disconnected.';}}
    else if(m.type==='counter_order'){if(m.data&&m.data.name){document.getElementById('doneP').textContent='Draft order '+m.data.name+' is waiting at the counter ('+m.data.count+' cards · $'+m.data.total+'). Give your name at the register.';}}
    else if(m.type==='settings'){applyPhoneSettings(m.data);}
    else if(m.type==='ack'){/* could sync cart count from server */}
@@ -236,7 +236,7 @@ function ADD(k){const c=byKey(k||selected);if(!c)return;cart.push(c);document.ge
 function OPENCART(){const l=document.getElementById('coList');l.innerHTML='';cart.forEach(c=>l.insertAdjacentHTML('beforeend',`<div class="co-item"><span>${H(c.name)}</span><span>$${money(c.price)}</span></div>`));if(!cart.length)l.innerHTML='<div class="sel-empty">Cart is empty.</div>';
  document.getElementById('coTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);SHOW('v-cart');}
 let checkedOut=false;
-function lostSession(){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent='The connection to the binder was lost — scan the QR code on the TV to start again.';}
+function lostSession(){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent='The connection to the showcase was lost — scan the QR code on the TV to start again.';}
 function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
  if(!ws||ws.readyState!==1){lostSession();return;}
  const t=cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
@@ -249,6 +249,6 @@ function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
   else{document.getElementById('doneT').textContent='See the counter';document.getElementById('doneP').textContent='These cards can’t be added to an online cart right now — please pay at the counter ('+cart.length+' cards · $'+t+').';}}
  else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Staff have your '+cart.length+' cards ($'+t+') — give your name at the register.';}}
 window.BINDER_READY.then(()=>{applyCards(window.BINDER_CARDS);
- if(!token){SHOW('v-reject');document.getElementById('rjT').textContent='Scan the TV code';document.getElementById('rjP').textContent='Open this by scanning the QR on the binder screen.';}
+ if(!token){SHOW('v-reject');document.getElementById('rjT').textContent='Scan the TV code';document.getElementById('rjP').textContent='Open this by scanning the QR on the showcase screen.';}
  else connect();});
 </script></body></html>

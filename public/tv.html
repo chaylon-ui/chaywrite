@@ -32,19 +32,23 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .tray{--cols:8;--gap:.7vw;--cw:calc((min(91vw,1440px) - (var(--cols) - 1)*var(--gap))/var(--cols));--ch:calc(var(--cw)/0.715);
   position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:4.5% 3% 5%}
 .shelf{display:flex;gap:var(--gap);justify-content:center}
-.shelf + .shelf{margin-top:calc(var(--ch) * -0.5)}
+/* Shingled 5-row stack: every row except the bottom one shows its top 58% —
+   card name, the art, and a sliver of text box — the next row covers the rest.
+   The bottom row sits fully visible. */
+.shelf + .shelf{margin-top:calc(var(--ch) * -0.42)}
 /* Top-loader mode: the card art keeps its FULL size and the clear sleeve is
    drawn OUTSIDE it — the top-loader adds to the card, it never shrinks it.
    --ch clamps only so 3 sleeved rows always fit the case on odd aspect ratios. */
 .case.tl .tray{--gap:1.2vw;
   --chw:calc((min(91vw,1440px) - (var(--cols) - 1)*var(--gap))/var(--cols)/1.12/0.715);
-  --chh:calc((min(85vh,900px) - 8vh)/3/1.12);
+  --chh:calc((min(85vh,900px) - 8vh)/3.68);
   --ch:min(var(--chw),var(--chh));
   --cw:calc(var(--ch)*0.715);
   --rim:calc(var(--cw)*0.06);
-  padding:2.5% 3%;justify-content:center}
+  padding:2.5% 3%;justify-content:flex-start}
 .case.tl .shelf{gap:calc(var(--gap) + .2vw)}
-.case.tl .shelf + .shelf{margin-top:calc(var(--rim)*2 + 1vh)} /* whole sleeved card shows, no overlap */
+/* Sleeved rows shingle too — sleeve top + name + art visible, bottom row full */
+.case.tl .shelf + .shelf{margin-top:calc(var(--ch) * -0.36)}
 .case.tl .card{overflow:visible} /* the sleeve rim lives outside the card box */
 /* Glass pane: sheen + light wear-scratches + pane depth (no bottom fade). */
 .glass{position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden;
@@ -164,8 +168,9 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .zoomtv .zc .fsticker{top:auto;bottom:56%;right:7.5%;z-index:12}
 .zoomtv .zc .pink{font-size:2.9vh}
 .zoomtv .zc .fink{font-size:3.1vh}
-/* Condition sticker on the featured art — red BIC ballpoint on a white label */
-.zoomtv .zc .csticker{position:absolute;left:6%;bottom:7%;z-index:12;transform:rotate(-2.5deg);background:#fbfbf4;padding:.18em .55em .3em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
+/* Condition sticker on the featured art — red BIC ballpoint on a white label,
+   stuck just below the mana cost / top-right symbols. */
+.zoomtv .zc .csticker{position:absolute;right:5.5%;top:12.5%;z-index:12;transform:rotate(2deg);background:#fbfbf4;padding:.18em .55em .3em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
 .zoomtv .zc .cink{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:2.5vh;line-height:.8;color:#d02b20;filter:url(#ink)}
 /* White cue/index card beside the preview: the card's details written out in
    blue BIC ballpoint — name, treatment, set (helps catch a wrong set/print). */
@@ -215,7 +220,7 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
   </div></div>
   <div class="lock" id="lock">
     <div class="qrbox"><div id="qr"></div></div>
-    <div><h2>Scan to browse the binder</h2><p>Point your phone camera here. The code changes every 2 minutes and works once.</p></div>
+    <div><h2>Scan to browse the showcase</h2><p>Point your phone camera here. The code changes every 2 minutes and works once.</p></div>
     <div>Room code<span class="rc" id="rc">— — —</span></div><div class="timer" id="timer">new code in 2:00</div>
   </div>
 </div>
@@ -242,7 +247,7 @@ const PIP={W:'#efe7cb',U:'#3d78b8',B:'#55555f',R:'#b53a2c',G:'#2f7d4f',M:'#c9a22
 Grass:'#4faf6a',Fire:'#d05a2c',Water:'#3d78b8',Lightning:'#e8c23a',Psychic:'#a45cc8',Fighting:'#b0743a',Darkness:'#4a4a58',Metal:'#aab4c0',Dragon:'#bb9a44',Colorless:'#9aa0a8',Trainer:'#cbbd9a',
 Spell:'#3d9a82',Trap:'#c05a94',Dark:'#5a4a86',Light:'#e0cc84',Earth:'#9a8058',Wind:'#5aa872',Divine:'#c9a227',Monster:'#b08448'};
 const DARK=['U','B','R','G','Fire','Water','Psychic','Fighting','Darkness','Dragon','Grass','Spell','Trap','Dark','Earth','Wind','Monster'];
-const TRAY=24,COLS=8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
+const TRAY=40,COLS=8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
 function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 applyCards(window.BINDER_CARDS);
 /* Everything below the WebSocket is untrusted (the phone is a customer device):
