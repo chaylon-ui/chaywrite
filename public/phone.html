@@ -31,6 +31,15 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .ptab:active{transform:scale(.97)}
 .ptab.on{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(217,130,43,.35)}
 .ptab:disabled{opacity:.5}
+/* In-stock singles search (admin toggle). Results become the deck until ✕. */
+.srch{display:none;gap:.45rem;margin-bottom:.7rem}
+.srch.on{display:flex}
+.srch input{flex:1;min-width:0;background:#101016;border:1px solid #2a2a34;border-radius:12px;padding:.7rem .8rem;color:var(--ink);font-size:.95rem;font-family:inherit}
+.srch input:focus{outline:none;border-color:var(--ember)}
+.srch button{border:none;border-radius:12px;padding:0 1rem;font-family:'Inter';font-weight:700;font-size:.88rem;background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;cursor:pointer}
+.srch button:disabled{opacity:.5}
+.srch #sx{background:#17171d;border:1px solid #2a2a34;color:var(--ink);font-size:1.05rem;padding:0 .85rem}
+.srch #sx.hide{display:none}
 .flip{display:flex;gap:.7rem;margin-bottom:1rem}.flip button{flex:1;background:#15151b;border:1px solid #2a2a34;border-radius:15px;padding:1.3rem 0;color:var(--ink);font-size:1.4rem}.flip button:active{background:var(--ember-deep);border-color:var(--ember)}.flip button:disabled{opacity:.3}
 .pcur{text-align:center;font-size:.66rem;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:1rem}
 /* ---- Phone showcase: shingled cards, bottoms hidden by the next card ---- */
@@ -86,6 +95,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 <div class="view" id="v-ctrl">
   <div class="status"><span class="d"></span>You're driving the showcase</div>
   <div class="idle">auto-disconnects after 2 min idle · <span id="phIdle">2:00</span></div>
+  <div class="srch" id="srch"><input id="sq" type="search" maxlength="60" placeholder="Search all in-stock singles…"><button id="sgo" onclick="DOSEARCH()">Search</button><button id="sx" class="hide" onclick="ENDSEARCH(true)">✕</button></div>
   <div class="ptabs" id="ptabs"></div>
   <div class="flip"><button id="phPrev" onclick="EV('prev')">‹ Prev case</button><button id="phNext" onclick="EV('next')">Next case ›</button></div>
   <div class="pcur" id="pcur">Case 1</div>
@@ -167,16 +177,12 @@ function deckExtras(nCards,seed){const empty=Math.max(0,TRAY-nCards);const rng=m
  if(PSET.adEnabled)return `<div class="deckclutter adwrap">${adHTML()}</div>`;
  const hvw=empty>0?Math.min(74,26+Math.ceil(empty/COLS)*16):30;let inner='';
  const nf=2+Math.floor(rng()*3);for(let i=0;i<nf;i++)inner+=`<div class="clut" style="left:${(6+rng()*86).toFixed(1)}%;top:${(20+rng()*72).toFixed(1)}%;width:${(6+rng()*3).toFixed(1)}%;transform:translate(-50%,-50%) rotate(${(rng()*40-20)|0}deg)"><svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg></div>`;
- if(empty>0){const want=Math.min(8,Math.max(2,Math.round(empty*.4)));for(let i=0;i<want;i++)inner+=`<div class="clut" style="left:${(9+rng()*82).toFixed(1)}%;top:${(28+rng()*66).toFixed(1)}%;width:${(13+rng()*8).toFixed(1)}%;transform:translate(-50%,-50%) rotate(${(rng()*40-20)|0}deg)">${PROP_SVG(Math.floor(rng()*6))}</div>`;}
+ if(empty>0){const want=Math.min(8,Math.max(2,Math.round(empty*.4)));for(let i=0;i<want;i++)inner+=`<div class="clut" style="left:${(9+rng()*82).toFixed(1)}%;top:${(28+rng()*66).toFixed(1)}%;width:${(13+rng()*8).toFixed(1)}%;transform:translate(-50%,-50%) rotate(${(rng()*40-20)|0}deg)">${PROP_SVG(Math.floor(rng()*2))}</div>`;}
  return `<div class="deckclutter" style="height:${hvw}vw">${inner}</div>`;}
 function fly(x,y,r){return `<g transform="rotate(${r} ${x} ${y})"><ellipse cx="${x}" cy="${y}" rx="5.5" ry="9" fill="#17181c"/><ellipse cx="${x}" cy="${y-7}" rx="3.6" ry="3.6" fill="#101115"/><ellipse cx="${x-7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.45)" transform="rotate(-25 ${x-7} ${y-1})"/><ellipse cx="${x+7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.45)" transform="rotate(25 ${x+7} ${y-1})"/><g stroke="#0c0d10" stroke-width="1" fill="none"><path d="M${x-4} ${y+4} l-6 5"/><path d="M${x+4} ${y+4} l6 5"/><path d="M${x-4} ${y+8} l-5 3"/><path d="M${x+4} ${y+8} l5 3"/></g></g>`;}
-function PROP_SVG(n){let cb='';for(let r=0;r<4;r++)for(let k=0;k<4;k++)cb+=`<rect x="${30+k*11}" y="${56+r*13}" width="8.5" height="8.5" rx="2"/>`;
- const P=[
-  `<svg viewBox="0 0 100 140" class="ps"><rect x="16" y="52" width="68" height="40" rx="12" fill="#23262d"/><rect x="16" y="52" width="68" height="20" rx="10" fill="#353a44"/><rect x="24" y="57" width="54" height="7" rx="3" fill="#575c67"/><circle cx="24" cy="84" r="5" fill="#0e0f12"/><rect x="16" y="70" width="68" height="3" fill="#0e0f12" opacity=".5"/></svg>`,
+/* Felt props (matches the TV set): elastics and a token + paper clip. */
+function PROP_SVG(n){const P=[
   `<svg viewBox="0 0 100 140" class="ps" fill="none" stroke-width="5"><ellipse cx="46" cy="72" rx="30" ry="21" stroke="#b9633b" transform="rotate(-14 46 72)"/><ellipse cx="55" cy="70" rx="29" ry="19" stroke="#c9a24a" transform="rotate(10 55 70)"/><ellipse cx="50" cy="66" rx="27" ry="17" stroke="#7f4326" transform="rotate(26 50 66)"/></svg>`,
-  `<svg viewBox="0 0 100 140" class="ps"><rect x="24" y="28" width="52" height="84" rx="7" fill="#2b2e34"/><rect x="30" y="34" width="40" height="15" rx="3" fill="#8a9670"/><g fill="#4a4e57">${cb}</g></svg>`,
-  `<svg viewBox="0 0 100 140" class="ps">${fly(38,58,-20)}${fly(60,84,35)}${fly(45,98,10)}</svg>`,
-  `<svg viewBox="0 0 100 140" class="ps"><g transform="rotate(38 50 70)"><rect x="45" y="20" width="10" height="92" rx="5" fill="#20406a"/><polygon points="45,112 55,112 50,124" fill="#c7ccd3"/><rect x="44" y="30" width="12" height="4" fill="#d3a52a"/><rect x="46.5" y="16" width="2.4" height="16" rx="1" fill="#9aa0aa"/></g></svg>`,
   `<svg viewBox="0 0 100 140" class="ps"><circle cx="40" cy="82" r="15" fill="#bd7f40"/><circle cx="40" cy="82" r="15" fill="none" stroke="#8a5a28" stroke-width="2.4"/><g transform="rotate(-18 62 56)"><rect x="55" y="40" width="14" height="34" rx="7" fill="none" stroke="#c6cad1" stroke-width="2.6"/><rect x="58.5" y="46" width="7" height="22" rx="3.5" fill="none" stroke="#c6cad1" stroke-width="2.6"/></g></svg>`,
  ];return P[n%P.length];}
 function updateActionBar(){const bar=document.getElementById('actionbar');const c=selected&&byKey(selected);
@@ -210,13 +216,17 @@ let switching=false;
 function renderTabs(){const b=document.getElementById('ptabs');if(!b)return;const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];
  if(tabs.length<2){b.innerHTML='';return;}
  b.innerHTML=tabs.map((t,i)=>`<button class="ptab${t.collection===PSET.collection?' on':''}" ${switching?'disabled':''} onclick="switchTab(${i})">${H(String(t.label||'').slice(0,24))}</button>`).join('');}
-function switchTab(i){if(switching)return;const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];const t=tabs[i];
+function switchTab(i){if(switching)return;if(searchOn)ENDSEARCH(true);
+ const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];const t=tabs[i];
  if(!t||t.collection===PSET.collection)return;
  switching=true;renderTabs();
  fetch('/switch?i='+i,{method:'POST'}).catch(()=>{}).finally(()=>{switching=false;renderTabs();});}
 function applyPhoneSettings(s){if(!s||typeof s!=='object')return;const prev=PSET.collection;PSET=Object.assign(PSET,s);
  renderTabs();
- if(s.collection&&prev&&s.collection!==prev){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
+ const sr=document.getElementById('srch');if(sr)sr.classList.toggle('on',!!PSET.searchEnabled);
+ if(s.collection&&prev&&s.collection!==prev){
+  searchOn=false;savedDeck=null;document.getElementById('sx').classList.add('hide'); // a tab switch supersedes any search
+  fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
  else if(document.getElementById('deck'))drawSpread();}
 fetch('/settings',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{if(s)applyPhoneSettings(s);}).catch(()=>{});
 /* Flip sends the ABSOLUTE target spread — the phone owns navigation, the TV
@@ -227,7 +237,31 @@ function EV(kind){if(!ws||ws.readyState!==1)return;
  ws.send(JSON.stringify({type:'flip',data:{spread:t}}));}
 /* select/addcart carry the card payload, not just a name — the TV renders
    exactly what was tapped even if its cached deck snapshot differs. */
-function cardMsg(c){return {k:KEY(c),name:c.name,set:c.set,type:c.type,color:c.color,price:c.price,foil:!!c.foil,image:c.image||null,variantId:c.variantId||null}}
+function cardMsg(c){return {k:KEY(c),name:c.name,set:c.set,type:c.type,color:c.color,price:c.price,foil:!!c.foil,condition:c.condition||'',image:c.image||null,variantId:c.variantId||null}}
+/* ---- In-stock search: fetched here, mirrored to the TV over the socket.
+   Results replace the deck on BOTH screens until ✕ (or a tab switch). ---- */
+let searchOn=false,savedDeck=null,searching=false;
+async function DOSEARCH(){const q=document.getElementById('sq').value.trim();
+ if(q.length<2){toast('Type at least 2 letters');return;}
+ if(searching)return;searching=true;document.getElementById('sgo').disabled=true;
+ try{
+  const r=await fetch('/search.json?q='+encodeURIComponent(q),{cache:'no-store'});
+  const j=r.ok?await r.json():null;
+  const cards=(j&&Array.isArray(j.cards))?j.cards:[];
+  if(!cards.length){toast('No in-stock singles match “'+q+'”');return;}
+  if(!searchOn){savedDeck=CARDS;searchOn=true;}
+  cards.COLOR_NAME=(j.colorNames&&typeof j.colorNames==='object')?j.colorNames:CN;
+  applyCards(cards);drawSpread();document.getElementById('sheet').scrollTop=0;
+  document.getElementById('sx').classList.remove('hide');
+  document.getElementById('pcur').textContent=`Search: “${q}” · ${cards.length} found`;
+  if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'search',data:{q,colorNames:cards.COLOR_NAME,cards:cards.map(cardMsg)}}));
+ }catch(e){toast('Search hiccup — try again');}
+ finally{searching=false;document.getElementById('sgo').disabled=false;}}
+function ENDSEARCH(send){document.getElementById('sx').classList.add('hide');document.getElementById('sq').value='';
+ if(!searchOn)return;searchOn=false;
+ if(savedDeck){applyCards(savedDeck);savedDeck=null;drawSpread();}
+ if(send&&ws&&ws.readyState===1)ws.send(JSON.stringify({type:'endsearch'}));}
+document.getElementById('sq').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();DOSEARCH();}});
 /* Tap: feature on TV + reveal the Add button on the tile. Tap again: dismiss. */
 function PICK(k){if(!ws||ws.readyState!==1)return;
  if(selected===k){selected=null;ws.send(JSON.stringify({type:'unselect'}));drawSpread();return;}

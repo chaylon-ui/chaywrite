@@ -129,7 +129,48 @@ export async function serveCards(request, ctx, collection = "new-arrivals") {
   return res;
 }
 
-function buildCards(products) {
+/* Phone-driven search: Shopify's public predictive-search endpoint finds
+   matching products, then each hit is hydrated via /products/{handle}.js for
+   variants/tags/type. No price floor here — searching is deliberate. */
+export async function serveSearch(request) {
+  const url = new URL(request.url);
+  const q = String(url.searchParams.get("q") || "").trim().slice(0, 60);
+  const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
+  const out = { q, count: 0, cards: [] };
+  if (q.length < 2) return Response.json(out, { headers: { "cache-control": "no-store" } });
+  try {
+    const sr = await fetch(
+      `${HOST}/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=hide`,
+      { headers },
+    );
+    if (!sr.ok) throw new Error("suggest HTTP " + sr.status);
+    const hits = ((await sr.json())?.resources?.results?.products) || [];
+    const prods = await Promise.all(hits.map(async (h) => {
+      try {
+        const pr = await fetch(`${HOST}/products/${h.handle}.js`, { headers });
+        if (!pr.ok) return null;
+        const p = await pr.json();
+        // Normalise /products/{handle}.js (type + cent prices) to the
+        // products.json shape buildCards expects.
+        return {
+          title: p.title, handle: p.handle, product_type: p.type, tags: p.tags || [],
+          images: (p.images || []).map((src) => ({ src })),
+          variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, price: (v.price / 100).toFixed(2), available: !!v.available })),
+        };
+      } catch { return null; }
+    }));
+    const built = buildCards(prods.filter(Boolean), { minPrice: 0, perLane: 99 });
+    out.cards = built.cards; out.count = built.cards.length;
+    out.game = built.game; out.colorNames = built.colorNames;
+  } catch (e) {
+    out.error = String((e && e.message) || e);
+  }
+  return Response.json(out, { headers: { "cache-control": "public, max-age=30" } });
+}
+
+function buildCards(products, opts = {}) {
+  const minPrice = opts.minPrice ?? MIN_PRICE;
+  const perLane = opts.perLane ?? PER_LANE;
   // Decide the lane scheme from the dominant game in the feed; stragglers
   // from other games (mixed collections) fall into the fallback lane.
   const counts = { mtg: 0, pokemon: 0, yugioh: 0 };
@@ -148,7 +189,7 @@ function buildCards(products) {
   for (const p of products) {
     if (!/single/i.test(p.product_type || "")) continue;
     const eligible = (p.variants || []).filter(
-      (v2) => v2.available && +v2.price > MIN_PRICE && +v2.price < MAX_PRICE,
+      (v2) => v2.available && +v2.price > minPrice && +v2.price < MAX_PRICE,
     );
     if (eligible.length === 0) continue;
     const v = eligible.reduce((a, b) => (+b.price > +a.price ? b : a));
@@ -178,13 +219,13 @@ function buildCards(products) {
   }
 
   let laned = spec.lanes.flatMap((l) =>
-    byLane[l].sort((a, b) => +b.price - +a.price).slice(0, PER_LANE),
+    byLane[l].sort((a, b) => +b.price - +a.price).slice(0, perLane),
   );
   if (laned.length < TRAY) {
     laned = spec.lanes
       .flatMap((l) => byLane[l])
       .sort((a, b) => +b.price - +a.price)
-      .slice(0, PER_LANE * spec.lanes.length);
+      .slice(0, perLane * spec.lanes.length);
   }
   return { game, colorNames: spec.colorNames, cards: laned };
 }

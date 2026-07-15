@@ -17,6 +17,11 @@ export const DEFAULT_SETTINGS = {
     { label: "Yu-Gi-Oh!", collection: "yu-gi-oh-singles-new-arrivals", theme: "yugioh",  game: "yugioh" },
   ],
 
+  // Let customers search ALL in-stock singles from their phone; results show
+  // as a temporary showcase on the TV until they clear the search. Off until
+  // enabled in /admin.
+  searchEnabled: false,
+
   // Comic-book speech bubble on the featured-card preview. {card} becomes the
   // card's name. One line is picked at random each time; edit them in /admin
   // (clear all three to hide the bubble).

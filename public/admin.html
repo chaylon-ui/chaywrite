@@ -66,6 +66,8 @@ a.tvlink:hover{color:var(--ember)}
 
     <div class="row"><input id="topLoaders" type="checkbox"><label for="topLoaders">Show each card in a top-loader (TV)</label></div>
 
+    <div class="row"><input id="searchEnabled" type="checkbox"><label for="searchEnabled">Let customers search all in-stock singles from their phone</label></div>
+
     <!-- Comic speech bubble on the featured-card preview. One line is picked
          at random per preview; {card} becomes the card's name. -->
     <div class="group">
@@ -106,7 +108,7 @@ const GAME_TABS=[ // labels/themes fixed; only the collection handle is editable
   {label:'Yu-Gi-Oh!', theme:'yugioh',  game:'yugioh',  input:'colYugioh',  fallback:'yu-gi-oh-singles-new-arrivals'},
 ];
 async function loadSettings(){try{const s=await (await fetch('/settings',{cache:'no-store'})).json();
-  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;
+  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
@@ -125,7 +127,7 @@ $('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('unlock').click();}
 $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').className='msg';
   const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,
     collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
-  const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,
+  const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;

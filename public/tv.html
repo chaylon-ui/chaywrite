@@ -145,7 +145,8 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
 .foil-badge{position:absolute;top:6%;left:6%;z-index:5;font-size:.4rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700;padding:2px 5px;border-radius:2px;color:#1a1a1a;background:linear-gradient(120deg,#ffd9a8,#a8f0ff,#e0a8ff,#fff0a8);background-size:300% 300%;animation:foil 4s linear infinite}
 @keyframes foil{to{background-position:300% 0}}
 .drivebar{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:.4rem 1rem;background:linear-gradient(180deg,rgba(122,59,18,.95),transparent);font-size:.7rem;letter-spacing:.08em}
-.drivebar.hide{display:none}.drivebar .who{display:flex;align-items:center;gap:.4rem}.drivebar .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}.drivebar .idle{color:#f0d6b0;font-variant-numeric:tabular-nums}
+.drivebar.hide{display:none}.drivebar .who{display:flex;align-items:center;gap:.4rem}
+.drivebar .dvq{color:#ffe9c9;font-size:.72rem;letter-spacing:.08em;font-weight:600}.drivebar .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}.drivebar .idle{color:#f0d6b0;font-variant-numeric:tabular-nums}
 .tv-cart{position:absolute;bottom:0;left:0;right:0;z-index:15;background:linear-gradient(0deg,rgba(8,8,10,.96),transparent);padding:.6rem 1rem .7rem;display:flex;align-items:center;gap:.7rem;min-height:48px}
 .tv-cart.hide{display:none}.tv-cart .lbl{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .tv-cart .items{display:flex;gap:.4rem;flex:1;overflow:hidden}.tv-cart .chip{font-size:.64rem;background:#17171d;border:1px solid #2a2a34;border-radius:20px;padding:.25rem .6rem;white-space:nowrap}
@@ -233,7 +234,7 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
     <div class="glass"></div>
     <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div></div>
   </div>
-  <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
+  <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="dvq" id="dvq"></span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
   <div class="tv-cart hide" id="tvCart"><span class="lbl">Cart</span><div class="items" id="tvCartItems"></div><span class="total" id="tvCartTotal">$0.00</span></div>
   <div class="counter hide" id="counter"><div class="cbox">
     <div class="ct1">🛎 Order for the counter</div>
@@ -272,6 +273,19 @@ Spell:'#3d9a82',Trap:'#c05a94',Dark:'#5a4a86',Light:'#e0cc84',Earth:'#9a8058',Wi
 const DARK=['U','B','R','G','Fire','Water','Psychic','Fighting','Darkness','Dragon','Grass','Spell','Trap','Dark','Earth','Wind','Monster'];
 const TRAY=40,COLS=8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
 function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
+/* ---- Phone-driven search: the phone mirrors its results here; the default
+   deck is parked in SDECK and restored when the search is cleared. ---- */
+let SDECK=null;
+function startSearchDeck(d){if(!d)return;const q=String(d.q||'').slice(0,60);
+ const cards=(Array.isArray(d.cards)?d.cards:[]).slice(0,80).map(sanitizeCard).filter(Boolean);
+ if(!cards.length)return;
+ if(!SDECK)SDECK={cards:CARDS,cn:CN};
+ cards.COLOR_NAME=(d.colorNames&&typeof d.colorNames==='object')?d.colorNames:CN;
+ unzoom();selected=null;applyCards(cards);draw();
+ const el=document.getElementById('dvq');if(el)el.textContent='Search: “'+q+'” · '+cards.length+' found';}
+function endSearchDeck(){const el=document.getElementById('dvq');if(el)el.textContent='';
+ if(!SDECK)return;const d=SDECK.cards;d.COLOR_NAME=SDECK.cn;SDECK=null;
+ unzoom();selected=null;applyCards(d);draw();}
 applyCards(window.BINDER_CARDS);
 /* Everything below the WebSocket is untrusted (the phone is a customer device):
    escape strings before innerHTML, coerce numbers, whitelist image hosts. */
@@ -397,7 +411,7 @@ function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 let wasPaired=false;
 function setPaired(on){document.getElementById('lock').classList.toggle('hide',on);document.getElementById('drivebar').classList.toggle('hide',!on);document.getElementById('tvCart').classList.toggle('hide',!on);
  if(on&&!wasPaired){document.getElementById('counter').classList.add('hide');} // clear ticket only when a NEW session starts
- if(!on&&wasPaired){unzoom();selected=null;cart=[];updateCart();draw();}
+ if(!on&&wasPaired){endSearchDeck();unzoom();selected=null;cart=[];updateCart();draw();}
  if(on)stopAttract();else armAttract();
  // Paired sessions get the full screen: grow the case edge-to-edge, then
  // redraw once the transition lands so the felt clutter re-places itself.
@@ -454,6 +468,8 @@ function connect(){
    else if(m.type==='prev'){flip(-1);selected=null;setTimeout(unzoom,10);}
    else if(m.type==='select'){const c=fromMsg(m.data);if(c){selected=KEY(c);markSel();zoom(c);}}
    else if(m.type==='unselect'){selected=null;markSel();unzoom();}
+   else if(m.type==='search'){startSearchDeck(m.data);}
+   else if(m.type==='endsearch'){endSearchDeck();}
    else if(m.type==='addcart'){const c=fromMsg(m.data);if(c){cart.push(c);updateCart();}}
    else if(m.type==='checkout'){if(m.data&&m.data.where==='counter')showCounter(m.data);}
    else if(m.type==='counter_order'){updateCounterOrder(m.data);}
@@ -474,7 +490,7 @@ let SETTINGS={header:'',theme:'mtg',topLoaders:false,
  bubbleMsgs:["Wanna buy {card}, kid? I can ring it up if you add it to your cart!",
   "You gonna look all day, or you gonna buy it? I got customers waiting!",
   "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"]},TOPLOAD=false,CUR_COLLECTION=null;
-function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
+function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;

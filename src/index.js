@@ -1,5 +1,5 @@
 import { BinderRoom } from "./room.js";
-import { serveCards } from "./cards.js";
+import { serveCards, serveSearch } from "./cards.js";
 
 export { BinderRoom };
 
@@ -19,6 +19,10 @@ export default {
       url.pathname === "/switch"
     ) {
       return room.fetch(request);
+    }
+
+    if (url.pathname === "/search.json") {
+      return serveSearch(request);
     }
 
     if (url.pathname === "/cards.json") {

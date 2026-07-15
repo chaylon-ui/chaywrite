@@ -101,6 +101,7 @@ export class BinderRoom {
       next.collection = c;
     }
     if ("topLoaders" in patch) next.topLoaders = !!patch.topLoaders;
+    if ("searchEnabled" in patch) next.searchEnabled = !!patch.searchEnabled;
     if ("theme" in patch) {
       if (!THEMES.includes(patch.theme)) return "bad theme";
       next.theme = patch.theme;
@@ -286,7 +287,7 @@ export class BinderRoom {
     } catch {
       return;
     }
-    const allowed = ["flip", "next", "prev", "select", "unselect", "addcart", "checkout"];
+    const allowed = ["flip", "next", "prev", "select", "unselect", "addcart", "checkout", "search", "endsearch"];
     if (allowed.includes(msg.type)) {
       if (this.tv) this.send(this.tv, msg);
       this.send(this.phone, { type: "ack", of: msg.type, data: msg.data ?? null });
