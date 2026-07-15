@@ -9,6 +9,10 @@ keep_vars = true
 [assets]
 directory = "./public"
 binding = "ASSETS"
+# Serve files at their exact paths. The default ("auto-trailing-slash")
+# 307-redirects /tv.html -> /tv, which breaks the worker's serveAsset()
+# wrapper (it rebuilds headers, losing Location) — pages came back blank.
+html_handling = "none"
 
 [[durable_objects.bindings]]
 name = "ROOM"
