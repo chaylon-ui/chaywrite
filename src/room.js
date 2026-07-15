@@ -19,6 +19,12 @@ export class BinderRoom {
       try {
         const s = await this.state.storage.get("settings");
         if (s) this.settings = { ...DEFAULT_SETTINGS, ...s };
+        // One-time upgrade: settings saved before the newest-first collections
+        // existed still point at the old price/best-seller sorted handles.
+        const up = { "pokemon-singles": "pokemon-singles-new-arrivals", "yu-gi-oh-singles": "yu-gi-oh-singles-new-arrivals" };
+        if (Array.isArray(this.settings.tabs))
+          this.settings.tabs = this.settings.tabs.map((t) => (up[t.collection] ? { ...t, collection: up[t.collection] } : t));
+        if (up[this.settings.collection]) this.settings.collection = up[this.settings.collection];
         const p = await this.state.storage.get("pin");
         if (p) this.pin = p;
       } catch {}

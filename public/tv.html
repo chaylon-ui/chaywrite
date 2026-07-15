@@ -128,6 +128,10 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
 .clutter{position:absolute;inset:0;z-index:3;pointer-events:none}
 .clut{position:absolute;aspect-ratio:100/140;filter:drop-shadow(0 4px 6px rgba(0,0,0,.55))}
 .clut svg{width:100%;height:100%;display:block}
+/* Haphazard pile of obsolete-game card backs */
+.clut .cbstack{position:absolute;inset:0}
+.clut .cb{position:absolute;inset:0}
+.clut .cb svg{filter:drop-shadow(0 5px 9px rgba(0,0,0,.6))}
 .card-frame{position:absolute;inset:0;border-radius:inherit;padding:5% 5% 6%;display:flex;flex-direction:column;box-shadow:inset 0 0 0 2px rgba(0,0,0,.6)}
 .ct{font-family:'Cinzel',serif;font-weight:600;font-size:.6rem;line-height:1.05;display:flex;justify-content:space-between;gap:2px}
 .pip{width:9px;height:9px;border-radius:50%;flex-shrink:0}
@@ -332,15 +336,28 @@ function COIN_SVG(n){const C=[
  ];return C[n%C.length];}
 /* A die-cut Pikachu-style sticker, slightly askew. */
 const STICKER_SVG=`<svg viewBox="0 0 100 140"><g transform="rotate(7 50 72)" paint-order="stroke fill"><polygon points="33,62 20,30 44,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="67,62 80,30 56,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="24,34 20,30 31,44 27,46" fill="#26262c"/><polygon points="76,34 80,30 69,44 73,46" fill="#26262c"/><ellipse cx="50" cy="80" rx="25" ry="22" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7"/><g fill="#26262c"><circle cx="41" cy="76" r="3.6"/><circle cx="59" cy="76" r="3.6"/></g><g fill="#fff"><circle cx="42.2" cy="74.8" r="1.2"/><circle cx="60.2" cy="74.8" r="1.2"/></g><circle cx="33" cy="87" r="4.8" fill="#e5533a"/><circle cx="67" cy="87" r="4.8" fill="#e5533a"/><path d="M45 86 q2.5 3 5 0 q2.5 3 5 0" stroke="#26262c" stroke-width="1.6" fill="none" stroke-linecap="round"/></g></svg>`;
+/* Backs of long-gone TCGs — full card size, stacked haphazardly on sparse
+   shelves as showcase mess. Stylised homages: starburst, black ring, classic
+   brown, blue swirl, green marble. */
+function BACK_SVG(n){const B=[
+  `<svg viewBox="0 0 100 140"><defs><radialGradient id="bk1" cx="50%" cy="45%"><stop offset="0%" stop-color="#ffe9b0"/><stop offset="35%" stop-color="#f5a12c"/><stop offset="100%" stop-color="#a01e10"/></radialGradient></defs><rect width="100" height="140" rx="6" fill="url(#bk1)"/><g stroke="rgba(255,250,230,.55)" stroke-width="2"><line x1="50" y1="62" x2="14" y2="14"/><line x1="50" y1="62" x2="86" y2="12"/><line x1="50" y1="62" x2="8" y2="70"/><line x1="50" y1="62" x2="92" y2="66"/><line x1="50" y1="62" x2="18" y2="126"/><line x1="50" y1="62" x2="84" y2="124"/></g><circle cx="50" cy="58" r="21" fill="#8a1408" stroke="#fff" stroke-width="2.5"/><path d="M38 52 l10 12 M60 46 l-8 10" stroke="#e8d9c0" stroke-width="3"/><rect x="12" y="72" width="76" height="15" rx="3" fill="#1a1a1e" stroke="#e8e2d2" stroke-width="1.6"/><text x="50" y="83.5" font-size="11" font-weight="900" fill="#e8e2d2" text-anchor="middle" font-family="Arial Black,Arial">BAKUGAN</text><rect x="1.5" y="1.5" width="97" height="137" rx="6" fill="none" stroke="rgba(60,10,4,.6)" stroke-width="3"/></svg>`,
+  `<svg viewBox="0 0 100 140"><rect width="100" height="140" rx="6" fill="#141414"/><rect width="100" height="140" rx="6" fill="url(#) " opacity="0"/><circle cx="50" cy="62" r="30" fill="none" stroke="#3a3a3e" stroke-width="7"/><ellipse cx="50" cy="62" rx="30" ry="19" fill="#8a1a10" stroke="#e8e2d2" stroke-width="2.5"/><circle cx="50" cy="62" r="3" fill="#e8e2d2"/><path d="M28 62 a22 13 0 0 1 44 0" fill="none" stroke="#2c0c06" stroke-width="2"/><text x="50" y="66.5" font-size="12" font-weight="900" fill="#efe8da" text-anchor="middle" font-family="Arial Black,Arial" letter-spacing="1">CHAOTIC</text><rect x="14" y="116" width="72" height="10" rx="5" fill="#26262a"/><rect x="1.5" y="1.5" width="97" height="137" rx="6" fill="none" stroke="#3c3c40" stroke-width="2"/></svg>`,
+  `<svg viewBox="0 0 100 140"><rect width="100" height="140" rx="6" fill="#5e4630"/><rect x="4" y="4" width="92" height="132" rx="5" fill="#6e5238"/><ellipse cx="50" cy="72" rx="34" ry="46" fill="#8a6a48" stroke="#2e5a74" stroke-width="4"/><text x="50" y="28" font-size="15" font-weight="900" fill="#1c1a2e" text-anchor="middle" font-family="Georgia,serif" font-style="italic">Magic</text><g><circle cx="50" cy="58" r="4" fill="#e8e0c0"/><circle cx="36" cy="76" r="4" fill="#2e5a8a"/><circle cx="64" cy="76" r="4" fill="#26262c"/><circle cx="40" cy="94" r="4" fill="#a03224"/><circle cx="60" cy="94" r="4" fill="#2e6a3e"/></g><rect x="24" y="124" width="52" height="9" rx="2" fill="#4a3520"/><text x="50" y="131" font-size="6.5" fill="#c8b890" text-anchor="middle" font-family="Georgia,serif" letter-spacing="1">DECKMASTER</text></svg>`,
+  `<svg viewBox="0 0 100 140"><defs><radialGradient id="bk4" cx="50%" cy="50%"><stop offset="0%" stop-color="#f0e468"/><stop offset="40%" stop-color="#2a4a9a"/><stop offset="100%" stop-color="#101c48"/></radialGradient></defs><rect width="100" height="140" rx="6" fill="url(#bk4)"/><g fill="none" stroke-linecap="round"><path d="M22 100 Q50 60 82 44" stroke="#e8d24a" stroke-width="3.5"/><path d="M18 84 Q52 52 86 60" stroke="#f0e8a0" stroke-width="2"/><path d="M30 112 Q60 78 88 78" stroke="#c8b02a" stroke-width="2.5"/></g><circle cx="50" cy="62" r="16" fill="#e8ecf4" opacity=".85"/><rect x="10" y="56" width="80" height="14" rx="7" fill="#8a1a10" stroke="#e8d24a" stroke-width="2"/><text x="50" y="66.5" font-size="9.5" font-weight="900" fill="#f0e0a8" text-anchor="middle" font-family="Arial Black,Arial">DUEL MASTERS</text><rect x="1.5" y="1.5" width="97" height="137" rx="6" fill="none" stroke="#0c1430" stroke-width="3"/></svg>`,
+  `<svg viewBox="0 0 100 140"><rect width="100" height="140" rx="6" fill="#12352c"/><path d="M0 20 Q30 8 50 24 T100 30 M0 60 Q40 44 70 62 T100 74 M0 104 Q34 88 62 106 T100 112" stroke="rgba(180,220,200,.14)" stroke-width="7" fill="none"/><text x="50" y="24" font-size="14" font-weight="800" fill="#c8b890" text-anchor="middle" font-family="Georgia,serif">VAMPIRE</text><text x="50" y="33" font-size="5.5" fill="#8a4438" text-anchor="middle" font-family="Georgia,serif" letter-spacing="1">THE ETERNAL STRUGGLE</text><circle cx="50" cy="76" r="24" fill="#0e2a22" stroke="#3a6a58" stroke-width="2.5"/><path d="M50 60 a10 10 0 0 1 9 15 a10 10 0 1 1 -18 0 a10 10 0 0 1 9 -15 M50 66 a6 6 0 1 0 .01 0" fill="none" stroke="#4a8a70" stroke-width="3.5"/><text x="50" y="126" font-size="6" fill="#c8b890" text-anchor="middle" font-family="Georgia,serif" letter-spacing="1">DECKMASTER</text></svg>`,
+ ];return B[n%B.length];}
+function CARDBACK_STACK(rng){const n=2+Math.floor(rng()*2);let inner='';
+ for(let i=0;i<n;i++)inner+=`<div class="cb" style="transform:rotate(${(rng()*24-12).toFixed(1)}deg) translate(${(rng()*8-4).toFixed(1)}%,${(rng()*6-3).toFixed(1)}%)">${BACK_SVG(Math.floor(rng()*5))}</div>`;
+ return `<div class="cbstack">${inner}</div>`;}
 /* Deterministic per-case RNG so clutter/grime stay put across re-renders. */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function cobweb(cx,cy){const dx=cx===0?1:-1,dy=cy===0?1:-1,ang=[12,34,57,80];let s='<g stroke="rgba(228,222,210,.14)" stroke-width=".28" fill="none">';
  ang.forEach(a=>{const r=a*Math.PI/180;s+=`<line x1="${cx}" y1="${cy}" x2="${(cx+dx*27*Math.cos(r)).toFixed(1)}" y2="${(cy+dy*27*Math.sin(r)).toFixed(1)}"/>`;});
  [8,15,23].forEach(R=>{s+='<polyline points="'+ang.map(a=>{const r=a*Math.PI/180;return `${(cx+dx*R*Math.cos(r)).toFixed(1)},${(cy+dy*R*Math.sin(r)).toFixed(1)}`;}).join(' ')+'"/>';});
  return s+'</g>';}
-function decorateGrime(el,rng){let s='<svg viewBox="0 0 100 100" preserveAspectRatio="none">'+cobweb(0,0)+cobweb(100,0);
- for(let i=0;i<50;i++)s+=`<circle cx="${(rng()*100).toFixed(1)}" cy="${(rng()*100).toFixed(1)}" r="${(rng()*.6+.12).toFixed(2)}" fill="rgba(236,226,206,${(rng()*.13+.03).toFixed(2)})"/>`;
- for(let i=0;i<8;i++)s+=`<circle cx="${(rng()*100).toFixed(1)}" cy="${(rng()*100).toFixed(1)}" r="${(rng()*7+3).toFixed(1)}" fill="rgba(0,0,0,${(rng()*.09+.04).toFixed(2)})"/>`;
+function decorateGrime(el,rng){let s='<svg viewBox="0 0 100 100" preserveAspectRatio="none">'+cobweb(rng()<0.5?0:100,0);
+ for(let i=0;i<24;i++)s+=`<circle cx="${(rng()*100).toFixed(1)}" cy="${(rng()*100).toFixed(1)}" r="${(rng()*.6+.12).toFixed(2)}" fill="rgba(236,226,206,${(rng()*.11+.03).toFixed(2)})"/>`;
+ for(let i=0;i<4;i++)s+=`<circle cx="${(rng()*100).toFixed(1)}" cy="${(rng()*100).toFixed(1)}" r="${(rng()*7+3).toFixed(1)}" fill="rgba(0,0,0,${(rng()*.07+.03).toFixed(2)})"/>`;
  el.innerHTML=s+'</svg>';}
 /* Roughed-up case: dust + cobwebs + a few dead flies, plus clutter randomly
    scattered across whatever felt the cards leave bare (rejection sampling). */
@@ -354,12 +371,17 @@ function decorate(slab,idx){const rng=mulberry32((idx*2654435761)^0x9e3779b9);
     w × 1.4w, tilted up to ±20°), so nothing — dice included — ever pokes
     underneath a card. */
  const place=(svg,w,minX,spanX,minY,spanY,tries)=>{const m=(w/100)*Wt*0.87+4;for(let k=0;k<tries;k++){const cx=Wt*(minX+rng()*spanX),cy=Hh*(minY+rng()*spanY);if(!onFelt(cx,cy,m))continue;items.push({svg,x:(cx/Wt)*100,y:(cy/Hh)*100,w,rot:(rng()*40-20)|0});return;}};
- for(let i=0;i<2;i++)place(`<svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg>`,2.6+rng()*1.6,0.05,0.9,0.12,0.78,60); // a couple of dead flies per case
- const nd=2+Math.floor(rng()*3);for(let i=0;i<nd;i++)place(DIE_SVG(Math.floor(rng()*3)),3.6+rng()*1.2,0.05,0.9,0.12,0.8,220); // d6/d20/d10 scattered on bare felt
- const nc=1+Math.floor(rng()*2);for(let i=0;i<nc;i++)place(COIN_SVG(Math.floor(rng()*2)),2.7+rng()*.9,0.05,0.9,0.12,0.8,220);   // quarter / dime
- place(STICKER_SVG,5+rng()*1.6,0.06,0.88,0.14,0.76,220); // one stray Pikachu sticker
- const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(6,Math.round(empty*0.4));
+ place(`<svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg>`,2.6+rng()*1.6,0.05,0.9,0.12,0.78,60); // one dead fly per case
+ const nd=1+Math.floor(rng()*2);for(let i=0;i<nd;i++)place(DIE_SVG(Math.floor(rng()*3)),3.6+rng()*1.2,0.05,0.9,0.12,0.8,220); // d6/d20/d10 on bare felt
+ place(COIN_SVG(Math.floor(rng()*2)),2.7+rng()*.9,0.05,0.9,0.12,0.8,220);   // one coin
+ if(rng()<0.5)place(STICKER_SVG,5+rng()*1.6,0.06,0.88,0.14,0.76,220); // sometimes a stray Pikachu sticker
+ const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(3,Math.round(empty*0.2));
  for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*2)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
+ /* Sparse shelves sometimes get a haphazard pile of obsolete-game card backs —
+    same size as the real cards, never underneath them. */
+ if(empty>=10&&rects.length&&rng()<0.65){const cw=rects[0].r2-rects[0].l,wpct=(cw/Wt)*100;
+  place(CARDBACK_STACK(rng),wpct*1.06,0.08,0.84,0.18,0.66,240);
+  if(empty>=20&&rng()<0.5)place(CARDBACK_STACK(rng),wpct*1.02,0.08,0.84,0.18,0.66,240);}
  slab.querySelector('.clutter').innerHTML=items.map(it=>`<div class="clut" style="left:${it.x.toFixed(1)}%;top:${it.y.toFixed(1)}%;width:${it.w.toFixed(1)}%;transform:translate(-50%,-50%) rotate(${it.rot}deg)">${it.svg}</div>`).join('');}
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
  slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
@@ -500,4 +522,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
 window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings',{cache:'no-store'})).json());}catch(e){}applyCards(window.BINDER_CARDS);draw();connect();});
+/* Fresh stock without anyone touching the TV: the deck feed re-checks every
+   10 minutes while idle (redraws only when the version actually changed —
+   new arrivals and price changes flow in on their own). */
+setInterval(()=>{if(!wasPaired)refreshCards();},10*60*1000);
 </script></body></html>
