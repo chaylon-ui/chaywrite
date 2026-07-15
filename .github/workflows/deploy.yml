@@ -18,6 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Stamp build version (drives the TV's auto-update)
+        run: |
+          sed -i "s/__BUILD__/${GITHUB_SHA::7}/" public/tv.html
+          printf '{"v":"%s"}' "${GITHUB_SHA::7}" > public/version.json
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:

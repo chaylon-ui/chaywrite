@@ -133,6 +133,13 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .lock.hide{display:none}.lock .qrbox{background:#fff;padding:12px;border-radius:12px}.lock #qr{width:190px;height:190px;display:flex;align-items:center;justify-content:center}.lock #qr img,.lock #qr canvas{width:190px;height:190px;display:block}
 .lock h2{font-family:'Cinzel',serif;font-size:1.4rem}.lock p{font-size:.8rem;color:var(--muted);max-width:320px}
 .lock .rc{font-family:'Cinzel',serif;font-size:1.6rem;letter-spacing:.3em;color:var(--ember-bright);margin-left:.3em}.lock .timer{font-size:.72rem;color:var(--ember-bright);letter-spacing:.1em;font-variant-numeric:tabular-nums}
+/* Attract mode: the lock shrinks to a corner card so the case can put on a
+   show while the QR stays scannable. */
+.lock.mini{inset:auto 1.2rem 1.2rem auto;background:rgba(8,8,11,.88);backdrop-filter:blur(2px);border:1px solid #2a2a34;border-radius:14px;padding:.75rem .9rem;gap:.45rem;box-shadow:0 16px 36px -12px #000}
+.lock.mini .qrbox{padding:7px;border-radius:9px}
+.lock.mini #qr{width:108px;height:108px}.lock.mini #qr img,.lock.mini #qr canvas{width:108px;height:108px}
+.lock.mini h2{font-size:.72rem;letter-spacing:.04em}.lock.mini p{display:none}
+.lock.mini .rc{font-size:.95rem;letter-spacing:.2em}.lock.mini .timer{font-size:.58rem}
 .zoomtv{position:absolute;inset:0;z-index:25;display:none;align-items:center;justify-content:center;background:rgba(3,3,5,.82);backdrop-filter:blur(6px);perspective:1600px}
 .zoomtv.open{display:flex}.zoomtv .zc{height:80%;aspect-ratio:.715/1;position:relative;border-radius:3%/2%;box-shadow:0 40px 90px -20px #000;
   transform-style:preserve-3d;animation:zfloat 6.5s ease-in-out infinite}
@@ -331,7 +338,26 @@ let wasPaired=false;
 function setPaired(on){document.getElementById('lock').classList.toggle('hide',on);document.getElementById('drivebar').classList.toggle('hide',!on);document.getElementById('tvCart').classList.toggle('hide',!on);
  if(on&&!wasPaired){document.getElementById('counter').classList.add('hide');} // clear ticket only when a NEW session starts
  if(!on&&wasPaired){unzoom();selected=null;cart=[];updateCart();draw();}
+ if(on)stopAttract();else armAttract();
  wasPaired=on;}
+/* ---- Attract mode: after a stretch with no phone, shrink the QR to a corner
+   card and let the case perform — spreads flip themselves and a random card
+   (foils favoured) gets the featured-zoom treatment now and then. Any pairing
+   kills the show instantly. ---- */
+const ATTRACT_AFTER_S=25,ATTRACT_FLIP_MS=14000,ATTRACT_ZOOM_MS=40000;
+let attractArm=null,attractFlip=null,attractZoom=null,attractPulse=null,attractOn=false;
+function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},ATTRACT_AFTER_S*1000);}
+function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
+ document.getElementById('lock').classList.add('mini');
+ attractFlip=setInterval(()=>{unzoom();if(spreads>1&&!flipping)flipTo((spread+1)%spreads);},ATTRACT_FLIP_MS);
+ if(!matchMedia('(prefers-reduced-motion:reduce)').matches)
+  attractZoom=setInterval(()=>{if(!CARDS.length)return;
+   const foils=CARDS.filter(c=>c.foil),pool=(foils.length&&Math.random()<0.6)?foils:CARDS;
+   zoom(pool[Math.floor(Math.random()*pool.length)]);
+   attractPulse=setTimeout(()=>{if(attractOn)unzoom();},6000);},ATTRACT_ZOOM_MS);}
+function stopAttract(){clearTimeout(attractArm);clearInterval(attractFlip);clearInterval(attractZoom);clearTimeout(attractPulse);
+ attractArm=attractFlip=attractZoom=attractPulse=null;
+ if(attractOn){attractOn=false;document.getElementById('lock').classList.remove('mini');unzoom();}}
 /* Counter ticket: shown on "send to counter"; persists past the session drop
    (staff need it) and clears when the next customer pairs. */
 function showCounter(d){const raw=(Array.isArray(d.items)&&d.items.length?d.items:cart.map(c=>({name:c.name,price:c.price,qty:1}))).slice(0,40);
@@ -371,6 +397,14 @@ function connect(){
    else if(m.type==='settings'){applySettings(m.data);}
  };
 }
+/* ---- Auto-update: the deploy pipeline stamps BUILD and publishes
+   /version.json; when a newer build appears the TV reloads itself — but only
+   while unpaired (never mid-session) and never within 5 min of boot. In local
+   dev BUILD keeps its placeholder and this whole check no-ops. ---- */
+const BUILD='__BUILD__',BOOT=Date.now();
+setInterval(()=>{if(BUILD.startsWith('__')||wasPaired||Date.now()-BOOT<3e5)return;
+ fetch('/version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null)
+  .then(j=>{if(j&&j.v&&j.v!==BUILD&&!wasPaired)location.reload();}).catch(()=>{});},3e5);
 /* Admin-editable display settings (header text, case theme, top-loaders).
    Game tabs live on the PHONE now — the TV just follows settings broadcasts. */
 let SETTINGS={header:'',theme:'mtg',topLoaders:false},TOPLOAD=false,CUR_COLLECTION=null;
