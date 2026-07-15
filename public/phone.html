@@ -155,7 +155,7 @@ function renderDeck(){const cards=trays[spread]||[];const rows=[];for(let i=0;i<
    hidden on the phone. Small foil tag top-right; price on the art lower-right. */
 function mCardHTML(c){const k=KEY(c),q=cart.filter(x=>KEY(x)===k).length,jk=H(JS(k));
  const st=c.image?`background-image:url('${H(IMGURL(c.image,300))}')`:`background:${ART[c.color]||ART.C}`;
- return `<div class="m ${selected===k?'sel':''}" style="${st}" onclick="PICK('${jk}')">${c.foil?'<div class="fsticker"><span class="fink">foil</span></div>':''}${q?`<span class="qty">×${q}</span>`:''}</div>`;}
+ return `<div class="m ${selected===k?'sel':''}" style="${st}" onclick="PICK('${jk}')">${c.foil?`<div class="fsticker"><span class="fink">${PSET.game==='pokemon'?'Holo':'foil'}</span></div>`:''}${q?`<span class="qty">×${q}</span>`:''}</div>`;}
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function phoneGrime(seed){const rng=mulberry32((seed*40503)^0x1234);let s='<svg viewBox="0 0 100 100" preserveAspectRatio="none">';for(let i=0;i<44;i++)s+=`<circle cx="${(rng()*100).toFixed(1)}" cy="${(rng()*100).toFixed(1)}" r="${(rng()*.5+.1).toFixed(2)}" fill="rgba(236,226,206,${(rng()*.12+.03).toFixed(2)})"/>`;return s+'</svg>';}
 /* Bottom of the deck: an Exor Games ad + Google-review card when enabled,

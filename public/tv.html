@@ -68,6 +68,11 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .psticker .pink{display:block;font-family:'Cutive Mono','Courier New',monospace;font-weight:700;font-size:calc(var(--cw)*.12);line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
 .fsticker{position:absolute;right:8%;top:24%;z-index:8;transform:rotate(4deg);background:#fbfbf4;padding:.2em .5em .32em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
 .fsticker .fink{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:calc(var(--cw)*.135);line-height:.75;color:#123bbf;filter:url(#ink)}
+/* Oily rainbow film over foil/holo card art — slow iridescent drift. */
+.oil{position:absolute;inset:0;z-index:5;pointer-events:none;border-radius:inherit;mix-blend-mode:screen;opacity:.55;
+  background:linear-gradient(115deg,rgba(255,90,90,.13) 4%,rgba(255,190,60,.15) 18%,rgba(248,255,120,.12) 33%,rgba(95,255,155,.15) 48%,rgba(80,190,255,.17) 63%,rgba(165,95,255,.15) 78%,rgba(255,95,215,.13) 93%);
+  background-size:230% 230%;animation:oily 7s ease-in-out infinite alternate}
+@keyframes oily{from{background-position:0% 0%}to{background-position:100% 100%}}
 /* --- Top-loader (clear rigid sleeve) — TV only, toggled in settings --- */
 /* Full-bleed art: the img keeps the normal card treatment (its own radius +
    shadow), and the sleeve is painted by ::before/::after EXTENDING BEYOND
@@ -150,13 +155,24 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
   55%{transform:translateY(.4%) rotateX(2deg) rotateY(8deg)}
   80%{transform:translateY(-1%) rotateX(-3deg) rotateY(-4deg)}}
 .zoomtv .zc .card-frame{padding:4%}.zoomtv .zc .ct{font-size:1.7rem}.zoomtv .zc .cty{font-size:1.1rem;padding:5px 10px}.zoomtv .zc .ptag .mk{font-size:.9rem;padding:6px 8px}.zoomtv .zc .ptag .am{font-size:1.6rem;padding:6px 13px}
-.shim{position:absolute;inset:0;border-radius:inherit;z-index:9;pointer-events:none;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.42) 48%,rgba(200,240,255,.45) 51%,transparent 66%);background-size:280% 280%;opacity:0}
+.shim{position:absolute;inset:0;border-radius:inherit;z-index:9;pointer-events:none;background-size:280% 280%,240% 240%;opacity:0;mix-blend-mode:screen;background:
+  linear-gradient(115deg,transparent 30%,rgba(255,255,255,.42) 48%,rgba(200,240,255,.45) 51%,transparent 66%),
+  linear-gradient(75deg,rgba(255,90,90,.14) 4%,rgba(255,190,60,.16) 18%,rgba(248,255,120,.13) 33%,rgba(95,255,155,.16) 48%,rgba(80,190,255,.18) 63%,rgba(165,95,255,.16) 78%,rgba(255,95,215,.14) 93%)}
 .zoomtv .zc.foil .shim{opacity:1;animation:sweep 2.6s ease-in-out infinite}@keyframes sweep{0%{background-position:180% 0}55%,100%{background-position:-80% 0}}
 /* Featured card: sticker price at the bottom-right of the art, foil above it */
 .zoomtv .zc .psticker{top:auto;bottom:46%;right:5%;z-index:12}
 .zoomtv .zc .fsticker{top:auto;bottom:56%;right:7.5%;z-index:12}
 .zoomtv .zc .pink{font-size:2.9vh}
 .zoomtv .zc .fink{font-size:3.1vh}
+/* Condition sticker on the featured art — red BIC ballpoint on a white label */
+.zoomtv .zc .csticker{position:absolute;left:6%;bottom:7%;z-index:12;transform:rotate(-2.5deg);background:#fbfbf4;padding:.18em .55em .3em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
+.zoomtv .zc .cink{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:2.5vh;line-height:.8;color:#d02b20;filter:url(#ink)}
+/* White cue/index card beside the preview: the card's details written out in
+   blue BIC ballpoint — name, treatment, set (helps catch a wrong set/print). */
+.zoomtv .cue{position:absolute;left:calc(50% + 31.5vh);top:50%;transform:translateY(-50%) rotate(2.2deg);width:36vh;min-height:22vh;z-index:5;border-radius:5px;padding:1vh 1.6vh 1.6vh;box-shadow:0 24px 60px -18px #000,0 0 0 .5px rgba(0,0,0,.2);
+  background:linear-gradient(180deg,transparent 0 4.6vh,#e0472f 4.6vh calc(4.6vh + 1.5px),transparent calc(4.6vh + 1.5px)),repeating-linear-gradient(180deg,transparent 0 calc(3.4vh - 1px),rgba(70,120,220,.3) calc(3.4vh - 1px) 3.4vh),#fbfaf3}
+.zoomtv .cue .cu-name{font-family:'Caveat',cursive;font-weight:700;font-size:3.4vh;line-height:4.4vh;color:#123bbf;filter:url(#ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zoomtv .cue .cu-line{font-family:'Caveat',cursive;font-weight:600;font-size:2.7vh;line-height:3.4vh;color:#123bbf;filter:url(#ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Featured card inside its top-loader: art full-bleed, sleeve OUTSIDE. */
 .zoomtv .zc.intl{overflow:visible;background:transparent}
 .zoomtv .zc.intl .scan{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;border-radius:3%/2%;box-shadow:0 3px 12px rgba(0,0,0,.6)}
@@ -178,7 +194,7 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .cord{font-size:.68rem;color:var(--muted)}
 .conn{position:absolute;top:.7rem;right:1rem;z-index:40;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:.4rem}
 .conn .d{width:7px;height:7px;border-radius:50%;background:#555}.conn.on .d{background:var(--ok);box-shadow:0 0 6px var(--ok)}
-@media (prefers-reduced-motion:reduce){.leaf{transition:none}.zoomtv .zc{animation:none}.zoomtv .zc.foil .shim{animation:none;opacity:.25}.foil-badge{animation:none}}
+@media (prefers-reduced-motion:reduce){.leaf{transition:none}.zoomtv .zc{animation:none}.zoomtv .zc.foil .shim{animation:none;opacity:.25}.foil-badge{animation:none}.oil{animation:none}}
 </style></head><body>
 <header><div class="logo">EXOR<span>·</span>GAMES</div><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span></header>
 <div class="stage">
@@ -187,7 +203,7 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
   <div class="case" id="case">
     <div class="caseInner" id="caseInner"></div>
     <div class="glass"></div>
-    <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div></div>
+    <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div></div>
   </div>
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
   <div class="tv-cart hide" id="tvCart"><span class="lbl">Cart</span><div class="items" id="tvCartItems"></div><span class="total" id="tvCartTotal">$0.00</span></div>
@@ -237,8 +253,12 @@ const KEY=c=>String(c.variantId||c.name);
 function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
  return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),type:String(d.type||'').slice(0,70),
   color:(ART[d.color]?d.color:'C'),price:money(d.price),foil:!!d.foil,
+  condition:String(d.condition||'').slice(0,60),
   image:(typeof d.image==='string'&&d.image.indexOf('https://cdn.shopify.com/')===0)?d.image:null,
   variantId:String(d.variantId||'').replace(/\D/g,'')||null};}
+/* Pokémon players say "Holo", everyone else says "foil". */
+let GAME='mtg';
+function foilWord(){return GAME==='pokemon'?'Holo':'foil'}
 function fromMsg(data){return typeof data==='string'?findCard(data):sanitizeCard(data)}
 function tx(c){return DARK.includes(c)?'#f4efe4':'#0d0d0f'}
 /* Slight, stable per-card tilt + jitter so cards look placed by hand. */
@@ -249,7 +269,7 @@ function cardHTML(c){if(!c)return '';
  const face=c.image?`<img class="scan" src="${H(IMGURL(c.image,360))}" alt="" loading="lazy">`
   :`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div>
  <div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty">${H(c.type)}</div></div>`;
- const tags=`<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?'<div class="fsticker"><span class="fink">foil</span></div>':''}`;
+ const tags=`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}`;
  return `<div class="card ${DARK.includes(c.color)?'dark':''}${TOPLOAD?' intl':''}" data-c="${H(c.color)}" data-id="${H(KEY(c))}" style="${tiltStyle(KEY(c))}">${face}${tags}</div>`;}
 /* Shingled shelves, top-anchored so the leftover space collects at the bottom. */
 function fillTray(el,cards){const rows=[];for(let i=0;i<cards.length;i+=COLS)rows.push(cards.slice(i,i+COLS));
@@ -326,10 +346,16 @@ function flip(dir){if(flipping)return;const t=spread+dir;if(t<0||t>=spreads)retu
  let done=false;const finish=()=>{if(done)return;done=true;spread=t;draw();flipping=false;afterFlip();};
  inc.addEventListener('transitionend',finish,{once:true});setTimeout(finish,1000);}
 function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD?' intl':'');
- zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.scan').forEach(e=>e.remove());
+ zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.oil,.scan').forEach(e=>e.remove());
  if(c.image)zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
- zc.insertAdjacentHTML('beforeend',`<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?'<div class="fsticker"><span class="fink">foil</span></div>':''}`);z.classList.add('open');}
+ /* Phone `select` messages don't carry condition — enrich from the local deck. */
+ const full=CARDS.find(x=>x.name===c.name&&(!c.variantId||String(x.variantId)===String(c.variantId)))||{};
+ const cond=c.condition||full.condition||'';
+ const treatment=c.foil?(GAME==='pokemon'?'Holofoil':'Foil'):(GAME==='pokemon'?'Non-holo':'Non-foil');
+ zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
+ document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div><div class="cu-line">${H(treatment)}</div><div class="cu-line">${H(c.set||'—')}</div>`;
+ z.classList.add('open');}
 function unzoom(){document.getElementById('ztv').classList.remove('open')}
 function findCard(n){return CARDS.find(c=>c.name===n)}
 function updateCart(){const box=document.getElementById('tvCartItems');box.innerHTML='';cart.forEach(c=>box.insertAdjacentHTML('beforeend',`<span class="chip">${H(c.name)} · $${money(c.price)}</span>`));document.getElementById('tvCartTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);}
@@ -408,8 +434,9 @@ setInterval(()=>{if(BUILD.startsWith('__')||wasPaired||Date.now()-BOOT<3e5)retur
 /* Admin-editable display settings (header text, case theme, top-loaders).
    Game tabs live on the PHONE now — the TV just follows settings broadcasts. */
 let SETTINGS={header:'',theme:'mtg',topLoaders:false},TOPLOAD=false,CUR_COLLECTION=null;
-function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
+function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
+ if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
  const cs=document.getElementById('case');
  cs.classList.toggle('theme-pokemon',s.theme==='pokemon');
@@ -419,6 +446,6 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if(s.collection)CUR_COLLECTION=s.collection;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
-function refreshCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
+function refreshCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
 window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings',{cache:'no-store'})).json());}catch(e){}applyCards(window.BINDER_CARDS);draw();connect();});
 </script></body></html>
