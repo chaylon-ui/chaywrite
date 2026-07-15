@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Exor Games — Binder Remote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&family=Caveat:wght@600;700&family=Cutive+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0d;--ember:#b5651d;--ember-bright:#d9822b;--ember-deep:#7a3b12;--ink:#efe9dd;--muted:#8b8b96;--ok:#3f9d5a;--bad:#c0483a;
+--W:#efe7cb;--U:#3d78b8;--B:#3a3a44;--R:#b53a2c;--G:#2f7d4f;--M:#c9a227;--C:#9aa0a8;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:radial-gradient(circle at 50% 12%,#16161c,#0a0a0d 70%);color:var(--ink);font-family:'Inter',system-ui,sans-serif;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+.top{padding:1.1rem 1rem .7rem;text-align:center;border-bottom:1px solid #1c1c22}
+/* NOTE: the original build inlined the Exor Games PNG logo as a base64 <img>.
+   Swap the .plogo div below for your original <img src="data:image/png;base64,…">
+   line if you prefer the graphic logo. */
+.plogo{font-family:'Cinzel',serif;font-weight:700;font-size:1.05rem;letter-spacing:.14em}
+.plogo span{color:var(--ember-bright)}
+.view{flex:1;min-height:0;display:none;flex-direction:column;padding:1.1rem}.view.active{display:flex}
+.center{align-items:center;justify-content:center;text-align:center;gap:1rem}
+h3{font-family:'Cinzel',serif}
+p{font-size:.85rem;color:var(--muted);line-height:1.45}
+.btn{font-family:'Inter';font-weight:600;font-size:1rem;border:none;border-radius:13px;padding:.95rem 1rem;cursor:pointer;width:100%;letter-spacing:.02em}
+.btn:active{transform:scale(.98)}.btn-primary{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff}
+.btn-ghost{background:transparent;border:1px solid #2a2a34;color:var(--ink)}.btn-sub{background:#17171d;border:1px solid #2a2a34;color:var(--ink)}
+.status{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);display:flex;align-items:center;gap:.4rem;justify-content:center}.status .d{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.idle{text-align:center;font-size:.66rem;color:var(--muted);margin:.3rem 0 .7rem;font-variant-numeric:tabular-nums}
+/* Game tabs — moved here from the TV. Tap to switch the whole display. */
+.ptabs{display:flex;gap:.45rem;justify-content:center;margin-bottom:.8rem;flex-wrap:wrap}
+.ptabs:empty{display:none}
+.ptab{font-family:'Inter',sans-serif;font-weight:600;font-size:.82rem;letter-spacing:.02em;padding:.5rem 1rem;border-radius:22px;border:1px solid #3a3a44;background:#17171d;color:var(--muted);cursor:pointer;transition:all .15s}
+.ptab:active{transform:scale(.97)}
+.ptab.on{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(217,130,43,.35)}
+.ptab:disabled{opacity:.5}
+.flip{display:flex;gap:.7rem;margin-bottom:1rem}.flip button{flex:1;background:#15151b;border:1px solid #2a2a34;border-radius:15px;padding:1.3rem 0;color:var(--ink);font-size:1.4rem}.flip button:active{background:var(--ember-deep);border-color:var(--ember)}.flip button:disabled{opacity:.3}
+.pcur{text-align:center;font-size:.66rem;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:1rem}
+/* ---- Phone showcase: shingled cards, bottoms hidden by the next card ---- */
+.sheet{flex:1;overflow-y:auto;min-height:0;padding:.2rem .1rem .4rem;-webkit-overflow-scrolling:touch;
+  background:linear-gradient(180deg,#1b130b,#100b06);border-radius:12px}
+/* width is viewport-based (not %) so the derived --ch height doesn't collapse
+   against an auto-height parent. ~2.6rem accounts for view + sheet padding. */
+.deck{--cols:3;--gap:8px;--cw:calc((min(100vw,560px) - 2.6rem - (var(--cols) - 1)*var(--gap))/var(--cols));--ch:calc(var(--cw)/0.715);
+  position:relative;display:flex;flex-direction:column;align-items:center;padding:.3rem}
+.shelf{display:flex;gap:var(--gap);width:100%;justify-content:center}
+.shelf + .shelf{margin-top:calc(var(--ch) * -0.48)}
+.m{position:relative;isolation:isolate;width:var(--cw);height:var(--ch);flex:0 0 auto;border-radius:9px;overflow:hidden;
+  background:#101014 center/cover no-repeat;
+  box-shadow:0 -6px 13px -5px rgba(0,0,0,.7),0 5px 9px -4px rgba(0,0,0,.5),inset 0 0 0 1px rgba(0,0,0,.5);
+  transition:transform .16s ease,box-shadow .16s ease}
+/* Select = highlight only. No lift/reveal — the full card shows on the TV. */
+.m.sel{box-shadow:inset 0 0 0 3px var(--ember-bright),0 0 14px rgba(217,130,43,.55)}
+.m .psticker{position:absolute;right:5%;top:38%;z-index:4;transform:rotate(-3deg);background:#fbfbf4;padding:.4em .5em;border-radius:2px;box-shadow:0 2px 4px rgba(0,0,0,.55),0 0 0 .5px rgba(0,0,0,.12)}
+.m .psticker::before,.m .psticker::after{content:"";position:absolute;left:7%;right:7%;height:1.5px;background:#c0392b}
+.m .psticker::before{top:14%}.m .psticker::after{bottom:14%}
+.m .psticker .pink{display:block;font-family:'Cutive Mono','Courier New',monospace;font-weight:700;font-size:calc(var(--cw)*.115);line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
+.m .fsticker{position:absolute;right:8%;top:23%;z-index:5;transform:rotate(4deg);background:#fbfbf4;padding:.16em .45em .28em;border-radius:2px;box-shadow:0 2px 4px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
+.m .fsticker .fink{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:calc(var(--cw)*.13);line-height:.75;color:#123bbf;filter:url(#ink)}
+.m .qty{position:absolute;top:6px;left:6px;z-index:6;font-size:.66rem;font-weight:800;background:var(--ok);color:#fff;border-radius:9px;padding:1px 7px;box-shadow:0 2px 5px rgba(0,0,0,.55)}
+.sheetgrime{position:absolute;inset:0;z-index:0;pointer-events:none}
+.sheetgrime svg{position:absolute;inset:0;width:100%;height:100%}
+/* Felt strip that overlaps the last card row so its text stays hidden too. */
+.deckclutter{position:relative;z-index:7;width:100%;margin-top:calc(var(--ch) * -0.5);background:linear-gradient(180deg,rgba(18,12,6,0),#120c06 13%,#0f0a05)}
+.deckclutter.adwrap{padding:calc(var(--ch) * 0.5 + .8rem) 1rem 1.1rem}
+.adcard{text-align:center}
+.adcard .adlogo{font-family:'Cinzel',serif;font-weight:700;font-size:1.05rem;letter-spacing:.06em;color:var(--ember-bright)}
+.adcard .adtxt{font-size:.86rem;color:var(--ink);line-height:1.45;margin:.45rem auto .9rem;max-width:22rem}
+.adcard .adg{display:block;background:linear-gradient(180deg,#ffd23f,#e0a800);color:#1a1400;font-weight:700;font-size:.86rem;padding:.75rem 1rem;border-radius:12px;text-decoration:none;box-shadow:0 3px 12px rgba(245,197,24,.28)}
+.adcard .adg:active{transform:scale(.99)}
+.clut{position:absolute;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
+.clut svg{width:100%;height:100%;display:block}
+.actionbar{border-top:1px solid #1c1c22;padding-top:.7rem;margin-top:auto}
+.actionbar .hint{text-align:center;color:var(--muted);font-size:.72rem;padding:.55rem 0}
+.actsel{display:none}.actionbar.has .actsel{display:block}.actionbar.has .hint{display:none}
+.actsel .an{font-family:'Cinzel',serif;font-size:1.02rem;text-align:center}
+.actsel .ap{text-align:center;font-size:.74rem;color:var(--muted);margin:.1rem 0 .7rem}
+.co-list{flex:1;overflow:auto;display:flex;flex-direction:column;gap:.4rem;margin:.5rem 0}
+.co-item{display:flex;justify-content:space-between;font-size:.82rem;background:#141419;border:1px solid #22222a;border-radius:9px;padding:.6rem .7rem}
+.co-total{display:flex;justify-content:space-between;font-family:'Cinzel',serif;font-weight:700;padding:.5rem .2rem;border-top:1px solid #22222a;margin-bottom:.6rem}.co-total .v{color:var(--ember-bright)}
+.ic{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.7rem}
+.ic.bad{background:rgba(192,72,58,.15);border:1px solid var(--bad)}.ic.ok{background:rgba(63,157,90,.15);border:1px solid var(--ok)}
+.toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%) translateY(160%);background:linear-gradient(180deg,#1a1a20,#101014);border:1px solid var(--ember);color:var(--ink);padding:.7rem 1.1rem;border-radius:11px;z-index:99;font-size:.85rem;transition:transform .35s cubic-bezier(.2,1.2,.3,1)}.toast.show{transform:translateX(-50%) translateY(0)}
+</style></head><body>
+<div class="top"><div class="plogo">EXOR<span>·</span>GAMES</div></div>
+
+<div class="view center active" id="v-connect"><div class="ic ok" style="animation:none">⟳</div><h3>Connecting…</h3><p>Pairing with the binder.</p></div>
+
+<div class="view" id="v-ctrl">
+  <div class="status"><span class="d"></span>You're driving the binder</div>
+  <div class="idle">auto-disconnects after 2 min idle · <span id="phIdle">2:00</span></div>
+  <div class="ptabs" id="ptabs"></div>
+  <div class="flip"><button id="phPrev" onclick="EV('prev')">‹ Prev case</button><button id="phNext" onclick="EV('next')">Next case ›</button></div>
+  <div class="pcur" id="pcur">Case 1</div>
+  <svg class="inkdefs" width="0" height="0" aria-hidden="true"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.4" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+  <div class="sheet" id="sheet"><div class="deck" id="deck"></div></div>
+  <div class="actionbar" id="actionbar">
+    <div class="hint" id="hint">Tap a card to feature it on the TV.</div>
+    <div class="actsel">
+      <div class="an" id="selName"></div><div class="ap" id="selMeta"></div>
+      <button class="btn btn-primary" onclick="ADD()" style="margin-bottom:.5rem">Add to cart</button>
+    </div>
+    <button class="btn btn-ghost" onclick="OPENCART()">View cart (<span id="cc">0</span>)</button>
+  </div>
+</div>
+
+<div class="view" id="v-cart">
+  <h3 style="text-align:center">Your cart</h3>
+  <div class="co-list" id="coList"></div>
+  <div class="co-total"><span>Total</span><span class="v" id="coTotal">$0.00</span></div>
+  <button class="btn btn-primary" onclick="CHECKOUT('phone')">Check out on my phone</button>
+  <button class="btn btn-sub" onclick="CHECKOUT('counter')" style="margin-top:.5rem">Send to counter to pay</button>
+  <button class="btn btn-ghost" onclick="SHOW('v-ctrl')" style="margin-top:.5rem">Keep browsing</button>
+</div>
+
+<div class="view center" id="v-reject"><div class="ic bad">🔒</div><h3 id="rjT">Someone's using this binder</h3><p id="rjP">Another customer is driving right now. Try again in a moment.</p></div>
+<div class="view center" id="v-done"><div class="ic ok">✓</div><h3 id="doneT"></h3><p id="doneP"></p></div>
+
+<div class="toast" id="toast"></div>
+<script src="/cards.sample.js"></script>
+<script>
+/* Live deck loader — must match the TV's deck so names line up (both read the
+   same edge-cached /cards.json). Falls back to the sample deck on failure. */
+window.BINDER_READY=fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;window.BINDER_CARDS=d.cards;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
+function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
+</script>
+<script>
+let CARDS, CN;
+/* Fallback art swatches per lane (MTG letters, Pokémon energies, YGO lanes). */
+const ART={W:'radial-gradient(circle at 50% 40%,#fff8e0,#cdbf90)',U:'radial-gradient(circle at 50% 40%,#7db4e8,#254a72)',B:'radial-gradient(circle at 50% 40%,#4a4a56,#0c0c10)',R:'radial-gradient(circle at 50% 40%,#e08a5a,#7a1f16)',G:'radial-gradient(circle at 50% 40%,#7fc88f,#1c5030)',M:'radial-gradient(circle at 50% 40%,#f0d878,#8a6f18)',C:'radial-gradient(circle at 50% 40%,#c8ced6,#5c626b)',
+Grass:'radial-gradient(circle at 50% 40%,#8fd08f,#2f7d4f)',Fire:'radial-gradient(circle at 50% 40%,#f0946a,#8a2a12)',Water:'radial-gradient(circle at 50% 40%,#7db4e8,#22537a)',Lightning:'radial-gradient(circle at 50% 40%,#f6da62,#a8861a)',Psychic:'radial-gradient(circle at 50% 40%,#d29ae6,#6a3391)',Fighting:'radial-gradient(circle at 50% 40%,#d09a6a,#7a4a22)',Darkness:'radial-gradient(circle at 50% 40%,#5a5a68,#17171f)',Metal:'radial-gradient(circle at 50% 40%,#d0d8e0,#767e88)',Dragon:'radial-gradient(circle at 50% 40%,#d6bd7a,#6e5a24)',Colorless:'radial-gradient(circle at 50% 40%,#c8ced6,#5c626b)',Trainer:'radial-gradient(circle at 50% 40%,#efe6d0,#a89878)',
+Spell:'radial-gradient(circle at 50% 40%,#6cc4b0,#1d5e50)',Trap:'radial-gradient(circle at 50% 40%,#dd7ab4,#7a2a5a)',Dark:'radial-gradient(circle at 50% 40%,#7a6aa0,#241a3a)',Light:'radial-gradient(circle at 50% 40%,#f6ecc0,#b8a860)',Earth:'radial-gradient(circle at 50% 40%,#b8a080,#5a4a30)',Wind:'radial-gradient(circle at 50% 40%,#9ad2aa,#3a7a52)',Divine:'radial-gradient(circle at 50% 40%,#f0d878,#8a6f18)',Monster:'radial-gradient(circle at 50% 40%,#c8a468,#6a4a28)'};
+const TRAY=24,COLS=3;let trays=[],spreads=0,spread=0,selected=null,cart=[];
+function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
+applyCards(window.BINDER_CARDS);
+const token=location.pathname.split('/c/')[1]||'';
+function SHOW(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function drawSpread(){renderDeck();
+ document.getElementById('pcur').textContent=`Case ${spread+1} of ${spreads}`;
+ document.getElementById('phPrev').disabled=spread===0;document.getElementById('phNext').disabled=spread>=spreads-1;
+ updateActionBar();}
+/* Cards are keyed by variantId (names duplicate across printings — two
+   "Smothering Tithe"s at different prices are both real). H() escapes for HTML,
+   JS() for inline-handler string context. */
+function H(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function money(x){const n=parseFloat(x);return isFinite(n)?n.toFixed(2):'0.00'}
+const KEY=c=>String(c.variantId||c.name);
+function byKey(k){return CARDS.find(c=>KEY(c)===k)}
+function JS(n){return String(n).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+/* Shingled showcase: each card's bottom tucks under the next; only the tapped
+   card highlights (and features on the TV). */
+function renderDeck(){const cards=trays[spread]||[];const rows=[];for(let i=0;i<cards.length;i+=COLS)rows.push(cards.slice(i,i+COLS));
+ let h='<div class="sheetgrime">'+phoneGrime(spread)+'</div>';
+ h+=rows.map(row=>'<div class="shelf">'+row.map(mCardHTML).join('')+'</div>').join('');
+ h+=deckExtras(cards.length,spread);
+ document.getElementById('deck').innerHTML=h;}
+/* Tap just selects (features on the TV) — no lift, so the card's text stays
+   hidden on the phone. Small foil tag top-right; price on the art lower-right. */
+function mCardHTML(c){const k=KEY(c),q=cart.filter(x=>KEY(x)===k).length,jk=H(JS(k));
+ const st=c.image?`background-image:url('${H(IMGURL(c.image,300))}')`:`background:${ART[c.color]||ART.C}`;
+ return `<div class="m ${selected===k?'sel':''}" style="${st}" onclick="PICK('${jk}')">${c.foil?'<div class="fsticker"><span class="fink">foil</span></div>':''}${q?`<span class="qty">×${q}</span>`:''}</div>`;}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function phoneGrime(seed){const rng=mulberry32((seed*40503)^0x1234);let s='<svg viewBox="0 0 100 100" preserveAspectRatio="none">';for(let i=0;i<44;i++)s+=`<circle cx="${(rng()*100).toFixed(1)}" cy="${(rng()*100).toFixed(1)}" r="${(rng()*.5+.1).toFixed(2)}" fill="rgba(236,226,206,${(rng()*.12+.03).toFixed(2)})"/>`;return s+'</svg>';}
+/* Bottom of the deck: an Exor Games ad + Google-review card when enabled,
+   otherwise dead flies + desk clutter. Either way it covers the last card row. */
+function adHTML(){const rev=PSET.reviewUrl?`<a class="adg" href="${H(PSET.reviewUrl)}" target="_blank" rel="noopener">★★★★★&nbsp;&nbsp;Loved the visit? Leave us a Google review</a>`:'';
+ return `<div class="adcard"><div class="adlogo">EXOR GAMES</div><div class="adtxt">${H(PSET.adText||'')}</div>${rev}</div>`;}
+function deckExtras(nCards,seed){const empty=Math.max(0,TRAY-nCards);const rng=mulberry32((seed*2246822519)^0xabcdef);
+ if(PSET.adEnabled)return `<div class="deckclutter adwrap">${adHTML()}</div>`;
+ const hvw=empty>0?Math.min(74,26+Math.ceil(empty/COLS)*16):30;let inner='';
+ const nf=2+Math.floor(rng()*3);for(let i=0;i<nf;i++)inner+=`<div class="clut" style="left:${(6+rng()*86).toFixed(1)}%;top:${(20+rng()*72).toFixed(1)}%;width:${(6+rng()*3).toFixed(1)}%;transform:translate(-50%,-50%) rotate(${(rng()*40-20)|0}deg)"><svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg></div>`;
+ if(empty>0){const want=Math.min(8,Math.max(2,Math.round(empty*.4)));for(let i=0;i<want;i++)inner+=`<div class="clut" style="left:${(9+rng()*82).toFixed(1)}%;top:${(28+rng()*66).toFixed(1)}%;width:${(13+rng()*8).toFixed(1)}%;transform:translate(-50%,-50%) rotate(${(rng()*40-20)|0}deg)">${PROP_SVG(Math.floor(rng()*6))}</div>`;}
+ return `<div class="deckclutter" style="height:${hvw}vw">${inner}</div>`;}
+function fly(x,y,r){return `<g transform="rotate(${r} ${x} ${y})"><ellipse cx="${x}" cy="${y}" rx="5.5" ry="9" fill="#17181c"/><ellipse cx="${x}" cy="${y-7}" rx="3.6" ry="3.6" fill="#101115"/><ellipse cx="${x-7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.45)" transform="rotate(-25 ${x-7} ${y-1})"/><ellipse cx="${x+7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.45)" transform="rotate(25 ${x+7} ${y-1})"/><g stroke="#0c0d10" stroke-width="1" fill="none"><path d="M${x-4} ${y+4} l-6 5"/><path d="M${x+4} ${y+4} l6 5"/><path d="M${x-4} ${y+8} l-5 3"/><path d="M${x+4} ${y+8} l5 3"/></g></g>`;}
+function PROP_SVG(n){let cb='';for(let r=0;r<4;r++)for(let k=0;k<4;k++)cb+=`<rect x="${30+k*11}" y="${56+r*13}" width="8.5" height="8.5" rx="2"/>`;
+ const P=[
+  `<svg viewBox="0 0 100 140" class="ps"><rect x="16" y="52" width="68" height="40" rx="12" fill="#23262d"/><rect x="16" y="52" width="68" height="20" rx="10" fill="#353a44"/><rect x="24" y="57" width="54" height="7" rx="3" fill="#575c67"/><circle cx="24" cy="84" r="5" fill="#0e0f12"/><rect x="16" y="70" width="68" height="3" fill="#0e0f12" opacity=".5"/></svg>`,
+  `<svg viewBox="0 0 100 140" class="ps" fill="none" stroke-width="5"><ellipse cx="46" cy="72" rx="30" ry="21" stroke="#b9633b" transform="rotate(-14 46 72)"/><ellipse cx="55" cy="70" rx="29" ry="19" stroke="#c9a24a" transform="rotate(10 55 70)"/><ellipse cx="50" cy="66" rx="27" ry="17" stroke="#7f4326" transform="rotate(26 50 66)"/></svg>`,
+  `<svg viewBox="0 0 100 140" class="ps"><rect x="24" y="28" width="52" height="84" rx="7" fill="#2b2e34"/><rect x="30" y="34" width="40" height="15" rx="3" fill="#8a9670"/><g fill="#4a4e57">${cb}</g></svg>`,
+  `<svg viewBox="0 0 100 140" class="ps">${fly(38,58,-20)}${fly(60,84,35)}${fly(45,98,10)}</svg>`,
+  `<svg viewBox="0 0 100 140" class="ps"><g transform="rotate(38 50 70)"><rect x="45" y="20" width="10" height="92" rx="5" fill="#20406a"/><polygon points="45,112 55,112 50,124" fill="#c7ccd3"/><rect x="44" y="30" width="12" height="4" fill="#d3a52a"/><rect x="46.5" y="16" width="2.4" height="16" rx="1" fill="#9aa0aa"/></g></svg>`,
+  `<svg viewBox="0 0 100 140" class="ps"><circle cx="40" cy="82" r="15" fill="#bd7f40"/><circle cx="40" cy="82" r="15" fill="none" stroke="#8a5a28" stroke-width="2.4"/><g transform="rotate(-18 62 56)"><rect x="55" y="40" width="14" height="34" rx="7" fill="none" stroke="#c6cad1" stroke-width="2.6"/><rect x="58.5" y="46" width="7" height="22" rx="3.5" fill="none" stroke="#c6cad1" stroke-width="2.6"/></g></svg>`,
+ ];return P[n%P.length];}
+function updateActionBar(){const bar=document.getElementById('actionbar');const c=selected&&byKey(selected);
+ if(c){bar.classList.add('has');document.getElementById('selName').textContent=c.name;
+  document.getElementById('selMeta').textContent=[c.set,CN[c.color]].filter(Boolean).join(' · ');}
+ else bar.classList.remove('has');}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800);}
+
+let ws;
+function connect(){
+ const proto=location.protocol==='https:'?'wss':'ws';
+ ws=new WebSocket(`${proto}://${location.host}/ws?role=phone&token=${encodeURIComponent(token)}`);
+ ws.onmessage=(ev)=>{const m=JSON.parse(ev.data);
+   if(m.type==='claimed'){SHOW('v-ctrl');drawSpread();}
+   else if(m.type==='rejected'){SHOW('v-reject');if(m.reason==='expired'){document.getElementById('rjT').textContent='This code expired';document.getElementById('rjP').textContent='Codes refresh every 2 minutes. Scan the current code on the TV.';}}
+   else if(m.type==='idle'){document.getElementById('phIdle').textContent=Math.floor(m.idleLeft/60)+':'+String(m.idleLeft%60).padStart(2,'0');}
+   else if(m.type==='dropped'){if(!checkedOut){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent=m.reason==='idle'?'No activity for 2 minutes, so the binder freed up for the next customer.':'Disconnected.';}}
+   else if(m.type==='counter_order'){if(m.data&&m.data.name){document.getElementById('doneP').textContent='Draft order '+m.data.name+' is waiting at the counter ('+m.data.count+' cards · $'+m.data.total+'). Give your name at the register.';}}
+   else if(m.type==='settings'){applyPhoneSettings(m.data);}
+   else if(m.type==='ack'){/* could sync cart count from server */}
+ };
+ /* A dead socket must not masquerade as a live session: without this, a
+    backgrounded phone could later "send to counter" into the void and show a
+    false success. */
+ ws.onclose=()=>{if(checkedOut)return;const active=document.querySelector('.view.active');if(active&&(active.id==='v-done'||active.id==='v-reject'))return;lostSession();};
+}
+/* Admin settings the phone cares about: ad card, active collection, and the
+   game tabs (which live HERE now — the customer switches, the TV follows). */
+let PSET={adEnabled:false,adText:'',reviewUrl:'',collection:null,tabs:[]};
+let switching=false;
+function renderTabs(){const b=document.getElementById('ptabs');if(!b)return;const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];
+ if(tabs.length<2){b.innerHTML='';return;}
+ b.innerHTML=tabs.map((t,i)=>`<button class="ptab${t.collection===PSET.collection?' on':''}" ${switching?'disabled':''} onclick="switchTab(${i})">${H(String(t.label||'').slice(0,24))}</button>`).join('');}
+function switchTab(i){if(switching)return;const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];const t=tabs[i];
+ if(!t||t.collection===PSET.collection)return;
+ switching=true;renderTabs();
+ fetch('/switch?i='+i,{method:'POST'}).catch(()=>{}).finally(()=>{switching=false;renderTabs();});}
+function applyPhoneSettings(s){if(!s||typeof s!=='object')return;const prev=PSET.collection;PSET=Object.assign(PSET,s);
+ renderTabs();
+ if(s.collection&&prev&&s.collection!==prev){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
+ else if(document.getElementById('deck'))drawSpread();}
+fetch('/settings',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{if(s)applyPhoneSettings(s);}).catch(()=>{});
+/* Flip sends the ABSOLUTE target spread — the phone owns navigation, the TV
+   follows. Rapid taps can't desync the two anymore. */
+function EV(kind){if(!ws||ws.readyState!==1)return;
+ const t=kind==='next'?spread+1:spread-1;if(t<0||t>=spreads)return;
+ spread=t;selected=null;drawSpread();document.getElementById('sheet').scrollTop=0;
+ ws.send(JSON.stringify({type:'flip',data:{spread:t}}));}
+/* select/addcart carry the card payload, not just a name — the TV renders
+   exactly what was tapped even if its cached deck snapshot differs. */
+function cardMsg(c){return {k:KEY(c),name:c.name,set:c.set,type:c.type,color:c.color,price:c.price,foil:!!c.foil,image:c.image||null,variantId:c.variantId||null}}
+/* Tap: feature on TV + reveal the Add button on the tile. Tap again: dismiss. */
+function PICK(k){if(!ws||ws.readyState!==1)return;
+ if(selected===k){selected=null;ws.send(JSON.stringify({type:'unselect'}));drawSpread();return;}
+ const c=byKey(k);if(!c)return;
+ selected=k;ws.send(JSON.stringify({type:'select',data:cardMsg(c)}));drawSpread();}
+function ADD(k){const c=byKey(k||selected);if(!c)return;cart.push(c);document.getElementById('cc').textContent=cart.length;toast('Added '+c.name+' · $'+money(c.price));if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'addcart',data:cardMsg(c)}));drawSpread();}
+function OPENCART(){const l=document.getElementById('coList');l.innerHTML='';cart.forEach(c=>l.insertAdjacentHTML('beforeend',`<div class="co-item"><span>${H(c.name)}</span><span>$${money(c.price)}</span></div>`));if(!cart.length)l.innerHTML='<div class="sel-empty">Cart is empty.</div>';
+ document.getElementById('coTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);SHOW('v-cart');}
+let checkedOut=false;
+function lostSession(){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent='The connection to the binder was lost — scan the QR code on the TV to start again.';}
+function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
+ if(!ws||ws.readyState!==1){lostSession();return;}
+ const t=cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
+ const agg={};cart.forEach(c=>{if(!c.variantId)return;(agg[c.variantId]=agg[c.variantId]||{variantId:c.variantId,name:c.name,price:c.price,qty:0}).qty++;});
+ const items=Object.values(agg);
+ ws.send(JSON.stringify({type:'checkout',data:{where,count:cart.length,total:t,items}}));
+ checkedOut=true;SHOW('v-done');
+ if(where==='phone'){const ids=items.map(i=>i.variantId+':'+i.qty).join(',');
+  if(ids){document.getElementById('doneT').textContent='Off to checkout';document.getElementById('doneP').textContent='Opening your Shopify cart ('+cart.length+' cards · $'+t+')…';setTimeout(()=>{location.href='https://exorgames.com/cart/'+ids;},800);}
+  else{document.getElementById('doneT').textContent='See the counter';document.getElementById('doneP').textContent='These cards can’t be added to an online cart right now — please pay at the counter ('+cart.length+' cards · $'+t+').';}}
+ else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Staff have your '+cart.length+' cards ($'+t+') — give your name at the register.';}}
+window.BINDER_READY.then(()=>{applyCards(window.BINDER_CARDS);
+ if(!token){SHOW('v-reject');document.getElementById('rjT').textContent='Scan the TV code';document.getElementById('rjP').textContent='Open this by scanning the QR on the binder screen.';}
+ else connect();});
+</script></body></html>
