@@ -46,10 +46,15 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .case.tl .shelf{gap:calc(var(--gap) + .2vw)}
 .case.tl .shelf + .shelf{margin-top:calc(var(--rim)*2 + 1vh)} /* whole sleeved card shows, no overlap */
 .case.tl .card{overflow:visible} /* the sleeve rim lives outside the card box */
-.rail{position:absolute;left:0;right:0;bottom:0;height:11%;z-index:6;pointer-events:none;
-  background:linear-gradient(180deg,transparent,rgba(26,15,6,.35) 45%,rgba(18,10,4,.9));box-shadow:inset 0 12px 22px -12px rgba(0,0,0,.85)}
-.glass{position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden;background:linear-gradient(122deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.06) 13%,transparent 30%,transparent 63%,rgba(255,255,255,.11) 86%,rgba(255,255,255,.03) 100%)}
+/* Glass pane: sheen + light wear-scratches + pane depth (no bottom fade). */
+.glass{position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden;
+  background:
+   url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='260'><g fill='none' stroke-linecap='round'><line x1='30' y1='190' x2='210' y2='128' stroke='rgba(255,255,255,.075)' stroke-width='.8'/><line x1='34' y1='193' x2='150' y2='153' stroke='rgba(255,255,255,.045)' stroke-width='.5'/><line x1='250' y1='40' x2='396' y2='96' stroke='rgba(255,255,255,.06)' stroke-width='.7'/><line x1='96' y1='18' x2='150' y2='84' stroke='rgba(255,255,255,.05)' stroke-width='.6'/><line x1='310' y1='226' x2='402' y2='196' stroke='rgba(255,255,255,.07)' stroke-width='.6'/><line x1='188' y1='236' x2='240' y2='210' stroke='rgba(255,255,255,.045)' stroke-width='.5'/><path d='M60 96q24 -14 52 -10' stroke='rgba(255,255,255,.05)' stroke-width='.6'/><path d='M330 140q20 12 20 34' stroke='rgba(255,255,255,.04)' stroke-width='.6'/><line x1='142' y1='120' x2='166' y2='112' stroke='rgba(255,255,255,.1)' stroke-width='1'/><line x1='352' y1='60' x2='366' y2='72' stroke='rgba(255,255,255,.09)' stroke-width='.9'/></g></svg>") 0 0/100% 100%,
+   linear-gradient(122deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.06) 13%,transparent 30%,transparent 63%,rgba(255,255,255,.11) 86%,rgba(255,255,255,.03) 100%);
+  box-shadow:inset 0 0 52px rgba(0,0,0,.32),inset 0 2px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.1),inset 2px 0 0 rgba(255,255,255,.08),inset -2px 0 0 rgba(255,255,255,.08)}
 .glass::before{content:"";position:absolute;top:-40%;left:-6%;width:44%;height:180%;transform:rotate(17deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),rgba(255,255,255,.05),transparent)}
+/* Inner pane line — reads as the glass sheet's thickness. */
+.glass::after{content:"";position:absolute;inset:5px;border-radius:10px;box-shadow:0 0 0 1.5px rgba(255,255,255,.07),inset 0 0 0 1px rgba(255,255,255,.035)}
 .card{position:relative;isolation:isolate;width:var(--cw);height:var(--ch);flex:0 0 auto;border-radius:5%/3.6%;overflow:hidden;background:#0c0c10;
   transform:translateY(var(--jy,0)) rotate(var(--tilt,0deg));
   box-shadow:0 -7px 16px -6px rgba(0,0,0,.72),0 6px 11px -5px rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.5);
@@ -69,15 +74,23 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
    the card box (negative inset), so nothing covers or shrinks the picture. */
 .card.intl{background:transparent}
 .card.intl .scan{border-radius:3.5%/2.5%;box-shadow:0 2px 7px rgba(0,0,0,.55),0 0 0 .5px rgba(0,0,0,.3)}
-/* rim + strong gloss + worn scratches, drawn out to the sleeve edge */
-.card.intl::after{content:"";position:absolute;inset:calc(-1*var(--rim,6%));z-index:9;pointer-events:none;border-radius:7%/5%;
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 0 2.5px rgba(180,200,230,.2),inset 0 0 16px rgba(255,255,255,.16),0 7px 15px -7px rgba(0,0,0,.65);
+/* Rigid sleeve body: welded (slightly LESS transparent) seams down the left,
+   right and bottom edges; squared-off top where the mouth is cut open.
+   Gloss + worn scratches over the whole pane. */
+.card.intl::after{content:"";position:absolute;inset:calc(-1*var(--rim,6%));z-index:9;pointer-events:none;border-radius:2.5% 2.5% 6% 6%/1.8% 1.8% 4.5% 4.5%;
+  box-shadow:
+   inset 0 0 0 1px rgba(255,255,255,.34),
+   inset 3px 0 0 0 rgba(224,234,250,.36),inset -3px 0 0 0 rgba(224,234,250,.36),inset 0 -3.5px 0 0 rgba(228,238,252,.44),
+   inset 7px 0 7px -5px rgba(255,255,255,.26),inset -7px 0 7px -5px rgba(255,255,255,.26),inset 0 -8px 8px -5px rgba(255,255,255,.3),
+   0 7px 15px -7px rgba(0,0,0,.65);
   background-size:100% 100%,100% 100%;background:
-   linear-gradient(118deg,rgba(255,255,255,.3) 0%,rgba(255,255,255,.04) 11%,transparent 26%,transparent 64%,rgba(255,255,255,.07) 82%,rgba(255,255,255,.2) 100%),
+   linear-gradient(118deg,rgba(255,255,255,.24) 0%,rgba(255,255,255,.04) 11%,transparent 26%,transparent 64%,rgba(255,255,255,.06) 82%,rgba(255,255,255,.16) 100%),
    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='130' height='182'><g fill='none' stroke-linecap='round'><line x1='14' y1='24' x2='80' y2='50' stroke='rgba(255,255,255,.18)' stroke-width='.6'/><line x1='98' y1='15' x2='64' y2='108' stroke='rgba(255,255,255,.12)' stroke-width='.5'/><line x1='20' y1='140' x2='106' y2='166' stroke='rgba(255,255,255,.14)' stroke-width='.5'/><line x1='8' y1='98' x2='36' y2='152' stroke='rgba(0,0,0,.07)' stroke-width='.5'/><line x1='72' y1='122' x2='120' y2='98' stroke='rgba(0,0,0,.05)' stroke-width='.5'/></g></svg>")}
-/* Frosted opening lip across the sleeve's top edge (above the art). */
-.card.intl::before{content:"";position:absolute;top:calc(-1*var(--rim,6%) - 1.5%);left:calc(-1*var(--rim,6%));right:calc(-1*var(--rim,6%));height:calc(var(--rim,6%) + 3%);z-index:10;pointer-events:none;border-radius:7% 7% 3% 3%/10% 10% 4% 4%;
-  background:linear-gradient(180deg,rgba(233,239,248,.92),rgba(214,223,238,.7) 58%,rgba(206,216,232,.18));box-shadow:inset 0 -1px 2px rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.12)}
+/* OPEN top: no weld here — just the front wall's crisp cut edge and a faint
+   slot shadow where the card slides in. */
+.card.intl::before{content:"";position:absolute;top:calc(-1*var(--rim,6%));left:calc(-1*var(--rim,6%));right:calc(-1*var(--rim,6%));height:calc(var(--rim,6%)*1.7);z-index:10;pointer-events:none;border-radius:2.5% 2.5% 0 0/22% 22% 0 0;
+  background:linear-gradient(180deg,rgba(228,236,248,.28),rgba(222,232,246,.12) 55%,transparent);
+  box-shadow:inset 0 1.5px 0 rgba(255,255,255,.62),inset 0 2.5px 0 rgba(120,140,165,.18)}
 /* --- Pokémon case theme (red & white) --- */
 .pball{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;background:center/34% no-repeat}
 .case.theme-pokemon .pball{opacity:.11;background-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23f4f4f4'/><path d='M2 50a48 48 0 0 1 96 0z' fill='%23e63b2e'/><rect x='2' y='46' width='96' height='7' fill='%23151515'/><circle cx='50' cy='49.5' r='13' fill='%23151515'/><circle cx='50' cy='49.5' r='7.5' fill='%23f4f4f4'/></svg>")}
@@ -121,7 +134,14 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .lock h2{font-family:'Cinzel',serif;font-size:1.4rem}.lock p{font-size:.8rem;color:var(--muted);max-width:320px}
 .lock .rc{font-family:'Cinzel',serif;font-size:1.6rem;letter-spacing:.3em;color:var(--ember-bright);margin-left:.3em}.lock .timer{font-size:.72rem;color:var(--ember-bright);letter-spacing:.1em;font-variant-numeric:tabular-nums}
 .zoomtv{position:absolute;inset:0;z-index:25;display:none;align-items:center;justify-content:center;background:rgba(3,3,5,.82);backdrop-filter:blur(6px);perspective:1600px}
-.zoomtv.open{display:flex}.zoomtv .zc{height:80%;aspect-ratio:.715/1;position:relative;border-radius:3%/2%;box-shadow:0 40px 90px -20px #000}
+.zoomtv.open{display:flex}.zoomtv .zc{height:80%;aspect-ratio:.715/1;position:relative;border-radius:3%/2%;box-shadow:0 40px 90px -20px #000;
+  transform-style:preserve-3d;animation:zfloat 6.5s ease-in-out infinite}
+/* The featured card hovers and tilts in hand — gentle 3D wobble + bob. */
+@keyframes zfloat{
+  0%,100%{transform:translateY(0) rotateX(3.5deg) rotateY(-6deg)}
+  30%{transform:translateY(-1.4%) rotateX(-2.5deg) rotateY(5deg)}
+  55%{transform:translateY(.4%) rotateX(2deg) rotateY(8deg)}
+  80%{transform:translateY(-1%) rotateX(-3deg) rotateY(-4deg)}}
 .zoomtv .zc .card-frame{padding:4%}.zoomtv .zc .ct{font-size:1.7rem}.zoomtv .zc .cty{font-size:1.1rem;padding:5px 10px}.zoomtv .zc .ptag .mk{font-size:.9rem;padding:6px 8px}.zoomtv .zc .ptag .am{font-size:1.6rem;padding:6px 13px}
 .shim{position:absolute;inset:0;border-radius:inherit;z-index:9;pointer-events:none;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.42) 48%,rgba(200,240,255,.45) 51%,transparent 66%);background-size:280% 280%;opacity:0}
 .zoomtv .zc.foil .shim{opacity:1;animation:sweep 2.6s ease-in-out infinite}@keyframes sweep{0%{background-position:180% 0}55%,100%{background-position:-80% 0}}
@@ -133,8 +153,12 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 /* Featured card inside its top-loader: art full-bleed, sleeve OUTSIDE. */
 .zoomtv .zc.intl{overflow:visible;background:transparent}
 .zoomtv .zc.intl .scan{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;border-radius:3%/2%;box-shadow:0 3px 12px rgba(0,0,0,.6)}
-.zoomtv .zc.intl::after{content:"";position:absolute;inset:-5.5%;z-index:9;pointer-events:none;border-radius:6%/4.5%;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.55),inset 0 0 0 3px rgba(180,200,230,.16),0 10px 24px -10px rgba(0,0,0,.7);background-size:100% 100%,100% 100%;background:linear-gradient(118deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.03) 10%,transparent 24%,transparent 66%,rgba(255,255,255,.06) 84%,rgba(255,255,255,.16) 100%),url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='130' height='182'><g fill='none' stroke-linecap='round'><line x1='14' y1='24' x2='80' y2='50' stroke='rgba(255,255,255,.16)' stroke-width='.6'/><line x1='98' y1='15' x2='64' y2='108' stroke='rgba(255,255,255,.1)' stroke-width='.5'/><line x1='20' y1='140' x2='106' y2='166' stroke='rgba(255,255,255,.12)' stroke-width='.5'/><line x1='8' y1='98' x2='36' y2='152' stroke='rgba(0,0,0,.07)' stroke-width='.5'/></g></svg>")}
-.zoomtv .zc.intl::before{content:"";position:absolute;top:-7%;left:-5.5%;right:-5.5%;height:8.5%;z-index:10;pointer-events:none;border-radius:6% 6% 3% 3%/12% 12% 5% 5%;background:linear-gradient(180deg,rgba(233,239,248,.92),rgba(214,223,238,.7) 58%,rgba(206,216,232,.18));box-shadow:inset 0 -1px 2px rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.12)}
+.zoomtv .zc.intl::after{content:"";position:absolute;inset:-5.5%;z-index:9;pointer-events:none;border-radius:2.2% 2.2% 5.5% 5.5%/1.6% 1.6% 4% 4%;
+  box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.32),inset 5px 0 0 0 rgba(224,234,250,.34),inset -5px 0 0 0 rgba(224,234,250,.34),inset 0 -6px 0 0 rgba(228,238,252,.42),inset 12px 0 12px -8px rgba(255,255,255,.24),inset -12px 0 12px -8px rgba(255,255,255,.24),inset 0 -14px 14px -9px rgba(255,255,255,.28),0 10px 24px -10px rgba(0,0,0,.7);
+  background-size:100% 100%,100% 100%;background:linear-gradient(118deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.03) 10%,transparent 24%,transparent 66%,rgba(255,255,255,.05) 84%,rgba(255,255,255,.14) 100%),url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='130' height='182'><g fill='none' stroke-linecap='round'><line x1='14' y1='24' x2='80' y2='50' stroke='rgba(255,255,255,.16)' stroke-width='.6'/><line x1='98' y1='15' x2='64' y2='108' stroke='rgba(255,255,255,.1)' stroke-width='.5'/><line x1='20' y1='140' x2='106' y2='166' stroke='rgba(255,255,255,.12)' stroke-width='.5'/><line x1='8' y1='98' x2='36' y2='152' stroke='rgba(0,0,0,.07)' stroke-width='.5'/></g></svg>")}
+.zoomtv .zc.intl::before{content:"";position:absolute;top:-5.5%;left:-5.5%;right:-5.5%;height:9%;z-index:10;pointer-events:none;border-radius:2.2% 2.2% 0 0/20% 20% 0 0;
+  background:linear-gradient(180deg,rgba(228,236,248,.26),rgba(222,232,246,.1) 55%,transparent);
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.6),inset 0 3.5px 0 rgba(120,140,165,.16)}
 /* Counter ticket: pinned top-left ABOVE the lock screen (z-35 > lock z-30) so
    staff can read it after the session drops, while the QR stays scannable. */
 .counter{position:absolute;top:3.4rem;left:1rem;z-index:35;max-width:330px}
@@ -147,7 +171,7 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
 .cord{font-size:.68rem;color:var(--muted)}
 .conn{position:absolute;top:.7rem;right:1rem;z-index:40;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:.4rem}
 .conn .d{width:7px;height:7px;border-radius:50%;background:#555}.conn.on .d{background:var(--ok);box-shadow:0 0 6px var(--ok)}
-@media (prefers-reduced-motion:reduce){.leaf{transition:none}.zoomtv .zc.foil .shim{animation:none;opacity:.25}.foil-badge{animation:none}}
+@media (prefers-reduced-motion:reduce){.leaf{transition:none}.zoomtv .zc{animation:none}.zoomtv .zc.foil .shim{animation:none;opacity:.25}.foil-badge{animation:none}}
 </style></head><body>
 <header><div class="logo">EXOR<span>·</span>GAMES</div><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span></header>
 <div class="stage">
@@ -155,7 +179,7 @@ header{display:flex;align-items:center;gap:1.1rem;padding:1rem 1.6rem .6rem;flex
   <svg class="inkdefs" width="0" height="0" aria-hidden="true"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
   <div class="case" id="case">
     <div class="caseInner" id="caseInner"></div>
-    <div class="rail"></div><div class="glass"></div>
+    <div class="glass"></div>
     <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div></div>
   </div>
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
@@ -224,13 +248,11 @@ function cardHTML(c){if(!c)return '';
 function fillTray(el,cards){const rows=[];for(let i=0;i<cards.length;i+=COLS)rows.push(cards.slice(i,i+COLS));
  el.innerHTML=rows.map(row=>'<div class="shelf">'+row.map(cardHTML).join('')+'</div>').join('');}
 function fly(x,y,r){return `<g transform="rotate(${r} ${x} ${y})"><ellipse cx="${x}" cy="${y}" rx="5.5" ry="9" fill="#17181c"/><ellipse cx="${x}" cy="${y-7}" rx="3.6" ry="3.6" fill="#101115"/><ellipse cx="${x-7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.5)" transform="rotate(-25 ${x-7} ${y-1})"/><ellipse cx="${x+7}" cy="${y-1}" rx="8" ry="3.4" fill="rgba(205,210,222,.5)" transform="rotate(25 ${x+7} ${y-1})"/><g stroke="#0c0d10" stroke-width="1" fill="none"><path d="M${x-4} ${y+4} l-6 5"/><path d="M${x+4} ${y+4} l6 5"/><path d="M${x-4} ${y+8} l-5 3"/><path d="M${x+4} ${y+8} l5 3"/></g></g>`;}
-function PROP_SVG(n){let cb='';for(let r=0;r<4;r++)for(let k=0;k<4;k++)cb+=`<rect x="${30+k*11}" y="${56+r*13}" width="8.5" height="8.5" rx="2"/>`;
- const P=[
-  `<svg viewBox="0 0 100 140"><rect x="16" y="52" width="68" height="40" rx="12" fill="#23262d"/><rect x="16" y="52" width="68" height="20" rx="10" fill="#353a44"/><rect x="24" y="57" width="54" height="7" rx="3" fill="#575c67"/><circle cx="24" cy="84" r="5" fill="#0e0f12"/><rect x="16" y="70" width="68" height="3" fill="#0e0f12" opacity=".5"/></svg>`,
+/* Felt clutter props: elastics, a trio of flies, a wood token + paper clip.
+   (Pencils, calculators and staplers were retired by owner request.) */
+function PROP_SVG(n){const P=[
   `<svg viewBox="0 0 100 140" fill="none" stroke-width="5"><ellipse cx="46" cy="72" rx="30" ry="21" stroke="#b9633b" transform="rotate(-14 46 72)"/><ellipse cx="55" cy="70" rx="29" ry="19" stroke="#c9a24a" transform="rotate(10 55 70)"/><ellipse cx="50" cy="66" rx="27" ry="17" stroke="#7f4326" transform="rotate(26 50 66)"/></svg>`,
-  `<svg viewBox="0 0 100 140"><rect x="24" y="28" width="52" height="84" rx="7" fill="#2b2e34"/><rect x="30" y="34" width="40" height="15" rx="3" fill="#8a9670"/><g fill="#4a4e57">${cb}</g></svg>`,
   `<svg viewBox="0 0 100 140">${fly(38,58,-20)}${fly(60,84,35)}${fly(45,98,10)}</svg>`,
-  `<svg viewBox="0 0 100 140"><g transform="rotate(38 50 70)"><rect x="45" y="20" width="10" height="92" rx="5" fill="#20406a"/><polygon points="45,112 55,112 50,124" fill="#c7ccd3"/><rect x="44" y="30" width="12" height="4" fill="#d3a52a"/><rect x="46.5" y="16" width="2.4" height="16" rx="1" fill="#9aa0aa"/></g></svg>`,
   `<svg viewBox="0 0 100 140"><circle cx="40" cy="82" r="15" fill="#bd7f40"/><circle cx="40" cy="82" r="15" fill="none" stroke="#8a5a28" stroke-width="2.4"/><g transform="rotate(-18 62 56)"><rect x="55" y="40" width="14" height="34" rx="7" fill="none" stroke="#c6cad1" stroke-width="2.6"/><rect x="58.5" y="46" width="7" height="22" rx="3.5" fill="none" stroke="#c6cad1" stroke-width="2.6"/></g></svg>`,
  ];return P[n%P.length];}
 /* Deterministic per-case RNG so clutter/grime stay put across re-renders. */
@@ -254,7 +276,7 @@ function decorate(slab,idx){const rng=mulberry32((idx*2654435761)^0x9e3779b9);
  const place=(svg,w,minX,spanX,minY,spanY,tries)=>{for(let k=0;k<tries;k++){const cx=Wt*(minX+rng()*spanX),cy=Hh*(minY+rng()*spanY);if(!onFelt(cx,cy))continue;items.push({svg,x:(cx/Wt)*100,y:(cy/Hh)*100,w,rot:(rng()*40-20)|0});return;}};
  const nf=3+Math.floor(rng()*3);for(let i=0;i<nf;i++)place(`<svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg>`,2.6+rng()*1.6,0.05,0.9,0.12,0.78,60);
  const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(9,Math.round(empty*0.55));
- for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*6)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
+ for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*3)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
  slab.querySelector('.clutter').innerHTML=items.map(it=>`<div class="clut" style="left:${it.x.toFixed(1)}%;top:${it.y.toFixed(1)}%;width:${it.w.toFixed(1)}%;transform:translate(-50%,-50%) rotate(${it.rot}deg)">${it.svg}</div>`).join('');}
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
  slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
