@@ -1,6 +1,7 @@
 # Temporary diagnostics: probe the StrictlyBetter API shape and the deployed
 # /better.json from a runner with open egress (the dev sandbox can reach
 # neither). Trigger by hand; delete once the upgrades feature is confirmed.
+# probe 2: after the array-shape parser + cookie-redirect fix.
 name: Diag
 on:
   push:
