@@ -206,8 +206,9 @@ export async function serveBetter(request, ctx) {
   if (hit) return hit;
 
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
+  const trace = url.searchParams.get("debug") === "1" ? [] : null;
   try {
-    const sr = await fetchSB(SB_HOST + "/api/obsoletes/" + encodeURIComponent(name));
+    const sr = await fetchSB(SB_HOST + "/api/obsoletes/" + encodeURIComponent(name), trace);
     if (!sr.ok) throw new Error("strictlybetter HTTP " + sr.status);
     const j = await sr.json();
     // Laravel-paginated rows; each relation groups functional reprints, so
@@ -241,15 +242,16 @@ export async function serveBetter(request, ctx) {
   } catch (e) {
     out.error = String((e && e.message) || e);
   }
+  if (trace) out.trace = trace;
   const res = Response.json(out, { headers: { "cache-control": `public, max-age=${BETTER_TTL_S}` } });
-  if (!out.error) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  if (!out.error && !trace) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }
 
 /* StrictlyBetter sits behind a session layer that 302s cookie-less clients
    back to the same URL — Workers' fetch won't carry cookies across redirects,
    so it loops forever. Follow redirects by hand, holding on to cookies. */
-async function fetchSB(startUrl) {
+async function fetchSB(startUrl, trace) {
   let u = startUrl, cookies = "";
   for (let hop = 0; hop < 4; hop++) {
     const r = await fetch(u, {
@@ -262,6 +264,7 @@ async function fetchSB(startUrl) {
       redirect: "manual",
       signal: AbortSignal.timeout(6000),
     });
+    if (trace) trace.push({ url: u, status: r.status, location: r.headers.get("location"), server: r.headers.get("server"), setCookies: (typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : []).length });
     if (r.status < 300 || r.status >= 400) return r;
     const jar = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [];
     const fresh = jar.map((c) => String(c).split(";")[0].trim()).filter(Boolean);
