@@ -77,6 +77,21 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .clut{position:absolute;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
 .clut svg{width:100%;height:100%;display:block}
 .actionbar{border-top:1px solid #1c1c22;padding-top:.5rem;margin-top:auto}
+/* "Strictly better" upgrades sheet — floats above the action bar. */
+.bpanel{position:fixed;left:.5rem;right:.5rem;bottom:5.4rem;z-index:60;background:#14141a;border:1px solid #2a2a34;border-radius:14px;box-shadow:0 -12px 32px rgba(0,0,0,.55);overflow:hidden}
+.bpanel.hide{display:none}
+.bph{display:flex;justify-content:space-between;align-items:center;padding:.55rem .8rem;font-weight:700;font-size:.85rem;color:#e8b04a;border-bottom:1px solid #26262f}
+.bph button{background:none;border:none;color:#8b8b96;font-size:1.05rem;padding:.1rem .4rem}
+.bplist{max-height:36vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.brow{display:flex;gap:.6rem;align-items:center;padding:.5rem .8rem;border-bottom:1px solid #1d1d25}
+.brow:last-child{border-bottom:none}
+.brow.on{background:#1e1a26}
+.brow img{width:38px;height:53px;object-fit:cover;border-radius:4px;flex-shrink:0}
+.brow .bi{flex:1;min-width:0}
+.brow .bn2{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brow .bs2{font-size:.7rem;color:#8b8b96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brow .bp2{font-weight:700;font-size:.85rem;color:#e8b04a;flex-shrink:0}
+.brow .badd{border:none;border-radius:8px;padding:.4rem .65rem;font-weight:700;font-size:.8rem;background:linear-gradient(180deg,#d9822b,#7a3b12);color:#fff;flex-shrink:0}
 .actionbar .hint{text-align:center;color:var(--muted);font-size:.7rem;padding:.35rem 0}
 .actsel{display:none}.actionbar.has .actsel{display:block}.actionbar.has .hint{display:none}
 .actsel .an{font-family:'Cinzel',serif;font-size:1.02rem;text-align:center}
@@ -100,6 +115,12 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
   <div class="pcur" id="pcur">Case 1</div>
   <svg class="inkdefs" width="0" height="0" aria-hidden="true"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.4" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
   <div class="sheet" id="sheet"><div class="deck" id="deck"></div></div>
+  <!-- In-stock "strictly better" upgrades for the tapped MTG card. Tap a row
+       to feature it on the TV; ✕ returns to the showcase cards. -->
+  <div class="bpanel hide" id="bpanel">
+    <div class="bph"><span>⚡ Strictly better — in stock</span><button onclick="BPX()" aria-label="Close">✕</button></div>
+    <div class="bplist" id="bplist"></div>
+  </div>
   <div class="actionbar" id="actionbar">
     <div class="hint" id="hint">Tap a card to feature it on the TV.</div>
     <div class="actsel">
@@ -226,6 +247,7 @@ function renderTabs(){const b=document.getElementById('ptabs');if(!b)return;cons
 function switchTab(i){if(switching)return;if(searchOn)ENDSEARCH(true);
  const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];const t=tabs[i];
  if(!t||(t.collection===PSET.collection&&!!t.newToday===!!PSET.newTodayActive))return;
+ hideBetters();
  switching=true;renderTabs();
  fetch('/switch?i='+i,{method:'POST'}).catch(()=>{}).finally(()=>{switching=false;renderTabs();});}
 /* Swipe left/right across the cards to walk the showcase tabs (wraps around);
@@ -243,7 +265,7 @@ function applyPhoneSettings(s){if(!s||typeof s!=='object')return;const prev=PSET
  renderTabs();
  const sr=document.getElementById('srch');if(sr)sr.classList.toggle('on',!!PSET.searchEnabled);
  if((s.collection&&prev&&s.collection!==prev)||(prev&&('newTodayActive' in s)&&!!s.newTodayActive!==prevNT)){
-  searchOn=false;savedDeck=null;document.getElementById('sx').classList.add('hide'); // a tab switch supersedes any search
+  searchOn=false;savedDeck=null;document.getElementById('sx').classList.add('hide');hideBetters(); // a tab switch supersedes any search
   fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
  else if(document.getElementById('deck'))drawSpread();}
 fetch('/settings',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{if(s)applyPhoneSettings(s);}).catch(()=>{});
@@ -276,15 +298,40 @@ async function DOSEARCH(){const q=document.getElementById('sq').value.trim();
  }catch(e){toast('Search hiccup — try again');}
  finally{searching=false;document.getElementById('sgo').disabled=false;}}
 function ENDSEARCH(send){document.getElementById('sx').classList.add('hide');document.getElementById('sq').value='';
+ hideBetters();
  if(!searchOn)return;searchOn=false;
  if(savedDeck){applyCards(savedDeck);savedDeck=null;drawSpread();}
  if(send&&ws&&ws.readyState===1)ws.send(JSON.stringify({type:'endsearch'}));}
 document.getElementById('sq').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();DOSEARCH();}});
 /* Tap: feature on TV + reveal the Add button on the tile. Tap again: dismiss. */
 function PICK(k){if(!ws||ws.readyState!==1)return;
- if(selected===k){selected=null;ws.send(JSON.stringify({type:'unselect'}));drawSpread();return;}
+ if(selected===k){selected=null;ws.send(JSON.stringify({type:'unselect'}));hideBetters();drawSpread();return;}
  const c=byKey(k);if(!c)return;
- selected=k;ws.send(JSON.stringify({type:'select',data:cardMsg(c)}));drawSpread();}
+ selected=k;ws.send(JSON.stringify({type:'select',data:cardMsg(c)}));showBetters(c);drawSpread();}
+/* In-stock "strictly better" upgrades for the tapped MTG card (data:
+   strictlybetter.eu community rankings, filtered by our stock). Tap a row to
+   feature that upgrade on the TV; ✕ goes back to the showcase cards. */
+let BLIST=[],BPSEQ=0;
+const MTG_LANES=['W','U','B','R','G','M','C'];
+function hideBetters(){document.getElementById('bpanel').classList.add('hide');BLIST=[];BPSEQ++;}
+function BPX(){hideBetters();if(selected){selected=null;if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'unselect'}));}drawSpread();}
+function bMsg(i){const b=BLIST[i];return {k:'sb'+i,name:b.name,set:b.set||'',type:b.type||'MTG Single',color:b.color||'C',price:b.price,foil:!!b.foil,condition:b.condition||'',image:b.image||null,variantId:b.variantId||null};}
+function showBetters(c){if(!MTG_LANES.includes(c.color)){hideBetters();return;}
+ const seq=++BPSEQ;
+ fetch('/better.json?name='+encodeURIComponent(c.name)).then(r=>r.ok?r.json():null).then(d=>{
+  if(seq!==BPSEQ)return;
+  const cards=(d&&Array.isArray(d.cards)?d.cards:[]).slice(0,4);
+  if(!cards.length){document.getElementById('bpanel').classList.add('hide');BLIST=[];return;}
+  BLIST=cards;
+  document.getElementById('bplist').innerHTML=cards.map((b,i)=>
+   `<div class="brow" id="br${i}" onclick="PICKB(${i})">${b.image?`<img src="${H(IMGURL(b.image,120))}" alt="">`:''}<div class="bi"><div class="bn2">${H(b.name)}</div><div class="bs2">${H(b.set||'')}${b.foil?' · Foil':''}</div></div><span class="bp2">$${money(b.price)}</span><button class="badd" onclick="event.stopPropagation();ADDB(${i})">Add</button></div>`).join('');
+  document.getElementById('bpanel').classList.remove('hide');
+ }).catch(()=>{});}
+function PICKB(i){const b=BLIST[i];if(!b||!ws||ws.readyState!==1)return;
+ document.querySelectorAll('.brow').forEach((el,j)=>el.classList.toggle('on',j===i));
+ ws.send(JSON.stringify({type:'select',data:bMsg(i)}));}
+function ADDB(i){const b=BLIST[i];if(!b)return;cart.push(b);document.getElementById('cc').textContent=cart.length;toast('Added '+b.name+' · $'+money(b.price));
+ if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'addcart',data:bMsg(i)}));}
 function ADD(k){const c=byKey(k||selected);if(!c)return;cart.push(c);document.getElementById('cc').textContent=cart.length;toast('Added '+c.name+' · $'+money(c.price));if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'addcart',data:cardMsg(c)}));drawSpread();}
 function OPENCART(){const l=document.getElementById('coList');l.innerHTML='';cart.forEach(c=>l.insertAdjacentHTML('beforeend',`<div class="co-item"><span>${H(c.name)}</span><span>$${money(c.price)}</span></div>`));if(!cart.length)l.innerHTML='<div class="sel-empty">Cart is empty.</div>';
  document.getElementById('coTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);SHOW('v-cart');}

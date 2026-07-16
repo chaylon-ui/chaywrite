@@ -188,6 +188,100 @@ export async function serveSearch(request) {
   return Response.json(out, { headers: { "cache-control": "public, max-age=30" } });
 }
 
+/* "Strictly better" upgrades for a previewed MTG card, filtered to what's
+   actually in stock. Rankings come from the strictlybetter.eu community API;
+   stock and prices come from the store's own predictive search. Returns an
+   empty list quietly on any upstream hiccup — the UIs just don't show it. */
+const SB_HOST = "https://www.strictlybetter.eu";
+const BETTER_TTL_S = 600;
+
+export async function serveBetter(request, ctx) {
+  const url = new URL(request.url);
+  const name = String(url.searchParams.get("name") || "").trim().slice(0, 80);
+  const out = { name, count: 0, cards: [] };
+  if (name.length < 2) return Response.json(out, { headers: { "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/better.json?n=" + encodeURIComponent(name.toLowerCase()), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
+  try {
+    const sr = await fetch(SB_HOST + "/api/obsoletes/" + encodeURIComponent(name), {
+      headers, signal: AbortSignal.timeout(6000),
+    });
+    if (!sr.ok) throw new Error("strictlybetter HTTP " + sr.status);
+    const j = await sr.json();
+    // The endpoint is a search: keep only relations where OUR card is the
+    // inferior, rank superiors by community votes. Shape handled loosely so
+    // an upstream format tweak degrades to "no suggestions", not an error.
+    const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
+    const target = name.toLowerCase();
+    const scores = new Map();
+    for (const r of rows) {
+      const sup = r?.superior?.name;
+      const inf = r?.inferior?.name;
+      if (!sup || !inf || inf.toLowerCase() !== target) continue;
+      const score = (+r.upvotes || 0) - (+r.downvotes || 0);
+      if (score < 0) continue;
+      scores.set(sup, Math.max(scores.get(sup) ?? -1, score));
+    }
+    const names = [...scores.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([n]) => n)
+      .filter((n) => n.toLowerCase() !== target)
+      .slice(0, 8);
+    for (const supName of names) {
+      if (out.cards.length >= 4) break;
+      const card = await findInStock(supName, headers);
+      if (card) out.cards.push(card);
+    }
+    out.count = out.cards.length;
+  } catch (e) {
+    out.error = String((e && e.message) || e);
+  }
+  const res = Response.json(out, { headers: { "cache-control": `public, max-age=${BETTER_TTL_S}` } });
+  if (!out.error) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
+/* Exact-name in-stock lookup via the shop's predictive search; returns the
+   cheapest available copy normalised to the card shape the UIs speak. */
+async function findInStock(name, headers) {
+  try {
+    const sr = await fetch(
+      `${HOST}/search/suggest.json?q=${encodeURIComponent(name)}&resources[type]=product&resources[limit]=6&resources[options][unavailable_products]=hide`,
+      { headers },
+    );
+    if (!sr.ok) return null;
+    const hits = ((await sr.json())?.resources?.results?.products) || [];
+    const want = name.toLowerCase();
+    const hit = hits.find((h) => String(h.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want);
+    if (!hit) return null;
+    const pr = await fetch(`${HOST}/products/${hit.handle}.js`, { headers });
+    if (!pr.ok) return null;
+    const p = await pr.json();
+    if (!/single/i.test(p.type || "")) return null;
+    const eligible = (p.variants || []).filter((v) => v.available && v.price > 0);
+    if (!eligible.length) return null;
+    const v = eligible.reduce((a, b) => (b.price < a.price ? b : a));
+    const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
+    const img = (p.images && p.images[0]) || p.featured_image || null;
+    return {
+      name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
+      set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
+      type: "MTG Single",
+      color: "C",
+      price: (v.price / 100).toFixed(2),
+      foil: /foil/i.test(v.title || ""),
+      condition: (v.title || "").replace(/\s*foil\s*/i, " ").trim(),
+      image: img ? abs(img) : null,
+      variantId: v.id,
+      url: "https://exorgames.com/products/" + p.handle,
+    };
+  } catch { return null; }
+}
+
 function buildCards(products, opts = {}) {
   const minPrice = opts.minPrice ?? MIN_PRICE;
   const perLane = opts.perLane ?? PER_LANE;
