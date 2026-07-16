@@ -49,6 +49,15 @@ export const DEFAULT_SETTINGS = {
     "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!",
   ],
 
+  // Masking-tape shout across the top of the case while the TV idles in
+  // attract mode (no phone paired). One line is picked at random each time
+  // the show starts; edit in /admin (clear all three to hide the tape).
+  attractMsgs: [
+    "NEW ARRIVALS! No Holds - no trades for beanie babies",
+    "NEW ARRIVALS! Yes I checked the prices with newest Scry Mag",
+    "NEW ARRIVALS!!! More stock out back just ask!",
+  ],
+
   // Ad + Google-review card on the phone (toggle from /admin).
   adEnabled: false,
   adText: "Got cards? Exor Games buys singles, collections & sealed — cash or store credit.",

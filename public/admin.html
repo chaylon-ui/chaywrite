@@ -103,6 +103,19 @@ a.tvlink:hover{color:var(--ember)}
       <div class="hint">Shown comic-book style next to the featured card. Write <code>{card}</code> where the card's name should appear. Clear all three to hide the bubble.</div>
     </div>
 
+    <!-- Attract-mode masking tape: a torn strip across the top of the case
+         while the TV idles unpaired. One line picked at random per show. -->
+    <div class="group">
+      <div class="gtitle">Idle attract tape</div>
+      <label for="at1">Line 1</label>
+      <input id="at1" type="text" maxlength="120" placeholder="NEW ARRIVALS! No Holds - no trades for beanie babies">
+      <label for="at2">Line 2</label>
+      <input id="at2" type="text" maxlength="120" placeholder="NEW ARRIVALS! Yes I checked the prices with newest Scry Mag">
+      <label for="at3">Line 3</label>
+      <input id="at3" type="text" maxlength="120" placeholder="NEW ARRIVALS!!! More stock out back just ask!">
+      <div class="hint">Sharpie on masking tape across the top of the TV while it idles (no phone connected). Clear all three to hide the tape.</div>
+    </div>
+
     <label for="reviewUrl">Google review link</label>
     <input id="reviewUrl" type="text" placeholder="https://g.page/r/…/review">
     <div class="hint">Your Google review URL — shown as a friendly button on the phone. Leave blank to hide it.</div>
@@ -135,6 +148,8 @@ async function loadSettings(){try{const s=await (await fetch('/settings',{cache:
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
+  const am=Array.isArray(s.attractMsgs)?s.attractMsgs:[];
+  $('at1').value=am[0]||'';$('at2').value=am[1]||'';$('at3').value=am[2]||'';
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
   const tabs=Array.isArray(s.tabs)?s.tabs:[];
   GAME_TABS.forEach(g=>{const t=tabs.find(x=>x.game===g.game)||tabs.find(x=>x.theme===g.theme);
@@ -155,6 +170,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     perfMode:$('perfMode').checked,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase'},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
+    attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;
   const {ok,j}=await post(patch);

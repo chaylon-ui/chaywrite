@@ -73,6 +73,18 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
   box-shadow:0 4px 10px rgba(0,0,0,.4),inset 0 0 14px rgba(120,100,50,.18);
   clip-path:polygon(0% 18%,2.2% 0%,4.5% 12%,96% 3%,98.2% 16%,100% 10%,99.2% 84%,97% 100%,94.5% 88%,5% 96%,2.4% 84%,.8% 92%)}
 .case.newtoday .tape{display:block}
+/* Attract-mode masking tape — a thick torn strip slapped across the top of
+   the glass while the TV idles, sharpie shout editable in /admin. */
+.tapetop{display:none;position:absolute;left:4%;top:1.7%;max-width:92%;z-index:12;transform:rotate(1.1deg);padding:1.5vh 4.5vh 1.8vh;pointer-events:none;
+  font-family:'Permanent Marker',cursive;font-size:4.1vh;letter-spacing:.02em;color:#1a1a21;white-space:nowrap;overflow:hidden;
+  background:repeating-linear-gradient(92deg,rgba(0,0,0,.025) 0 3px,transparent 3px 7px),linear-gradient(90deg,#dcd1aa,#eae1c2 22%,#d9cfab 55%,#e6ddbb 82%,#d8cda9);
+  box-shadow:0 5px 12px rgba(0,0,0,.45),inset 0 0 16px rgba(120,100,50,.18);
+  clip-path:polygon(0% 22%,1.4% 0%,3.2% 14%,97.2% 6%,98.6% 0%,100% 18%,99.4% 86%,97.6% 100%,95.8% 86%,3% 94%,1.8% 100%,.4% 80%)}
+body.attract .tapetop{display:block}
+/* Felt underlay — props that live UNDER the cards (the Scrye magazine). */
+.underlay{position:absolute;inset:0;z-index:0;pointer-events:none}
+.underlay .mag{position:absolute;transform:translate(-50%,-50%) rotate(var(--mrot,0deg));filter:drop-shadow(0 4px 7px rgba(0,0,0,.5))}
+.underlay .mag img{display:block;width:100%;aspect-ratio:1700/2194;object-fit:cover;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
 /* Performance mode (admin toggle): kill the expensive full-screen blurs and
    filter animations for weak TV boxes; transforms/tilt stay (they're cheap). */
 body.perf .zoomtv{backdrop-filter:none;background:rgba(3,3,5,.94)}
@@ -283,6 +295,7 @@ body.paired .case.tl.showcase .tray{--chh:calc(92vh/3.65)}
     <div class="caseInner" id="caseInner"></div>
     <div class="glass"></div>
     <div class="tape" aria-hidden="true">NEW TODAY!&nbsp; just in ✦</div>
+    <div class="tapetop" id="tapetop" aria-hidden="true"></div>
     <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div></div>
   </div>
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="dvq" id="dvq"></span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
@@ -404,7 +417,13 @@ const BACKS=[
  {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/HP_MTG_Card.png?v=1784123777&width=360'},
  {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/duelmasters.webp?v=1784123777&width=360'},
  {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/vampire.webp?v=1784123776&width=500',land:true},
+ {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Rage_cardback.jpg?v=1784217692&width=360'},
+ {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/SWCCG-Back-Dark-min.webp?v=1784217692&width=360'},
+ {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Star_Trek_Customizable_Card_Game_cardback.jpg?v=1784217693&width=360'},
 ];
+/* An old Scrye issue that slides UNDER the cards now and then — true magazine
+   proportions next to a card (about 3.3× as wide). */
+const MAG_URL='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Scrye_13.webp?v=1784217947&width=520';
 function BACK_IMG(n){const b=BACKS[n%BACKS.length];return `<img${b.land?' class="rot"':''} src="${b.u}" alt="" loading="lazy">`;}
 /* Stack from a dealt hand of back indices (no repeats — the caller shuffles
    all five games and splits them between the piles). */
@@ -442,17 +461,24 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
  const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(3,Math.round(empty*0.2));
  for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*2)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
  /* Sparse shelves sometimes get a haphazard pile of obsolete-game card backs —
-    same size as the real cards, never underneath them. All five games are
+    same size as the real cards, never underneath them. All eight games are
     shuffled and dealt across the piles, so the two stacks never repeat a back
     and every game gets its turn. */
  if(empty>=10&&rects.length&&rng()<0.65){const cw=rects[0].r2-rects[0].l,wpct=(cw/Wt)*100;
-  const hand=[0,1,2,3,4];for(let i=hand.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[hand[i],hand[j]]=[hand[j],hand[i]];}
-  const n1=2+Math.floor(rng()*2);
+  const hand=BACKS.map((_,i)=>i);for(let i=hand.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[hand[i],hand[j]]=[hand[j],hand[i]];}
+  const n1=2+Math.floor(rng()*3);
   place(CARDBACK_STACK(rng,hand.slice(0,n1)),wpct*1.06,0.08,0.84,0.18,0.66,240);
-  if(empty>=20&&rng()<0.5)place(CARDBACK_STACK(rng,hand.slice(n1)),wpct*1.02,0.08,0.84,0.18,0.66,240);}
+  if(empty>=20&&rng()<0.5)place(CARDBACK_STACK(rng,hand.slice(n1,n1+2+Math.floor(rng()*2))),wpct*1.02,0.08,0.84,0.18,0.66,240);}
+ /* Now and then an old Scrye lies on the felt UNDER whatever's on the shelf —
+    cards always sit on top of the magazine, overlap welcome. */
+ const mslot=slab.querySelector('.underlay');
+ if(mslot){let mhtml='';
+  if(rects.length&&empty>=6&&rng()<0.55){const cw2=rects[0].r2-rects[0].l,mw=Math.min((cw2/Wt)*100*3.3,34);
+   mhtml=`<div class="mag" style="left:${(14+rng()*72).toFixed(1)}%;top:${(30+rng()*48).toFixed(1)}%;width:${mw.toFixed(1)}%;--mrot:${(rng()*36-18).toFixed(1)}deg"><img src="${MAG_URL}" alt="" loading="lazy"></div>`;}
+  mslot.innerHTML=mhtml;}
  slab.querySelector('.clutter').innerHTML=items.map(it=>`<div class="clut" style="left:${it.x.toFixed(1)}%;top:${it.y.toFixed(1)}%;width:${it.w.toFixed(1)}%;transform:translate(-50%,-50%) rotate(${it.rot}deg)">${it.svg}</div>`).join('');}
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
- slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
+ slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="grime"></div><div class="underlay"></div><div class="tray"></div><div class="clutter"></div>';
  fillTray(slab.querySelector('.tray'),trays[idx]||[]);return slab;}
 function draw(){const inner=document.getElementById('caseInner');inner.innerHTML='';const slab=makeSlab(spread);slab.id='slab';inner.appendChild(slab);decorate(slab,spread);markSel();}
 function markSel(){document.querySelectorAll('#caseInner .card').forEach(el=>el.classList.toggle('sel',selected&&el.dataset.id===selected));}
@@ -513,6 +539,8 @@ let attractArm=null,attractFlip=null,attractZoom=null,attractPulse=null,attractO
 function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},ATTRACT_AFTER_S*1000);}
 function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
  document.getElementById('lock').classList.add('mini');
+ const ams=(Array.isArray(SETTINGS.attractMsgs)?SETTINGS.attractMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
+ if(ams.length){document.getElementById('tapetop').textContent=ams[Math.floor(Math.random()*ams.length)];document.body.classList.add('attract');}
  attractFlip=setInterval(()=>{unzoom();if(spreads>1&&!flipping)flipTo((spread+1)%spreads);},ATTRACT_FLIP_MS);
  if(!matchMedia('(prefers-reduced-motion:reduce)').matches)
   attractZoom=setInterval(()=>{if(!CARDS.length)return;
@@ -521,6 +549,7 @@ function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
    attractPulse=setTimeout(()=>{if(attractOn)unzoom();},6000);},ATTRACT_ZOOM_MS);}
 function stopAttract(){clearTimeout(attractArm);clearInterval(attractFlip);clearInterval(attractZoom);clearTimeout(attractPulse);
  attractArm=attractFlip=attractZoom=attractPulse=null;
+ document.body.classList.remove('attract');
  if(attractOn){attractOn=false;document.getElementById('lock').classList.remove('mini');unzoom();}}
 /* Counter ticket: shown on "send to counter"; persists past the session drop
    (staff need it) and clears when the next customer pairs. */
@@ -576,7 +605,10 @@ setInterval(()=>{if(BUILD.startsWith('__')||wasPaired||Date.now()-BOOT<3e5)retur
 let SETTINGS={header:'',theme:'mtg',topLoaders:false,
  bubbleMsgs:["Wanna buy {card}, kid? I can ring it up if you add it to your cart!",
   "You gonna look all day, or you gonna buy it? I got customers waiting!",
-  "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false;
+  "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"],
+ attractMsgs:["NEW ARRIVALS! No Holds - no trades for beanie babies",
+  "NEW ARRIVALS! Yes I checked the prices with newest Scry Mag",
+  "NEW ARRIVALS!!! More stock out back just ask!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false;
 function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
