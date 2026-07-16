@@ -311,8 +311,8 @@ export class BinderRoom {
           }
         }`;
         const input = {
-          note: "Exor showcase TV — customer sent cart to counter",
-          tags: ["showcase-tv"],
+          note: "Exor showcase TV — customer sent cart to counter (Kiosk)",
+          tags: ["showcase-tv", "Kiosk"],
           lineItems: data.items.slice(0, 100).map((i) => ({
             variantId: "gid://shopify/ProductVariant/" + i.variantId,
             quantity: Math.max(1, Math.min(99, +i.qty || 1)),

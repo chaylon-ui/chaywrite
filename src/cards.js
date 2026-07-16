@@ -96,6 +96,28 @@ const GAMES = {
   },
 };
 
+/* Variant titles double as conditions ("Near Mint Foil", "Lightly Played").
+   Sports cards aren't conditioned at the store, and "Default Title" is
+   Shopify's no-variant placeholder — both come back empty. */
+const SPORTS_GAMES = new Set(["hockey", "basketball"]);
+function condOf(vtitle, game) {
+  if (game && SPORTS_GAMES.has(game)) return "";
+  const t = String(vtitle || "");
+  if (/^default title$/i.test(t)) return "";
+  return t.replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ").trim();
+}
+/* Every in-stock printing of the product, so the phone can offer a
+   condition toggle. Only attached when there's actually a choice. */
+function variantsOf(eligible, game) {
+  if (!eligible || eligible.length < 2) return undefined;
+  return eligible.slice(0, 8).map((v) => ({
+    variantId: v.id,
+    price: (+v.price).toFixed(2),
+    foil: /foil/i.test(v.title || ""),
+    condition: condOf(v.title, game),
+  }));
+}
+
 function sportsLane(title) {
   const t = String(title || "");
   const rookie = /rookie/i.test(t), auto = /\bauto/i.test(t);
@@ -177,45 +199,84 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
   return res;
 }
 
-/* Phone-driven search: Shopify's public predictive-search endpoint finds
-   matching products, then each hit is hydrated via /products/{handle}.js for
-   variants/tags/type. No price floor here — searching is deliberate. */
-export async function serveSearch(request) {
+/* Phone-driven search. With the SHOPIFY_ADMIN_TOKEN secret set the worker
+   searches the FULL catalogue via the Admin API (predictive search caps at
+   10 hits, which is why "Charizard" came up short); without it, it falls
+   back to Shopify's public predictive search + per-handle hydration.
+   No price floor here — searching is deliberate. */
+export async function serveSearch(request, env) {
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim().slice(0, 60);
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
   const out = { q, count: 0, cards: [] };
   if (q.length < 2) return Response.json(out, { headers: { "cache-control": "no-store" } });
   try {
-    const sr = await fetch(
-      `${HOST}/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=hide`,
-      { headers },
-    );
-    if (!sr.ok) throw new Error("suggest HTTP " + sr.status);
-    const hits = ((await sr.json())?.resources?.results?.products) || [];
-    const prods = await Promise.all(hits.map(async (h) => {
-      try {
-        const pr = await fetch(`${HOST}/products/${h.handle}.js`, { headers });
-        if (!pr.ok) return null;
-        const p = await pr.json();
-        // Normalise /products/{handle}.js (type + cent prices + protocol-
-        // relative image URLs) to the products.json shape buildCards expects.
-        const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
-        const imgs = (p.images && p.images.length ? p.images : [p.featured_image]).filter(Boolean);
-        return {
-          title: p.title, handle: p.handle, product_type: p.type, tags: p.tags || [],
-          images: imgs.map((src) => ({ src: abs(src) })),
-          variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, price: (v.price / 100).toFixed(2), available: !!v.available })),
-        };
-      } catch { return null; }
-    }));
+    const token = env && env.SHOPIFY_ADMIN_TOKEN;
+    let prods = null;
+    if (token) {
+      try { prods = await adminSearch(q, env); } catch { prods = null; }
+    }
+    if (!prods) prods = await suggestSearch(q, headers);
     const built = buildCards(prods.filter(Boolean), { minPrice: 0, perLane: 99 });
-    out.cards = built.cards; out.count = built.cards.length;
+    out.cards = built.cards.slice(0, 80); out.count = out.cards.length;
     out.game = built.game; out.colorNames = built.colorNames;
   } catch (e) {
     out.error = String((e && e.message) || e);
   }
   return Response.json(out, { headers: { "cache-control": "public, max-age=30" } });
+}
+
+/* Full-catalogue title search through the Admin API (up to 40 products). */
+async function adminSearch(q, env) {
+  const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
+  const safe = q.replace(/[*"\\()]/g, " ").trim();
+  if (!safe) return null;
+  const gql = `query($q:String!){products(first:40,query:$q){edges{node{
+    title handle productType tags featuredImage{url}
+    variants(first:30){edges{node{id title price availableForSale}}}}}}}`;
+  const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "X-Shopify-Access-Token": env.SHOPIFY_ADMIN_TOKEN },
+    body: JSON.stringify({ query: gql, variables: { q: `status:active title:*${safe}*` } }),
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!r.ok) throw new Error("admin search HTTP " + r.status);
+  const j = await r.json();
+  const edges = j?.data?.products?.edges;
+  if (!Array.isArray(edges)) throw new Error("admin search shape");
+  return edges.map(({ node: p }) => ({
+    title: p.title, handle: p.handle, product_type: p.productType, tags: p.tags || [],
+    images: p.featuredImage ? [{ src: p.featuredImage.url }] : [],
+    variants: (p.variants?.edges || []).map(({ node: v }) => ({
+      id: +String(v.id).replace(/\D/g, ""), title: v.title, price: String(v.price), available: !!v.availableForSale,
+    })),
+  }));
+}
+
+/* Tokenless fallback: public predictive search (top 10) + handle hydration. */
+async function suggestSearch(q, headers) {
+  const sr = await fetch(
+    `${HOST}/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=hide`,
+    { headers },
+  );
+  if (!sr.ok) throw new Error("suggest HTTP " + sr.status);
+  const hits = ((await sr.json())?.resources?.results?.products) || [];
+  return Promise.all(hits.map(async (h) => {
+    try {
+      const pr = await fetch(`${HOST}/products/${h.handle}.js`, { headers });
+      if (!pr.ok) return null;
+      const p = await pr.json();
+      // Normalise /products/{handle}.js (type + cent prices + protocol-
+      // relative image URLs) to the products.json shape buildCards expects.
+      const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
+      const imgs = (p.images && p.images.length ? p.images : [p.featured_image]).filter(Boolean);
+      return {
+        title: p.title, handle: p.handle, product_type: p.type, tags: p.tags || [],
+        images: imgs.map((src) => ({ src: abs(src) })),
+        variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, price: (v.price / 100).toFixed(2), available: !!v.available })),
+      };
+    } catch { return null; }
+  }));
 }
 
 /* In-stock filter for the "Alternatives in stock" strip. The TV/phone
@@ -276,7 +337,7 @@ async function findInStock(name, headers) {
       color: "C",
       price: (v.price / 100).toFixed(2),
       foil: /foil/i.test(v.title || ""),
-      condition: (v.title || "").replace(/\s*foil\s*/i, " ").trim(),
+      condition: condOf(v.title, "mtg"),
       image: img ? abs(img) : null,
       variantId: v.id,
       url: "https://exorgames.com/products/" + p.handle,
@@ -327,7 +388,8 @@ function buildCards(products, opts = {}) {
       type: ownGame === game ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
-      condition: (v.title || "").replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ").trim(),
+      condition: condOf(v.title, ownGame || game),
+      variants: variantsOf(eligible, ownGame || game),
       image: (p.images && p.images[0] && p.images[0].src) || null,
       variantId: v.id,
       url: "https://exorgames.com/products/" + p.handle,
@@ -381,7 +443,8 @@ function buildShowcase(products) {
       type: spec ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
-      condition: (v.title || "").replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ").trim(),
+      condition: condOf(v.title, g),
+      variants: variantsOf(eligible, g),
       image: (p.images && p.images[0] && p.images[0].src) || null,
       variantId: v.id,
       url: "https://exorgames.com/products/" + p.handle,

@@ -77,6 +77,13 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .clut{position:absolute;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
 .clut svg{width:100%;height:100%;display:block}
 .actionbar{border-top:1px solid #1c1c22;padding-top:.5rem;margin-top:auto}
+/* Condition toggle — shows when we stock the card in more than one condition. */
+.condrow{display:flex;gap:.4rem;flex-wrap:wrap;margin:.15rem 0 .5rem}
+.condrow:empty{display:none}
+.cchip{font-family:'Inter',sans-serif;font-weight:600;font-size:.72rem;padding:.34rem .7rem;border-radius:16px;border:1px solid #3a3a44;background:#17171d;color:var(--muted);cursor:pointer;white-space:nowrap}
+.cchip.on{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;border-color:transparent}
+/* Kiosk fulfillment warning on the cart step. */
+.kwarn{font-size:.78rem;color:#e8b04a;background:rgba(217,130,43,.1);border:1px solid rgba(217,130,43,.35);border-radius:11px;padding:.6rem .8rem;margin:.6rem 0;line-height:1.4}
 /* "Strictly better" upgrades sheet — floats above the action bar. */
 .bpanel{position:fixed;left:.5rem;right:.5rem;bottom:5.4rem;z-index:60;background:#14141a;border:1px solid #2a2a34;border-radius:14px;box-shadow:0 -12px 32px rgba(0,0,0,.55);overflow:hidden}
 .bpanel.hide{display:none}
@@ -125,6 +132,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
     <div class="hint" id="hint">Tap a card to feature it on the TV.</div>
     <div class="actsel">
       <div class="an" id="selName"></div><div class="ap" id="selMeta"></div>
+      <div class="condrow" id="condRow"></div>
       <button class="btn btn-primary" onclick="ADD()" style="margin-bottom:.5rem">Add to cart</button>
     </div>
     <button class="btn btn-ghost" onclick="OPENCART()">View cart (<span id="cc">0</span>)</button>
@@ -135,6 +143,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
   <h3 style="text-align:center">Your cart</h3>
   <div class="co-list" id="coList"></div>
   <div class="co-total"><span>Total</span><span class="v" id="coTotal">$0.00</span></div>
+  <p class="kwarn">⏱ Heads up: kiosk orders can take up to <b>24–48 hours</b> to fulfill — we pull your cards from the showcase by hand.</p>
   <button class="btn btn-primary" onclick="CHECKOUT('phone')">Check out on my phone</button>
   <!-- Send-to-counter is disabled for now (owner request) — greyed out, no action. -->
   <button class="btn btn-sub" disabled style="margin-top:.5rem;opacity:.4;cursor:not-allowed">Send to counter to pay <span style="font-size:.72rem;color:var(--muted)">· coming soon</span></button>
@@ -214,10 +223,26 @@ function PROP_SVG(n){const P=[
   `<svg viewBox="0 0 100 140" class="ps" fill="none" stroke-width="5"><ellipse cx="46" cy="72" rx="30" ry="21" stroke="#b9633b" transform="rotate(-14 46 72)"/><ellipse cx="55" cy="70" rx="29" ry="19" stroke="#c9a24a" transform="rotate(10 55 70)"/><ellipse cx="50" cy="66" rx="27" ry="17" stroke="#7f4326" transform="rotate(26 50 66)"/></svg>`,
   `<svg viewBox="0 0 100 140" class="ps"><circle cx="40" cy="82" r="15" fill="#bd7f40"/><circle cx="40" cy="82" r="15" fill="none" stroke="#8a5a28" stroke-width="2.4"/><g transform="rotate(-18 62 56)"><rect x="55" y="40" width="14" height="34" rx="7" fill="none" stroke="#c6cad1" stroke-width="2.6"/><rect x="58.5" y="46" width="7" height="22" rx="3.5" fill="none" stroke="#c6cad1" stroke-width="2.6"/></g></svg>`,
  ];return P[n%P.length];}
+/* Condition toggle: when we stock the tapped card in more than one condition,
+   chips appear under its name; tapping one re-features that printing on the
+   TV and makes Add put THAT copy in the cart. */
+let selVarId=null;
+function effCard(c){if(!c||selVarId==null||!Array.isArray(c.variants))return c;
+ const v=c.variants.find(x=>String(x.variantId)===String(selVarId));
+ return v?{...c,price:v.price,foil:v.foil,condition:v.condition,variantId:v.variantId}:c;}
+function chipLabel(v){return [v.condition,v.foil?'Foil':''].filter(Boolean).join(' · ')||'Standard';}
+function SETVAR(vid){const c=selected&&byKey(selected);if(!c)return;selVarId=vid;
+ if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'select',data:cardMsg(effCard(c))}));
+ updateActionBar();}
 function updateActionBar(){const bar=document.getElementById('actionbar');const c=selected&&byKey(selected);
+ const cr=document.getElementById('condRow');
  if(c){bar.classList.add('has');document.getElementById('selName').textContent=c.name;
-  document.getElementById('selMeta').textContent=[c.set,CN[c.color]].filter(Boolean).join(' · ');}
- else bar.classList.remove('has');}
+  const e=effCard(c);
+  document.getElementById('selMeta').textContent=[c.set,CN[c.color],e.condition||''].filter(Boolean).join(' · ');
+  cr.innerHTML=(Array.isArray(c.variants)&&c.variants.length>1)
+   ?c.variants.map(v=>`<button class="cchip${String(v.variantId)===String(e.variantId)?' on':''}" onclick="SETVAR('${H(String(v.variantId))}')">${H(chipLabel(v))} · $${money(v.price)}</button>`).join('')
+   :'';}
+ else{bar.classList.remove('has');cr.innerHTML='';}}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800);}
 
 let ws;
@@ -308,9 +333,9 @@ function ENDSEARCH(send){document.getElementById('sx').classList.add('hide');doc
 document.getElementById('sq').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();DOSEARCH();}});
 /* Tap: feature on TV + reveal the Add button on the tile. Tap again: dismiss. */
 function PICK(k){if(!ws||ws.readyState!==1)return;
- if(selected===k){selected=null;ws.send(JSON.stringify({type:'unselect'}));hideBetters();drawSpread();return;}
+ if(selected===k){selected=null;selVarId=null;ws.send(JSON.stringify({type:'unselect'}));hideBetters();drawSpread();return;}
  const c=byKey(k);if(!c)return;
- selected=k;ws.send(JSON.stringify({type:'select',data:cardMsg(c)}));showBetters(c);drawSpread();}
+ selected=k;selVarId=null;ws.send(JSON.stringify({type:'select',data:cardMsg(c)}));showBetters(c);drawSpread();}
 /* In-stock "strictly better" upgrades for the tapped MTG card (data:
    strictlybetter.eu community rankings, filtered by our stock). Tap a row to
    feature that upgrade on the TV; ✕ goes back to the showcase cards. */
@@ -348,10 +373,15 @@ function PICKB(i){const b=BLIST[i];if(!b||!ws||ws.readyState!==1)return;
  ws.send(JSON.stringify({type:'select',data:bMsg(i)}));}
 function ADDB(i){const b=BLIST[i];if(!b)return;cart.push(b);document.getElementById('cc').textContent=cart.length;toast('Added '+b.name+' · $'+money(b.price));
  if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'addcart',data:bMsg(i)}));}
-function ADD(k){const c=byKey(k||selected);if(!c)return;cart.push(c);document.getElementById('cc').textContent=cart.length;toast('Added '+c.name+' · $'+money(c.price));if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'addcart',data:cardMsg(c)}));drawSpread();}
+function ADD(k){const c0=byKey(k||selected);if(!c0)return;const c=(!k||k===selected)?effCard(c0):c0;
+ cart.push(c);document.getElementById('cc').textContent=cart.length;toast('Added '+c.name+(c.condition?' ('+c.condition+')':'')+' · $'+money(c.price));if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'addcart',data:cardMsg(c)}));drawSpread();}
 function OPENCART(){const l=document.getElementById('coList');l.innerHTML='';cart.forEach(c=>l.insertAdjacentHTML('beforeend',`<div class="co-item"><span>${H(c.name)}</span><span>$${money(c.price)}</span></div>`));if(!cart.length)l.innerHTML='<div class="sel-empty">Cart is empty.</div>';
  document.getElementById('coTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);SHOW('v-cart');}
 let checkedOut=false;
+/* Kiosk orders are marked so staff can spot them: a cart attribute + note
+   ride along on the permalink and land on the Shopify order. */
+function cartUrl(ids){return 'https://exorgames.com/cart/'+ids
+ +'?attributes%5BSource%5D=Kiosk&note='+encodeURIComponent('Kiosk order — please allow 24-48 hours to fulfill');}
 function lostSession(){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent='The connection to the showcase was lost — scan the QR code on the TV to start again.';}
 function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
  if(!ws||ws.readyState!==1){lostSession();return;}
@@ -361,7 +391,7 @@ function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
  ws.send(JSON.stringify({type:'checkout',data:{where,count:cart.length,total:t,items}}));
  checkedOut=true;SHOW('v-done');
  if(where==='phone'){const ids=items.map(i=>i.variantId+':'+i.qty).join(',');
-  if(ids){document.getElementById('doneT').textContent='Off to checkout';document.getElementById('doneP').textContent='Opening your Shopify cart ('+cart.length+' cards · $'+t+')…';setTimeout(()=>{location.href='https://exorgames.com/cart/'+ids;},800);}
+  if(ids){document.getElementById('doneT').textContent='Off to checkout';document.getElementById('doneP').textContent='Opening your Shopify cart ('+cart.length+' cards · $'+t+')…';setTimeout(()=>{location.href=cartUrl(ids);},800);}
   else{document.getElementById('doneT').textContent='See the counter';document.getElementById('doneP').textContent='These cards can’t be added to an online cart right now — please pay at the counter ('+cart.length+' cards · $'+t+').';}}
  else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Staff have your '+cart.length+' cards ($'+t+') — give your name at the register.';}}
 window.BINDER_READY.then(()=>{applyCards(window.BINDER_CARDS);

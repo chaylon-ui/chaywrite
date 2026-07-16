@@ -580,10 +580,11 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
  /* Phone `select` messages don't carry condition — enrich from the local deck. */
  const full=CARDS.find(x=>x.name===c.name&&(!c.variantId||String(x.variantId)===String(c.variantId)))||{};
- const cond=c.condition||full.condition||'';
+ const sporty=(GAME==='hockey'||GAME==='basketball');
+ const cond=sporty?'':(c.condition||full.condition||''); // sports cards aren't conditioned
  const treatment=c.foil?(GAME==='pokemon'?'Holofoil':'Foil'):(GAME==='pokemon'?'Non-holo':'Non-foil');
  zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
- document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div><div class="cu-line">${H(treatment)}</div><div class="cu-line">${H(c.set||'—')}</div>`;
+ document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div>${sporty?'':`<div class="cu-line">${H(treatment)}</div>`}${cond?`<div class="cu-line">${H(cond)}</div>`:''}<div class="cu-line">${H(c.set||'—')}</div>`;
  /* Comic shopkeeper bubble — one random line per preview, {card} = card name. */
  const bub=document.getElementById('zbub'),msgs=(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
  if(msgs.length){const m=msgs[Math.floor(Math.random()*msgs.length)];

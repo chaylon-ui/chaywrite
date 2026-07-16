@@ -28,7 +28,7 @@ export default {
     }
 
     if (url.pathname === "/search.json") {
-      return serveSearch(request);
+      return serveSearch(request, env);
     }
 
     if (url.pathname === "/instock.json") {
