@@ -81,6 +81,12 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
   box-shadow:0 5px 12px rgba(0,0,0,.45),inset 0 0 16px rgba(120,100,50,.18);
   clip-path:polygon(0% 22%,1.4% 0%,3.2% 14%,97.2% 6%,98.6% 0%,100% 18%,99.4% 86%,97.6% 100%,95.8% 86%,3% 94%,1.8% 100%,.4% 80%)}
 body.attract .tapetop{display:block}
+/* While the tape owns the top of the glass, nudge the card stack down and
+   trim its height budget so no card ever hides behind the strip. (Attract
+   only runs unpaired, so only the unpaired budgets need variants.) */
+body.attract .tray{padding-top:calc(4.5% + 6.5vh);--hbudget:calc(min(85vh,900px) - 18vh)}
+body.attract .case.tl .tray{--chh:calc((min(85vh,900px) - 19vh)/3.68);padding-top:calc(2.5% + 9.5vh)}
+body.attract .case.tl.showcase .tray{--chh:calc((min(85vh,900px) - 15vh)/3.6)}
 /* Felt underlay — props that live UNDER the cards (the Scrye magazine). */
 .underlay{position:absolute;inset:0;z-index:0;pointer-events:none}
 .underlay .mag{position:absolute;transform:translate(-50%,-50%) rotate(var(--mrot,0deg));filter:drop-shadow(0 4px 7px rgba(0,0,0,.5))}
@@ -339,7 +345,12 @@ const DARK=['U','B','R','G','Fire','Water','Psychic','Fighting','Darkness','Drag
    an ESL price tag on every card, so 24 per spread instead of 40. */
 let TRAY=40;const COLS=8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
 const SHOWCASE=()=>!!(CARDS&&CARDS.GAME==='showcase');
-function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&list.GAME==='showcase')?24:40;trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
+/* Per-deck salt so switching tabs reshuffles the clutter/card-back piles —
+   without it every deck's first spread drew the exact same mess. */
+let DECKSALT=0;
+function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&list.GAME==='showcase')?24:40;
+ DECKSALT=0;for(let i=0;i<CARDS.length;i+=5){const k=String(CARDS[i].variantId||CARDS[i].name||i);for(let j=0;j<k.length;j++)DECKSALT=(DECKSALT*31+k.charCodeAt(j))>>>0;}
+ trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 /* ---- Phone-driven search: the phone mirrors its results here; the default
    deck is parked in SDECK and restored when the search is cleared. ---- */
 let SDECK=null;
@@ -444,7 +455,7 @@ function decorateGrime(el,rng){let s='<svg viewBox="0 0 100 100" preserveAspectR
    scattered across whatever felt the cards leave bare (rejection sampling). */
 /* Seeded per case AND per hour: stable while a customer browses, but the
    clutter (and which card backs show) reshuffles through the day. */
-function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b9^(Math.floor(Date.now()/36e5)*2246822519))>>>0);
+function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b9^DECKSALT^(Math.floor(Date.now()/36e5)*2246822519))>>>0);
  decorateGrime(slab.querySelector('.grime'),rng);
  const inner=document.getElementById('caseInner'),IR=inner.getBoundingClientRect(),Hh=IR.height,Wt=IR.width;
  const rects=[...slab.querySelectorAll('.tray .card')].map(el=>{const r=el.getBoundingClientRect();return{l:r.left-IR.left,t:r.top-IR.top,r2:r.right-IR.left,b:r.bottom-IR.top};});
@@ -540,7 +551,7 @@ function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>
 function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
  document.getElementById('lock').classList.add('mini');
  const ams=(Array.isArray(SETTINGS.attractMsgs)?SETTINGS.attractMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
- if(ams.length){document.getElementById('tapetop').textContent=ams[Math.floor(Math.random()*ams.length)];document.body.classList.add('attract');}
+ if(ams.length){document.getElementById('tapetop').textContent=ams[Math.floor(Math.random()*ams.length)];document.body.classList.add('attract');draw();/* re-lay the shelf below the tape */}
  attractFlip=setInterval(()=>{unzoom();if(spreads>1&&!flipping)flipTo((spread+1)%spreads);},ATTRACT_FLIP_MS);
  if(!matchMedia('(prefers-reduced-motion:reduce)').matches)
   attractZoom=setInterval(()=>{if(!CARDS.length)return;
@@ -549,8 +560,9 @@ function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
    attractPulse=setTimeout(()=>{if(attractOn)unzoom();},6000);},ATTRACT_ZOOM_MS);}
 function stopAttract(){clearTimeout(attractArm);clearInterval(attractFlip);clearInterval(attractZoom);clearTimeout(attractPulse);
  attractArm=attractFlip=attractZoom=attractPulse=null;
+ const hadTape=document.body.classList.contains('attract');
  document.body.classList.remove('attract');
- if(attractOn){attractOn=false;document.getElementById('lock').classList.remove('mini');unzoom();}}
+ if(attractOn){attractOn=false;document.getElementById('lock').classList.remove('mini');unzoom();if(hadTape)draw();}}
 /* Counter ticket: shown on "send to counter"; persists past the session drop
    (staff need it) and clears when the next customer pairs. */
 function showCounter(d){const raw=(Array.isArray(d.items)&&d.items.length?d.items:cart.map(c=>({name:c.name,price:c.price,qty:1}))).slice(0,40);
