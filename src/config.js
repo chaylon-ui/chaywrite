@@ -9,12 +9,16 @@ export const DEFAULT_SETTINGS = {
   topLoaders: false,          // show each card inside a clear top-loader (TV only)
 
   // Game tabs — shown on the PHONE (customer switches; the TV follows).
-  // Each tab carries the collection it pulls from, the case skin, and the
-  // lane-grouping scheme. Collection handles are editable from /admin.
+  // Each tab carries the collection it pulls from, the case skin, the
+  // lane-grouping scheme, and an enabled flag so every TV (room) can carry
+  // its own mix — e.g. the sports-area TV enables only Hockey/Basketball.
+  // Collection handles and enabled flags are editable from /admin?room=….
   tabs: [
-    { label: "Magic",     collection: "new-arrivals",     theme: "mtg",     game: "mtg" },
-    { label: "Pokémon",   collection: "pokemon-singles-new-arrivals",  theme: "pokemon", game: "pokemon" },
-    { label: "Yu-Gi-Oh!", collection: "yu-gi-oh-singles-new-arrivals", theme: "yugioh",  game: "yugioh" },
+    { label: "Magic",      collection: "new-arrivals",                  theme: "mtg",        game: "mtg",        enabled: true },
+    { label: "Pokémon",    collection: "pokemon-singles-new-arrivals",  theme: "pokemon",    game: "pokemon",    enabled: true },
+    { label: "Yu-Gi-Oh!",  collection: "yu-gi-oh-singles-new-arrivals", theme: "yugioh",     game: "yugioh",     enabled: true },
+    { label: "Hockey",     collection: "all-hockey-card-singles",       theme: "hockey",     game: "hockey",     enabled: false },
+    { label: "Basketball", collection: "all-basketball-singles",        theme: "basketball", game: "basketball", enabled: false },
   ],
 
   // The physical showcase, mirrored: a tab showing every card tagged
@@ -32,7 +36,7 @@ export const DEFAULT_SETTINGS = {
   // "New Today" showcases — an extra phone tab per enabled game showing cards
   // published today (topped up to at least 10, all over $10), with a
   // masking-tape banner across the TV case while active.
-  newToday: { mtg: false, pokemon: false, yugioh: false },
+  newToday: { mtg: false, pokemon: false, yugioh: false, hockey: false, basketball: false },
   newTodayActive: false, // true while a New Today tab is the active showcase
 
   // Let customers search ALL in-stock singles from their phone; results show

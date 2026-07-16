@@ -35,7 +35,9 @@ a.tvlink:hover{color:var(--ember)}
 </style></head><body>
 <div class="wrap">
   <h1>Exor Showcase — Admin</h1>
-  <div class="sub">Display &amp; collection settings for the shop TV</div>
+  <div class="sub">Settings for TV room “<b id="roomLbl"></b>” — each TV is its own room with its own games, QR and PIN.<br>
+  Point a TV at <code>/tv?room=sports</code> and manage it at <code>/admin?room=sports</code>.
+  <span id="roomJump" style="display:block;margin-top:.35rem"><input id="roomIn" type="text" placeholder="room name" style="width:9rem;background:#0e0e12;border:1px solid #26262f;border-radius:8px;padding:.3rem .5rem;color:#efe9dd;font-size:.75rem"> <button id="roomGo" style="background:#17171d;border:1px solid #2a2a34;border-radius:8px;color:#efe9dd;padding:.3rem .6rem;font-size:.75rem;cursor:pointer">Manage</button></span></div>
 
   <!-- PIN login -->
   <div class="card" id="login">
@@ -50,18 +52,22 @@ a.tvlink:hover{color:var(--ember)}
     <label for="header">Header line (shown on the TV)</label>
     <input id="header" type="text" maxlength="200" placeholder="Featured Singles · New Arrivals over $10">
 
-    <!-- One collection per game. Customers switch games from their phone;
-         the showcase pulls the matching collection and lane-groups it
-         (MTG by color, Pokémon by energy type, Yu-Gi-Oh by Spell/Trap/attribute). -->
+    <!-- One row per game: carry it on THIS TV (checkbox) + the collection it
+         pulls from. Sports lanes group by Rookie/Auto/Young Guns from titles;
+         TCGs lane by color/energy/type as before. -->
     <div class="group">
-      <div class="gtitle">Game collections</div>
-      <label for="colMtg">Magic — collection handle</label>
+      <div class="gtitle">Games on this TV</div>
+      <div class="hint" style="margin-top:.2rem">Tick the games THIS TV carries — the sports-area TV can carry only Hockey &amp; Basketball while the main TV skips them. Only cards over $10 and in stock are shown.</div>
+      <div class="row"><input id="enMtg" type="checkbox"><label for="enMtg">Magic</label></div>
       <input id="colMtg" type="text" placeholder="new-arrivals">
-      <label for="colPokemon">Pokémon — collection handle</label>
+      <div class="row"><input id="enPokemon" type="checkbox"><label for="enPokemon">Pokémon</label></div>
       <input id="colPokemon" type="text" placeholder="pokemon-singles-new-arrivals">
-      <label for="colYugioh">Yu-Gi-Oh! — collection handle</label>
+      <div class="row"><input id="enYugioh" type="checkbox"><label for="enYugioh">Yu-Gi-Oh!</label></div>
       <input id="colYugioh" type="text" placeholder="yu-gi-oh-singles-new-arrivals">
-      <div class="hint">The store collection each game tab pulls from, e.g. <code>new-arrivals</code>. Only cards over $10 and in stock are shown.</div>
+      <div class="row"><input id="enHockey" type="checkbox"><label for="enHockey">Hockey</label></div>
+      <input id="colHockey" type="text" placeholder="all-hockey-card-singles">
+      <div class="row"><input id="enBasketball" type="checkbox"><label for="enBasketball">Basketball</label></div>
+      <input id="colBasketball" type="text" placeholder="all-basketball-singles">
     </div>
 
     <div class="row"><input id="topLoaders" type="checkbox"><label for="topLoaders">Show each card in a top-loader (TV)</label></div>
@@ -88,6 +94,8 @@ a.tvlink:hover{color:var(--ember)}
       <div class="row"><input id="ntMtg" type="checkbox"><label for="ntMtg">Magic</label></div>
       <div class="row"><input id="ntPokemon" type="checkbox"><label for="ntPokemon">Pokémon</label></div>
       <div class="row"><input id="ntYugioh" type="checkbox"><label for="ntYugioh">Yu-Gi-Oh!</label></div>
+      <div class="row"><input id="ntHockey" type="checkbox"><label for="ntHockey">Hockey</label></div>
+      <div class="row"><input id="ntBasketball" type="checkbox"><label for="ntBasketball">Basketball</label></div>
     </div>
 
     <!-- Comic speech bubble on the featured-card preview. One line is picked
@@ -137,14 +145,21 @@ a.tvlink:hover{color:var(--ember)}
 <script>
 let PIN="";
 const $=id=>document.getElementById(id);
-const GAME_TABS=[ // labels/themes fixed; only the collection handle is editable
-  {label:'Magic',     theme:'mtg',     game:'mtg',     input:'colMtg',     fallback:'new-arrivals'},
-  {label:'Pokémon',   theme:'pokemon', game:'pokemon', input:'colPokemon', fallback:'pokemon-singles-new-arrivals'},
-  {label:'Yu-Gi-Oh!', theme:'yugioh',  game:'yugioh',  input:'colYugioh',  fallback:'yu-gi-oh-singles-new-arrivals'},
+/* Each TV is a room (?room=…) with fully independent settings. */
+const ROOM=(()=>{const r=String(new URLSearchParams(location.search).get('room')||'').toLowerCase();return /^[a-z0-9][a-z0-9-]{0,31}$/.test(r)?r:'default';})();
+const RQ=ROOM==='default'?'':'&room='+ROOM;
+$('roomLbl').textContent=ROOM;
+$('roomGo').onclick=()=>{const r=$('roomIn').value.trim().toLowerCase();if(/^[a-z0-9][a-z0-9-]{0,31}$/.test(r))location.search=r==='default'?'':'?room='+r;};
+const GAME_TABS=[ // labels/themes fixed; collection + carried-on-this-TV editable
+  {label:'Magic',      theme:'mtg',        game:'mtg',        input:'colMtg',        enable:'enMtg',        fallback:'new-arrivals',                  defOn:true},
+  {label:'Pokémon',    theme:'pokemon',    game:'pokemon',    input:'colPokemon',    enable:'enPokemon',    fallback:'pokemon-singles-new-arrivals',  defOn:true},
+  {label:'Yu-Gi-Oh!',  theme:'yugioh',     game:'yugioh',     input:'colYugioh',     enable:'enYugioh',     fallback:'yu-gi-oh-singles-new-arrivals', defOn:true},
+  {label:'Hockey',     theme:'hockey',     game:'hockey',     input:'colHockey',     enable:'enHockey',     fallback:'all-hockey-card-singles',       defOn:false},
+  {label:'Basketball', theme:'basketball', game:'basketball', input:'colBasketball', enable:'enBasketball', fallback:'all-basketball-singles',        defOn:false},
 ];
-async function loadSettings(){try{const s=await (await fetch('/settings',{cache:'no-store'})).json();
+async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json();
   $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;
-  const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;
+  const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
@@ -153,9 +168,10 @@ async function loadSettings(){try{const s=await (await fetch('/settings',{cache:
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
   const tabs=Array.isArray(s.tabs)?s.tabs:[];
   GAME_TABS.forEach(g=>{const t=tabs.find(x=>x.game===g.game)||tabs.find(x=>x.theme===g.theme);
-    $(g.input).value=(t&&t.collection)||g.fallback;});
+    $(g.input).value=(t&&t.collection)||g.fallback;
+    $(g.enable).checked=t?t.enabled!==false:g.defOn;});
 }catch(e){}}
-async function post(patch){const r=await fetch('/admin/api',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
+async function post(patch){const r=await fetch('/admin/api?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
   const j=await r.json().catch(()=>({error:'network'}));return{ok:r.ok,j};}
 $('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
   $('loginMsg').textContent='Checking…';$('loginMsg').className='msg';PIN=pin;
@@ -164,10 +180,11 @@ $('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
   else{PIN='';$('loginMsg').textContent=j.error||'Incorrect PIN';$('loginMsg').className='msg bad';}};
 $('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('unlock').click();});
 $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').className='msg';
-  const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,
+  const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,enabled:$(g.enable).checked,
     collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
+  if(!tabs.some(t=>t.enabled)){$('saveMsg').textContent='Enable at least one game';$('saveMsg').className='msg bad';return;}
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
-    perfMode:$('perfMode').checked,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked},
+    perfMode:$('perfMode').checked,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase'},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),

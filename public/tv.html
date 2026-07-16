@@ -210,6 +210,14 @@ body.searching .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.
   linear-gradient(179deg,#3c2b58,#2c1e44 28%,#382a54 54%,#1e1334 78%,#352950)}
 .case.theme-yugioh .wood::after{opacity:.32}
 .case.theme-yugioh .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(232,196,82,.2),rgba(52,38,84,.28) 44%,rgba(10,6,20,.68) 100%)}
+/* Hockey: rink boards + cool ice-blue felt, crossed sticks & puck watermark. */
+.case.theme-hockey .wood{background:linear-gradient(179deg,#dfe6ea,#bcc8cf 30%,#d3dce1 55%,#a9b6be 80%,#cdd6db)}
+.case.theme-hockey .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(240,248,255,.30),rgba(90,130,165,.26) 44%,rgba(12,28,44,.58) 100%)}
+.case.theme-hockey .pball{opacity:.14;background-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g stroke='%23122437' stroke-linecap='round' fill='none'><path d='M22 12 L64 74' stroke-width='6'/><path d='M64 74 L80 80' stroke-width='11'/><path d='M78 12 L36 74' stroke-width='6'/><path d='M36 74 L20 80' stroke-width='11'/></g><ellipse cx='50' cy='88' rx='15' ry='6' fill='%23122437'/><rect x='35' y='83' width='30' height='5' fill='%23122437'/></svg>")}
+/* Basketball: hardwood court + warm felt, ball watermark. */
+.case.theme-basketball .wood{background:linear-gradient(179deg,#c98d4e,#a96e34 30%,#bd8043 55%,#93602c 80%,#b57a3e)}
+.case.theme-basketball .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(255,214,160,.24),rgba(140,74,26,.26) 44%,rgba(40,18,6,.6) 100%)}
+.case.theme-basketball .pball{opacity:.13;background-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23d96f2b'/><g stroke='%233a1d0a' stroke-width='3.2' fill='none'><circle cx='50' cy='50' r='44'/><path d='M6 50 H94'/><path d='M50 6 V94'/><path d='M17 18 Q50 50 17 82'/><path d='M83 18 Q50 50 83 82'/></g></svg>")}
 /* The whole case interior (wood, felt, grime, cards, clutter) slides as one */
 .slab{position:absolute;inset:0;transition:transform .55s cubic-bezier(.45,.05,.2,1);will-change:transform}
 .grime{position:absolute;inset:0;z-index:2;pointer-events:none}
@@ -362,7 +370,11 @@ body.searching .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.
 <script>
 /* Live deck loader: swap the sample cards for /cards.json (edge-cached Shopify
    collection feed). On any failure the sample deck simply stays in place. */
-window.BINDER_READY=fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
+/* Which TV is this? Each ?room= is an independent showcase (own settings,
+   own QR, own pairing) — e.g. /tv?room=sports for the sports-area TV. */
+window.ROOM=(()=>{const r=String(new URLSearchParams(location.search).get('room')||'').toLowerCase();return /^[a-z0-9][a-z0-9-]{0,31}$/.test(r)?r:'default';})();
+window.RQ=window.ROOM==='default'?'':'&room='+window.ROOM;
+window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
 <script>
@@ -658,13 +670,13 @@ function updateCounterOrder(d){if(!d||document.getElementById('counter').classLi
  if(d.name)o.textContent='Draft order '+d.name+' — open it in Shopify POS or Admin › Orders › Drafts';}
 let qrLast=null;
 function renderQR(token,left){document.getElementById('rc').textContent=token?token.replace('EX-',''):'— — —';document.getElementById('timer').textContent='new code in '+fmt(left);
- if(token!==qrLast){qrLast=token;const el=document.getElementById('qr');el.innerHTML='';const url=(location.origin)+'/c/'+token;try{new QRCode(el,{text:url,width:190,height:190,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){el.textContent='QR';}}}
+ if(token!==qrLast){qrLast=token;const el=document.getElementById('qr');el.innerHTML='';const url=(location.origin)+'/c/'+token+(ROOM==='default'?'':'?room='+ROOM);try{new QRCode(el,{text:url,width:190,height:190,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){el.textContent='QR';}}}
 
 /* ---- WebSocket to the room ---- */
 let ws;
 function connect(){
  const proto=location.protocol==='https:'?'wss':'ws';
- ws=new WebSocket(`${proto}://${location.host}/ws?role=tv`);
+ ws=new WebSocket(`${proto}://${location.host}/ws?role=tv${RQ}`);
  ws.onopen=()=>{document.getElementById('conn').classList.add('on');document.getElementById('connT').textContent='live';};
  ws.onclose=()=>{document.getElementById('conn').classList.remove('on');document.getElementById('connT').textContent='reconnecting…';setTimeout(connect,1500);};
  ws.onmessage=(ev)=>{const m=JSON.parse(ev.data);
@@ -701,13 +713,15 @@ let SETTINGS={header:'',theme:'mtg',topLoaders:false,
  attractMsgs:["NEW ARRIVALS! No Holds - no trades for beanie babies",
   "NEW ARRIVALS! Yes I checked the prices with newest Scry Mag",
   "NEW ARRIVALS!!! More stock out back just ask!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false;
-function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
+function refetchCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
  const cs=document.getElementById('case');
  cs.classList.toggle('theme-pokemon',s.theme==='pokemon');
  cs.classList.toggle('theme-yugioh',s.theme==='yugioh');
+ cs.classList.toggle('theme-hockey',s.theme==='hockey');
+ cs.classList.toggle('theme-basketball',s.theme==='basketball');
  cs.classList.toggle('tl',!!s.topLoaders);
  cs.classList.toggle('newtoday',!!s.newTodayActive);
  cs.classList.toggle('showcase',!!s.showcaseActive);
@@ -718,8 +732,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  CUR_NT=ntNow;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
-function refreshCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
-window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings',{cache:'no-store'})).json());}catch(e){}if(window.BINDER_GAME)GAME=window.BINDER_GAME;applyCards(window.BINDER_CARDS);draw();connect();});
+function refreshCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
+window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json());}catch(e){}if(window.BINDER_GAME)GAME=window.BINDER_GAME;applyCards(window.BINDER_CARDS);draw();connect();});
 /* Fresh stock without anyone touching the TV: the deck feed re-checks every
    10 minutes while idle (redraws only when the version actually changed —
    new arrivals and price changes flow in on their own). */

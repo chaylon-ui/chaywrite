@@ -74,7 +74,37 @@ const GAMES = {
       return t || "Yu-Gi-Oh!";
     },
   },
+
+  // Sports singles carry their lane in the TITLE ("… Young Guns …",
+  // "… Rookie Auto …"), not in tags (tags are just the season, e.g. 22/23).
+  hockey: {
+    match: /hockey/i,
+    lanes: ["Rookie Auto", "Young Guns", "Autos", "Rookies", "Base"],
+    colorNames: { "Rookie Auto": "Rookie Autos", "Young Guns": "Young Guns", Autos: "Autographs", Rookies: "Rookies", Base: "Base & Inserts" },
+    fallbackLane: "Base",
+    laneOf(tags, title) { return sportsLane(title); },
+    typeOf(tags, title) { return sportsLane(title) === "Base" ? "Hockey Single" : sportsLane(title); },
+  },
+
+  basketball: {
+    match: /basketball/i,
+    lanes: ["Rookie Auto", "Autos", "Rookies", "Base"],
+    colorNames: { "Rookie Auto": "Rookie Autos", Autos: "Autographs", Rookies: "Rookies", Base: "Base & Inserts" },
+    fallbackLane: "Base",
+    laneOf(tags, title) { return sportsLane(title); },
+    typeOf(tags, title) { return sportsLane(title) === "Base" ? "Basketball Single" : sportsLane(title); },
+  },
 };
+
+function sportsLane(title) {
+  const t = String(title || "");
+  const rookie = /rookie/i.test(t), auto = /\bauto/i.test(t);
+  if (/young\s*guns?/i.test(t)) return "Young Guns";
+  if (rookie && auto) return "Rookie Auto";
+  if (auto) return "Autos";
+  if (rookie) return "Rookies";
+  return "Base";
+}
 
 function gameOf(productType) {
   const pt = productType || "";
@@ -259,7 +289,7 @@ function buildCards(products, opts = {}) {
   const perLane = opts.perLane ?? PER_LANE;
   // Decide the lane scheme from the dominant game in the feed; stragglers
   // from other games (mixed collections) fall into the fallback lane.
-  const counts = { mtg: 0, pokemon: 0, yugioh: 0 };
+  const counts = Object.fromEntries(Object.keys(GAMES).map((k) => [k, 0]));
   for (const p of products) {
     if (!/single/i.test(p.product_type || "")) continue;
     const g = gameOf(p.product_type);
@@ -282,7 +312,7 @@ function buildCards(products, opts = {}) {
 
     const tags = p.tags || [];
     const ownGame = gameOf(p.product_type);
-    const lane = ownGame === game ? spec.laneOf(tags) : spec.fallbackLane;
+    const lane = ownGame === game ? spec.laneOf(tags, p.title) : spec.fallbackLane;
 
     const set = (p.title.match(/\[([^\]]+)\]/) || [, ""])[1];
     const name = p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim();
@@ -294,7 +324,7 @@ function buildCards(products, opts = {}) {
       name,
       color: lane,
       set,
-      type: ownGame === game ? spec.typeOf(tags) : (p.product_type || "Single"),
+      type: ownGame === game ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
       condition: (v.title || "").replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ").trim(),
@@ -323,7 +353,7 @@ function buildCards(products, opts = {}) {
    game bunched under its own name, priciest first within each lane. */
 function buildShowcase(products) {
   const seen = new Set();
-  const known = { mtg: [], pokemon: [], yugioh: [] };
+  const known = Object.fromEntries(Object.keys(GAMES).map((k) => [k, []]));
   const other = new Map(); // game name -> cards
   const colorNames = {};
 
@@ -342,13 +372,13 @@ function buildShowcase(products) {
     const g = gameOf(p.product_type);
     const spec = g && GAMES[g];
     // Games without a lane scheme lane under their own name, e.g. "Lorcana".
-    const lane = spec ? spec.laneOf(tags) : (String(p.product_type || "").replace(/\bsingles?\b/gi, "").trim() || "Other");
+    const lane = spec ? spec.laneOf(tags, p.title) : (String(p.product_type || "").replace(/\bsingles?\b/gi, "").trim() || "Other");
 
     const card = {
       name,
       color: lane,
       set,
-      type: spec ? spec.typeOf(tags) : (p.product_type || "Single"),
+      type: spec ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
       condition: (v.title || "").replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ").trim(),
@@ -365,7 +395,7 @@ function buildShowcase(products) {
   }
 
   const cards = [];
-  for (const g of ["mtg", "pokemon", "yugioh"]) {
+  for (const g of Object.keys(GAMES)) {
     const spec = GAMES[g];
     const byLane = {};
     for (const c of known[g]) (byLane[c.color] || (byLane[c.color] = [])).push(c);

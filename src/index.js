@@ -3,12 +3,18 @@ import { serveCards, serveSearch, serveInstock } from "./cards.js";
 
 export { BinderRoom };
 
-const ROOM_NAME = "default";
+/* Every TV is a ROOM — its own Durable Object with its own settings, PIN,
+   pairing token and QR. ?room=sports on the TV URL gives the sports-area
+   TV an independent, compartmentalized showcase; no param = "default"
+   (the original TV keeps its state). Rooms create themselves on first use. */
+const ROOM_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const id = env.ROOM.idFromName(ROOM_NAME);
+    const rq = String(url.searchParams.get("room") || "").toLowerCase();
+    const roomName = ROOM_RE.test(rq) ? rq : "default";
+    const id = env.ROOM.idFromName(roomName);
     const room = env.ROOM.get(id);
 
     if (

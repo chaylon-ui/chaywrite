@@ -1,6 +1,6 @@
 import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN } from "./config.js";
 
-const THEMES = ["mtg", "pokemon", "yugioh"];
+const THEMES = ["mtg", "pokemon", "yugioh", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
 
 export class BinderRoom {
@@ -25,6 +25,14 @@ export class BinderRoom {
         if (Array.isArray(this.settings.tabs))
           this.settings.tabs = this.settings.tabs.map((t) => (up[t.collection] ? { ...t, collection: up[t.collection] } : t));
         if (up[this.settings.collection]) this.settings.collection = up[this.settings.collection];
+        // One-time upgrade: settings saved before the sports tabs existed
+        // lack enabled flags and the Hockey/Basketball entries (added off).
+        if (Array.isArray(this.settings.tabs)) {
+          this.settings.tabs = this.settings.tabs.map((t) => ({ ...t, enabled: t.enabled !== false }));
+          for (const d of DEFAULT_SETTINGS.tabs)
+            if (!this.settings.tabs.some((t) => t.game === d.game)) this.settings.tabs.push({ ...d });
+        }
+        this.settings.newToday = { ...DEFAULT_SETTINGS.newToday, ...(this.settings.newToday || {}) };
         const p = await this.state.storage.get("pin");
         if (p) this.pin = p;
       } catch {}
@@ -91,7 +99,7 @@ export class BinderRoom {
   // The Showcase tab (the physical case, mirrored) and enabled "New Today"
   // games appear as extra virtual tabs after the base ones.
   effectiveTabs() {
-    const base = Array.isArray(this.settings.tabs) ? this.settings.tabs : [];
+    const base = (Array.isArray(this.settings.tabs) ? this.settings.tabs : []).filter((t) => t.enabled !== false);
     const st = this.settings.showcaseTab || {};
     const sc = st.enabled
       ? [{ label: String(st.label || "Showcase").slice(0, 24), collection: st.collection || "esl-showcase", theme: "mtg", game: "showcase", showcase: true }]
@@ -126,7 +134,7 @@ export class BinderRoom {
     if ("newToday" in patch) {
       const nt = patch.newToday;
       if (!nt || typeof nt !== "object") return "bad newToday";
-      next.newToday = { mtg: !!nt.mtg, pokemon: !!nt.pokemon, yugioh: !!nt.yugioh };
+      next.newToday = Object.fromEntries(Object.keys(DEFAULT_SETTINGS.newToday).map((g) => [g, !!nt[g]]));
     }
     if ("showcaseTab" in patch) {
       const st = patch.showcaseTab;
@@ -160,9 +168,10 @@ export class BinderRoom {
       if (u && !/^https:\/\/[\w.\-/?=&%#:@]+$/i.test(u)) return "review URL must start with https://";
       next.reviewUrl = u.slice(0, 400);
     }
-    // Game tabs (label fixed per game in the admin UI; collections editable).
+    // Game tabs (label fixed per game in the admin UI; collections and the
+    // per-game enabled flag editable — that's how a room carries only sports).
     if ("tabs" in patch) {
-      if (!Array.isArray(patch.tabs) || patch.tabs.length < 1 || patch.tabs.length > 6) return "bad tabs";
+      if (!Array.isArray(patch.tabs) || patch.tabs.length < 1 || patch.tabs.length > 8) return "bad tabs";
       const clean = [];
       for (const t of patch.tabs) {
         if (!t || typeof t !== "object") return "bad tab entry";
@@ -172,13 +181,16 @@ export class BinderRoom {
         if (!HANDLE_RE.test(c)) return "bad collection handle for " + label;
         const theme = THEMES.includes(t.theme) ? t.theme : "mtg";
         const game = THEMES.includes(t.game) ? t.game : theme;
-        clean.push({ label, collection: c, theme, game });
+        clean.push({ label, collection: c, theme, game, enabled: t.enabled !== false });
       }
       next.tabs = clean;
-      // Keep the active collection/theme/game pointing at a real tab —
+      // Keep the active collection/theme/game pointing at a real ENABLED tab —
       // unless the virtual Showcase tab is the one on screen.
-      const active = clean.find((t) => t.collection === next.collection) || (next.showcaseActive ? null : clean[0]);
+      const enabledClean = clean.filter((t) => t.enabled !== false);
+      const active = enabledClean.find((t) => t.collection === next.collection)
+        || (next.showcaseActive ? null : enabledClean[0] || clean[0]);
       if (active) {
+        if (active.collection !== next.collection) next.newTodayActive = false; // the room got re-pointed
         next.collection = active.collection;
         next.theme = active.theme;
         next.game = active.game;

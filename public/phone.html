@@ -149,7 +149,10 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 <script>
 /* Live deck loader — must match the TV's deck so names line up (both read the
    same edge-cached /cards.json). Falls back to the sample deck on failure. */
-window.BINDER_READY=fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
+/* Which TV (room) paired us? Carried on the QR link as ?room=…. */
+window.ROOM=(()=>{const r=String(new URLSearchParams(location.search).get('room')||'').toLowerCase();return /^[a-z0-9][a-z0-9-]{0,31}$/.test(r)?r:'default';})();
+window.RQ=window.ROOM==='default'?'':'&room='+window.ROOM;
+window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
 <script>
@@ -167,7 +170,7 @@ function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&list
  DECKSALT=0;for(let i=0;i<CARDS.length;i+=5){const k=String(CARDS[i].variantId||CARDS[i].name||i);for(let j=0;j<k.length;j++)DECKSALT=(DECKSALT*31+k.charCodeAt(j))>>>0;}
  trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 applyCards(window.BINDER_CARDS);
-const token=location.pathname.split('/c/')[1]||'';
+const token=(location.pathname.split('/c/')[1]||'').split('?')[0];
 function SHOW(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');}
 function drawSpread(){renderDeck();
  document.getElementById('pcur').textContent=`Case ${spread+1} of ${spreads}`;
@@ -220,7 +223,7 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 let ws;
 function connect(){
  const proto=location.protocol==='https:'?'wss':'ws';
- ws=new WebSocket(`${proto}://${location.host}/ws?role=phone&token=${encodeURIComponent(token)}`);
+ ws=new WebSocket(`${proto}://${location.host}/ws?role=phone&token=${encodeURIComponent(token)}${RQ}`);
  ws.onmessage=(ev)=>{const m=JSON.parse(ev.data);
    if(m.type==='claimed'){SHOW('v-ctrl');drawSpread();}
    else if(m.type==='rejected'){SHOW('v-reject');if(m.reason==='expired'){document.getElementById('rjT').textContent='This code expired';document.getElementById('rjP').textContent='Codes refresh every 2 minutes. Scan the current code on the TV.';}}
@@ -249,7 +252,7 @@ function switchTab(i){if(switching)return;if(searchOn)ENDSEARCH(true);
  if(!t||(t.collection===PSET.collection&&!!t.newToday===!!PSET.newTodayActive))return;
  hideBetters();
  switching=true;renderTabs();
- fetch('/switch?i='+i,{method:'POST'}).catch(()=>{}).finally(()=>{switching=false;renderTabs();});}
+ fetch('/switch?i='+i+RQ,{method:'POST'}).catch(()=>{}).finally(()=>{switching=false;renderTabs();});}
 /* Swipe left/right across the cards to walk the showcase tabs (wraps around);
    the tab buttons still work the same. Vertical scrolling is untouched — only
    a decisive horizontal drag counts. */
@@ -266,9 +269,9 @@ function applyPhoneSettings(s){if(!s||typeof s!=='object')return;const prev=PSET
  const sr=document.getElementById('srch');if(sr)sr.classList.toggle('on',!!PSET.searchEnabled);
  if((s.collection&&prev&&s.collection!==prev)||(prev&&('newTodayActive' in s)&&!!s.newTodayActive!==prevNT)){
   searchOn=false;savedDeck=null;document.getElementById('sx').classList.add('hide');hideBetters(); // a tab switch supersedes any search
-  fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
+  fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
  else if(document.getElementById('deck'))drawSpread();}
-fetch('/settings',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{if(s)applyPhoneSettings(s);}).catch(()=>{});
+fetch('/settings?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{if(s)applyPhoneSettings(s);}).catch(()=>{});
 /* Flip sends the ABSOLUTE target spread — the phone owns navigation, the TV
    follows. Rapid taps can't desync the two anymore. */
 function EV(kind){if(!ws||ws.readyState!==1)return;
