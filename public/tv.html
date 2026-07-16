@@ -100,10 +100,12 @@ body.attract .qrarr{display:block}
 @keyframes qwig{0%,100%{transform:rotate(0deg)}50%{transform:rotate(4deg)}}
 body.perf .qrbub{animation:bpop .38s cubic-bezier(.34,1.56,.64,1)}
 body.perf .qrarr{animation:none}
-/* Felt underlay — props that live UNDER the cards (the Scrye magazine). */
-.underlay{position:absolute;inset:0;z-index:0;pointer-events:none}
+/* Felt underlay — props that live UNDER the cards (the old magazines).
+   Above the felt tint and the game-logo watermark so covers stay vivid;
+   below the grime layer (dust settles on them) and the card tray. */
+.underlay{position:absolute;inset:0;z-index:2;pointer-events:none}
 .underlay .mag{position:absolute;transform:translate(-50%,-50%) rotate(var(--mrot,0deg));filter:drop-shadow(0 4px 7px rgba(0,0,0,.5))}
-.underlay .mag img{display:block;width:100%;aspect-ratio:1700/2194;object-fit:cover;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+.underlay .mag img{display:block;width:100%;object-fit:cover;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
 /* Performance mode (admin toggle): kill the expensive full-screen blurs and
    filter animations for weak TV boxes; transforms/tilt stay (they're cheap). */
 body.perf .zoomtv{backdrop-filter:none;background:rgba(3,3,5,.94)}
@@ -451,9 +453,15 @@ const BACKS=[
  {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/SWCCG-Back-Dark-min.webp?v=1784217692&width=360'},
  {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Star_Trek_Customizable_Card_Game_cardback.jpg?v=1784217693&width=360'},
 ];
-/* An old Scrye issue that slides UNDER the cards now and then — true magazine
-   proportions next to a card (about 3.3× as wide). */
-const MAG_URL='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Scrye_13.webp?v=1784217947&width=520';
+/* Old gaming mags that slide UNDER the cards now and then — true magazine
+   proportions next to a card (about 3.3× as wide). The issue on display
+   rotates hourly so the same cover doesn't linger. */
+const MAGS=[
+ {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Scrye_13.webp?v=1784217947&width=520',w:1700,h:2194},
+ {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/InQuest014.png?v=1784219962&width=520',w:650,h:949},
+ {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/images_90072c07-47f8-4b84-b155-cac9c92f8ecb.jpg?v=1784219962&width=520',w:377,h:530},
+ {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/images9.jpg?v=1784219962&width=520',w:387,h:516},
+];
 function BACK_IMG(n){const b=BACKS[n%BACKS.length];return `<img${b.land?' class="rot"':''} src="${b.u}" alt="" loading="lazy">`;}
 /* Stack from a dealt hand of back indices (no repeats — the caller shuffles
    all five games and splits them between the piles). */
@@ -507,11 +515,12 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
  if(mslot){let mhtml='';
   const mrng=mulberry32((((idx+7)*1597334677)^DECKSALT^(Math.floor(Date.now()/36e5)*2246822519))>>>0);
   if(rects.length&&empty>=6&&mrng()<0.55){const cw2=rects[0].r2-rects[0].l,mw=Math.min((cw2/Wt)*100*3.3,34);
-   mhtml=`<div class="mag" style="left:${(14+mrng()*72).toFixed(1)}%;top:${(30+mrng()*48).toFixed(1)}%;width:${mw.toFixed(1)}%;--mrot:${(mrng()*36-18).toFixed(1)}deg"><img src="${MAG_URL}" alt="" loading="lazy"></div>`;}
+   const mg=MAGS[(Math.floor(Date.now()/36e5)+idx)%MAGS.length]; // hourly cycle through the issues
+   mhtml=`<div class="mag" style="left:${(14+mrng()*72).toFixed(1)}%;top:${(30+mrng()*48).toFixed(1)}%;width:${mw.toFixed(1)}%;--mrot:${(mrng()*36-18).toFixed(1)}deg"><img src="${mg.u}" style="aspect-ratio:${mg.w}/${mg.h}" alt="" loading="lazy"></div>`;}
   mslot.innerHTML=mhtml;}
  slab.querySelector('.clutter').innerHTML=items.map(it=>`<div class="clut" style="left:${it.x.toFixed(1)}%;top:${it.y.toFixed(1)}%;width:${it.w.toFixed(1)}%;transform:translate(-50%,-50%) rotate(${it.rot}deg)">${it.svg}</div>`).join('');}
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
- slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="grime"></div><div class="underlay"></div><div class="tray"></div><div class="clutter"></div>';
+ slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="underlay"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
  fillTray(slab.querySelector('.tray'),trays[idx]||[]);return slab;}
 function draw(){const inner=document.getElementById('caseInner');inner.innerHTML='';const slab=makeSlab(spread);slab.id='slab';inner.appendChild(slab);decorate(slab,spread);markSel();}
 function markSel(){document.querySelectorAll('#caseInner .card').forEach(el=>el.classList.toggle('sel',selected&&el.dataset.id===selected));}
