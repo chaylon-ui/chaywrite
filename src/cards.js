@@ -207,24 +207,25 @@ export async function serveBetter(request, ctx) {
 
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
   try {
-    const sr = await fetch(SB_HOST + "/api/obsoletes/" + encodeURIComponent(name), {
-      headers, signal: AbortSignal.timeout(6000),
-    });
+    const sr = await fetchSB(SB_HOST + "/api/obsoletes/" + encodeURIComponent(name));
     if (!sr.ok) throw new Error("strictlybetter HTTP " + sr.status);
     const j = await sr.json();
-    // The endpoint is a search: keep only relations where OUR card is the
-    // inferior, rank superiors by community votes. Shape handled loosely so
-    // an upstream format tweak degrades to "no suggestions", not an error.
+    // Laravel-paginated rows; each relation groups functional reprints, so
+    // inferiors/superiors are ARRAYS. Keep relations where OUR card is among
+    // the inferiors, skip community-downvoted ones, rank by net votes.
     const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
     const target = name.toLowerCase();
     const scores = new Map();
     for (const r of rows) {
-      const sup = r?.superior?.name;
-      const inf = r?.inferior?.name;
-      if (!sup || !inf || inf.toLowerCase() !== target) continue;
+      const infs = Array.isArray(r?.inferiors) ? r.inferiors : r?.inferior ? [r.inferior] : [];
+      const sups = Array.isArray(r?.superiors) ? r.superiors : r?.superior ? [r.superior] : [];
+      if (!infs.some((c) => c && typeof c.name === "string" && c.name.toLowerCase() === target)) continue;
       const score = (+r.upvotes || 0) - (+r.downvotes || 0);
-      if (score < 0) continue;
-      scores.set(sup, Math.max(scores.get(sup) ?? -1, score));
+      if (score < 0 || (r.labels && r.labels.downvoted)) continue;
+      for (const s of sups) {
+        if (!s || typeof s.name !== "string") continue;
+        scores.set(s.name, Math.max(scores.get(s.name) ?? -1, score));
+      }
     }
     const names = [...scores.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -243,6 +244,32 @@ export async function serveBetter(request, ctx) {
   const res = Response.json(out, { headers: { "cache-control": `public, max-age=${BETTER_TTL_S}` } });
   if (!out.error) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
+}
+
+/* StrictlyBetter sits behind a session layer that 302s cookie-less clients
+   back to the same URL — Workers' fetch won't carry cookies across redirects,
+   so it loops forever. Follow redirects by hand, holding on to cookies. */
+async function fetchSB(startUrl) {
+  let u = startUrl, cookies = "";
+  for (let hop = 0; hop < 4; hop++) {
+    const r = await fetch(u, {
+      headers: {
+        accept: "application/json",
+        "accept-language": "en",
+        "user-agent": "ExorShowcaseTV/1.0 (+https://exorgames.com)",
+        ...(cookies ? { cookie: cookies } : {}),
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(6000),
+    });
+    if (r.status < 300 || r.status >= 400) return r;
+    const jar = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [];
+    const fresh = jar.map((c) => String(c).split(";")[0].trim()).filter(Boolean);
+    if (fresh.length) cookies = (cookies ? cookies + "; " : "") + fresh.join("; ");
+    const loc = r.headers.get("location");
+    u = loc ? new URL(loc, u).toString() : u;
+  }
+  throw new Error("strictlybetter redirect loop");
 }
 
 /* Exact-name in-stock lookup via the shop's predictive search; returns the
