@@ -21,9 +21,13 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .status{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);display:flex;align-items:center;gap:.4rem;justify-content:center;margin-bottom:.55rem}.status .d{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
 .status .sidle{color:var(--muted);font-variant-numeric:tabular-nums}
 /* Game tabs — moved here from the TV. Tap to switch the whole display. */
-.ptabs{display:flex;gap:.4rem;justify-content:center;margin-bottom:.5rem;flex-wrap:wrap}
+/* Single row, side-scrolls when New Today tabs make it overflow — never wraps,
+   so the controls below (and View cart) always stay on screen. */
+.ptabs{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 .1rem 2px}
+.ptabs::-webkit-scrollbar{display:none}
 .ptabs:empty{display:none}
-.ptab{font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;letter-spacing:.02em;padding:.42rem .9rem;border-radius:20px;border:1px solid #3a3a44;background:#17171d;color:var(--muted);cursor:pointer;transition:all .15s}
+.ptab:first-child{margin-left:auto}.ptab:last-child{margin-right:auto} /* centers when it fits */
+.ptab{font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;letter-spacing:.02em;padding:.42rem .9rem;border-radius:20px;border:1px solid #3a3a44;background:#17171d;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap;flex:0 0 auto}
 .ptab:active{transform:scale(.97)}
 .ptab.on{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(217,130,43,.35)}
 .ptab:disabled{opacity:.5}
