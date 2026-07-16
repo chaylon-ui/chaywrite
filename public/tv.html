@@ -580,16 +580,30 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  else bub.style.display='none';
  loadBetters(c);
  z.classList.add('open');}
-/* In-stock upgrades for the featured card (MTG only): strictlybetter.eu
-   rankings cross-checked against our stock by the worker. Quietly absent
-   when there's nothing to show. */
+/* In-stock upgrades for the featured card (MTG only). This browser asks
+   strictlybetter.eu directly (their API is CORS-open; their Cloudflare zone
+   blocks server-side fetches), then our worker maps the suggested names onto
+   actual stock. Quietly absent when there's nothing to show. */
 let BETTERSEQ=0;
 const MTG_LANES=['W','U','B','R','G','M','C'];
+/* Relations group functional reprints: inferiors/superiors are arrays.
+   Keep rows naming our card as an inferior, skip downvoted, rank by votes. */
+function sbParse(j,target){const rows=Array.isArray(j)?j:(j&&Array.isArray(j.data)?j.data:[]);const t=String(target).toLowerCase();const scores=new Map();
+ for(const r of rows){const infs=Array.isArray(r&&r.inferiors)?r.inferiors:[];const sups=Array.isArray(r&&r.superiors)?r.superiors:[];
+  if(!infs.some(c=>c&&typeof c.name==='string'&&c.name.toLowerCase()===t))continue;
+  const score=((+r.upvotes)||0)-((+r.downvotes)||0);if(score<0||(r.labels&&r.labels.downvoted))continue;
+  for(const s of sups){if(s&&typeof s.name==='string')scores.set(s.name,Math.max(scores.get(s.name)??-1,score));}}
+ return [...scores.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]).filter(n=>n.toLowerCase()!==t).slice(0,8);}
 function loadBetters(c){const bx=document.getElementById('betters');bx.classList.remove('on');bx.innerHTML='';
  if(!MTG_LANES.includes(c.color))return;const seq=++BETTERSEQ;
- fetch('/better.json?name='+encodeURIComponent(c.name)).then(r=>r.ok?r.json():null).then(d=>{
-  if(seq!==BETTERSEQ||!document.getElementById('ztv').classList.contains('open'))return;
-  const cards=(d&&Array.isArray(d.cards)?d.cards:[]).map(sanitizeCard).filter(Boolean).slice(0,3);
+ fetch('https://www.strictlybetter.eu/api/obsoletes/'+encodeURIComponent(c.name),{headers:{accept:'application/json'}})
+ .then(r=>r.ok?r.json():null)
+ .then(j=>{const names=j?sbParse(j,c.name):[];
+  if(!names.length||seq!==BETTERSEQ)return null;
+  return fetch('/instock.json?names='+encodeURIComponent(names.join('|')));})
+ .then(r=>r&&r.ok?r.json():null).then(d=>{
+  if(!d||seq!==BETTERSEQ||!document.getElementById('ztv').classList.contains('open'))return;
+  const cards=(Array.isArray(d.cards)?d.cards:[]).map(sanitizeCard).filter(Boolean).slice(0,3);
   if(!cards.length)return;
   bx.innerHTML='<div class="bt">Alternatives in stock</div><div class="brw">'+cards.map(b=>
    `<div class="bcard">${b.image?`<img src="${H(IMGURL(b.image,200))}" alt="" loading="lazy">`:''}<div class="bnm">${H(b.name)}</div><div class="bpr">$${money(b.price)}</div></div>`).join('')+'</div>';

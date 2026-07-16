@@ -316,9 +316,22 @@ const MTG_LANES=['W','U','B','R','G','M','C'];
 function hideBetters(){document.getElementById('bpanel').classList.add('hide');BLIST=[];BPSEQ++;}
 function BPX(){hideBetters();if(selected){selected=null;if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'unselect'}));}drawSpread();}
 function bMsg(i){const b=BLIST[i];return {k:'sb'+i,name:b.name,set:b.set||'',type:b.type||'MTG Single',color:b.color||'C',price:b.price,foil:!!b.foil,condition:b.condition||'',image:b.image||null,variantId:b.variantId||null};}
+/* This browser asks strictlybetter.eu directly (CORS-open; their Cloudflare
+   zone blocks server-side fetches), then our worker filters to what's in stock. */
+function sbParse(j,target){const rows=Array.isArray(j)?j:(j&&Array.isArray(j.data)?j.data:[]);const t=String(target).toLowerCase();const scores=new Map();
+ for(const r of rows){const infs=Array.isArray(r&&r.inferiors)?r.inferiors:[];const sups=Array.isArray(r&&r.superiors)?r.superiors:[];
+  if(!infs.some(c=>c&&typeof c.name==='string'&&c.name.toLowerCase()===t))continue;
+  const score=((+r.upvotes)||0)-((+r.downvotes)||0);if(score<0||(r.labels&&r.labels.downvoted))continue;
+  for(const s of sups){if(s&&typeof s.name==='string')scores.set(s.name,Math.max(scores.get(s.name)??-1,score));}}
+ return [...scores.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]).filter(n=>n.toLowerCase()!==t).slice(0,8);}
 function showBetters(c){if(!MTG_LANES.includes(c.color)){hideBetters();return;}
  const seq=++BPSEQ;
- fetch('/better.json?name='+encodeURIComponent(c.name)).then(r=>r.ok?r.json():null).then(d=>{
+ fetch('https://www.strictlybetter.eu/api/obsoletes/'+encodeURIComponent(c.name),{headers:{accept:'application/json'}})
+ .then(r=>r.ok?r.json():null)
+ .then(j=>{const names=j?sbParse(j,c.name):[];
+  if(!names.length||seq!==BPSEQ)return null;
+  return fetch('/instock.json?names='+encodeURIComponent(names.join('|')));})
+ .then(r=>r&&r.ok?r.json():null).then(d=>{
   if(seq!==BPSEQ)return;
   const cards=(d&&Array.isArray(d.cards)?d.cards:[]).slice(0,4);
   if(!cards.length){document.getElementById('bpanel').classList.add('hide');BLIST=[];return;}

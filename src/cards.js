@@ -188,91 +188,33 @@ export async function serveSearch(request) {
   return Response.json(out, { headers: { "cache-control": "public, max-age=30" } });
 }
 
-/* "Strictly better" upgrades for a previewed MTG card, filtered to what's
-   actually in stock. Rankings come from the strictlybetter.eu community API;
-   stock and prices come from the store's own predictive search. Returns an
-   empty list quietly on any upstream hiccup — the UIs just don't show it. */
-const SB_HOST = "https://www.strictlybetter.eu";
+/* In-stock filter for the "Alternatives in stock" strip. The TV/phone
+   BROWSERS query strictlybetter.eu themselves (its API is CORS-open to
+   browsers, but its Cloudflare zone 301-loops Worker-originated fetches),
+   then hand the suggested names here to be mapped onto our actual stock.
+   Names are |-separated — card names contain commas. */
 const BETTER_TTL_S = 600;
 
-export async function serveBetter(request, ctx) {
+export async function serveInstock(request, ctx) {
   const url = new URL(request.url);
-  const name = String(url.searchParams.get("name") || "").trim().slice(0, 80);
-  const out = { name, count: 0, cards: [] };
-  if (name.length < 2) return Response.json(out, { headers: { "cache-control": "no-store" } });
+  const names = String(url.searchParams.get("names") || "")
+    .split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2).slice(0, 8);
+  const out = { count: 0, cards: [] };
+  if (!names.length) return Response.json(out, { headers: { "cache-control": "no-store" } });
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/better.json?n=" + encodeURIComponent(name.toLowerCase()), request.url).toString());
+  const cacheKey = new Request(new URL("/instock.json?n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
-  const trace = url.searchParams.get("debug") === "1" ? [] : null;
-  try {
-    const sr = await fetchSB(SB_HOST + "/api/obsoletes/" + encodeURIComponent(name), trace);
-    if (!sr.ok) throw new Error("strictlybetter HTTP " + sr.status);
-    const j = await sr.json();
-    // Laravel-paginated rows; each relation groups functional reprints, so
-    // inferiors/superiors are ARRAYS. Keep relations where OUR card is among
-    // the inferiors, skip community-downvoted ones, rank by net votes.
-    const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-    const target = name.toLowerCase();
-    const scores = new Map();
-    for (const r of rows) {
-      const infs = Array.isArray(r?.inferiors) ? r.inferiors : r?.inferior ? [r.inferior] : [];
-      const sups = Array.isArray(r?.superiors) ? r.superiors : r?.superior ? [r.superior] : [];
-      if (!infs.some((c) => c && typeof c.name === "string" && c.name.toLowerCase() === target)) continue;
-      const score = (+r.upvotes || 0) - (+r.downvotes || 0);
-      if (score < 0 || (r.labels && r.labels.downvoted)) continue;
-      for (const s of sups) {
-        if (!s || typeof s.name !== "string") continue;
-        scores.set(s.name, Math.max(scores.get(s.name) ?? -1, score));
-      }
-    }
-    const names = [...scores.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([n]) => n)
-      .filter((n) => n.toLowerCase() !== target)
-      .slice(0, 8);
-    for (const supName of names) {
-      if (out.cards.length >= 4) break;
-      const card = await findInStock(supName, headers);
-      if (card) out.cards.push(card);
-    }
-    out.count = out.cards.length;
-  } catch (e) {
-    out.error = String((e && e.message) || e);
+  for (const n of names) {
+    if (out.cards.length >= 4) break;
+    const card = await findInStock(n, headers);
+    if (card) out.cards.push(card);
   }
-  if (trace) out.trace = trace;
+  out.count = out.cards.length;
   const res = Response.json(out, { headers: { "cache-control": `public, max-age=${BETTER_TTL_S}` } });
-  if (!out.error && !trace) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
-}
-
-/* StrictlyBetter sits behind a session layer that 302s cookie-less clients
-   back to the same URL — Workers' fetch won't carry cookies across redirects,
-   so it loops forever. Follow redirects by hand, holding on to cookies. */
-async function fetchSB(startUrl, trace) {
-  let u = startUrl, cookies = "";
-  for (let hop = 0; hop < 4; hop++) {
-    const r = await fetch(u, {
-      headers: {
-        accept: "application/json",
-        "accept-language": "en",
-        "user-agent": "ExorShowcaseTV/1.0 (+https://exorgames.com)",
-        ...(cookies ? { cookie: cookies } : {}),
-      },
-      redirect: "manual",
-      signal: AbortSignal.timeout(6000),
-    });
-    if (trace) trace.push({ url: u, status: r.status, location: r.headers.get("location"), server: r.headers.get("server"), setCookies: (typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : []).length });
-    if (r.status < 300 || r.status >= 400) return r;
-    const jar = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [];
-    const fresh = jar.map((c) => String(c).split(";")[0].trim()).filter(Boolean);
-    if (fresh.length) cookies = (cookies ? cookies + "; " : "") + fresh.join("; ");
-    const loc = r.headers.get("location");
-    u = loc ? new URL(loc, u).toString() : u;
-  }
-  throw new Error("strictlybetter redirect loop");
 }
 
 /* Exact-name in-stock lookup via the shop's predictive search; returns the
