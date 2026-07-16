@@ -1,0 +1,21 @@
+# Temporary diagnostics: probe the StrictlyBetter API shape and the deployed
+# /better.json from a runner with open egress (the dev sandbox can reach
+# neither). Trigger by hand; delete once the upgrades feature is confirmed.
+name: Diag
+on: workflow_dispatch
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: StrictlyBetter API (worker UA)
+        run: |
+          curl -sS -m 20 -w '\nHTTP %{http_code}\n' 'https://www.strictlybetter.eu/api/obsoletes/lightning%20strike' \
+            -H 'accept: application/json' -H 'user-agent: ExorShowcaseTV/1.0 (+workers.dev)' | head -c 7000 || true
+      - name: StrictlyBetter API (browser UA)
+        run: |
+          curl -sS -m 20 -w '\nHTTP %{http_code}\n' 'https://www.strictlybetter.eu/api/obsoletes/lightning%20strike' \
+            -H 'accept: application/json' \
+            -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' | head -c 7000 || true
+      - name: Deployed better.json
+        run: |
+          curl -sS -m 30 -w '\nHTTP %{http_code}\n' 'https://exor-binder.nevski.workers.dev/better.json?name=lightning%20strike' | head -c 7000 || true

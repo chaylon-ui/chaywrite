@@ -591,7 +591,7 @@ function loadBetters(c){const bx=document.getElementById('betters');bx.classList
   if(seq!==BETTERSEQ||!document.getElementById('ztv').classList.contains('open'))return;
   const cards=(d&&Array.isArray(d.cards)?d.cards:[]).map(sanitizeCard).filter(Boolean).slice(0,3);
   if(!cards.length)return;
-  bx.innerHTML='<div class="bt">Strictly better · in stock</div><div class="brw">'+cards.map(b=>
+  bx.innerHTML='<div class="bt">Alternatives in stock</div><div class="brw">'+cards.map(b=>
    `<div class="bcard">${b.image?`<img src="${H(IMGURL(b.image,200))}" alt="" loading="lazy">`:''}<div class="bnm">${H(b.name)}</div><div class="bpr">$${money(b.price)}</div></div>`).join('')+'</div>';
   bx.classList.add('on');}).catch(()=>{});}
 function unzoom(){document.getElementById('ztv').classList.remove('open');document.body.classList.remove('zopen');BETTERSEQ++;const bx=document.getElementById('betters');if(bx){bx.classList.remove('on');bx.innerHTML='';}}
