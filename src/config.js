@@ -17,6 +17,16 @@ export const DEFAULT_SETTINGS = {
     { label: "Yu-Gi-Oh!", collection: "yu-gi-oh-singles-new-arrivals", theme: "yugioh",  game: "yugioh" },
   ],
 
+  // Performance mode for weaker TV boxes: replaces the preview's backdrop
+  // blur with a plain dim and stills the heavy filter animations.
+  perfMode: false,
+
+  // "New Today" showcases — an extra phone tab per enabled game showing cards
+  // published today (topped up to at least 10, all over $10), with a
+  // masking-tape banner across the TV case while active.
+  newToday: { mtg: false, pokemon: false, yugioh: false },
+  newTodayActive: false, // true while a New Today tab is the active showcase
+
   // Let customers search ALL in-stock singles from their phone; results show
   // as a temporary showcase on the TV until they clear the search. Off until
   // enabled in /admin.

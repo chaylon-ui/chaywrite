@@ -88,7 +88,16 @@ export class BinderRoom {
   }
 
   // ---- Settings (admin-editable, persisted) ----
-  publicSettings() { return { ...this.settings }; } // never includes the PIN
+  // Enabled "New Today" games appear as extra virtual tabs after the base ones.
+  effectiveTabs() {
+    const base = Array.isArray(this.settings.tabs) ? this.settings.tabs : [];
+    const nt = this.settings.newToday || {};
+    const extra = base
+      .filter((t) => nt[t.game])
+      .map((t) => ({ label: ("New Today · " + t.label).slice(0, 24), collection: t.collection, theme: t.theme, game: t.game, newToday: true }));
+    return [...base, ...extra];
+  }
+  publicSettings() { return { ...this.settings, tabs: this.effectiveTabs() }; } // never includes the PIN
 
   broadcastSettings() {
     const m = { type: "settings", data: this.publicSettings() };
@@ -108,6 +117,12 @@ export class BinderRoom {
     }
     if ("topLoaders" in patch) next.topLoaders = !!patch.topLoaders;
     if ("searchEnabled" in patch) next.searchEnabled = !!patch.searchEnabled;
+    if ("perfMode" in patch) next.perfMode = !!patch.perfMode;
+    if ("newToday" in patch) {
+      const nt = patch.newToday;
+      if (!nt || typeof nt !== "object") return "bad newToday";
+      next.newToday = { mtg: !!nt.mtg, pokemon: !!nt.pokemon, yugioh: !!nt.yugioh };
+    }
     if ("theme" in patch) {
       if (!THEMES.includes(patch.theme)) return "bad theme";
       next.theme = patch.theme;
@@ -208,10 +223,10 @@ export class BinderRoom {
 
     if (url.pathname.endsWith("/switch")) {
       const i = parseInt(url.searchParams.get("i"), 10);
-      const tabs = Array.isArray(this.settings.tabs) ? this.settings.tabs : [];
+      const tabs = this.effectiveTabs();
       if (!(i >= 0 && i < tabs.length)) return Response.json({ error: "bad tab" }, { status: 400 });
       const t = tabs[i];
-      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme };
+      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme, newTodayActive: !!t.newToday };
       await this.state.storage.put("settings", this.settings);
       this.broadcastSettings();
       return Response.json({ ok: true, settings: this.publicSettings() });

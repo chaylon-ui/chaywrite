@@ -27,13 +27,15 @@ export default {
 
     if (url.pathname === "/cards.json") {
       let collection = url.searchParams.get("collection") || "";
+      let newToday = url.searchParams.get("nt") === "1";
       if (!collection) {
         try {
           const s = await (await room.fetch(new Request(url.origin + "/settings"))).json();
           if (s && s.collection) collection = s.collection;
+          if (s) newToday = !!s.newTodayActive;
         } catch {}
       }
-      return serveCards(request, ctx, collection || "new-arrivals");
+      return serveCards(request, ctx, collection || "new-arrivals", newToday);
     }
 
     if (url.pathname === "/admin" || url.pathname === "/admin.html") {

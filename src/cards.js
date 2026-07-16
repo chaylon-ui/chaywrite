@@ -82,10 +82,10 @@ function gameOf(productType) {
   return null;
 }
 
-export async function serveCards(request, ctx, collection = "new-arrivals") {
+export async function serveCards(request, ctx, collection = "new-arrivals", newToday = false) {
   collection = /^[a-z0-9][a-z0-9-]{0,80}$/.test(collection) ? collection : "new-arrivals";
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/cards.json?c=" + collection, request.url).toString());
+  const cacheKey = new Request(new URL("/cards.json?c=" + collection + (newToday ? "&nt=1" : ""), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
@@ -105,7 +105,23 @@ export async function serveCards(request, ctx, collection = "new-arrivals") {
     trouble.push(String((e && e.message) || e));
   }
 
-  const built = buildCards(products);
+  let built;
+  if (newToday) {
+    // Cards published today (store-local time), topped up with the next-newest
+    // until at least 10 make the case. Same in-stock/over-$10 rules as always.
+    const dayKey = (d) => new Date(d || 0).toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+    const today = dayKey(Date.now());
+    const pool = [...products].sort((a, b) => new Date(b.published_at || b.created_at || 0) - new Date(a.published_at || a.created_at || 0));
+    let take = pool.findIndex((p) => dayKey(p.published_at || p.created_at) !== today);
+    if (take === -1) take = pool.length;
+    built = buildCards(pool.slice(0, Math.max(take, 1)), { perLane: 99 });
+    while (built.cards.length < 10 && take < pool.length) {
+      take += 5;
+      built = buildCards(pool.slice(0, take), { perLane: 99 });
+    }
+  } else {
+    built = buildCards(products);
+  }
   if (built.cards.length === 0) {
     return Response.json(
       { error: "feed unavailable", detail: trouble, cards: [] },

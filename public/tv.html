@@ -3,7 +3,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Exor Games — Featured Singles</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&family=Caveat:wght@600;700&family=Cutive+Mono&family=Bangers&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&family=Caveat:wght@600;700&family=Cutive+Mono&family=Bangers&family=Permanent+Marker&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{--bg:#08080a;--panel:#0d0d10;--sleeve:#15151a;--stitch:#2c2c34;--ember:#b5651d;--ember-bright:#d9822b;--ember-deep:#7a3b12;--ink:#efe9dd;--muted:#8b8b96;--ok:#3f9d5a;
@@ -65,6 +65,23 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
 .glass::before{content:"";position:absolute;top:-40%;left:-6%;width:44%;height:180%;transform:rotate(17deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),rgba(255,255,255,.05),transparent)}
 /* Inner pane line — reads as the glass sheet's thickness. */
 .glass::after{content:"";position:absolute;inset:5px;border-radius:10px;box-shadow:0 0 0 1.5px rgba(255,255,255,.07),inset 0 0 0 1px rgba(255,255,255,.035)}
+/* "New Today" masking tape, torn ends, sharpie handwriting — shows across the
+   bottom of the case while a New Today showcase is active. */
+.tape{display:none;position:absolute;left:7%;bottom:2.6%;z-index:12;transform:rotate(-2.2deg);padding:1.2vh 4vh 1.4vh;pointer-events:none;
+  font-family:'Permanent Marker',cursive;font-size:3.6vh;letter-spacing:.03em;color:#1c1c22;white-space:nowrap;
+  background:repeating-linear-gradient(88deg,rgba(0,0,0,.025) 0 3px,transparent 3px 7px),linear-gradient(90deg,#ddd2ab,#e9e0c1 28%,#dbd0ac 62%,#e5dcba);
+  box-shadow:0 4px 10px rgba(0,0,0,.4),inset 0 0 14px rgba(120,100,50,.18);
+  clip-path:polygon(0% 18%,2.2% 0%,4.5% 12%,96% 3%,98.2% 16%,100% 10%,99.2% 84%,97% 100%,94.5% 88%,5% 96%,2.4% 84%,.8% 92%)}
+.case.newtoday .tape{display:block}
+/* Performance mode (admin toggle): kill the expensive full-screen blurs and
+   filter animations for weak TV boxes; transforms/tilt stay (they're cheap). */
+body.perf .zoomtv{backdrop-filter:none;background:rgba(3,3,5,.94)}
+body.perf .lock{backdrop-filter:none;background:rgba(6,6,9,.96)}
+body.perf .oil{animation:none}
+body.perf .zoomtv .zc.foil .shim{animation-duration:5s}
+/* Always: while a preview is up, the barely-visible background foils stop
+   burning GPU on their hue cycle. */
+body.zopen .tray .oil{animation-play-state:paused}
 .card{position:relative;isolation:isolate;width:var(--cw);height:var(--ch);flex:0 0 auto;border-radius:5%/3.6%;overflow:hidden;background:#0c0c10;
   transform:translateY(var(--jy,0)) rotate(var(--tilt,0deg));
   box-shadow:0 -7px 16px -6px rgba(0,0,0,.72),0 6px 11px -5px rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.5);
@@ -237,6 +254,7 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
   <div class="case" id="case">
     <div class="caseInner" id="caseInner"></div>
     <div class="glass"></div>
+    <div class="tape" aria-hidden="true">NEW TODAY!&nbsp; just in ✦</div>
     <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div></div>
   </div>
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="dvq" id="dvq"></span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
@@ -412,6 +430,7 @@ function flip(dir){if(flipping)return;const t=spread+dir;if(t<0||t>=spreads)retu
  let done=false;const finish=()=>{if(done)return;done=true;spread=t;draw();flipping=false;afterFlip();};
  inc.addEventListener('transitionend',finish,{once:true});setTimeout(finish,1000);}
 function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD?' intl':'');
+ document.body.classList.add('zopen'); // pause background effects while previewing
  zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.oil,.scan').forEach(e=>e.remove());
  if(c.image)zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
@@ -428,7 +447,7 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
   bub.style.display='';bub.style.animation='none';void bub.offsetWidth;bub.style.animation='';}
  else bub.style.display='none';
  z.classList.add('open');}
-function unzoom(){document.getElementById('ztv').classList.remove('open')}
+function unzoom(){document.getElementById('ztv').classList.remove('open');document.body.classList.remove('zopen')}
 function findCard(n){return CARDS.find(c=>c.name===n)}
 function updateCart(){const box=document.getElementById('tvCartItems');box.innerHTML='';cart.forEach(c=>box.insertAdjacentHTML('beforeend',`<span class="chip">${H(c.name)} · $${money(c.price)}</span>`));document.getElementById('tvCartTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);}
 function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
@@ -513,7 +532,7 @@ setInterval(()=>{if(BUILD.startsWith('__')||wasPaired||Date.now()-BOOT<3e5)retur
 let SETTINGS={header:'',theme:'mtg',topLoaders:false,
  bubbleMsgs:["Wanna buy {card}, kid? I can ring it up if you add it to your cart!",
   "You gonna look all day, or you gonna buy it? I got customers waiting!",
-  "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"]},TOPLOAD=false,CUR_COLLECTION=null;
+  "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false;
 function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
@@ -522,8 +541,12 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-pokemon',s.theme==='pokemon');
  cs.classList.toggle('theme-yugioh',s.theme==='yugioh');
  cs.classList.toggle('tl',!!s.topLoaders);
- if(s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION){unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
+ cs.classList.toggle('newtoday',!!s.newTodayActive);
+ document.body.classList.toggle('perf',!!s.perfMode);
+ const ntNow=!!s.newTodayActive;
+ if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
  if(s.collection)CUR_COLLECTION=s.collection;
+ CUR_NT=ntNow;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}

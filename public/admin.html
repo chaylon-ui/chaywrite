@@ -68,6 +68,18 @@ a.tvlink:hover{color:var(--ember)}
 
     <div class="row"><input id="searchEnabled" type="checkbox"><label for="searchEnabled">Let customers search all in-stock singles from their phone</label></div>
 
+    <div class="row"><input id="perfMode" type="checkbox"><label for="perfMode">Performance mode — smoother on weak TV boxes (lighter blur &amp; effects)</label></div>
+
+    <!-- "New Today" showcases: extra phone tab per game, masking-tape banner
+         on the TV, cards published today topped up to at least 10, over $10. -->
+    <div class="group">
+      <div class="gtitle">“New Today” showcases</div>
+      <div class="hint" style="margin-top:.2rem">Adds a “New Today” tab per enabled game — today's arrivals (topped up to at least 10 cards, all over $10) with a masking-tape banner on the TV.</div>
+      <div class="row"><input id="ntMtg" type="checkbox"><label for="ntMtg">Magic</label></div>
+      <div class="row"><input id="ntPokemon" type="checkbox"><label for="ntPokemon">Pokémon</label></div>
+      <div class="row"><input id="ntYugioh" type="checkbox"><label for="ntYugioh">Yu-Gi-Oh!</label></div>
+    </div>
+
     <!-- Comic speech bubble on the featured-card preview. One line is picked
          at random per preview; {card} becomes the card's name. -->
     <div class="group">
@@ -108,7 +120,8 @@ const GAME_TABS=[ // labels/themes fixed; only the collection handle is editable
   {label:'Yu-Gi-Oh!', theme:'yugioh',  game:'yugioh',  input:'colYugioh',  fallback:'yu-gi-oh-singles-new-arrivals'},
 ];
 async function loadSettings(){try{const s=await (await fetch('/settings',{cache:'no-store'})).json();
-  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;
+  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;
+  const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
@@ -128,6 +141,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,
     collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
+    perfMode:$('perfMode').checked,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;

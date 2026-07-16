@@ -210,16 +210,17 @@ let PSET={adEnabled:false,adText:'',reviewUrl:'',collection:null,tabs:[]};
 let switching=false;
 function renderTabs(){const b=document.getElementById('ptabs');if(!b)return;const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];
  if(tabs.length<2){b.innerHTML='';return;}
- b.innerHTML=tabs.map((t,i)=>`<button class="ptab${t.collection===PSET.collection?' on':''}" ${switching?'disabled':''} onclick="switchTab(${i})">${H(String(t.label||'').slice(0,24))}</button>`).join('');}
+ const active=(t)=>t.collection===PSET.collection&&!!t.newToday===!!PSET.newTodayActive;
+ b.innerHTML=tabs.map((t,i)=>`<button class="ptab${active(t)?' on':''}" ${switching?'disabled':''} onclick="switchTab(${i})">${H(String(t.label||'').slice(0,24))}</button>`).join('');}
 function switchTab(i){if(switching)return;if(searchOn)ENDSEARCH(true);
  const tabs=Array.isArray(PSET.tabs)?PSET.tabs:[];const t=tabs[i];
- if(!t||t.collection===PSET.collection)return;
+ if(!t||(t.collection===PSET.collection&&!!t.newToday===!!PSET.newTodayActive))return;
  switching=true;renderTabs();
  fetch('/switch?i='+i,{method:'POST'}).catch(()=>{}).finally(()=>{switching=false;renderTabs();});}
-function applyPhoneSettings(s){if(!s||typeof s!=='object')return;const prev=PSET.collection;PSET=Object.assign(PSET,s);
+function applyPhoneSettings(s){if(!s||typeof s!=='object')return;const prev=PSET.collection,prevNT=!!PSET.newTodayActive;PSET=Object.assign(PSET,s);
  renderTabs();
  const sr=document.getElementById('srch');if(sr)sr.classList.toggle('on',!!PSET.searchEnabled);
- if(s.collection&&prev&&s.collection!==prev){
+ if((s.collection&&prev&&s.collection!==prev)||(prev&&('newTodayActive' in s)&&!!s.newTodayActive!==prevNT)){
   searchOn=false;savedDeck=null;document.getElementById('sx').classList.add('hide'); // a tab switch supersedes any search
   fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
  else if(document.getElementById('deck'))drawSpread();}
