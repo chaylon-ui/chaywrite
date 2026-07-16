@@ -116,11 +116,15 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
 .case.theme-pokemon .wood::after{opacity:.22}
 .case.theme-pokemon .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(255,244,240,.16),rgba(120,22,14,.24) 44%,rgba(28,6,4,.6) 100%)}
 /* --- Yu-Gi-Oh! case theme (midnight slate & gold) --- */
-.case.theme-yugioh .pball{opacity:.1;background-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,10 90,80 10,80' fill='none' stroke='%23d4af37' stroke-width='4'/><circle cx='50' cy='57' r='13' fill='none' stroke='%23d4af37' stroke-width='4'/><circle cx='50' cy='57' r='5' fill='%23d4af37'/><path d='M50 74 l0 6 M42 70 l-4 5 M58 70 l4 5' stroke='%23d4af37' stroke-width='3' fill='none'/></svg>")}
-.case.theme-yugioh{border-image:linear-gradient(150deg,#8a7434,#c9a94a 34%,#4a3d18 66%,#8a7434) 1}
-.case.theme-yugioh .wood{background:linear-gradient(179deg,#2e2a3c,#221e30 30%,#2b2638 55%,#181424 80%,#292440)}
-.case.theme-yugioh .wood::after{opacity:.3}
-.case.theme-yugioh .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(212,175,55,.14),rgba(38,30,60,.26) 44%,rgba(8,6,14,.65) 100%)}
+/* Yu-Gi-Oh case: millennium gold on deep royal purple, big eye watermark,
+   gold pinstripes in the stone — unmistakably Duel Monsters. */
+.case.theme-yugioh .pball{opacity:.17;background-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,8 92,82 8,82' fill='none' stroke='%23e8c452' stroke-width='4.5'/><polygon points='50,20 82,76 18,76' fill='none' stroke='%23a8862e' stroke-width='1.5'/><circle cx='50' cy='58' r='14' fill='none' stroke='%23e8c452' stroke-width='4'/><circle cx='50' cy='58' r='5.5' fill='%23e8c452'/><path d='M50 76 l0 7 M40 72 l-5 6 M60 72 l5 6 M32 64 l-7 3 M68 64 l7 3' stroke='%23e8c452' stroke-width='3' fill='none'/></svg>")}
+.case.theme-yugioh{border-image:linear-gradient(150deg,#b8952e,#f0d060 30%,#6e5618 62%,#c9a94a) 1}
+.case.theme-yugioh .wood{background:
+  repeating-linear-gradient(92deg,rgba(232,196,82,.05) 0 1.5px,transparent 1.5px 64px),
+  linear-gradient(179deg,#3c2b58,#2c1e44 28%,#382a54 54%,#1e1334 78%,#352950)}
+.case.theme-yugioh .wood::after{opacity:.32}
+.case.theme-yugioh .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(232,196,82,.2),rgba(52,38,84,.28) 44%,rgba(10,6,20,.68) 100%)}
 /* The whole case interior (wood, felt, grime, cards, clutter) slides as one */
 .slab{position:absolute;inset:0;transition:transform .55s cubic-bezier(.45,.05,.2,1);will-change:transform}
 .grime{position:absolute;inset:0;z-index:2;pointer-events:none}
@@ -518,7 +522,7 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-pokemon',s.theme==='pokemon');
  cs.classList.toggle('theme-yugioh',s.theme==='yugioh');
  cs.classList.toggle('tl',!!s.topLoaders);
- if(s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)refetchCards();
+ if(s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION){unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
  if(s.collection)CUR_COLLECTION=s.collection;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
