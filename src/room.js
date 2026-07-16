@@ -88,14 +88,19 @@ export class BinderRoom {
   }
 
   // ---- Settings (admin-editable, persisted) ----
-  // Enabled "New Today" games appear as extra virtual tabs after the base ones.
+  // The Showcase tab (the physical case, mirrored) and enabled "New Today"
+  // games appear as extra virtual tabs after the base ones.
   effectiveTabs() {
     const base = Array.isArray(this.settings.tabs) ? this.settings.tabs : [];
+    const st = this.settings.showcaseTab || {};
+    const sc = st.enabled
+      ? [{ label: String(st.label || "Showcase").slice(0, 24), collection: st.collection || "esl-showcase", theme: "mtg", game: "showcase", showcase: true }]
+      : [];
     const nt = this.settings.newToday || {};
     const extra = base
       .filter((t) => nt[t.game])
       .map((t) => ({ label: ("New Today · " + t.label).slice(0, 24), collection: t.collection, theme: t.theme, game: t.game, newToday: true }));
-    return [...base, ...extra];
+    return [...base, ...sc, ...extra];
   }
   publicSettings() { return { ...this.settings, tabs: this.effectiveTabs() }; } // never includes the PIN
 
@@ -122,6 +127,19 @@ export class BinderRoom {
       const nt = patch.newToday;
       if (!nt || typeof nt !== "object") return "bad newToday";
       next.newToday = { mtg: !!nt.mtg, pokemon: !!nt.pokemon, yugioh: !!nt.yugioh };
+    }
+    if ("showcaseTab" in patch) {
+      const st = patch.showcaseTab;
+      if (!st || typeof st !== "object") return "bad showcaseTab";
+      const c = String(st.collection || "esl-showcase").trim().toLowerCase();
+      if (!HANDLE_RE.test(c)) return "bad showcase collection handle";
+      next.showcaseTab = { enabled: !!st.enabled, label: String(st.label || "Showcase").slice(0, 24).trim() || "Showcase", collection: c };
+      // If the Showcase tab was just disabled while on screen, fall back home.
+      if (!next.showcaseTab.enabled && next.showcaseActive) {
+        const home = (Array.isArray(next.tabs) && next.tabs[0]) || null;
+        if (home) { next.collection = home.collection; next.theme = home.theme; next.game = home.game; }
+        next.showcaseActive = false;
+      }
     }
     if ("theme" in patch) {
       if (!THEMES.includes(patch.theme)) return "bad theme";
@@ -153,11 +171,14 @@ export class BinderRoom {
         clean.push({ label, collection: c, theme, game });
       }
       next.tabs = clean;
-      // Keep the active collection/theme/game pointing at a real tab.
-      const active = clean.find((t) => t.collection === next.collection) || clean[0];
-      next.collection = active.collection;
-      next.theme = active.theme;
-      next.game = active.game;
+      // Keep the active collection/theme/game pointing at a real tab —
+      // unless the virtual Showcase tab is the one on screen.
+      const active = clean.find((t) => t.collection === next.collection) || (next.showcaseActive ? null : clean[0]);
+      if (active) {
+        next.collection = active.collection;
+        next.theme = active.theme;
+        next.game = active.game;
+      }
     }
     this.settings = next;
     await this.state.storage.put("settings", next);
@@ -226,7 +247,7 @@ export class BinderRoom {
       const tabs = this.effectiveTabs();
       if (!(i >= 0 && i < tabs.length)) return Response.json({ error: "bad tab" }, { status: 400 });
       const t = tabs[i];
-      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme, newTodayActive: !!t.newToday };
+      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme, newTodayActive: !!t.newToday, showcaseActive: !!t.showcase };
       await this.state.storage.put("settings", this.settings);
       this.broadcastSettings();
       return Response.json({ ok: true, settings: this.publicSettings() });

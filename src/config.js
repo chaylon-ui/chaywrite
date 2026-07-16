@@ -17,6 +17,14 @@ export const DEFAULT_SETTINGS = {
     { label: "Yu-Gi-Oh!", collection: "yu-gi-oh-singles-new-arrivals", theme: "yugioh",  game: "yugioh" },
   ],
 
+  // The physical showcase, mirrored: a tab showing every card tagged
+  // ESL-SHOWCASE in the store (the "esl-showcase" smart collection gathers
+  // the tag automatically). Mixed games, no price floor — the tag is the
+  // curation. Cards group by game: Magic by color, Pokémon by energy,
+  // Yu-Gi-Oh by Spell/Trap/attribute, anything else under its own game name.
+  showcaseTab: { enabled: true, label: "Showcase", collection: "esl-showcase" },
+  showcaseActive: false, // true while the Showcase tab is on screen
+
   // Performance mode for weaker TV boxes: replaces the preview's backdrop
   // blur with a plain dim and stills the heavy filter animations.
   perfMode: false,

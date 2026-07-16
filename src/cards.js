@@ -82,10 +82,10 @@ function gameOf(productType) {
   return null;
 }
 
-export async function serveCards(request, ctx, collection = "new-arrivals", newToday = false) {
+export async function serveCards(request, ctx, collection = "new-arrivals", newToday = false, showcase = false) {
   collection = /^[a-z0-9][a-z0-9-]{0,80}$/.test(collection) ? collection : "new-arrivals";
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/cards.json?c=" + collection + (newToday ? "&nt=1" : ""), request.url).toString());
+  const cacheKey = new Request(new URL("/cards.json?c=" + collection + (newToday ? "&nt=1" : "") + (showcase ? "&sc=1" : ""), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
@@ -106,7 +106,9 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
   }
 
   let built;
-  if (newToday) {
+  if (showcase) {
+    built = buildShowcase(products);
+  } else if (newToday) {
     // Cards published today (store-local time), topped up with the next-newest
     // until at least 10 make the case. Same in-stock/over-$10 rules as always.
     const dayKey = (d) => new Date(d || 0).toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
@@ -246,6 +248,71 @@ function buildCards(products, opts = {}) {
       .slice(0, perLane * spec.lanes.length);
   }
   return { game, colorNames: spec.colorNames, cards: laned };
+}
+
+/* The physical showcase, mirrored: one mixed feed (the ESL-SHOWCASE tag),
+   every game together. No price floor and no singles-only filter — being
+   tagged IS the curation. Cards group by game: Magic first (by color), then
+   Pokémon (by energy), Yu-Gi-Oh (Spell/Trap/attribute), then every other
+   game bunched under its own name, priciest first within each lane. */
+function buildShowcase(products) {
+  const seen = new Set();
+  const known = { mtg: [], pokemon: [], yugioh: [] };
+  const other = new Map(); // game name -> cards
+  const colorNames = {};
+
+  for (const p of products) {
+    const eligible = (p.variants || []).filter((v2) => v2.available && +v2.price > 0 && +v2.price < MAX_PRICE);
+    if (eligible.length === 0) continue;
+    const v = eligible.reduce((a, b) => (+b.price > +a.price ? b : a));
+
+    const set = (p.title.match(/\[([^\]]+)\]/) || [, ""])[1];
+    const name = p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim();
+    const key = name + "|" + set;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const tags = p.tags || [];
+    const g = gameOf(p.product_type);
+    const spec = g && GAMES[g];
+    // Games without a lane scheme lane under their own name, e.g. "Lorcana".
+    const lane = spec ? spec.laneOf(tags) : (String(p.product_type || "").replace(/\bsingles?\b/gi, "").trim() || "Other");
+
+    const card = {
+      name,
+      color: lane,
+      set,
+      type: spec ? spec.typeOf(tags) : (p.product_type || "Single"),
+      price: (+v.price).toFixed(2),
+      foil: /foil/i.test(v.title || ""),
+      condition: (v.title || "").replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ").trim(),
+      image: (p.images && p.images[0] && p.images[0].src) || null,
+      variantId: v.id,
+      url: "https://exorgames.com/products/" + p.handle,
+    };
+    if (spec) known[g].push(card);
+    else {
+      if (!other.has(lane)) other.set(lane, []);
+      other.get(lane).push(card);
+      colorNames[lane] = lane;
+    }
+  }
+
+  const cards = [];
+  for (const g of ["mtg", "pokemon", "yugioh"]) {
+    const spec = GAMES[g];
+    const byLane = {};
+    for (const c of known[g]) (byLane[c.color] || (byLane[c.color] = [])).push(c);
+    for (const l of spec.lanes) {
+      if (!byLane[l]) continue;
+      cards.push(...byLane[l].sort((a, b) => +b.price - +a.price));
+      if (!(l in colorNames)) colorNames[l] = spec.colorNames[l];
+    }
+  }
+  for (const gname of [...other.keys()].sort()) {
+    cards.push(...other.get(gname).sort((a, b) => +b.price - +a.price));
+  }
+  return { game: "showcase", colorNames, cards };
 }
 
 function fnv(s) {

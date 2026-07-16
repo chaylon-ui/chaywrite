@@ -70,6 +70,16 @@ a.tvlink:hover{color:var(--ember)}
 
     <div class="row"><input id="perfMode" type="checkbox"><label for="perfMode">Performance mode — smoother on weak TV boxes (lighter blur &amp; effects)</label></div>
 
+    <!-- The physical showcase, mirrored: a tab of every card tagged
+         ESL-SHOWCASE (mixed games, no price floor), grouped game by game. -->
+    <div class="group">
+      <div class="gtitle">Showcase tab (the real case)</div>
+      <div class="row" style="margin-top:.6rem"><input id="scEnabled" type="checkbox"><label for="scEnabled">Show a “Showcase” tab of cards tagged <code>ESL-SHOWCASE</code></label></div>
+      <label for="scCollection">Collection handle</label>
+      <input id="scCollection" type="text" placeholder="esl-showcase">
+      <div class="hint">The <code>esl-showcase</code> smart collection gathers the tag automatically — tag or untag a product in Shopify and the TV follows. All games show together, sorted by game then color/energy. No $10 minimum.</div>
+    </div>
+
     <!-- "New Today" showcases: extra phone tab per game, masking-tape banner
          on the TV, cards published today topped up to at least 10, over $10. -->
     <div class="group">
@@ -122,6 +132,7 @@ const GAME_TABS=[ // labels/themes fixed; only the collection handle is editable
 async function loadSettings(){try{const s=await (await fetch('/settings',{cache:'no-store'})).json();
   $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;
+  const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
@@ -142,6 +153,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
     perfMode:$('perfMode').checked,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked},
+    showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase'},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;
