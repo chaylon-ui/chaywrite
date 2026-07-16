@@ -128,7 +128,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 <script>
 /* Live deck loader — must match the TV's deck so names line up (both read the
    same edge-cached /cards.json). Falls back to the sample deck on failure. */
-window.BINDER_READY=fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;window.BINDER_CARDS=d.cards;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
+window.BINDER_READY=fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
 <script>
@@ -137,8 +137,10 @@ let CARDS, CN;
 const ART={W:'radial-gradient(circle at 50% 40%,#fff8e0,#cdbf90)',U:'radial-gradient(circle at 50% 40%,#7db4e8,#254a72)',B:'radial-gradient(circle at 50% 40%,#4a4a56,#0c0c10)',R:'radial-gradient(circle at 50% 40%,#e08a5a,#7a1f16)',G:'radial-gradient(circle at 50% 40%,#7fc88f,#1c5030)',M:'radial-gradient(circle at 50% 40%,#f0d878,#8a6f18)',C:'radial-gradient(circle at 50% 40%,#c8ced6,#5c626b)',
 Grass:'radial-gradient(circle at 50% 40%,#8fd08f,#2f7d4f)',Fire:'radial-gradient(circle at 50% 40%,#f0946a,#8a2a12)',Water:'radial-gradient(circle at 50% 40%,#7db4e8,#22537a)',Lightning:'radial-gradient(circle at 50% 40%,#f6da62,#a8861a)',Psychic:'radial-gradient(circle at 50% 40%,#d29ae6,#6a3391)',Fighting:'radial-gradient(circle at 50% 40%,#d09a6a,#7a4a22)',Darkness:'radial-gradient(circle at 50% 40%,#5a5a68,#17171f)',Metal:'radial-gradient(circle at 50% 40%,#d0d8e0,#767e88)',Dragon:'radial-gradient(circle at 50% 40%,#d6bd7a,#6e5a24)',Colorless:'radial-gradient(circle at 50% 40%,#c8ced6,#5c626b)',Trainer:'radial-gradient(circle at 50% 40%,#efe6d0,#a89878)',
 Spell:'radial-gradient(circle at 50% 40%,#6cc4b0,#1d5e50)',Trap:'radial-gradient(circle at 50% 40%,#dd7ab4,#7a2a5a)',Dark:'radial-gradient(circle at 50% 40%,#7a6aa0,#241a3a)',Light:'radial-gradient(circle at 50% 40%,#f6ecc0,#b8a860)',Earth:'radial-gradient(circle at 50% 40%,#b8a080,#5a4a30)',Wind:'radial-gradient(circle at 50% 40%,#9ad2aa,#3a7a52)',Divine:'radial-gradient(circle at 50% 40%,#f0d878,#8a6f18)',Monster:'radial-gradient(circle at 50% 40%,#c8a468,#6a4a28)'};
-const TRAY=40,COLS=3;let trays=[],spreads=0,spread=0,selected=null,cart=[];
-function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
+/* Showcase deck runs 24 per spread on the TV (3 rows + ESL tags) — page the
+   phone the same way so both screens agree on spreads. */
+let TRAY=40;const COLS=3;let trays=[],spreads=0,spread=0,selected=null,cart=[];
+function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&list.GAME==='showcase')?24:40;trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 applyCards(window.BINDER_CARDS);
 const token=location.pathname.split('/c/')[1]||'';
 function SHOW(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');}
@@ -226,7 +228,7 @@ function applyPhoneSettings(s){if(!s||typeof s!=='object')return;const prev=PSET
  const sr=document.getElementById('srch');if(sr)sr.classList.toggle('on',!!PSET.searchEnabled);
  if((s.collection&&prev&&s.collection!==prev)||(prev&&('newTodayActive' in s)&&!!s.newTodayActive!==prevNT)){
   searchOn=false;savedDeck=null;document.getElementById('sx').classList.add('hide'); // a tab switch supersedes any search
-  fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
+  fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){window.BINDER_VERSION=d.version;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);drawSpread();}}).catch(()=>{});}
  else if(document.getElementById('deck'))drawSpread();}
 fetch('/settings',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{if(s)applyPhoneSettings(s);}).catch(()=>{});
 /* Flip sends the ABSOLUTE target spread — the phone owns navigation, the TV

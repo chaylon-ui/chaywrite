@@ -95,6 +95,34 @@ body.zopen .tray .oil{animation-play-state:paused}
 .psticker .pink{display:block;font-family:'Cutive Mono','Courier New',monospace;font-weight:700;font-size:calc(var(--cw)*.12);line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
 .fsticker{position:absolute;right:8%;top:24%;z-index:8;transform:rotate(4deg);background:#fbfbf4;padding:.2em .5em .32em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
 .fsticker .fink{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:calc(var(--cw)*.135);line-height:.75;color:#123bbf;filter:url(#ink)}
+/* The store's real e-ink shelf labels, recreated for the Showcase deck: a
+   chunky white plastic ESL sat across each card's text box — art and title
+   stay visible above it. Black name strip, Exor logo on white, price on red. */
+.esl{position:absolute;left:2.5%;right:2.5%;bottom:1.6%;height:37%;z-index:7;border-radius:.5em;
+ background:linear-gradient(172deg,#fff,#eceae2 55%,#d3d1c8);font-size:calc(var(--cw)*.085);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.85),inset 0 -2px 3px rgba(0,0,0,.16),0 3px 6px rgba(0,0,0,.5),0 1px 2px rgba(0,0,0,.45)}
+.esl .escr{position:absolute;inset:9% 6%;background:#eeebe0;border-radius:.18em;overflow:hidden;display:flex;flex-direction:column;
+ box-shadow:inset 0 0 0 1px rgba(0,0,0,.28),inset 0 2px 4px rgba(0,0,0,.2)}
+.esl .enm{flex:0 0 40%;min-height:0;background:#161412;color:#f2efe4;display:flex;align-items:center;gap:.5em;padding:0 .55em;
+ font-family:'Cutive Mono','Courier New',monospace;font-weight:700;font-size:.78em;line-height:1;white-space:nowrap}
+.esl .enm .en{overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
+.esl .enm .ec{flex:0 0 auto;font-size:.66em;opacity:.8}
+.esl .erow{flex:1;display:flex;min-height:0}
+.esl .elogo{flex:0 0 31%;background:#fbf9f1;display:flex;align-items:center;justify-content:center;min-width:0}
+.esl .elogo img{width:86%;height:82%;object-fit:contain}
+.esl .eprice{flex:1;min-width:0;background:#c23a20;color:#fdfcf7;display:flex;align-items:center;justify-content:center;gap:.04em;
+ font-family:'Cutive Mono','Courier New',monospace;font-weight:800;font-size:1.32em;line-height:1;white-space:nowrap}
+.esl .eprice .ed{font-size:.6em}
+.esl .eled{position:absolute;top:8%;right:2.6%;width:4.5%;aspect-ratio:1;border-radius:50%;background:#b47cff;
+ box-shadow:0 0 .35em .12em rgba(154,84,255,.8);opacity:.18;animation:eled 4.6s infinite}
+@keyframes eled{0%,86%,100%{opacity:.18}90%,94%{opacity:1}}
+body.perf .esl .eled,body.zopen .esl .eled{animation:none}
+/* Showcase layout: 3 un-shingled rows so every ESL tag stays readable. */
+.case.showcase .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/3.12))}
+.case.showcase .shelf + .shelf{margin-top:calc(var(--ch) * 0.035)}
+.case.tl.showcase .tray{--chh:calc((min(85vh,900px) - 8vh)/3.6);--ch:min(var(--chw),var(--chh))}
+body.paired .case.tl.showcase .tray{--chh:calc(92vh/3.65)}
+.case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * 0.12)}
 /* Oily rainbow film over foil/holo card art — strong iridescent drift with a
    slow hue cycle so the colours crawl like oil on water. */
 .oil{position:absolute;inset:0;z-index:5;pointer-events:none;border-radius:inherit;mix-blend-mode:hard-light;opacity:.85;
@@ -276,7 +304,7 @@ body.zopen .tray .oil{animation-play-state:paused}
 <script>
 /* Live deck loader: swap the sample cards for /cards.json (edge-cached Shopify
    collection feed). On any failure the sample deck simply stays in place. */
-window.BINDER_READY=fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;window.BINDER_CARDS=d.cards;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
+window.BINDER_READY=fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
 <script>
@@ -294,8 +322,11 @@ const PIP={W:'#efe7cb',U:'#3d78b8',B:'#55555f',R:'#b53a2c',G:'#2f7d4f',M:'#c9a22
 Grass:'#4faf6a',Fire:'#d05a2c',Water:'#3d78b8',Lightning:'#e8c23a',Psychic:'#a45cc8',Fighting:'#b0743a',Darkness:'#4a4a58',Metal:'#aab4c0',Dragon:'#bb9a44',Colorless:'#9aa0a8',Trainer:'#cbbd9a',
 Spell:'#3d9a82',Trap:'#c05a94',Dark:'#5a4a86',Light:'#e0cc84',Earth:'#9a8058',Wind:'#5aa872',Divine:'#c9a227',Monster:'#b08448'};
 const DARK=['U','B','R','G','Fire','Water','Psychic','Fighting','Darkness','Dragon','Grass','Spell','Trap','Dark','Earth','Wind','Monster'];
-const TRAY=40,COLS=8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
-function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
+/* The Showcase deck (the real case, mirrored) runs roomier: 3 rows of 8 with
+   an ESL price tag on every card, so 24 per spread instead of 40. */
+let TRAY=40;const COLS=8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
+const SHOWCASE=()=>!!(CARDS&&CARDS.GAME==='showcase');
+function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&list.GAME==='showcase')?24:40;trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 /* ---- Phone-driven search: the phone mirrors its results here; the default
    deck is parked in SDECK and restored when the search is cleared. ---- */
 let SDECK=null;
@@ -334,8 +365,13 @@ function cardHTML(c){if(!c)return '';
  const face=c.image?`<img class="scan" src="${H(IMGURL(c.image,360))}" alt="" loading="lazy">`
   :`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div>
  <div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty">${H(c.type)}</div></div>`;
- const tags=`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}`;
+ const tags=SHOWCASE()
+  ?`${c.foil?'<div class="oil"></div>':''}${ESL_TAG(c)}`
+  :`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}`;
  return `<div class="card ${DARK.includes(c.color)?'dark':''}${TOPLOAD?' intl':''}" data-c="${H(c.color)}" data-id="${H(KEY(c))}" style="${tiltStyle(KEY(c))}">${face}${tags}</div>`;}
+/* One of the store's e-ink shelf labels, drawn over the card's text box. */
+const ESL_LOGO='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866&width=180';
+function ESL_TAG(c){return `<div class="esl"><div class="escr"><div class="enm"><span class="en">${H(c.name)}${c.foil?' ·'+(GAME==='pokemon'?'Holo':'Foil'):''}</span><span class="ec">${H(String(c.set||'').slice(0,12))}</span></div><div class="erow"><div class="elogo"><img src="${ESL_LOGO}" alt="" loading="lazy"></div><div class="eprice"><span class="ed">$</span>${money(c.price)}</div></div></div><div class="eled"></div></div>`;}
 /* Shingled shelves, top-anchored so the leftover space collects at the bottom. */
 function fillTray(el,cards){const rows=[];for(let i=0;i<cards.length;i+=COLS)rows.push(cards.slice(i,i+COLS));
  el.innerHTML=rows.map(row=>'<div class="shelf">'+row.map(cardHTML).join('')+'</div>').join('');}
@@ -439,7 +475,7 @@ function flip(dir){if(flipping)return;const t=spread+dir;if(t<0||t>=spreads)retu
  inc.addEventListener('transitionend',finish,{once:true});setTimeout(finish,1000);}
 function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD?' intl':'');
  document.body.classList.add('zopen'); // pause background effects while previewing
- zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.oil,.scan').forEach(e=>e.remove());
+ zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan').forEach(e=>e.remove());
  if(c.image)zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
  /* Phone `select` messages don't carry condition — enrich from the local deck. */
@@ -541,7 +577,7 @@ let SETTINGS={header:'',theme:'mtg',topLoaders:false,
  bubbleMsgs:["Wanna buy {card}, kid? I can ring it up if you add it to your cart!",
   "You gonna look all day, or you gonna buy it? I got customers waiting!",
   "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false;
-function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
+function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
@@ -550,6 +586,7 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-yugioh',s.theme==='yugioh');
  cs.classList.toggle('tl',!!s.topLoaders);
  cs.classList.toggle('newtoday',!!s.newTodayActive);
+ cs.classList.toggle('showcase',!!s.showcaseActive);
  document.body.classList.toggle('perf',!!s.perfMode);
  const ntNow=!!s.newTodayActive;
  if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
@@ -557,8 +594,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  CUR_NT=ntNow;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
-function refreshCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;applyCards(d.cards);draw();}}).catch(()=>{});}
-window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings',{cache:'no-store'})).json());}catch(e){}applyCards(window.BINDER_CARDS);draw();connect();});
+function refreshCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
+window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings',{cache:'no-store'})).json());}catch(e){}if(window.BINDER_GAME)GAME=window.BINDER_GAME;applyCards(window.BINDER_CARDS);draw();connect();});
 /* Fresh stock without anyone touching the TV: the deck feed re-checks every
    10 minutes while idle (redraws only when the version actually changed —
    new arrivals and price changes flow in on their own). */
