@@ -73,6 +73,7 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
   box-shadow:0 4px 10px rgba(0,0,0,.4),inset 0 0 14px rgba(120,100,50,.18);
   clip-path:polygon(0% 18%,2.2% 0%,4.5% 12%,96% 3%,98.2% 16%,100% 10%,99.2% 84%,97% 100%,94.5% 88%,5% 96%,2.4% 84%,.8% 92%)}
 .case.newtoday .tape{display:block}
+body.searching .case.newtoday .tape{display:none} /* search results aren't "New Today" */
 /* Attract-mode masking tape — a torn strip slapped over the header text next
    to the Exor logo (never over the cards), sharpie shout editable in /admin. */
 .tapetop{display:none;margin-left:.6rem;min-width:0;transform:rotate(-1.2deg);padding:.9vh 3.6vh 1.1vh;pointer-events:none;
@@ -156,6 +157,12 @@ body.perf .esl .eled,body.zopen .esl .eled{animation:none}
 .case.tl.showcase .tray{--chh:calc((min(85vh,900px) - 8vh)/3.6);--ch:min(var(--chw),var(--chh))}
 body.paired .case.tl.showcase .tray{--chh:calc(92vh/3.65)}
 .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * 0.12)}
+/* Search results use the normal dense deck (40/spread, no ESL tags) even on
+   the Showcase tab — fall back to the 5-row shingled layout while searching. */
+body.searching .case.showcase .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/3.32))}
+body.searching .case.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.42)}
+body.searching .case.tl.showcase .tray{--chh:calc((min(85vh,900px) - 8vh)/3.68)}
+body.searching .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.36)}
 /* Oily rainbow film over foil/holo card art — strong iridescent drift with a
    slow hue cycle so the colours crawl like oil on water. */
 .oil{position:absolute;inset:0;z-index:5;pointer-events:none;border-radius:inherit;mix-blend-mode:hard-light;opacity:.85;
@@ -380,9 +387,11 @@ function startSearchDeck(d){if(!d)return;const q=String(d.q||'').slice(0,60);
  if(!cards.length)return;
  if(!SDECK)SDECK={cards:CARDS,cn:CN};
  cards.COLOR_NAME=(d.colorNames&&typeof d.colorNames==='object')?d.colorNames:CN;
+ document.body.classList.add('searching'); // search results aren't "New Today" — park the tape
  unzoom();selected=null;applyCards(cards);draw();
  const el=document.getElementById('dvq');if(el)el.textContent='Search: “'+q+'” · '+cards.length+' found';}
 function endSearchDeck(){const el=document.getElementById('dvq');if(el)el.textContent='';
+ document.body.classList.remove('searching');
  if(!SDECK)return;const d=SDECK.cards;d.COLOR_NAME=SDECK.cn;SDECK=null;
  unzoom();selected=null;applyCards(d);draw();}
 applyCards(window.BINDER_CARDS);
@@ -652,7 +661,7 @@ let SETTINGS={header:'',theme:'mtg',topLoaders:false,
  attractMsgs:["NEW ARRIVALS! No Holds - no trades for beanie babies",
   "NEW ARRIVALS! Yes I checked the prices with newest Scry Mag",
   "NEW ARRIVALS!!! More stock out back just ask!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false;
-function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
+function refetchCards(){fetch('/cards.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
