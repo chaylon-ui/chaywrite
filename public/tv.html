@@ -73,20 +73,33 @@ body.paired .case.tl .tray{--chw:calc((95vw - (var(--cols) - 1)*var(--gap))/var(
   box-shadow:0 4px 10px rgba(0,0,0,.4),inset 0 0 14px rgba(120,100,50,.18);
   clip-path:polygon(0% 18%,2.2% 0%,4.5% 12%,96% 3%,98.2% 16%,100% 10%,99.2% 84%,97% 100%,94.5% 88%,5% 96%,2.4% 84%,.8% 92%)}
 .case.newtoday .tape{display:block}
-/* Attract-mode masking tape — a thick torn strip slapped across the top of
-   the glass while the TV idles, sharpie shout editable in /admin. */
-.tapetop{display:none;position:absolute;left:4%;top:1.7%;max-width:92%;z-index:12;transform:rotate(1.1deg);padding:1.5vh 4.5vh 1.8vh;pointer-events:none;
-  font-family:'Permanent Marker',cursive;font-size:4.1vh;letter-spacing:.02em;color:#1a1a21;white-space:nowrap;overflow:hidden;
+/* Attract-mode masking tape — a torn strip slapped over the header text next
+   to the Exor logo (never over the cards), sharpie shout editable in /admin. */
+.tapetop{display:none;margin-left:.6rem;min-width:0;transform:rotate(-1.2deg);padding:.9vh 3.6vh 1.1vh;pointer-events:none;
+  font-family:'Permanent Marker',cursive;font-size:3.4vh;letter-spacing:.02em;color:#1a1a21;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   background:repeating-linear-gradient(92deg,rgba(0,0,0,.025) 0 3px,transparent 3px 7px),linear-gradient(90deg,#dcd1aa,#eae1c2 22%,#d9cfab 55%,#e6ddbb 82%,#d8cda9);
-  box-shadow:0 5px 12px rgba(0,0,0,.45),inset 0 0 16px rgba(120,100,50,.18);
+  box-shadow:0 4px 10px rgba(0,0,0,.45),inset 0 0 14px rgba(120,100,50,.18);
   clip-path:polygon(0% 22%,1.4% 0%,3.2% 14%,97.2% 6%,98.6% 0%,100% 18%,99.4% 86%,97.6% 100%,95.8% 86%,3% 94%,1.8% 100%,.4% 80%)}
 body.attract .tapetop{display:block}
-/* While the tape owns the top of the glass, nudge the card stack down and
-   trim its height budget so no card ever hides behind the strip. (Attract
-   only runs unpaired, so only the unpaired budgets need variants.) */
-body.attract .tray{padding-top:calc(4.5% + 6.5vh);--hbudget:calc(min(85vh,900px) - 18vh)}
-body.attract .case.tl .tray{--chh:calc((min(85vh,900px) - 19vh)/3.68);padding-top:calc(2.5% + 9.5vh)}
-body.attract .case.tl.showcase .tray{--chh:calc((min(85vh,900px) - 15vh)/3.6)}
+body.attract .tapetop:empty{display:none}
+body.attract #subhead{display:none}
+/* Attract: the shopkeeper's comic bubble + scribbled arrows aimed at the
+   corner QR card, inviting a scan. Same comic language as the card bubble. */
+.qrbub{display:none;position:fixed;right:13rem;bottom:8.5rem;width:30vh;z-index:44;padding:1.8vh 2vh;
+ font-family:'Bangers','Comic Sans MS','Chalkboard SE',cursive;font-size:2.7vh;line-height:1.22;letter-spacing:.05em;color:#101010;text-align:center;
+ border:.5vh solid #101010;border-radius:2.4vh;
+ background:radial-gradient(circle,rgba(16,16,16,.055) .9px,transparent 1.4px) 0 0/1vh 1vh,#fffef4;
+ box-shadow:.8vh 1vh 0 rgba(16,16,16,.88);animation:bpop .38s cubic-bezier(.34,1.56,.64,1),qbob 3.6s ease-in-out .5s infinite}
+.qrbub .bn{color:#b5301d;-webkit-text-stroke:.4px #101010}
+.qrbub::before{content:"";position:absolute;right:-3.2vh;top:62%;border:1.5vh solid transparent;border-left:3.2vh solid #101010;transform:rotate(-14deg)}
+.qrbub::after{content:"";position:absolute;right:-1.6vh;top:63.5%;border:1.1vh solid transparent;border-left:2.4vh solid #fffef4;transform:rotate(-14deg)}
+.qrarr{display:none;position:fixed;right:10.2rem;bottom:4rem;width:8.5rem;height:7.5rem;z-index:44;pointer-events:none;animation:qwig 1.7s ease-in-out infinite;transform-origin:15% 15%}
+body.attract .qrbub{display:block}
+body.attract .qrarr{display:block}
+@keyframes qbob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-.9vh) rotate(-.5deg)}}
+@keyframes qwig{0%,100%{transform:rotate(0deg)}50%{transform:rotate(4deg)}}
+body.perf .qrbub{animation:bpop .38s cubic-bezier(.34,1.56,.64,1)}
+body.perf .qrarr{animation:none}
 /* Felt underlay — props that live UNDER the cards (the Scrye magazine). */
 .underlay{position:absolute;inset:0;z-index:0;pointer-events:none}
 .underlay .mag{position:absolute;transform:translate(-50%,-50%) rotate(var(--mrot,0deg));filter:drop-shadow(0 4px 7px rgba(0,0,0,.5))}
@@ -293,7 +306,7 @@ body.paired .case.tl.showcase .tray{--chh:calc(92vh/3.65)}
 .conn .d{width:7px;height:7px;border-radius:50%;background:#555}.conn.on .d{background:var(--ok);box-shadow:0 0 6px var(--ok)}
 @media (prefers-reduced-motion:reduce){.leaf{transition:none}.zoomtv .zc{animation:none}.zoomtv .zc.foil .shim{animation:none;opacity:.25}.foil-badge{animation:none}.oil{animation:none}}
 </style></head><body>
-<header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span></header>
+<header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span><div class="tapetop" id="tapetop" aria-hidden="true"></div></header>
 <div class="stage">
   <div class="conn" id="conn"><span class="d"></span><span id="connT">connecting…</span></div>
   <svg class="inkdefs" width="0" height="0" aria-hidden="true"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
@@ -301,7 +314,6 @@ body.paired .case.tl.showcase .tray{--chh:calc(92vh/3.65)}
     <div class="caseInner" id="caseInner"></div>
     <div class="glass"></div>
     <div class="tape" aria-hidden="true">NEW TODAY!&nbsp; just in ✦</div>
-    <div class="tapetop" id="tapetop" aria-hidden="true"></div>
     <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div></div>
   </div>
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="dvq" id="dvq"></span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
@@ -312,6 +324,13 @@ body.paired .case.tl.showcase .tray{--chh:calc(92vh/3.65)}
     <div class="ct2"><span id="ctrCount"></span><span id="ctrTot"></span></div>
     <div class="cord" id="ctrOrd">Ring up at the register</div>
   </div></div>
+  <div class="qrbub" aria-hidden="true">Scan the <span class="bn">QR code</span> to take a look in the showcase!</div>
+  <svg class="qrarr" viewBox="0 0 120 100" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round">
+   <path d="M14 12 C 48 20, 82 40, 100 72" stroke="#fffef4" stroke-width="9"/><path d="M14 12 C 48 20, 82 40, 100 72" stroke="#101010" stroke-width="4.5"/>
+   <path d="M84 64 L 100 72 L 92 50" stroke="#fffef4" stroke-width="9"/><path d="M84 64 L 100 72 L 92 50" stroke="#101010" stroke-width="4.5"/>
+   <path d="M26 44 C 48 50, 66 62, 78 82" stroke="#fffef4" stroke-width="7"/><path d="M26 44 C 48 50, 66 62, 78 82" stroke="#101010" stroke-width="3.4"/>
+   <path d="M64 78 L 78 82 L 72 64" stroke="#fffef4" stroke-width="7"/><path d="M64 78 L 78 82 L 72 64" stroke="#101010" stroke-width="3.4"/>
+  </g></svg>
   <div class="lock" id="lock">
     <div class="qrbox"><div id="qr"></div></div>
     <div><h2>Scan to browse the showcase</h2><p>Point your phone camera here. The code changes every 2 minutes and works once.</p></div>
@@ -481,11 +500,14 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
   place(CARDBACK_STACK(rng,hand.slice(0,n1)),wpct*1.06,0.08,0.84,0.18,0.66,240);
   if(empty>=20&&rng()<0.5)place(CARDBACK_STACK(rng,hand.slice(n1,n1+2+Math.floor(rng()*2))),wpct*1.02,0.08,0.84,0.18,0.66,240);}
  /* Now and then an old Scrye lies on the felt UNDER whatever's on the shelf —
-    cards always sit on top of the magazine, overlap welcome. */
+    cards always sit on top of the magazine, overlap welcome. Its RNG is
+    forked from the seed (not the shared stream) so layout changes can't
+    re-roll it away mid-session. */
  const mslot=slab.querySelector('.underlay');
  if(mslot){let mhtml='';
-  if(rects.length&&empty>=6&&rng()<0.55){const cw2=rects[0].r2-rects[0].l,mw=Math.min((cw2/Wt)*100*3.3,34);
-   mhtml=`<div class="mag" style="left:${(14+rng()*72).toFixed(1)}%;top:${(30+rng()*48).toFixed(1)}%;width:${mw.toFixed(1)}%;--mrot:${(rng()*36-18).toFixed(1)}deg"><img src="${MAG_URL}" alt="" loading="lazy"></div>`;}
+  const mrng=mulberry32((((idx+7)*1597334677)^DECKSALT^(Math.floor(Date.now()/36e5)*2246822519))>>>0);
+  if(rects.length&&empty>=6&&mrng()<0.55){const cw2=rects[0].r2-rects[0].l,mw=Math.min((cw2/Wt)*100*3.3,34);
+   mhtml=`<div class="mag" style="left:${(14+mrng()*72).toFixed(1)}%;top:${(30+mrng()*48).toFixed(1)}%;width:${mw.toFixed(1)}%;--mrot:${(mrng()*36-18).toFixed(1)}deg"><img src="${MAG_URL}" alt="" loading="lazy"></div>`;}
   mslot.innerHTML=mhtml;}
  slab.querySelector('.clutter').innerHTML=items.map(it=>`<div class="clut" style="left:${it.x.toFixed(1)}%;top:${it.y.toFixed(1)}%;width:${it.w.toFixed(1)}%;transform:translate(-50%,-50%) rotate(${it.rot}deg)">${it.svg}</div>`).join('');}
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
@@ -551,18 +573,18 @@ function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>
 function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
  document.getElementById('lock').classList.add('mini');
  const ams=(Array.isArray(SETTINGS.attractMsgs)?SETTINGS.attractMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
- if(ams.length){document.getElementById('tapetop').textContent=ams[Math.floor(Math.random()*ams.length)];document.body.classList.add('attract');draw();/* re-lay the shelf below the tape */}
+ document.getElementById('tapetop').textContent=ams.length?ams[Math.floor(Math.random()*ams.length)]:'';
+ document.body.classList.add('attract'); // tape in the header + QR speech bubble
  attractFlip=setInterval(()=>{unzoom();if(spreads>1&&!flipping)flipTo((spread+1)%spreads);},ATTRACT_FLIP_MS);
  if(!matchMedia('(prefers-reduced-motion:reduce)').matches)
   attractZoom=setInterval(()=>{if(!CARDS.length)return;
    const foils=CARDS.filter(c=>c.foil),pool=(foils.length&&Math.random()<0.6)?foils:CARDS;
    zoom(pool[Math.floor(Math.random()*pool.length)]);
-   attractPulse=setTimeout(()=>{if(attractOn)unzoom();},6000);},ATTRACT_ZOOM_MS);}
+   attractPulse=setTimeout(()=>{if(attractOn)unzoom();},14000);/* linger — passers-by need time to look */},ATTRACT_ZOOM_MS);}
 function stopAttract(){clearTimeout(attractArm);clearInterval(attractFlip);clearInterval(attractZoom);clearTimeout(attractPulse);
  attractArm=attractFlip=attractZoom=attractPulse=null;
- const hadTape=document.body.classList.contains('attract');
  document.body.classList.remove('attract');
- if(attractOn){attractOn=false;document.getElementById('lock').classList.remove('mini');unzoom();if(hadTape)draw();}}
+ if(attractOn){attractOn=false;document.getElementById('lock').classList.remove('mini');unzoom();}}
 /* Counter ticket: shown on "send to counter"; persists past the session drop
    (staff need it) and clears when the next customer pairs. */
 function showCounter(d){const raw=(Array.isArray(d.items)&&d.items.length?d.items:cart.map(c=>({name:c.name,price:c.price,qty:1}))).slice(0,40);
