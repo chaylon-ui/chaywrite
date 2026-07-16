@@ -2,7 +2,9 @@
 # /better.json from a runner with open egress (the dev sandbox can reach
 # neither). Trigger by hand; delete once the upgrades feature is confirmed.
 name: Diag
-on: workflow_dispatch
+on:
+  push:
+    paths: ['.github/workflows/diag.yml']
 jobs:
   diag:
     runs-on: ubuntu-latest
