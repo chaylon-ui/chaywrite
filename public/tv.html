@@ -370,8 +370,10 @@ const BACKS=[
  {u:'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/vampire.webp?v=1784123776&width=500',land:true},
 ];
 function BACK_IMG(n){const b=BACKS[n%BACKS.length];return `<img${b.land?' class="rot"':''} src="${b.u}" alt="" loading="lazy">`;}
-function CARDBACK_STACK(rng){const n=2+Math.floor(rng()*2);let inner='';
- for(let i=0;i<n;i++)inner+=`<div class="cb" style="transform:rotate(${(rng()*24-12).toFixed(1)}deg) translate(${(rng()*8-4).toFixed(1)}%,${(rng()*6-3).toFixed(1)}%)">${BACK_IMG(Math.floor(rng()*5))}</div>`;
+/* Stack from a dealt hand of back indices (no repeats — the caller shuffles
+   all five games and splits them between the piles). */
+function CARDBACK_STACK(rng,picks){let inner='';
+ picks.forEach(idx=>{inner+=`<div class="cb" style="transform:rotate(${(rng()*24-12).toFixed(1)}deg) translate(${(rng()*8-4).toFixed(1)}%,${(rng()*6-3).toFixed(1)}%)">${BACK_IMG(idx)}</div>`;});
  return `<div class="cbstack">${inner}</div>`;}
 /* Deterministic per-case RNG so clutter/grime stay put across re-renders. */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -385,7 +387,9 @@ function decorateGrime(el,rng){let s='<svg viewBox="0 0 100 100" preserveAspectR
  el.innerHTML=s+'</svg>';}
 /* Roughed-up case: dust + cobwebs + a few dead flies, plus clutter randomly
    scattered across whatever felt the cards leave bare (rejection sampling). */
-function decorate(slab,idx){const rng=mulberry32((idx*2654435761)^0x9e3779b9);
+/* Seeded per case AND per hour: stable while a customer browses, but the
+   clutter (and which card backs show) reshuffles through the day. */
+function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b9^(Math.floor(Date.now()/36e5)*2246822519))>>>0);
  decorateGrime(slab.querySelector('.grime'),rng);
  const inner=document.getElementById('caseInner'),IR=inner.getBoundingClientRect(),Hh=IR.height,Wt=IR.width;
  const rects=[...slab.querySelectorAll('.tray .card')].map(el=>{const r=el.getBoundingClientRect();return{l:r.left-IR.left,t:r.top-IR.top,r2:r.right-IR.left,b:r.bottom-IR.top};});
@@ -402,10 +406,14 @@ function decorate(slab,idx){const rng=mulberry32((idx*2654435761)^0x9e3779b9);
  const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(3,Math.round(empty*0.2));
  for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*2)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
  /* Sparse shelves sometimes get a haphazard pile of obsolete-game card backs —
-    same size as the real cards, never underneath them. */
+    same size as the real cards, never underneath them. All five games are
+    shuffled and dealt across the piles, so the two stacks never repeat a back
+    and every game gets its turn. */
  if(empty>=10&&rects.length&&rng()<0.65){const cw=rects[0].r2-rects[0].l,wpct=(cw/Wt)*100;
-  place(CARDBACK_STACK(rng),wpct*1.06,0.08,0.84,0.18,0.66,240);
-  if(empty>=20&&rng()<0.5)place(CARDBACK_STACK(rng),wpct*1.02,0.08,0.84,0.18,0.66,240);}
+  const hand=[0,1,2,3,4];for(let i=hand.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[hand[i],hand[j]]=[hand[j],hand[i]];}
+  const n1=2+Math.floor(rng()*2);
+  place(CARDBACK_STACK(rng,hand.slice(0,n1)),wpct*1.06,0.08,0.84,0.18,0.66,240);
+  if(empty>=20&&rng()<0.5)place(CARDBACK_STACK(rng,hand.slice(n1)),wpct*1.02,0.08,0.84,0.18,0.66,240);}
  slab.querySelector('.clutter').innerHTML=items.map(it=>`<div class="clut" style="left:${it.x.toFixed(1)}%;top:${it.y.toFixed(1)}%;width:${it.w.toFixed(1)}%;transform:translate(-50%,-50%) rotate(${it.rot}deg)">${it.svg}</div>`).join('');}
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
  slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
