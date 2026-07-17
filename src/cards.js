@@ -279,6 +279,47 @@ async function suggestSearch(q, headers) {
   }));
 }
 
+/* Live stock counts so the kiosk can stop customers adding more copies than
+   we own. The public product feed only says in-stock yes/no, so real numbers
+   need the Admin API (SHOPIFY_ADMIN_TOKEN) — without the secret this returns
+   {} and the clients simply don't cap. Untracked or oversell-allowed
+   variants come back null (no cap). Cached 60s. */
+export async function serveQty(request, env, ctx) {
+  const url = new URL(request.url);
+  const ids = [...new Set(
+    String(url.searchParams.get("ids") || "").split(",").map((s) => s.replace(/\D/g, "")).filter(Boolean),
+  )].slice(0, 24);
+  const token = env && env.SHOPIFY_ADMIN_TOKEN;
+  if (!ids.length || !token) return Response.json({}, { headers: { "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/qty.json?ids=" + ids.sort().join(","), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const out = {};
+  try {
+    const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
+    const gql = `query($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{
+      id inventoryQuantity inventoryPolicy inventoryItem{tracked}}}}`;
+    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ query: gql, variables: { ids: ids.map((i) => "gid://shopify/ProductVariant/" + i) } }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) throw new Error("qty HTTP " + r.status);
+    const nodes = (await r.json())?.data?.nodes || [];
+    for (const n of nodes) {
+      if (!n || !n.id) continue;
+      const id = String(n.id).replace(/\D/g, "");
+      const uncapped = (n.inventoryItem && n.inventoryItem.tracked === false) || n.inventoryPolicy === "CONTINUE";
+      out[id] = uncapped ? null : Math.max(0, n.inventoryQuantity | 0);
+    }
+  } catch { /* fall through with whatever we have — clients treat missing as uncapped */ }
+  const res = Response.json(out, { headers: { "cache-control": "public, max-age=60" } });
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 /* In-stock filter for the "Alternatives in stock" strip. The TV/phone
    BROWSERS query strictlybetter.eu themselves (its API is CORS-open to
    browsers, but its Cloudflare zone 301-loops Worker-originated fetches),
@@ -333,6 +374,7 @@ async function findInStock(name, headers) {
     return {
       name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
       set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
+      game: "mtg",
       type: "MTG Single",
       color: "C",
       price: (v.price / 100).toFixed(2),
@@ -385,6 +427,7 @@ function buildCards(products, opts = {}) {
       name,
       color: lane,
       set,
+      game: ownGame || game, // per-card, so foil/Holo wording survives mixed decks (search, showcase)
       type: ownGame === game ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
@@ -440,6 +483,7 @@ function buildShowcase(products) {
       name,
       color: lane,
       set,
+      game: g || null,
       type: spec ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),

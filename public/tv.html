@@ -354,9 +354,20 @@ html.portrait .zoomtv .bubble{right:auto;left:50%;top:1.6vh;transform:translateX
 html.portrait .zoomtv .bubble::before,html.portrait .zoomtv .bubble::after{display:none}
 html.portrait .zoomtv .cue{left:50%;right:auto;top:auto;bottom:1.8vh;transform:translateX(-50%) rotate(1.6deg);width:76vw;min-height:13vh}
 html.portrait .zoomtv .betters{display:none}
-/* Attract-mode dressing scales down a touch on the narrow screen. */
-html.portrait .tapetop{font-size:2.2vh;max-width:60vw}
-html.portrait .qrbub{width:38vw;font-size:2vh}
+/* Attract-mode dressing on the narrow screen: the tape wraps instead of
+   getting chopped, and the QR moves bottom-center and grows — with the
+   bubble right above it, tail pointing down at the code. */
+html.portrait .tapetop{font-size:2vh;max-width:none;flex:1;white-space:normal;line-height:1.15;padding:.7vh 2.6vh .9vh}
+html.portrait .lock.mini{inset:auto auto 1.4rem 50%;transform:translateX(-50%)}
+html.portrait .lock.mini #qr{width:180px;height:180px}
+html.portrait .lock.mini #qr img,html.portrait .lock.mini #qr canvas{width:180px;height:180px}
+html.portrait .lock.mini .qrbox{padding:10px}
+html.portrait .lock.mini h2{font-size:.9rem}
+html.portrait .lock.mini .rc{font-size:1.15rem}
+html.portrait .qrbub{width:52vw;font-size:2.2vh}
+html.portrait .qrbub::before{right:auto;left:50%;top:100%;margin:-2px 0 0 -1.5vh;border:1.5vh solid transparent;border-top:3.2vh solid #101010;border-bottom:0;transform:rotate(-6deg)}
+html.portrait .qrbub::after{right:auto;left:50%;top:calc(100% - .8vh);margin:0 0 0 -1.1vh;border:1.1vh solid transparent;border-top:2.4vh solid #fffef4;border-bottom:0;transform:rotate(-6deg)}
+html.portrait .qrarr{animation:none;transform:scaleX(-1);transform-origin:50% 50%} /* flipped: sits right of the QR, points down-left at it */
 /* ---- Touch mode (kiosk totems): /tv?touch=1, off by default. The screen IS
    the controller — no pairing QR, on-screen tabs and page arrows, tap a card
    to preview, and Checkout hands the cart to the shopper's phone via QR.
@@ -509,11 +520,17 @@ const KEY=c=>String(c.variantId||c.name);
 function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
  return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),type:String(d.type||'').slice(0,70),
   color:(ART[d.color]?d.color:'C'),price:money(d.price),foil:!!d.foil,
+  game:CARD_GAMES.includes(d.game)?d.game:null,
   condition:String(d.condition||'').slice(0,60),
   image:(typeof d.image==='string'&&/^https:\/\/(cdn\.shopify\.com|exorgames\.com\/cdn)\//.test(d.image))?d.image:null,
   variantId:String(d.variantId||'').replace(/\D/g,'')||null};}
-/* Pokémon players say "Holo", everyone else says "foil". */
+/* Pokémon players say "Holo", everyone else says "foil". Word by the CARD's
+   own game (cards.json carries it) — mixed decks (search, Showcase) used to
+   caption MTG cards "Holo" whenever the TV sat on the Pokémon tab. */
 let GAME='mtg';
+const CARD_GAMES=['mtg','pokemon','yugioh','hockey','basketball'];
+function cardGame(c){return (c&&CARD_GAMES.includes(c.game))?c.game:GAME}
+function foilWordFor(c){return cardGame(c)==='pokemon'?'Holo':'foil'}
 function foilWord(){return GAME==='pokemon'?'Holo':'foil'}
 function fromMsg(data){return typeof data==='string'?findCard(data):sanitizeCard(data)}
 function tx(c){return DARK.includes(c)?'#f4efe4':'#0d0d0f'}
@@ -527,11 +544,11 @@ function cardHTML(c){if(!c)return '';
  <div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty">${H(c.type)}</div></div>`;
  const tags=SHOWCASE()
   ?`${c.foil?'<div class="oil"></div>':''}${ESL_TAG(c)}`
-  :`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}`;
+  :`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWordFor(c)}</span></div>`:''}`;
  return `<div class="card ${DARK.includes(c.color)?'dark':''}${TOPLOAD?' intl':''}" data-c="${H(c.color)}" data-id="${H(KEY(c))}" style="${tiltStyle(KEY(c))}">${face}${tags}</div>`;}
 /* One of the store's e-ink shelf labels, drawn over the card's text box. */
 const ESL_LOGO='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866&width=180';
-function ESL_TAG(c){return `<div class="esl"><div class="escr"><div class="enm"><span class="en">${H(c.name)}${c.foil?' ·'+(GAME==='pokemon'?'Holo':'Foil'):''}</span><span class="ec">${H(String(c.set||'').slice(0,12))}</span></div><div class="erow"><div class="elogo"><img src="${ESL_LOGO}" alt="" loading="lazy"></div><div class="eprice"><span class="ed">$</span>${money(c.price)}</div></div></div><div class="eled"></div></div>`;}
+function ESL_TAG(c){return `<div class="esl"><div class="escr"><div class="enm"><span class="en">${H(c.name)}${c.foil?' ·'+(cardGame(c)==='pokemon'?'Holo':'Foil'):''}</span><span class="ec">${H(String(c.set||'').slice(0,12))}</span></div><div class="erow"><div class="elogo"><img src="${ESL_LOGO}" alt="" loading="lazy"></div><div class="eprice"><span class="ed">$</span>${money(c.price)}</div></div></div><div class="eled"></div></div>`;}
 /* Shingled shelves, top-anchored so the leftover space collects at the bottom. */
 function fillTray(el,cards){const rows=[];for(let i=0;i<cards.length;i+=COLS)rows.push(cards.slice(i,i+COLS));
  el.innerHTML=rows.map(row=>'<div class="shelf">'+row.map(cardHTML).join('')+'</div>').join('');}
@@ -664,10 +681,11 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
  /* Phone `select` messages don't carry condition — enrich from the local deck. */
  const full=CARDS.find(x=>x.name===c.name&&(!c.variantId||String(x.variantId)===String(c.variantId)))||{};
- const sporty=(GAME==='hockey'||GAME==='basketball');
+ const cg=cardGame(c.game?c:full.game?full:c); // the card's own game, not the tab's
+ const sporty=(cg==='hockey'||cg==='basketball');
  const cond=sporty?'':(c.condition||full.condition||''); // sports cards aren't conditioned
- const treatment=c.foil?(GAME==='pokemon'?'Holofoil':'Foil'):(GAME==='pokemon'?'Non-holo':'Non-foil');
- zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWord()}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
+ const treatment=c.foil?(cg==='pokemon'?'Holofoil':'Foil'):(cg==='pokemon'?'Non-holo':'Non-foil');
+ zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${cg==='pokemon'?'Holo':'foil'}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
  document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div>${sporty?'':`<div class="cu-line">${H(treatment)}</div>`}${cond?`<div class="cu-line">${H(cond)}</div>`:''}<div class="cu-line">${H(c.set||'—')}</div>`;
  /* Comic shopkeeper bubble — one random line per preview, {card} = card name. */
  const bub=document.getElementById('zbub'),msgs=(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
@@ -736,8 +754,16 @@ function placeQrProps(){if(window.TOUCH||!document.body.classList.contains('attr
  const bub=document.querySelector('.qrbub'),arr=document.querySelector('.qrarr'),lk=document.getElementById('lock'),qb=lk&&lk.querySelector('.qrbox');
  if(!bub||!qb)return;
  const card=lk.getBoundingClientRect(),q=qb.getBoundingClientRect(),tail=innerHeight*0.032;
+ if(window.PORTRAIT){ // card sits bottom-center: bubble above it (tail down), arrows to its right pointing back in
+  const bw=bub.offsetWidth||0; // layout size — rect() lies mid pop-in animation
+  bub.style.right=Math.max(4,Math.round(innerWidth-(card.left+card.width/2)-bw/2))+'px';
+  bub.style.bottom=Math.round(innerHeight-card.top+tail+14)+'px';
+  if(arr){const aw=arr.offsetWidth||136;
+   arr.style.right=Math.max(4,Math.round(innerWidth-card.right-aw-8))+'px';
+   arr.style.bottom=Math.round(innerHeight-(card.top+card.height*0.5))+'px';}
+  return;}
  bub.style.right=Math.round(innerWidth-card.left+tail+16)+'px'; // tail tip ends shy of the card (slack covers the bob animation's rotate)
- const bh=bub.getBoundingClientRect().height||0;
+ const bh=bub.offsetHeight||0;
  bub.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height/2)-bh*0.38))+'px'; // tail (62% down) aims at the QR's middle
  if(arr){arr.style.right=Math.round(innerWidth-card.left+4)+'px';
   arr.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height*0.85)))+'px';}}
@@ -809,18 +835,31 @@ function connect(){
    reprices everything itself. Rooms stay isolated: tab switches only ever
    talk to THIS screen's ?room=, so other TVs never notice a totem exists. */
 let ZCARD=null,ZVAR=null,ZKEEP=false,BETCARDS=null,lastAct=Date.now();
+/* Stock caps: /qty.json returns real counts when the Admin token secret is
+   set (the public feed only says in/out of stock); missing id = no cap. */
+let QTYS={};
+function fetchQty(ids){ids=[...new Set(ids.filter(Boolean).map(String))].filter(i=>!(i in QTYS));
+ if(!ids.length)return;fetch('/qty.json?ids='+ids.join(',')).then(r=>r.ok?r.json():null).then(d=>{if(d)Object.assign(QTYS,d);}).catch(()=>{});}
+function inCartN(vid){return cart.filter(c=>String(c.variantId)===String(vid)).length}
+function stockLeft(vid){const q=QTYS[String(vid)];return (typeof q==='number')?Math.max(0,q-inCartN(vid)):null}
 function effT(){if(!ZCARD)return null;if(!ZVAR)return ZCARD;
  const v=(ZCARD.variants||[]).find(x=>String(x.variantId)===String(ZVAR));
  return v?Object.assign({},ZCARD,{price:v.price,foil:!!v.foil,condition:v.condition||'',variantId:v.variantId}):ZCARD;}
 function TOPEN(c){if(!c)return;ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
 function TSETVAR(vid){if(!ZCARD)return;ZVAR=vid;ZKEEP=true;zoom(effT());ZKEEP=false;}
 function TOPENB(i){const b=BETCARDS&&BETCARDS[i];if(b)TOPEN(b);}
-function chipLbl(v){const p=[];if(v.condition)p.push(v.condition);if(v.foil)p.push(foilWord());return p.join(' · ')||'Standard';}
+function chipLbl(v,g){const p=[];if(v.condition)p.push(v.condition);if(v.foil)p.push(g==='pokemon'?'Holo':'Foil');return p.join(' · ')||'Standard';}
 function renderTact(){const ta=document.getElementById('tact');if(!ta)return;if(!ZCARD){ta.innerHTML='';return;}
- const e=effT(),vs=(Array.isArray(ZCARD.variants)&&ZCARD.variants.length>1)?ZCARD.variants:[],cur=String(e.variantId||'');
- ta.innerHTML=(vs.length?`<div class="tchips">${vs.map(v=>`<button class="tchip${String(v.variantId)===cur?' on':''}" onclick="TSETVAR('${H(String(v.variantId))}')">${H(chipLbl(v))} · $${money(v.price)}</button>`).join('')}</div>`:'')
+ fetchQty([ZCARD.variantId,...(Array.isArray(ZCARD.variants)?ZCARD.variants.map(v=>v.variantId):[])]);
+ const e=effT(),vs=(Array.isArray(ZCARD.variants)&&ZCARD.variants.length>1)?ZCARD.variants:[],cur=String(e.variantId||''),zg=cardGame(ZCARD);
+ ta.innerHTML=(vs.length?`<div class="tchips">${vs.map(v=>`<button class="tchip${String(v.variantId)===cur?' on':''}" onclick="TSETVAR('${H(String(v.variantId))}')">${H(chipLbl(v,zg))} · $${money(v.price)}</button>`).join('')}</div>`:'')
   +`<button class="tadd" onclick="TADD(this)">Add to cart · $${money(e.price)}</button>`;}
-function TADD(btn){const e=effT();if(!e)return;cart.push(e);updateCart();
+function TADD(btn){const e=effT();if(!e)return;
+ const left=e.variantId?stockLeft(e.variantId):null;
+ if(left!==null&&left<=0){const q=QTYS[String(e.variantId)];
+  btn.textContent=q>0?('That’s all we have — '+q+' in stock'):'Sold out — sorry!';
+  setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},1400);return;}
+ cart.push(e);updateCart();
  btn.classList.add('done');btn.textContent='Added ✓';
  setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},900);}
 function TCKO(){if(!cart.length)return;
