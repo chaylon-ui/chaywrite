@@ -368,6 +368,22 @@ html.portrait .qrbub{width:52vw;font-size:2.2vh}
 html.portrait .qrbub::before{right:auto;left:50%;top:100%;margin:-2px 0 0 -1.5vh;border:1.5vh solid transparent;border-top:3.2vh solid #101010;border-bottom:0;transform:rotate(-6deg)}
 html.portrait .qrbub::after{right:auto;left:50%;top:calc(100% - .8vh);margin:0 0 0 -1.1vh;border:1.1vh solid transparent;border-top:2.4vh solid #fffef4;border-bottom:0;transform:rotate(-6deg)}
 html.portrait .qrarr{animation:none;transform:scaleX(-1);transform-origin:50% 50%} /* flipped: sits right of the QR, points down-left at it */
+/* ---- Christmas dressing (admin "Holiday" setting, per room): a sagging
+   string of colored lights along the top of the case, frosted glass corners,
+   and festive clutter on the felt. Decor only — cards stay untouched. ---- */
+.xdress{display:none;position:absolute;inset:0;z-index:6;pointer-events:none}
+.case.xmas .xdress{display:block}
+.xdress .xfrost{position:absolute;inset:0;background:
+ radial-gradient(58% 34% at 0% 0%,rgba(235,246,255,.30),transparent 62%),
+ radial-gradient(58% 34% at 100% 0%,rgba(235,246,255,.26),transparent 62%),
+ radial-gradient(46% 26% at 0% 100%,rgba(235,246,255,.16),transparent 60%),
+ radial-gradient(46% 26% at 100% 100%,rgba(235,246,255,.19),transparent 60%)}
+.xdress .xlights{position:absolute;top:0;left:0;right:0;height:8.5%}
+.xdress .xlights svg{width:100%;height:100%;display:block}
+.xdress .xlights .xb{animation:xtw 2.8s ease-in-out infinite}
+@keyframes xtw{0%,100%{opacity:1}50%{opacity:.4}}
+body.perf .xdress .xlights .xb{animation:none}
+@media (prefers-reduced-motion:reduce){.xdress .xlights .xb{animation:none}}
 /* ---- Touch mode (kiosk totems): /tv?touch=1, off by default. The screen IS
    the controller — no pairing QR, on-screen tabs and page arrows, tap a card
    to preview, and Checkout hands the cart to the shopper's phone via QR.
@@ -431,6 +447,7 @@ html.touch .tcko{display:block}
   <div class="case" id="case">
     <div class="caseInner" id="caseInner"></div>
     <div class="glass"></div>
+    <div class="xdress" id="xdress" aria-hidden="true"></div>
     <div class="tape" aria-hidden="true">NEW TODAY!&nbsp; just in ✦</div>
     <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div><div class="betters" id="betters"></div><div class="tact" id="tact"></div><button class="tclose" id="tclose" aria-label="Close preview">✕</button></div>
   </div>
@@ -590,6 +607,14 @@ function COIN_SVG(n){const C=[
   `<svg viewBox="0 0 100 140"><circle cx="50" cy="70" r="27" fill="#c8ccd4"/><circle cx="50" cy="70" r="27" fill="none" stroke="#8f96a2" stroke-width="2.4"/><circle cx="50" cy="70" r="23" fill="none" stroke="rgba(96,102,114,.55)" stroke-width="1.2" stroke-dasharray="2.2 2.4"/><path d="M50 52 l2.6 5.4 5.6-1.8-1.8 5.4 5.4 2.8-4.6 3.6 1.8 5.4-5.4-1.6-3.6 5.4-3.6-5.4-5.4 1.6 1.8-5.4-4.6-3.6 5.4-2.8-1.8-5.4 5.6 1.8z" fill="#7d8390"/><text x="50" y="90" font-size="9" font-weight="700" fill="#6f7582" text-anchor="middle" font-family="Georgia,serif">25</text></svg>`,
   `<svg viewBox="0 0 100 140"><circle cx="50" cy="70" r="18" fill="#d3d6dc"/><circle cx="50" cy="70" r="18" fill="none" stroke="#9aa0ab" stroke-width="2"/><g stroke="#7d8390" stroke-width="1.6" fill="none"><path d="M40 76 q10 4 20 0"/><line x1="50" y1="60" x2="50" y2="75"/><path d="M50 62 l8 10 h-8z" fill="#7d8390"/></g><text x="50" y="86" font-size="7.5" font-weight="700" fill="#6f7582" text-anchor="middle" font-family="Georgia,serif">10</text></svg>`,
  ];return C[n%C.length];}
+/* Christmas felt props (the Holiday setting): candy cane, bauble, holly
+   sprig, and a little wrapped gift — same hand-placed clutter language. */
+function XPROP_SVG(n){const X=[
+ `<svg viewBox="0 0 100 140"><g transform="rotate(16 50 70)"><path d="M40 118 V58 a16 16 0 0 1 32 0 v8" fill="none" stroke="#f2ede6" stroke-width="12" stroke-linecap="round"/><path d="M40 118 V58 a16 16 0 0 1 32 0 v8" fill="none" stroke="#c9342b" stroke-width="12" stroke-linecap="round" stroke-dasharray="8 10"/></g></svg>`,
+ `<svg viewBox="0 0 100 140"><g transform="rotate(-9 50 78)"><path d="M50 30 q9 5 0 12" stroke="#c9a24a" stroke-width="2.6" fill="none"/><rect x="44" y="40" width="12" height="9" rx="2" fill="#c9a24a"/><circle cx="50" cy="84" r="32" fill="#b03028"/><circle cx="50" cy="84" r="32" fill="none" stroke="#6e1c15" stroke-width="2"/><path d="M20 82 q15 9 30 0 t30 0" stroke="#e8dfc2" stroke-width="3" fill="none"/><ellipse cx="38" cy="70" rx="8" ry="12" fill="rgba(255,255,255,.4)" transform="rotate(-22 38 70)"/></g></svg>`,
+ `<svg viewBox="0 0 100 140"><g transform="rotate(7 50 72)"><path d="M48 74 C30 70 22 56 26 42 C36 50 44 50 50 46 C48 58 52 66 58 70 Z" fill="#2f6b3c" stroke="#1c4526" stroke-width="2"/><path d="M52 74 C70 72 80 60 78 44 C68 51 60 50 54 45 C55 58 52 66 46 70 Z" fill="#3f8f5a" stroke="#1c4526" stroke-width="2"/><circle cx="46" cy="80" r="7" fill="#c9342b" stroke="#7a1f18" stroke-width="1.6"/><circle cx="58" cy="82" r="7" fill="#d94a3a" stroke="#7a1f18" stroke-width="1.6"/><circle cx="51" cy="91" r="7" fill="#b03028" stroke="#7a1f18" stroke-width="1.6"/></g></svg>`,
+ `<svg viewBox="0 0 100 140"><g transform="rotate(-12 50 82)"><rect x="24" y="62" width="52" height="44" rx="5" fill="#3d6e8e"/><rect x="24" y="62" width="52" height="44" rx="5" fill="none" stroke="#24485e" stroke-width="2.4"/><rect x="45" y="62" width="10" height="44" fill="#e8b04a"/><rect x="24" y="79" width="52" height="10" fill="#e8b04a"/><path d="M50 62 c-12 -14 -26 -6 -14 2 c6 4 14 -2 14 -2 c0 0 8 6 14 2 c12 -8 -2 -16 -14 -2z" fill="#c9a24a" stroke="#8a6f18" stroke-width="1.8"/></g></svg>`,
+];return X[n%X.length];}
 /* A die-cut Pikachu-style sticker, slightly askew. */
 const STICKER_SVG=`<svg viewBox="0 0 100 140"><g transform="rotate(7 50 72)" paint-order="stroke fill"><polygon points="33,62 20,30 44,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="67,62 80,30 56,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="24,34 20,30 31,44 27,46" fill="#26262c"/><polygon points="76,34 80,30 69,44 73,46" fill="#26262c"/><ellipse cx="50" cy="80" rx="25" ry="22" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7"/><g fill="#26262c"><circle cx="41" cy="76" r="3.6"/><circle cx="59" cy="76" r="3.6"/></g><g fill="#fff"><circle cx="42.2" cy="74.8" r="1.2"/><circle cx="60.2" cy="74.8" r="1.2"/></g><circle cx="33" cy="87" r="4.8" fill="#e5533a"/><circle cx="67" cy="87" r="4.8" fill="#e5533a"/><path d="M45 86 q2.5 3 5 0 q2.5 3 5 0" stroke="#26262c" stroke-width="1.6" fill="none" stroke-linecap="round"/></g></svg>`;
 /* Backs of long-gone TCGs — the real scans, served from the store's own
@@ -648,6 +673,9 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
  const nd=1+Math.floor(rng()*2);for(let i=0;i<nd;i++)place(DIE_SVG(Math.floor(rng()*3)),3.6+rng()*1.2,0.05,0.9,0.12,0.8,220); // d6/d20/d10 on bare felt
  place(COIN_SVG(Math.floor(rng()*2)),2.7+rng()*.9,0.05,0.9,0.12,0.8,220);   // one coin
  if(rng()<0.5)place(STICKER_SVG,5+rng()*1.6,0.06,0.88,0.14,0.76,220); // sometimes a stray Pikachu sticker
+ if(XMAS){const nx=2+Math.floor(rng()*2);const hand=[0,1,2,3];  // Christmas clutter: deal 2-3 distinct props
+  for(let i=hand.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[hand[i],hand[j]]=[hand[j],hand[i]];}
+  for(let i=0;i<nx;i++)place(XPROP_SVG(hand[i]),4.4+rng()*2,0.05,0.9,0.12,0.8,220);}
  const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(3,Math.round(empty*0.2));
  for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*2)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
  /* Sparse shelves sometimes get a haphazard pile of obsolete-game card backs —
@@ -961,7 +989,20 @@ let SETTINGS={header:'',theme:'mtg',topLoaders:false,
   "Surely your allowance will cover it, kid — add {card} to your cart, it'll be cool in your deck!"],
  attractMsgs:["NEW ARRIVALS! No Holds - no trades for beanie babies",
   "NEW ARRIVALS! Yes I checked the prices with newest Scry Mag",
-  "NEW ARRIVALS!!! More stock out back just ask!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false;
+  "NEW ARRIVALS!!! More stock out back just ask!"]},TOPLOAD=false,CUR_COLLECTION=null,CUR_NT=false,XMAS=false;
+/* Christmas light string: a sagging wire with staggered colored bulbs,
+   drawn once into #xdress when the Holiday setting flips on. */
+function renderXdress(){const xd=document.getElementById('xdress');if(!xd)return;
+ if(!XMAS){xd.innerHTML='';return;}
+ const cols=['#e04a38','#e8b04a','#4f9e5c','#4a7ac9','#d878b8'],step=90;
+ let wire='M0 10',bulbs='',i=0;
+ for(let x=step;x<=1080;x+=step){wire+=` Q ${x-step/2} ${34+(i%2)*7} ${x} ${10+(i%3===0?4:0)}`;i++;}
+ i=0;
+ for(let x=step/2;x<1080;x+=step){const c=cols[i%cols.length],y=30+(i%2)*6;
+  bulbs+=`<rect x="${x-3}" y="${y-4}" width="6" height="7" rx="2" fill="#33443a"/>`
+   +`<circle class="xb" cx="${x}" cy="${y+11}" r="14" fill="${c}" opacity=".16" style="animation-delay:${(i%5)*.45}s"/>`
+   +`<circle class="xb" cx="${x}" cy="${y+11}" r="7.5" fill="${c}" style="animation-delay:${(i%5)*.45}s"/>`;i++;}
+ xd.innerHTML=`<div class="xlights"><svg viewBox="0 0 1080 62" preserveAspectRatio="none"><path d="${wire}" fill="none" stroke="#243528" stroke-width="2.6"/>${bulbs}</svg></div><div class="xfrost"></div>`;}
 function refetchCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();if(window.TOUCH)renderTouchTabs(SETTINGS);}}).catch(()=>{});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
@@ -972,6 +1013,9 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-hockey',s.theme==='hockey');
  cs.classList.toggle('theme-basketball',s.theme==='basketball');
  cs.classList.toggle('tl',!!s.topLoaders);
+ const hx=(SETTINGS.holiday==='christmas');
+ cs.classList.toggle('xmas',hx);
+ if(hx!==XMAS){XMAS=hx;renderXdress();if(document.getElementById('slab'))draw();} // re-roll the clutter so the props land
  cs.classList.toggle('newtoday',!!s.newTodayActive);
  cs.classList.toggle('showcase',!!s.showcaseActive);
  document.body.classList.toggle('perf',!!s.perfMode);

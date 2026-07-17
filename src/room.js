@@ -129,6 +129,10 @@ export class BinderRoom {
       next.collection = c;
     }
     if ("topLoaders" in patch) next.topLoaders = !!patch.topLoaders;
+    if ("holiday" in patch) {
+      if (!["none", "christmas"].includes(patch.holiday)) return "bad holiday";
+      next.holiday = patch.holiday;
+    }
     if ("searchEnabled" in patch) next.searchEnabled = !!patch.searchEnabled;
     if ("perfMode" in patch) next.perfMode = !!patch.perfMode;
     if ("newToday" in patch) {

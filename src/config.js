@@ -33,6 +33,11 @@ export const DEFAULT_SETTINGS = {
   // blur with a plain dim and stills the heavy filter animations.
   perfMode: false,
 
+  // Seasonal dressing for the case (per room, from /admin). "christmas" adds
+  // a string of lights along the top, frosted corners and festive clutter —
+  // cards, prices and tabs are untouched.
+  holiday: "none", // "none" | "christmas"
+
   // "New Today" showcases — an extra phone tab per enabled game showing cards
   // published today (topped up to at least 10, all over $10), with a
   // masking-tape banner across the TV case while active.

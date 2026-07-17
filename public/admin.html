@@ -76,6 +76,17 @@ a.tvlink:hover{color:var(--ember)}
 
     <div class="row"><input id="perfMode" type="checkbox"><label for="perfMode">Performance mode — smoother on weak TV boxes (lighter blur &amp; effects)</label></div>
 
+    <!-- Seasonal case dressing: decor only, cards & prices untouched. -->
+    <div class="group">
+      <div class="gtitle">Holiday dressing</div>
+      <label for="holiday">Season this TV's case</label>
+      <select id="holiday">
+        <option value="none">None — regular showcase</option>
+        <option value="christmas">Christmas — lights, frost &amp; candy canes</option>
+      </select>
+      <div class="hint">Christmas strings twinkling lights along the top of the case, frosts the glass corners, and scatters candy canes, a bauble, holly and a little gift on the felt. Cards, prices and tabs are untouched — flip it back to None in January.</div>
+    </div>
+
     <!-- The physical showcase, mirrored: a tab of every card tagged
          ESL-SHOWCASE (mixed games, no price floor), grouped game by game. -->
     <div class="group">
@@ -158,7 +169,7 @@ const GAME_TABS=[ // labels/themes fixed; collection + carried-on-this-TV editab
   {label:'Basketball', theme:'basketball', game:'basketball', input:'colBasketball', enable:'enBasketball', fallback:'all-basketball-singles',        defOn:false},
 ];
 async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json();
-  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;
+  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('holiday').value=s.holiday==='christmas'?'christmas':'none';
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
@@ -184,7 +195,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
   if(!tabs.some(t=>t.enabled)){$('saveMsg').textContent='Enable at least one game';$('saveMsg').className='msg bad';return;}
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
-    perfMode:$('perfMode').checked,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
+    perfMode:$('perfMode').checked,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase'},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
