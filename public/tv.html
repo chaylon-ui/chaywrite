@@ -729,12 +729,27 @@ function setPaired(on){document.getElementById('lock').classList.toggle('hide',o
    kills the show instantly. ---- */
 const ATTRACT_AFTER_S=25,ATTRACT_FLIP_MS=14000,ATTRACT_ZOOM_MS=40000;
 let attractArm=null,attractFlip=null,attractZoom=null,attractPulse=null,attractOn=false;
+/* Place the bubble + arrows off the MEASURED corner card, so neither ever
+   covers the QR square — the old fixed offsets clipped it on some screens
+   (the card's width depends on its text) and the code wouldn't scan. */
+function placeQrProps(){if(window.TOUCH||!document.body.classList.contains('attract'))return;
+ const bub=document.querySelector('.qrbub'),arr=document.querySelector('.qrarr'),lk=document.getElementById('lock'),qb=lk&&lk.querySelector('.qrbox');
+ if(!bub||!qb)return;
+ const card=lk.getBoundingClientRect(),q=qb.getBoundingClientRect(),tail=innerHeight*0.032;
+ bub.style.right=Math.round(innerWidth-card.left+tail+16)+'px'; // tail tip ends shy of the card (slack covers the bob animation's rotate)
+ const bh=bub.getBoundingClientRect().height||0;
+ bub.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height/2)-bh*0.38))+'px'; // tail (62% down) aims at the QR's middle
+ if(arr){arr.style.right=Math.round(innerWidth-card.left+4)+'px';
+  arr.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height*0.85)))+'px';}}
+window.addEventListener('resize',()=>{if(attractOn)requestAnimationFrame(placeQrProps);});
 function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},ATTRACT_AFTER_S*1000);}
 function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
  document.getElementById('lock').classList.add('mini');
  const ams=(Array.isArray(SETTINGS.attractMsgs)?SETTINGS.attractMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
  document.getElementById('tapetop').textContent=ams.length?ams[Math.floor(Math.random()*ams.length)]:'';
  document.body.classList.add('attract'); // tape in the header + QR speech bubble
+ requestAnimationFrame(placeQrProps);
+ if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(attractOn)placeQrProps();}); // comic font loads late and changes the bubble's height
  attractFlip=setInterval(()=>{unzoom();if(spreads>1&&!flipping)flipTo((spread+1)%spreads);},ATTRACT_FLIP_MS);
  if(!matchMedia('(prefers-reduced-motion:reduce)').matches)
   attractZoom=setInterval(()=>{if(!CARDS.length)return;
