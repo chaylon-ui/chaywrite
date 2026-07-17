@@ -333,6 +333,30 @@ body.searching .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.
 .conn{position:absolute;top:.7rem;right:1rem;z-index:40;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:.4rem}
 .conn .d{width:7px;height:7px;border-radius:50%;background:#555}.conn.on .d{background:var(--ok);box-shadow:0 0 6px var(--ok)}
 @media (prefers-reduced-motion:reduce){.leaf{transition:none}.zoomtv .zc{animation:none}.zoomtv .zc.foil .shim{animation:none;opacity:.25}.foil-badge{animation:none}.oil{animation:none}}
+/* ---- Portrait mode (vertical screens): 5 columns × 8 shingled rows; the
+   preview stacks bubble → card → cue vertically. Activated by /tv?portrait=1
+   or automatically when the display is taller than wide. ---- */
+html.portrait .case{width:96vw;height:min(88vh,1800px)}
+html.portrait .tray{--cols:5;--gap:1.6vw;--wbudget:90vw;--hbudget:calc(min(88vh,1800px) - 6vh);
+ --ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/5.06))}
+html.portrait body.paired .case{width:100vw;height:100vh}
+html.portrait body.paired .tray{--wbudget:94vw;--hbudget:calc(100vh - 10vh)}
+html.portrait .case.tl .tray{--chw:calc((90vw - (var(--cols) - 1)*var(--gap))/var(--cols)/1.12/0.715);--chh:calc((min(88vh,1800px) - 6vh)/5.9);--ch:min(var(--chw),var(--chh))}
+html.portrait body.paired .case.tl .tray{--chh:calc(94vh/5.9)}
+html.portrait .case.showcase .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/5.2))}
+html.portrait .case.tl.showcase .tray{--chh:calc((min(88vh,1800px) - 6vh)/6.1)}
+html.portrait body.searching .case.showcase .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/5.06))}
+html.portrait body.searching .case.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.42)}
+/* Preview: size the featured card by WIDTH; bubble on top, cue at the bottom,
+   the alternatives strip lives on the phone in this orientation. */
+html.portrait .zoomtv .zc{height:auto;width:72vw}
+html.portrait .zoomtv .bubble{right:auto;left:50%;top:1.6vh;transform:translateX(-50%) rotate(-2deg);width:76vw;font-size:2.3vh;animation:none}
+html.portrait .zoomtv .bubble::before,html.portrait .zoomtv .bubble::after{display:none}
+html.portrait .zoomtv .cue{left:50%;right:auto;top:auto;bottom:1.8vh;transform:translateX(-50%) rotate(1.6deg);width:76vw;min-height:13vh}
+html.portrait .zoomtv .betters{display:none}
+/* Attract-mode dressing scales down a touch on the narrow screen. */
+html.portrait .tapetop{font-size:2.2vh;max-width:60vw}
+html.portrait .qrbub{width:38vw;font-size:2vh}
 </style></head><body>
 <header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span><div class="tapetop" id="tapetop" aria-hidden="true"></div></header>
 <div class="stage">
@@ -374,6 +398,12 @@ body.searching .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.
    own QR, own pairing) — e.g. /tv?room=sports for the sports-area TV. */
 window.ROOM=(()=>{const r=String(new URLSearchParams(location.search).get('room')||'').toLowerCase();return /^[a-z0-9][a-z0-9-]{0,31}$/.test(r)?r:'default';})();
 window.RQ=window.ROOM==='default'?'':'&room='+window.ROOM;
+/* Portrait mode for vertically-mounted screens: /tv?portrait=1 forces it,
+   ?portrait=0 forces landscape, no param follows the screen's shape. */
+window.PORTRAIT=(()=>{const p=new URLSearchParams(location.search).get('portrait');
+ if(p==='1')return true;if(p==='0')return false;
+ return matchMedia('(orientation: portrait)').matches;})();
+if(window.PORTRAIT)document.documentElement.classList.add('portrait');
 window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
@@ -394,7 +424,7 @@ Spell:'#3d9a82',Trap:'#c05a94',Dark:'#5a4a86',Light:'#e0cc84',Earth:'#9a8058',Wi
 const DARK=['U','B','R','G','Fire','Water','Psychic','Fighting','Darkness','Dragon','Grass','Spell','Trap','Dark','Earth','Wind','Monster'];
 /* The Showcase deck (the real case, mirrored) runs roomier: 3 rows of 8 with
    an ESL price tag on every card, so 24 per spread instead of 40. */
-let TRAY=40;const COLS=8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
+let TRAY=40;const COLS=window.PORTRAIT?5:8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
 const SHOWCASE=()=>!!(CARDS&&CARDS.GAME==='showcase');
 /* Per-deck salt so switching tabs reshuffles the clutter/card-back piles —
    without it every deck's first spread drew the exact same mess. */
