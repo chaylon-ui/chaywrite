@@ -357,19 +357,66 @@ html.portrait .zoomtv .betters{display:none}
 /* Attract-mode dressing scales down a touch on the narrow screen. */
 html.portrait .tapetop{font-size:2.2vh;max-width:60vw}
 html.portrait .qrbub{width:38vw;font-size:2vh}
+/* ---- Touch mode (kiosk totems): /tv?touch=1, off by default. The screen IS
+   the controller — no pairing QR, on-screen tabs and page arrows, tap a card
+   to preview, and Checkout hands the cart to the shopper's phone via QR.
+   Combines freely with ?portrait= and ?room=. ---- */
+html.touch .lock{display:none!important}
+html.touch .qrarr{display:none!important}
+html.touch .qrbub{right:auto;left:50%;bottom:2.4vh;transform:translateX(-50%) rotate(-1.4deg)}
+html.touch .qrbub::before,html.touch .qrbub::after{display:none}
+html.touch #caseInner .card{cursor:pointer}
+html.touch .betters .bcard{cursor:pointer}
+.ttabs{display:none;position:absolute;top:.55rem;left:50%;transform:translateX(-50%);z-index:26;gap:.45rem;max-width:86vw;flex-wrap:wrap;justify-content:center}
+html.touch .ttabs{display:flex}
+.ttab{font-family:'Cinzel',serif;font-weight:700;font-size:.82rem;letter-spacing:.06em;color:#d8d2c4;background:rgba(14,14,18,.85);border:1px solid #34343e;border-radius:22px;padding:.55rem 1.05rem;cursor:pointer}
+.ttab.on{color:#0d0d0f;background:var(--ember-bright);border-color:transparent}
+.tnav{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:26;width:3.4rem;height:5.6rem;border-radius:14px;border:1px solid #34343e;background:rgba(12,12,16,.72);color:#e8e2d4;font-size:2.2rem;line-height:1;cursor:pointer}
+html.touch .tnav{display:block}
+.tnav.tprev{left:.5rem}.tnav.tnext{right:.5rem}
+.tnav:active{background:rgba(40,40,52,.9)}
+.tact{display:none;position:absolute;left:50%;bottom:2.6vh;transform:translateX(-50%);z-index:9;flex-direction:column;align-items:center;gap:.6rem;max-width:92vw}
+html.touch .zoomtv .tact{display:flex}
+html.portrait .tact{bottom:16.5vh} /* clear the bottom-center cue card */
+.tchips{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
+.tchip{font-size:.8rem;color:#d8d2c4;background:rgba(16,16,20,.92);border:1px solid #3a3a46;border-radius:20px;padding:.55rem .95rem;cursor:pointer}
+.tchip.on{color:#0d0d0f;background:#e8ddc2;border-color:transparent;font-weight:700}
+.tadd{font-family:'Cinzel',serif;font-weight:700;font-size:.95rem;color:#0d0d0f;background:var(--ember-bright);border:0;border-radius:24px;padding:.75rem 1.6rem;cursor:pointer;box-shadow:0 10px 26px -10px #000}
+.tadd.done{background:var(--ok)}
+.tclose{display:none;position:absolute;top:.9rem;right:.9rem;z-index:10;width:3.2rem;height:3.2rem;border-radius:50%;border:1px solid #3a3a46;background:rgba(12,12,16,.88);color:#e8e2d4;font-size:1.4rem;line-height:1;cursor:pointer}
+html.touch .zoomtv.open .tclose{display:block}
+.tcko{display:none;font-family:'Cinzel',serif;font-weight:700;color:#0d0d0f;background:var(--ember-bright);border:0;border-radius:20px;padding:.5rem 1.1rem;font-size:.8rem;cursor:pointer}
+html.touch .tcko{display:block}
+.tcheck{display:none;position:fixed;inset:0;z-index:60;background:rgba(6,6,9,.92);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:1rem}
+.tcheck.open{display:flex}
+.tcbox{background:#141419;border:1px solid #2e2e38;border-radius:18px;padding:1.6rem 1.8rem;text-align:center;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:.9rem}
+.tcbox h2{font-family:'Cinzel',serif;font-size:1.25rem}
+.tcqr{background:#fff;padding:12px;border-radius:12px;min-width:200px;min-height:200px}
+.tcnote{font-size:.78rem;color:#e8b04a;line-height:1.45;max-width:340px}
+.tcrow{display:flex;gap:.7rem}
+.tcbtn{font-size:.85rem;color:#d8d2c4;background:#1d1d24;border:1px solid #34343e;border-radius:20px;padding:.6rem 1.2rem;cursor:pointer}
 </style></head><body>
 <header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span><div class="tapetop" id="tapetop" aria-hidden="true"></div></header>
 <div class="stage">
   <div class="conn" id="conn"><span class="d"></span><span id="connT">connecting…</span></div>
+  <div class="ttabs" id="ttabs"></div>
+  <button class="tnav tprev" id="tprev" aria-label="Previous page">‹</button>
+  <button class="tnav tnext" id="tnext" aria-label="Next page">›</button>
   <svg class="inkdefs" width="0" height="0" aria-hidden="true"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
   <div class="case" id="case">
     <div class="caseInner" id="caseInner"></div>
     <div class="glass"></div>
     <div class="tape" aria-hidden="true">NEW TODAY!&nbsp; just in ✦</div>
-    <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div><div class="betters" id="betters"></div></div>
+    <div class="zoomtv" id="ztv"><div class="zc" id="ztvc"><div class="shim"></div></div><div class="cue" id="cue"></div><div class="bubble" id="zbub"></div><div class="betters" id="betters"></div><div class="tact" id="tact"></div><button class="tclose" id="tclose" aria-label="Close preview">✕</button></div>
   </div>
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="dvq" id="dvq"></span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
-  <div class="tv-cart hide" id="tvCart"><span class="lbl">Cart</span><div class="items" id="tvCartItems"></div><span class="total" id="tvCartTotal">$0.00</span></div>
+  <div class="tv-cart hide" id="tvCart"><span class="lbl">Cart</span><div class="items" id="tvCartItems"></div><span class="total" id="tvCartTotal">$0.00</span><button class="tcko" id="tcko">Checkout</button></div>
+  <div class="tcheck" id="tcheck"><div class="tcbox">
+    <h2>Scan to check out on your phone</h2>
+    <div class="tcqr" id="tcqr"></div>
+    <p class="tcnote">⏱ Kiosk orders can take up to <b>24–48 hours</b> to fulfill — we pull your cards from the showcase by hand.</p>
+    <div class="tcrow"><button class="tcbtn" id="tcClear">Clear cart</button><button class="tcbtn" id="tcClose">Close</button></div>
+  </div></div>
   <div class="counter hide" id="counter"><div class="cbox">
     <div class="ct1">🛎 Order for the counter</div>
     <div class="citems" id="ctrItems"></div>
@@ -404,6 +451,12 @@ window.PORTRAIT=(()=>{const p=new URLSearchParams(location.search).get('portrait
  if(p==='1')return true;if(p==='0')return false;
  return matchMedia('(orientation: portrait)').matches;})();
 if(window.PORTRAIT)document.documentElement.classList.add('portrait');
+/* Touch mode for kiosk totems: /tv?touch=1 (off by default). The screen
+   itself becomes the controller — tap to preview, on-screen tabs and cart,
+   checkout hands off to the customer's phone via QR. Per-screen, like
+   portrait; give each totem its own ?room= so it never crosses other TVs. */
+window.TOUCH=new URLSearchParams(location.search).get('touch')==='1';
+if(window.TOUCH)document.documentElement.classList.add('touch');
 window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
@@ -604,6 +657,7 @@ function flip(dir){if(flipping)return;const t=spread+dir;if(t<0||t>=spreads)retu
  let done=false;const finish=()=>{if(done)return;done=true;spread=t;draw();flipping=false;afterFlip();};
  inc.addEventListener('transitionend',finish,{once:true});setTimeout(finish,1000);}
 function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD?' intl':'');
+ if(window.TOUCH&&!ZKEEP){ZCARD=c;ZVAR=null;} // remember what's featured so the action row can re-price it
  document.body.classList.add('zopen'); // pause background effects while previewing
  zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan').forEach(e=>e.remove());
  if(c.image)zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
@@ -622,6 +676,7 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
   bub.style.display='';bub.style.animation='none';void bub.offsetWidth;bub.style.animation='';}
  else bub.style.display='none';
  loadBetters(c);
+ if(window.TOUCH)renderTact();
  z.classList.add('open');}
 /* In-stock upgrades for the featured card (MTG only). This browser asks
    strictlybetter.eu directly (their API is CORS-open; their Cloudflare zone
@@ -648,15 +703,19 @@ function loadBetters(c){const bx=document.getElementById('betters');bx.classList
   if(!d||seq!==BETTERSEQ||!document.getElementById('ztv').classList.contains('open'))return;
   const cards=(Array.isArray(d.cards)?d.cards:[]).map(sanitizeCard).filter(Boolean).slice(0,3);
   if(!cards.length)return;
-  bx.innerHTML='<div class="bt">Alternatives in stock</div><div class="brw">'+cards.map(b=>
-   `<div class="bcard">${b.image?`<img src="${H(IMGURL(b.image,200))}" alt="" loading="lazy">`:''}<div class="bnm">${H(b.name)}</div><div class="bpr">$${money(b.price)}</div></div>`).join('')+'</div>';
+  BETCARDS=cards;
+  bx.innerHTML='<div class="bt">Alternatives in stock</div><div class="brw">'+cards.map((b,i)=>
+   `<div class="bcard"${window.TOUCH?` onclick="TOPENB(${i})"`:''}>${b.image?`<img src="${H(IMGURL(b.image,200))}" alt="" loading="lazy">`:''}<div class="bnm">${H(b.name)}</div><div class="bpr">$${money(b.price)}</div></div>`).join('')+'</div>';
   bx.classList.add('on');}).catch(()=>{});}
-function unzoom(){document.getElementById('ztv').classList.remove('open');document.body.classList.remove('zopen');BETTERSEQ++;const bx=document.getElementById('betters');if(bx){bx.classList.remove('on');bx.innerHTML='';}}
+function unzoom(){document.getElementById('ztv').classList.remove('open');document.body.classList.remove('zopen');BETTERSEQ++;const bx=document.getElementById('betters');if(bx){bx.classList.remove('on');bx.innerHTML='';}
+ const ta=document.getElementById('tact');if(ta)ta.innerHTML='';ZCARD=null;ZVAR=null;}
 function findCard(n){return CARDS.find(c=>c.name===n)}
-function updateCart(){const box=document.getElementById('tvCartItems');box.innerHTML='';cart.forEach(c=>box.insertAdjacentHTML('beforeend',`<span class="chip">${H(c.name)} · $${money(c.price)}</span>`));document.getElementById('tvCartTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);}
+function updateCart(){const box=document.getElementById('tvCartItems');box.innerHTML='';cart.forEach(c=>box.insertAdjacentHTML('beforeend',`<span class="chip">${H(c.name)} · $${money(c.price)}</span>`));document.getElementById('tvCartTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
+ if(window.TOUCH)document.getElementById('tvCart').classList.toggle('hide',cart.length===0);}
 function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 let wasPaired=false;
-function setPaired(on){document.getElementById('lock').classList.toggle('hide',on);document.getElementById('drivebar').classList.toggle('hide',!on);document.getElementById('tvCart').classList.toggle('hide',!on);
+function setPaired(on){document.getElementById('lock').classList.toggle('hide',on);document.getElementById('drivebar').classList.toggle('hide',!on);
+ document.getElementById('tvCart').classList.toggle('hide',window.TOUCH?cart.length===0:!on); // the totem's cart bar follows its own cart, not pairing
  if(on&&!wasPaired){document.getElementById('counter').classList.add('hide');} // clear ticket only when a NEW session starts
  if(!on&&wasPaired){endSearchDeck();unzoom();selected=null;cart=[];updateCart();draw();}
  if(on)stopAttract();else armAttract();
@@ -727,6 +786,61 @@ function connect(){
    else if(m.type==='settings'){applySettings(m.data);}
  };
 }
+/* ---- Touch mode: the totem drives itself. On-screen tabs and page arrows
+   replace the phone, tapping a card previews it (with condition/foil chips
+   when we stock several printings), Add builds an on-screen cart, and
+   Checkout hands the cart to the shopper's phone through a big one-time QR —
+   the same Kiosk-tagged cart link the phone flow uses, so Shopify still
+   reprices everything itself. Rooms stay isolated: tab switches only ever
+   talk to THIS screen's ?room=, so other TVs never notice a totem exists. */
+let ZCARD=null,ZVAR=null,ZKEEP=false,BETCARDS=null,lastAct=Date.now();
+function effT(){if(!ZCARD)return null;if(!ZVAR)return ZCARD;
+ const v=(ZCARD.variants||[]).find(x=>String(x.variantId)===String(ZVAR));
+ return v?Object.assign({},ZCARD,{price:v.price,foil:!!v.foil,condition:v.condition||'',variantId:v.variantId}):ZCARD;}
+function TOPEN(c){if(!c)return;ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
+function TSETVAR(vid){if(!ZCARD)return;ZVAR=vid;ZKEEP=true;zoom(effT());ZKEEP=false;}
+function TOPENB(i){const b=BETCARDS&&BETCARDS[i];if(b)TOPEN(b);}
+function chipLbl(v){const p=[];if(v.condition)p.push(v.condition);if(v.foil)p.push(foilWord());return p.join(' · ')||'Standard';}
+function renderTact(){const ta=document.getElementById('tact');if(!ta)return;if(!ZCARD){ta.innerHTML='';return;}
+ const e=effT(),vs=(Array.isArray(ZCARD.variants)&&ZCARD.variants.length>1)?ZCARD.variants:[],cur=String(e.variantId||'');
+ ta.innerHTML=(vs.length?`<div class="tchips">${vs.map(v=>`<button class="tchip${String(v.variantId)===cur?' on':''}" onclick="TSETVAR('${H(String(v.variantId))}')">${H(chipLbl(v))} · $${money(v.price)}</button>`).join('')}</div>`:'')
+  +`<button class="tadd" onclick="TADD(this)">Add to cart · $${money(e.price)}</button>`;}
+function TADD(btn){const e=effT();if(!e)return;cart.push(e);updateCart();
+ btn.classList.add('done');btn.textContent='Added ✓';
+ setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},900);}
+function TCKO(){if(!cart.length)return;
+ const agg={};cart.forEach(c=>{const id=String(c.variantId||'').replace(/\D/g,'');if(id)agg[id]=(agg[id]||0)+1;});
+ const ids=Object.entries(agg).map(([id,q])=>id+':'+q).join(',');if(!ids)return;
+ const url='https://exorgames.com/cart/'+ids+'?attributes%5BSource%5D=Kiosk&note='+encodeURIComponent('Kiosk order — please allow 24-48 hours to fulfill');
+ const qel=document.getElementById('tcqr');qel.innerHTML='';
+ try{new QRCode(qel,{text:url,width:280,height:280,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent='QR';}
+ document.getElementById('tcheck').classList.add('open');}
+function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)return;
+ const tabs=Array.isArray(s.tabs)?s.tabs:[];
+ box.innerHTML=tabs.map((t,i)=>{const on=t.collection===s.collection&&(!!t.newToday===!!s.newTodayActive)&&(!!t.showcase===!!s.showcaseActive);
+  return `<button class="ttab${on?' on':''}" onclick="TSWITCH(${i})">${H(String(t.label||''))}</button>`;}).join('');}
+function TSWITCH(i){fetch('/switch?i='+i+RQ,{method:'POST'}).catch(()=>{});}
+if(window.TOUCH){
+ document.getElementById('caseInner').addEventListener('click',ev=>{
+  if(document.getElementById('ztv').classList.contains('open'))return;
+  const el=ev.target.closest('.card');if(!el)return;
+  const c=CARDS.find(x=>KEY(x)===el.dataset.id);if(c)TOPEN(c);});
+ document.getElementById('tprev').onclick=()=>flip(-1);
+ document.getElementById('tnext').onclick=()=>flip(1);
+ document.getElementById('tclose').onclick=()=>{selected=null;markSel();unzoom();};
+ document.getElementById('ztv').addEventListener('click',ev=>{if(ev.target.id==='ztv'){selected=null;markSel();unzoom();}});
+ document.getElementById('tcko').onclick=TCKO;
+ document.getElementById('tcClose').onclick=()=>document.getElementById('tcheck').classList.remove('open');
+ document.getElementById('tcClear').onclick=()=>{cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
+ /* Any touch counts as activity: wake from attract mode and hold it off. */
+ document.addEventListener('pointerdown',()=>{lastAct=Date.now();stopAttract();armAttract();},{capture:true});
+ /* Walk-away reset: 2.5 min without a touch clears the cart and closes
+    the preview/checkout so the next shopper starts fresh. */
+ setInterval(()=>{if(Date.now()-lastAct<150000)return;
+  if(cart.length||document.getElementById('ztv').classList.contains('open')||document.getElementById('tcheck').classList.contains('open')){
+   cart=[];updateCart();selected=null;markSel();unzoom();document.getElementById('tcheck').classList.remove('open');}},15000);
+ const qb=document.querySelector('.qrbub');if(qb)qb.innerHTML='<span class="bn">Touch</span> a card to take a closer look!';
+}
 /* ---- Auto-update: the deploy pipeline stamps BUILD and publishes
    /version.json; when a newer build appears the TV reloads itself — but only
    while unpaired (never mid-session) and never within 5 min of boot. In local
@@ -761,7 +875,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
  if(s.collection)CUR_COLLECTION=s.collection;
  CUR_NT=ntNow;
- const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}}
+ const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}
+ if(window.TOUCH)renderTouchTabs(SETTINGS);}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
 window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json());}catch(e){}if(window.BINDER_GAME)GAME=window.BINDER_GAME;applyCards(window.BINDER_CARDS);draw();connect();});
