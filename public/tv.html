@@ -912,8 +912,14 @@ function TADD(btn){const e=effT();if(!e)return;
  setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},900);}
 function TCKO(){if(!cart.length)return;
  const agg={};cart.forEach(c=>{const id=String(c.variantId||'').replace(/\D/g,'');if(id)agg[id]=(agg[id]||0)+1;});
- const ids=Object.entries(agg).map(([id,q])=>id+':'+q).join(',');if(!ids)return;
- const url='https://exorgames.com/cart/'+ids+'?attributes%5BSource%5D=Kiosk&note='+encodeURIComponent('Kiosk order — please allow 24-48 hours to fulfill');
+ const items=Object.entries(agg).map(([id,q])=>({variantId:id,qty:q}));if(!items.length)return;
+ /* Chained /cart/add hops APPEND to the shopper's existing exorgames.com
+    cart (a /cart/ID:QTY permalink would wipe it); hidden _source property
+    marks the kiosk lines for staff. */
+ let url='/cart';
+ for(let i=items.length-1;i>=0;i--)url='/cart/add?id='+items[i].variantId+'&quantity='+items[i].qty
+  +'&properties%5B_source%5D=Kiosk&return_to='+encodeURIComponent(url);
+ url='https://exorgames.com'+url;
  const qel=document.getElementById('tcqr');qel.innerHTML='';
  try{new QRCode(qel,{text:url,width:280,height:280,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent='QR';}
  document.getElementById('tcheck').classList.add('open');}

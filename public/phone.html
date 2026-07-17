@@ -391,10 +391,15 @@ function ADD(k){const c0=byKey(k||selected);if(!c0)return;const c=(!k||k===selec
 function OPENCART(){const l=document.getElementById('coList');l.innerHTML='';cart.forEach(c=>l.insertAdjacentHTML('beforeend',`<div class="co-item"><span>${H(c.name)}</span><span>$${money(c.price)}</span></div>`));if(!cart.length)l.innerHTML='<div class="sel-empty">Cart is empty.</div>';
  document.getElementById('coTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);SHOW('v-cart');}
 let checkedOut=false;
-/* Kiosk orders are marked so staff can spot them: a cart attribute + note
-   ride along on the permalink and land on the Shopify order. */
-function cartUrl(ids){return 'https://exorgames.com/cart/'+ids
- +'?attributes%5BSource%5D=Kiosk&note='+encodeURIComponent('Kiosk order — please allow 24-48 hours to fulfill');}
+/* Checkout link that KEEPS whatever the shopper already has in their
+   exorgames.com cart: /cart/ID:QTY permalinks REPLACE the whole cart, so we
+   chain /cart/add hops instead — each hop appends one line (marked with a
+   hidden _source=Kiosk property so staff/Flow can spot kiosk lines) and
+   return_to's the next, landing on /cart with their original items intact. */
+function cartUrl(items){let url='/cart';
+ for(let i=items.length-1;i>=0;i--)url='/cart/add?id='+items[i].variantId+'&quantity='+items[i].qty
+  +'&properties%5B_source%5D=Kiosk&return_to='+encodeURIComponent(url);
+ return 'https://exorgames.com'+url;}
 function lostSession(){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent='The connection to the showcase was lost — scan the QR code on the TV to start again.';}
 function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
  if(!ws||ws.readyState!==1){lostSession();return;}
@@ -403,8 +408,8 @@ function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
  const items=Object.values(agg);
  ws.send(JSON.stringify({type:'checkout',data:{where,count:cart.length,total:t,items}}));
  checkedOut=true;SHOW('v-done');
- if(where==='phone'){const ids=items.map(i=>i.variantId+':'+i.qty).join(',');
-  if(ids){document.getElementById('doneT').textContent='Off to checkout';document.getElementById('doneP').textContent='Opening your Shopify cart ('+cart.length+' cards · $'+t+')…';setTimeout(()=>{location.href=cartUrl(ids);},800);}
+ if(where==='phone'){
+  if(items.length){document.getElementById('doneT').textContent='Off to checkout';document.getElementById('doneP').textContent='Opening your Shopify cart ('+cart.length+' cards · $'+t+')… Anything already in your exorgames.com cart stays put.';setTimeout(()=>{location.href=cartUrl(items);},800);}
   else{document.getElementById('doneT').textContent='See the counter';document.getElementById('doneP').textContent='These cards can’t be added to an online cart right now — please pay at the counter ('+cart.length+' cards · $'+t+').';}}
  else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Staff have your '+cart.length+' cards ($'+t+') — give your name at the register.';}}
 window.BINDER_READY.then(()=>{applyCards(window.BINDER_CARDS);
