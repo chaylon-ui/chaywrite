@@ -36,12 +36,14 @@ a.tvlink:hover{color:var(--ember)}
 <div class="wrap">
   <h1>Exor Showcase — Admin</h1>
   <div class="sub">Settings for TV room “<b id="roomLbl"></b>” — each TV is its own room with its own games, QR and PIN.<br>
-  Point a TV at <code>/tv?room=sports</code> and manage it at <code>/admin?room=sports</code>.
-  <span id="roomJump" style="display:block;margin-top:.35rem"><input id="roomIn" type="text" placeholder="room name" style="width:9rem;background:#0e0e12;border:1px solid #26262f;border-radius:8px;padding:.3rem .5rem;color:#efe9dd;font-size:.75rem"> <button id="roomGo" style="background:#17171d;border:1px solid #2a2a34;border-radius:8px;color:#efe9dd;padding:.3rem .6rem;font-size:.75rem;cursor:pointer">Manage</button></span></div>
+  Point a TV at <code>/tv?room=sports</code> and pick it from the screen list below to manage it.</div>
 
-  <!-- PIN login -->
+  <!-- PIN login: pick the screen, then unlock it -->
   <div class="card" id="login">
-    <label>Enter PIN</label>
+    <label for="roomSel">Screen</label>
+    <select id="roomSel"></select>
+    <input id="roomNew" type="text" class="hide" maxlength="32" placeholder="new screen name (e.g. totem)" style="margin-top:.5rem">
+    <label style="margin-top:.8rem;display:block">Enter PIN</label>
     <div class="pinrow"><input id="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••"></div>
     <button class="btn btn-primary" id="unlock">Unlock</button>
     <div class="msg" id="loginMsg"></div>
@@ -49,6 +51,7 @@ a.tvlink:hover{color:var(--ember)}
 
   <!-- Settings form -->
   <div class="card hide" id="form">
+    <div class="sub" style="margin:0 0 .9rem">Editing screen “<b id="formRoom"></b>” — <a href="#" id="switchScreen" style="color:#d9822b">switch screen</a></div>
     <label for="header">Header line (shown on the TV)</label>
     <input id="header" type="text" maxlength="200" placeholder="Featured Singles · New Arrivals over $10">
 
@@ -165,11 +168,29 @@ a.tvlink:hover{color:var(--ember)}
 <script>
 let PIN="";
 const $=id=>document.getElementById(id);
-/* Each TV is a room (?room=…) with fully independent settings. */
-const ROOM=(()=>{const r=String(new URLSearchParams(location.search).get('room')||'').toLowerCase();return /^[a-z0-9][a-z0-9-]{0,31}$/.test(r)?r:'default';})();
-const RQ=ROOM==='default'?'':'&room='+ROOM;
-$('roomLbl').textContent=ROOM;
-$('roomGo').onclick=()=>{const r=$('roomIn').value.trim().toLowerCase();if(/^[a-z0-9][a-z0-9-]{0,31}$/.test(r))location.search=r==='default'?'':'?room='+r;};
+/* Each TV is a room (?room=…) with fully independent settings. The room is
+   picked from the screen dropdown at login (?room= in the URL just preselects
+   it); /rooms lists every screen the worker has seen activity from. */
+const ROOM_OK=/^[a-z0-9][a-z0-9-]{0,31}$/;
+let ROOM=(()=>{const r=String(new URLSearchParams(location.search).get('room')||'').toLowerCase();return ROOM_OK.test(r)?r:'default';})();
+let RQ=ROOM==='default'?'':'&room='+ROOM;
+function setRoom(r){ROOM=r;RQ=ROOM==='default'?'':'&room='+ROOM;
+ $('roomLbl').textContent=ROOM;$('formRoom').textContent=ROOM;
+ history.replaceState(null,'',location.pathname+(ROOM==='default'?'':'?room='+ROOM));}
+setRoom(ROOM);
+const roomLabel=n=>n==='default'?'Main showcase (default)':n;
+async function loadRooms(){const sel=$('roomSel');
+ let rooms=[{name:'default'}];
+ try{const j=await (await fetch('/rooms',{cache:'no-store'})).json();if(Array.isArray(j.rooms)&&j.rooms.length)rooms=j.rooms;}catch(e){}
+ const prev=sel.options.length?sel.value:ROOM; // read AFTER the fetch — keep any pick made while it loaded
+ sel.innerHTML='';
+ rooms.forEach(r=>{const o=document.createElement('option');o.value=r.name;o.textContent=roomLabel(r.name);sel.appendChild(o);});
+ const nw=document.createElement('option');nw.value='__new';nw.textContent='＋ New screen…';sel.appendChild(nw);
+ sel.value=[...sel.options].some(o=>o.value===prev)?prev:'default';
+ $('roomNew').classList.toggle('hide',sel.value!=='__new');}
+$('roomSel').onchange=()=>{$('roomNew').classList.toggle('hide',$('roomSel').value!=='__new');};
+$('switchScreen').onclick=e=>{e.preventDefault();$('form').classList.add('hide');$('login').classList.remove('hide');$('loginMsg').textContent='';loadRooms();};
+loadRooms();
 const GAME_TABS=[ // labels/themes fixed; collection + carried-on-this-TV editable
   {label:'Magic',      theme:'mtg',        game:'mtg',        input:'colMtg',        enable:'enMtg',        fallback:'new-arrivals',                  defOn:true},
   {label:'Pokémon',    theme:'pokemon',    game:'pokemon',    input:'colPokemon',    enable:'enPokemon',    fallback:'pokemon-singles-new-arrivals',  defOn:true},
@@ -195,10 +216,14 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
 async function post(patch){const r=await fetch('/admin/api?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
   const j=await r.json().catch(()=>({error:'network'}));return{ok:r.ok,j};}
 $('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
+  let r=$('roomSel').value;
+  if(r==='__new'){r=$('roomNew').value.trim().toLowerCase();
+    if(!ROOM_OK.test(r)){$('loginMsg').textContent='Screen names: letters, numbers and dashes (start with a letter or number)';$('loginMsg').className='msg bad';return;}}
+  setRoom(r); // every fetch below targets the picked screen
   $('loginMsg').textContent='Checking…';$('loginMsg').className='msg';PIN=pin;
   const {ok,j}=await post({}); // empty patch = harmless PIN check
-  if(ok){$('login').classList.add('hide');$('form').classList.remove('hide');loadSettings();}
-  else{PIN='';$('loginMsg').textContent=j.error||'Incorrect PIN';$('loginMsg').className='msg bad';}};
+  if(ok){$('login').classList.add('hide');$('form').classList.remove('hide');$('saveMsg').textContent='';loadSettings();}
+  else{PIN='';$('loginMsg').textContent=(j.error||'Incorrect PIN')+(r==='default'?'':' — each screen can have its own PIN');$('loginMsg').className='msg bad';}};
 $('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('unlock').click();});
 $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').className='msg';
   const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,enabled:$(g.enable).checked,

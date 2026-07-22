@@ -17,6 +17,12 @@ export default {
     const id = env.ROOM.idFromName(roomName);
     const room = env.ROOM.get(id);
 
+    // The default room's DO doubles as the screen registry: remember every
+    // room that shows activity so /admin can offer a picker of known screens.
+    if (url.pathname === "/rooms") {
+      return env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/rooms-list"));
+    }
+
     if (
       url.pathname === "/ws" ||
       url.pathname === "/status" ||
@@ -24,6 +30,10 @@ export default {
       url.pathname === "/admin/api" ||
       url.pathname === "/switch"
     ) {
+      if (roomName !== "default" && url.pathname !== "/status") {
+        ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
+          .fetch(new Request(url.origin + "/rooms-register?name=" + roomName)));
+      }
       return room.fetch(request);
     }
 

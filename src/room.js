@@ -279,6 +279,28 @@ export class BinderRoom {
       return Response.json(this.publicSettings(), { headers: { "cache-control": "no-store" } });
     }
 
+    // ---- Screen registry (only ever called on the DEFAULT room's DO) ----
+    // The worker pings /rooms-register whenever a room shows activity, so
+    // /admin can offer a dropdown of every screen instead of hand-typed URLs.
+    if (url.pathname.endsWith("/rooms-register")) {
+      const n = String(url.searchParams.get("name") || "").toLowerCase();
+      if (/^[a-z0-9][a-z0-9-]{0,31}$/.test(n)) {
+        if (!this.roomsSeen) this.roomsSeen = (await this.state.storage.get("roomsSeen")) || {};
+        const now = Date.now();
+        if (!this.roomsSeen[n] || now - this.roomsSeen[n] > 36e5) { // persist at most hourly per room
+          this.roomsSeen[n] = now;
+          await this.state.storage.put("roomsSeen", this.roomsSeen);
+        }
+      }
+      return Response.json({ ok: true });
+    }
+    if (url.pathname.endsWith("/rooms-list")) {
+      if (!this.roomsSeen) this.roomsSeen = (await this.state.storage.get("roomsSeen")) || {};
+      const rooms = [{ name: "default" },
+        ...Object.keys(this.roomsSeen).filter((n) => n !== "default").sort().map((name) => ({ name }))];
+      return Response.json({ rooms }, { headers: { "cache-control": "no-store" } });
+    }
+
     if (url.pathname.endsWith("/switch")) {
       const i = parseInt(url.searchParams.get("i"), 10);
       const tabs = this.effectiveTabs();
