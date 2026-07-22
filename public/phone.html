@@ -84,6 +84,7 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .cchip.on{background:linear-gradient(180deg,var(--ember-bright),var(--ember-deep));color:#fff;border-color:transparent}
 /* Kiosk fulfillment warning on the cart step. */
 .kwarn{font-size:.78rem;color:#e8b04a;background:rgba(217,130,43,.1);border:1px solid rgba(217,130,43,.35);border-radius:11px;padding:.6rem .8rem;margin:.6rem 0;line-height:1.4}
+.corm{width:1.9rem;height:1.9rem;margin-left:.4rem;border-radius:8px;border:1px solid #5a2a26;background:#2a1512;color:#e08a7a;font-size:.85rem;cursor:pointer;vertical-align:middle}
 /* "Strictly better" upgrades sheet — floats above the action bar. */
 .bpanel{position:fixed;left:.5rem;right:.5rem;bottom:5.4rem;z-index:60;background:#14141a;border:1px solid #2a2a34;border-radius:14px;box-shadow:0 -12px 32px rgba(0,0,0,.55);overflow:hidden}
 .bpanel.hide{display:none}
@@ -388,8 +389,12 @@ function ADDB(i){const b=BLIST[i];if(!b)return;if(capBlocked(b))return;
 function ADD(k){const c0=byKey(k||selected);if(!c0)return;const c=(!k||k===selected)?effCard(c0):c0;
  if(capBlocked(c))return;
  cart.push(c);document.getElementById('cc').textContent=cart.length;toast('Added '+c.name+(c.condition?' ('+c.condition+')':'')+' · $'+money(c.price));if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'addcart',data:cardMsg(c)}));drawSpread();}
-function OPENCART(){const l=document.getElementById('coList');l.innerHTML='';cart.forEach(c=>l.insertAdjacentHTML('beforeend',`<div class="co-item"><span>${H(c.name)}</span><span>$${money(c.price)}</span></div>`));if(!cart.length)l.innerHTML='<div class="sel-empty">Cart is empty.</div>';
+function OPENCART(){const l=document.getElementById('coList');l.innerHTML='';cart.forEach((c,i)=>l.insertAdjacentHTML('beforeend',`<div class="co-item"><span>${H(c.name)}${c.condition?' · '+H(c.condition):''}</span><span>$${money(c.price)} <button class="corm" onclick="RMCART(${i})" aria-label="Remove">✕</button></span></div>`));if(!cart.length)l.innerHTML='<div class="sel-empty">Cart is empty.</div>';
  document.getElementById('coTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);SHOW('v-cart');}
+function RMCART(i){const c=cart[i];if(!c)return;cart.splice(i,1);
+ document.getElementById('cc').textContent=cart.length;toast('Removed '+c.name);
+ if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'rmcart',data:cardMsg(c)}));
+ OPENCART();drawSpread();}
 let checkedOut=false;
 /* Checkout link that KEEPS whatever the shopper already has in their
    exorgames.com cart: /cart/ID:QTY permalinks REPLACE the whole cart, so we
