@@ -134,10 +134,10 @@ function gameOf(productType) {
   return null;
 }
 
-export async function serveCards(request, ctx, collection = "new-arrivals", newToday = false, showcase = false) {
+export async function serveCards(request, ctx, collection = "new-arrivals", newToday = false, showcase = false, sleeves = false) {
   collection = /^[a-z0-9][a-z0-9-]{0,80}$/.test(collection) ? collection : "new-arrivals";
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/cards.json?c=" + collection + (newToday ? "&nt=1" : "") + (showcase ? "&sc=1" : ""), request.url).toString());
+  const cacheKey = new Request(new URL("/cards.json?c=" + collection + (newToday ? "&nt=1" : "") + (showcase ? "&sc=1" : "") + (sleeves ? "&sv=1" : ""), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
@@ -158,7 +158,9 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
   }
 
   let built;
-  if (showcase) {
+  if (sleeves) {
+    built = buildSleeves(products);
+  } else if (showcase) {
     built = buildShowcase(products);
   } else if (newToday) {
     // Cards published today (store-local time), topped up with the next-newest
@@ -516,6 +518,40 @@ function buildShowcase(products) {
     cards.push(...other.get(gname).sort((a, b) => +b.price - +a.price));
   }
   return { game: "showcase", colorNames, cards };
+}
+
+/* The sleeve wall (accessories, not singles): every in-stock product in the
+   collection, no price floor, sorted by title so the Dragon Shield lines
+   (Brushed, Dual Matte, Matte, …) group like a real retail shelf. Names are
+   trimmed of the shouty "DRAGON SHIELD SLEEVES … 100CT" wrapper. */
+function buildSleeves(products) {
+  const seen = new Set();
+  const cards = [];
+  for (const p of products) {
+    const eligible = (p.variants || []).filter((v2) => v2.available && +v2.price > 0 && +v2.price < MAX_PRICE);
+    if (eligible.length === 0) continue;
+    const v = eligible.reduce((a, b) => (+b.price < +a.price ? b : a)); // lead with the cheapest in-stock option
+    const name = String(p.title || "")
+      .replace(/^dragon\s*shield\s*(sleeves)?\s*/i, "").replace(/\s*\d+\s*ct\.?\s*$/i, "").trim() || p.title;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    cards.push({
+      name,
+      color: "C",
+      set: "Dragon Shield",
+      game: "sleeves",
+      type: "Card Sleeves",
+      price: (+v.price).toFixed(2),
+      foil: false,
+      condition: "",
+      variants: variantsOf(eligible, "sleeves"),
+      image: (p.images && p.images[0] && p.images[0].src) || null,
+      variantId: v.id,
+      url: "https://exorgames.com/products/" + p.handle,
+    });
+  }
+  cards.sort((a, b) => a.name.localeCompare(b.name));
+  return { game: "sleeves", colorNames: {}, cards };
 }
 
 function fnv(s) {

@@ -43,14 +43,15 @@ export default {
       let collection = url.searchParams.get("collection") || "";
       let newToday = url.searchParams.get("nt") === "1";
       let showcase = url.searchParams.get("sc") === "1";
+      let sleeves = url.searchParams.get("sv") === "1";
       if (!collection) {
         try {
           const s = await (await room.fetch(new Request(url.origin + "/settings"))).json();
           if (s && s.collection) collection = s.collection;
-          if (s) { newToday = !!s.newTodayActive; showcase = !!s.showcaseActive; }
+          if (s) { newToday = !!s.newTodayActive; showcase = !!s.showcaseActive; sleeves = !!s.sleevesActive; }
         } catch {}
       }
-      return serveCards(request, ctx, collection || "new-arrivals", newToday, showcase);
+      return serveCards(request, ctx, collection || "new-arrivals", newToday, showcase, sleeves);
     }
 
     if (url.pathname === "/admin" || url.pathname === "/admin.html") {

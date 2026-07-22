@@ -368,6 +368,27 @@ html.portrait .qrbub{width:52vw;font-size:2.2vh}
 html.portrait .qrbub::before{right:auto;left:50%;top:100%;margin:-2px 0 0 -1.5vh;border:1.5vh solid transparent;border-top:3.2vh solid #101010;border-bottom:0;transform:rotate(-6deg)}
 html.portrait .qrbub::after{right:auto;left:50%;top:calc(100% - .8vh);margin:0 0 0 -1.1vh;border:1.1vh solid transparent;border-top:2.4vh solid #fffef4;border-bottom:0;transform:rotate(-6deg)}
 html.portrait .qrarr{animation:none;transform:scaleX(-1);transform-origin:50% 50%} /* flipped: sits right of the QR, points down-left at it */
+/* ---- Sleeve wall (admin "Sleeve wall" tab): a black retail gondola for the
+   Dragon Shield accessories. Boxes stand straight on lit black shelves with
+   a front lip; product shots render whole (no crop) on white card faces.
+   The usual felt trinkets (dice, coins) still wander the empty spots. ---- */
+.case.sleeves .wood{background:linear-gradient(180deg,#17171b,#0b0b0e 55%,#131318)}
+.case.sleeves .felt{background:
+ repeating-linear-gradient(180deg,rgba(255,255,255,.05) 0 1px,transparent 1px 44px),
+ linear-gradient(180deg,#1b1b21,#0f0f13)}
+.case.sleeves .pball{display:none}
+.case.sleeves .grime{opacity:.45}
+.case.sleeves .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/3.55))}
+.case.sleeves .shelf{position:relative;padding-bottom:2vh}
+.case.sleeves .shelf + .shelf{margin-top:.5vh}
+.case.sleeves .shelf::after{content:"";position:absolute;left:-1.6%;right:-1.6%;bottom:0;height:1.7vh;
+ background:linear-gradient(180deg,#3c3c45,#17171c 45%,#272730);border-top:1px solid #575761;border-radius:2px;
+ box-shadow:0 6px 13px rgba(0,0,0,.65)}
+.case.sleeves .tray .card{--tilt:0deg!important;--jy:0%!important;border-radius:5px;box-shadow:0 3px 9px rgba(0,0,0,.55)}
+.case.sleeves .tray .card .scan{object-fit:contain;background:#f4f4f6}
+.case.sleeves .zoomtv .zc{background:#f4f4f6}
+.case.sleeves .zoomtv .zc .scan{object-fit:contain;background:#f4f4f6}
+html.portrait .case.sleeves .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/5.65))}
 /* ---- Christmas dressing (admin "Holiday" setting, per room): a sagging
    string of colored lights along the top of the case, frosted glass corners,
    and festive clutter on the felt. Decor only — cards stay untouched. ---- */
@@ -527,10 +548,11 @@ const DARK=['U','B','R','G','Fire','Water','Psychic','Fighting','Darkness','Drag
    an ESL price tag on every card, so 24 per spread instead of 40. */
 let TRAY=40;const COLS=window.PORTRAIT?5:8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
 const SHOWCASE=()=>!!(CARDS&&CARDS.GAME==='showcase');
+const SLEEVES=()=>!!(CARDS&&CARDS.GAME==='sleeves');
 /* Per-deck salt so switching tabs reshuffles the clutter/card-back piles —
    without it every deck's first spread drew the exact same mess. */
 let DECKSALT=0;
-function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&list.GAME==='showcase')?24:40;
+function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&(list.GAME==='showcase'||list.GAME==='sleeves'))?24:40;
  DECKSALT=0;for(let i=0;i<CARDS.length;i+=5){const k=String(CARDS[i].variantId||CARDS[i].name||i);for(let j=0;j<k.length;j++)DECKSALT=(DECKSALT*31+k.charCodeAt(j))>>>0;}
  trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 /* ---- Phone-driven search: the phone mirrors its results here; the default
@@ -582,7 +604,7 @@ function cardHTML(c){if(!c)return '';
  const tags=SHOWCASE()
   ?`${c.foil?'<div class="oil"></div>':''}${ESL_TAG(c)}`
   :`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWordFor(c)}</span></div>`:''}`;
- return `<div class="card ${DARK.includes(c.color)?'dark':''}${TOPLOAD?' intl':''}" data-c="${H(c.color)}" data-id="${H(KEY(c))}" style="${tiltStyle(KEY(c))}">${face}${tags}</div>`;}
+ return `<div class="card ${DARK.includes(c.color)?'dark':''}${TOPLOAD&&!SLEEVES()?' intl':''}" data-c="${H(c.color)}" data-id="${H(KEY(c))}" style="${tiltStyle(KEY(c))}">${face}${tags}</div>`;}
 /* One of the store's e-ink shelf labels, drawn over the card's text box. */
 const ESL_LOGO='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866&width=180';
 function ESL_TAG(c){return `<div class="esl"><div class="escr"><div class="enm"><span class="en">${H(c.name)}${c.foil?' ·'+(cardGame(c)==='pokemon'?'Holo':'Foil'):''}</span><span class="ec">${H(String(c.set||'').slice(0,12))}</span></div><div class="erow"><div class="elogo"><img src="${ESL_LOGO}" alt="" loading="lazy"></div><div class="eprice"><span class="ed">$</span>${money(c.price)}</div></div></div><div class="eled"></div></div>`;}
@@ -682,7 +704,7 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
     same size as the real cards, never underneath them. All eight games are
     shuffled and dealt across the piles, so the two stacks never repeat a back
     and every game gets its turn. */
- if(empty>=10&&rects.length&&rng()<0.65){const cw=rects[0].r2-rects[0].l,wpct=(cw/Wt)*100;
+ if(!SLEEVES()&&empty>=10&&rects.length&&rng()<0.65){const cw=rects[0].r2-rects[0].l,wpct=(cw/Wt)*100;
   const hand=BACKS.map((_,i)=>i);for(let i=hand.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[hand[i],hand[j]]=[hand[j],hand[i]];}
   const n1=2+Math.floor(rng()*3);
   place(CARDBACK_STACK(rng,hand.slice(0,n1)),wpct*1.06,0.08,0.84,0.18,0.66,240);
@@ -694,7 +716,7 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
  const mslot=slab.querySelector('.underlay');
  if(mslot){let mhtml='';
   const mrng=mulberry32((((idx+7)*1597334677)^DECKSALT^(Math.floor(Date.now()/36e5)*2246822519))>>>0);
-  if(rects.length&&empty>=6&&mrng()<0.55){const cw2=rects[0].r2-rects[0].l,mw=Math.min((cw2/Wt)*100*3.3,34);
+  if(!SLEEVES()&&rects.length&&empty>=6&&mrng()<0.55){const cw2=rects[0].r2-rects[0].l,mw=Math.min((cw2/Wt)*100*3.3,34);
    const mg=MAGS[(Math.floor(Date.now()/36e5)+idx)%MAGS.length]; // hourly cycle through the issues
    mhtml=`<div class="mag" style="left:${(14+mrng()*72).toFixed(1)}%;top:${(30+mrng()*48).toFixed(1)}%;width:${mw.toFixed(1)}%;--mrot:${(mrng()*36-18).toFixed(1)}deg"><img src="${mg.u}" style="aspect-ratio:${mg.w}/${mg.h}" alt="" loading="lazy"></div>`;}
   mslot.innerHTML=mhtml;}
@@ -721,7 +743,9 @@ function flip(dir){if(flipping)return;const t=spread+dir;if(t<0||t>=spreads)retu
  requestAnimationFrame(()=>{cur.style.transform=`translateX(${dir>0?'-100%':'100%'})`;inc.style.transform='translateX(0)';});
  let done=false;const finish=()=>{if(done)return;done=true;spread=t;draw();flipping=false;afterFlip();};
  inc.addEventListener('transitionend',finish,{once:true});setTimeout(finish,1000);}
-function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD?' intl':'');
+function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');
+ const sleevy=(c.game==='sleeves'||SLEEVES()); // accessories: no top-loader, no foil/condition talk
+ zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD&&!sleevy?' intl':'');
  if(window.TOUCH&&!ZKEEP){ZCARD=c;ZVAR=null;} // remember what's featured so the action row can re-price it
  document.body.classList.add('zopen'); // pause background effects while previewing
  zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan').forEach(e=>e.remove());
@@ -731,10 +755,11 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  const full=CARDS.find(x=>x.name===c.name&&(!c.variantId||String(x.variantId)===String(c.variantId)))||{};
  const cg=cardGame(c.game?c:full.game?full:c); // the card's own game, not the tab's
  const sporty=(cg==='hockey'||cg==='basketball');
+ const noTreat=sporty||sleevy; // sports and accessories skip the foil/non-foil line
  const cond=sporty?'':(c.condition||full.condition||''); // sports cards aren't conditioned
  const treatment=c.foil?(cg==='pokemon'?'Holofoil':'Foil'):(cg==='pokemon'?'Non-holo':'Non-foil');
  zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${cg==='pokemon'?'Holo':'foil'}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
- document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div>${sporty?'':`<div class="cu-line">${H(treatment)}</div>`}${cond?`<div class="cu-line">${H(cond)}</div>`:''}<div class="cu-line">${H(c.set||'—')}</div>`;
+ document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div>${noTreat?'':`<div class="cu-line">${H(treatment)}</div>`}${cond?`<div class="cu-line">${H(cond)}</div>`:''}<div class="cu-line">${H(c.set||'—')}</div>`;
  /* Comic shopkeeper bubble — one random line per preview, {card} = card name. */
  const bub=document.getElementById('zbub'),msgs=(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
  if(msgs.length){const m=msgs[Math.floor(Math.random()*msgs.length)];
@@ -1018,7 +1043,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-yugioh',s.theme==='yugioh');
  cs.classList.toggle('theme-hockey',s.theme==='hockey');
  cs.classList.toggle('theme-basketball',s.theme==='basketball');
- cs.classList.toggle('tl',!!s.topLoaders);
+ cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive); // the sleeve wall never wears top-loaders
+ cs.classList.toggle('sleeves',!!s.sleevesActive);
  const hx=(SETTINGS.holiday==='christmas');
  cs.classList.toggle('xmas',hx);
  if(hx!==XMAS){XMAS=hx;renderXdress();if(document.getElementById('slab'))draw();} // re-roll the clutter so the props land

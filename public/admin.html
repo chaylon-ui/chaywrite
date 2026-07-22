@@ -97,6 +97,15 @@ a.tvlink:hover{color:var(--ember)}
       <div class="hint">The <code>esl-showcase</code> smart collection gathers the tag automatically — tag or untag a product in Shopify and the TV follows. All games show together, sorted by game then color/energy. No $10 minimum.</div>
     </div>
 
+    <!-- The sleeve wall: black retail shelf of the Dragon Shield collection. -->
+    <div class="group">
+      <div class="gtitle">Sleeve wall tab</div>
+      <div class="row" style="margin-top:.6rem"><input id="svEnabled" type="checkbox"><label for="svEnabled">Show a “Sleeves” tab styled as a black retail shelf</label></div>
+      <label for="svCollection">Collection handle</label>
+      <input id="svCollection" type="text" placeholder="all-dragon-shield-sleeves">
+      <div class="hint">Dragon Shield boxes stand on black gondola shelves, sorted by product line, with the usual dice-and-trinket clutter in the gaps. No $10 minimum, no top-loaders, no conditions. Use <code>all-regular-dragon-shield-sleeves</code> instead to hide Japanese &amp; Perfect Fit sizes.</div>
+    </div>
+
     <!-- "New Today" showcases: extra phone tab per game, masking-tape banner
          on the TV, cards published today topped up to at least 10, over $10. -->
     <div class="group">
@@ -172,6 +181,7 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
   $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('holiday').value=s.holiday==='christmas'?'christmas':'none';
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
+  const sv=s.sleevesTab||{};$('svEnabled').checked=!!sv.enabled;$('svCollection').value=sv.collection||'all-dragon-shield-sleeves';
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
   const am=Array.isArray(s.attractMsgs)?s.attractMsgs:[];
@@ -197,6 +207,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
     perfMode:$('perfMode').checked,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase'},
+    sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves'},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};

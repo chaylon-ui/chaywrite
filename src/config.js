@@ -29,6 +29,11 @@ export const DEFAULT_SETTINGS = {
   showcaseTab: { enabled: true, label: "Showcase", collection: "esl-showcase" },
   showcaseActive: false, // true while the Showcase tab is on screen
 
+  // The sleeve wall: a black retail-shelf tab of the Dragon Shield sleeve
+  // collection (accessories — no top-loaders, no conditions, no price floor).
+  sleevesTab: { enabled: false, label: "Sleeves", collection: "all-dragon-shield-sleeves" },
+  sleevesActive: false, // true while the sleeve wall is on screen
+
   // Performance mode for weaker TV boxes: replaces the preview's backdrop
   // blur with a plain dim and stills the heavy filter animations.
   perfMode: false,

@@ -104,11 +104,15 @@ export class BinderRoom {
     const sc = st.enabled
       ? [{ label: String(st.label || "Showcase").slice(0, 24), collection: st.collection || "esl-showcase", theme: "mtg", game: "showcase", showcase: true }]
       : [];
+    const sv = this.settings.sleevesTab || {};
+    const sl = sv.enabled
+      ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true }]
+      : [];
     const nt = this.settings.newToday || {};
     const extra = base
       .filter((t) => nt[t.game])
       .map((t) => ({ label: ("New Today · " + t.label).slice(0, 24), collection: t.collection, theme: t.theme, game: t.game, newToday: true }));
-    return [...base, ...sc, ...extra];
+    return [...base, ...sc, ...sl, ...extra];
   }
   publicSettings() { return { ...this.settings, tabs: this.effectiveTabs() }; } // never includes the PIN
 
@@ -153,6 +157,19 @@ export class BinderRoom {
         next.showcaseActive = false;
       }
     }
+    if ("sleevesTab" in patch) {
+      const sv = patch.sleevesTab;
+      if (!sv || typeof sv !== "object") return "bad sleevesTab";
+      const c = String(sv.collection || "all-dragon-shield-sleeves").trim().toLowerCase();
+      if (!HANDLE_RE.test(c)) return "bad sleeves collection handle";
+      next.sleevesTab = { enabled: !!sv.enabled, label: String(sv.label || "Sleeves").slice(0, 24).trim() || "Sleeves", collection: c };
+      // If the sleeve wall was just disabled while on screen, fall back home.
+      if (!next.sleevesTab.enabled && next.sleevesActive) {
+        const home = (Array.isArray(next.tabs) && next.tabs[0]) || null;
+        if (home) { next.collection = home.collection; next.theme = home.theme; next.game = home.game; }
+        next.sleevesActive = false;
+      }
+    }
     if ("theme" in patch) {
       if (!THEMES.includes(patch.theme)) return "bad theme";
       next.theme = patch.theme;
@@ -192,7 +209,7 @@ export class BinderRoom {
       // unless the virtual Showcase tab is the one on screen.
       const enabledClean = clean.filter((t) => t.enabled !== false);
       const active = enabledClean.find((t) => t.collection === next.collection)
-        || (next.showcaseActive ? null : enabledClean[0] || clean[0]);
+        || ((next.showcaseActive || next.sleevesActive) ? null : enabledClean[0] || clean[0]);
       if (active) {
         if (active.collection !== next.collection) next.newTodayActive = false; // the room got re-pointed
         next.collection = active.collection;
@@ -267,7 +284,7 @@ export class BinderRoom {
       const tabs = this.effectiveTabs();
       if (!(i >= 0 && i < tabs.length)) return Response.json({ error: "bad tab" }, { status: 400 });
       const t = tabs[i];
-      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme, newTodayActive: !!t.newToday, showcaseActive: !!t.showcase };
+      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme, newTodayActive: !!t.newToday, showcaseActive: !!t.showcase, sleevesActive: !!t.sleeves };
       await this.state.storage.put("settings", this.settings);
       this.broadcastSettings();
       return Response.json({ ok: true, settings: this.publicSettings() });
