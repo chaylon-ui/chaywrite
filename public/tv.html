@@ -391,9 +391,11 @@ html.portrait .qrarr{animation:none;transform:scaleX(-1);transform-origin:50% 50
 .case.sleeves .tray .card.sel{box-shadow:0 0 0 3px var(--ember-bright),0 24px 44px -12px rgba(40,40,60,.5)}
 .case.sleeves .tray .card .psticker{top:auto;bottom:1%;right:6%;transform:rotate(-2deg)} /* shelf-edge price tag, off the box art */
 .case.sleeves .clut{filter:drop-shadow(0 4px 6px rgba(45,45,70,.35))}
-.case.sleeves .zoomtv{background:rgba(238,238,243,.92)} /* light backdrop so white product shots blend in the preview too */
+.case.sleeves .zoomtv{background:rgba(255,255,255,.97)} /* white backdrop: white-JPEG product shots melt straight into it */
 .case.sleeves .zoomtv .zc{background:transparent;box-shadow:none}
 .case.sleeves .zoomtv .zc .scan{object-fit:contain;background:transparent;border-radius:0;filter:drop-shadow(0 30px 40px rgba(45,45,70,.4))}
+.case.sleeves .zoomtv .zc.flatimg .scan{filter:none} /* opaque white shot: no cutout shadow — edges vanish on the white backdrop */
+.case.sleeves .zoomtv .cue .cu-name{white-space:normal;font-size:2.9vh;line-height:1.2} /* long product names wrap instead of clipping */
 body.perf .case.sleeves .tray .card .scan{filter:none}
 html.portrait .case.sleeves .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/5.65))}
 /* ---- Christmas dressing (admin "Holiday" setting, per room): a sagging
@@ -757,13 +759,33 @@ function flip(dir){if(flipping)return;const t=spread+dir;if(t<0||t>=spreads)retu
  requestAnimationFrame(()=>{cur.style.transform=`translateX(${dir>0?'-100%':'100%'})`;inc.style.transform='translateX(0)';});
  let done=false;const finish=()=>{if(done)return;done=true;spread=t;draw();flipping=false;afterFlip();};
  inc.addEventListener('transitionend',finish,{once:true});setTimeout(finish,1000);}
+/* White-JPEG detection for the sleeve preview: shots with no alpha channel
+   can't be die-cut, so they melt into the white backdrop (no cutout shadow)
+   instead of floating as a hard-edged rectangle. Verdict cached per image. */
+const FLATIMG={};
+function flagFlat(zc,url){
+ const done=flat=>{const im=zc.querySelector('.scan');if(flat&&im&&im.src===url)zc.classList.add('flatimg');};
+ if(url in FLATIMG)return done(FLATIMG[url]);
+ const im=new Image();im.crossOrigin='anonymous';
+ im.onload=()=>{let flat=false;
+  try{const cv=document.createElement('canvas');cv.width=cv.height=9;const cx=cv.getContext('2d');
+   cx.drawImage(im,0,0,9,9);const d=cx.getImageData(0,0,9,9).data;
+   flat=true;for(let i=3;i<d.length;i+=4)if(d[i]<250){flat=false;break;}}catch(e){flat=false;}
+  FLATIMG[url]=flat;done(flat);};
+ im.onerror=()=>{FLATIMG[url]=false;};
+ im.src=url;}
+/* The shopkeeper pitches accessories differently than singles. */
+const SLEEVE_BUBS=["Naked cards?! Grab {card} and sleeve 'em before you wreck 'em!",
+ "Treat the deck to {card} — scuffed corners don't win tournaments!",
+ "{card}: fresh armor for the deck. Your rares will thank you!"];
 function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');
  const sleevy=(c.game==='sleeves'||SLEEVES()); // accessories: no top-loader, no foil/condition talk
  zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD&&!sleevy?' intl':'');
  if(window.TOUCH&&!ZKEEP){ZCARD=c;ZVAR=null;} // remember what's featured so the action row can re-price it
  document.body.classList.add('zopen'); // pause background effects while previewing
  zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan').forEach(e=>e.remove());
- if(c.image)zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
+ if(c.image){zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
+  if(sleevy)flagFlat(zc,IMGURL(c.image,800));}
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
  /* Phone `select` messages don't carry condition — enrich from the local deck. */
  const full=CARDS.find(x=>x.name===c.name&&(!c.variantId||String(x.variantId)===String(c.variantId)))||{};
@@ -775,7 +797,7 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${cg==='pokemon'?'Holo':'foil'}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
  document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div>${noTreat?'':`<div class="cu-line">${H(treatment)}</div>`}${cond?`<div class="cu-line">${H(cond)}</div>`:''}<div class="cu-line">${H(c.set||'—')}</div>`;
  /* Comic shopkeeper bubble — one random line per preview, {card} = card name. */
- const bub=document.getElementById('zbub'),msgs=(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
+ const bub=document.getElementById('zbub'),msgs=(sleevy?SLEEVE_BUBS:(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[])).map(m=>String(m||'').trim()).filter(Boolean);
  if(msgs.length){const m=msgs[Math.floor(Math.random()*msgs.length)];
   bub.innerHTML=m.split('{card}').map(H).join('<span class="bn">'+H(c.name)+'</span>');
   bub.style.display='';bub.style.animation='none';void bub.offsetWidth;bub.style.animation='';}

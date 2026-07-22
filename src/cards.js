@@ -531,8 +531,13 @@ function buildSleeves(products) {
     const eligible = (p.variants || []).filter((v2) => v2.available && +v2.price > 0 && +v2.price < MAX_PRICE);
     if (eligible.length === 0) continue;
     const v = eligible.reduce((a, b) => (+b.price < +a.price ? b : a)); // lead with the cheapest in-stock option
-    const name = String(p.title || "")
+    const raw = String(p.title || "")
       .replace(/^dragon\s*shield\s*(sleeves)?\s*/i, "").replace(/\s*\d+\s*ct\.?\s*$/i, "").trim() || p.title;
+    // The catalogue titles SHOUT IN CAPS — settle them into Title Case for
+    // the cue card and speech bubble (already-mixed-case titles untouched).
+    const name = raw === raw.toUpperCase()
+      ? raw.toLowerCase().replace(/(^|[^a-z0-9'])([a-z])/g, (m, a, b) => a + b.toUpperCase())
+      : raw;
     if (seen.has(name)) continue;
     seen.add(name);
     cards.push({
