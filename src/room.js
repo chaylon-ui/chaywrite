@@ -13,6 +13,7 @@ export class BinderRoom {
     this.lastActivity = 0;
     this.tv = null;
     this.phone = null;
+    this.staff = new Set(); // /staff alert pages watching this room (any number)
     this.settings = { ...DEFAULT_SETTINGS };
     this.pin = DEFAULT_PIN;
     this.state.blockConcurrencyWhile?.(async () => {
@@ -278,6 +279,12 @@ export class BinderRoom {
             if (this.phone === server) this.dropSession("closed");
           });
         }
+      } else if (role === "staff") {
+        // Counter-alert listeners (the /staff Chrome page). Any number may
+        // watch a room; they only receive broadcasts and can never drive it.
+        this.staff.add(server);
+        this.send(server, { type: "staff_hello" });
+        server.addEventListener("close", () => this.staff.delete(server));
       } else {
         server.close(4e3, "unknown role");
       }
@@ -357,6 +364,23 @@ export class BinderRoom {
       return Response.json({ ok: true });
     }
 
+    // Shopify Flow's "Send HTTP request" action POSTs here to pop an alert on
+    // every connected /staff page — body like {"name":"{{draftOrder.name}}",
+    // "total":"12.00","note":"Draft order created"}. The /staff page dedupes
+    // by order name, so a kiosk order that also fires Flow only rings once.
+    if (url.pathname.endsWith("/alert") && request.method === "POST") {
+      let d; try { d = await request.json(); } catch { d = {}; }
+      const data = {
+        name: String((d && d.name) || "").slice(0, 32) || null,
+        count: Math.max(0, Math.min(999, parseInt(d && d.count, 10) || 0)),
+        total: String((d && d.total) || "").slice(0, 12),
+        note: String((d && d.note) || "").slice(0, 140),
+      };
+      let delivered = 0;
+      for (const s of this.staff) { this.send(s, { type: "staff_alert", data }); delivered++; }
+      return Response.json({ ok: true, delivered });
+    }
+
     if (url.pathname.endsWith("/status")) {
       return Response.json({
         paired: !!this.controllerId,
@@ -372,7 +396,11 @@ export class BinderRoom {
   // (`npx wrangler secret put SHOPIFY_ADMIN_TOKEN` — needs write_draft_orders);
   // without it we still notify, just with no order number.
   async handleCounterCheckout(data) {
-    const out = { name: null, count: data.count ?? 0, total: data.total ?? "0.00" };
+    const out = {
+      name: null, count: data.count ?? 0, total: data.total ?? "0.00",
+      items: (Array.isArray(data.items) ? data.items : []).slice(0, 8)
+        .map((i) => ({ name: String((i && i.name) || "").slice(0, 140), qty: Math.max(1, +((i && i.qty)) || 1) })),
+    };
     const token = this.env.SHOPIFY_ADMIN_TOKEN;
     const shop = this.env.SHOPIFY_SHOP || "most-wanted-ca.myshopify.com";
     if (token && Array.isArray(data.items) && data.items.length) {
@@ -407,6 +435,7 @@ export class BinderRoom {
     const m = { type: "counter_order", data: out };
     if (this.tv) this.send(this.tv, m);
     if (this.phone) this.send(this.phone, m);
+    for (const s of this.staff) this.send(s, m);
   }
 
   onPhoneMessage(ev) {

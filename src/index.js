@@ -29,7 +29,8 @@ export default {
       url.pathname === "/settings" ||
       url.pathname === "/admin/api" ||
       url.pathname === "/switch" ||
-      url.pathname === "/counter"
+      url.pathname === "/counter" ||
+      url.pathname === "/alert"
     ) {
       if (roomName !== "default" && url.pathname !== "/status") {
         ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
@@ -67,6 +68,9 @@ export default {
 
     if (url.pathname === "/admin" || url.pathname === "/admin.html") {
       return serveAsset(env, "/admin.html", request);
+    }
+    if (url.pathname === "/staff") {
+      return serveAsset(env, "/staff.html", request);
     }
     if (url.pathname.startsWith("/c/")) {
       return serveAsset(env, "/phone.html", request);
