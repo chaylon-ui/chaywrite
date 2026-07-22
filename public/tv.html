@@ -555,6 +555,19 @@ html.touch .ttab:active,html.touch .tnav:active,html.touch .tchip:active,html.to
 .ttmo.hot .ttn{color:#c9342b}
 .ttmo.hot .ttbox{animation:ttshake .45s linear infinite}
 @keyframes ttpop{0%{transform:scale(1.7)}100%{transform:scale(1)}}
+/* Comic loading interstitial while a new collection's cards are fetched —
+   only appears if the fetch takes more than a beat, so quick switches stay
+   snappy but a slow one never looks broken. */
+.tload{display:none;position:fixed;inset:0;z-index:58;background:rgba(6,6,9,.55);align-items:center;justify-content:center;pointer-events:none}
+.tload.open{display:flex}
+.tlbox{background:#fffef4;border:4px solid #101010;border-radius:18px;box-shadow:.5rem .6rem 0 rgba(16,16,16,.85);padding:1.2rem 2.2rem;text-align:center;transform:rotate(-1.2deg);animation:bpop .3s cubic-bezier(.34,1.56,.64,1)}
+.tlh{font-family:'Bangers',cursive;font-size:2.2rem;color:#c9342b;-webkit-text-stroke:1px #101010;letter-spacing:.04em}
+.tlp{font-family:'Bangers',cursive;font-size:1.25rem;color:#16161c}
+.tldots{display:flex;gap:.5rem;justify-content:center;margin-top:.55rem}
+.tldots span{width:13px;height:13px;border-radius:50%;background:#ffd75e;border:2.5px solid #101010;animation:tldot .9s ease-in-out infinite}
+.tldots span:nth-child(2){animation-delay:.15s}
+.tldots span:nth-child(3){animation-delay:.3s}
+@keyframes tldot{0%,100%{transform:translateY(0)}40%{transform:translateY(-11px)}}
 /* Customer pickup ticket after "send to counter" on a kiosk: big number +
    a QR to photograph, gone again in 20 seconds. Staff jargon stays off it. */
 .tdone{display:none;position:fixed;inset:0;z-index:62;background:rgba(6,6,9,.72);align-items:center;justify-content:center;cursor:pointer}
@@ -626,6 +639,11 @@ html.touch .ttab:active,html.touch .tnav:active,html.touch .tchip:active,html.to
     <div class="ttp">Your cart clears in…</div>
     <div class="ttn" id="ttn">30</div>
     <div class="ttp2">TAP ANYWHERE to keep shopping!</div>
+  </div></div>
+  <div class="tload" id="tload" aria-hidden="true"><div class="tlbox">
+    <div class="tlh">HANG TIGHT!</div>
+    <div class="tlp">Grabbing the cards…</div>
+    <div class="tldots"><span></span><span></span><span></span></div>
   </div></div>
   <div class="tdone" id="tdone" onclick="hideTdone()"><div class="tdbox">
     <div class="tdh">SENT TO THE COUNTER!</div>
@@ -1226,7 +1244,10 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
   return `<button class="ttab${on?' on':''}" onclick="TSWITCH(${i},this)">${H(String(t.label||''))}</button>`;}).join('')
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
   +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'');}
-function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);fetch('/switch?i='+i+RQ,{method:'POST'}).catch(()=>{});}
+function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
+ const t=(Array.isArray(SETTINGS.tabs)?SETTINGS.tabs:[])[i];
+ if(t&&(t.collection!==CUR_COLLECTION||!!t.newToday!==CUR_NT))showTload(); // instant feedback; hides when the new deck lands
+ fetch('/switch?i='+i+RQ,{method:'POST'}).catch(()=>{});}
 /* Totem search: the same /search.json the phone uses, driven by an on-screen
    keyboard. Results swap into the case live via the shared search-deck path
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
@@ -1293,8 +1314,14 @@ function initTouch(){if(TINITED)return;TINITED=true;
    &&!document.getElementById('tcheck').classList.contains('open')
    &&!document.getElementById('tkb').classList.contains('open')){
    SWIPED=true;flip(dx<0?1:-1);setTimeout(()=>{SWIPED=false;},400);}},{capture:true});
- document.getElementById('tprev').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;comicBurst(this,'FLIP!',true);flip(-1);};
- document.getElementById('tnext').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;comicBurst(this,'FLIP!',true);flip(1);};
+ /* Page arrows wrap around — at the last page › jumps back to the first, so
+    they always DO something. A one-page deck says so instead of no-oping. */
+ document.getElementById('tprev').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;
+  if(spreads<2){comicBurst(this,'ALL HERE!',true);return;}
+  comicBurst(this,'FLIP!',true);if(spread-1<0)flipTo(spreads-1);else flip(-1);};
+ document.getElementById('tnext').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;
+  if(spreads<2){comicBurst(this,'ALL HERE!',true);return;}
+  comicBurst(this,'FLIP!',true);if(spread+1>=spreads)flipTo(0);else flip(1);};
  document.getElementById('tclose').onclick=function(){comicBurst(this,'BAM!',true);selected=null;markSel();unzoom();};
  /* Tapping the featured card itself closes the preview, same as the ✕. */
  document.getElementById('ztvc').addEventListener('click',()=>{if(!window.TOUCH)return;selected=null;markSel();unzoom();});
@@ -1363,7 +1390,21 @@ function renderXdress(){const xd=document.getElementById('xdress');if(!xd)return
    +`<circle class="xb" cx="${x}" cy="${y+11}" r="14" fill="${c}" opacity=".16" style="animation-delay:${(i%5)*.45}s"/>`
    +`<circle class="xb" cx="${x}" cy="${y+11}" r="7.5" fill="${c}" style="animation-delay:${(i%5)*.45}s"/>`;i++;}
  xd.innerHTML=`<div class="xlights"><svg viewBox="0 0 1080 62" preserveAspectRatio="none"><path d="${wire}" fill="none" stroke="#243528" stroke-width="2.6"/>${bulbs}</svg></div><div class="xfrost"></div>`;}
-function refetchCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();if(window.TOUCH)renderTouchTabs(SETTINGS);}}).catch(()=>{});}
+/* Deck fetches are sequenced: rapid tab taps fire overlapping /cards.json
+   requests and the responses can land out of order — only the NEWEST request
+   may paint the case, or a stale deck overwrites the tab you're now on. The
+   loading box only appears if the fetch takes more than a beat (and a
+   failsafe hides it even if the network goes away mid-switch). */
+let CFSEQ=0,TLT=null,TLFS=null;
+function showTload(){if(TLT||document.getElementById('tload').classList.contains('open'))return;
+ TLT=setTimeout(()=>{TLT=null;document.getElementById('tload').classList.add('open');
+  clearTimeout(TLFS);TLFS=setTimeout(hideTload,12000);},250);}
+function hideTload(){clearTimeout(TLT);TLT=null;clearTimeout(TLFS);TLFS=null;document.getElementById('tload').classList.remove('open');}
+function refetchCards(){const seq=++CFSEQ;showTload();
+ fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
+  if(seq!==CFSEQ)return; // a newer switch is already in flight — this deck is stale
+  hideTload();
+  if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();if(window.TOUCH)renderTouchTabs(SETTINGS);}}).catch(()=>{if(seq===CFSEQ)hideTload();});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
@@ -1396,7 +1437,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if(kb)kb.dataset.pos=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
-function refreshCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
+function refreshCards(){const seq=CFSEQ; // background poll: never overwrite a tab switch that started after it
+ fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(seq===CFSEQ&&d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
 window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json());}catch(e){}if(window.BINDER_GAME)GAME=window.BINDER_GAME;applyCards(window.BINDER_CARDS);draw();connect();});
 /* Fresh stock without anyone touching the TV: the deck feed re-checks every
    10 minutes while idle (redraws only when the version actually changed —
