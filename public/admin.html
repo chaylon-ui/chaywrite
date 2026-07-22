@@ -28,6 +28,11 @@ input:focus,select:focus{outline:none;border-color:var(--ember)}
 .btn:active{transform:scale(.99)}
 .msg{text-align:center;font-size:.85rem;margin-top:1rem;min-height:1.2em}
 .msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}
+.uchip{background:#0e0e12;border:1px solid var(--line);border-radius:8px;padding:.35rem .6rem;font-size:.74rem;color:var(--muted)}
+.uchip b{color:var(--ink);font-size:.85rem}
+.usess{border:1px solid var(--line);border-radius:10px;margin-top:.5rem;padding:.45rem .7rem;font-size:.78rem}
+.usess summary{cursor:pointer;color:var(--ink)}
+.usess div{color:var(--muted);margin-top:.25rem;padding-left:.4rem}
 .pinrow{display:flex;gap:.6rem}.pinrow input{text-align:center;letter-spacing:.4em;font-size:1.3rem}
 .hide{display:none}
 a.tvlink{display:block;text-align:center;color:var(--muted);font-size:.75rem;margin-top:1.4rem;text-decoration:none}
@@ -181,6 +186,18 @@ a.tvlink:hover{color:var(--ember)}
 
     <button class="btn btn-primary" id="save">Save settings</button>
     <div class="msg" id="saveMsg"></div>
+
+    <!-- Kiosk usage log: touch-screen sessions grouped per store day. -->
+    <div class="group">
+      <div class="gtitle">Kiosk usage (touch screens)</div>
+      <div style="display:flex;gap:.6rem;margin-top:.7rem;align-items:center">
+        <select id="usageDay" style="flex:1"></select>
+        <button class="btn btn-primary" id="usageLoad" style="width:auto;margin:0;padding:.6rem 1rem;font-size:.85rem">Load</button>
+      </div>
+      <div id="usageSum" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.8rem"></div>
+      <div id="usageSess" style="margin-top:.4rem"></div>
+      <div class="hint">One row per person using the touch screen: what they tapped, searched and carted, and whether the visit became a counter draft order, a checkout QR handoff, timed out, or just browsing. Kept 14 days per screen. Paid pickups appear in Shopify as completed draft orders; online checkouts carry a hidden <code>_source: Kiosk</code> line-item property.</div>
+    </div>
     <a class="tvlink" href="/" target="_blank">Open the TV view ↗</a>
   </div>
 </div>
@@ -242,7 +259,7 @@ $('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
   setRoom(r); // every fetch below targets the picked screen
   $('loginMsg').textContent='Checking…';$('loginMsg').className='msg';PIN=pin;
   const {ok,j}=await post({}); // empty patch = harmless PIN check
-  if(ok){$('login').classList.add('hide');$('form').classList.remove('hide');$('saveMsg').textContent='';loadSettings();}
+  if(ok){$('login').classList.add('hide');$('form').classList.remove('hide');$('saveMsg').textContent='';loadSettings();loadUsage();}
   else{PIN='';$('loginMsg').textContent=(j.error||'Incorrect PIN')+(r==='default'?'':' — each screen can have its own PIN');$('loginMsg').className='msg bad';}};
 $('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('unlock').click();});
 $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').className='msg';
@@ -261,6 +278,29 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const {ok,j}=await post(patch);
   if(ok){$('saveMsg').textContent='Saved ✓ (the TV and phone update live)';$('saveMsg').className='msg ok';if(np){PIN=np;$('newPin').value='';}}
   else{$('saveMsg').textContent=j.error||'Save failed';$('saveMsg').className='msg bad';}};
+/* ---- Kiosk usage viewer: /alog groups a day's touch-screen events into
+   sessions. Days follow store (Atlantic) time; kept 14 days per screen. ---- */
+(function fillUsageDays(){const sel=$('usageDay');
+ for(let i=0;i<14;i++){const d=new Date(Date.now()-i*864e5).toLocaleDateString('en-CA',{timeZone:'America/Halifax'});
+  const o=document.createElement('option');o.value=d;o.textContent=i===0?d+' (today)':d;sel.appendChild(o);}})();
+const EVL={ss:'walked up',tap:'looked at',q:'searched',add:'added to cart',rm:'removed',qr:'checkout QR shown',send:'sent to counter',ord:'draft order',to:'cart timed out',se:'walked away'};
+$('usageLoad').onclick=()=>loadUsage();
+async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="uchip">Loading…</span>';$('usageSess').innerHTML='';
+ const r=await fetch('/alog?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,day:$('usageDay').value})}).catch(()=>null);
+ const j=r?await r.json().catch(()=>null):null;
+ if(!r||!r.ok||!j){$('usageSum').innerHTML='<span class="uchip">'+((j&&j.error)||'Could not load usage')+'</span>';return;}
+ const s=j.summary||{};
+ $('usageSum').innerHTML=[['Sessions',s.sessions],['Card taps',s.taps],['Searches',s.searches],['Cart adds',s.adds],['Checkout QRs',s.qr],['Counter orders',s.counter],['Draft orders',s.orders],['Timeouts',s.timeouts],['$ to counter',(s.counterTotal||0).toFixed(2)]]
+  .map(([l,v])=>`<span class="uchip"><b>${v??0}</b> ${l}</span>`).join('');
+ const fmt=t=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+ const esc=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ const evLine=e=>`${fmt(e.t)} — ${EVL[e.e]||e.e}${e.d&&e.e!=='ss'?' — '+esc(e.d):''}${e.v?' ($'+(+e.v).toFixed(2)+')':''}`;
+ $('usageSess').innerHTML=(j.sessions||[]).map(x=>{
+  const mins=Math.max(1,Math.round((x.end-x.start)/6e4));
+  const out=x.events.some(e=>e.e==='ord')?'→ draft order':x.events.some(e=>e.e==='send')?'→ sent to counter'
+   :x.events.some(e=>e.e==='to')?'→ cart timed out':x.events.some(e=>e.e==='qr')?'→ checkout QR':'→ browsed';
+  return `<details class="usess"><summary>${fmt(x.start)} · ${mins} min · ${x.events.length} actions ${out}</summary>${x.events.map(e=>`<div>${evLine(e)}</div>`).join('')}</details>`;
+ }).join('')||'<div class="hint" style="margin-top:.6rem">No kiosk activity recorded for this day.</div>';}
 loadSettings(); // prefill (read-only until unlocked)
 </script>
 </body></html>

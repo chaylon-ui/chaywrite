@@ -30,7 +30,9 @@ export default {
       url.pathname === "/admin/api" ||
       url.pathname === "/switch" ||
       url.pathname === "/counter" ||
-      url.pathname === "/alert"
+      url.pathname === "/alert" ||
+      url.pathname === "/track" ||
+      url.pathname === "/alog"
     ) {
       // Staff order alerts are gated behind the default room's admin PIN:
       // /staff pages pass it as ?k= on their websockets, Shopify Flow puts it

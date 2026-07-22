@@ -447,6 +447,12 @@ html.touch #caseInner .card{cursor:pointer}
 html.touch .betters .bcard{cursor:pointer}
 .ttabs{display:none;position:absolute;top:.55rem;left:50%;transform:translateX(-50%);z-index:26;gap:.45rem;max-width:86vw;flex-wrap:wrap;justify-content:center}
 html.touch .ttabs{display:flex}
+/* Reserve real space for the tab bar so it never covers the top card row —
+   --ttabh is measured from the rendered bar (it grows when the search pill
+   wraps to a second line) and the case shrinks to fit below it. */
+html.touch .stage{padding-top:var(--ttabh,4.4rem)}
+html.touch .case{height:min(100%,900px)} /* the stage's content box already sits below the bar */
+html.touch.portrait .case{height:min(100%,1800px)}
 .ttab{font-family:'Cinzel',serif;font-weight:700;font-size:.82rem;letter-spacing:.06em;color:#d8d2c4;background:rgba(14,14,18,.85);border:1px solid #34343e;border-radius:22px;padding:.55rem 1.05rem;cursor:pointer}
 .ttab.on{color:#0d0d0f;background:var(--ember-bright);border-color:transparent}
 /* The card search gets a real search-field look on its own centered row —
@@ -1186,7 +1192,26 @@ function stockLeft(vid){const q=QTYS[String(vid)];return (typeof q==='number')?M
 function effT(){if(!ZCARD)return null;if(!ZVAR)return ZCARD;
  const v=(ZCARD.variants||[]).find(x=>String(x.variantId)===String(ZVAR));
  return v?Object.assign({},ZCARD,{price:v.price,foil:!!v.foil,condition:v.condition||'',variantId:v.variantId}):ZCARD;}
-function TOPEN(c){if(!c)return;ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
+/* ---- Kiosk usage analytics (touch screens only) ----
+   A session starts at the first tracked interaction and ends when the visit
+   resolves (counter order, timeout, or idle reset). Events queue locally and
+   batch-post to /track every few seconds; the admin page reads them back
+   grouped by session. Nothing personal is recorded — just taps, searches,
+   cart moves and how the visit ended. */
+let ASID=null,AQ=[],AFT=null;
+function TRACK(e,d,v){if(!window.TOUCH)return;
+ if(!ASID){ASID='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  AQ.push({t:Date.now(),e:'ss',d:'touch',v:0});}
+ AQ.push({t:Date.now(),e,d:String(d||'').slice(0,80),v:+v||0});
+ if(!AFT)AFT=setTimeout(FLUSHT,6000);}
+function FLUSHT(){clearTimeout(AFT);AFT=null;if(!AQ.length||!ASID)return;const batch=AQ.splice(0,40);
+ fetch('/track?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:ASID,events:batch})}).catch(()=>{});
+ if(AQ.length)AFT=setTimeout(FLUSHT,6000);}
+function ASESSEND(reason){if(!ASID)return;AQ.push({t:Date.now(),e:'se',d:reason,v:0});
+ const sid=ASID;ASID=null;clearTimeout(AFT);AFT=null;
+ while(AQ.length){const batch=AQ.splice(0,40);
+  fetch('/track?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid,events:batch})}).catch(()=>{});}}
+function TOPEN(c){if(!c)return;TRACK('tap',c.name);ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
 function TSETVAR(vid){if(!ZCARD)return;ZVAR=vid;ZKEEP=true;zoom(effT());ZKEEP=false;}
 function TCHIP(el,vid){comicBurst(el,'SWAPPED!',true);TSETVAR(vid);}
 function TOPENB(i){const b=BETCARDS&&BETCARDS[i];if(b)TOPEN(b);}
@@ -1209,7 +1234,7 @@ function TADD(btn){const e=effT();if(!e)return;
  if(left!==null&&left<=0){const q=QTYS[String(e.variantId)];
   btn.textContent=q>0?('That’s all we have — '+q+' in stock'):'Sold out — sorry!';
   setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},1400);return;}
- cart.push(e);updateCart();
+ cart.push(e);updateCart();TRACK('add',e.name,parseFloat(e.price)||0);
  btn.classList.add('done');btn.textContent='KA-CHING!';comicBurst(btn);
  setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},900);}
 function cartAgg(){const agg={};
@@ -1227,10 +1252,12 @@ function kioskCartUrl(items){let url='/cart';
    re-renders on every change, and an emptied cart closes itself. */
 function TCSET(vid,delta,el){vid=String(vid);
  if(delta>0){const left=stockLeft(vid);if(left!==null&&left<=0){if(el)comicBurst(el,'ALL GONE!',true);return;}
-  const proto=cart.find(c=>String(c.variantId)===vid);if(proto)cart.push(Object.assign({},proto));if(el)comicBurst(el,'+1!',true);}
- else{for(let i=cart.length-1;i>=0;i--)if(String(cart[i].variantId)===vid){cart.splice(i,1);break;}if(el)comicBurst(el,'−1!',true);}
+  const proto=cart.find(c=>String(c.variantId)===vid);if(proto){cart.push(Object.assign({},proto));TRACK('add',proto.name,parseFloat(proto.price)||0);}if(el)comicBurst(el,'+1!',true);}
+ else{for(let i=cart.length-1;i>=0;i--)if(String(cart[i].variantId)===vid){TRACK('rm',cart[i].name);cart.splice(i,1);break;}if(el)comicBurst(el,'−1!',true);}
  updateCart();renderTcheck();}
-function TCREMOVE(vid,el){vid=String(vid);if(el)comicBurst(el,'GONE!',true);cart=cart.filter(c=>String(c.variantId)!==vid);updateCart();renderTcheck();}
+function TCREMOVE(vid,el){vid=String(vid);if(el)comicBurst(el,'GONE!',true);
+ const gone=cart.find(c=>String(c.variantId)===vid);if(gone)TRACK('rm',gone.name);
+ cart=cart.filter(c=>String(c.variantId)!==vid);updateCart();renderTcheck();}
 function renderTcheck(){const items=cartAgg();
  if(!items.length){document.getElementById('tcheck').classList.remove('open');return;}
  document.getElementById('tclist').innerHTML=items.map(i=>{const vid=H(String(i.variantId));
@@ -1241,14 +1268,17 @@ function renderTcheck(){const items=cartAgg();
  const qel=document.getElementById('tcqr');qel.innerHTML='';
  try{new QRCode(qel,{text:kioskCartUrl(items),width:280,height:280,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent='QR';}}
 function TCKO(){if(!cart.length)return;renderTcheck();
- if(cart.length)document.getElementById('tcheck').classList.add('open');}
+ if(cart.length){TRACK('qr',cart.length+' cards',cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0));
+  document.getElementById('tcheck').classList.add('open');}}
 function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)return;
  const tabs=Array.isArray(s.tabs)?s.tabs:[];
  const searching=document.body.classList.contains('searching');
  box.innerHTML=tabs.map((t,i)=>{const on=!searching&&t.collection===s.collection&&(!!t.newToday===!!s.newTodayActive)&&(!!t.showcase===!!s.showcaseActive);
   return `<button class="ttab${on?' on':''}" onclick="TSWITCH(${i},this)">${H(String(t.label||''))}</button>`;}).join('')
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
-  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'');}
+  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'');
+ requestAnimationFrame(()=>{ // measured AFTER layout so the case clears the bar exactly
+  document.documentElement.style.setProperty('--ttabh',(box.offsetHeight+22)+'px');});}
 function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
  const t=(Array.isArray(SETTINGS.tabs)?SETTINGS.tabs:[])[i];
  if(t&&(t.collection!==CUR_COLLECTION||!!t.newToday!==CUR_NT))showTload(); // instant feedback; hides when the new deck lands
@@ -1267,7 +1297,7 @@ function TKEY(k){if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
  renderTQ();clearTimeout(TKT);TKT=setTimeout(TKGO,350);}
 function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres');
  if(q.length<2){if(!q&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}res.textContent='Results fill the case behind this keyboard as you type.';return;}
- res.textContent='Searching…';
+ res.textContent='Searching…';TRACK('q',q);
  fetch('/search.json?q='+encodeURIComponent(q)).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==TKSEQ||!d)return;
   const n=Array.isArray(d.cards)?d.cards.length:0;
@@ -1292,10 +1322,12 @@ function fillTdone(name){const d=document.getElementById('tdone');if(!d.classLis
  document.getElementById('tdnum').textContent=name||'—';
  const qel=document.getElementById('tdqr');qel.innerHTML='';
  if(name){try{new QRCode(qel,{text:'Exor Games counter pickup — order '+name+' — '+TDPC+' cards — $'+TDPT,width:180,height:180,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent=name;}}
+ if(name){TRACK('ord',name);ASESSEND('order');} // the visit resolved into a draft order
  clearTimeout(TDONET);TDONET=setTimeout(hideTdone,20000);} // fresh 20s once the number lands
 function TCOUNTER(){if(!cart.length)return;
  const items=cartAgg();if(!items.length)return;
  const total=cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
+ TRACK('send',cart.length+' cards',parseFloat(total)||0);
  fetch('/counter?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({items,count:cart.length,total})}).catch(()=>{});
  unzoom();showTdone(cart.length,total);
  cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');}
@@ -1358,10 +1390,13 @@ function initTouch(){if(TINITED)return;TINITED=true;
   if(cart.length){
    if(t>=TOUCH_ATTRACT_S){const left=Math.ceil(TOUCH_ATTRACT_S+30-t);
     if(left>0)showTTMO(left);
-    else{hideTTMO();touchReset();stopAttract();startAttract();}}
+    else{hideTTMO();
+     TRACK('to',cart.length+' cards',cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0));ASESSEND('timeout');
+     touchReset();stopAttract();startAttract();}}
    else hideTTMO();
   }else{hideTTMO();
-   if(t>=150&&(SDECK||document.getElementById('ztv').classList.contains('open')||document.getElementById('tcheck').classList.contains('open')||document.getElementById('tkb').classList.contains('open')))touchReset();}
+   if(t>=150&&(SDECK||document.getElementById('ztv').classList.contains('open')||document.getElementById('tcheck').classList.contains('open')||document.getElementById('tkb').classList.contains('open'))){ASESSEND('idle');touchReset();}
+   else if(t>=150&&ASID)ASESSEND('idle');} // browsed and walked away — close the session
  },1000);
 }
 function touchReset(){cart=[];updateCart();selected=null;markSel();unzoom();document.getElementById('tcheck').classList.remove('open');TSEARCHCLEAR();}

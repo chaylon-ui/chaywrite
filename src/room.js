@@ -368,6 +368,56 @@ export class BinderRoom {
     // every connected /staff page — body like {"name":"{{draftOrder.name}}",
     // "total":"12.00","note":"Draft order created"}. The /staff page dedupes
     // by order name, so a kiosk order that also fires Flow only rings once.
+    // ---- Kiosk usage analytics ----
+    // Touch screens batch-post interaction events here (session id + what was
+    // tapped/searched/carted and how the visit ended). Stored per LOCAL store
+    // day (Atlantic time), capped, kept 14 days. Same open trust level as
+    // /counter — worst case someone fabricates browsing stats.
+    if (url.pathname.endsWith("/track") && request.method === "POST") {
+      let d; try { d = await request.json(); } catch { return Response.json({ error: "bad body" }, { status: 400 }); }
+      const sid = String((d && d.sid) || "").slice(0, 24);
+      const evs = (Array.isArray(d && d.events) ? d.events : []).slice(0, 40);
+      const OKEV = ["ss", "tap", "q", "add", "rm", "qr", "send", "ord", "to", "se"];
+      if (!sid || !evs.length) return Response.json({ ok: true });
+      const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+      const key = "alog:" + day;
+      const cur = (await this.state.storage.get(key)) || [];
+      for (const ev of evs) {
+        if (cur.length >= 1500) break; // per-day cap
+        if (!ev || !OKEV.includes(ev.e)) continue;
+        cur.push([sid, Math.round(+ev.t || Date.now()), String(ev.e), String(ev.d ?? "").slice(0, 80), Math.round((+ev.v || 0) * 100) / 100]);
+      }
+      await this.state.storage.put(key, cur);
+      if (this.lastPruneDay !== day) { // drop days older than 14, once per day
+        this.lastPruneDay = day;
+        const cut = "alog:" + new Date(Date.now() - 14 * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+        const all = await this.state.storage.list({ prefix: "alog:" });
+        for (const k of all.keys()) if (k < cut) await this.state.storage.delete(k);
+      }
+      return Response.json({ ok: true });
+    }
+    // Admin usage viewer: PIN-guarded, groups a day's events into sessions.
+    if (url.pathname.endsWith("/alog") && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { return Response.json({ error: "bad json" }, { status: 400 }); }
+      if (String((b && b.pin) || "") !== String(this.pin)) return Response.json({ error: "Incorrect PIN" }, { status: 403 });
+      const day = /^\d{4}-\d{2}-\d{2}$/.test((b && b.day) || "") ? b.day
+        : new Date().toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+      const rows = (await this.state.storage.get("alog:" + day)) || [];
+      const bySid = {}, sum = { sessions: 0, taps: 0, searches: 0, adds: 0, qr: 0, counter: 0, orders: 0, timeouts: 0, counterTotal: 0 };
+      for (const [sid, t, e, dd, v] of rows) {
+        const s = (bySid[sid] = bySid[sid] || { sid, start: t, end: t, events: [] });
+        s.start = Math.min(s.start, t); s.end = Math.max(s.end, t);
+        s.events.push({ t, e, d: dd, v });
+        if (e === "tap") sum.taps++; else if (e === "q") sum.searches++; else if (e === "add") sum.adds++;
+        else if (e === "qr") sum.qr++; else if (e === "send") { sum.counter++; sum.counterTotal += v || 0; }
+        else if (e === "ord") sum.orders++; else if (e === "to") sum.timeouts++;
+      }
+      const sessions = Object.values(bySid).sort((a, z) => z.start - a.start).slice(0, 200);
+      sum.sessions = sessions.length;
+      sum.counterTotal = Math.round(sum.counterTotal * 100) / 100;
+      return Response.json({ day, summary: sum, sessions }, { headers: { "cache-control": "no-store" } });
+    }
+
     // Worker-internal: validates the staff key (this room's admin PIN) for
     // /staff pages and /alert calls. Not reachable from outside — the worker
     // only routes /ws, /alert etc. here. Light lockout blunts brute force.
