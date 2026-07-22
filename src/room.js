@@ -368,6 +368,18 @@ export class BinderRoom {
     // every connected /staff page — body like {"name":"{{draftOrder.name}}",
     // "total":"12.00","note":"Draft order created"}. The /staff page dedupes
     // by order name, so a kiosk order that also fires Flow only rings once.
+    // Worker-internal: validates the staff key (this room's admin PIN) for
+    // /staff pages and /alert calls. Not reachable from outside — the worker
+    // only routes /ws, /alert etc. here. Light lockout blunts brute force.
+    if (url.pathname.endsWith("/staff-check")) {
+      const now = Date.now();
+      if (this.skWin && now - this.skWin > 6e5) { this.skWin = 0; this.skFails = 0; }
+      if ((this.skFails || 0) >= 20) return Response.json({ ok: false, locked: true });
+      const ok = (url.searchParams.get("k") || "") === String(this.pin);
+      if (!ok) { this.skFails = (this.skFails || 0) + 1; this.skWin = this.skWin || now; }
+      return Response.json({ ok });
+    }
+
     if (url.pathname.endsWith("/alert") && request.method === "POST") {
       let d; try { d = await request.json(); } catch { d = {}; }
       const data = {
@@ -376,6 +388,8 @@ export class BinderRoom {
         total: String((d && d.total) || "").slice(0, 12),
         note: String((d && d.note) || "").slice(0, 140),
       };
+      // An empty body is the /staff page's key probe — validate, don't ring.
+      if (!data.name && !data.note && !data.total && !data.count) return Response.json({ ok: true, delivered: 0 });
       let delivered = 0;
       for (const s of this.staff) { this.send(s, { type: "staff_alert", data }); delivered++; }
       return Response.json({ ok: true, delivered });

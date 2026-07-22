@@ -20,6 +20,7 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 .arm.off{display:none}
 .armbtn{font-family:'Bangers',cursive;font-size:2rem;letter-spacing:.05em;color:#16161c;background:#ffd75e;border:4px solid #101010;border-radius:18px;box-shadow:.4rem .5rem 0 rgba(0,0,0,.7);padding:.9rem 2.2rem;cursor:pointer}
 .armbtn:active{transform:translate(2px,3px);box-shadow:.15rem .2rem 0 rgba(0,0,0,.7)}
+.keyin{font-family:'Inter',system-ui,sans-serif;font-size:1.3rem;font-weight:800;letter-spacing:.3em;text-align:center;width:12rem;padding:.6rem .4rem;background:#fffef4;color:#16161c;border:4px solid #101010;border-radius:14px;box-shadow:.3rem .4rem 0 rgba(0,0,0,.7);outline:none}
 .armp{color:#bab7c4;max-width:34rem;line-height:1.5}
 .armwarn{color:#e0885e;font-size:.9rem;max-width:34rem;display:none}
 .log{display:flex;flex-direction:column;gap:.7rem;max-width:46rem}
@@ -40,9 +41,10 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 <div class="log" id="log"><div class="hint" id="hint">Waiting for counter orders…</div></div>
 
 <div class="arm" id="arm">
+  <input class="keyin" id="keyin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" onkeydown="if(event.key==='Enter')ARM()">
   <button class="armbtn" id="armbtn" onclick="ARM()">🔔 ENABLE ALERTS</button>
-  <p class="armp">One click lets Chrome show pop-up notifications and play the chime. If Chrome asks for permission, choose <b>Allow</b>.</p>
-  <p class="armwarn" id="armwarn">Notifications are blocked for this site — click the icon left of the address bar and set Notifications to Allow, then reload.</p>
+  <p class="armp">Enter the showcase <b>admin PIN</b> (the main screen's), then one click lets Chrome show pop-up notifications and play the chime. If Chrome asks for permission, choose <b>Allow</b>.</p>
+  <p class="armwarn" id="armwarn"></p>
 </div>
 
 <script>
@@ -53,7 +55,8 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
    order that ALSO triggers Flow only rings once. */
 const QROOMS = (new URLSearchParams(location.search).get('rooms') || '').toLowerCase()
   .split(',').map(s => s.trim()).filter(s => /^[a-z0-9][a-z0-9-]{0,31}$/.test(s));
-let ROOMS = [], SOCKS = {}, SEEN = new Set(), NROWS = 0, ACTX = null;
+let ROOMS = [], SOCKS = {}, SEEN = new Set(), NROWS = 0, ACTX = null, KEY = '';
+try { KEY = localStorage.getItem('exorStaffKey') || ''; } catch {}
 
 function chipBar(){
   const bar = document.getElementById('roomsbar');
@@ -68,7 +71,7 @@ function chipBar(){
 }
 
 function connect(room){
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=staff&room=' + room);
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=staff&room=' + room + '&k=' + encodeURIComponent(KEY));
   SOCKS[room] = ws;
   ws.onopen = chipBar;
   ws.onmessage = (ev) => {
@@ -132,12 +135,24 @@ function chime(){
   } catch {}
 }
 
+function warn(msg){ const w = document.getElementById('armwarn'); w.textContent = msg; w.style.display = 'block'; }
+
 async function ARM(){
+  const k = document.getElementById('keyin').value.trim();
+  if (!k) { warn('Enter the admin PIN first.'); return; }
+  // Validate the key with an empty POST to /alert — the worker 403s a bad
+  // PIN and the room treats an empty body as a probe (nothing rings).
+  let r = null;
+  try { r = await fetch('/alert?k=' + encodeURIComponent(k), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch {}
+  if (!r || !r.ok) { warn(r && r.status === 403 ? 'Wrong PIN — use the admin PIN for the main screen. Too many tries locks it for 10 minutes.' : 'Could not reach the showcase server — check the connection and try again.'); return; }
+  KEY = k;
+  try { localStorage.setItem('exorStaffKey', k); } catch {}
   try { ACTX = ACTX || new (window.AudioContext || window.webkitAudioContext)(); ACTX.resume(); } catch {}
   let perm = ('Notification' in window) ? Notification.permission : 'denied';
   if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch {} }
-  if (perm === 'denied') { document.getElementById('armwarn').style.display = 'block'; return; }
+  if (perm === 'denied') { warn('Notifications are blocked for this site — click the icon left of the address bar and set Notifications to Allow, then reload.'); return; }
   document.getElementById('arm').classList.add('off');
+  boot();
 }
 
 async function boot(){
@@ -161,7 +176,7 @@ async function boot(){
     } catch {}
   }, 300000);
 }
-boot();
+if (KEY) document.getElementById('keyin').value = KEY; // remembered from last time — still one click to arm sound
 </script>
 </body>
 </html>

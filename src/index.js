@@ -32,6 +32,20 @@ export default {
       url.pathname === "/counter" ||
       url.pathname === "/alert"
     ) {
+      // Staff order alerts are gated behind the default room's admin PIN:
+      // /staff pages pass it as ?k= on their websockets, Shopify Flow puts it
+      // in the /alert URL. Checked against the DEFAULT room so one key covers
+      // every screen; the room DO applies a lockout against brute force.
+      if (url.pathname === "/alert" || (url.pathname === "/ws" && url.searchParams.get("role") === "staff")) {
+        const k = url.searchParams.get("k") || "";
+        let ok = false;
+        try {
+          const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
+            .fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
+          ok = !!(await chk.json()).ok;
+        } catch {}
+        if (!ok) return Response.json({ error: "staff key required" }, { status: 403 });
+      }
       if (roomName !== "default" && url.pathname !== "/status") {
         ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
           .fetch(new Request(url.origin + "/rooms-register?name=" + roomName)));
