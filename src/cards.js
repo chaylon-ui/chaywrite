@@ -521,8 +521,8 @@ function buildShowcase(products) {
 }
 
 /* The sleeve wall (accessories, not singles): every in-stock product in the
-   collection, no price floor, sorted by title so the Dragon Shield lines
-   (Brushed, Dual Matte, Matte, …) group like a real retail shelf. Names are
+   collection, no price floor, in FEED ORDER — the collection is set to sort
+   by Best selling in Shopify, so the top shelf is the top sellers. Names are
    trimmed of the shouty "DRAGON SHIELD SLEEVES … 100CT" wrapper. */
 function buildSleeves(products) {
   const seen = new Set();
@@ -550,7 +550,6 @@ function buildSleeves(products) {
       url: "https://exorgames.com/products/" + p.handle,
     });
   }
-  cards.sort((a, b) => a.name.localeCompare(b.name));
   return { game: "sleeves", colorNames: {}, cards };
 }
 
