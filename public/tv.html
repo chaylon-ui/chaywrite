@@ -555,6 +555,18 @@ html.touch .ttab:active,html.touch .tnav:active,html.touch .tchip:active,html.to
 .ttmo.hot .ttn{color:#c9342b}
 .ttmo.hot .ttbox{animation:ttshake .45s linear infinite}
 @keyframes ttpop{0%{transform:scale(1.7)}100%{transform:scale(1)}}
+/* Customer pickup ticket after "send to counter" on a kiosk: big number +
+   a QR to photograph, gone again in 20 seconds. Staff jargon stays off it. */
+.tdone{display:none;position:fixed;inset:0;z-index:62;background:rgba(6,6,9,.72);align-items:center;justify-content:center;cursor:pointer}
+.tdone.open{display:flex;animation:bpop .38s cubic-bezier(.34,1.56,.64,1)}
+.tdbox{background:radial-gradient(circle,rgba(16,16,16,.05) 1px,transparent 1.5px) 0 0/10px 10px,#fffef4;border:4px solid #101010;border-radius:20px;box-shadow:.5rem .7rem 0 rgba(16,16,16,.9);padding:1.5rem 2.5rem;text-align:center;transform:rotate(-.8deg);display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.tdh{font-family:'Bangers',cursive;font-size:2.4rem;color:#2e7d46;-webkit-text-stroke:1px #101010;letter-spacing:.04em}
+.tdp{font-family:'Bangers',cursive;font-size:1.2rem;color:#16161c}
+.tdp2{font-family:'Bangers',cursive;font-size:1.05rem;color:#71717c;margin-top:.25rem}
+.tdnum{font-family:'Bangers',cursive;font-size:3.6rem;line-height:1;color:#c9342b;-webkit-text-stroke:1px #101010}
+.tdqr{background:#fff;border:3px solid #101010;border-radius:10px;padding:8px;margin:.5rem 0}
+.tdqr:empty{display:none}
+.tdp3{font-family:'Bangers',cursive;font-size:1.15rem;color:#b8641b;letter-spacing:.03em}
 @keyframes ttshake{0%,100%{transform:translate(0,0) rotate(-1deg)}25%{transform:translate(-4px,2px) rotate(.6deg)}50%{transform:translate(3px,-2px) rotate(-1.8deg)}75%{transform:translate(-2px,3px) rotate(.2deg)}}
 /* Dymo-style embossed name label for "Image Coming Soon" placeholder cards —
    raised white-on-black tape across the top so you know what it is at a glance. */
@@ -614,6 +626,14 @@ html.touch .ttab:active,html.touch .tnav:active,html.touch .tchip:active,html.to
     <div class="ttp">Your cart clears in…</div>
     <div class="ttn" id="ttn">30</div>
     <div class="ttp2">TAP ANYWHERE to keep shopping!</div>
+  </div></div>
+  <div class="tdone" id="tdone" onclick="hideTdone()"><div class="tdbox">
+    <div class="tdh">SENT TO THE COUNTER!</div>
+    <div class="tdp" id="tdsum"></div>
+    <div class="tdp2">Your pickup number</div>
+    <div class="tdnum" id="tdnum">…</div>
+    <div class="tdqr" id="tdqr"></div>
+    <div class="tdp3">📸 Snap a photo — show it at the register!</div>
   </div></div>
   <div class="counter hide" id="counter"><div class="cbox">
     <div class="ct1">🛎 Order for the counter</div>
@@ -1121,7 +1141,7 @@ function connect(){
    else if(m.type==='addcart'){const c=fromMsg(m.data);if(c){cart.push(c);updateCart();}}
    else if(m.type==='rmcart'){const c=fromMsg(m.data);if(c){const i=cart.findIndex(x=>x.name===c.name&&String(x.variantId||'')===String(c.variantId||''));if(i>-1){cart.splice(i,1);updateCart();}}}
    else if(m.type==='checkout'){if(m.data&&m.data.where==='counter')showCounter(m.data);}
-   else if(m.type==='counter_order'){updateCounterOrder(m.data);}
+   else if(m.type==='counter_order'){if(window.TOUCH)fillTdone(m.data&&m.data.name);else updateCounterOrder(m.data);}
    else if(m.type==='settings'){applySettings(m.data);}
  };
 }
@@ -1231,11 +1251,27 @@ function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres
 /* Send the totem's cart to the counter: the room turns it into a Shopify
    draft order (same path the phone uses) and the counter ticket pops on
    screen; the order number arrives over the websocket moments later. */
+/* The kiosk shows the CUSTOMER a pickup ticket (big number + a QR to
+   photograph, 20s then gone) instead of the staff corner ticket — the
+   draft-order number fills in when the room reports it created. */
+let TDONET=null,TDPC=0,TDPT='0.00';
+function showTdone(count,total){TDPC=count;TDPT=total;
+ document.getElementById('tdsum').textContent=count+' card'+(count===1?'':'s')+' · $'+total;
+ document.getElementById('tdnum').textContent='…';
+ document.getElementById('tdqr').innerHTML='';
+ document.getElementById('tdone').classList.add('open');
+ clearTimeout(TDONET);TDONET=setTimeout(hideTdone,20000);}
+function hideTdone(){clearTimeout(TDONET);document.getElementById('tdone').classList.remove('open');}
+function fillTdone(name){const d=document.getElementById('tdone');if(!d.classList.contains('open'))return;
+ document.getElementById('tdnum').textContent=name||'—';
+ const qel=document.getElementById('tdqr');qel.innerHTML='';
+ if(name){try{new QRCode(qel,{text:'Exor Games counter pickup — order '+name+' — '+TDPC+' cards — $'+TDPT,width:180,height:180,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent=name;}}
+ clearTimeout(TDONET);TDONET=setTimeout(hideTdone,20000);} // fresh 20s once the number lands
 function TCOUNTER(){if(!cart.length)return;
  const items=cartAgg();if(!items.length)return;
  const total=cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
  fetch('/counter?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({items,count:cart.length,total})}).catch(()=>{});
- showCounter({items,count:cart.length,total});
+ unzoom();showTdone(cart.length,total);
  cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');}
 function touchDress(on){const qb=document.querySelector('.qrbub');
  if(qb)qb.innerHTML=on?'<span class="bn">Touch</span> a card to take a closer look!':'Scan the <span class="bn">QR code</span> to take a look in the showcase!';}
