@@ -646,6 +646,20 @@ function XPROP_SVG(n){const X=[
  `<svg viewBox="0 0 100 140"><g transform="rotate(7 50 72)"><path d="M48 74 C30 70 22 56 26 42 C36 50 44 50 50 46 C48 58 52 66 58 70 Z" fill="#2f6b3c" stroke="#1c4526" stroke-width="2"/><path d="M52 74 C70 72 80 60 78 44 C68 51 60 50 54 45 C55 58 52 66 46 70 Z" fill="#3f8f5a" stroke="#1c4526" stroke-width="2"/><circle cx="46" cy="80" r="7" fill="#c9342b" stroke="#7a1f18" stroke-width="1.6"/><circle cx="58" cy="82" r="7" fill="#d94a3a" stroke="#7a1f18" stroke-width="1.6"/><circle cx="51" cy="91" r="7" fill="#b03028" stroke="#7a1f18" stroke-width="1.6"/></g></svg>`,
  `<svg viewBox="0 0 100 140"><g transform="rotate(-12 50 82)"><rect x="24" y="62" width="52" height="44" rx="5" fill="#3d6e8e"/><rect x="24" y="62" width="52" height="44" rx="5" fill="none" stroke="#24485e" stroke-width="2.4"/><rect x="45" y="62" width="10" height="44" fill="#e8b04a"/><rect x="24" y="79" width="52" height="10" fill="#e8b04a"/><path d="M50 62 c-12 -14 -26 -6 -14 2 c6 4 14 -2 14 -2 c0 0 8 6 14 2 c12 -8 -2 -16 -14 -2z" fill="#c9a24a" stroke="#8a6f18" stroke-width="1.8"/></g></svg>`,
 ];return X[n%X.length];}
+/* Hand-scrawled post-it notes stuck to the sleeve wall's back panel —
+   adhesive beats gravity, so these live anywhere the shelves aren't. */
+function NOTE_SVG(n){const N=[
+ [['All in-stock','sleeves!'],'#f7e96b'],
+ [['100ct boxes —','fresh stock!'],'#ffd6ea'],
+ [['Ask us about','Japanese size!'],'#cfe8ff'],
+ [['Double sleeve','your deck!'],'#d8f3cf'],
+];const [lines,col]=N[n%N.length];
+ return `<svg viewBox="0 0 100 140"><g transform="rotate(${n%2?3:-4} 50 70)">
+ <path d="M10 26 h80 v84 l-14 6 h-66 z" fill="${col}"/>
+ <path d="M76 116 l14 -6 l-10 -3 z" fill="rgba(0,0,0,.14)"/>
+ <rect x="10" y="26" width="80" height="9" fill="rgba(0,0,0,.05)"/>
+ <text x="50" y="66" text-anchor="middle" font-family="'Permanent Marker','Comic Sans MS',cursive" font-size="12.5" fill="#33333c">${lines[0]}</text>
+ <text x="50" y="86" text-anchor="middle" font-family="'Permanent Marker','Comic Sans MS',cursive" font-size="12.5" fill="#33333c">${lines[1]}</text></g></svg>`;}
 /* A die-cut Pikachu-style sticker, slightly askew. */
 const STICKER_SVG=`<svg viewBox="0 0 100 140"><g transform="rotate(7 50 72)" paint-order="stroke fill"><polygon points="33,62 20,30 44,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="67,62 80,30 56,54" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7" stroke-linejoin="round"/><polygon points="24,34 20,30 31,44 27,46" fill="#26262c"/><polygon points="76,34 80,30 69,44 73,46" fill="#26262c"/><ellipse cx="50" cy="80" rx="25" ry="22" fill="#f5c93a" stroke="#fbfbf4" stroke-width="7"/><g fill="#26262c"><circle cx="41" cy="76" r="3.6"/><circle cx="59" cy="76" r="3.6"/></g><g fill="#fff"><circle cx="42.2" cy="74.8" r="1.2"/><circle cx="60.2" cy="74.8" r="1.2"/></g><circle cx="33" cy="87" r="4.8" fill="#e5533a"/><circle cx="67" cy="87" r="4.8" fill="#e5533a"/><path d="M45 86 q2.5 3 5 0 q2.5 3 5 0" stroke="#26262c" stroke-width="1.6" fill="none" stroke-linecap="round"/></g></svg>`;
 /* Backs of long-gone TCGs — the real scans, served from the store's own
@@ -701,12 +715,21 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
     underneath a card. On the SLEEVE WALL gravity applies: props can't float
     on a vertical fixture, so they snap down to stand on a shelf board (or
     the case floor), with only a gentle lean. */
- const boardLines=SLEEVES()?[...slab.querySelectorAll('.tray .shelf')].map(s=>{const r=s.getBoundingClientRect();return r.bottom-IR.top-innerHeight*0.017+2;}).concat([Hh*0.99]):null;
- const place=(svg,w,minX,spanX,minY,spanY,tries)=>{const m=(w/100)*Wt*0.87+4;for(let k=0;k<tries;k++){
-   let cx=Wt*(minX+rng()*spanX),cy;
-   if(boardLines){const ih=(w/100)*Wt*1.4;cy=boardLines[Math.floor(rng()*boardLines.length)]-ih/2;}
-   else cy=Hh*(minY+rng()*spanY);
-   if(!onFelt(cx,cy,m))continue;items.push({svg,x:(cx/Wt)*100,y:(cy/Hh)*100,w,rot:boardLines?(rng()*14-7)|0:(rng()*40-20)|0});return;}};
+ const boardLines=SLEEVES()?[...slab.querySelectorAll('.tray .shelf')].map(s=>{const r=s.getBoundingClientRect();
+   return {y:r.bottom-IR.top-innerHeight*0.017+2,l:Math.max(0,r.left-IR.left-8),r2:Math.min(Wt,r.right-IR.left+8)};})
+  .concat([{y:Hh*0.99,l:Wt*0.03,r2:Wt*0.97}]):null;
+ /* `stuck` opts out of gravity: post-it notes hold onto the back wall by
+    adhesive, everything else must land ON a board (within its actual span —
+    a short bracket shelf can't hold a die floating past its edge). */
+ const place=(svg,w,minX,spanX,minY,spanY,tries,stuck)=>{const m=(w/100)*Wt*0.87+4;for(let k=0;k<tries;k++){
+   let cx,cy;
+   if(boardLines&&!stuck){const ln=boardLines[Math.floor(rng()*boardLines.length)],iw=(w/100)*Wt;
+    const lo=ln.l+iw/2,hi=ln.r2-iw/2;if(hi<=lo)continue;
+    cx=lo+rng()*(hi-lo);cy=ln.y-iw*0.7;}
+   else{cx=Wt*(minX+rng()*spanX);cy=Hh*(minY+rng()*spanY);}
+   if(!onFelt(cx,cy,m))continue;
+   if(boardLines)rects.push({l:cx-m,t:cy-m,r2:cx+m,b:cy+m}); // wall props claim their spot — no dice piled on post-its
+   items.push({svg,x:(cx/Wt)*100,y:(cy/Hh)*100,w,rot:boardLines?(rng()*14-7)|0:(rng()*40-20)|0});return;}};
  place(`<svg viewBox="0 0 100 140">${fly(50,72,(rng()*360)|0)}</svg>`,2.6+rng()*1.6,0.05,0.9,0.12,0.78,60); // one dead fly per case
  const nd=1+Math.floor(rng()*2);for(let i=0;i<nd;i++)place(DIE_SVG(Math.floor(rng()*3)),3.6+rng()*1.2,0.05,0.9,0.12,0.8,220); // d6/d20/d10 on bare felt
  place(COIN_SVG(Math.floor(rng()*2)),2.7+rng()*.9,0.05,0.9,0.12,0.8,220);   // one coin
@@ -714,6 +737,10 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
  if(XMAS){const nx=2+Math.floor(rng()*2);const hand=[0,1,2,3];  // Christmas clutter: deal 2-3 distinct props
   for(let i=hand.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[hand[i],hand[j]]=[hand[j],hand[i]];}
   for(let i=0;i<nx;i++)place(XPROP_SVG(hand[i]),4.4+rng()*2,0.05,0.9,0.12,0.8,220);}
+ if(SLEEVES()){const deal=[0,1,2,3];  // 2-3 distinct post-its stuck to the back wall
+  for(let i=deal.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[deal[i],deal[j]]=[deal[j],deal[i]];}
+  const nn=2+Math.floor(rng()*2);
+  for(let i=0;i<nn;i++)place(NOTE_SVG(deal[i]),7+rng()*1.6,0.04,0.92,0.08,0.84,200,true);}
  const empty=Math.max(0,TRAY-(trays[idx]||[]).length),want=Math.min(3,Math.round(empty*0.2));
  for(let i=0;i<want;i++)place(PROP_SVG(Math.floor(rng()*2)),6.5+rng()*5,0.07,0.86,0.15,0.72,150);
  /* Sparse shelves sometimes get a haphazard pile of obsolete-game card backs —
