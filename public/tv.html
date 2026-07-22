@@ -531,7 +531,12 @@ html.touch img{-webkit-user-drag:none}
 html.touch body.zopen .tnav{display:none} /* page arrows never float over a preview */
 html.touch .ttab{font-family:'Bangers','Comic Sans MS','Chalkboard SE',cursive;font-size:1.02rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2.5px solid #101010;border-radius:14px;box-shadow:.15rem .2rem 0 #101010;padding:.5rem 1rem}
 html.touch .ttab.on{background:var(--ember-bright);border-color:#101010;color:#16161c}
-html.touch .tnav{font-family:'Bangers',cursive;background:#fffef4;color:#16161c;border:3px solid #101010;border-radius:16px;box-shadow:.2rem .28rem 0 #101010}
+html.touch .tnav{font-family:'Bangers',cursive;background:#fffef4;color:#16161c;border:3px solid #101010;border-radius:16px;box-shadow:.2rem .28rem 0 #101010;width:4.6rem;height:7.2rem;font-size:2.9rem;touch-action:none}
+html.touch .tnav::after{content:'';position:absolute;inset:-18px} /* invisible tap halo — near-misses still count */
+/* The shared :active pop must KEEP translateY(-50%): replacing the transform
+   made the arrow leap up half its height under the finger, so the release
+   landed outside the button and the tap was swallowed. */
+html.touch .tnav:active{transform:translateY(-50%) scale(.94) rotate(-1deg);background:#ffd75e}
 html.touch .tchip{font-family:'Bangers','Comic Sans MS',cursive;font-size:1.05rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2.5px solid #101010;border-radius:14px;box-shadow:.14rem .2rem 0 #101010}
 html.touch .tchip.on{background:var(--ember-bright);font-weight:400}
 html.touch .tclose{background:#fffef4;color:#16161c;border:3px solid #101010;box-shadow:.16rem .22rem 0 #101010;font-weight:700}
@@ -541,7 +546,7 @@ html.touch .tqbtn{background:#fffef4;color:#16161c;border:2.5px solid #101010;bo
 html.touch .tcx{background:#ffb9ad;color:#7a1f16;border:2.5px solid #101010;box-shadow:.12rem .16rem 0 #101010}
 html.touch .tkk{font-family:'Bangers',cursive;font-size:1.3rem;background:#fffef4;color:#16161c;border:2.5px solid #101010;border-radius:12px;box-shadow:.12rem .18rem 0 #101010}
 html.touch .tcbox,html.touch .tkbox{border:3px solid #101010;box-shadow:.4rem .55rem 0 rgba(16,16,16,.85)}
-html.touch .ttab:active,html.touch .tnav:active,html.touch .tchip:active,html.touch .tcbtn:active,html.touch .tqbtn:active,html.touch .tcx:active,html.touch .tkk:active,html.touch .tcko:active,html.touch .tclose:active,html.touch .tsbar:active{transform:scale(.92) rotate(-1deg)}
+html.touch .ttab:active,html.touch .tchip:active,html.touch .tcbtn:active,html.touch .tqbtn:active,html.touch .tcx:active,html.touch .tkk:active,html.touch .tcko:active,html.touch .tclose:active,html.touch .tsbar:active{transform:scale(.92) rotate(-1deg)}
 .tburst.small{width:9.5rem}
 /* "Still there?" countdown before an idle cart clears — comic panel that
    gets progressively more stressed as the clock runs out. */
@@ -1314,14 +1319,19 @@ function initTouch(){if(TINITED)return;TINITED=true;
    &&!document.getElementById('tcheck').classList.contains('open')
    &&!document.getElementById('tkb').classList.contains('open')){
    SWIPED=true;flip(dx<0?1:-1);setTimeout(()=>{SWIPED=false;},400);}},{capture:true});
- /* Page arrows wrap around — at the last page › jumps back to the first, so
-    they always DO something. A one-page deck says so instead of no-oping. */
- document.getElementById('tprev').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;
-  if(spreads<2){comicBurst(this,'ALL HERE!',true);return;}
-  comicBurst(this,'FLIP!',true);if(spread-1<0)flipTo(spreads-1);else flip(-1);};
- document.getElementById('tnext').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;
-  if(spreads<2){comicBurst(this,'ALL HERE!',true);return;}
-  comicBurst(this,'FLIP!',true);if(spread+1>=spreads)flipTo(0);else flip(1);};
+ /* Page arrows fire on FINGER-DOWN, not click: a click needs a clean press
+    AND release on the same spot, which kiosk touch frames often fumble.
+    They wrap around at either end, and presses during the flip animation
+    queue up instead of being dropped — every tap counts. A one-page deck
+    says ALL HERE! instead of silently no-oping. */
+ const NAVGO=(el,dir)=>{if(document.getElementById('ztv').classList.contains('open'))return;
+  if(spreads<2){comicBurst(el,'ALL HERE!',true);return;}
+  comicBurst(el,'FLIP!',true);
+  const base=(pendingSpread!=null)?pendingSpread:((flipping&&flipTarget!=null)?flipTarget:spread);
+  let t=base+dir;if(t<0)t=spreads-1;else if(t>=spreads)t=0;
+  flipTo(t);};
+ [['tprev',-1],['tnext',1]].forEach(([id,dir])=>{const el=document.getElementById(id);
+  el.addEventListener('pointerdown',e=>{e.preventDefault();NAVGO(el,dir);});});
  document.getElementById('tclose').onclick=function(){comicBurst(this,'BAM!',true);selected=null;markSel();unzoom();};
  /* Tapping the featured card itself closes the preview, same as the ✕. */
  document.getElementById('ztvc').addEventListener('click',()=>{if(!window.TOUCH)return;selected=null;markSel();unzoom();});
