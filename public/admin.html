@@ -147,6 +147,14 @@ a.tvlink:hover{color:var(--ember)}
       <label for="at3">Line 3</label>
       <input id="at3" type="text" maxlength="120" placeholder="NEW ARRIVALS!!! More stock out back just ask!">
       <div class="hint">Sharpie on masking tape across the top of the TV while it idles (no phone connected). Clear all three to hide the tape.</div>
+      <label for="attractHome" style="margin-top:.8rem;display:block">When the show starts, jump back to</label>
+      <select id="attractHome">
+        <option value="mtg">Magic — latest arrivals</option>
+        <option value="pokemon">Pokémon — latest arrivals</option>
+        <option value="yugioh">Yu-Gi-Oh! — latest arrivals</option>
+        <option value="showcase">Showcase (the real case)</option>
+      </select>
+      <div class="hint">Whatever tab the last customer left on (Sleeves, a search, New Today) resets to this one when the screen goes idle — so the NEW ARRIVALS tape always sits over actual arrivals, never the Dragon Shield wall.</div>
     </div>
 
     <label for="reviewUrl">Google review link</label>
@@ -209,6 +217,7 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
   const am=Array.isArray(s.attractMsgs)?s.attractMsgs:[];
   $('at1').value=am[0]||'';$('at2').value=am[1]||'';$('at3').value=am[2]||'';
+  $('attractHome').value=['mtg','pokemon','yugioh','showcase'].includes(s.attractHome)?s.attractHome:'mtg';
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
   const tabs=Array.isArray(s.tabs)?s.tabs:[];
   GAME_TABS.forEach(g=>{const t=tabs.find(x=>x.game===g.game)||tabs.find(x=>x.theme===g.theme);
@@ -237,6 +246,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves'},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
+    attractHome:$('attractHome').value,
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;
   const {ok,j}=await post(patch);

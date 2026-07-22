@@ -179,6 +179,10 @@ export class BinderRoom {
       if (!Array.isArray(patch.bubbleMsgs) || patch.bubbleMsgs.length > 5) return "bad bubble messages";
       next.bubbleMsgs = patch.bubbleMsgs.map((m) => String(m ?? "").slice(0, 220).trim()).filter(Boolean);
     }
+    if ("attractHome" in patch) {
+      if (!["mtg", "pokemon", "yugioh", "showcase"].includes(patch.attractHome)) return "bad attractHome";
+      next.attractHome = patch.attractHome;
+    }
     if ("attractMsgs" in patch) {
       if (!Array.isArray(patch.attractMsgs) || patch.attractMsgs.length > 5) return "bad attract messages";
       next.attractMsgs = patch.attractMsgs.map((m) => String(m ?? "").slice(0, 120).trim()).filter(Boolean);

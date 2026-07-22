@@ -459,8 +459,22 @@ html.portrait .tact{bottom:16.5vh} /* clear the bottom-center cue card */
 .tchips{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
 .tchip{font-size:.8rem;color:#d8d2c4;background:rgba(16,16,20,.92);border:1px solid #3a3a46;border-radius:20px;padding:.55rem .95rem;cursor:pointer}
 .tchip.on{color:#0d0d0f;background:#e8ddc2;border-color:transparent;font-weight:700}
-.tadd{font-family:'Cinzel',serif;font-weight:700;font-size:.95rem;color:#0d0d0f;background:var(--ember-bright);border:0;border-radius:24px;padding:.75rem 1.6rem;cursor:pointer;box-shadow:0 10px 26px -10px #000}
-.tadd.done{background:var(--ok)}
+/* Comic-book Add button: Bangers on a halftone yellow slab with a hard
+   offset shadow, and a POW-burst when something lands in the cart. */
+.tadd{font-family:'Bangers','Comic Sans MS','Chalkboard SE',cursive;font-size:1.55rem;letter-spacing:.06em;color:#16161c;
+ background:radial-gradient(circle,rgba(16,16,16,.07) 1px,transparent 1.6px) 0 0/9px 9px,#ffd23f;
+ border:3px solid #101010;border-radius:16px;padding:.75rem 2.1rem;cursor:pointer;
+ transform:rotate(-1.4deg);box-shadow:.3rem .42rem 0 #101010;-webkit-text-stroke:.4px #3a2a00}
+.tadd:active{transform:rotate(-1.4deg) scale(.92)}
+.tadd.done{background:radial-gradient(circle,rgba(16,16,16,.07) 1px,transparent 1.6px) 0 0/9px 9px,#6fe08a}
+.tburst{position:fixed;z-index:70;width:16rem;transform:translate(-50%,-50%);pointer-events:none;
+ animation:tpow .85s cubic-bezier(.22,1.6,.4,1) forwards}
+.tburst svg{width:100%;display:block;filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+@keyframes tpow{0%{transform:translate(-50%,-50%) scale(.15) rotate(-18deg);opacity:0}
+ 18%{opacity:1}45%{transform:translate(-50%,-58%) scale(1.14) rotate(4deg)}
+ 70%{transform:translate(-50%,-64%) scale(1) rotate(-2deg);opacity:1}
+ 100%{transform:translate(-50%,-80%) scale(1.05) rotate(-2deg);opacity:0}}
+@media (prefers-reduced-motion:reduce){.tburst{animation:tpow .4s linear forwards}}
 .tclose{display:none;position:absolute;top:.9rem;right:.9rem;z-index:10;width:3.2rem;height:3.2rem;border-radius:50%;border:1px solid #3a3a46;background:rgba(12,12,16,.88);color:#e8e2d4;font-size:1.4rem;line-height:1;cursor:pointer}
 html.touch .zoomtv.open .tclose{display:block}
 .tcko{display:none;font-family:'Cinzel',serif;font-weight:700;color:#0d0d0f;background:var(--ember-bright);border:0;border-radius:20px;padding:.5rem 1.1rem;font-size:.8rem;cursor:pointer}
@@ -945,7 +959,20 @@ function placeQrProps(){if(window.TOUCH||!document.body.classList.contains('attr
   arr.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height*0.85)))+'px';}}
 window.addEventListener('resize',()=>{if(attractOn)requestAnimationFrame(placeQrProps);});
 function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},attractDelayS()*1000);}
+/* When the show starts, snap back to the admin-picked home tab (latest
+   arrivals for a game, or the Showcase) — an abandoned Sleeves view or
+   search shouldn't idle under the NEW ARRIVALS tape. */
+function attractGoHome(){const home=SETTINGS.attractHome;if(!['mtg','pokemon','yugioh','showcase'].includes(home))return;
+ const tabs=Array.isArray(SETTINGS.tabs)?SETTINGS.tabs:[];
+ const want=home==='showcase'?tabs.findIndex(t=>t.showcase)
+  :tabs.findIndex(t=>t.game===home&&!t.newToday&&!t.showcase&&!t.sleeves);
+ if(want<0)return;const t=tabs[want];
+ const already=t.collection===SETTINGS.collection&&!!t.newToday===!!SETTINGS.newTodayActive
+  &&!!t.showcase===!!SETTINGS.showcaseActive&&!!t.sleeves===!!SETTINGS.sleevesActive;
+ if(already)return;
+ fetch('/switch?i='+want+RQ,{method:'POST'}).catch(()=>{});}
 function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
+ attractGoHome();
  document.getElementById('lock').classList.add('mini');
  const ams=(Array.isArray(SETTINGS.attractMsgs)?SETTINGS.attractMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
  document.getElementById('tapetop').textContent=ams.length?ams[Math.floor(Math.random()*ams.length)]:'';
@@ -1030,13 +1057,19 @@ function renderTact(){const ta=document.getElementById('tact');if(!ta)return;if(
  const e=effT(),vs=(Array.isArray(ZCARD.variants)&&ZCARD.variants.length>1)?ZCARD.variants:[],cur=String(e.variantId||''),zg=cardGame(ZCARD);
  ta.innerHTML=(vs.length?`<div class="tchips">${vs.map(v=>`<button class="tchip${String(v.variantId)===cur?' on':''}" onclick="TSETVAR('${H(String(v.variantId))}')">${H(chipLbl(v,zg))} · $${money(v.price)}</button>`).join('')}</div>`:'')
   +`<button class="tadd" onclick="TADD(this)">Add to cart · $${money(e.price)}</button>`;}
+/* A comic-book action burst over the button — the cart hit LANDS. */
+function comicBurst(btn){const r=btn.getBoundingClientRect();
+ const b=document.createElement('div');b.className='tburst';
+ b.style.left=(r.left+r.width/2)+'px';b.style.top=(r.top-14)+'px';
+ b.innerHTML=`<svg viewBox="0 0 200 120"><polygon points="196,60 163.8,69.6 183.1,87 146.7,86.2 148,106.8 117.1,95.7 100,114 82.9,95.7 52,106.8 53.3,86.2 16.9,87 36.2,69.6 4,60 36.2,50.4 16.9,33 53.3,33.8 52,13.2 82.9,24.3 100,6 117.1,24.3 148,13.2 146.7,33.8 183.1,33 163.8,50.4" fill="#ffd23f" stroke="#101010" stroke-width="5" stroke-linejoin="round"/><text x="100" y="73" text-anchor="middle" font-family="'Bangers','Comic Sans MS',cursive" font-size="40" letter-spacing="2" fill="#c9342b" stroke="#fffef4" stroke-width="1.4" paint-order="stroke">ADDED!</text></svg>`;
+ document.body.appendChild(b);setTimeout(()=>b.remove(),950);}
 function TADD(btn){const e=effT();if(!e)return;
  const left=e.variantId?stockLeft(e.variantId):null;
  if(left!==null&&left<=0){const q=QTYS[String(e.variantId)];
   btn.textContent=q>0?('That’s all we have — '+q+' in stock'):'Sold out — sorry!';
   setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},1400);return;}
  cart.push(e);updateCart();
- btn.classList.add('done');btn.textContent='Added ✓';
+ btn.classList.add('done');btn.textContent='KA-CHING!';comicBurst(btn);
  setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},900);}
 function TCKO(){if(!cart.length)return;
  const agg={};cart.forEach(c=>{const id=String(c.variantId||'').replace(/\D/g,'');if(id)agg[id]=(agg[id]||0)+1;});

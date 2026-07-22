@@ -79,6 +79,11 @@ export const DEFAULT_SETTINGS = {
     "NEW ARRIVALS!!! More stock out back just ask!",
   ],
 
+  // Which tab the screen snaps back to when the attract show starts — so an
+  // abandoned Sleeves/search view resets to latest arrivals for the next
+  // passer-by (and the NEW ARRIVALS tape always matches what's on screen).
+  attractHome: "mtg", // "mtg" | "pokemon" | "yugioh" | "showcase"
+
   // Ad + Google-review card on the phone (toggle from /admin).
   adEnabled: false,
   adText: "Got cards? Exor Games buys singles, collections & sealed — cash or store credit.",
