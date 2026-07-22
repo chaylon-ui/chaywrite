@@ -28,3 +28,19 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Optional: if the repo has a SHOPIFY_ADMIN_TOKEN Actions secret, sync it
+      # to the worker as an encrypted secret on every deploy. The value never
+      # appears in the repo or logs — GitHub masks it end to end. Owner setup:
+      # repo Settings → Secrets and variables → Actions → New repository secret.
+      - name: Sync SHOPIFY_ADMIN_TOKEN worker secret (when configured)
+        env:
+          SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$SHOPIFY_ADMIN_TOKEN" ]; then
+            printf '%s' "$SHOPIFY_ADMIN_TOKEN" | npx wrangler@4 secret put SHOPIFY_ADMIN_TOKEN
+          else
+            echo "No SHOPIFY_ADMIN_TOKEN repo secret set - skipping (add one to enable full search, stock caps and numbered draft orders)"
+          fi
