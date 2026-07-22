@@ -449,6 +449,14 @@ html.touch .betters .bcard{cursor:pointer}
 html.touch .ttabs{display:flex}
 .ttab{font-family:'Cinzel',serif;font-weight:700;font-size:.82rem;letter-spacing:.06em;color:#d8d2c4;background:rgba(14,14,18,.85);border:1px solid #34343e;border-radius:22px;padding:.55rem 1.05rem;cursor:pointer}
 .ttab.on{color:#0d0d0f;background:var(--ember-bright);border-color:transparent}
+/* The card search gets a real search-field look on its own centered row —
+   white pill, magnifier, placeholder text — impossible to miss. */
+.tsbar{flex-basis:100%;max-width:24rem;margin:.15rem auto 0;display:flex;align-items:center;gap:.6rem;
+ background:#fffef4;border:2px solid #101010;border-radius:26px;padding:.62rem 1.25rem;cursor:pointer;
+ box-shadow:.18rem .26rem 0 rgba(16,16,16,.8);text-align:left}
+.tsbar .tsico{font-size:1.05rem}
+.tsbar .tsph{flex:1;font-size:1rem;color:#71717c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tsbar.on .tsph{color:#16161c;font-weight:600}
 .tnav{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:26;width:3.4rem;height:5.6rem;border-radius:14px;border:1px solid #34343e;background:rgba(12,12,16,.72);color:#e8e2d4;font-size:2.2rem;line-height:1;cursor:pointer}
 html.touch .tnav{display:block}
 .tnav.tprev{left:.5rem}.tnav.tnext{right:.5rem}
@@ -481,8 +489,18 @@ html.touch .zoomtv.open .tclose{display:block}
 html.touch .tcko{display:block}
 .tcheck{display:none;position:fixed;inset:0;z-index:60;background:rgba(6,6,9,.92);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:1rem}
 .tcheck.open{display:flex}
-.tcbox{background:#141419;border:1px solid #2e2e38;border-radius:18px;padding:1.6rem 1.8rem;text-align:center;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:.9rem}
+.tcbox{background:#141419;border:1px solid #2e2e38;border-radius:18px;padding:1.4rem 1.7rem;text-align:center;max-width:500px;width:min(94vw,500px);display:flex;flex-direction:column;align-items:center;gap:.75rem;max-height:94vh;overflow:auto}
 .tcbox h2{font-family:'Cinzel',serif;font-size:1.25rem}
+/* Editable cart rows: qty steppers + remove, sized for fingers. */
+.tclist{width:100%;max-height:30vh;overflow:auto;display:flex;flex-direction:column;gap:.45rem}
+.tcrowi{display:flex;align-items:center;gap:.55rem;background:#0e0e13;border:1px solid #2a2a34;border-radius:12px;padding:.45rem .65rem}
+.tcrowi .tcnm{flex:1;text-align:left;font-size:.85rem;color:#efe9dd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tcrowi .tcpr{font-family:'Cutive Mono','Courier New',monospace;color:#e8b04a;font-size:.8rem;white-space:nowrap}
+.tqbtn{width:2.3rem;height:2.3rem;border-radius:10px;border:1px solid #34343e;background:#1d1d24;color:#e8e2d4;font-size:1.25rem;line-height:1;cursor:pointer;flex:0 0 auto}
+.tqbtn:active{background:#33333e}
+.tqty{min-width:1.5rem;text-align:center;font-weight:700;color:#efe9dd}
+.tcx{width:2.3rem;height:2.3rem;border-radius:10px;border:1px solid #5a2a26;background:#2a1512;color:#e08a7a;font-size:1rem;cursor:pointer;flex:0 0 auto}
+.tctotal{font-family:'Cinzel',serif;font-weight:700;color:var(--ember-bright);font-size:1.05rem}
 .tcqr{background:#fff;padding:12px;border-radius:12px;min-width:200px;min-height:200px}
 .tcnote{font-size:.78rem;color:#e8b04a;line-height:1.45;max-width:340px}
 .tcrow{display:flex;gap:.7rem}
@@ -501,6 +519,49 @@ html.touch .tcko{display:block}
 .tkk.wide{max-width:none;flex:3}
 .tkres{font-size:.85rem;color:#e8b04a;min-height:1.25rem;text-align:center}
 .tkrow2{display:flex;gap:.7rem;justify-content:center;margin-top:.2rem}
+/* Keyboard height on the screen is a per-room admin setting (kbPos) —
+   totems get mounted at all kinds of heights. */
+.tkb[data-pos="top"]{align-items:flex-start}
+.tkb[data-pos="midtop"]{align-items:flex-start;padding-top:14vh}
+.tkb[data-pos="middle"]{align-items:center}
+.tkb[data-pos="midbot"]{align-items:flex-end;padding-bottom:16vh}
+/* ---- Comic-book chrome: every touch control is an inked panel button. ---- */
+html.touch{-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html.touch img{-webkit-user-drag:none}
+html.touch body.zopen .tnav{display:none} /* page arrows never float over a preview */
+html.touch .ttab{font-family:'Bangers','Comic Sans MS','Chalkboard SE',cursive;font-size:1.02rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2.5px solid #101010;border-radius:14px;box-shadow:.15rem .2rem 0 #101010;padding:.5rem 1rem}
+html.touch .ttab.on{background:var(--ember-bright);border-color:#101010;color:#16161c}
+html.touch .tnav{font-family:'Bangers',cursive;background:#fffef4;color:#16161c;border:3px solid #101010;border-radius:16px;box-shadow:.2rem .28rem 0 #101010}
+html.touch .tchip{font-family:'Bangers','Comic Sans MS',cursive;font-size:1.05rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2.5px solid #101010;border-radius:14px;box-shadow:.14rem .2rem 0 #101010}
+html.touch .tchip.on{background:var(--ember-bright);font-weight:400}
+html.touch .tclose{background:#fffef4;color:#16161c;border:3px solid #101010;box-shadow:.16rem .22rem 0 #101010;font-weight:700}
+html.touch .tcko{font-family:'Bangers',cursive;font-weight:400;font-size:1rem;letter-spacing:.05em;color:#16161c;background:#ffd23f;border:2.5px solid #101010;border-radius:14px;box-shadow:.14rem .2rem 0 #101010}
+html.touch .tcbtn{font-family:'Bangers',cursive;font-size:1.02rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2.5px solid #101010;border-radius:14px;box-shadow:.14rem .2rem 0 #101010}
+html.touch .tqbtn{background:#fffef4;color:#16161c;border:2.5px solid #101010;box-shadow:.12rem .16rem 0 #101010;font-weight:700}
+html.touch .tcx{background:#ffb9ad;color:#7a1f16;border:2.5px solid #101010;box-shadow:.12rem .16rem 0 #101010}
+html.touch .tkk{font-family:'Bangers',cursive;font-size:1.3rem;background:#fffef4;color:#16161c;border:2.5px solid #101010;border-radius:12px;box-shadow:.12rem .18rem 0 #101010}
+html.touch .tcbox,html.touch .tkbox{border:3px solid #101010;box-shadow:.4rem .55rem 0 rgba(16,16,16,.85)}
+html.touch .ttab:active,html.touch .tnav:active,html.touch .tchip:active,html.touch .tcbtn:active,html.touch .tqbtn:active,html.touch .tcx:active,html.touch .tkk:active,html.touch .tcko:active,html.touch .tclose:active,html.touch .tsbar:active{transform:scale(.92) rotate(-1deg)}
+.tburst.small{width:9.5rem}
+/* "Still there?" countdown before an idle cart clears — comic panel that
+   gets progressively more stressed as the clock runs out. */
+.ttmo{display:none;position:fixed;inset:0;z-index:65;background:rgba(6,6,9,.7);align-items:center;justify-content:center}
+.ttmo.open{display:flex}
+.ttbox{background:radial-gradient(circle,rgba(16,16,16,.05) 1px,transparent 1.5px) 0 0/10px 10px,#fffef4;border:4px solid #101010;border-radius:20px;box-shadow:.5rem .7rem 0 rgba(16,16,16,.9);padding:2rem 2.8rem;text-align:center;transform:rotate(-1deg)}
+.ttbox .tth{font-family:'Bangers',cursive;font-size:3rem;color:#c9342b;-webkit-text-stroke:1px #101010;letter-spacing:.04em}
+.ttbox .ttp{font-family:'Bangers',cursive;font-size:1.3rem;color:#16161c;margin-top:.2rem}
+.ttbox .ttn{font-family:'Bangers',cursive;font-size:5.2rem;line-height:1;color:#16161c;margin:.4rem 0;animation:ttpop .5s cubic-bezier(.22,1.6,.4,1)}
+.ttbox .ttp2{font-family:'Bangers',cursive;font-size:1.35rem;color:#b8641b;letter-spacing:.05em}
+.ttmo.hot .ttn{color:#c9342b}
+.ttmo.hot .ttbox{animation:ttshake .45s linear infinite}
+@keyframes ttpop{0%{transform:scale(1.7)}100%{transform:scale(1)}}
+@keyframes ttshake{0%,100%{transform:translate(0,0) rotate(-1deg)}25%{transform:translate(-4px,2px) rotate(.6deg)}50%{transform:translate(3px,-2px) rotate(-1.8deg)}75%{transform:translate(-2px,3px) rotate(.2deg)}}
+/* Dymo-style embossed name label for "Image Coming Soon" placeholder cards —
+   raised white-on-black tape across the top so you know what it is at a glance. */
+.emblbl{position:absolute;top:3%;left:4.5%;right:4.5%;z-index:8;background:linear-gradient(180deg,#26262b,#0b0b0e 60%,#17171b);border-radius:3px;padding:.3em .45em;transform:rotate(-.9deg);box-shadow:0 2px 4px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.14)}
+.emblbl span{display:block;font-family:'Cutive Mono','Courier New',monospace;font-weight:700;font-size:calc(var(--cw)*.088);line-height:1.2;letter-spacing:.06em;color:#f2f2f4;text-transform:uppercase;text-align:center;overflow:hidden;max-height:2.45em;text-shadow:0 1px 0 rgba(255,255,255,.3),0 -1px 1px rgba(0,0,0,.95)}
+.zoomtv .zc .emblbl{z-index:12}
+.zoomtv .zc .emblbl span{font-size:2.1vh}
 </style></head><body>
 <header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span><div class="tapetop" id="tapetop" aria-hidden="true"></div></header>
 <div class="stage">
@@ -535,9 +596,11 @@ html.touch .tcko{display:block}
   <div class="drivebar hide" id="drivebar"><span class="who"><span class="dot"></span>Phone paired</span><span class="dvq" id="dvq"></span><span class="idle">frees in <b id="tvIdle">2:00</b></span></div>
   <div class="tv-cart hide" id="tvCart"><span class="lbl">Cart</span><div class="items" id="tvCartItems"></div><span class="total" id="tvCartTotal">$0.00</span><button class="tcko" id="tcko">Checkout</button></div>
   <div class="tcheck" id="tcheck"><div class="tcbox">
-    <h2>Scan to check out on your phone</h2>
+    <h2>Your cart</h2>
+    <div class="tclist" id="tclist"></div>
+    <div class="tctotal" id="tctotal"></div>
     <div class="tcqr" id="tcqr"></div>
-    <p class="tcnote">⏱ Kiosk orders can take up to <b>24–48 hours</b> to fulfill — we pull your cards from the showcase by hand.</p>
+    <p class="tcnote">Scan with your phone to check out — ⏱ kiosk orders can take up to <b>24–48 hours</b> to fulfill.</p>
     <div class="tcrow"><button class="tcbtn" id="tcCounter">🛎 Send to counter</button><button class="tcbtn" id="tcClear">Clear cart</button><button class="tcbtn" id="tcClose">Close</button></div>
   </div></div>
   <div class="tkb" id="tkb"><div class="tkbox">
@@ -545,6 +608,12 @@ html.touch .tcko{display:block}
     <div id="tkrows"></div>
     <div class="tkres" id="tkres">Results fill the case behind this keyboard as you type.</div>
     <div class="tkrow2"><button class="tcbtn" id="tkclear">✕ Clear search</button><button class="tcbtn" id="tkdone">Done — browse results</button></div>
+  </div></div>
+  <div class="ttmo" id="ttmo"><div class="ttbox">
+    <div class="tth">STILL THERE?</div>
+    <div class="ttp">Your cart clears in…</div>
+    <div class="ttn" id="ttn">30</div>
+    <div class="ttp2">TAP ANYWHERE to keep shopping!</div>
   </div></div>
   <div class="counter hide" id="counter"><div class="cbox">
     <div class="ct1">🛎 Order for the counter</div>
@@ -659,7 +728,11 @@ function tiltStyle(k){let h=7;for(let i=0;i<k.length;i++)h=(h*31+k.charCodeAt(i)
  return `--tilt:${((h%71)/10-3.5).toFixed(1)}deg;--jy:${(((h>>>3)%40)/10-2).toFixed(1)}%`;}
 /* Small foil tag top-right; price on the art, lower-right (stays in view). */
 function cardHTML(c){if(!c)return '';
- const face=c.image?`<img class="scan" src="${H(IMGURL(c.image,360))}" alt="" loading="lazy">`
+ /* "Image Coming Soon" placeholder shots get a Dymo-embossed name label
+    across the top — otherwise you can't tell what the card is until you
+    tap it. Detected by the placeholder filename our uploads use. */
+ const emb=(c.image&&/placeholder/i.test(c.image))?`<div class="emblbl"><span>${H(c.name)}</span></div>`:'';
+ const face=c.image?`<img class="scan" src="${H(IMGURL(c.image,360))}" alt="" loading="lazy">${emb}`
   :`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div>
  <div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty">${H(c.type)}</div></div>`;
  const tags=SHOWCASE()
@@ -862,8 +935,9 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD&&!sleevy?' intl':'');
  if(window.TOUCH&&!ZKEEP){ZCARD=c;ZVAR=null;} // remember what's featured so the action row can re-price it
  document.body.classList.add('zopen'); // pause background effects while previewing
- zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan').forEach(e=>e.remove());
+ zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan,.emblbl').forEach(e=>e.remove());
  if(c.image){zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
+  if(/placeholder/i.test(c.image))zc.insertAdjacentHTML('beforeend',`<div class="emblbl"><span>${H(c.name)}</span></div>`);
   if(sleevy)flagFlat(zc,IMGURL(c.image,800));}
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
  /* Phone `select` messages don't carry condition — enrich from the local deck. */
@@ -971,8 +1045,23 @@ function attractGoHome(){const home=SETTINGS.attractHome;if(!['mtg','pokemon','y
   &&!!t.showcase===!!SETTINGS.showcaseActive&&!!t.sleeves===!!SETTINGS.sleevesActive;
  if(already)return;
  fetch('/switch?i='+want+RQ,{method:'POST'}).catch(()=>{});}
-function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
+/* On touch kiosks the attract show is a pitch: friendly comic callouts
+   cycling through what the screen can do. */
+const TOUCH_ADS=[
+ '<span class="bn">Welcome!</span> Tap any card for a closer look — browsing is always free!',
+ '<span class="bn">Swipe</span> left or right to flip through the whole showcase!',
+ '<span class="bn">🔍 Search</span> every single we have in stock, right from this screen!',
+ '<span class="bn">🛒 Build a cart</span> and check out with a quick QR scan — no sign-in to browse!',
+ '<span class="bn">🛎 Prefer a person?</span> Send your picks to the counter and we’ll ring you up with a smile!'];
+let attractAd=null,adIdx=0;
+function touchAd(){const qb=document.querySelector('.qrbub');if(!qb)return;
+ qb.innerHTML=TOUCH_ADS[adIdx%TOUCH_ADS.length];adIdx++;
+ qb.style.animation='none';void qb.offsetWidth;qb.style.animation='';}
+function startAttract(){if(attractOn||wasPaired)return;
+ if(window.TOUCH&&cart.length){armAttract();return;} // a live cart gets the STILL THERE? countdown first
+ attractOn=true;
  attractGoHome();
+ if(window.TOUCH){adIdx=0;touchAd();attractAd=setInterval(touchAd,6500);}
  document.getElementById('lock').classList.add('mini');
  const ams=(Array.isArray(SETTINGS.attractMsgs)?SETTINGS.attractMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
  document.getElementById('tapetop').textContent=ams.length?ams[Math.floor(Math.random()*ams.length)]:'';
@@ -985,8 +1074,9 @@ function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
    const foils=CARDS.filter(c=>c.foil),pool=(foils.length&&Math.random()<0.6)?foils:CARDS;
    zoom(pool[Math.floor(Math.random()*pool.length)]);
    attractPulse=setTimeout(()=>{if(attractOn)unzoom();},14000);/* linger — passers-by need time to look */},ATTRACT_ZOOM_MS);}
-function stopAttract(){clearTimeout(attractArm);clearInterval(attractFlip);clearInterval(attractZoom);clearTimeout(attractPulse);
- attractArm=attractFlip=attractZoom=attractPulse=null;
+function stopAttract(){clearTimeout(attractArm);clearInterval(attractFlip);clearInterval(attractZoom);clearTimeout(attractPulse);clearInterval(attractAd);
+ attractArm=attractFlip=attractZoom=attractPulse=attractAd=null;
+ if(window.TOUCH)touchDress(true); // back to the plain "touch a card" line for the next show
  document.body.classList.remove('attract');
  if(attractOn){attractOn=false;document.getElementById('lock').classList.remove('mini');unzoom();}}
 /* Counter ticket: shown on "send to counter"; persists past the session drop
@@ -999,7 +1089,11 @@ function showCounter(d){const raw=(Array.isArray(d.items)&&d.items.length?d.item
  document.getElementById('ctrCount').textContent=n+' card'+(n===1?'':'s');
  document.getElementById('ctrTot').textContent='$'+money(d.total);
  document.getElementById('ctrOrd').textContent='Sent '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})+' · ring up at the register';
- document.getElementById('counter').classList.remove('hide');unzoom();}
+ document.getElementById('counter').classList.remove('hide');unzoom();
+ /* Staff TVs keep the ticket up until the next customer; a self-serve kiosk
+    clears it after 20s so it never squats over the next shopper's view. */
+ clearTimeout(window.CTRT);
+ if(window.TOUCH)window.CTRT=setTimeout(()=>document.getElementById('counter').classList.add('hide'),20000);}
 function updateCounterOrder(d){if(!d||document.getElementById('counter').classList.contains('hide'))return;const o=document.getElementById('ctrOrd');
  if(d.name)o.textContent='Draft order '+d.name+' — open it in Shopify POS or Admin › Orders › Drafts';}
 let qrLast=null;
@@ -1025,6 +1119,7 @@ function connect(){
    else if(m.type==='search'){startSearchDeck(m.data);}
    else if(m.type==='endsearch'){endSearchDeck();}
    else if(m.type==='addcart'){const c=fromMsg(m.data);if(c){cart.push(c);updateCart();}}
+   else if(m.type==='rmcart'){const c=fromMsg(m.data);if(c){const i=cart.findIndex(x=>x.name===c.name&&String(x.variantId||'')===String(c.variantId||''));if(i>-1){cart.splice(i,1);updateCart();}}}
    else if(m.type==='checkout'){if(m.data&&m.data.where==='counter')showCounter(m.data);}
    else if(m.type==='counter_order'){updateCounterOrder(m.data);}
    else if(m.type==='settings'){applySettings(m.data);}
@@ -1050,18 +1145,21 @@ function effT(){if(!ZCARD)return null;if(!ZVAR)return ZCARD;
  return v?Object.assign({},ZCARD,{price:v.price,foil:!!v.foil,condition:v.condition||'',variantId:v.variantId}):ZCARD;}
 function TOPEN(c){if(!c)return;ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
 function TSETVAR(vid){if(!ZCARD)return;ZVAR=vid;ZKEEP=true;zoom(effT());ZKEEP=false;}
+function TCHIP(el,vid){comicBurst(el,'SWAPPED!',true);TSETVAR(vid);}
 function TOPENB(i){const b=BETCARDS&&BETCARDS[i];if(b)TOPEN(b);}
 function chipLbl(v,g){const p=[];if(v.condition)p.push(v.condition);if(v.foil)p.push(g==='pokemon'?'Holo':'Foil');return p.join(' · ')||'Standard';}
 function renderTact(){const ta=document.getElementById('tact');if(!ta)return;if(!ZCARD){ta.innerHTML='';return;}
  fetchQty([ZCARD.variantId,...(Array.isArray(ZCARD.variants)?ZCARD.variants.map(v=>v.variantId):[])]);
  const e=effT(),vs=(Array.isArray(ZCARD.variants)&&ZCARD.variants.length>1)?ZCARD.variants:[],cur=String(e.variantId||''),zg=cardGame(ZCARD);
- ta.innerHTML=(vs.length?`<div class="tchips">${vs.map(v=>`<button class="tchip${String(v.variantId)===cur?' on':''}" onclick="TSETVAR('${H(String(v.variantId))}')">${H(chipLbl(v,zg))} · $${money(v.price)}</button>`).join('')}</div>`:'')
+ ta.innerHTML=(vs.length?`<div class="tchips">${vs.map(v=>`<button class="tchip${String(v.variantId)===cur?' on':''}" onclick="TCHIP(this,'${H(String(v.variantId))}')">${H(chipLbl(v,zg))} · $${money(v.price)}</button>`).join('')}</div>`:'')
   +`<button class="tadd" onclick="TADD(this)">Add to cart · $${money(e.price)}</button>`;}
-/* A comic-book action burst over the button — the cart hit LANDS. */
-function comicBurst(btn){const r=btn.getBoundingClientRect();
- const b=document.createElement('div');b.className='tburst';
+/* A comic-book action burst over any pressed control — the tap LANDS.
+   Every touch button pops one (small for chips/keys-level controls). */
+function comicBurst(btn,txt,small){const r=btn.getBoundingClientRect();
+ const b=document.createElement('div');b.className='tburst'+(small?' small':'');
  b.style.left=(r.left+r.width/2)+'px';b.style.top=(r.top-14)+'px';
- b.innerHTML=`<svg viewBox="0 0 200 120"><polygon points="196,60 163.8,69.6 183.1,87 146.7,86.2 148,106.8 117.1,95.7 100,114 82.9,95.7 52,106.8 53.3,86.2 16.9,87 36.2,69.6 4,60 36.2,50.4 16.9,33 53.3,33.8 52,13.2 82.9,24.3 100,6 117.1,24.3 148,13.2 146.7,33.8 183.1,33 163.8,50.4" fill="#ffd23f" stroke="#101010" stroke-width="5" stroke-linejoin="round"/><text x="100" y="73" text-anchor="middle" font-family="'Bangers','Comic Sans MS',cursive" font-size="40" letter-spacing="2" fill="#c9342b" stroke="#fffef4" stroke-width="1.4" paint-order="stroke">ADDED!</text></svg>`;
+ const t=String(txt||'ADDED!').slice(0,12);
+ b.innerHTML=`<svg viewBox="0 0 200 120"><polygon points="196,60 163.8,69.6 183.1,87 146.7,86.2 148,106.8 117.1,95.7 100,114 82.9,95.7 52,106.8 53.3,86.2 16.9,87 36.2,69.6 4,60 36.2,50.4 16.9,33 53.3,33.8 52,13.2 82.9,24.3 100,6 117.1,24.3 148,13.2 146.7,33.8 183.1,33 163.8,50.4" fill="#ffd23f" stroke="#101010" stroke-width="5" stroke-linejoin="round"/><text x="100" y="73" text-anchor="middle" font-family="'Bangers','Comic Sans MS',cursive" font-size="${t.length>8?30:40}" letter-spacing="2" fill="#c9342b" stroke="#fffef4" stroke-width="1.4" paint-order="stroke">${H(t)}</text></svg>`;
  document.body.appendChild(b);setTimeout(()=>b.remove(),950);}
 function TADD(btn){const e=effT();if(!e)return;
  const left=e.variantId?stockLeft(e.variantId):null;
@@ -1071,32 +1169,49 @@ function TADD(btn){const e=effT();if(!e)return;
  cart.push(e);updateCart();
  btn.classList.add('done');btn.textContent='KA-CHING!';comicBurst(btn);
  setTimeout(()=>{if(document.getElementById('ztv').classList.contains('open'))renderTact();},900);}
-function TCKO(){if(!cart.length)return;
- const agg={};cart.forEach(c=>{const id=String(c.variantId||'').replace(/\D/g,'');if(id)agg[id]=(agg[id]||0)+1;});
- const items=Object.entries(agg).map(([id,q])=>({variantId:id,qty:q}));if(!items.length)return;
- /* Chained /cart/add hops APPEND to the shopper's existing exorgames.com
-    cart (a /cart/ID:QTY permalink would wipe it); hidden _source property
-    marks the kiosk lines for staff. */
- let url='/cart';
+function cartAgg(){const agg={};
+ cart.forEach(c=>{const id=String(c.variantId||'').replace(/\D/g,'');if(!id)return;
+  (agg[id]=agg[id]||{variantId:id,name:c.name,condition:c.condition||'',price:c.price,qty:0}).qty++;});
+ return Object.values(agg);}
+/* Chained /cart/add hops APPEND to the shopper's existing exorgames.com
+   cart (a /cart/ID:QTY permalink would wipe it); hidden _source property
+   marks the kiosk lines for staff. */
+function kioskCartUrl(items){let url='/cart';
  for(let i=items.length-1;i>=0;i--)url='/cart/add?id='+items[i].variantId+'&quantity='+items[i].qty
   +'&properties%5B_source%5D=Kiosk&return_to='+encodeURIComponent(url);
- url='https://exorgames.com'+url;
+ return 'https://exorgames.com'+url;}
+/* The cart view is editable: steppers respect the stock caps, the QR
+   re-renders on every change, and an emptied cart closes itself. */
+function TCSET(vid,delta,el){vid=String(vid);
+ if(delta>0){const left=stockLeft(vid);if(left!==null&&left<=0){if(el)comicBurst(el,'ALL GONE!',true);return;}
+  const proto=cart.find(c=>String(c.variantId)===vid);if(proto)cart.push(Object.assign({},proto));if(el)comicBurst(el,'+1!',true);}
+ else{for(let i=cart.length-1;i>=0;i--)if(String(cart[i].variantId)===vid){cart.splice(i,1);break;}if(el)comicBurst(el,'−1!',true);}
+ updateCart();renderTcheck();}
+function TCREMOVE(vid,el){vid=String(vid);if(el)comicBurst(el,'GONE!',true);cart=cart.filter(c=>String(c.variantId)!==vid);updateCart();renderTcheck();}
+function renderTcheck(){const items=cartAgg();
+ if(!items.length){document.getElementById('tcheck').classList.remove('open');return;}
+ document.getElementById('tclist').innerHTML=items.map(i=>{const vid=H(String(i.variantId));
+  return `<div class="tcrowi"><span class="tcnm">${H(i.name)}${i.condition?' · '+H(i.condition):''}</span><span class="tcpr">$${money(i.price)}</span>`
+   +`<button class="tqbtn" onclick="TCSET('${vid}',-1,this)">−</button><span class="tqty">${i.qty}</span><button class="tqbtn" onclick="TCSET('${vid}',1,this)">＋</button>`
+   +`<button class="tcx" onclick="TCREMOVE('${vid}',this)">✕</button></div>`;}).join('');
+ document.getElementById('tctotal').textContent=cart.length+' card'+(cart.length===1?'':'s')+' · $'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
  const qel=document.getElementById('tcqr');qel.innerHTML='';
- try{new QRCode(qel,{text:url,width:280,height:280,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent='QR';}
- document.getElementById('tcheck').classList.add('open');}
+ try{new QRCode(qel,{text:kioskCartUrl(items),width:280,height:280,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent='QR';}}
+function TCKO(){if(!cart.length)return;renderTcheck();
+ if(cart.length)document.getElementById('tcheck').classList.add('open');}
 function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)return;
  const tabs=Array.isArray(s.tabs)?s.tabs:[];
  const searching=document.body.classList.contains('searching');
  box.innerHTML=tabs.map((t,i)=>{const on=!searching&&t.collection===s.collection&&(!!t.newToday===!!s.newTodayActive)&&(!!t.showcase===!!s.showcaseActive);
-  return `<button class="ttab${on?' on':''}" onclick="TSWITCH(${i})">${H(String(t.label||''))}</button>`;}).join('')
-  +(s.searchEnabled!==false?`<button class="ttab${searching?' on':''}" onclick="TSEARCHOPEN()">🔍 Search</button>`:'')
-  +(searching?`<button class="ttab" onclick="TSEARCHCLEAR()">✕ Clear</button>`:'');}
-function TSWITCH(i){fetch('/switch?i='+i+RQ,{method:'POST'}).catch(()=>{});}
+  return `<button class="ttab${on?' on':''}" onclick="TSWITCH(${i},this)">${H(String(t.label||''))}</button>`;}).join('')
+  +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
+  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'');}
+function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);fetch('/switch?i='+i+RQ,{method:'POST'}).catch(()=>{});}
 /* Totem search: the same /search.json the phone uses, driven by an on-screen
    keyboard. Results swap into the case live via the shared search-deck path
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
 let TQ='',TKT=null,TKSEQ=0;
-function TSEARCHOPEN(){document.getElementById('tkb').classList.add('open');renderTQ();}
+function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);document.getElementById('tkb').classList.add('open');renderTQ();}
 function TSEARCHCLOSE(){document.getElementById('tkb').classList.remove('open');}
 function TSEARCHCLEAR(){TQ='';TKSEQ++;clearTimeout(TKT);renderTQ();
  document.getElementById('tkres').textContent='Results fill the case behind this keyboard as you type.';
@@ -1117,9 +1232,7 @@ function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres
    draft order (same path the phone uses) and the counter ticket pops on
    screen; the order number arrives over the websocket moments later. */
 function TCOUNTER(){if(!cart.length)return;
- const agg={};cart.forEach(c=>{const id=String(c.variantId||'').replace(/\D/g,'');if(!id)return;
-  (agg[id]=agg[id]||{variantId:id,name:c.name,price:c.price,qty:0}).qty++;});
- const items=Object.values(agg);if(!items.length)return;
+ const items=cartAgg();if(!items.length)return;
  const total=cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
  fetch('/counter?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({items,count:cart.length,total})}).catch(()=>{});
  showCounter({items,count:cart.length,total});
@@ -1144,28 +1257,44 @@ function initTouch(){if(TINITED)return;TINITED=true;
    &&!document.getElementById('tcheck').classList.contains('open')
    &&!document.getElementById('tkb').classList.contains('open')){
    SWIPED=true;flip(dx<0?1:-1);setTimeout(()=>{SWIPED=false;},400);}},{capture:true});
- document.getElementById('tprev').onclick=()=>flip(-1);
- document.getElementById('tnext').onclick=()=>flip(1);
- document.getElementById('tclose').onclick=()=>{selected=null;markSel();unzoom();};
+ document.getElementById('tprev').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;comicBurst(this,'FLIP!',true);flip(-1);};
+ document.getElementById('tnext').onclick=function(){if(document.getElementById('ztv').classList.contains('open'))return;comicBurst(this,'FLIP!',true);flip(1);};
+ document.getElementById('tclose').onclick=function(){comicBurst(this,'BAM!',true);selected=null;markSel();unzoom();};
+ /* Tapping the featured card itself closes the preview, same as the ✕. */
+ document.getElementById('ztvc').addEventListener('click',()=>{if(!window.TOUCH)return;selected=null;markSel();unzoom();});
  document.getElementById('ztv').addEventListener('click',ev=>{if(ev.target.id==='ztv'){selected=null;markSel();unzoom();}});
- document.getElementById('tcko').onclick=TCKO;
- document.getElementById('tcCounter').onclick=TCOUNTER;
+ document.getElementById('tcko').onclick=function(){comicBurst(this,'SCAN IT!');TCKO();};
+ document.getElementById('tcCounter').onclick=function(){comicBurst(this,'SENT!');TCOUNTER();};
  document.getElementById('tcClose').onclick=()=>document.getElementById('tcheck').classList.remove('open');
- document.getElementById('tcClear').onclick=()=>{cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
+ document.getElementById('tcClear').onclick=function(){comicBurst(this,'POOF!',true);cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
  document.getElementById('tkrows').innerHTML=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
   .map(r=>'<div class="tkr">'+[...r].map(k=>`<button class="tkk" onclick="TKEY('${k}')">${k}</button>`).join('')+'</div>').join('')
   +`<div class="tkr"><button class="tkk wide" onclick="TKEY(' ')">space</button><button class="tkk wide" onclick="TKEY('⌫')">⌫</button></div>`;
- document.getElementById('tkclear').onclick=TSEARCHCLEAR;
- document.getElementById('tkdone').onclick=TSEARCHCLOSE;
+ document.getElementById('tkclear').onclick=function(){comicBurst(this,'POOF!',true);TSEARCHCLEAR();};
+ document.getElementById('tkdone').onclick=function(){comicBurst(this,'SHOW ME!',true);TSEARCHCLOSE();};
  document.getElementById('tkb').addEventListener('click',ev=>{if(ev.target.id==='tkb')TSEARCHCLOSE();});
  /* Any touch counts as activity: wake from attract mode and hold it off. */
  document.addEventListener('pointerdown',()=>{if(!window.TOUCH)return;lastAct=Date.now();stopAttract();armAttract();},{capture:true});
- /* Walk-away reset: 2.5 min without a touch clears the cart and closes
-    the preview/checkout so the next shopper starts fresh. */
- setInterval(()=>{if(!window.TOUCH||Date.now()-lastAct<150000)return;
-  if(cart.length||SDECK||document.getElementById('ztv').classList.contains('open')||document.getElementById('tcheck').classList.contains('open')||document.getElementById('tkb').classList.contains('open')){
-   cart=[];updateCart();selected=null;markSel();unzoom();document.getElementById('tcheck').classList.remove('open');TSEARCHCLEAR();}},15000);
+ /* Walk-away housekeeping, once a second:
+    - cart with items: at 2 idle minutes a comic STILL THERE? panel counts
+      down 30s (getting shakier under 10) — any tap keeps the cart; hitting
+      zero clears it and rolls straight into the attract show.
+    - no cart: open preview/search/checkout quietly resets at 2.5 minutes. */
+ setInterval(()=>{if(!window.TOUCH)return hideTTMO();
+  const t=(Date.now()-lastAct)/1000;
+  if(cart.length){
+   if(t>=TOUCH_ATTRACT_S){const left=Math.ceil(TOUCH_ATTRACT_S+30-t);
+    if(left>0)showTTMO(left);
+    else{hideTTMO();touchReset();stopAttract();startAttract();}}
+   else hideTTMO();
+  }else{hideTTMO();
+   if(t>=150&&(SDECK||document.getElementById('ztv').classList.contains('open')||document.getElementById('tcheck').classList.contains('open')||document.getElementById('tkb').classList.contains('open')))touchReset();}
+ },1000);
 }
+function touchReset(){cart=[];updateCart();selected=null;markSel();unzoom();document.getElementById('tcheck').classList.remove('open');TSEARCHCLEAR();}
+function showTTMO(n){const m=document.getElementById('ttmo');m.classList.add('open');m.classList.toggle('hot',n<=10);
+ const el=document.getElementById('ttn');if(el.textContent!==String(n)){el.textContent=n;el.style.animation='none';void el.offsetWidth;el.style.animation='';}}
+function hideTTMO(){const m=document.getElementById('ttmo');if(m)m.classList.remove('open');}
 let SWIPED=false;
 if(window.TOUCH){initTouch();touchDress(true);}
 /* ---- Auto-update: the deploy pipeline stamps BUILD and publishes
@@ -1227,6 +1356,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
   if(tm)initTouch();
   touchDress(tm);
   if(!wasPaired){stopAttract();armAttract();}}
+ const kb=document.getElementById('tkb');
+ if(kb)kb.dataset.pos=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}

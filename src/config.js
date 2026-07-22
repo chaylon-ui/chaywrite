@@ -44,6 +44,9 @@ export const DEFAULT_SETTINGS = {
   // (2 minute) idle window before the attract show. /tv?touch=1 still forces
   // it per-URL regardless of this setting.
   touchMode: false,
+  // Where the on-screen search keyboard sits on a touch kiosk (some totems
+  // are mounted high, some low): top | midtop | middle | midbot | bottom.
+  kbPos: "bottom",
 
   // Seasonal dressing for the case (per room, from /admin). "christmas" adds
   // a string of lights along the top, frosted corners and festive clutter —

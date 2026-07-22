@@ -134,6 +134,10 @@ export class BinderRoom {
     }
     if ("topLoaders" in patch) next.topLoaders = !!patch.topLoaders;
     if ("touchMode" in patch) next.touchMode = !!patch.touchMode;
+    if ("kbPos" in patch) {
+      if (!["top", "midtop", "middle", "midbot", "bottom"].includes(patch.kbPos)) return "bad kbPos";
+      next.kbPos = patch.kbPos;
+    }
     if ("holiday" in patch) {
       if (!["none", "christmas"].includes(patch.holiday)) return "bad holiday";
       next.holiday = patch.holiday;
@@ -414,7 +418,7 @@ export class BinderRoom {
     } catch {
       return;
     }
-    const allowed = ["flip", "next", "prev", "select", "unselect", "addcart", "checkout", "search", "endsearch"];
+    const allowed = ["flip", "next", "prev", "select", "unselect", "addcart", "rmcart", "checkout", "search", "endsearch"];
     if (allowed.includes(msg.type)) {
       if (this.tv) this.send(this.tv, msg);
       this.send(this.phone, { type: "ack", of: msg.type, data: msg.data ?? null });
