@@ -79,6 +79,8 @@ a.tvlink:hover{color:var(--ember)}
 
     <div class="row"><input id="perfMode" type="checkbox"><label for="perfMode">Performance mode — smoother on weak TV boxes (lighter blur &amp; effects)</label></div>
 
+    <div class="row"><input id="touchMode" type="checkbox"><label for="touchMode">Touch-screen kiosk mode — this screen IS the controller: tap &amp; swipe to browse, on-screen tabs/search/cart, checkout hands off by QR, “send to counter” makes a draft order. Attract show waits 2 idle minutes. No pairing QR.</label></div>
+
     <!-- Seasonal case dressing: decor only, cards & prices untouched. -->
     <div class="group">
       <div class="gtitle">Holiday dressing</div>
@@ -199,7 +201,7 @@ const GAME_TABS=[ // labels/themes fixed; collection + carried-on-this-TV editab
   {label:'Basketball', theme:'basketball', game:'basketball', input:'colBasketball', enable:'enBasketball', fallback:'all-basketball-singles',        defOn:false},
 ];
 async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json();
-  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('holiday').value=s.holiday==='christmas'?'christmas':'none';
+  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('holiday').value=s.holiday==='christmas'?'christmas':'none';
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const sv=s.sleevesTab||{};$('svEnabled').checked=!!sv.enabled;$('svCollection').value=sv.collection||'all-dragon-shield-sleeves';
@@ -230,7 +232,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
   if(!tabs.some(t=>t.enabled)){$('saveMsg').textContent='Enable at least one game';$('saveMsg').className='msg bad';return;}
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
-    perfMode:$('perfMode').checked,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
+    perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase'},
     sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves'},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),

@@ -38,6 +38,13 @@ export const DEFAULT_SETTINGS = {
   // blur with a plain dim and stills the heavy filter animations.
   perfMode: false,
 
+  // Touch-screen kiosk mode (per room, from /admin): the screen itself is the
+  // controller — tap/swipe to browse, on-screen tabs/search/cart, checkout by
+  // QR to the shopper's phone, send-to-counter draft orders, and a longer
+  // (2 minute) idle window before the attract show. /tv?touch=1 still forces
+  // it per-URL regardless of this setting.
+  touchMode: false,
+
   // Seasonal dressing for the case (per room, from /admin). "christmas" adds
   // a string of lights along the top, frosted corners and festive clutter —
   // cards, prices and tabs are untouched.

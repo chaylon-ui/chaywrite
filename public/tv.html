@@ -523,7 +523,7 @@ html.touch .tcko{display:block}
     <h2>Scan to check out on your phone</h2>
     <div class="tcqr" id="tcqr"></div>
     <p class="tcnote">⏱ Kiosk orders can take up to <b>24–48 hours</b> to fulfill — we pull your cards from the showcase by hand.</p>
-    <div class="tcrow"><button class="tcbtn" id="tcClear">Clear cart</button><button class="tcbtn" id="tcClose">Close</button></div>
+    <div class="tcrow"><button class="tcbtn" id="tcCounter">🛎 Send to counter</button><button class="tcbtn" id="tcClear">Clear cart</button><button class="tcbtn" id="tcClose">Close</button></div>
   </div></div>
   <div class="tkb" id="tkb"><div class="tkbox">
     <div class="tkq"><span id="tkq"></span></div>
@@ -569,7 +569,8 @@ if(window.PORTRAIT)document.documentElement.classList.add('portrait');
    itself becomes the controller — tap to preview, on-screen tabs and cart,
    checkout hands off to the customer's phone via QR. Per-screen, like
    portrait; give each totem its own ?room= so it never crosses other TVs. */
-window.TOUCH=new URLSearchParams(location.search).get('touch')==='1';
+window.URLTOUCH=new URLSearchParams(location.search).get('touch')==='1';
+window.TOUCH=window.URLTOUCH; // may also flip on later via the room's admin "touchMode" setting
 if(window.TOUCH)document.documentElement.classList.add('touch');
 window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
@@ -917,7 +918,9 @@ function setPaired(on){document.getElementById('lock').classList.toggle('hide',o
    card and let the case perform — spreads flip themselves and a random card
    (foils favoured) gets the featured-zoom treatment now and then. Any pairing
    kills the show instantly. ---- */
-const ATTRACT_AFTER_S=25,ATTRACT_FLIP_MS=14000,ATTRACT_ZOOM_MS=40000;
+const ATTRACT_AFTER_S=25,TOUCH_ATTRACT_S=120,ATTRACT_FLIP_MS=14000,ATTRACT_ZOOM_MS=40000;
+/* A kiosk being browsed by hand gets a long leash before the show starts. */
+function attractDelayS(){return window.TOUCH?TOUCH_ATTRACT_S:ATTRACT_AFTER_S}
 let attractArm=null,attractFlip=null,attractZoom=null,attractPulse=null,attractOn=false;
 /* Place the bubble + arrows off the MEASURED corner card, so neither ever
    covers the QR square — the old fixed offsets clipped it on some screens
@@ -940,7 +943,7 @@ function placeQrProps(){if(window.TOUCH||!document.body.classList.contains('attr
  if(arr){arr.style.right=Math.round(innerWidth-card.left+4)+'px';
   arr.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height*0.85)))+'px';}}
 window.addEventListener('resize',()=>{if(attractOn)requestAnimationFrame(placeQrProps);});
-function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},ATTRACT_AFTER_S*1000);}
+function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},attractDelayS()*1000);}
 function startAttract(){if(attractOn||wasPaired)return;attractOn=true;
  document.getElementById('lock').classList.add('mini');
  const ams=(Array.isArray(SETTINGS.attractMsgs)?SETTINGS.attractMsgs:[]).map(m=>String(m||'').trim()).filter(Boolean);
@@ -1076,16 +1079,43 @@ function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres
   res.textContent=n?(n+' card'+(n===1?'':'s')+' found — tap Done to browse'):('Nothing in stock matches “'+q+'”');
   if(n){startSearchDeck({q,cards:d.cards,colorNames:d.colorNames});renderTouchTabs(SETTINGS);}
  }).catch(()=>{if(seq===TKSEQ)res.textContent='Search hiccuped — keep typing to retry.';});}
-if(window.TOUCH){
+/* Send the totem's cart to the counter: the room turns it into a Shopify
+   draft order (same path the phone uses) and the counter ticket pops on
+   screen; the order number arrives over the websocket moments later. */
+function TCOUNTER(){if(!cart.length)return;
+ const agg={};cart.forEach(c=>{const id=String(c.variantId||'').replace(/\D/g,'');if(!id)return;
+  (agg[id]=agg[id]||{variantId:id,name:c.name,price:c.price,qty:0}).qty++;});
+ const items=Object.values(agg);if(!items.length)return;
+ const total=cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
+ fetch('/counter?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({items,count:cart.length,total})}).catch(()=>{});
+ showCounter({items,count:cart.length,total});
+ cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');}
+function touchDress(on){const qb=document.querySelector('.qrbub');
+ if(qb)qb.innerHTML=on?'<span class="bn">Touch</span> a card to take a closer look!':'Scan the <span class="bn">QR code</span> to take a look in the showcase!';}
+let TINITED=false;
+function initTouch(){if(TINITED)return;TINITED=true;
  document.getElementById('caseInner').addEventListener('click',ev=>{
+  if(!window.TOUCH||SWIPED)return;
   if(document.getElementById('ztv').classList.contains('open'))return;
   const el=ev.target.closest('.card');if(!el)return;
   const c=CARDS.find(x=>KEY(x)===el.dataset.id);if(c)TOPEN(c);});
+ /* Swipe across the case to turn the page (left = next, like the phone). */
+ let sx=0,sy=0;
+ const stage=document.querySelector('.stage');
+ stage.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY;},{capture:true});
+ stage.addEventListener('pointerup',e=>{if(!window.TOUCH)return;
+  const dx=e.clientX-sx,dy=e.clientY-sy;
+  if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy)*1.6
+   &&!document.getElementById('ztv').classList.contains('open')
+   &&!document.getElementById('tcheck').classList.contains('open')
+   &&!document.getElementById('tkb').classList.contains('open')){
+   SWIPED=true;flip(dx<0?1:-1);setTimeout(()=>{SWIPED=false;},400);}},{capture:true});
  document.getElementById('tprev').onclick=()=>flip(-1);
  document.getElementById('tnext').onclick=()=>flip(1);
  document.getElementById('tclose').onclick=()=>{selected=null;markSel();unzoom();};
  document.getElementById('ztv').addEventListener('click',ev=>{if(ev.target.id==='ztv'){selected=null;markSel();unzoom();}});
  document.getElementById('tcko').onclick=TCKO;
+ document.getElementById('tcCounter').onclick=TCOUNTER;
  document.getElementById('tcClose').onclick=()=>document.getElementById('tcheck').classList.remove('open');
  document.getElementById('tcClear').onclick=()=>{cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
  document.getElementById('tkrows').innerHTML=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
@@ -1095,14 +1125,15 @@ if(window.TOUCH){
  document.getElementById('tkdone').onclick=TSEARCHCLOSE;
  document.getElementById('tkb').addEventListener('click',ev=>{if(ev.target.id==='tkb')TSEARCHCLOSE();});
  /* Any touch counts as activity: wake from attract mode and hold it off. */
- document.addEventListener('pointerdown',()=>{lastAct=Date.now();stopAttract();armAttract();},{capture:true});
+ document.addEventListener('pointerdown',()=>{if(!window.TOUCH)return;lastAct=Date.now();stopAttract();armAttract();},{capture:true});
  /* Walk-away reset: 2.5 min without a touch clears the cart and closes
     the preview/checkout so the next shopper starts fresh. */
- setInterval(()=>{if(Date.now()-lastAct<150000)return;
+ setInterval(()=>{if(!window.TOUCH||Date.now()-lastAct<150000)return;
   if(cart.length||SDECK||document.getElementById('ztv').classList.contains('open')||document.getElementById('tcheck').classList.contains('open')||document.getElementById('tkb').classList.contains('open')){
    cart=[];updateCart();selected=null;markSel();unzoom();document.getElementById('tcheck').classList.remove('open');TSEARCHCLEAR();}},15000);
- const qb=document.querySelector('.qrbub');if(qb)qb.innerHTML='<span class="bn">Touch</span> a card to take a closer look!';
 }
+let SWIPED=false;
+if(window.TOUCH){initTouch();touchDress(true);}
 /* ---- Auto-update: the deploy pipeline stamps BUILD and publishes
    /version.json; when a newer build appears the TV reloads itself — but only
    while unpaired (never mid-session) and never within 5 min of boot. In local
@@ -1155,6 +1186,13 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if(s.collection)CUR_COLLECTION=s.collection;
  CUR_NT=ntNow;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}
+ /* Touch-kiosk mode can flip live from admin (per room); ?touch=1 still
+    forces it per-URL. Re-arm attract so the 2-minute kiosk leash applies. */
+ const tm=window.URLTOUCH||!!s.touchMode;
+ if(tm!==window.TOUCH){window.TOUCH=tm;document.documentElement.classList.toggle('touch',tm);
+  if(tm)initTouch();
+  touchDress(tm);
+  if(!wasPaired){stopAttract();armAttract();}}
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}

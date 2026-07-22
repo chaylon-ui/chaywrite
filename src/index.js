@@ -28,7 +28,8 @@ export default {
       url.pathname === "/status" ||
       url.pathname === "/settings" ||
       url.pathname === "/admin/api" ||
-      url.pathname === "/switch"
+      url.pathname === "/switch" ||
+      url.pathname === "/counter"
     ) {
       if (roomName !== "default" && url.pathname !== "/status") {
         ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))

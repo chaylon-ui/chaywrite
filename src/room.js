@@ -133,6 +133,7 @@ export class BinderRoom {
       next.collection = c;
     }
     if ("topLoaders" in patch) next.topLoaders = !!patch.topLoaders;
+    if ("touchMode" in patch) next.touchMode = !!patch.touchMode;
     if ("holiday" in patch) {
       if (!["none", "christmas"].includes(patch.holiday)) return "bad holiday";
       next.holiday = patch.holiday;
@@ -325,6 +326,27 @@ export class BinderRoom {
       const err = await this.applyAdminPatch(body.patch);
       if (err) return Response.json({ error: err }, { status: 400 });
       return Response.json({ ok: true, settings: this.publicSettings() });
+    }
+
+    // Touch-kiosk "send to counter": same draft-order path the phone uses,
+    // but over HTTP since the totem has no phone. Items are re-sanitized here
+    // (the TV UI is trusted, but the request could come from anywhere).
+    if (url.pathname.endsWith("/counter") && request.method === "POST") {
+      let d; try { d = await request.json(); } catch { return Response.json({ error: "bad body" }, { status: 400 }); }
+      const items = (Array.isArray(d.items) ? d.items : []).slice(0, 100)
+        .map((i) => ({
+          variantId: String((i && i.variantId) || "").replace(/\D/g, ""),
+          name: String((i && i.name) || "").slice(0, 140),
+          price: String((i && i.price) || "0"),
+          qty: Math.max(1, Math.min(99, parseInt(i && i.qty, 10) || 1)),
+        }))
+        .filter((i) => i.variantId);
+      if (!items.length) return Response.json({ error: "empty cart" }, { status: 400 });
+      this.state.waitUntil(this.handleCounterCheckout({
+        items, count: Math.max(1, Math.min(999, parseInt(d.count, 10) || items.length)),
+        total: String(d.total || "0.00").slice(0, 12),
+      }));
+      return Response.json({ ok: true });
     }
 
     if (url.pathname.endsWith("/status")) {
