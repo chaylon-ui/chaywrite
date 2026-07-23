@@ -80,6 +80,7 @@ const GAMES = {
   // parse from the body text (passed as the third laneOf/typeOf argument).
   starwars: {
     match: /star\s*wars/i,
+    perLane: 30, // 5 lanes x 30 = up to 150 cards (3-4 pages)
     lanes: ["Leader", "Base", "Unit", "Event", "Upgrade"],
     colorNames: { Leader: "Leaders", Base: "Bases", Unit: "Units", Event: "Events", Upgrade: "Upgrades" },
     fallbackLane: "Unit",
@@ -92,6 +93,7 @@ const GAMES = {
 
   onepiece: {
     match: /one\s*piece/i,
+    perLane: 20, // 7 lanes x 20 = up to 140 cards
     lanes: ["Red", "Green", "Blue", "Purple", "Black", "Yellow", "Multi"],
     colorNames: Object.fromEntries(["Red", "Green", "Blue", "Purple", "Black", "Yellow"].map((l) => [l, l]).concat([["Multi", "Multicolor"]])),
     fallbackLane: "Multi",
@@ -111,6 +113,7 @@ const GAMES = {
 
   riftbound: {
     match: /riftbound/i,
+    perLane: 20,
     lanes: ["Legend", "Champion", "Unit", "Signature", "Spell", "Gear", "Rune", "Battlefield"],
     colorNames: { Legend: "Legends", Champion: "Champions", Unit: "Units", Signature: "Signatures", Spell: "Spells", Gear: "Gear", Rune: "Runes", Battlefield: "Battlefields" },
     fallbackLane: "Unit",
@@ -437,7 +440,7 @@ async function findInStock(name, headers) {
 
 function buildCards(products, opts = {}) {
   const minPrice = opts.minPrice ?? MIN_PRICE;
-  const perLane = opts.perLane ?? PER_LANE;
+
   // Decide the lane scheme from the dominant game in the feed; stragglers
   // from other games (mixed collections) fall into the fallback lane.
   const counts = Object.fromEntries(Object.keys(GAMES).map((k) => [k, 0]));
@@ -449,6 +452,9 @@ function buildCards(products, opts = {}) {
   const gameKey = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
   const game = counts[gameKey] > 0 ? gameKey : "mtg";
   const spec = GAMES[game];
+  // Games with deep in-stock catalogues run their lanes longer than the
+  // default dozen (a caller's perLane — search, New Today — still wins).
+  const perLane = opts.perLane ?? spec.perLane ?? PER_LANE;
 
   const byLane = Object.fromEntries(spec.lanes.map((l) => [l, []]));
   const seen = new Set();

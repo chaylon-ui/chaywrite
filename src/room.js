@@ -27,7 +27,10 @@ export class BinderRoom {
         if (s) this.settings = { ...DEFAULT_SETTINGS, ...s };
         // One-time upgrade: settings saved before the newest-first collections
         // existed still point at the old price/best-seller sorted handles.
-        const up = { "pokemon-singles": "pokemon-singles-new-arrivals", "yu-gi-oh-singles": "yu-gi-oh-singles-new-arrivals" };
+        const up = { "pokemon-singles": "pokemon-singles-new-arrivals", "yu-gi-oh-singles": "yu-gi-oh-singles-new-arrivals",
+          // the newest-1000 feeds were too thin for these — in-stock collections instead
+          "star-wars-unlimited-singles-trading-cards": "star-wars-unlimited-singles-in-stock",
+          "one-piece-cards": "one-piece-in-stock" };
         if (Array.isArray(this.settings.tabs))
           this.settings.tabs = this.settings.tabs.map((t) => (up[t.collection] ? { ...t, collection: up[t.collection] } : t));
         if (up[this.settings.collection]) this.settings.collection = up[this.settings.collection];

@@ -84,10 +84,10 @@ a.tvlink:hover{color:var(--ember)}
       <input id="colYugioh" type="text" placeholder="yu-gi-oh-singles-new-arrivals">
       <div class="icorow" data-icon="yugioh"></div>
       <div class="row"><input id="enStarwars" type="checkbox"><label for="enStarwars">Star Wars Unlimited</label></div>
-      <input id="colStarwars" type="text" placeholder="star-wars-unlimited-singles-trading-cards">
+      <input id="colStarwars" type="text" placeholder="star-wars-unlimited-singles-in-stock">
       <div class="icorow" data-icon="starwars"></div>
       <div class="row"><input id="enOnepiece" type="checkbox"><label for="enOnepiece">One Piece</label></div>
-      <input id="colOnepiece" type="text" placeholder="one-piece-cards">
+      <input id="colOnepiece" type="text" placeholder="one-piece-in-stock">
       <div class="icorow" data-icon="onepiece"></div>
       <div class="row"><input id="enRiftbound" type="checkbox"><label for="enRiftbound">Riftbound</label></div>
       <input id="colRiftbound" type="text" placeholder="riftbound-singles">
@@ -259,8 +259,8 @@ const GAME_TABS=[ // labels/themes fixed; collection + carried-on-this-TV editab
   {label:'Magic',      theme:'mtg',        game:'mtg',        input:'colMtg',        enable:'enMtg',        fallback:'new-arrivals',                  defOn:true},
   {label:'Pokémon',    theme:'pokemon',    game:'pokemon',    input:'colPokemon',    enable:'enPokemon',    fallback:'pokemon-singles-new-arrivals',  defOn:true},
   {label:'Yu-Gi-Oh!',  theme:'yugioh',     game:'yugioh',     input:'colYugioh',     enable:'enYugioh',     fallback:'yu-gi-oh-singles-new-arrivals', defOn:true},
-  {label:'Star Wars',  theme:'starwars',   game:'starwars',   input:'colStarwars',   enable:'enStarwars',   fallback:'star-wars-unlimited-singles-trading-cards', defOn:false},
-  {label:'One Piece',  theme:'onepiece',   game:'onepiece',   input:'colOnepiece',   enable:'enOnepiece',   fallback:'one-piece-cards',               defOn:false},
+  {label:'Star Wars',  theme:'starwars',   game:'starwars',   input:'colStarwars',   enable:'enStarwars',   fallback:'star-wars-unlimited-singles-in-stock', defOn:false},
+  {label:'One Piece',  theme:'onepiece',   game:'onepiece',   input:'colOnepiece',   enable:'enOnepiece',   fallback:'one-piece-in-stock',            defOn:false},
   {label:'Riftbound',  theme:'riftbound',  game:'riftbound',  input:'colRiftbound',  enable:'enRiftbound',  fallback:'riftbound-singles',             defOn:false},
   {label:'Hockey',     theme:'hockey',     game:'hockey',     input:'colHockey',     enable:'enHockey',     fallback:'all-hockey-card-singles',       defOn:false},
   {label:'Basketball', theme:'basketball', game:'basketball', input:'colBasketball', enable:'enBasketball', fallback:'all-basketball-singles',        defOn:false},
