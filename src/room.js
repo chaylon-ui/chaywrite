@@ -126,6 +126,7 @@ export class BinderRoom {
     const m = { type: "settings", data: this.publicSettings() };
     if (this.tv) this.send(this.tv, m);
     if (this.phone) this.send(this.phone, m);
+    for (const r of this.remotes) this.send(r, m); // mirrors refetch their deck off this
   }
 
   // Validate + merge an admin patch; returns null on success or an error string.
