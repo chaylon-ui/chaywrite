@@ -64,6 +64,7 @@ a.tvlink:hover{color:var(--ember)}
   <!-- Settings form -->
   <div class="card hide" id="form">
     <div class="sub" style="margin:0 0 .9rem">Editing screen “<b id="formRoom"></b>” — <a href="#" id="switchScreen" style="color:#d9822b">switch screen</a></div>
+    <a class="tvlink" id="remoteLink" target="_blank" style="margin:0 0 1rem;padding:.55rem;border:1px solid var(--line);border-radius:10px;color:var(--ember)">🖥 Watch &amp; control this screen live ↗</a>
     <label for="header">Header line (shown on the TV)</label>
     <input id="header" type="text" maxlength="200" placeholder="Featured Singles · New Arrivals over $10">
 
@@ -301,7 +302,9 @@ $('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
   setRoom(r); // every fetch below targets the picked screen
   $('loginMsg').textContent='Checking…';$('loginMsg').className='msg';PIN=pin;
   const {ok,j}=await post({}); // empty patch = harmless PIN check
-  if(ok){$('login').classList.add('hide');$('form').classList.remove('hide');$('saveMsg').textContent='';loadSettings();loadUsage();}
+  if(ok){$('login').classList.add('hide');$('form').classList.remove('hide');$('saveMsg').textContent='';
+    $('remoteLink').href='/tv?room='+ROOM+'&remote=1&k='+encodeURIComponent(PIN); // live mirror + control of this screen
+    loadSettings();loadUsage();}
   else{PIN='';$('loginMsg').textContent=(j.error||'Incorrect PIN')+(r==='default'?'':' — each screen can have its own PIN');$('loginMsg').className='msg bad';}};
 $('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('unlock').click();});
 $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').className='msg';
@@ -318,7 +321,8 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;
   const {ok,j}=await post(patch);
-  if(ok){$('saveMsg').textContent='Saved ✓ (the TV and phone update live)';$('saveMsg').className='msg ok';if(np){PIN=np;$('newPin').value='';}}
+  if(ok){$('saveMsg').textContent='Saved ✓ (the TV and phone update live)';$('saveMsg').className='msg ok';
+    if(np){PIN=np;$('newPin').value='';$('remoteLink').href='/tv?room='+ROOM+'&remote=1&k='+encodeURIComponent(PIN);}}
   else{$('saveMsg').textContent=j.error||'Save failed';$('saveMsg').className='msg bad';}};
 /* ---- Kiosk usage viewer: /alog groups a day's touch-screen events into
    sessions. Days follow store (Atlantic) time; kept 14 days per screen. ---- */

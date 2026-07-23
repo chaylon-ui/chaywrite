@@ -18,6 +18,7 @@ export class BinderRoom {
     this.tv = null;
     this.phone = null;
     this.staff = new Set(); // /staff alert pages watching this room (any number)
+    this.remotes = new Set(); // admin remote-control mirrors of this room's kiosk
     this.settings = { ...DEFAULT_SETTINGS };
     this.pin = DEFAULT_PIN;
     this.state.blockConcurrencyWhile?.(async () => {
@@ -258,8 +259,29 @@ export class BinderRoom {
         this.tv = server;
         this.send(server, { type: "settings", data: this.publicSettings() });
         this.pushTvState();
+        this.send(server, { type: "remotes", data: { n: this.remotes.size } });
+        // The kiosk streams mirror snapshots; fan them out to the remotes.
+        server.addEventListener("message", (ev) => {
+          let m; try { m = JSON.parse(ev.data); } catch { return; }
+          if (m && m.type === "mirror") for (const r of this.remotes) this.send(r, m);
+        });
         server.addEventListener("close", () => {
           if (this.tv === server) this.tv = null;
+        });
+      } else if (role === "remote") {
+        // Admin remote-control mirror (worker already checked the PIN):
+        // receives the kiosk's mirror stream, sends rc commands back to it.
+        this.remotes.add(server);
+        this.send(server, { type: "settings", data: this.publicSettings() });
+        if (this.tv) this.send(this.tv, { type: "remotes", data: { n: this.remotes.size } });
+        if (this.tv) this.send(this.tv, { type: "rc", data: { a: "hello" } });
+        server.addEventListener("message", (ev) => {
+          let m; try { m = JSON.parse(ev.data); } catch { return; }
+          if (m && m.type === "rc" && this.tv) this.send(this.tv, m);
+        });
+        server.addEventListener("close", () => {
+          this.remotes.delete(server);
+          if (this.tv) this.send(this.tv, { type: "remotes", data: { n: this.remotes.size } });
         });
       } else if (role === "phone") {
         const ok = token && token === this.token && this.now() < this.tokenExpiresAt;

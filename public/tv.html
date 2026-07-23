@@ -250,7 +250,13 @@ body.searching .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.
 .tv-cart .items{display:flex;gap:.4rem;flex:1;overflow:hidden}.tv-cart .chip{font-size:.64rem;background:#17171d;border:1px solid #2a2a34;border-radius:20px;padding:.25rem .6rem;white-space:nowrap}
 .tv-cart .total{font-family:'Cinzel',serif;font-weight:700;color:var(--ember-bright);font-size:.9rem}
 .lock{position:absolute;inset:0;background:rgba(6,6,9,.9);backdrop-filter:blur(4px);z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.1rem;text-align:center;padding:1rem}
-.lock.hide{display:none}.lock .qrbox{background:#fff;padding:12px;border-radius:12px}.lock #qr{width:190px;height:190px;display:flex;align-items:center;justify-content:center}.lock #qr img,.lock #qr canvas{width:190px;height:190px;display:block}
+.lock.hide{display:none}
+html.remote .lock{display:none!important} /* the mirror never shows the pairing QR */
+.rmbar{display:none;position:fixed;left:50%;bottom:.6rem;transform:translateX(-50%);z-index:70;align-items:center;gap:.8rem;background:#fffef4;color:#16161c;border:3px solid #101010;border-radius:16px;box-shadow:.25rem .35rem 0 rgba(16,16,16,.85);padding:.5rem 1rem;font-family:'Bangers',cursive;font-size:1rem;letter-spacing:.03em}
+html.remote .rmbar{display:flex}
+.rmbar .rmb{font-family:inherit;font-size:.95rem;background:#ffd75e;border:2.5px solid #101010;border-radius:10px;padding:.3rem .7rem;cursor:pointer}
+.rmbar .rmb:active{transform:scale(.93)}
+.rmbar #rmatt{color:#71717c}.lock .qrbox{background:#fff;padding:12px;border-radius:12px}.lock #qr{width:190px;height:190px;display:flex;align-items:center;justify-content:center}.lock #qr img,.lock #qr canvas{width:190px;height:190px;display:block}
 .lock h2{font-family:'Cinzel',serif;font-size:1.4rem}.lock p{font-size:.8rem;color:var(--muted);max-width:320px}
 .lock .rc{font-family:'Cinzel',serif;font-size:1.6rem;letter-spacing:.3em;color:var(--ember-bright);margin-left:.3em}.lock .timer{font-size:.72rem;color:var(--ember-bright);letter-spacing:.1em;font-variant-numeric:tabular-nums}
 /* Attract mode: the lock shrinks to a corner card so the case can put on a
@@ -668,6 +674,7 @@ html.touch .ttab:active,html.touch .tchip:active,html.touch .tcbtn:active,html.t
     <div class="ttn" id="ttn">30</div>
     <div class="ttp2">TAP ANYWHERE to keep shopping!</div>
   </div></div>
+  <div class="rmbar" id="rmbar"><span>🖥 REMOTE CONTROL</span><span id="rmroom"></span><span id="rmatt" style="display:none">· attract showing</span><button class="rmb" onclick="RSEND({a:'reset'})">Reset kiosk</button></div>
   <div class="tload" id="tload" aria-hidden="true"><div class="tlbox">
     <div class="tlh">HANG TIGHT!</div>
     <div class="tlp">Grabbing the cards…</div>
@@ -720,6 +727,12 @@ if(window.PORTRAIT)document.documentElement.classList.add('portrait');
    checkout hands off to the customer's phone via QR. Per-screen, like
    portrait; give each totem its own ?room= so it never crosses other TVs. */
 window.URLTOUCH=new URLSearchParams(location.search).get('touch')==='1';
+/* Remote control mode (opened from admin): this page becomes a live mirror of
+   the store kiosk — it renders the kiosk's state and forwards every tap to be
+   executed THERE. Needs the admin PIN (?k=) to connect. */
+window.REMOTE=new URLSearchParams(location.search).get('remote')==='1';
+window.RKEY=new URLSearchParams(location.search).get('k')||'';
+if(window.REMOTE){window.URLTOUCH=true;document.documentElement.classList.add('remote');}
 window.TOUCH=window.URLTOUCH; // may also flip on later via the room's admin "touchMode" setting
 if(window.TOUCH)document.documentElement.classList.add('touch');
 window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
@@ -1098,7 +1111,7 @@ function placeQrProps(){if(window.TOUCH||!document.body.classList.contains('attr
  if(arr){arr.style.right=Math.round(innerWidth-card.left+4)+'px';
   arr.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height*0.85)))+'px';}}
 window.addEventListener('resize',()=>{if(attractOn)requestAnimationFrame(placeQrProps);});
-function armAttract(){if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},attractDelayS()*1000);}
+function armAttract(){if(window.REMOTE)return;if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},attractDelayS()*1000);}
 /* When the show starts, snap back to the admin-picked home tab (latest
    arrivals for a game, or the Showcase) — an abandoned Sleeves view or
    search shouldn't idle under the NEW ARRIVALS tape. */
@@ -1123,7 +1136,7 @@ let attractAd=null,adIdx=0;
 function touchAd(){const qb=document.querySelector('.qrbub');if(!qb)return;
  qb.innerHTML=TOUCH_ADS[adIdx%TOUCH_ADS.length];adIdx++;
  qb.style.animation='none';void qb.offsetWidth;qb.style.animation='';}
-function startAttract(){if(attractOn||wasPaired)return;
+function startAttract(){if(window.REMOTE)return;if(attractOn||wasPaired)return;
  if(window.TOUCH&&cart.length){armAttract();return;} // a live cart gets the STILL THERE? countdown first
  attractOn=true;
  attractGoHome();
@@ -1170,7 +1183,8 @@ function renderQR(token,left){document.getElementById('rc').textContent=token?to
 let ws;
 function connect(){
  const proto=location.protocol==='https:'?'wss':'ws';
- ws=new WebSocket(`${proto}://${location.host}/ws?role=tv${RQ}`);
+ const role=window.REMOTE?'remote&k='+encodeURIComponent(window.RKEY):'tv';
+ ws=new WebSocket(`${proto}://${location.host}/ws?role=${role}${RQ}`);
  ws.onopen=()=>{document.getElementById('conn').classList.add('on');document.getElementById('connT').textContent='live';};
  ws.onclose=()=>{document.getElementById('conn').classList.remove('on');document.getElementById('connT').textContent='reconnecting…';setTimeout(connect,1500);};
  ws.onmessage=(ev)=>{const m=JSON.parse(ev.data);
@@ -1189,8 +1203,65 @@ function connect(){
    else if(m.type==='checkout'){if(m.data&&m.data.where==='counter')showCounter(m.data);}
    else if(m.type==='counter_order'){if(window.TOUCH)fillTdone(m.data&&m.data.name);else updateCounterOrder(m.data);}
    else if(m.type==='settings'){applySettings(m.data);}
+   else if(m.type==='mirror'){if(window.REMOTE)APPLYMIR(m.data||{});}
+   else if(m.type==='rc'){if(!window.REMOTE)EXECRC(m.data||{});}
+   else if(m.type==='remotes'){REMN=+((m.data||{}).n)||0;}
  };
 }
+/* ---- Remote control: the kiosk streams light state snapshots (page, open
+   card, cart, search) to any admin-opened /tv?remote=1 mirrors; the mirrors
+   render them with their own copy of the deck and send taps back as rc
+   commands that run on the REAL kiosk. Both screens stay in lockstep. ---- */
+let REMN=0,REM_APPLY=false,RLASTC='';
+function RSEND(o){if(ws&&ws.readyState===1)try{ws.send(JSON.stringify({type:'rc',data:o}));}catch(e){}}
+function MIRROR(force){if(window.REMOTE||(!force&&!REMN)||!ws||ws.readyState!==1)return;
+ try{ws.send(JSON.stringify({type:'mirror',data:{
+  sp:spread,
+  z:(document.getElementById('ztv').classList.contains('open')&&ZCARD)?KEY(ZCARD):null,
+  cv:ZVAR||null,
+  cart:cart.map(c=>({n:c.name,p:c.price,v:String(c.variantId||''),c:c.condition||''})),
+  q:TQ,
+  kb:document.getElementById('tkb').classList.contains('open'),
+  chk:document.getElementById('tcheck').classList.contains('open'),
+  att:document.body.classList.contains('attract')}}));}catch(e){}}
+setInterval(()=>MIRROR(),1000);
+function APPLYMIR(m){REM_APPLY=true;try{
+ if(typeof m.sp==='number'&&m.sp!==spread&&m.sp>=0&&m.sp<spreads)flipTo(m.sp);
+ const zopen=document.getElementById('ztv').classList.contains('open');
+ if(m.z){const cur=(zopen&&ZCARD)?KEY(ZCARD):null;
+  if(cur!==m.z){const c=CARDS.find(x=>KEY(x)===m.z);if(c)TOPEN(c);}
+  if(m.cv&&ZVAR!==m.cv&&ZCARD&&Array.isArray(ZCARD.variants)&&ZCARD.variants.some(v=>String(v.variantId)===String(m.cv)))TSETVAR(String(m.cv));}
+ else if(zopen){selected=null;markSel();unzoom();}
+ const cs=JSON.stringify(m.cart||[]);
+ if(cs!==RLASTC){RLASTC=cs;cart=(m.cart||[]).map(o=>({name:o.n,price:o.p,variantId:o.v,condition:o.c}));updateCart();}
+ if(typeof m.q==='string'&&m.q!==TQ){TQ=m.q;renderTQ();
+  if(TQ.trim().length>=2)TKGO();else if(!TQ&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}}
+ document.getElementById('tkb').classList.toggle('open',!!m.kb);
+ if(m.chk&&cart.length){renderTcheck();document.getElementById('tcheck').classList.add('open');}
+ else if(!m.chk)document.getElementById('tcheck').classList.remove('open');
+ const ra=document.getElementById('rmatt');if(ra)ra.style.display=m.att?'inline':'none';
+}finally{REM_APPLY=false;}}
+function EXECRC(d){if(!d)return;lastAct=Date.now();stopAttract();armAttract();
+ switch(d.a){
+  case 'hello':break;
+  case 'flip':if(typeof d.t==='number')flipTo(d.t);break;
+  case 'tap':{const c=CARDS.find(x=>KEY(x)===d.id);if(c)TOPEN(c);break;}
+  case 'close':selected=null;markSel();unzoom();break;
+  case 'chip':TSETVAR(String(d.vid||''));break;
+  case 'add':{const b=document.querySelector('#tact .tadd');if(b)TADD(b);break;}
+  case 'cset':TCSET(String(d.vid||''),+d.d||0,null);break;
+  case 'crem':TCREMOVE(String(d.vid||''),null);break;
+  case 'cart':TCKO();break;
+  case 'chkclose':document.getElementById('tcheck').classList.remove('open');break;
+  case 'clearcart':cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');break;
+  case 'counter':TCOUNTER();break;
+  case 'sopen':TSEARCHOPEN(null);break;
+  case 'key':TKEY(String(d.k||' ').slice(0,1));break;
+  case 'sclear':TSEARCHCLEAR();break;
+  case 'sdone':TSEARCHCLOSE();break;
+  case 'reset':touchReset();break;
+ }
+ MIRROR(true);}
 /* ---- Touch mode: the totem drives itself. On-screen tabs and page arrows
    replace the phone, tapping a card previews it (with condition/foil chips
    when we stock several printings), Add builds an on-screen cart, and
@@ -1216,7 +1287,7 @@ function effT(){if(!ZCARD)return null;if(!ZVAR)return ZCARD;
    grouped by session. Nothing personal is recorded — just taps, searches,
    cart moves and how the visit ended. */
 let ASID=null,AQ=[],AFT=null;
-function TRACK(e,d,v){if(!window.TOUCH)return;
+function TRACK(e,d,v){if(!window.TOUCH||window.REMOTE)return;
  if(!ASID){ASID='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   AQ.push({t:Date.now(),e:'ss',d:'touch',v:0});}
  AQ.push({t:Date.now(),e,d:String(d||'').slice(0,80),v:+v||0});
@@ -1235,9 +1306,11 @@ function ASESSEND(reason){if(!ASID)return;AQ.push({t:Date.now(),e:'se',d:reason,
  const sid=ASID;ASID=null;clearTimeout(AFT);AFT=null;
  while(AQ.length){const batch=AQ.splice(0,40);
   fetch('/track?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid,events:batch})}).catch(()=>{});}}
-function TOPEN(c){if(!c)return;TRACK('tap',c.name);ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
+function TOPEN(c){if(!c)return;
+ if(window.REMOTE&&!REM_APPLY){RSEND({a:'tap',id:KEY(c)});return;}
+ TRACK('tap',c.name);ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
 function TSETVAR(vid){if(!ZCARD)return;ZVAR=vid;ZKEEP=true;zoom(effT());ZKEEP=false;}
-function TCHIP(el,vid){comicBurst(el,'SWAPPED!',true);TSETVAR(vid);}
+function TCHIP(el,vid){comicBurst(el,'SWAPPED!',true);if(window.REMOTE&&!REM_APPLY){RSEND({a:'chip',vid:String(vid)});return;}TSETVAR(vid);}
 function TOPENB(i){const b=BETCARDS&&BETCARDS[i];if(b)TOPEN(b);}
 function chipLbl(v,g){const p=[];if(v.condition)p.push(v.condition);if(v.foil)p.push(g==='pokemon'?'Holo':'Foil');return p.join(' · ')||'Standard';}
 function renderTact(){const ta=document.getElementById('tact');if(!ta)return;if(!ZCARD){ta.innerHTML='';return;}
@@ -1254,6 +1327,7 @@ function comicBurst(btn,txt,small){const r=btn.getBoundingClientRect();
  b.innerHTML=`<svg viewBox="0 0 200 120"><polygon points="196,60 163.8,69.6 183.1,87 146.7,86.2 148,106.8 117.1,95.7 100,114 82.9,95.7 52,106.8 53.3,86.2 16.9,87 36.2,69.6 4,60 36.2,50.4 16.9,33 53.3,33.8 52,13.2 82.9,24.3 100,6 117.1,24.3 148,13.2 146.7,33.8 183.1,33 163.8,50.4" fill="#ffd23f" stroke="#101010" stroke-width="5" stroke-linejoin="round"/><text x="100" y="73" text-anchor="middle" font-family="'Bangers','Comic Sans MS',cursive" font-size="${t.length>8?30:40}" letter-spacing="2" fill="#c9342b" stroke="#fffef4" stroke-width="1.4" paint-order="stroke">${H(t)}</text></svg>`;
  document.body.appendChild(b);setTimeout(()=>b.remove(),950);}
 function TADD(btn){const e=effT();if(!e)return;
+ if(window.REMOTE){comicBurst(btn);RSEND({a:'add'});return;}
  const left=e.variantId?stockLeft(e.variantId):null;
  if(left!==null&&left<=0){const q=QTYS[String(e.variantId)];
   btn.textContent=q>0?('That’s all we have — '+q+' in stock'):'Sold out — sorry!';
@@ -1275,11 +1349,13 @@ function kioskCartUrl(items){let url='/cart';
 /* The cart view is editable: steppers respect the stock caps, the QR
    re-renders on every change, and an emptied cart closes itself. */
 function TCSET(vid,delta,el){vid=String(vid);
+ if(window.REMOTE&&!REM_APPLY){if(el)comicBurst(el,delta>0?'+1!':'−1!',true);RSEND({a:'cset',vid,d:delta});return;}
  if(delta>0){const left=stockLeft(vid);if(left!==null&&left<=0){if(el)comicBurst(el,'ALL GONE!',true);return;}
   const proto=cart.find(c=>String(c.variantId)===vid);if(proto){cart.push(Object.assign({},proto));TRACK('add',proto.name,parseFloat(proto.price)||0);}if(el)comicBurst(el,'+1!',true);}
  else{for(let i=cart.length-1;i>=0;i--)if(String(cart[i].variantId)===vid){TRACK('rm',cart[i].name);cart.splice(i,1);break;}if(el)comicBurst(el,'−1!',true);}
  updateCart();renderTcheck();}
 function TCREMOVE(vid,el){vid=String(vid);if(el)comicBurst(el,'GONE!',true);
+ if(window.REMOTE&&!REM_APPLY){RSEND({a:'crem',vid});return;}
  const gone=cart.find(c=>String(c.variantId)===vid);if(gone)TRACK('rm',gone.name);
  cart=cart.filter(c=>String(c.variantId)!==vid);updateCart();renderTcheck();}
 function renderTcheck(){const items=cartAgg();
@@ -1328,13 +1404,14 @@ function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
    keyboard. Results swap into the case live via the shared search-deck path
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
 let TQ='',TKT=null,TKSEQ=0;
-function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);document.getElementById('tkb').classList.add('open');renderTQ();}
+function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);if(window.REMOTE&&!REM_APPLY){RSEND({a:'sopen'});return;}document.getElementById('tkb').classList.add('open');renderTQ();}
 function TSEARCHCLOSE(){document.getElementById('tkb').classList.remove('open');}
 function TSEARCHCLEAR(){TQ='';TKSEQ++;clearTimeout(TKT);renderTQ();
  document.getElementById('tkres').textContent='Results fill the case behind this keyboard as you type.';
  endSearchDeck();TSEARCHCLOSE();renderTouchTabs(SETTINGS);}
 function renderTQ(){const el=document.getElementById('tkq');if(el)el.textContent=TQ;}
-function TKEY(k){if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
+function TKEY(k){if(window.REMOTE&&!REM_APPLY){RSEND({a:'key',k});return;}
+ if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
  renderTQ();clearTimeout(TKT);TKT=setTimeout(TKGO,350);}
 function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres');
  if(q.length<2){if(!q&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}res.textContent='Results fill the case behind this keyboard as you type.';return;}
@@ -1391,7 +1468,10 @@ function initTouch(){if(TINITED)return;TINITED=true;
    &&!document.getElementById('ztv').classList.contains('open')
    &&!document.getElementById('tcheck').classList.contains('open')
    &&!document.getElementById('tkb').classList.contains('open')){
-   SWIPED=true;flip(dx<0?1:-1);setTimeout(()=>{SWIPED=false;},400);}},{capture:true});
+   SWIPED=true;const sd=dx<0?1:-1;
+   if(window.REMOTE){const st=spread+sd;if(st>=0&&st<spreads)RSEND({a:'flip',t:st});}
+   else flip(sd);
+   setTimeout(()=>{SWIPED=false;},400);}},{capture:true});
  /* Page arrows fire on FINGER-DOWN, not click: a click needs a clean press
     AND release on the same spot, which kiosk touch frames often fumble.
     They wrap around at either end, and presses during the flip animation
@@ -1402,23 +1482,24 @@ function initTouch(){if(TINITED)return;TINITED=true;
   comicBurst(el,'FLIP!',true);
   const base=(pendingSpread!=null)?pendingSpread:((flipping&&flipTarget!=null)?flipTarget:spread);
   let t=base+dir;if(t<0)t=spreads-1;else if(t>=spreads)t=0;
+  if(window.REMOTE){RSEND({a:'flip',t});return;}
   flipTo(t);};
  [['tprev',-1],['tnext',1]].forEach(([id,dir])=>{const el=document.getElementById(id);
   el.addEventListener('pointerdown',e=>{e.preventDefault();NAVGO(el,dir);});});
- document.getElementById('tclose').onclick=function(){comicBurst(this,'BAM!',true);selected=null;markSel();unzoom();};
+ document.getElementById('tclose').onclick=function(){comicBurst(this,'BAM!',true);if(window.REMOTE){RSEND({a:'close'});return;}selected=null;markSel();unzoom();};
  /* Tapping the featured card itself closes the preview, same as the ✕. */
- document.getElementById('ztvc').addEventListener('click',()=>{if(!window.TOUCH)return;selected=null;markSel();unzoom();});
- document.getElementById('ztv').addEventListener('click',ev=>{if(ev.target.id==='ztv'){selected=null;markSel();unzoom();}});
- document.getElementById('tcko').onclick=function(){comicBurst(this,'SCAN IT!');TCKO();};
- document.getElementById('tcCounter').onclick=function(){comicBurst(this,'SENT!');TCOUNTER();};
- document.getElementById('tcClose').onclick=()=>document.getElementById('tcheck').classList.remove('open');
- document.getElementById('tcClear').onclick=function(){comicBurst(this,'POOF!',true);cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
+ document.getElementById('ztvc').addEventListener('click',()=>{if(!window.TOUCH)return;if(window.REMOTE){RSEND({a:'close'});return;}selected=null;markSel();unzoom();});
+ document.getElementById('ztv').addEventListener('click',ev=>{if(ev.target.id==='ztv'){if(window.REMOTE){RSEND({a:'close'});return;}selected=null;markSel();unzoom();}});
+ document.getElementById('tcko').onclick=function(){comicBurst(this,'SCAN IT!');if(window.REMOTE){RSEND({a:'cart'});return;}TCKO();};
+ document.getElementById('tcCounter').onclick=function(){comicBurst(this,'SENT!');if(window.REMOTE){RSEND({a:'counter'});return;}TCOUNTER();};
+ document.getElementById('tcClose').onclick=()=>{if(window.REMOTE){RSEND({a:'chkclose'});return;}document.getElementById('tcheck').classList.remove('open');};
+ document.getElementById('tcClear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE){RSEND({a:'clearcart'});return;}cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
  document.getElementById('tkrows').innerHTML=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
   .map(r=>'<div class="tkr">'+[...r].map(k=>`<button class="tkk" onclick="TKEY('${k}')">${k}</button>`).join('')+'</div>').join('')
   +`<div class="tkr"><button class="tkk wide" onclick="TKEY(' ')">space</button><button class="tkk wide" onclick="TKEY('⌫')">⌫</button></div>`;
- document.getElementById('tkclear').onclick=function(){comicBurst(this,'POOF!',true);TSEARCHCLEAR();};
- document.getElementById('tkdone').onclick=function(){comicBurst(this,'SHOW ME!',true);TSEARCHCLOSE();};
- document.getElementById('tkb').addEventListener('click',ev=>{if(ev.target.id==='tkb')TSEARCHCLOSE();});
+ document.getElementById('tkclear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE){RSEND({a:'sclear'});return;}TSEARCHCLEAR();};
+ document.getElementById('tkdone').onclick=function(){comicBurst(this,'SHOW ME!',true);if(window.REMOTE){RSEND({a:'sdone'});return;}TSEARCHCLOSE();};
+ document.getElementById('tkb').addEventListener('click',ev=>{if(ev.target.id==='tkb'){if(window.REMOTE){RSEND({a:'sdone'});return;}TSEARCHCLOSE();}});
  /* Any touch counts as activity: wake from attract mode and hold it off. */
  document.addEventListener('pointerdown',()=>{if(!window.TOUCH)return;lastAct=Date.now();stopAttract();armAttract();},{capture:true});
  /* Walk-away housekeeping, once a second:
@@ -1426,7 +1507,7 @@ function initTouch(){if(TINITED)return;TINITED=true;
       down 30s (getting shakier under 10) — any tap keeps the cart; hitting
       zero clears it and rolls straight into the attract show.
     - no cart: open preview/search/checkout quietly resets at 2.5 minutes. */
- setInterval(()=>{if(!window.TOUCH)return hideTTMO();
+ setInterval(()=>{if(!window.TOUCH||window.REMOTE)return hideTTMO();
   const t=(Date.now()-lastAct)/1000;
   if(cart.length){
    if(t>=TOUCH_ATTRACT_S){const left=Math.ceil(TOUCH_ATTRACT_S+30-t);
@@ -1446,6 +1527,7 @@ function showTTMO(n){const m=document.getElementById('ttmo');m.classList.add('op
 function hideTTMO(){const m=document.getElementById('ttmo');if(m)m.classList.remove('open');}
 let SWIPED=false;
 if(window.TOUCH){initTouch();touchDress(true);}
+if(window.REMOTE){const rl=document.getElementById('rmroom');if(rl)rl.textContent='· screen “'+(ROOM||'default')+'”';}
 /* ---- Auto-update: the deploy pipeline stamps BUILD and publishes
    /version.json; when a newer build appears the TV reloads itself — but only
    while unpaired (never mid-session) and never within 5 min of boot. In local

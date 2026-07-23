@@ -34,16 +34,17 @@ export default {
       url.pathname === "/track" ||
       url.pathname === "/alog"
     ) {
-      // Staff order alerts are gated behind the default room's admin PIN:
-      // /staff pages pass it as ?k= on their websockets, Shopify Flow puts it
-      // in the /alert URL. Checked against the DEFAULT room so one key covers
-      // every screen; the room DO applies a lockout against brute force.
-      if (url.pathname === "/alert" || (url.pathname === "/ws" && url.searchParams.get("role") === "staff")) {
+      // PIN-gated connections. Staff alert pages and Flow's /alert POSTs check
+      // against the DEFAULT room's admin PIN (one key covers every screen);
+      // remote-control mirrors check against the TARGET screen's own PIN.
+      // The room DO applies a lockout against brute force either way.
+      const wsRole = url.pathname === "/ws" ? (url.searchParams.get("role") || "") : "";
+      if (url.pathname === "/alert" || wsRole === "staff" || wsRole === "remote") {
         const k = url.searchParams.get("k") || "";
+        const gate = wsRole === "remote" ? room : env.ROOM.get(env.ROOM.idFromName("default"));
         let ok = false;
         try {
-          const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
-            .fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
+          const chk = await gate.fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
           ok = !!(await chk.json()).ok;
         } catch {}
         if (!ok) return Response.json({ error: "staff key required" }, { status: 403 });
