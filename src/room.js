@@ -407,17 +407,32 @@ export class BinderRoom {
       const day = /^\d{4}-\d{2}-\d{2}$/.test((b && b.day) || "") ? b.day
         : new Date().toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
       const rows = (await this.state.storage.get("alog:" + day)) || [];
-      const bySid = {}, sum = { sessions: 0, taps: 0, searches: 0, adds: 0, qr: 0, counter: 0, orders: 0, timeouts: 0, counterTotal: 0 };
+      const bySid = {};
       for (const [sid, t, e, dd, v] of rows) {
         const s = (bySid[sid] = bySid[sid] || { sid, start: t, end: t, events: [] });
         s.start = Math.min(s.start, t); s.end = Math.max(s.end, t);
         s.events.push({ t, e, d: dd, v });
-        if (e === "tap") sum.taps++; else if (e === "q") sum.searches++; else if (e === "add") sum.adds++;
-        else if (e === "qr") sum.qr++; else if (e === "send") { sum.counter++; sum.counterTotal += v || 0; }
-        else if (e === "ord") sum.orders++; else if (e === "to") sum.timeouts++;
       }
       const sessions = Object.values(bySid).sort((a, z) => z.start - a.start).slice(0, 200);
-      sum.sessions = sessions.length;
+      // Collapse letter-by-letter search chains (live search once fired per
+      // keystroke; also cleans batches that crossed a flush boundary): while
+      // consecutive q events extend/backspace the same text, keep the last.
+      for (const s of sessions) {
+        const out = [];
+        for (const ev of s.events) {
+          const prev = out[out.length - 1];
+          if (prev && prev.e === "q" && ev.e === "q" && ev.t - prev.t < 25000
+            && (String(ev.d).startsWith(String(prev.d)) || String(prev.d).startsWith(String(ev.d)))) out[out.length - 1] = ev;
+          else out.push(ev);
+        }
+        s.events = out;
+      }
+      const sum = { sessions: sessions.length, taps: 0, searches: 0, adds: 0, qr: 0, counter: 0, orders: 0, timeouts: 0, counterTotal: 0 };
+      for (const s of sessions) for (const ev of s.events) {
+        if (ev.e === "tap") sum.taps++; else if (ev.e === "q") sum.searches++; else if (ev.e === "add") sum.adds++;
+        else if (ev.e === "qr") sum.qr++; else if (ev.e === "send") { sum.counter++; sum.counterTotal += ev.v || 0; }
+        else if (ev.e === "ord") sum.orders++; else if (ev.e === "to") sum.timeouts++;
+      }
       sum.counterTotal = Math.round(sum.counterTotal * 100) / 100;
       return Response.json({ day, summary: sum, sessions }, { headers: { "cache-control": "no-store" } });
     }

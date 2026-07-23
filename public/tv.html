@@ -1224,6 +1224,13 @@ function TRACK(e,d,v){if(!window.TOUCH)return;
 function FLUSHT(){clearTimeout(AFT);AFT=null;if(!AQ.length||!ASID)return;const batch=AQ.splice(0,40);
  fetch('/track?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:ASID,events:batch})}).catch(()=>{});
  if(AQ.length)AFT=setTimeout(FLUSHT,6000);}
+/* Live search fires as you type — log ONE search per query, not one per
+   letter: while the previous search event is still queued and the new text
+   just extends (or backspaces) it, rewrite that event instead of adding. */
+let QEV=null;
+function TRACKQ(q){if(!window.TOUCH)return;q=String(q).slice(0,80);
+ if(QEV&&AQ.includes(QEV)&&Date.now()-QEV.t<20000&&(String(QEV.d).startsWith(q)||q.startsWith(String(QEV.d)))){QEV.d=q;QEV.t=Date.now();return;}
+ TRACK('q',q);QEV=AQ[AQ.length-1];}
 function ASESSEND(reason){if(!ASID)return;AQ.push({t:Date.now(),e:'se',d:reason,v:0});
  const sid=ASID;ASID=null;clearTimeout(AFT);AFT=null;
  while(AQ.length){const batch=AQ.splice(0,40);
@@ -1331,7 +1338,7 @@ function TKEY(k){if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
  renderTQ();clearTimeout(TKT);TKT=setTimeout(TKGO,350);}
 function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres');
  if(q.length<2){if(!q&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}res.textContent='Results fill the case behind this keyboard as you type.';return;}
- res.textContent='Searching…';TRACK('q',q);
+ res.textContent='Searching…';TRACKQ(q);
  fetch('/search.json?q='+encodeURIComponent(q)).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==TKSEQ||!d)return;
   const n=Array.isArray(d.cards)?d.cards.length:0;
