@@ -2,6 +2,10 @@ import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN } from "./c
 
 const THEMES = ["mtg", "pokemon", "yugioh", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
+// Optional tab icon: a small data-URL image the admin page has already
+// downsampled. Strict shape + size cap keeps settings well under DO limits.
+const cleanIcon = (v) =>
+  (typeof v === "string" && v.length <= 12000 && /^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(v)) ? v : "";
 
 export class BinderRoom {
   constructor(state, env) {
@@ -103,11 +107,11 @@ export class BinderRoom {
     const base = (Array.isArray(this.settings.tabs) ? this.settings.tabs : []).filter((t) => t.enabled !== false);
     const st = this.settings.showcaseTab || {};
     const sc = st.enabled
-      ? [{ label: String(st.label || "Showcase").slice(0, 24), collection: st.collection || "esl-showcase", theme: "mtg", game: "showcase", showcase: true }]
+      ? [{ label: String(st.label || "Showcase").slice(0, 24), collection: st.collection || "esl-showcase", theme: "mtg", game: "showcase", showcase: true, icon: st.icon || "" }]
       : [];
     const sv = this.settings.sleevesTab || {};
     const sl = sv.enabled
-      ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true }]
+      ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true, icon: sv.icon || "" }]
       : [];
     const nt = this.settings.newToday || {};
     const extra = base
@@ -155,7 +159,7 @@ export class BinderRoom {
       if (!st || typeof st !== "object") return "bad showcaseTab";
       const c = String(st.collection || "esl-showcase").trim().toLowerCase();
       if (!HANDLE_RE.test(c)) return "bad showcase collection handle";
-      next.showcaseTab = { enabled: !!st.enabled, label: String(st.label || "Showcase").slice(0, 24).trim() || "Showcase", collection: c };
+      next.showcaseTab = { enabled: !!st.enabled, label: String(st.label || "Showcase").slice(0, 24).trim() || "Showcase", collection: c, icon: cleanIcon(st.icon) };
       // If the Showcase tab was just disabled while on screen, fall back home.
       if (!next.showcaseTab.enabled && next.showcaseActive) {
         const home = (Array.isArray(next.tabs) && next.tabs[0]) || null;
@@ -168,7 +172,7 @@ export class BinderRoom {
       if (!sv || typeof sv !== "object") return "bad sleevesTab";
       const c = String(sv.collection || "all-dragon-shield-sleeves").trim().toLowerCase();
       if (!HANDLE_RE.test(c)) return "bad sleeves collection handle";
-      next.sleevesTab = { enabled: !!sv.enabled, label: String(sv.label || "Sleeves").slice(0, 24).trim() || "Sleeves", collection: c };
+      next.sleevesTab = { enabled: !!sv.enabled, label: String(sv.label || "Sleeves").slice(0, 24).trim() || "Sleeves", collection: c, icon: cleanIcon(sv.icon) };
       // If the sleeve wall was just disabled while on screen, fall back home.
       if (!next.sleevesTab.enabled && next.sleevesActive) {
         const home = (Array.isArray(next.tabs) && next.tabs[0]) || null;
@@ -212,7 +216,7 @@ export class BinderRoom {
         if (!HANDLE_RE.test(c)) return "bad collection handle for " + label;
         const theme = THEMES.includes(t.theme) ? t.theme : "mtg";
         const game = THEMES.includes(t.game) ? t.game : theme;
-        clean.push({ label, collection: c, theme, game, enabled: t.enabled !== false });
+        clean.push({ label, collection: c, theme, game, enabled: t.enabled !== false, icon: cleanIcon(t.icon) });
       }
       next.tabs = clean;
       // Keep the active collection/theme/game pointing at a real ENABLED tab —

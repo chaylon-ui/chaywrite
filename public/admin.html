@@ -28,6 +28,13 @@ input:focus,select:focus{outline:none;border-color:var(--ember)}
 .btn:active{transform:scale(.99)}
 .msg{text-align:center;font-size:.85rem;margin-top:1rem;min-height:1.2em}
 .msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}
+.icorow{display:flex;align-items:center;gap:.55rem;margin-top:.45rem}
+.icoprev{height:26px;max-width:110px;object-fit:contain;background:#ffffff14;border-radius:6px;padding:2px 5px}
+.icobtn{font-size:.7rem;color:var(--ember);cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:.32rem .6rem}
+.icobtn:hover{border-color:var(--ember)}
+.icoclr{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.7rem;padding:.3rem}
+.icoclr:hover{color:var(--bad)}
+.icohint{font-size:.64rem;color:var(--muted)}
 .uchip{background:#0e0e12;border:1px solid var(--line);border-radius:8px;padding:.35rem .6rem;font-size:.74rem;color:var(--muted)}
 .uchip b{color:var(--ink);font-size:.85rem}
 .usess{border:1px solid var(--line);border-radius:10px;margin-top:.5rem;padding:.45rem .7rem;font-size:.78rem}
@@ -68,14 +75,20 @@ a.tvlink:hover{color:var(--ember)}
       <div class="hint" style="margin-top:.2rem">Tick the games THIS TV carries — the sports-area TV can carry only Hockey &amp; Basketball while the main TV skips them. Only cards over $10 and in stock are shown.</div>
       <div class="row"><input id="enMtg" type="checkbox"><label for="enMtg">Magic</label></div>
       <input id="colMtg" type="text" placeholder="new-arrivals">
+      <div class="icorow" data-icon="mtg"></div>
       <div class="row"><input id="enPokemon" type="checkbox"><label for="enPokemon">Pokémon</label></div>
       <input id="colPokemon" type="text" placeholder="pokemon-singles-new-arrivals">
+      <div class="icorow" data-icon="pokemon"></div>
       <div class="row"><input id="enYugioh" type="checkbox"><label for="enYugioh">Yu-Gi-Oh!</label></div>
       <input id="colYugioh" type="text" placeholder="yu-gi-oh-singles-new-arrivals">
+      <div class="icorow" data-icon="yugioh"></div>
       <div class="row"><input id="enHockey" type="checkbox"><label for="enHockey">Hockey</label></div>
       <input id="colHockey" type="text" placeholder="all-hockey-card-singles">
+      <div class="icorow" data-icon="hockey"></div>
       <div class="row"><input id="enBasketball" type="checkbox"><label for="enBasketball">Basketball</label></div>
       <input id="colBasketball" type="text" placeholder="all-basketball-singles">
+      <div class="icorow" data-icon="basketball"></div>
+      <div class="hint">Tab icon: upload a logo (any size — it's shrunk automatically) and the kiosk tab bar shows it instead of the word. Remove it to go back to text.</div>
     </div>
 
     <div class="row"><input id="topLoaders" type="checkbox"><label for="topLoaders">Show each card in a top-loader (TV)</label></div>
@@ -113,6 +126,7 @@ a.tvlink:hover{color:var(--ember)}
       <div class="row" style="margin-top:.6rem"><input id="scEnabled" type="checkbox"><label for="scEnabled">Show a “Showcase” tab of cards tagged <code>ESL-SHOWCASE</code></label></div>
       <label for="scCollection">Collection handle</label>
       <input id="scCollection" type="text" placeholder="esl-showcase">
+      <div class="icorow" data-icon="showcase"></div>
       <div class="hint">The <code>esl-showcase</code> smart collection gathers the tag automatically — tag or untag a product in Shopify and the TV follows. All games show together, sorted by game then color/energy. No $10 minimum.</div>
     </div>
 
@@ -122,6 +136,7 @@ a.tvlink:hover{color:var(--ember)}
       <div class="row" style="margin-top:.6rem"><input id="svEnabled" type="checkbox"><label for="svEnabled">Show a “Sleeves” tab styled as a black retail shelf</label></div>
       <label for="svCollection">Collection handle</label>
       <input id="svCollection" type="text" placeholder="all-dragon-shield-sleeves">
+      <div class="icorow" data-icon="sleeves"></div>
       <div class="hint">Dragon Shield boxes stand on black gondola shelves, sorted by product line, with the usual dice-and-trinket clutter in the gaps. No $10 minimum, no top-loaders, no conditions. Use <code>all-regular-dragon-shield-sleeves</code> instead to hide Japanese &amp; Perfect Fit sizes.</div>
     </div>
 
@@ -234,6 +249,30 @@ const GAME_TABS=[ // labels/themes fixed; collection + carried-on-this-TV editab
   {label:'Hockey',     theme:'hockey',     game:'hockey',     input:'colHockey',     enable:'enHockey',     fallback:'all-hockey-card-singles',       defOn:false},
   {label:'Basketball', theme:'basketball', game:'basketball', input:'colBasketball', enable:'enBasketball', fallback:'all-basketball-singles',        defOn:false},
 ];
+/* ---- Tab icons: any uploaded image is downsampled on this page (56px tall,
+   WebP, ~<9KB) before it's saved, so a 4MB logo costs the kiosk nothing. ---- */
+const ICONS={}; // key ('mtg'…'sleeves') -> small data URL, '' = text label
+function shrinkIcon(file,cb){const fr=new FileReader();
+ fr.onload=()=>{const img=new Image();
+  img.onload=()=>{const IH=56,w=Math.max(24,Math.min(220,Math.round(img.width*IH/img.height)||IH));
+   const cv=document.createElement('canvas');cv.width=w;cv.height=IH;
+   const cx=cv.getContext('2d');cx.imageSmoothingEnabled=true;cx.imageSmoothingQuality='high';
+   cx.drawImage(img,0,0,w,IH);
+   let out=cv.toDataURL('image/webp',0.8);
+   if(!/^data:image\/webp/.test(out))out=cv.toDataURL('image/png'); // Safari fallback
+   if(out.length>12000)out=cv.toDataURL('image/webp',0.5);
+   cb(/^data:image\/(webp|png)/.test(out)&&out.length<=12000?out:null);};
+  img.onerror=()=>cb(null);img.src=fr.result;};
+ fr.onerror=()=>cb(null);fr.readAsDataURL(file);}
+document.querySelectorAll('.icorow').forEach(row=>{const key=row.dataset.icon;
+ row.innerHTML=`<img class="icoprev hide"><label class="icobtn">Tab icon…<input type="file" accept="image/*" style="display:none"></label><button type="button" class="icoclr hide">✕ remove</button><span class="icohint">optional — shows instead of the word</span>`;
+ const prev=row.querySelector('.icoprev'),file=row.querySelector('input[type=file]'),clr=row.querySelector('.icoclr');
+ row.refresh=()=>{const u=ICONS[key]||'';prev.classList.toggle('hide',!u);if(u)prev.src=u;clr.classList.toggle('hide',!u);};
+ file.addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+  shrinkIcon(f,url=>{if(!url){alert('Could not shrink that image — try a simpler logo file.');return;}
+   ICONS[key]=url;row.refresh();});});
+ clr.onclick=()=>{ICONS[key]='';row.refresh();};});
+function refreshIconRows(){document.querySelectorAll('.icorow').forEach(r=>r.refresh&&r.refresh());}
 async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json();
   $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('kbPos').value=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';$('holiday').value=s.holiday==='christmas'?'christmas':'none';
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
@@ -248,7 +287,10 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
   const tabs=Array.isArray(s.tabs)?s.tabs:[];
   GAME_TABS.forEach(g=>{const t=tabs.find(x=>x.game===g.game)||tabs.find(x=>x.theme===g.theme);
     $(g.input).value=(t&&t.collection)||g.fallback;
-    $(g.enable).checked=t?t.enabled!==false:g.defOn;});
+    $(g.enable).checked=t?t.enabled!==false:g.defOn;
+    ICONS[g.game]=(t&&t.icon)||'';});
+  ICONS.showcase=sc.icon||'';ICONS.sleeves=sv.icon||'';
+  refreshIconRows();
 }catch(e){}}
 async function post(patch){const r=await fetch('/admin/api?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
   const j=await r.json().catch(()=>({error:'network'}));return{ok:r.ok,j};}
@@ -264,12 +306,12 @@ $('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
 $('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('unlock').click();});
 $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').className='msg';
   const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,enabled:$(g.enable).checked,
-    collection:($(g.input).value.trim().toLowerCase())||g.fallback}));
+    collection:($(g.input).value.trim().toLowerCase())||g.fallback,icon:ICONS[g.game]||''}));
   if(!tabs.some(t=>t.enabled)){$('saveMsg').textContent='Enable at least one game';$('saveMsg').className='msg bad';return;}
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
     perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
-    showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase'},
-    sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves'},
+    showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase',icon:ICONS.showcase||''},
+    sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
     attractHome:$('attractHome').value,

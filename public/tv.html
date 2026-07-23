@@ -445,8 +445,25 @@ html.touch .qrbub{right:auto;left:50%;bottom:2.4vh;transform:translateX(-50%) ro
 html.touch .qrbub::before,html.touch .qrbub::after{display:none}
 html.touch #caseInner .card{cursor:pointer}
 html.touch .betters .bcard{cursor:pointer}
-.ttabs{display:none;position:absolute;top:.55rem;left:50%;transform:translateX(-50%);z-index:26;gap:.45rem;max-width:86vw;flex-wrap:wrap;justify-content:center}
+.ttabs{display:none;position:absolute;top:.55rem;left:50%;transform:translateX(-50%);z-index:26;gap:.3rem;max-width:94vw;flex-direction:column;align-items:center}
 html.touch .ttabs{display:flex}
+/* The tab row scrolls sideways instead of wrapping — a clipped, fading button
+   at the edge plus a ‹ › chevron say "more this way", so the bar never looks
+   like it ends while buttons are off-screen. */
+.tswrap{position:relative;display:flex;align-items:center;gap:.25rem;max-width:94vw}
+.tscroll{display:flex;gap:.45rem;overflow-x:auto;flex-wrap:nowrap;padding:.25rem .3rem;scrollbar-width:none;max-width:86vw}
+.tscroll .ttab{flex:0 0 auto;white-space:nowrap} /* buttons keep their size; the ROW scrolls */
+.tscroll::-webkit-scrollbar{display:none}
+.tswrap.canl .tscroll{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px);mask-image:linear-gradient(90deg,transparent,#000 36px)}
+.tswrap.canr .tscroll{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent)}
+.tswrap.canl.canr .tscroll{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent)}
+.tsarr{display:none;flex:0 0 auto;font-family:'Bangers',cursive;font-size:1.5rem;line-height:1;width:2.3rem;height:2.3rem;border-radius:50%;background:#fffef4;color:#16161c;border:3px solid #101010;box-shadow:.14rem .2rem 0 #101010;cursor:pointer;padding:0}
+.tswrap.canl .tsl{display:block}
+.tswrap.canr .tsr{display:block}
+.tsarr:active{transform:scale(.9)}
+/* Optional tab icon (admin upload, auto-shrunk) — falls back to the label. */
+.ttab .ticon{display:block;height:1.75em;max-width:9rem;object-fit:contain;pointer-events:none}
+.ttab.hasico{padding:.35rem .8rem}
 /* Reserve real space for the tab bar so it never covers the top card row —
    --ttabh is measured from the rendered bar (it grows when the search pill
    wraps to a second line) and the case shrinks to fit below it. */
@@ -457,7 +474,7 @@ html.touch.portrait .case{height:min(100%,1800px)}
 .ttab.on{color:#0d0d0f;background:var(--ember-bright);border-color:transparent}
 /* The card search gets a real search-field look on its own centered row —
    white pill, magnifier, placeholder text — impossible to miss. */
-.tsbar{flex-basis:100%;max-width:24rem;margin:.15rem auto 0;display:flex;align-items:center;gap:.6rem;
+.tsbar{width:min(24rem,86vw);margin:.15rem auto 0;display:flex;align-items:center;gap:.6rem;
  background:#fffef4;border:2px solid #101010;border-radius:26px;padding:.62rem 1.25rem;cursor:pointer;
  box-shadow:.18rem .26rem 0 rgba(16,16,16,.8);text-align:left}
 .tsbar .tsico{font-size:1.05rem}
@@ -1273,12 +1290,29 @@ function TCKO(){if(!cart.length)return;renderTcheck();
 function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)return;
  const tabs=Array.isArray(s.tabs)?s.tabs:[];
  const searching=document.body.classList.contains('searching');
- box.innerHTML=tabs.map((t,i)=>{const on=!searching&&t.collection===s.collection&&(!!t.newToday===!!s.newTodayActive)&&(!!t.showcase===!!s.showcaseActive);
-  return `<button class="ttab${on?' on':''}" onclick="TSWITCH(${i},this)">${H(String(t.label||''))}</button>`;}).join('')
+ const btn=(t,i)=>{const on=!searching&&t.collection===s.collection&&(!!t.newToday===!!s.newTodayActive)&&(!!t.showcase===!!s.showcaseActive);
+  const face=t.icon?`<img class="ticon" src="${H(t.icon)}" alt="${H(String(t.label||''))}">`:H(String(t.label||''));
+  return `<button class="ttab${on?' on':''}${t.icon?' hasico':''}" onclick="TSWITCH(${i},this)">${face}</button>`;};
+ box.innerHTML=`<div class="tswrap"><button class="tsarr tsl" onclick="TSCROLLBY(-1)" aria-label="More tabs this way">‹</button>`
+  +`<div class="tscroll" id="tscroll">${tabs.map(btn).join('')}`
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
+  +`</div><button class="tsarr tsr" onclick="TSCROLLBY(1)" aria-label="More tabs this way">›</button></div>`
   +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'');
+ const sc=document.getElementById('tscroll');
+ sc.addEventListener('scroll',TSCROLLUPD,{passive:true});
+ const cur=sc.querySelector('.ttab.on'); // keep the active tab in view
+ if(cur)sc.scrollLeft=cur.offsetLeft-sc.clientWidth/2+cur.offsetWidth/2;
+ TSCROLLUPD();
  requestAnimationFrame(()=>{ // measured AFTER layout so the case clears the bar exactly
-  document.documentElement.style.setProperty('--ttabh',(box.offsetHeight+22)+'px');});}
+  document.documentElement.style.setProperty('--ttabh',(box.offsetHeight+22)+'px');TSCROLLUPD();});}
+/* Edge state for the tab scroller: canl/canr fade the clipped side and show
+   the matching chevron, so "more buttons that way" is always visible. */
+function TSCROLLUPD(){const sc=document.getElementById('tscroll');if(!sc)return;
+ const w=sc.closest('.tswrap');if(!w)return;
+ w.classList.toggle('canl',sc.scrollLeft>6);
+ w.classList.toggle('canr',sc.scrollLeft<sc.scrollWidth-sc.clientWidth-6);}
+function TSCROLLBY(dir){const sc=document.getElementById('tscroll');if(!sc)return;
+ sc.scrollBy({left:dir*Math.max(160,sc.clientWidth*0.6),behavior:'smooth'});}
 function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
  const t=(Array.isArray(SETTINGS.tabs)?SETTINGS.tabs:[])[i];
  if(t&&(t.collection!==CUR_COLLECTION||!!t.newToday!==CUR_NT))showTload(); // instant feedback; hides when the new deck lands
