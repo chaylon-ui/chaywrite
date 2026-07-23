@@ -83,6 +83,15 @@ a.tvlink:hover{color:var(--ember)}
       <div class="row"><input id="enYugioh" type="checkbox"><label for="enYugioh">Yu-Gi-Oh!</label></div>
       <input id="colYugioh" type="text" placeholder="yu-gi-oh-singles-new-arrivals">
       <div class="icorow" data-icon="yugioh"></div>
+      <div class="row"><input id="enStarwars" type="checkbox"><label for="enStarwars">Star Wars Unlimited</label></div>
+      <input id="colStarwars" type="text" placeholder="star-wars-unlimited-singles-trading-cards">
+      <div class="icorow" data-icon="starwars"></div>
+      <div class="row"><input id="enOnepiece" type="checkbox"><label for="enOnepiece">One Piece</label></div>
+      <input id="colOnepiece" type="text" placeholder="one-piece-cards">
+      <div class="icorow" data-icon="onepiece"></div>
+      <div class="row"><input id="enRiftbound" type="checkbox"><label for="enRiftbound">Riftbound</label></div>
+      <input id="colRiftbound" type="text" placeholder="riftbound-singles">
+      <div class="icorow" data-icon="riftbound"></div>
       <div class="row"><input id="enHockey" type="checkbox"><label for="enHockey">Hockey</label></div>
       <input id="colHockey" type="text" placeholder="all-hockey-card-singles">
       <div class="icorow" data-icon="hockey"></div>
@@ -149,6 +158,9 @@ a.tvlink:hover{color:var(--ember)}
       <div class="row"><input id="ntMtg" type="checkbox"><label for="ntMtg">Magic</label></div>
       <div class="row"><input id="ntPokemon" type="checkbox"><label for="ntPokemon">Pokémon</label></div>
       <div class="row"><input id="ntYugioh" type="checkbox"><label for="ntYugioh">Yu-Gi-Oh!</label></div>
+      <div class="row"><input id="ntStarwars" type="checkbox"><label for="ntStarwars">Star Wars Unlimited</label></div>
+      <div class="row"><input id="ntOnepiece" type="checkbox"><label for="ntOnepiece">One Piece</label></div>
+      <div class="row"><input id="ntRiftbound" type="checkbox"><label for="ntRiftbound">Riftbound</label></div>
       <div class="row"><input id="ntHockey" type="checkbox"><label for="ntHockey">Hockey</label></div>
       <div class="row"><input id="ntBasketball" type="checkbox"><label for="ntBasketball">Basketball</label></div>
     </div>
@@ -247,6 +259,9 @@ const GAME_TABS=[ // labels/themes fixed; collection + carried-on-this-TV editab
   {label:'Magic',      theme:'mtg',        game:'mtg',        input:'colMtg',        enable:'enMtg',        fallback:'new-arrivals',                  defOn:true},
   {label:'Pokémon',    theme:'pokemon',    game:'pokemon',    input:'colPokemon',    enable:'enPokemon',    fallback:'pokemon-singles-new-arrivals',  defOn:true},
   {label:'Yu-Gi-Oh!',  theme:'yugioh',     game:'yugioh',     input:'colYugioh',     enable:'enYugioh',     fallback:'yu-gi-oh-singles-new-arrivals', defOn:true},
+  {label:'Star Wars',  theme:'starwars',   game:'starwars',   input:'colStarwars',   enable:'enStarwars',   fallback:'star-wars-unlimited-singles-trading-cards', defOn:false},
+  {label:'One Piece',  theme:'onepiece',   game:'onepiece',   input:'colOnepiece',   enable:'enOnepiece',   fallback:'one-piece-cards',               defOn:false},
+  {label:'Riftbound',  theme:'riftbound',  game:'riftbound',  input:'colRiftbound',  enable:'enRiftbound',  fallback:'riftbound-singles',             defOn:false},
   {label:'Hockey',     theme:'hockey',     game:'hockey',     input:'colHockey',     enable:'enHockey',     fallback:'all-hockey-card-singles',       defOn:false},
   {label:'Basketball', theme:'basketball', game:'basketball', input:'colBasketball', enable:'enBasketball', fallback:'all-basketball-singles',        defOn:false},
 ];
@@ -276,7 +291,7 @@ document.querySelectorAll('.icorow').forEach(row=>{const key=row.dataset.icon;
 function refreshIconRows(){document.querySelectorAll('.icorow').forEach(r=>r.refresh&&r.refresh());}
 async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json();
   $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('kbPos').value=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';$('holiday').value=s.holiday==='christmas'?'christmas':'none';
-  const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
+  const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntStarwars').checked=!!nt.starwars;$('ntOnepiece').checked=!!nt.onepiece;$('ntRiftbound').checked=!!nt.riftbound;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const sv=s.sleevesTab||{};$('svEnabled').checked=!!sv.enabled;$('svCollection').value=sv.collection||'all-dragon-shield-sleeves';
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
@@ -312,7 +327,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     collection:($(g.input).value.trim().toLowerCase())||g.fallback,icon:ICONS[g.game]||''}));
   if(!tabs.some(t=>t.enabled)){$('saveMsg').textContent='Enable at least one game';$('saveMsg').className='msg bad';return;}
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
-    perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
+    perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,starwars:$('ntStarwars').checked,onepiece:$('ntOnepiece').checked,riftbound:$('ntRiftbound').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase',icon:ICONS.showcase||''},
     sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),

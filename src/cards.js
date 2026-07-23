@@ -75,6 +75,52 @@ const GAMES = {
     },
   },
 
+  // These three games carry NO lane tags — but their descriptions are
+  // structured ("Card Type: Leader … Rarity: Rare … Color: Red"), so lanes
+  // parse from the body text (passed as the third laneOf/typeOf argument).
+  starwars: {
+    match: /star\s*wars/i,
+    lanes: ["Leader", "Base", "Unit", "Event", "Upgrade"],
+    colorNames: { Leader: "Leaders", Base: "Bases", Unit: "Units", Event: "Events", Upgrade: "Upgrades" },
+    fallbackLane: "Unit",
+    laneOf(tags, title, body) {
+      const m = /card\s*type:\s*(leader|base|unit|event|upgrade)/i.exec(body || "");
+      return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : "Unit";
+    },
+    typeOf(tags, title, body) { return this.laneOf(tags, title, body) || "SWU Single"; },
+  },
+
+  onepiece: {
+    match: /one\s*piece/i,
+    lanes: ["Red", "Green", "Blue", "Purple", "Black", "Yellow", "Multi"],
+    colorNames: Object.fromEntries(["Red", "Green", "Blue", "Purple", "Black", "Yellow"].map((l) => [l, l]).concat([["Multi", "Multicolor"]])),
+    fallbackLane: "Multi",
+    laneOf(tags, title, body) {
+      const m = /color:\s*([a-z/ ]+)/i.exec(body || "");
+      if (!m) return "Multi";
+      const colors = m[1].split(/[/\s]+/).map((c) => c[0] ? c[0].toUpperCase() + c.slice(1).toLowerCase() : "")
+        .filter((c) => ["Red", "Green", "Blue", "Purple", "Black", "Yellow"].includes(c));
+      return colors.length === 1 ? colors[0] : "Multi";
+    },
+    typeOf(tags, title, body) {
+      const t = ["Leader", "Character", "Event", "Stage"].find((x) => (tags || []).includes(x))
+        || (/card\s*type:\s*(leader|character|event|stage)/i.exec(body || "") || [])[1];
+      return t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : "One Piece Single";
+    },
+  },
+
+  riftbound: {
+    match: /riftbound/i,
+    lanes: ["Legend", "Champion", "Unit", "Signature", "Spell", "Gear", "Rune", "Battlefield"],
+    colorNames: { Legend: "Legends", Champion: "Champions", Unit: "Units", Signature: "Signatures", Spell: "Spells", Gear: "Gear", Rune: "Runes", Battlefield: "Battlefields" },
+    fallbackLane: "Unit",
+    laneOf(tags, title, body) {
+      const m = /card\s*type:\s*(legend|champion|signature|unit|spell|gear|rune|battlefield)/i.exec(body || "");
+      return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : "Unit";
+    },
+    typeOf(tags, title, body) { return this.laneOf(tags, title, body) || "Riftbound Single"; },
+  },
+
   // Sports singles carry their lane in the TITLE ("… Young Guns …",
   // "… Rookie Auto …"), not in tags (tags are just the season, e.g. 22/23).
   hockey: {
@@ -234,7 +280,7 @@ async function adminSearch(q, env) {
   const safe = q.replace(/[*"\\()]/g, " ").trim();
   if (!safe) return null;
   const gql = `query($q:String!){products(first:40,query:$q){edges{node{
-    title handle productType tags featuredImage{url}
+    title handle productType tags description(truncateAt:400) featuredImage{url}
     variants(first:30){edges{node{id title price availableForSale}}}}}}}`;
   const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
     method: "POST",
@@ -247,7 +293,7 @@ async function adminSearch(q, env) {
   const edges = j?.data?.products?.edges;
   if (!Array.isArray(edges)) throw new Error("admin search shape");
   return edges.map(({ node: p }) => ({
-    title: p.title, handle: p.handle, product_type: p.productType, tags: p.tags || [],
+    title: p.title, handle: p.handle, product_type: p.productType, tags: p.tags || [], body_html: p.description || "",
     images: p.featuredImage ? [{ src: p.featuredImage.url }] : [],
     variants: (p.variants?.edges || []).map(({ node: v }) => ({
       id: +String(v.id).replace(/\D/g, ""), title: v.title, price: String(v.price), available: !!v.availableForSale,
@@ -273,7 +319,7 @@ async function suggestSearch(q, headers) {
       const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
       const imgs = (p.images && p.images.length ? p.images : [p.featured_image]).filter(Boolean);
       return {
-        title: p.title, handle: p.handle, product_type: p.type, tags: p.tags || [],
+        title: p.title, handle: p.handle, product_type: p.type, tags: p.tags || [], body_html: p.description || "",
         images: imgs.map((src) => ({ src: abs(src) })),
         variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, price: (v.price / 100).toFixed(2), available: !!v.available })),
       };
@@ -416,8 +462,9 @@ function buildCards(products, opts = {}) {
     const v = eligible.reduce((a, b) => (+b.price > +a.price ? b : a));
 
     const tags = p.tags || [];
+    const body = String(p.body_html || "").replace(/<[^>]*>/g, " "); // lane facts live in the description for tagless games
     const ownGame = gameOf(p.product_type);
-    const lane = ownGame === game ? spec.laneOf(tags, p.title) : spec.fallbackLane;
+    const lane = ownGame === game ? spec.laneOf(tags, p.title, body) : spec.fallbackLane;
 
     const set = (p.title.match(/\[([^\]]+)\]/) || [, ""])[1];
     const name = p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim();
@@ -430,7 +477,7 @@ function buildCards(products, opts = {}) {
       color: lane,
       set,
       game: ownGame || game, // per-card, so foil/Holo wording survives mixed decks (search, showcase)
-      type: ownGame === game ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
+      type: ownGame === game ? spec.typeOf(tags, p.title, body) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
       condition: condOf(v.title, ownGame || game),
@@ -476,17 +523,18 @@ function buildShowcase(products) {
     seen.add(key);
 
     const tags = p.tags || [];
+    const body = String(p.body_html || "").replace(/<[^>]*>/g, " ");
     const g = gameOf(p.product_type);
     const spec = g && GAMES[g];
     // Games without a lane scheme lane under their own name, e.g. "Lorcana".
-    const lane = spec ? spec.laneOf(tags, p.title) : (String(p.product_type || "").replace(/\bsingles?\b/gi, "").trim() || "Other");
+    const lane = spec ? spec.laneOf(tags, p.title, body) : (String(p.product_type || "").replace(/\bsingles?\b/gi, "").trim() || "Other");
 
     const card = {
       name,
       color: lane,
       set,
       game: g || null,
-      type: spec ? spec.typeOf(tags, p.title) : (p.product_type || "Single"),
+      type: spec ? spec.typeOf(tags, p.title, body) : (p.product_type || "Single"),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
       condition: condOf(v.title, g),

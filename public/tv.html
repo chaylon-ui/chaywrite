@@ -204,6 +204,15 @@ body.searching .case.tl.showcase .shelf + .shelf{margin-top:calc(var(--ch) * -0.
 /* Yu-Gi-Oh case: millennium gold on deep royal purple, big eye watermark,
    gold pinstripes in the stone — unmistakably Duel Monsters. */
 .case.theme-yugioh .pball{opacity:.17;background-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,8 92,82 8,82' fill='none' stroke='%23e8c452' stroke-width='4.5'/><polygon points='50,20 82,76 18,76' fill='none' stroke='%23a8862e' stroke-width='1.5'/><circle cx='50' cy='58' r='14' fill='none' stroke='%23e8c452' stroke-width='4'/><circle cx='50' cy='58' r='5.5' fill='%23e8c452'/><path d='M50 76 l0 7 M40 72 l-5 6 M60 72 l5 6 M32 64 l-7 3 M68 64 l7 3' stroke='%23e8c452' stroke-width='3' fill='none'/></svg>")}
+.case.theme-starwars{border-image:linear-gradient(150deg,#c9a227,#f5d76e 30%,#403005 62%,#c9a227) 1}
+.case.theme-starwars .wood{background:linear-gradient(179deg,#23262e,#101218 30%,#1b1e26 55%,#0a0c12 80%,#1e212a)}
+.case.theme-starwars .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(210,225,255,.10),rgba(20,28,52,.34) 44%,rgba(2,4,12,.66) 100%)}
+.case.theme-onepiece{border-image:linear-gradient(150deg,#b3542c,#e8935a 30%,#5e2810 62%,#b3542c) 1}
+.case.theme-onepiece .wood{background:linear-gradient(179deg,#b0552c,#8c3c1c 30%,#a34c26 55%,#742f12 80%,#9c4a24)}
+.case.theme-onepiece .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(255,240,220,.13),rgba(30,80,110,.30) 44%,rgba(6,20,30,.62) 100%)}
+.case.theme-riftbound{border-image:linear-gradient(150deg,#3d8f9c,#7fd6e0 30%,#173a44 62%,#3d8f9c) 1}
+.case.theme-riftbound .wood{background:linear-gradient(179deg,#20343c,#122028 30%,#1a2d36 55%,#0c161c 80%,#1d3038)}
+.case.theme-riftbound .felt{background:radial-gradient(120% 90% at 50% 18%,rgba(220,250,255,.11),rgba(20,70,84,.32) 44%,rgba(3,12,16,.62) 100%)}
 .case.theme-yugioh{border-image:linear-gradient(150deg,#b8952e,#f0d060 30%,#6e5618 62%,#c9a94a) 1}
 .case.theme-yugioh .wood{background:
   repeating-linear-gradient(92deg,rgba(232,196,82,.05) 0 1.5px,transparent 1.5px 64px),
@@ -796,7 +805,7 @@ function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
    own game (cards.json carries it) — mixed decks (search, Showcase) used to
    caption MTG cards "Holo" whenever the TV sat on the Pokémon tab. */
 let GAME='mtg';
-const CARD_GAMES=['mtg','pokemon','yugioh','hockey','basketball'];
+const CARD_GAMES=['mtg','pokemon','yugioh','starwars','onepiece','riftbound','hockey','basketball'];
 function cardGame(c){return (c&&CARD_GAMES.includes(c.game))?c.game:GAME}
 function foilWordFor(c){return cardGame(c)==='pokemon'?'Holo':'foil'}
 function foilWord(){return GAME==='pokemon'?'Holo':'foil'}
@@ -1574,11 +1583,14 @@ function refetchCards(){const seq=++CFSEQ;showTload();
   hideTload();
   if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();if(window.TOUCH)renderTouchTabs(SETTINGS);}}).catch(()=>{if(seq===CFSEQ)hideTload();});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
- if(s.game&&['mtg','pokemon','yugioh'].includes(s.game))GAME=s.game;
+ if(s.game&&['mtg','pokemon','yugioh','starwars','onepiece','riftbound'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
  const cs=document.getElementById('case');
  cs.classList.toggle('theme-pokemon',s.theme==='pokemon');
  cs.classList.toggle('theme-yugioh',s.theme==='yugioh');
+ cs.classList.toggle('theme-starwars',s.theme==='starwars');
+ cs.classList.toggle('theme-onepiece',s.theme==='onepiece');
+ cs.classList.toggle('theme-riftbound',s.theme==='riftbound');
  cs.classList.toggle('theme-hockey',s.theme==='hockey');
  cs.classList.toggle('theme-basketball',s.theme==='basketball');
  cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive); // the sleeve wall never wears top-loaders

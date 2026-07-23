@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
     { label: "Magic",      collection: "new-arrivals",                  theme: "mtg",        game: "mtg",        enabled: true },
     { label: "Pokémon",    collection: "pokemon-singles-new-arrivals",  theme: "pokemon",    game: "pokemon",    enabled: true },
     { label: "Yu-Gi-Oh!",  collection: "yu-gi-oh-singles-new-arrivals", theme: "yugioh",     game: "yugioh",     enabled: true },
+    { label: "Star Wars",  collection: "star-wars-unlimited-singles-trading-cards", theme: "starwars",  game: "starwars",  enabled: false },
+    { label: "One Piece",  collection: "one-piece-cards",               theme: "onepiece",   game: "onepiece",   enabled: false },
+    { label: "Riftbound",  collection: "riftbound-singles",             theme: "riftbound",  game: "riftbound",  enabled: false },
     { label: "Hockey",     collection: "all-hockey-card-singles",       theme: "hockey",     game: "hockey",     enabled: false },
     { label: "Basketball", collection: "all-basketball-singles",        theme: "basketball", game: "basketball", enabled: false },
   ],
@@ -56,7 +59,7 @@ export const DEFAULT_SETTINGS = {
   // "New Today" showcases — an extra phone tab per enabled game showing cards
   // published today (topped up to at least 10, all over $10), with a
   // masking-tape banner across the TV case while active.
-  newToday: { mtg: false, pokemon: false, yugioh: false, hockey: false, basketball: false },
+  newToday: { mtg: false, pokemon: false, yugioh: false, starwars: false, onepiece: false, riftbound: false, hockey: false, basketball: false },
   newTodayActive: false, // true while a New Today tab is the active showcase
 
   // Let customers search ALL in-stock singles from their phone; results show

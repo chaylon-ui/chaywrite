@@ -1,6 +1,6 @@
 import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN } from "./config.js";
 
-const THEMES = ["mtg", "pokemon", "yugioh", "hockey", "basketball"];
+const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
 // Optional tab icon: a small data-URL image the admin page has already
 // downsampled. Strict shape + size cap keeps settings well under DO limits.
@@ -207,7 +207,7 @@ export class BinderRoom {
     // Game tabs (label fixed per game in the admin UI; collections and the
     // per-game enabled flag editable — that's how a room carries only sports).
     if ("tabs" in patch) {
-      if (!Array.isArray(patch.tabs) || patch.tabs.length < 1 || patch.tabs.length > 8) return "bad tabs";
+      if (!Array.isArray(patch.tabs) || patch.tabs.length < 1 || patch.tabs.length > 12) return "bad tabs";
       const clean = [];
       for (const t of patch.tabs) {
         if (!t || typeof t !== "object") return "bad tab entry";
