@@ -201,6 +201,7 @@ export class BinderRoom {
       if (!Array.isArray(patch.attractMsgs) || patch.attractMsgs.length > 5) return "bad attract messages";
       next.attractMsgs = patch.attractMsgs.map((m) => String(m ?? "").slice(0, 120).trim()).filter(Boolean);
     }
+    if ("attractShow" in patch) next.attractShow = !!patch.attractShow;
     if ("adEnabled" in patch) next.adEnabled = !!patch.adEnabled;
     if ("adText" in patch) next.adText = String(patch.adText).slice(0, 300);
     if ("reviewUrl" in patch) {

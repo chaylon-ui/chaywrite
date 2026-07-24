@@ -85,6 +85,13 @@ export const DEFAULT_SETTINGS = {
     "NEW ARRIVALS!!! More stock out back just ask!",
   ],
 
+  // Kiosk welcome show (touch kiosks, off by default): while the screen
+  // idles, a full-screen comic invite explains what the kiosk can do —
+  // tap/search/cart/checkout — over the live flipping case. The first touch
+  // dismisses it straight into normal browsing. Off = the regular attract
+  // show (tape + shopkeeper bubble ads) exactly as before.
+  attractShow: false,
+
   // Which tab the screen snaps back to when the attract show starts — so an
   // abandoned Sleeves/search view resets to latest arrivals for the next
   // passer-by (and the NEW ARRIVALS tape always matches what's on screen).

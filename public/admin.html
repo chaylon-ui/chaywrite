@@ -189,6 +189,7 @@ a.tvlink:hover{color:var(--ember)}
       <label for="at3">Line 3</label>
       <input id="at3" type="text" maxlength="120" placeholder="NEW ARRIVALS!!! More stock out back just ask!">
       <div class="hint">Sharpie on masking tape across the top of the TV while it idles (no phone connected). Clear all three to hide the tape.</div>
+      <div class="row"><input id="attractShow" type="checkbox"><label for="attractShow">Kiosk welcome show — while idle, a full-screen comic invite explains what this screen does (tap, search, cart, checkout on your phone or at the counter) over the live flipping case. First touch drops straight into browsing. Touch kiosks only.</label></div>
       <label for="attractHome" style="margin-top:.8rem;display:block">When the show starts, jump back to</label>
       <select id="attractHome">
         <option value="mtg">Magic — latest arrivals</option>
@@ -298,7 +299,7 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
   const am=Array.isArray(s.attractMsgs)?s.attractMsgs:[];
   $('at1').value=am[0]||'';$('at2').value=am[1]||'';$('at3').value=am[2]||'';
-  $('attractHome').value=['mtg','pokemon','yugioh','showcase'].includes(s.attractHome)?s.attractHome:'mtg';
+  $('attractHome').value=['mtg','pokemon','yugioh','showcase'].includes(s.attractHome)?s.attractHome:'mtg';$('attractShow').checked=!!s.attractShow;
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
   const tabs=Array.isArray(s.tabs)?s.tabs:[];
   GAME_TABS.forEach(g=>{const t=tabs.find(x=>x.game===g.game)||tabs.find(x=>x.theme===g.theme);
@@ -332,7 +333,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
-    attractHome:$('attractHome').value,
+    attractHome:$('attractHome').value,attractShow:$('attractShow').checked,
     reviewUrl:$('reviewUrl').value.trim(),adEnabled:$('adEnabled').checked,adText:$('adText').value};
   const np=$('newPin').value.trim();if(np)patch.newPin=np;
   const {ok,j}=await post(patch);
