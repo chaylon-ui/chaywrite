@@ -980,7 +980,7 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
  slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="underlay"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
  fillTray(slab.querySelector('.tray'),trays[idx]||[]);return slab;}
-function draw(){const inner=document.getElementById('caseInner');inner.innerHTML='';const slab=makeSlab(spread);slab.id='slab';inner.appendChild(slab);decorate(slab,spread);markSel();}
+function draw(){const inner=document.getElementById('caseInner');inner.innerHTML='';const slab=makeSlab(spread);slab.id='slab';inner.appendChild(slab);decorate(slab,spread);markSel();if(typeof MIRRORQ==='function')MIRRORQ();}
 function markSel(){document.querySelectorAll('#caseInner .card').forEach(el=>el.classList.toggle('sel',selected&&el.dataset.id===selected));}
 let flipping=false,pendingSpread=null,flipTarget=null;
 /* Absolute navigation from the phone: converge on the LATEST requested spread.
@@ -1045,6 +1045,7 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  else bub.style.display='none';
  loadBetters(c);
  if(window.TOUCH)renderTact();
+ if(typeof MIRRORQ==='function')MIRRORQ();
  z.classList.add('open');}
 /* In-stock upgrades for the featured card (MTG only). This browser asks
    strictlybetter.eu directly (their API is CORS-open; their Cloudflare zone
@@ -1075,10 +1076,10 @@ function loadBetters(c){const bx=document.getElementById('betters');bx.classList
   bx.innerHTML='<div class="bt">Alternatives in stock</div><div class="brw">'+cards.map((b,i)=>
    `<div class="bcard"${window.TOUCH?` onclick="TOPENB(${i})"`:''}>${b.image?`<img src="${H(IMGURL(b.image,200))}" alt="" loading="lazy">`:''}<div class="bnm">${H(b.name)}</div><div class="bpr">$${money(b.price)}</div></div>`).join('')+'</div>';
   bx.classList.add('on');}).catch(()=>{});}
-function unzoom(){document.getElementById('ztv').classList.remove('open');document.body.classList.remove('zopen');BETTERSEQ++;const bx=document.getElementById('betters');if(bx){bx.classList.remove('on');bx.innerHTML='';}
+function unzoom(){if(typeof MIRRORQ==='function')MIRRORQ();document.getElementById('ztv').classList.remove('open');document.body.classList.remove('zopen');BETTERSEQ++;const bx=document.getElementById('betters');if(bx){bx.classList.remove('on');bx.innerHTML='';}
  const ta=document.getElementById('tact');if(ta)ta.innerHTML='';ZCARD=null;ZVAR=null;}
 function findCard(n){return CARDS.find(c=>c.name===n)}
-function updateCart(){const box=document.getElementById('tvCartItems');box.innerHTML='';cart.forEach(c=>box.insertAdjacentHTML('beforeend',`<span class="chip">${H(c.name)} · $${money(c.price)}</span>`));document.getElementById('tvCartTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
+function updateCart(){if(typeof MIRRORQ==='function')MIRRORQ();const box=document.getElementById('tvCartItems');box.innerHTML='';cart.forEach(c=>box.insertAdjacentHTML('beforeend',`<span class="chip">${H(c.name)} · $${money(c.price)}</span>`));document.getElementById('tvCartTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
  if(window.TOUCH)document.getElementById('tvCart').classList.toggle('hide',cart.length===0);}
 function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 let wasPaired=false;
@@ -1221,7 +1222,14 @@ function connect(){
    card, cart, search) to any admin-opened /tv?remote=1 mirrors; the mirrors
    render them with their own copy of the deck and send taps back as rc
    commands that run on the REAL kiosk. Both screens stay in lockstep. ---- */
-let REMN=0,REM_APPLY=false,RLASTC='';
+let REMN=0,REM_APPLY=false,RLASTC='',RGRACE=0,MQT=null;
+/* Optimistic remote actions apply LOCALLY at once and forward to the kiosk;
+   for a short grace window mirror snapshots are ignored so the kiosk's
+   (momentarily older) state can't yank the mirror backwards. */
+function RGO(o,ms){RSEND(o);RGRACE=Date.now()+(ms||1500);}
+/* Kiosk-side: push a fresh snapshot right after any state change instead of
+   waiting for the 1s heartbeat — remote mirrors reconcile in ~200ms. */
+function MIRRORQ(){if(window.REMOTE||!REMN)return;clearTimeout(MQT);MQT=setTimeout(()=>MIRROR(true),120);}
 function RSEND(o){if(ws&&ws.readyState===1)try{ws.send(JSON.stringify({type:'rc',data:o}));}catch(e){}}
 function MIRROR(force){if(window.REMOTE||(!force&&!REMN)||!ws||ws.readyState!==1)return;
  try{ws.send(JSON.stringify({type:'mirror',data:{
@@ -1234,7 +1242,7 @@ function MIRROR(force){if(window.REMOTE||(!force&&!REMN)||!ws||ws.readyState!==1
   chk:document.getElementById('tcheck').classList.contains('open'),
   att:document.body.classList.contains('attract')}}));}catch(e){}}
 setInterval(()=>MIRROR(),1000);
-function APPLYMIR(m){REM_APPLY=true;try{
+function APPLYMIR(m){if(Date.now()<RGRACE)return;REM_APPLY=true;try{
  if(typeof m.sp==='number'&&m.sp!==spread&&m.sp>=0&&m.sp<spreads)flipTo(m.sp);
  const zopen=document.getElementById('ztv').classList.contains('open');
  if(m.z){const cur=(zopen&&ZCARD)?KEY(ZCARD):null;
@@ -1242,7 +1250,8 @@ function APPLYMIR(m){REM_APPLY=true;try{
   if(m.cv&&ZVAR!==m.cv&&ZCARD&&Array.isArray(ZCARD.variants)&&ZCARD.variants.some(v=>String(v.variantId)===String(m.cv)))TSETVAR(String(m.cv));}
  else if(zopen){selected=null;markSel();unzoom();}
  const cs=JSON.stringify(m.cart||[]);
- if(cs!==RLASTC){RLASTC=cs;cart=(m.cart||[]).map(o=>({name:o.n,price:o.p,variantId:o.v,condition:o.c}));updateCart();}
+ const local=JSON.stringify(cart.map(c=>({n:c.name,p:c.price,v:String(c.variantId||''),c:c.condition||''})));
+ if(cs!==local){cart=(m.cart||[]).map(o=>({name:o.n,price:o.p,variantId:o.v,condition:o.c}));updateCart();}
  if(typeof m.q==='string'&&m.q!==TQ){TQ=m.q;renderTQ();
   if(TQ.trim().length>=2)TKGO();else if(!TQ&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}}
  document.getElementById('tkb').classList.toggle('open',!!m.kb);
@@ -1316,10 +1325,10 @@ function ASESSEND(reason){if(!ASID)return;AQ.push({t:Date.now(),e:'se',d:reason,
  while(AQ.length){const batch=AQ.splice(0,40);
   fetch('/track?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid,events:batch})}).catch(()=>{});}}
 function TOPEN(c){if(!c)return;
- if(window.REMOTE&&!REM_APPLY){RSEND({a:'tap',id:KEY(c)});return;}
+ if(window.REMOTE&&!REM_APPLY)RGO({a:'tap',id:KEY(c)});
  TRACK('tap',c.name);ZCARD=c;ZVAR=null;ZKEEP=true;selected=KEY(c);markSel();zoom(effT());ZKEEP=false;}
 function TSETVAR(vid){if(!ZCARD)return;ZVAR=vid;ZKEEP=true;zoom(effT());ZKEEP=false;}
-function TCHIP(el,vid){comicBurst(el,'SWAPPED!',true);if(window.REMOTE&&!REM_APPLY){RSEND({a:'chip',vid:String(vid)});return;}TSETVAR(vid);}
+function TCHIP(el,vid){comicBurst(el,'SWAPPED!',true);if(window.REMOTE&&!REM_APPLY)RGO({a:'chip',vid:String(vid)});TSETVAR(vid);}
 function TOPENB(i){const b=BETCARDS&&BETCARDS[i];if(b)TOPEN(b);}
 function chipLbl(v,g){const p=[];if(v.condition)p.push(v.condition);if(v.foil)p.push(g==='pokemon'?'Holo':'Foil');return p.join(' · ')||'Standard';}
 function renderTact(){const ta=document.getElementById('tact');if(!ta)return;if(!ZCARD){ta.innerHTML='';return;}
@@ -1336,7 +1345,7 @@ function comicBurst(btn,txt,small){const r=btn.getBoundingClientRect();
  b.innerHTML=`<svg viewBox="0 0 200 120"><polygon points="196,60 163.8,69.6 183.1,87 146.7,86.2 148,106.8 117.1,95.7 100,114 82.9,95.7 52,106.8 53.3,86.2 16.9,87 36.2,69.6 4,60 36.2,50.4 16.9,33 53.3,33.8 52,13.2 82.9,24.3 100,6 117.1,24.3 148,13.2 146.7,33.8 183.1,33 163.8,50.4" fill="#ffd23f" stroke="#101010" stroke-width="5" stroke-linejoin="round"/><text x="100" y="73" text-anchor="middle" font-family="'Bangers','Comic Sans MS',cursive" font-size="${t.length>8?30:40}" letter-spacing="2" fill="#c9342b" stroke="#fffef4" stroke-width="1.4" paint-order="stroke">${H(t)}</text></svg>`;
  document.body.appendChild(b);setTimeout(()=>b.remove(),950);}
 function TADD(btn){const e=effT();if(!e)return;
- if(window.REMOTE){comicBurst(btn);RSEND({a:'add'});return;}
+ if(window.REMOTE)RGO({a:'add'});
  const left=e.variantId?stockLeft(e.variantId):null;
  if(left!==null&&left<=0){const q=QTYS[String(e.variantId)];
   btn.textContent=q>0?('That’s all we have — '+q+' in stock'):'Sold out — sorry!';
@@ -1358,13 +1367,13 @@ function kioskCartUrl(items){let url='/cart';
 /* The cart view is editable: steppers respect the stock caps, the QR
    re-renders on every change, and an emptied cart closes itself. */
 function TCSET(vid,delta,el){vid=String(vid);
- if(window.REMOTE&&!REM_APPLY){if(el)comicBurst(el,delta>0?'+1!':'−1!',true);RSEND({a:'cset',vid,d:delta});return;}
+ if(window.REMOTE&&!REM_APPLY)RGO({a:'cset',vid,d:delta});
  if(delta>0){const left=stockLeft(vid);if(left!==null&&left<=0){if(el)comicBurst(el,'ALL GONE!',true);return;}
   const proto=cart.find(c=>String(c.variantId)===vid);if(proto){cart.push(Object.assign({},proto));TRACK('add',proto.name,parseFloat(proto.price)||0);}if(el)comicBurst(el,'+1!',true);}
  else{for(let i=cart.length-1;i>=0;i--)if(String(cart[i].variantId)===vid){TRACK('rm',cart[i].name);cart.splice(i,1);break;}if(el)comicBurst(el,'−1!',true);}
  updateCart();renderTcheck();}
 function TCREMOVE(vid,el){vid=String(vid);if(el)comicBurst(el,'GONE!',true);
- if(window.REMOTE&&!REM_APPLY){RSEND({a:'crem',vid});return;}
+ if(window.REMOTE&&!REM_APPLY)RGO({a:'crem',vid});
  const gone=cart.find(c=>String(c.variantId)===vid);if(gone)TRACK('rm',gone.name);
  cart=cart.filter(c=>String(c.variantId)!==vid);updateCart();renderTcheck();}
 function renderTcheck(){const items=cartAgg();
@@ -1413,13 +1422,13 @@ function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
    keyboard. Results swap into the case live via the shared search-deck path
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
 let TQ='',TKT=null,TKSEQ=0;
-function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);if(window.REMOTE&&!REM_APPLY){RSEND({a:'sopen'});return;}document.getElementById('tkb').classList.add('open');renderTQ();}
+function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);if(window.REMOTE&&!REM_APPLY)RGO({a:'sopen'});document.getElementById('tkb').classList.add('open');renderTQ();}
 function TSEARCHCLOSE(){document.getElementById('tkb').classList.remove('open');}
 function TSEARCHCLEAR(){TQ='';TKSEQ++;clearTimeout(TKT);renderTQ();
  document.getElementById('tkres').textContent='Results fill the case behind this keyboard as you type.';
  endSearchDeck();TSEARCHCLOSE();renderTouchTabs(SETTINGS);}
 function renderTQ(){const el=document.getElementById('tkq');if(el)el.textContent=TQ;}
-function TKEY(k){if(window.REMOTE&&!REM_APPLY){RSEND({a:'key',k});return;}
+function TKEY(k){if(window.REMOTE&&!REM_APPLY)RGO({a:'key',k},2500);
  if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
  renderTQ();clearTimeout(TKT);TKT=setTimeout(TKGO,350);}
 function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres');
@@ -1478,8 +1487,8 @@ function initTouch(){if(TINITED)return;TINITED=true;
    &&!document.getElementById('tcheck').classList.contains('open')
    &&!document.getElementById('tkb').classList.contains('open')){
    SWIPED=true;const sd=dx<0?1:-1;
-   if(window.REMOTE){const st=spread+sd;if(st>=0&&st<spreads)RSEND({a:'flip',t:st});}
-   else flip(sd);
+   if(window.REMOTE){const st=spread+sd;if(st>=0&&st<spreads)RGO({a:'flip',t:st},1800);}
+   flip(sd);
    setTimeout(()=>{SWIPED=false;},400);}},{capture:true});
  /* Page arrows fire on FINGER-DOWN, not click: a click needs a clean press
     AND release on the same spot, which kiosk touch frames often fumble.
@@ -1491,24 +1500,24 @@ function initTouch(){if(TINITED)return;TINITED=true;
   comicBurst(el,'FLIP!',true);
   const base=(pendingSpread!=null)?pendingSpread:((flipping&&flipTarget!=null)?flipTarget:spread);
   let t=base+dir;if(t<0)t=spreads-1;else if(t>=spreads)t=0;
-  if(window.REMOTE){RSEND({a:'flip',t});return;}
+  if(window.REMOTE)RGO({a:'flip',t},1800);
   flipTo(t);};
  [['tprev',-1],['tnext',1]].forEach(([id,dir])=>{const el=document.getElementById(id);
   el.addEventListener('pointerdown',e=>{e.preventDefault();NAVGO(el,dir);});});
- document.getElementById('tclose').onclick=function(){comicBurst(this,'BAM!',true);if(window.REMOTE){RSEND({a:'close'});return;}selected=null;markSel();unzoom();};
+ document.getElementById('tclose').onclick=function(){comicBurst(this,'BAM!',true);if(window.REMOTE)RGO({a:'close'});selected=null;markSel();unzoom();};
  /* Tapping the featured card itself closes the preview, same as the ✕. */
- document.getElementById('ztvc').addEventListener('click',()=>{if(!window.TOUCH)return;if(window.REMOTE){RSEND({a:'close'});return;}selected=null;markSel();unzoom();});
- document.getElementById('ztv').addEventListener('click',ev=>{if(ev.target.id==='ztv'){if(window.REMOTE){RSEND({a:'close'});return;}selected=null;markSel();unzoom();}});
- document.getElementById('tcko').onclick=function(){comicBurst(this,'SCAN IT!');if(window.REMOTE){RSEND({a:'cart'});return;}TCKO();};
+ document.getElementById('ztvc').addEventListener('click',()=>{if(!window.TOUCH)return;if(window.REMOTE)RGO({a:'close'});selected=null;markSel();unzoom();});
+ document.getElementById('ztv').addEventListener('click',ev=>{if(ev.target.id==='ztv'){if(window.REMOTE)RGO({a:'close'});selected=null;markSel();unzoom();}});
+ document.getElementById('tcko').onclick=function(){comicBurst(this,'SCAN IT!');if(window.REMOTE)RGO({a:'cart'});TCKO();};
  document.getElementById('tcCounter').onclick=function(){comicBurst(this,'SENT!');if(window.REMOTE){RSEND({a:'counter'});return;}TCOUNTER();};
- document.getElementById('tcClose').onclick=()=>{if(window.REMOTE){RSEND({a:'chkclose'});return;}document.getElementById('tcheck').classList.remove('open');};
- document.getElementById('tcClear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE){RSEND({a:'clearcart'});return;}cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
+ document.getElementById('tcClose').onclick=()=>{if(window.REMOTE)RGO({a:'chkclose'});document.getElementById('tcheck').classList.remove('open');};
+ document.getElementById('tcClear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE)RGO({a:'clearcart'});cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
  document.getElementById('tkrows').innerHTML=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
   .map(r=>'<div class="tkr">'+[...r].map(k=>`<button class="tkk" onclick="TKEY('${k}')">${k}</button>`).join('')+'</div>').join('')
   +`<div class="tkr"><button class="tkk wide" onclick="TKEY(' ')">space</button><button class="tkk wide" onclick="TKEY('⌫')">⌫</button></div>`;
- document.getElementById('tkclear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE){RSEND({a:'sclear'});return;}TSEARCHCLEAR();};
- document.getElementById('tkdone').onclick=function(){comicBurst(this,'SHOW ME!',true);if(window.REMOTE){RSEND({a:'sdone'});return;}TSEARCHCLOSE();};
- document.getElementById('tkb').addEventListener('click',ev=>{if(ev.target.id==='tkb'){if(window.REMOTE){RSEND({a:'sdone'});return;}TSEARCHCLOSE();}});
+ document.getElementById('tkclear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE)RGO({a:'sclear'});TSEARCHCLEAR();};
+ document.getElementById('tkdone').onclick=function(){comicBurst(this,'SHOW ME!',true);if(window.REMOTE)RGO({a:'sdone'});TSEARCHCLOSE();};
+ document.getElementById('tkb').addEventListener('click',ev=>{if(ev.target.id==='tkb'){if(window.REMOTE)RGO({a:'sdone'});TSEARCHCLOSE();}});
  /* Any touch counts as activity: wake from attract mode and hold it off. */
  document.addEventListener('pointerdown',()=>{if(!window.TOUCH)return;lastAct=Date.now();stopAttract();armAttract();},{capture:true});
  /* Walk-away housekeeping, once a second:
