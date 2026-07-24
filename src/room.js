@@ -483,6 +483,9 @@ export class BinderRoom {
         count: Math.max(0, Math.min(999, parseInt(d && d.count, 10) || 0)),
         total: String((d && d.total) || "").slice(0, 12),
         note: String((d && d.note) || "").slice(0, 140),
+        // where the order came from — the /staff page badges each row with it
+        // ("kiosk" is implied for counter orders; Flow sends e.g. "shipday")
+        src: String((d && d.src) || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 20),
       };
       // An empty body is the /staff page's key probe — validate, don't ring.
       if (!data.name && !data.note && !data.total && !data.count) return Response.json({ ok: true, delivered: 0 });

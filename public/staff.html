@@ -32,6 +32,10 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 .row .meta{font-weight:800}
 .row .when{margin-left:auto;color:#71717c;font-size:.8rem}
 .row .items,.row .note{color:#4c4a55;font-size:.86rem}
+.row .srcb{font-family:'Bangers',cursive;font-size:.82rem;letter-spacing:.06em;color:#fff;border:2px solid #101010;border-radius:8px;padding:.12rem .5rem;transform:rotate(-1.5deg);white-space:nowrap}
+.row .srcb.kiosk{background:#c9342b}
+.row .srcb.shipday{background:#1a73e8}
+.row .srcb.other{background:#5b5b66}
 </style>
 </head>
 <body>
@@ -82,24 +86,35 @@ function connect(room){
   ws.onclose = () => { chipBar(); setTimeout(() => { if (SOCKS[room] === ws) connect(room); }, 4000); };
 }
 
+/* Sources: counter orders are the kiosk's own; Flow-posted alerts carry a
+   src slug ("shipday", …). Each row gets a badge and the notification title
+   says where the order came from. */
+const SRC = {
+  kiosk:   { label: 'KIOSK',   icon: '🖥', title: 'Counter order' },
+  shipday: { label: 'SHIPDAY', icon: '🚚', title: 'Pickup order' },
+};
+function srcOf(d, via){ return (d.src || (via === 'kiosk' ? 'kiosk' : '')) || 'other'; }
 function onAlert(room, d, via){
   const name = d.name || null;
   if (name && SEEN.has(name)) return;   // kiosk + Flow double-fire → one ring
   if (name) SEEN.add(name);
   const meta = (d.count ? d.count + ' card' + (d.count === 1 ? '' : 's') : '') +
     (d.total ? (d.count ? ' · ' : '') + '$' + d.total : '');
-  addRow(room, name, meta, d);
-  notify(name, meta, room);
+  const src = srcOf(d, via);
+  addRow(room, name, meta, d, src);
+  notify(name, meta, room, src);
   chime();
 }
 
-function addRow(room, name, meta, d){
+function addRow(room, name, meta, d, src){
   const h = document.getElementById('hint'); if (h) h.remove();
   const row = document.createElement('div');
   row.className = 'row';
   const items = (Array.isArray(d.items) ? d.items : []).map(i => (i.qty > 1 ? i.qty + '× ' : '') + i.name).join(', ');
+  const sb = SRC[src] || { label: (src || 'order').toUpperCase(), icon: '📦' };
   row.innerHTML =
-    '<div class="top"><span class="num">' + esc(name || 'Counter order') + '</span>' +
+    '<div class="top"><span class="srcb ' + (SRC[src] ? esc(src) : 'other') + '">' + sb.icon + ' ' + esc(sb.label) + '</span>' +
+    '<span class="num">' + esc(name || 'Counter order') + '</span>' +
     '<span class="meta">' + esc(meta) + '</span>' +
     '<span class="when">' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + esc(room) + '</span></div>' +
     (items ? '<div class="items">' + esc(items) + '</div>' : '') +
@@ -109,10 +124,11 @@ function addRow(room, name, meta, d){
 }
 function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-function notify(name, meta, room){
+function notify(name, meta, room, src){
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const kind = (SRC[src] && SRC[src].title) || 'Order';
   try {
-    new Notification('🛎 Counter order ' + (name || ''), {
+    new Notification('🛎 ' + kind + ' ' + (name || ''), {
       body: meta + (room !== 'default' ? ' — ' + room + ' screen' : ''),
       tag: name || undefined,
       requireInteraction: true,   // stays up until staff dismiss it
