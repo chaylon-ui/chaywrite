@@ -462,6 +462,8 @@ html.touch #caseInner .card{cursor:pointer}
 html.touch .betters .bcard{cursor:pointer}
 .ttabs{display:none;position:absolute;top:.55rem;left:50%;transform:translateX(-50%);z-index:26;gap:.3rem;max-width:94vw;flex-direction:column;align-items:center}
 html.touch .ttabs{display:flex}
+html.touch{touch-action:manipulation}
+html.touch body{overscroll-behavior:none}
 /* The tab row scrolls sideways instead of wrapping — a clipped, fading button
    at the edge plus a ‹ › chevron say "more this way", so the bar never looks
    like it ends while buttons are off-screen. */
@@ -791,6 +793,22 @@ window.REMOTE=new URLSearchParams(location.search).get('remote')==='1';
 window.RKEY=new URLSearchParams(location.search).get('k')||'';
 if(window.REMOTE){window.URLTOUCH=true;document.documentElement.classList.add('remote');}
 window.TOUCH=window.URLTOUCH; // may also flip on later via the room's admin "touchMode" setting
+/* ---- Kiosk lockdown (not on remote mirrors): kill pinch/ctrl-wheel/keyboard
+   zoom and the long-press menu, and self-heal fullscreen — if someone backs
+   the browser out of fullscreen, the next customer tap puts it back. Leaving
+   or minimizing the browser itself can only be blocked by OS kiosk mode. */
+if(!window.REMOTE){
+ const vp=document.querySelector('meta[name=viewport]');
+ if(vp)vp.setAttribute('content','width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+ document.addEventListener('wheel',e=>{if(e.ctrlKey)e.preventDefault();},{passive:false});
+ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&['+','-','=','0'].includes(e.key))e.preventDefault();});
+ document.addEventListener('gesturestart',e=>e.preventDefault());
+ document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
+ document.addEventListener('contextmenu',e=>{if(window.TOUCH)e.preventDefault();});
+ document.addEventListener('pointerdown',()=>{
+  try{if(window.TOUCH&&!document.fullscreenElement&&screen.height-window.innerHeight>40)
+   document.documentElement.requestFullscreen({navigationUI:'hide'}).catch(()=>{});}catch(e){}},{capture:true});
+}
 if(window.TOUCH)document.documentElement.classList.add('touch');
 window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
