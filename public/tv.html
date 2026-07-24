@@ -609,6 +609,17 @@ html.touch .ttab:active,html.touch .tchip:active,html.touch .tcbtn:active,html.t
 .tshow{display:none;position:fixed;inset:0;z-index:29;background:rgba(6,6,9,.6);align-items:center;justify-content:center;padding:1rem}
 .tshow.open{display:flex}
 .tsbox2{background:radial-gradient(circle,rgba(16,16,16,.05) 1px,transparent 1.5px) 0 0/10px 10px,#fffef4;border:5px solid #101010;border-radius:24px;box-shadow:.6rem .8rem 0 rgba(16,16,16,.9);padding:1.6rem 2.4rem 1.4rem;max-width:min(92vw,44rem);text-align:center;transform:rotate(-.6deg);animation:bpop .45s cubic-bezier(.34,1.56,.64,1)}
+.tslogo{display:block;height:clamp(3.2rem,9vw,5.4rem);max-width:80%;object-fit:contain;margin:0 auto .55rem;filter:drop-shadow(2px 3px 0 rgba(16,16,16,.25))}
+.tsgames{overflow:hidden;margin-top:1rem;border-top:3px solid #101010;padding-top:.75rem}
+.tsgrow{display:inline-flex;align-items:center;white-space:nowrap}
+.tsgames.scroll .tsgrow{animation:tsgscroll 20s linear infinite}
+.tsgames:not(.scroll) .tsgrow{width:100%;justify-content:center}
+.tsg{margin-right:2.4rem;flex:0 0 auto}
+.tsg img{height:2.7rem;max-width:10rem;object-fit:contain;display:block}
+.tsg.tsgt{font-family:'Bangers',cursive;font-size:1.45rem;color:#16161c;background:#f4efdc;border:3px solid #101010;border-radius:12px;padding:.22rem .9rem;transform:rotate(-1deg)}
+.tsg.tsgt:nth-child(even){transform:rotate(1.2deg)}
+@keyframes tsgscroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.tsgames.scroll .tsgrow{animation:none}}
 .tshead{font-family:'Bangers',cursive;font-size:clamp(2rem,5.5vw,3.4rem);line-height:1.05;color:#c9342b;-webkit-text-stroke:1.5px #101010;letter-spacing:.04em}
 .tssub{font-family:'Bangers',cursive;font-size:clamp(1rem,2.4vw,1.35rem);color:#16161c;margin:.35rem 0 .9rem}
 .tsteps{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;text-align:left}
@@ -707,6 +718,8 @@ html.portrait .tsteps{grid-template-columns:1fr}
     <div class="ttp2">TAP ANYWHERE to keep shopping!</div>
   </div></div>
   <div class="tshow" id="tshow"><div class="tsbox2">
+    <img class="tslogo" alt="Exor Games" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/logo_above_the_text.svg?v=1782497400"
+      onerror="this.onerror=null;this.src='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866'">
     <div class="tshead">EVERY SINGLE, ONE TAP AWAY!</div>
     <div class="tssub">This screen is a live showcase of the cards we stock — browse it, build a cart, take it home.</div>
     <div class="tsteps">
@@ -716,6 +729,7 @@ html.portrait .tsteps{grid-template-columns:1fr}
       <div class="tstep"><span class="tsemoji">📲</span><span><b>CHECK OUT</b> on your phone — or send it to the counter!</span></div>
     </div>
     <div class="tstouch"><span class="tsfinger">👇</span> TOUCH THE SCREEN TO START</div>
+    <div class="tsgames" id="tsgames"></div>
   </div></div>
   <div class="rmbar" id="rmbar"><span>🖥 REMOTE CONTROL</span><span id="rmroom"></span><span id="rmatt" style="display:none">· attract showing</span><button class="rmb" onclick="RSEND({a:'reset'})">Reset kiosk</button></div>
   <div class="tload" id="tload" aria-hidden="true"><div class="tlbox">
@@ -1166,6 +1180,18 @@ function armAttract(){if(window.REMOTE)return;if(attractArm||attractOn)return;at
    search shouldn't idle under the NEW ARRIVALS tape. */
 let TSHOWCY=null;
 function showTshow(){const el=document.getElementById('tshow');el.classList.add('open');
+ // Game ribbon: every game THIS screen carries — official logo when a tab
+ // icon is uploaded in admin, comic text chip otherwise. Marquee only when
+ // the row is too wide to fit.
+ const rib=document.getElementById('tsgames');
+ const base=(Array.isArray(SETTINGS.tabs)?SETTINGS.tabs:[]).filter(t=>!t.showcase&&!t.sleeves&&!t.newToday);
+ const cell=t=>t.icon?`<span class="tsg"><img src="${H(t.icon)}" alt="${H(String(t.label||''))}"></span>`
+  :`<span class="tsg tsgt">${H(String(t.label||''))}</span>`;
+ const row=base.map(cell).join('');
+ rib.innerHTML=row?`<div class="tsgrow">${row}</div>`:'';
+ rib.classList.remove('scroll');
+ requestAnimationFrame(()=>{const tr=rib.querySelector('.tsgrow');
+  if(tr&&tr.scrollWidth>rib.clientWidth+8){tr.innerHTML=row+row;rib.classList.add('scroll');}});
  const steps=[...el.querySelectorAll('.tstep')];let i=0;
  clearInterval(TSHOWCY);TSHOWCY=setInterval(()=>{steps.forEach((st,j)=>st.classList.toggle('on',j===i%steps.length));i++;},2400);
  steps.forEach((st,j)=>st.classList.toggle('on',j===0));i=1;}
