@@ -524,6 +524,11 @@ export class BinderRoom {
         const input = {
           note: "Exor showcase TV — customer sent cart to counter (Kiosk)",
           tags: ["showcase-tv", "Kiosk"],
+          // POS tablets filter their drafts list by source: staff-created
+          // drafts carry shopify_draft_order while app-created ones carry the
+          // app's name and get hidden. Match the staff source so kiosk orders
+          // show up on the tablets like Tyler's do.
+          sourceName: "shopify_draft_order",
           lineItems: data.items.slice(0, 100).map((i) => ({
             variantId: "gid://shopify/ProductVariant/" + i.variantId,
             quantity: Math.max(1, Math.min(99, +i.qty || 1)),
