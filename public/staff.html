@@ -29,6 +29,8 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 @keyframes pop{0%{transform:scale(.85)}100%{transform:scale(1)}}
 .row .top{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
 .row .num{font-family:'Bangers',cursive;font-size:1.7rem;color:#c9342b;-webkit-text-stroke:.5px #101010}
+.row a.num{text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:4px}
+.row .open{margin-left:.2rem;font-size:.78rem;font-weight:800;color:#1a73e8;text-decoration:none;border:2px solid #1a73e8;border-radius:8px;padding:.1rem .5rem;white-space:nowrap}
 .row .meta{font-weight:800}
 .row .when{margin-left:auto;color:#71717c;font-size:.8rem}
 .row .items,.row .note{color:#4c4a55;font-size:.86rem}
@@ -112,9 +114,13 @@ function addRow(room, name, meta, d, src){
   row.className = 'row';
   const items = (Array.isArray(d.items) ? d.items : []).map(i => (i.qty > 1 ? i.qty + '× ' : '') + i.name).join(', ');
   const sb = SRC[src] || { label: (src || 'order').toUpperCase(), icon: '📦' };
+  const link = d.url || (d.did ? 'https://admin.shopify.com/store/most-wanted-ca/draft_orders/' + String(d.did).replace(/\D/g, '') : '');
+  const numHtml = link
+    ? '<a class="num" href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(name || 'Counter order') + '</a>'
+    : '<span class="num">' + esc(name || 'Counter order') + '</span>';
   row.innerHTML =
     '<div class="top"><span class="srcb ' + (SRC[src] ? esc(src) : 'other') + '">' + sb.icon + ' ' + esc(sb.label) + '</span>' +
-    '<span class="num">' + esc(name || 'Counter order') + '</span>' +
+    numHtml + (link ? '<a class="open" href="' + esc(link) + '" target="_blank" rel="noopener">OPEN ↗</a>' : '') +
     '<span class="meta">' + esc(meta) + '</span>' +
     '<span class="when">' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + esc(room) + '</span></div>' +
     (items ? '<div class="items">' + esc(items) + '</div>' : '') +

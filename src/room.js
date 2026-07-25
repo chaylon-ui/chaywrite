@@ -486,6 +486,8 @@ export class BinderRoom {
         // where the order came from — the /staff page badges each row with it
         // ("kiosk" is implied for counter orders; Flow sends e.g. "shipday")
         src: String((d && d.src) || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 20),
+        // optional deep link (e.g. the order in Shopify admin) — https only
+        url: /^https:\/\/[\w.\-/?=&%#:@]+$/.test(String((d && d.url) || "")) ? String(d.url).slice(0, 300) : "",
       };
       // An empty body is the /staff page's key probe — validate, don't ring.
       if (!data.name && !data.note && !data.total && !data.count) return Response.json({ ok: true, delivered: 0 });
@@ -544,7 +546,7 @@ export class BinderRoom {
         });
         const j = await r.json();
         const dr = j?.data?.draftOrderCreate?.draftOrder;
-        if (dr) out.name = dr.name;
+        if (dr) { out.name = dr.name; out.did = String(dr.id || "").replace(/\D/g, ""); }
         else out.error = JSON.stringify(j?.data?.draftOrderCreate?.userErrors || j?.errors || r.status);
       } catch (e) {
         out.error = String((e && e.message) || e);
