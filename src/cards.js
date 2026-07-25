@@ -371,6 +371,40 @@ export async function serveQty(request, env, ctx) {
   return res;
 }
 
+/* The pickup board: every OPEN draft order, newest first — the POS tablets
+   can't list third-party drafts natively, so /pickups shows them all (staff
+   PIN-gated at the worker layer). Needs SHOPIFY_ADMIN_TOKEN. */
+export async function servePickups(env) {
+  const token = env && env.SHOPIFY_ADMIN_TOKEN;
+  if (!token) return Response.json({ error: "no admin token" }, { status: 503 });
+  const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
+  const gql = `{ draftOrders(first: 40, query: "status:open", reverse: true) { edges { node {
+    id name createdAt totalPrice tags note
+    lineItems(first: 25) { edges { node { title quantity } } } } } } }`;
+  try {
+    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ query: gql }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const edges = (await r.json())?.data?.draftOrders?.edges || [];
+    const orders = edges.map(({ node: n }) => ({
+      name: n.name,
+      did: String(n.id || "").replace(/\D/g, ""),
+      createdAt: n.createdAt,
+      total: n.totalPrice,
+      kiosk: (n.tags || []).includes("showcase-tv"),
+      note: String(n.note || "").slice(0, 140),
+      items: (n.lineItems?.edges || []).map(({ node: li }) => ({ t: li.title, q: li.quantity })),
+    }));
+    return Response.json({ orders }, { headers: { "cache-control": "no-store" } });
+  } catch (e) {
+    return Response.json({ error: String((e && e.message) || e) }, { status: 502 });
+  }
+}
+
 /* In-stock filter for the "Alternatives in stock" strip. The TV/phone
    BROWSERS query strictlybetter.eu themselves (its API is CORS-open to
    browsers, but its Cloudflare zone 301-loops Worker-originated fetches),

@@ -1,5 +1,5 @@
 import { BinderRoom } from "./room.js";
-import { serveCards, serveSearch, serveInstock, serveQty } from "./cards.js";
+import { serveCards, serveSearch, serveInstock, serveQty, servePickups } from "./cards.js";
 
 export { BinderRoom };
 
@@ -88,6 +88,23 @@ export default {
     }
     if (url.pathname === "/staff") {
       return serveAsset(env, "/staff.html", request);
+    }
+    if (url.pathname === "/pickups") {
+      return serveAsset(env, "/pickups.html", request);
+    }
+    // Live list of every open draft order (the POS drafts list hides
+    // third-party ones) — gated behind the default room's admin PIN with
+    // the same lockout as the staff page.
+    if (url.pathname === "/pickups.json") {
+      const k = url.searchParams.get("k") || "";
+      let ok = false;
+      try {
+        const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
+          .fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
+        ok = !!(await chk.json()).ok;
+      } catch {}
+      if (!ok) return Response.json({ error: "staff key required" }, { status: 403 });
+      return servePickups(env);
     }
     if (url.pathname.startsWith("/c/")) {
       return serveAsset(env, "/phone.html", request);
