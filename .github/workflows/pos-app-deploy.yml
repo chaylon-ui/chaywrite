@@ -1,0 +1,50 @@
+# Deploys the Kiosk Pickups POS app whenever pos-app/ changes.
+# Needs two one-time things from the store owner (see pos-app/DEPLOY.md):
+#   1. the app created in the Shopify Dev Dashboard, with its Client ID
+#      pasted into pos-app/shopify.app.toml
+#   2. an App Automation Token saved as the SHOPIFY_APP_AUTOMATION_TOKEN
+#      repo Actions secret
+# Until both exist the job skips itself with a notice instead of failing.
+name: Deploy POS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, claude/shopify-site-improvements-ztgdt8]
+    paths: ["pos-app/**", ".github/workflows/pos-app-deploy.yml"]
+
+concurrency: pos-app-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check prerequisites
+        id: pre
+        env:
+          HAS_TOKEN: ${{ secrets.SHOPIFY_APP_AUTOMATION_TOKEN != '' }}
+        run: |
+          skip=""
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::SHOPIFY_APP_AUTOMATION_TOKEN secret not set yet - skipping POS app deploy."
+            skip=1
+          fi
+          if ! grep -q "^client_id" pos-app/shopify.app.toml; then
+            echo "::notice::No client_id in pos-app/shopify.app.toml yet - skipping POS app deploy."
+            skip=1
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+      - name: Install dependencies
+        if: steps.pre.outputs.skip != '1'
+        working-directory: pos-app
+        run: npm ci
+      - name: Deploy app
+        if: steps.pre.outputs.skip != '1'
+        working-directory: pos-app
+        env:
+          SHOPIFY_APP_AUTOMATION_TOKEN: ${{ secrets.SHOPIFY_APP_AUTOMATION_TOKEN }}
+        run: npx shopify app deploy --allow-updates --source-control-url "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
