@@ -1695,6 +1695,8 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-riftbound',s.theme==='riftbound');
  cs.classList.toggle('theme-hockey',s.theme==='hockey');
  cs.classList.toggle('theme-basketball',s.theme==='basketball');
+ const tcc=document.getElementById('tcCounter');
+ if(tcc)tcc.style.display=(s.counterEnabled===false)?'none':''; // per-screen "Send to counter" toggle
  cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive); // the sleeve wall never wears top-loaders
  cs.classList.toggle('sleeves',!!s.sleevesActive);
  const hx=(SETTINGS.holiday==='christmas');

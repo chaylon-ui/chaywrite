@@ -47,6 +47,10 @@ export const DEFAULT_SETTINGS = {
   // (2 minute) idle window before the attract show. /tv?touch=1 still forces
   // it per-URL regardless of this setting.
   touchMode: false,
+  // Let touch kiosks offer "Send to counter" (creates a draft order for
+  // staff to ring through). Untick per screen to leave only the QR
+  // checkout-on-your-phone path.
+  counterEnabled: true,
   // Where the on-screen search keyboard sits on a touch kiosk (some totems
   // are mounted high, some low): top | midtop | middle | midbot | bottom.
   kbPos: "bottom",

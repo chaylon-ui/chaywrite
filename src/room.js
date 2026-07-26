@@ -144,6 +144,7 @@ export class BinderRoom {
     }
     if ("topLoaders" in patch) next.topLoaders = !!patch.topLoaders;
     if ("touchMode" in patch) next.touchMode = !!patch.touchMode;
+    if ("counterEnabled" in patch) next.counterEnabled = !!patch.counterEnabled;
     if ("kbPos" in patch) {
       if (!["top", "midtop", "middle", "midbot", "bottom"].includes(patch.kbPos)) return "bad kbPos";
       next.kbPos = patch.kbPos;
@@ -378,6 +379,7 @@ export class BinderRoom {
     // but over HTTP since the totem has no phone. Items are re-sanitized here
     // (the TV UI is trusted, but the request could come from anywhere).
     if (url.pathname.endsWith("/counter") && request.method === "POST") {
+      if (this.settings.counterEnabled === false) return Response.json({ error: "counter checkout disabled" }, { status: 403 });
       let d; try { d = await request.json(); } catch { return Response.json({ error: "bad body" }, { status: 400 }); }
       const items = (Array.isArray(d.items) ? d.items : []).slice(0, 100)
         .map((i) => ({

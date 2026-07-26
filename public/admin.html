@@ -108,6 +108,7 @@ a.tvlink:hover{color:var(--ember)}
     <div class="row"><input id="perfMode" type="checkbox"><label for="perfMode">Performance mode — smoother on weak TV boxes (lighter blur &amp; effects)</label></div>
 
     <div class="row"><input id="touchMode" type="checkbox"><label for="touchMode">Touch-screen kiosk mode — this screen IS the controller: tap &amp; swipe to browse, on-screen tabs/search/cart, checkout hands off by QR, “send to counter” makes a draft order. Attract show waits 2 idle minutes. No pairing QR.</label></div>
+    <div class="row"><input id="counterEnabled" type="checkbox"><label for="counterEnabled">Allow “Send to counter” on touch kiosks — customers can send their cart as a draft order for staff to ring through. Untick to offer only the scan-and-pay-on-your-phone checkout.</label></div>
     <label for="kbPos">On-screen keyboard position (touch kiosks)</label>
     <select id="kbPos">
       <option value="top">Top</option>
@@ -291,7 +292,7 @@ document.querySelectorAll('.icorow').forEach(row=>{const key=row.dataset.icon;
  clr.onclick=()=>{ICONS[key]='';row.refresh();};});
 function refreshIconRows(){document.querySelectorAll('.icorow').forEach(r=>r.refresh&&r.refresh());}
 async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json();
-  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('kbPos').value=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';$('holiday').value=s.holiday==='christmas'?'christmas':'none';
+  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('counterEnabled').checked=s.counterEnabled!==false;$('kbPos').value=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';$('holiday').value=s.holiday==='christmas'?'christmas':'none';
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntStarwars').checked=!!nt.starwars;$('ntOnepiece').checked=!!nt.onepiece;$('ntRiftbound').checked=!!nt.riftbound;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const sv=s.sleevesTab||{};$('svEnabled').checked=!!sv.enabled;$('svCollection').value=sv.collection||'all-dragon-shield-sleeves';
@@ -328,7 +329,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
     collection:($(g.input).value.trim().toLowerCase())||g.fallback,icon:ICONS[g.game]||''}));
   if(!tabs.some(t=>t.enabled)){$('saveMsg').textContent='Enable at least one game';$('saveMsg').className='msg bad';return;}
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
-    perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,starwars:$('ntStarwars').checked,onepiece:$('ntOnepiece').checked,riftbound:$('ntRiftbound').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
+    perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,counterEnabled:$('counterEnabled').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,starwars:$('ntStarwars').checked,onepiece:$('ntOnepiece').checked,riftbound:$('ntRiftbound').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase',icon:ICONS.showcase||''},
     sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
