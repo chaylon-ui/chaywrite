@@ -2,6 +2,7 @@
   "name": "kiosk-pickups-extension",
   "private": true,
   "dependencies": {
+    "@shopify/ui-extensions": "~2026.7.0",
     "preact": "^10.24.3",
     "react": "npm:@preact/compat@^18.3.1",
     "react-dom": "npm:@preact/compat@^18.3.1"
