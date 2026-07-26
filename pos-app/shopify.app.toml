@@ -1,0 +1,19 @@
+# Kiosk Pickups — extension-only Shopify app.
+# The first `npm run deploy` links this to a real app (the CLI offers to
+# create one and writes the client_id here itself).
+name = "Kiosk Pickups"
+handle = "kiosk-pickups"
+application_url = "https://shopify.dev/apps/default-app-home"
+embedded = false
+
+[access_scopes]
+scopes = ""
+
+[auth]
+redirect_urls = ["https://shopify.dev/apps/default-app-home/api/auth"]
+
+[webhooks]
+api_version = "2026-07"
+
+[build]
+include_config_on_deploy = true

@@ -1,0 +1,7 @@
+{
+  "name": "kiosk-pickups-extension",
+  "private": true,
+  "dependencies": {
+    "preact": "^10.24.3"
+  }
+}

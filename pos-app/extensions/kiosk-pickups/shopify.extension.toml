@@ -1,0 +1,15 @@
+api_version = "2026-07"
+
+[[extensions]]
+type = "ui_extension"
+name = "Kiosk Pickups"
+handle = "kiosk-pickups"
+description = "Shows open kiosk/pickup draft orders on the POS home screen"
+
+[[extensions.targeting]]
+target = "pos.home.tile.render"
+module = "./src/Tile.jsx"
+
+[[extensions.targeting]]
+target = "pos.home.modal.render"
+module = "./src/Modal.jsx"

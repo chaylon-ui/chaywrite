@@ -376,11 +376,11 @@ export async function serveQty(request, env, ctx) {
    PIN-gated at the worker layer). Needs SHOPIFY_ADMIN_TOKEN. */
 export async function servePickups(env) {
   const token = env && env.SHOPIFY_ADMIN_TOKEN;
-  if (!token) return Response.json({ error: "no admin token" }, { status: 503 });
+  if (!token) return Response.json({ error: "no admin token" }, { status: 503, headers: { "access-control-allow-origin": "*" } });
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const gql = `{ draftOrders(first: 40, query: "status:open", reverse: true) { edges { node {
     id name createdAt totalPrice tags note
-    lineItems(first: 25) { edges { node { title quantity } } } } } } }`;
+    lineItems(first: 25) { edges { node { title quantity variant { id } } } } } } } }`;
   try {
     const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: "POST",
@@ -397,11 +397,47 @@ export async function servePickups(env) {
       total: n.totalPrice,
       kiosk: (n.tags || []).includes("showcase-tv"),
       note: String(n.note || "").slice(0, 140),
-      items: (n.lineItems?.edges || []).map(({ node: li }) => ({ t: li.title, q: li.quantity })),
+      items: (n.lineItems?.edges || []).map(({ node: li }) => ({
+        t: li.title,
+        q: li.quantity,
+        // Numeric variant id so the POS tile can drop the line straight into
+        // the POS cart (shopify.cart.addLineItem wants the bare number).
+        v: Number(String(li.variant?.id || "").replace(/\D/g, "")) || 0,
+      })),
     }));
-    return Response.json({ orders }, { headers: { "cache-control": "no-store" } });
+    // CORS: the POS tile app (Shopify-hosted extension origin) reads this
+    // endpoint cross-origin. The PIN is the auth; the origin doesn't matter.
+    return Response.json({ orders }, { headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } });
   } catch (e) {
-    return Response.json({ error: String((e && e.message) || e) }, { status: 502 });
+    return Response.json({ error: String((e && e.message) || e) }, { status: 502, headers: { "access-control-allow-origin": "*" } });
+  }
+}
+
+/* "Mark done" from the POS tile (or anywhere staff-side): deletes the open
+   draft order once it's been rung through the register, so the pickup list
+   stays clean. did is digits-only (enforced by the router). */
+export async function servePickupDone(env, did) {
+  const cors = { "access-control-allow-origin": "*" };
+  const token = env && env.SHOPIFY_ADMIN_TOKEN;
+  if (!token) return Response.json({ error: "no admin token" }, { status: 503, headers: cors });
+  const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
+  const gql = `mutation { draftOrderDelete(input: {id: "gid://shopify/DraftOrder/${did}"}) { deletedId userErrors { message } } }`;
+  try {
+    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ query: gql }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = (await r.json())?.data?.draftOrderDelete;
+    if (!d?.deletedId) {
+      const msg = d?.userErrors?.[0]?.message || "draft not found (already done?)";
+      return Response.json({ ok: false, error: msg }, { status: 409, headers: cors });
+    }
+    return Response.json({ ok: true }, { headers: { ...cors, "cache-control": "no-store" } });
+  } catch (e) {
+    return Response.json({ error: String((e && e.message) || e) }, { status: 502, headers: cors });
   }
 }
 

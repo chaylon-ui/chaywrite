@@ -1,5 +1,5 @@
 import { BinderRoom } from "./room.js";
-import { serveCards, serveSearch, serveInstock, serveQty, servePickups } from "./cards.js";
+import { serveCards, serveSearch, serveInstock, serveQty, servePickups, servePickupDone } from "./cards.js";
 
 export { BinderRoom };
 
@@ -96,6 +96,11 @@ export default {
     // third-party ones) — gated behind the default room's admin PIN with
     // the same lockout as the staff page.
     if (url.pathname === "/pickups.json") {
+      // CORS on every branch (403 included) so the POS tile app — a
+      // Shopify-hosted extension origin — can read the response and tell
+      // "wrong PIN" apart from "network down".
+      const cors = { "access-control-allow-origin": "*" };
+      if (request.method === "OPTIONS") return new Response(null, { headers: cors });
       const k = url.searchParams.get("k") || "";
       let ok = false;
       try {
@@ -103,8 +108,26 @@ export default {
           .fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
         ok = !!(await chk.json()).ok;
       } catch {}
-      if (!ok) return Response.json({ error: "staff key required" }, { status: 403 });
+      if (!ok) return Response.json({ error: "staff key required" }, { status: 403, headers: cors });
       return servePickups(env);
+    }
+    // Mark a pickup done (deletes the open draft order after it's rung
+    // through the register) — POST from the POS tile, same PIN gate.
+    if (url.pathname === "/pickups/done") {
+      const cors = { "access-control-allow-origin": "*", "access-control-allow-methods": "POST, OPTIONS" };
+      if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+      if (request.method !== "POST") return Response.json({ error: "POST only" }, { status: 405, headers: cors });
+      const k = url.searchParams.get("k") || "";
+      let ok = false;
+      try {
+        const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
+          .fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
+        ok = !!(await chk.json()).ok;
+      } catch {}
+      if (!ok) return Response.json({ error: "staff key required" }, { status: 403, headers: cors });
+      const did = (url.searchParams.get("did") || "").replace(/\D/g, "").slice(0, 24);
+      if (!did) return Response.json({ error: "did required" }, { status: 400, headers: cors });
+      return servePickupDone(env, did);
     }
     if (url.pathname.startsWith("/c/")) {
       return serveAsset(env, "/phone.html", request);
