@@ -9,7 +9,31 @@ This exists because POS tablets only list draft orders created by
 first-party Shopify apps — kiosk drafts are invisible there. The tile reads
 the same PIN-gated `/pickups.json` feed as https://exor-binder.nevski.workers.dev/pickups.
 
-## One-time deploy (~10 minutes, needs the store owner login)
+## Option A — no installs (recommended): let GitHub deploy it
+
+Everything happens in a web browser; GitHub Actions
+(`.github/workflows/pos-app-deploy.yml`) runs the actual deploy.
+
+1. Go to the Shopify **Dev Dashboard** (dev.shopify.com) and sign in with
+   the store owner account → **Apps** → **Create app** → name it
+   **Kiosk Pickups**.
+2. On the new app's page, copy its **Client ID** and paste it into
+   `pos-app/shopify.app.toml` as `client_id = "…"` (or hand it to Claude
+   to wire in).
+3. Still in the app: **Settings** → **App Automation Token** →
+   **Create token** (pick 6 months) → **Generate** → copy it right away.
+4. GitHub → the chaywrite repo → **Settings** → **Secrets and variables**
+   → **Actions** → **New repository secret** → name
+   `SHOPIFY_APP_AUTOMATION_TOKEN`, paste the token.
+5. Push any change under `pos-app/` (or run the "Deploy POS app" workflow
+   from the Actions tab) — GitHub deploys the app.
+6. Back in the Dev Dashboard, open the app and **Install** it on the
+   Exor Games store.
+
+Then do the per-tablet step below. When the token expires (you'll get an
+email), repeat steps 3–4.
+
+## Option B — one-time deploy from your own computer (~10 minutes)
 
 Run these on any computer with Node 20+ installed (your laptop is fine —
 this doesn't touch the kiosk or the worker):
