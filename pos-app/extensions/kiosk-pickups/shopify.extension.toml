@@ -1,4 +1,6 @@
-api_version = "2026-07"
+# 2026-01 rather than the brand-new 2026-07: store tablets a few POS
+# versions behind still render the tile.
+api_version = "2026-01"
 
 [[extensions]]
 type = "ui_extension"
