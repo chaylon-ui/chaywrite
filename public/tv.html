@@ -891,15 +891,17 @@ function applyCards(list){
    deck is parked in SDECK and restored when the search is cleared. ---- */
 let SDECK=null;
 function startSearchDeck(d){if(!d)return;const q=String(d.q||'').slice(0,60);
- const cards=(Array.isArray(d.cards)?d.cards:[]).slice(0,80).map(sanitizeCard).filter(Boolean);
+ const cards=(Array.isArray(d.cards)?d.cards:[]).slice(0,120).map(sanitizeCard).filter(Boolean);
  if(!cards.length)return;
  if(!SDECK)SDECK={cards:CARDS,cn:CN};
  cards.COLOR_NAME=(d.colorNames&&typeof d.colorNames==='object')?d.colorNames:CN;
  document.body.classList.add('searching'); // search results aren't "New Today" — park the tape
+ applySettings(SETTINGS); // case swaps to the generic wooden look while searching
  unzoom();selected=null;applyCards(cards);draw();
  const el=document.getElementById('dvq');if(el)el.textContent='Search: “'+q+'” · '+cards.length+' found';}
 function endSearchDeck(){const el=document.getElementById('dvq');if(el)el.textContent='';
  document.body.classList.remove('searching');
+ applySettings(SETTINGS); // restore the tab's own case dressing
  if(!SDECK)return;const d=SDECK.cards;d.COLOR_NAME=SDECK.cn;SDECK=null;
  unzoom();selected=null;applyCards(d);draw();}
 applyCards(window.BINDER_CARDS);
@@ -1596,7 +1598,7 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
  // The sleeve wall gets its own filter row: Standard/Japanese size switch,
  // finish family (from the product titles) and pack count.
  const chip=(grp,val,label)=>`<button class="slvchip${SLVF[grp]===val?' on':''}" onclick="SLVSET('${grp}','${val}',this)">${label}</button>`;
- const slvbar=s.sleevesActive?`<div class="slvbar">`
+ const slvbar=(s.sleevesActive&&!searching)?`<div class="slvbar">`
   +`<div class="slvgrp">${chip('size','std','STANDARD')}${chip('size','jp','JAPANESE')}</div>`
   +`<div class="slvgrp">${chip('fin','all','ALL')}${chip('fin','brushed','BRUSHED')}${chip('fin','matte','MATTE')}${chip('fin','dual','DUAL MATTE')}${chip('fin','classic','CLASSIC')}${chip('fin','other','MORE')}</div>`
   +`<div class="slvgrp">${chip('ct','all','ANY PACK')}${chip('ct','100','100CT')}${chip('ct','60','60CT')}</div>`
@@ -1803,25 +1805,28 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if(s.game&&['mtg','pokemon','yugioh','starwars','onepiece','riftbound'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
  const cs=document.getElementById('case');
- cs.classList.toggle('theme-pokemon',s.theme==='pokemon');
- cs.classList.toggle('theme-yugioh',s.theme==='yugioh');
- cs.classList.toggle('theme-starwars',s.theme==='starwars');
- cs.classList.toggle('theme-onepiece',s.theme==='onepiece');
- cs.classList.toggle('theme-riftbound',s.theme==='riftbound');
- cs.classList.toggle('theme-hockey',s.theme==='hockey');
- cs.classList.toggle('theme-basketball',s.theme==='basketball');
+ // While a search deck is up the case wears the plain wooden look — search
+ // results are mixed singles, not the sleeve shelf/showcase they interrupted.
+ const srch=document.body.classList.contains('searching');
+ cs.classList.toggle('theme-pokemon',s.theme==='pokemon'&&!srch);
+ cs.classList.toggle('theme-yugioh',s.theme==='yugioh'&&!srch);
+ cs.classList.toggle('theme-starwars',s.theme==='starwars'&&!srch);
+ cs.classList.toggle('theme-onepiece',s.theme==='onepiece'&&!srch);
+ cs.classList.toggle('theme-riftbound',s.theme==='riftbound'&&!srch);
+ cs.classList.toggle('theme-hockey',s.theme==='hockey'&&!srch);
+ cs.classList.toggle('theme-basketball',s.theme==='basketball'&&!srch);
  const tcc=document.getElementById('tcCounter');
  if(tcc)tcc.style.display=(s.counterEnabled===false)?'none':''; // per-screen "Send to counter" toggle
  cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive); // the sleeve wall never wears top-loaders
- cs.classList.toggle('sleeves',!!s.sleevesActive);
+ cs.classList.toggle('sleeves',!!s.sleevesActive&&!srch);
  cs.classList.toggle('slvwhite',!!s.sleeveWhiteBg);
  if(!s.sleevesActive&&window.SLVWAS){SLVF={size:'std',fin:'all',ct:'all'};} // next shopper starts unfiltered
  window.SLVWAS=!!s.sleevesActive;
  const hx=(SETTINGS.holiday==='christmas');
  cs.classList.toggle('xmas',hx);
  if(hx!==XMAS){XMAS=hx;renderXdress();if(document.getElementById('slab'))draw();} // re-roll the clutter so the props land
- cs.classList.toggle('newtoday',!!s.newTodayActive);
- cs.classList.toggle('showcase',!!s.showcaseActive);
+ cs.classList.toggle('newtoday',!!s.newTodayActive&&!srch);
+ cs.classList.toggle('showcase',!!s.showcaseActive&&!srch);
  document.body.classList.toggle('perf',!!s.perfMode);
  const ntNow=!!s.newTodayActive;
  if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview

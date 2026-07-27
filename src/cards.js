@@ -268,8 +268,8 @@ export async function serveSearch(request, env) {
       try { prods = await adminSearch(q, env); } catch { prods = null; }
     }
     if (!prods) prods = await suggestSearch(q, headers);
-    const built = buildCards(prods.filter(Boolean), { minPrice: 0, perLane: 99 });
-    out.cards = built.cards.slice(0, 80); out.count = out.cards.length;
+    const built = buildCards(prods.filter(Boolean), { minPrice: 0, perLane: 199 });
+    out.cards = built.cards.slice(0, 120); out.count = out.cards.length;
     out.game = built.game; out.colorNames = built.colorNames;
   } catch (e) {
     out.error = String((e && e.message) || e);
@@ -282,19 +282,29 @@ async function adminSearch(q, env) {
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const safe = q.replace(/[*"\\()]/g, " ").trim();
   if (!safe) return null;
-  const gql = `query($q:String!){products(first:40,query:$q){edges{node{
+  // Two pages of 40 (the per-query cost stays at the long-proven level) so a
+  // deep name like "charizard" surfaces the EXs and GXs, not just page one.
+  const gql = `query($q:String!,$after:String){products(first:40,query:$q,after:$after){
+    pageInfo{hasNextPage endCursor}
+    edges{node{
     title handle productType tags description(truncateAt:400) featuredImage{url}
-    variants(first:30){edges{node{id title price availableForSale}}}}}}}`;
-  const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "X-Shopify-Access-Token": env.SHOPIFY_ADMIN_TOKEN },
-    body: JSON.stringify({ query: gql, variables: { q: `status:active title:*${safe}*` } }),
-    signal: AbortSignal.timeout(6000),
-  });
-  if (!r.ok) throw new Error("admin search HTTP " + r.status);
-  const j = await r.json();
-  const edges = j?.data?.products?.edges;
-  if (!Array.isArray(edges)) throw new Error("admin search shape");
+    variants(first:20){edges{node{id title price availableForSale}}}}}}}`;
+  let edges = [];
+  let after = null;
+  for (let page = 0; page < 2; page++) {
+    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Shopify-Access-Token": env.SHOPIFY_ADMIN_TOKEN },
+      body: JSON.stringify({ query: gql, variables: { q: `status:active title:*${safe}*`, after } }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) { if (page) break; throw new Error("admin search HTTP " + r.status); }
+    const pr = (await r.json())?.data?.products;
+    if (!Array.isArray(pr?.edges)) { if (page) break; throw new Error("admin search shape"); }
+    edges = edges.concat(pr.edges);
+    if (!pr.pageInfo?.hasNextPage || !pr.pageInfo.endCursor) break;
+    after = pr.pageInfo.endCursor;
+  }
   return edges.map(({ node: p }) => ({
     title: p.title, handle: p.handle, product_type: p.productType, tags: p.tags || [], body_html: p.description || "",
     images: p.featuredImage ? [{ src: p.featuredImage.url }] : [],
