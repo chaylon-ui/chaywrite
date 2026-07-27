@@ -909,11 +909,18 @@ function H(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 function money(x){const n=parseFloat(x);return isFinite(n)?n.toFixed(2):'0.00'}
 const KEY=c=>String(c.variantId||c.name);
 function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
+ // Alternate printings (condition/foil chips in the preview) ride along on
+ // search results too — sanitize each entry rather than dropping the list.
+ const vars=Array.isArray(d.variants)?d.variants.slice(0,8).map(v=>v&&typeof v==='object'?{
+  variantId:String(v.variantId||'').replace(/\D/g,'')||null,
+  price:money(v.price),foil:!!v.foil,
+  condition:String(v.condition||'').slice(0,60)}:null).filter(v=>v&&v.variantId):null;
  return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),type:String(d.type||'').slice(0,70),
   color:(ART[d.color]?d.color:'C'),price:money(d.price),foil:!!d.foil,
   game:CARD_GAMES.includes(d.game)?d.game:null,
   condition:String(d.condition||'').slice(0,60),
   image:(typeof d.image==='string'&&/^https:\/\/(cdn\.shopify\.com|exorgames\.com\/cdn)\//.test(d.image))?d.image:null,
+  variants:(vars&&vars.length>=2)?vars:undefined,
   variantId:String(d.variantId||'').replace(/\D/g,'')||null};}
 /* Pokémon players say "Holo", everyone else says "foil". Word by the CARD's
    own game (cards.json carries it) — mixed decks (search, Showcase) used to
