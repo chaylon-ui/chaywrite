@@ -155,6 +155,8 @@ export class BinderRoom {
     }
     if ("searchEnabled" in patch) next.searchEnabled = !!patch.searchEnabled;
     if ("perfMode" in patch) next.perfMode = !!patch.perfMode;
+    if ("sleeveWhiteBg" in patch) next.sleeveWhiteBg = !!patch.sleeveWhiteBg;
+    if ("fullCard" in patch) next.fullCard = !!patch.fullCard;
     if ("newToday" in patch) {
       const nt = patch.newToday;
       if (!nt || typeof nt !== "object") return "bad newToday";

@@ -659,8 +659,22 @@ function buildSleeves(products) {
     const eligible = (p.variants || []).filter((v2) => v2.available && +v2.price > 0 && +v2.price < MAX_PRICE);
     if (eligible.length === 0) continue;
     const v = eligible.reduce((a, b) => (+b.price < +a.price ? b : a)); // lead with the cheapest in-stock option
-    const raw = String(p.title || "")
-      .replace(/^dragon\s*shield\s*(sleeves)?\s*/i, "").replace(/\s*\d+\s*ct\.?\s*$/i, "").trim() || p.title;
+    const title = String(p.title || "");
+    // Filter facts straight from the title: pack count ("100CT", "60CT",
+    // tolerating the odd "100C" typo), Japanese small-size line, and the
+    // finish family. DUAL MATTE must be tested before MATTE.
+    const ctm = title.match(/\b(\d{2,3})\s*c\.?t?\b/i);
+    const ct = ctm ? ctm[1] : null;
+    const jp = /japanese/i.test(title);
+    const fin = /dual\b[\s\S]*\bmatte|dual\s+matte/i.test(title) ? "dual"
+      : /brushed/i.test(title) ? "brushed"
+      : /matte/i.test(title) ? "matte"
+      : /classic/i.test(title) ? "classic" : "";
+    const raw = title
+      .replace(/^dragon\s*shield\s*(sleeves)?\s*/i, "")
+      .replace(/\bjapanese\s*/gi, "") // the size switch says it; keep the sticker short
+      .replace(/\b\d{2,3}\s*c\.?t?\b\.?/gi, "") // count moves to its own sticker
+      .replace(/\s{2,}/g, " ").trim() || p.title;
     // The catalogue titles SHOUT IN CAPS — settle them into Title Case for
     // the cue card and speech bubble (already-mixed-case titles untouched).
     const name = raw === raw.toUpperCase()
@@ -670,6 +684,9 @@ function buildSleeves(products) {
     seen.add(name);
     cards.push({
       name,
+      ct,
+      jp,
+      fin,
       color: "C",
       set: "Dragon Shield",
       game: "sleeves",

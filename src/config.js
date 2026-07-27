@@ -36,6 +36,14 @@ export const DEFAULT_SETTINGS = {
   // collection (accessories — no top-loaders, no conditions, no price floor).
   sleevesTab: { enabled: false, label: "Sleeves", collection: "all-dragon-shield-sleeves" },
   sleevesActive: false, // true while the sleeve wall is on screen
+  // White backdrop behind each sleeve-box shot on the wall — for catalogues
+  // where the product photos aren't transparent cut-outs. Off = current look.
+  sleeveWhiteBg: false,
+
+  // Touch kiosks: expanded rows — the shelves stop shingling so the WHOLE
+  // card (text box included) is visible without tapping. Fewer cards per
+  // page. Off = the current overlapped stack.
+  fullCard: false,
 
   // Performance mode for weaker TV boxes: replaces the preview's backdrop
   // blur with a plain dim and stills the heavy filter animations.

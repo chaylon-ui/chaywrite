@@ -433,6 +433,29 @@ body.paired .case.sleeves .tray{padding-top:13vh;padding-bottom:5.5vh}
 .case.sleeves .zoomtv .cue .cu-name{white-space:normal;font-size:2.9vh;line-height:1.2} /* long product names wrap instead of clipping */
 body.perf .case.sleeves .tray .card .scan{filter:none}
 html.portrait .case.sleeves .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbudget)/6.3));padding-top:10.5vh;padding-bottom:4vh}
+/* Sleeve title sticker (bottom-left, dark pen) + smaller count sticker in a
+   different pen colour — the shouty catalogue title moves onto the shelf. */
+.case.sleeves .tray .card .slname{position:absolute;left:2%;bottom:14%;max-width:78%;z-index:7;transform:rotate(-1.5deg);background:#fdf6df;padding:.26em .45em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
+.case.sleeves .tray .card .slname span{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:calc(var(--cw)*.118);line-height:.92;color:#1c1c24;filter:url(#ink)}
+.case.sleeves .tray .card .slct{position:absolute;left:5%;bottom:1%;z-index:8;transform:rotate(2deg);background:#fbfbf4;padding:.12em .4em .2em;border-radius:2px;box-shadow:0 2px 4px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12)}
+.case.sleeves .tray .card .slct span{display:block;font-family:'Caveat',cursive;font-weight:700;font-size:calc(var(--cw)*.095);line-height:.8;color:#c0392b;filter:url(#ink)}
+/* Admin toggle: white backdrop behind each sleeve shot, for product photos
+   that aren't transparent cut-outs (they'd otherwise float as white slabs). */
+.case.sleeves.slvwhite .tray .card .scan{background:#fff;border-radius:8px;padding:3% 2%;filter:none;box-shadow:0 5px 10px rgba(0,0,0,.5)}
+/* Sleeve wall filter chips (touch kiosks) — size switch, finish, pack count. */
+.slvbar{display:flex;flex-wrap:wrap;gap:.3rem .35rem;justify-content:center;margin-top:.45rem;max-width:96vw}
+.slvchip{font-family:'Bangers','Comic Sans MS','Chalkboard SE',cursive;font-size:.92rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2px solid #101010;border-radius:11px;box-shadow:.12rem .16rem 0 #101010;padding:.32rem .68rem;cursor:pointer}
+.slvchip.on{background:#ffd94d}
+.slvgrp{display:flex;gap:.3rem;align-items:center}
+.slvgrp + .slvgrp{margin-left:.55rem;padding-left:.6rem;border-left:2px dashed rgba(255,255,255,.35)}
+/* Full-card rows (admin toggle, touch kiosks): the shelves stop shingling so
+   the entire card — text box included — is readable without tapping. Fewer,
+   bigger rows; the sleeve wall already shows full boxes and is left alone. */
+html.fullcard .case:not(.sleeves) .tray{--ch:min(calc(var(--cwv)/0.715),calc((var(--hbudget) - 2vh)/3.7))}
+html.fullcard .case:not(.sleeves) .shelf + .shelf{margin-top:.8vh}
+html.fullcard .case.tl:not(.sleeves) .tray{--chh:calc((min(85vh,900px) - 8vh)/4.15);--ch:min(var(--chw),var(--chh))}
+html.fullcard body.paired .case.tl:not(.sleeves) .tray{--chh:calc(92vh/4.15)}
+html.portrait.fullcard .case:not(.sleeves) .tray{--ch:min(calc(var(--cwv)/0.715),calc((var(--hbudget) - 3vh)/4.9))}
 html.portrait body.paired .case.sleeves .tray{padding-top:12.5vh;padding-bottom:4.5vh}
 /* ---- Christmas dressing (admin "Holiday" setting, per room): a sagging
    string of colored lights along the top of the case, frosted glass corners,
@@ -479,7 +502,7 @@ html.touch body{overscroll-behavior:none}
 .tswrap.canr .tsr{display:block}
 .tsarr:active{transform:scale(.9)}
 /* Optional tab icon (admin upload, auto-shrunk) — falls back to the label. */
-.ttab .ticon{display:block;height:1.75em;max-width:9rem;object-fit:contain;pointer-events:none}
+.ttab .ticon{display:block;height:2.7em;max-width:13rem;object-fit:contain;pointer-events:none}
 .ttab.hasico{padding:.35rem .8rem}
 /* Reserve real space for the tab bar so it never covers the top card row —
    --ttabh is measured from the rendered bar (it grows when the search pill
@@ -836,7 +859,31 @@ const SLEEVES=()=>!!(CARDS&&CARDS.GAME==='sleeves');
 /* Per-deck salt so switching tabs reshuffles the clutter/card-back piles —
    without it every deck's first spread drew the exact same mess. */
 let DECKSALT=0;
-function applyCards(list){CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=(list&&(list.GAME==='showcase'||list.GAME==='sleeves'))?24:40;
+/* ---- Sleeve wall filters (touch kiosks): size switch + finish + count.
+   The unfiltered deck parks in SLVALL; the wall shows a filtered view.
+   Non-touch TVs skip filtering but still get known-finishes-first order. ---- */
+let SLVALL=null,SLVF={size:'std',fin:'all',ct:'all'};
+const SLVFINS=['all','brushed','matte','dual','classic','other'];
+function slvView(){const src=SLVALL||[];const f=SLVF;
+ let out=(window.TOUCH||window.REMOTE)
+  ?src.filter(c=>((f.size==='jp')===!!c.jp)
+    &&(f.fin==='all'||(f.fin==='other'?!c.fin:c.fin===f.fin))
+    &&(f.ct==='all'||String(c.ct||'')===f.ct))
+  :src.slice();
+ // Known finishes lead; anything the title doesn't identify sorts to the end.
+ out=out.filter(c=>c.fin).concat(out.filter(c=>!c.fin));
+ out.COLOR_NAME=src.COLOR_NAME;out.GAME='sleeves';out.__slvView=true;return out;}
+function SLVSET(k,v,el){if(el&&window.TOUCH)comicBurst(el,'FILTERED!',true);
+ SLVF[k]=v;if(k==='size'){SLVF.fin='all';SLVF.ct='all';} // new size = fresh slate
+ if(window.REMOTE&&!REM_APPLY)RGO({a:'svf',f:Object.assign({},SLVF)});
+ if(SLEEVES()){unzoom();selected=null;applyCards(slvView());draw();}
+ if(window.TOUCH)renderTouchTabs(SETTINGS);}
+let FULLCARD_ON=false;
+function traySize(g){if(g==='showcase'||g==='sleeves')return 24;
+ return FULLCARD_ON?(window.PORTRAIT?20:24):40;}
+function applyCards(list){
+ if(list&&list.GAME==='sleeves'&&!list.__slvView){SLVALL=list;list=slvView();}
+ CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=traySize(list&&list.GAME);
  DECKSALT=0;for(let i=0;i<CARDS.length;i+=5){const k=String(CARDS[i].variantId||CARDS[i].name||i);for(let j=0;j<k.length;j++)DECKSALT=(DECKSALT*31+k.charCodeAt(j))>>>0;}
  trays=[];for(let i=0;i<CARDS.length;i+=TRAY)trays.push(CARDS.slice(i,i+TRAY));if(!trays.length)trays.push([]);spreads=trays.length;spread=0;selected=null;}
 /* ---- Phone-driven search: the phone mirrors its results here; the default
@@ -891,6 +938,8 @@ function cardHTML(c){if(!c)return '';
  <div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty">${H(c.type)}</div></div>`;
  const tags=SHOWCASE()
   ?`${c.foil?'<div class="oil"></div>':''}${ESL_TAG(c)}`
+  :SLEEVES()
+  ?`<div class="slname"><span>${H(c.name)}</span></div>${c.ct?`<div class="slct"><span>${H(String(c.ct))}CT</span></div>`:''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>`
   :`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWordFor(c)}</span></div>`:''}`;
  return `<div class="card ${DARK.includes(c.color)?'dark':''}${TOPLOAD&&!SLEEVES()?' intl':''}" data-c="${H(c.color)}" data-id="${H(KEY(c))}" style="${tiltStyle(KEY(c))}">${face}${tags}</div>`;}
 /* One of the store's e-ink shelf labels, drawn over the card's text box. */
@@ -1089,7 +1138,7 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD&&!sleevy?' intl':'');
  if(window.TOUCH&&!ZKEEP){ZCARD=c;ZVAR=null;} // remember what's featured so the action row can re-price it
  document.body.classList.add('zopen'); // pause background effects while previewing
- zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan,.emblbl').forEach(e=>e.remove());
+ zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan,.emblbl,.slname,.slct').forEach(e=>e.remove());
  if(c.image){zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
   if(/placeholder/i.test(c.image))zc.insertAdjacentHTML('beforeend',`<div class="emblbl"><span>${H(c.name)}</span></div>`);
   if(sleevy)flagFlat(zc,IMGURL(c.image,800));}
@@ -1336,6 +1385,7 @@ function MIRROR(force){if(window.REMOTE||(!force&&!REMN)||!ws||ws.readyState!==1
   q:TQ,
   kb:document.getElementById('tkb').classList.contains('open'),
   chk:document.getElementById('tcheck').classList.contains('open'),
+  svf:Object.assign({},SLVF),
   att:document.body.classList.contains('attract')}}));}catch(e){}}
 setInterval(()=>MIRROR(),1000);
 function APPLYMIR(m){if(Date.now()<RGRACE)return;REM_APPLY=true;try{
@@ -1353,6 +1403,8 @@ function APPLYMIR(m){if(Date.now()<RGRACE)return;REM_APPLY=true;try{
  document.getElementById('tkb').classList.toggle('open',!!m.kb);
  if(m.chk&&cart.length){renderTcheck();document.getElementById('tcheck').classList.add('open');}
  else if(!m.chk)document.getElementById('tcheck').classList.remove('open');
+ if(m.svf&&typeof m.svf==='object'){const nf={size:m.svf.size==='jp'?'jp':'std',fin:SLVFINS.includes(m.svf.fin)?m.svf.fin:'all',ct:['all','100','60'].includes(String(m.svf.ct))?String(m.svf.ct):'all'};
+  if(JSON.stringify(nf)!==JSON.stringify(SLVF)){SLVF=nf;if(SLEEVES()){selected=null;applyCards(slvView());draw();}renderTouchTabs(SETTINGS);}}
  const ra=document.getElementById('rmatt');if(ra)ra.style.display=m.att?'inline':'none';
 }finally{REM_APPLY=false;}}
 function EXECRC(d){if(!d)return;lastAct=Date.now();stopAttract();armAttract();
@@ -1374,6 +1426,8 @@ function EXECRC(d){if(!d)return;lastAct=Date.now();stopAttract();armAttract();
   case 'sclear':TSEARCHCLEAR();break;
   case 'sdone':TSEARCHCLOSE();break;
   case 'reset':touchReset();break;
+  case 'svf':if(d.f&&typeof d.f==='object'){SLVF={size:d.f.size==='jp'?'jp':'std',fin:SLVFINS.includes(d.f.fin)?d.f.fin:'all',ct:['all','100','60'].includes(String(d.f.ct))?String(d.f.ct):'all'};
+   if(SLEEVES()){unzoom();selected=null;applyCards(slvView());draw();}renderTouchTabs(SETTINGS);}break;
  }
  MIRROR(true);}
 /* ---- Touch mode: the totem drives itself. On-screen tabs and page arrows
@@ -1491,10 +1545,19 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
  const btn=(t,i)=>{const on=!searching&&t.collection===s.collection&&(!!t.newToday===!!s.newTodayActive)&&(!!t.showcase===!!s.showcaseActive);
   const face=t.icon?`<img class="ticon" src="${H(t.icon)}" alt="${H(String(t.label||''))}">`:H(String(t.label||''));
   return `<button class="ttab${on?' on':''}${t.icon?' hasico':''}" onclick="TSWITCH(${i},this)">${face}</button>`;};
+ // The sleeve wall gets its own filter row: Standard/Japanese size switch,
+ // finish family (from the product titles) and pack count.
+ const chip=(grp,val,label)=>`<button class="slvchip${SLVF[grp]===val?' on':''}" onclick="SLVSET('${grp}','${val}',this)">${label}</button>`;
+ const slvbar=s.sleevesActive?`<div class="slvbar">`
+  +`<div class="slvgrp">${chip('size','std','STANDARD')}${chip('size','jp','JAPANESE')}</div>`
+  +`<div class="slvgrp">${chip('fin','all','ALL')}${chip('fin','brushed','BRUSHED')}${chip('fin','matte','MATTE')}${chip('fin','dual','DUAL MATTE')}${chip('fin','classic','CLASSIC')}${chip('fin','other','MORE')}</div>`
+  +`<div class="slvgrp">${chip('ct','all','ANY PACK')}${chip('ct','100','100CT')}${chip('ct','60','60CT')}</div>`
+  +`</div>`:'';
  box.innerHTML=`<div class="tswrap"><button class="tsarr tsl" onclick="TSCROLLBY(-1)" aria-label="More tabs this way">‹</button>`
   +`<div class="tscroll" id="tscroll">${tabs.map(btn).join('')}`
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
   +`</div><button class="tsarr tsr" onclick="TSCROLLBY(1)" aria-label="More tabs this way">›</button></div>`
+  +slvbar
   +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'');
  const sc=document.getElementById('tscroll');
  sc.addEventListener('scroll',TSCROLLUPD,{passive:true});
@@ -1703,6 +1766,9 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if(tcc)tcc.style.display=(s.counterEnabled===false)?'none':''; // per-screen "Send to counter" toggle
  cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive); // the sleeve wall never wears top-loaders
  cs.classList.toggle('sleeves',!!s.sleevesActive);
+ cs.classList.toggle('slvwhite',!!s.sleeveWhiteBg);
+ if(!s.sleevesActive&&window.SLVWAS){SLVF={size:'std',fin:'all',ct:'all'};} // next shopper starts unfiltered
+ window.SLVWAS=!!s.sleevesActive;
  const hx=(SETTINGS.holiday==='christmas');
  cs.classList.toggle('xmas',hx);
  if(hx!==XMAS){XMAS=hx;renderXdress();if(document.getElementById('slab'))draw();} // re-roll the clutter so the props land
@@ -1723,6 +1789,11 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
   if(!wasPaired){stopAttract();armAttract();}}
  const kb=document.getElementById('tkb');
  if(kb)kb.dataset.pos=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';
+ /* Full-card rows (touch only): flipping the admin toggle re-cuts the deck
+    into the new page size and redraws in place. */
+ const fc=window.TOUCH&&!!s.fullCard;
+ if(fc!==FULLCARD_ON){FULLCARD_ON=fc;document.documentElement.classList.toggle('fullcard',fc);
+  if(document.getElementById('slab')){unzoom();selected=null;applyCards(CARDS);draw();}}
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){const seq=CFSEQ; // background poll: never overwrite a tab switch that started after it
