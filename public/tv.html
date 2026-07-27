@@ -455,7 +455,8 @@ html.fullcard .case:not(.sleeves) .tray{--ch:min(calc(var(--cwv)/0.715),calc((va
 html.fullcard .case:not(.sleeves) .shelf + .shelf{margin-top:.8vh}
 html.fullcard .case.tl:not(.sleeves) .tray{--chh:calc((min(85vh,900px) - 8vh)/4.15);--ch:min(var(--chw),var(--chh))}
 html.fullcard body.paired .case.tl:not(.sleeves) .tray{--chh:calc(92vh/4.15)}
-html.portrait.fullcard .case:not(.sleeves) .tray{--ch:min(calc(var(--cwv)/0.715),calc((var(--hbudget) - 3vh)/4.9))}
+html.portrait.fullcard .case:not(.sleeves) .tray{--ch:min(calc(var(--cwv)/0.715),calc((var(--hbudget) - 5vh)/5.95))}
+html.portrait.fullcard .case.tl:not(.sleeves) .tray{--chh:calc((min(88vh,1800px) - 11vh)/6.3);--ch:min(var(--chw),var(--chh))}
 html.portrait body.paired .case.sleeves .tray{padding-top:12.5vh;padding-bottom:4.5vh}
 /* ---- Christmas dressing (admin "Holiday" setting, per room): a sagging
    string of colored lights along the top of the case, frosted glass corners,
@@ -880,7 +881,7 @@ function SLVSET(k,v,el){if(el&&window.TOUCH)comicBurst(el,'FILTERED!',true);
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 let FULLCARD_ON=false;
 function traySize(g){if(g==='showcase'||g==='sleeves')return 24;
- return FULLCARD_ON?(window.PORTRAIT?20:24):40;}
+ return FULLCARD_ON?(window.PORTRAIT?30:24):40;} // portrait cards are width-bound: 6 full rows fit
 function applyCards(list){
  if(list&&list.GAME==='sleeves'&&!list.__slvView){SLVALL=list;list=slvView();}
  CARDS=list;CN=list.COLOR_NAME||CN||{};TRAY=traySize(list&&list.GAME);
