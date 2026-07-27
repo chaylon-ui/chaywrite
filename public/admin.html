@@ -4,9 +4,15 @@
 <title>Exor Showcase — Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{--bg:#0a0a0d;--panel:#14141a;--line:#26262f;--ember:#d9822b;--ember-deep:#7a3b12;--ink:#efe9dd;--muted:#8b8b96;--ok:#3f9d5a;--bad:#c0483a}
 *{box-sizing:border-box;margin:0;padding:0}
+.ulink{color:var(--ember);text-decoration:underline;cursor:pointer;font-weight:600}
+#uqrPop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:60;align-items:center;justify-content:center}
+#uqrPop .uqrCard{background:#fff;color:#111;border-radius:14px;padding:1.1rem;display:flex;flex-direction:column;align-items:center;gap:.7rem;max-width:92vw}
+#uqrPop #uqrLink{color:#7a3b12;font-weight:600;word-break:break-all;max-width:280px;text-align:center;font-size:.8rem}
+#uqrPop #uqrClose{border:0;border-radius:8px;padding:.5rem 1.4rem;background:#0a0a0d;color:#fff;font-weight:700;cursor:pointer}
 body{background:radial-gradient(circle at 50% 0%,#17171d,#0a0a0d 70%);color:var(--ink);font-family:'Inter',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem}
 .wrap{width:100%;max-width:460px}
 h1{font-family:'Cinzel',serif;font-size:1.4rem;text-align:center;margin-bottom:.3rem}
@@ -357,13 +363,40 @@ async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="
   .map(([l,v])=>`<span class="uchip"><b>${v??0}</b> ${l}</span>`).join('');
  const fmt=t=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
  const esc=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
- const evLine=e=>`${fmt(e.t)} — ${EVL[e.e]||e.e}${e.d&&e.e!=='ss'?' — '+esc(e.d):''}${e.v?' ($'+(+e.v).toFixed(2)+')':''}`;
+ UQR=[]; // per-load stash of cart permalinks, indexed by the [show QR] links
+ const evLine=e=>{
+  let body=e.d&&e.e!=='ss'?' — '+esc(e.d):'';
+  if(e.e==='qr'&&e.d&&String(e.d).includes('|')){ // "N cards|https://…/cart/add?…"
+   const cut=String(e.d).indexOf('|'),label=String(e.d).slice(0,cut),url=String(e.d).slice(cut+1);
+   const i=UQR.push(url)-1;
+   body=' — '+esc(label)+` <a href="#" class="ulink" onclick="showQrPop(${i});return false">show QR ⤢</a>`;}
+  else if(e.e==='ord'&&e.d){ // "#D263|1234567890" → deep link into Shopify admin
+   const [nm,did]=String(e.d).split('|');
+   const href=did?'https://admin.shopify.com/store/most-wanted-ca/draft_orders/'+esc(did)
+    :'https://admin.shopify.com/store/most-wanted-ca/draft_orders?query='+encodeURIComponent(nm||'');
+   body=` — <b>${esc(nm)}</b> <a class="ulink" target="_blank" rel="noopener" href="${href}">open ↗</a>`;}
+  return `${fmt(e.t)} — ${EVL[e.e]||e.e}${body}${e.v?' ($'+(+e.v).toFixed(2)+')':''}`;};
  $('usageSess').innerHTML=(j.sessions||[]).map(x=>{
   const mins=Math.max(1,Math.round((x.end-x.start)/6e4));
-  const out=x.events.some(e=>e.e==='ord')?'→ draft order':x.events.some(e=>e.e==='send')?'→ sent to counter'
+  const ord=x.events.find(e=>e.e==='ord');
+  const out=ord?'→ draft order '+esc(String(ord.d||'').split('|')[0]):x.events.some(e=>e.e==='send')?'→ sent to counter'
    :x.events.some(e=>e.e==='to')?'→ cart timed out':x.events.some(e=>e.e==='qr')?'→ checkout QR':'→ browsed';
   return `<details class="usess"><summary>${fmt(x.start)} · ${mins} min · ${x.events.length} actions ${out}</summary>${x.events.map(e=>`<div>${evLine(e)}</div>`).join('')}</details>`;
  }).join('')||'<div class="hint" style="margin-top:.6rem">No kiosk activity recorded for this day.</div>';}
+/* Pop-up re-render of a checkout QR the kiosk showed (UQR holds the cart
+   permalinks for the currently loaded day). */
+let UQR=[];
+function showQrPop(i){const url=UQR[i];if(!url)return;
+ let ov=document.getElementById('uqrPop');
+ if(!ov){ov=document.createElement('div');ov.id='uqrPop';
+  ov.innerHTML='<div class="uqrCard"><div id="uqrBox"></div><a id="uqrLink" target="_blank" rel="noopener"></a><button id="uqrClose">Close</button></div>';
+  ov.addEventListener('click',e=>{if(e.target===ov||e.target.id==='uqrClose')ov.style.display='none';});
+  document.body.appendChild(ov);}
+ const box=ov.querySelector('#uqrBox');box.innerHTML='';
+ try{new QRCode(box,{text:url,width:240,height:240,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}
+ catch(e){box.textContent='QR library did not load — use the link below.';}
+ const a=ov.querySelector('#uqrLink');a.href=url;a.textContent='Open this cart link ↗';
+ ov.style.display='flex';}
 loadSettings(); // prefill (read-only until unlocked)
 </script>
 </body></html>

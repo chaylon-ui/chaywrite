@@ -1303,7 +1303,11 @@ function connect(){
    else if(m.type==='addcart'){const c=fromMsg(m.data);if(c){cart.push(c);updateCart();}}
    else if(m.type==='rmcart'){const c=fromMsg(m.data);if(c){const i=cart.findIndex(x=>x.name===c.name&&String(x.variantId||'')===String(c.variantId||''));if(i>-1){cart.splice(i,1);updateCart();}}}
    else if(m.type==='checkout'){if(m.data&&m.data.where==='counter')showCounter(m.data);}
-   else if(m.type==='counter_order'){if(window.TOUCH)fillTdone(m.data&&m.data.name);else updateCounterOrder(m.data);}
+   else if(m.type==='counter_order'){if(window.TOUCH){const nm=m.data&&m.data.name;fillTdone(nm);
+    // log the order number here (not in fillTdone) so it lands even if the
+    // customer already dismissed the pickup ticket; did powers the admin link
+    if(nm){TRACK('ord',nm+(m.data&&m.data.did?'|'+m.data.did:''));ASESSEND('order');}}
+    else updateCounterOrder(m.data);}
    else if(m.type==='settings'){applySettings(m.data);}
    else if(m.type==='mirror'){if(window.REMOTE)APPLYMIR(m.data||{});}
    else if(m.type==='rc'){if(!window.REMOTE)EXECRC(m.data||{});}
@@ -1400,7 +1404,7 @@ let ASID=null,AQ=[],AFT=null;
 function TRACK(e,d,v){if(!window.TOUCH||window.REMOTE)return;
  if(!ASID){ASID='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   AQ.push({t:Date.now(),e:'ss',d:'touch',v:0});}
- AQ.push({t:Date.now(),e,d:String(d||'').slice(0,80),v:+v||0});
+ AQ.push({t:Date.now(),e,d:String(d||'').slice(0,e==='qr'?600:80),v:+v||0}); // qr keeps its full cart permalink
  if(!AFT)AFT=setTimeout(FLUSHT,6000);}
 function FLUSHT(){clearTimeout(AFT);AFT=null;if(!AQ.length||!ASID)return;const batch=AQ.splice(0,40);
  fetch('/track?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:ASID,events:batch})}).catch(()=>{});
@@ -1478,7 +1482,8 @@ function renderTcheck(){const items=cartAgg();
  const qel=document.getElementById('tcqr');qel.innerHTML='';
  try{new QRCode(qel,{text:kioskCartUrl(items),width:280,height:280,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent='QR';}}
 function TCKO(){if(!cart.length)return;renderTcheck();
- if(cart.length){TRACK('qr',cart.length+' cards',cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0));
+ if(cart.length){ // log the exact cart permalink so admin can re-pop this QR
+  TRACK('qr',cart.length+' cards|'+kioskCartUrl(cartAgg()),cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0));
   document.getElementById('tcheck').classList.add('open');}}
 function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)return;
  const tabs=Array.isArray(s.tabs)?s.tabs:[];
@@ -1550,7 +1555,6 @@ function fillTdone(name){const d=document.getElementById('tdone');if(!d.classLis
  document.getElementById('tdnum').textContent=name||'—';
  const qel=document.getElementById('tdqr');qel.innerHTML='';
  if(name){try{new QRCode(qel,{text:'Exor Games counter pickup — order '+name+' — '+TDPC+' cards — $'+TDPT,width:180,height:180,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent=name;}}
- if(name){TRACK('ord',name);ASESSEND('order');} // the visit resolved into a draft order
  clearTimeout(TDONET);TDONET=setTimeout(hideTdone,20000);} // fresh 20s once the number lands
 function TCOUNTER(){if(!cart.length)return;
  const items=cartAgg();if(!items.length)return;

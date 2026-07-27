@@ -418,7 +418,9 @@ export class BinderRoom {
       for (const ev of evs) {
         if (cur.length >= 1500) break; // per-day cap
         if (!ev || !OKEV.includes(ev.e)) continue;
-        cur.push([sid, Math.round(+ev.t || Date.now()), String(ev.e), String(ev.d ?? "").slice(0, 80), Math.round((+ev.v || 0) * 100) / 100]);
+        // qr events carry the full cart permalink (so admin can re-pop the
+        // QR); everything else stays short.
+        cur.push([sid, Math.round(+ev.t || Date.now()), String(ev.e), String(ev.d ?? "").slice(0, ev.e === "qr" ? 600 : 80), Math.round((+ev.v || 0) * 100) / 100]);
       }
       await this.state.storage.put(key, cur);
       if (this.lastPruneDay !== day) { // drop days older than 14, once per day
