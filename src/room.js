@@ -1,4 +1,4 @@
-import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN } from "./config.js";
+import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TAB_ICON } from "./config.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -115,7 +115,7 @@ export class BinderRoom {
       : [];
     const sv = this.settings.sleevesTab || {};
     const sl = sv.enabled
-      ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true, icon: sv.icon || "" }]
+      ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true, icon: sv.icon || SLEEVES_TAB_ICON }]
       : [];
     const nt = this.settings.newToday || {};
     const extra = base
