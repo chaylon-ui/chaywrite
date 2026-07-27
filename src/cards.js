@@ -389,7 +389,11 @@ export async function servePickups(env) {
       signal: AbortSignal.timeout(8000),
     });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    const edges = (await r.json())?.data?.draftOrders?.edges || [];
+    const j = await r.json();
+    // GraphQL failures come back 200 with an errors array — surface them
+    // instead of pretending the store has no pickups.
+    if (!j?.data?.draftOrders) throw new Error(j?.errors?.[0]?.message || "draft orders unreadable (check the app's read_draft_orders scope)");
+    const edges = j.data.draftOrders.edges || [];
     const orders = edges.map(({ node: n }) => ({
       name: n.name,
       did: String(n.id || "").replace(/\D/g, ""),
