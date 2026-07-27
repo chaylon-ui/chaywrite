@@ -379,7 +379,7 @@ export async function servePickups(env) {
   if (!token) return Response.json({ error: "no admin token" }, { status: 503, headers: { "access-control-allow-origin": "*" } });
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const gql = `{ draftOrders(first: 40, query: "status:open", reverse: true) { edges { node {
-    id name createdAt totalPrice tags note
+    id name createdAt totalPrice tags note2
     lineItems(first: 25) { edges { node { title quantity variant { id } } } } } } } }`;
   try {
     const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
@@ -400,7 +400,7 @@ export async function servePickups(env) {
       createdAt: n.createdAt,
       total: n.totalPrice,
       kiosk: (n.tags || []).includes("showcase-tv"),
-      note: String(n.note || "").slice(0, 140),
+      note: String(n.note2 || "").slice(0, 140),
       items: (n.lineItems?.edges || []).map(({ node: li }) => ({
         t: li.title,
         q: li.quantity,
