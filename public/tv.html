@@ -933,7 +933,8 @@ function cardHTML(c){if(!c)return '';
     across the top — otherwise you can't tell what the card is until you
     tap it. Detected by the placeholder filename our uploads use. */
  const emb=(c.image&&/placeholder/i.test(c.image))?`<div class="emblbl"><span>${H(c.name)}</span></div>`:'';
- const face=c.image?`<img class="scan" src="${H(IMGURL(c.image,360))}" alt="" loading="lazy">${emb}`
+ // Sleeve shots load CORS-clean so the uniformizer may read their pixels.
+ const face=c.image?`<img class="scan"${SLEEVES()?' crossorigin="anonymous"':''} src="${H(IMGURL(c.image,360))}" alt="" loading="lazy">${emb}`
   :`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div>
  <div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty">${H(c.type)}</div></div>`;
  const tags=SHOWCASE()
@@ -1095,7 +1096,46 @@ function decorate(slab,idx){const rng=mulberry32((((idx+1)*2654435761)^0x9e3779b
 function makeSlab(idx){const slab=document.createElement('div');slab.className='slab';
  slab.innerHTML='<div class="wood"></div><div class="felt"></div><div class="pball"></div><div class="underlay"></div><div class="grime"></div><div class="tray"></div><div class="clutter"></div>';
  fillTray(slab.querySelector('.tray'),trays[idx]||[]);return slab;}
-function draw(){const inner=document.getElementById('caseInner');inner.innerHTML='';const slab=makeSlab(spread);slab.id='slab';inner.appendChild(slab);decorate(slab,spread);markSel();if(typeof MIRRORQ==='function')MIRRORQ();}
+function draw(){const inner=document.getElementById('caseInner');inner.innerHTML='';const slab=makeSlab(spread);slab.id='slab';inner.appendChild(slab);decorate(slab,spread);markSel();if(SLEEVES())SLVUNIFY(slab);if(typeof MIRRORQ==='function')MIRRORQ();}
+/* ---- Sleeve-shot uniformizer: Dragon Shield's photos frame the box wildly
+   differently (some fill the shot, some float in a sea of white), so equal
+   slots showed unequal boxes. Each shot is pixel-scanned once, trimmed to
+   its content box (transparent OR near-white margins removed) and swapped
+   in as a cropped copy; results cache by URL. Shots that are already tight,
+   fail to load, or trim implausibly small are left untouched. ---- */
+const SLVTRIMC=new Map();
+function SLVUNIFY(root){root.querySelectorAll('.tray .card img.scan').forEach(img=>{
+ const orig=img.dataset.slvorig||img.src;
+ const hit=SLVTRIMC.get(orig);
+ if(hit){if(hit!=='skip'){img.dataset.slvorig=orig;img.src=hit;}return;}
+ const go=()=>SLVTRIM(img,orig);
+ if(img.complete&&img.naturalWidth)go();else img.addEventListener('load',go,{once:true});});}
+function SLVTRIM(img,orig){if(SLVTRIMC.has(orig))return;
+ try{
+  const W=img.naturalWidth,Hh=img.naturalHeight;if(!W||!Hh)return;
+  const sc=Math.min(1,220/W),cw=Math.max(1,Math.round(W*sc)),ch=Math.max(1,Math.round(Hh*sc));
+  const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.drawImage(img,0,0,cw,ch);
+  const d=cx.getImageData(0,0,cw,ch).data; // throws on CORS taint → skip
+  let x0=cw,x1=-1,y0=ch,y1=-1;
+  for(let y=0;y<ch;y++)for(let x=0;x<cw;x++){const i=(y*cw+x)*4;
+   if(!(d[i+3]<12||(d[i]>242&&d[i+1]>242&&d[i+2]>242))){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}}
+  if(x1<0||y1<0){SLVTRIMC.set(orig,'skip');return;}
+  const pad=Math.round(Math.max(x1-x0,y1-y0)*0.035);
+  x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);x1=Math.min(cw-1,x1+pad);y1=Math.min(ch-1,y1+pad);
+  const fw=(x1-x0+1)/cw,fh=(y1-y0+1)/ch;
+  // Already tight → leave alone. Implausibly small → probably a white box
+  // melting into a white background; don't risk beheading it.
+  if((fw>0.9&&fh>0.9)||fw<0.3||fh<0.3){SLVTRIMC.set(orig,'skip');return;}
+  const X0=Math.round(x0/cw*W),Y0=Math.round(y0/ch*Hh);
+  const XW=Math.max(1,Math.round((x1-x0+1)/cw*W)),YH=Math.max(1,Math.round((y1-y0+1)/ch*Hh));
+  const oh=Math.min(360,YH),ow=Math.max(1,Math.round(XW/YH*oh));
+  const out=document.createElement('canvas');out.width=ow;out.height=oh;
+  out.getContext('2d').drawImage(img,X0,Y0,XW,YH,0,0,ow,oh);
+  const durl=out.toDataURL('image/png');
+  SLVTRIMC.set(orig,durl);img.dataset.slvorig=orig;img.src=durl;
+ }catch(e){SLVTRIMC.set(orig,'skip');}}
 function markSel(){document.querySelectorAll('#caseInner .card').forEach(el=>el.classList.toggle('sel',selected&&el.dataset.id===selected));}
 let flipping=false,pendingSpread=null,flipTarget=null;
 /* Absolute navigation from the phone: converge on the LATEST requested spread.
