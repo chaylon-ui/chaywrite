@@ -113,6 +113,9 @@ function Modal() {
         try {
           await shopify.cart.addLineItem(it.v, q);
           added += q;
+          // brief breather between adds — rapid-fire cart mutations make POS
+          // pop its generic "something went wrong" banner even on success
+          await new Promise((res) => setTimeout(res, 300));
         } catch {
           skipped += q;
         }
