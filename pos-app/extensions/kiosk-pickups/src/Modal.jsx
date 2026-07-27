@@ -164,7 +164,7 @@ function Modal() {
               onInput={(e) => setPin(e.currentTarget.value)}
               onChange={(e) => setPin(e.currentTarget.value)}
             ></s-text-field>
-            {pinErr ? <s-banner tone="critical">{pinErr}</s-banner> : null}
+            {pinErr ? <s-banner tone="critical" heading="Check the PIN"><s-text>{pinErr}</s-text></s-banner> : null}
             <s-button onClick={savePin} disabled={busy || !pin.trim()}>
               {busy ? "Checking…" : "Save & open pickups"}
             </s-button>
@@ -189,7 +189,8 @@ function Modal() {
       <s-scroll-box>
         {err ? (
           <s-section>
-            <s-banner tone="critical">{err}</s-banner>
+            <s-banner tone="critical" heading="Can't load pickups"><s-text>{err}</s-text></s-banner>
+            <s-text>{err}</s-text>
           </s-section>
         ) : null}
         {orders === null ? (
