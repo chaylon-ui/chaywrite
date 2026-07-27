@@ -22,6 +22,7 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 .card a.num{text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:4px}
 .card .srcb{font-family:'Bangers',cursive;font-size:.82rem;letter-spacing:.06em;color:#fff;border:2px solid #101010;border-radius:8px;padding:.12rem .5rem;transform:rotate(-1.5deg);white-space:nowrap}
 .card .srcb.kiosk{background:#c9342b}
+.card .srcb .srci{height:1.05em;vertical-align:-0.18em;background:#fff;border-radius:3px;padding:1px}
 .card .srcb.other{background:#5b5b66}
 .card .total{font-weight:800;font-size:1.05rem;margin-left:auto}
 .card .age{color:#71717c;font-size:.8rem}
@@ -76,6 +77,7 @@ async function LOAD(manual){
     document.getElementById('stamp').textContent = 'updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
   } catch { err.textContent = 'Could not reach the showcase server'; }
 }
+const LOGOI = '<img class="srci" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/ExorMainLogo.png?v=1727973753&width=48" alt="">';
 function render(orders){
   const grid = document.getElementById('grid');
   document.getElementById('empty').style.display = orders.length ? 'none' : 'block';
@@ -83,7 +85,7 @@ function render(orders){
     const link = o.did ? 'https://admin.shopify.com/store/most-wanted-ca/draft_orders/' + esc(o.did) : '';
     const items = (o.items || []).map(i => (i.q > 1 ? i.q + '× ' : '') + esc(i.t)).join('<br>');
     return '<div class="card"><div class="top">' +
-      '<span class="srcb ' + (o.kiosk ? 'kiosk' : 'other') + '">' + (o.kiosk ? '🖥 KIOSK' : '📦 DRAFT') + '</span>' +
+      '<span class="srcb ' + (o.kiosk ? 'kiosk' : 'other') + '">' + (o.kiosk ? LOGOI + ' KIOSK' : '📦 DRAFT') + '</span>' +
       (link ? '<a class="num" href="' + link + '" target="_blank" rel="noopener">' + esc(o.name) + '</a>'
             : '<span class="num">' + esc(o.name) + '</span>') +
       '<span class="total">$' + esc(o.total) + '</span></div>' +

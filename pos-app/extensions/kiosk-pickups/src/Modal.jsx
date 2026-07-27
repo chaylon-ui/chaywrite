@@ -5,7 +5,7 @@
 // through, DONE deletes the draft once the sale is made.
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { BASE } from "./config.js";
+import { BASE, LOGO } from "./config.js";
 
 export default async () => {
   render(<Modal />, document.body);
@@ -206,7 +206,13 @@ function Modal() {
           </s-section>
         ) : (
           orders.map((o) => (
-            <s-section key={o.did} heading={`${o.kiosk ? "🖥 " : "📦 "}${o.name} · $${o.total} · ${age(o.createdAt)}`}>
+            <s-section key={o.did} heading={`${o.kiosk ? "" : "📦 "}${o.name} · $${o.total} · ${age(o.createdAt)}`}>
+              {o.kiosk ? (
+                <s-stack direction="inline" gap="small-200" alignItems="center">
+                  <s-image src={LOGO} alt="Exor Games kiosk" inlineSize="28px" aspectRatio="2380/2084" objectFit="contain"></s-image>
+                  <s-text>Kiosk order</s-text>
+                </s-stack>
+              ) : null}
               {(o.items || []).map((it, i) => (
                 <s-text key={i}>
                   {it.q} × {it.t}

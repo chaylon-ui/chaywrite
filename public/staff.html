@@ -36,6 +36,7 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 .row .items,.row .note{color:#4c4a55;font-size:.86rem}
 .row .srcb{font-family:'Bangers',cursive;font-size:.82rem;letter-spacing:.06em;color:#fff;border:2px solid #101010;border-radius:8px;padding:.12rem .5rem;transform:rotate(-1.5deg);white-space:nowrap}
 .row .srcb.kiosk{background:#c9342b}
+.row .srcb .srci{height:1.05em;vertical-align:-0.18em;background:#fff;border-radius:3px;padding:1px}
 .row .srcb.shipday{background:#1a73e8}
 .row .srcb.other{background:#5b5b66}
 </style>
@@ -92,7 +93,7 @@ function connect(room){
    src slug ("shipday", …). Each row gets a badge and the notification title
    says where the order came from. */
 const SRC = {
-  kiosk:   { label: 'KIOSK',   icon: '🖥', title: 'Counter order' },
+  kiosk:   { label: 'KIOSK',   icon: '<img class="srci" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/ExorMainLogo.png?v=1727973753&width=48" alt="">', title: 'Counter order' },
   shipday: { label: 'SHIPDAY', icon: '🚚', title: 'Pickup order' },
 };
 function srcOf(d, via){ return (d.src || (via === 'kiosk' ? 'kiosk' : '')) || 'other'; }
