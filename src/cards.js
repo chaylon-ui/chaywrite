@@ -397,6 +397,28 @@ const GAME_PTQ = {
   hockey: "product_type:Hockey*",
   basketball: 'product_type:"Basketball Singles"',
 };
+/* Yu-Gi-Oh set-code → set-name directory (YGOPRODeck's public DB), cached a
+   day. Lets "DUPO" surface as "Duel Power" while the search still runs on
+   the code the titles actually carry. Failure → codes show as-is. */
+async function ygoSetNames(request, ctx) {
+  const cache = caches.default;
+  const key = new Request(new URL("/ygosets.internal", request.url).toString());
+  const hit = await cache.match(key);
+  if (hit) { try { return await hit.json(); } catch {} }
+  try {
+    const r = await fetch("https://db.ygoprodeck.com/api/v7/cardsets.php", {
+      headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error("http " + r.status);
+    const arr = await r.json();
+    const map = {};
+    for (const s of arr || []) if (s && s.set_code && s.set_name) map[String(s.set_code).toUpperCase()] = String(s.set_name).slice(0, 60);
+    const res = Response.json(map, { headers: { "cache-control": "public, max-age=86400" } });
+    if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+    return map;
+  } catch { return {}; }
+}
+
 export async function serveSetSuggest(request, env, ctx) {
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 30);
@@ -409,6 +431,7 @@ export async function serveSetSuggest(request, env, ctx) {
   if (hit) return hit;
   const token = env && env.SHOPIFY_ADMIN_TOKEN;
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
+  const names = g === "yugioh" ? await ygoSetNames(request, ctx) : {};
   const found = new Map();
   try {
     if (!token) throw new Error("no token");
@@ -426,15 +449,18 @@ export async function serveSetSuggest(request, env, ctx) {
       if (!m) continue;
       let name = m[1].trim();
       // Yu-Gi-Oh style brackets carry card codes ([DUPO-EN101]) — fold those
-      // into their set-code prefix so DUPO suggests once, not per card.
+      // into their set-code prefix so DUPO suggests once, not per card, and
+      // translate the code to the real set name when the directory knows it.
       const code = name.match(/^([A-Z0-9]{2,6})-[A-Z]{0,4}\d/);
-      if (code) name = code[1];
-      if (name.toLowerCase().includes(q)) found.set(name.toLowerCase(), name);
+      const sq = code ? code[1] : name; // what the kiosk should SEARCH by
+      const label = code ? (names[code[1]] || code[1]) : name;
+      if (label.toLowerCase().includes(q) || sq.toLowerCase().includes(q))
+        found.set(sq.toLowerCase(), { n: label, q: sq });
     }
   } catch {}
   const sets = [...found.values()].sort((a, b) => {
-    const ap = a.toLowerCase().startsWith(q) ? 0 : 1, bp = b.toLowerCase().startsWith(q) ? 0 : 1;
-    return ap - bp || a.localeCompare(b);
+    const ap = a.n.toLowerCase().startsWith(q) ? 0 : 1, bp = b.n.toLowerCase().startsWith(q) ? 0 : 1;
+    return ap - bp || a.n.localeCompare(b.n);
   }).slice(0, 24);
   const res = Response.json({ sets }, { headers: { "cache-control": "public, max-age=600" } });
   if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()));

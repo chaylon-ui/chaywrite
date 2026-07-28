@@ -1744,14 +1744,15 @@ function SETSUG(q,prefixOnly){q=String(q||'').trim();clearTimeout(SUGT);
  const seq=++SUGSEQ;
  SUGT=setTimeout(()=>{fetch('/setsuggest.json?q='+encodeURIComponent(q)+'&g='+encodeURIComponent(GAME||'')).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==SUGSEQ)return;const box2=document.getElementById('setsug');if(!box2)return;
-  let sets=(d&&Array.isArray(d.sets))?d.sets:[];
-  if(prefixOnly)sets=sets.filter(x=>x.toLowerCase().startsWith(q.toLowerCase()));
+  let sets=((d&&Array.isArray(d.sets))?d.sets:[]).map(x=>typeof x==='string'?{n:x,q:x}:x).filter(x=>x&&x.n&&x.q);
+  if(prefixOnly)sets=sets.filter(x=>x.n.toLowerCase().startsWith(q.toLowerCase())||x.q.toLowerCase().startsWith(q.toLowerCase()));
   window.__SUG=sets;
-  box2.innerHTML=sets.length?`<div class="setschips">${sets.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SUG[${i}])">${H(x)}</button>`).join('')}</div>`
+  box2.innerHTML=sets.length?`<div class="setschips">${sets.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SUG[${i}])">${H(x.n)}</button>`).join('')}</div>`
    :'<div class="setshint">No sets match that yet — keep typing or try another spelling.</div>';
  }).catch(()=>{if(seq===SUGSEQ){const b=document.getElementById('setsug');if(b)b.innerHTML='<div class="setshint">Could not reach the set list — try again.</div>';}});},250);}
 function SETLETTER(l,el){if(el&&window.TOUCH)comicBurst(el,l,true);SETSUG(l,true);}
-function SETGO(n){n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,36);if(!n)return;
+function SETGO(n){if(n&&typeof n==='object')n=n.q; // suggestion chips carry {n:label,q:search}
+ n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,36);if(!n)return;
  const ov=document.getElementById('setsov');if(ov)ov.classList.remove('open');
  // Set CODES (Yu-Gi-Oh's DUPO etc.) match titles as "[CODE-…" — full set
  // names close their bracket.
