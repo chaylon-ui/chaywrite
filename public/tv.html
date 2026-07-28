@@ -1678,12 +1678,20 @@ function SETSOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SETS!',true);
   ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');});}
  __SETS=[...new Set((Array.isArray(CARDS)?CARDS:[]).map(c=>String(c.set||'').trim())
   .filter(x=>x.length>1&&x!=='Dragon Shield'))].slice(0,30);
+ // Touch kiosks have no OS keyboard — deal one into the panel (the website
+ // and remote mirrors type with their real keyboards).
+ const kb=(window.TOUCH&&!window.SITE&&!window.REMOTE)?`<div class="setskb">${['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
+  .map(r=>'<div class="tkr">'+[...r].map(k=>`<button class="tkk" onclick="SETKEY('${k}')">${k}</button>`).join('')+'</div>').join('')}
+  <div class="tkr"><button class="tkk wide" onclick="SETKEY(' ')">space</button><button class="tkk wide" onclick="SETKEY('⌫')">⌫</button></div></div>`:'';
  ov.innerHTML=`<div class="setsbox"><div class="setstitle">BROWSE BY SET</div>
-  <div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="36"
+  <div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="36"${kb?' readonly':''}
    onkeydown="if(event.key==='Enter')SETGO(this.value)"><button class="slvchip" onclick="SETGO(document.getElementById('setsin').value)">GO</button></div>
+  ${kb}
   ${__SETS.length?`<div class="setshint">Sets on this page:</div><div class="setschips">${__SETS.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SETS[${i}])">${H(x)}</button>`).join('')}</div>`:''}
   <button class="slvchip setsclose" onclick="document.getElementById('setsov').classList.remove('open')">✕ CLOSE</button></div>`;
  ov.classList.add('open');}
+function SETKEY(k){const i=document.getElementById('setsin');if(!i)return;
+ if(k==='⌫')i.value=i.value.slice(0,-1);else if(i.value.length<36)i.value+=k;}
 function SETGO(n){n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,36);if(!n)return;
  const ov=document.getElementById('setsov');if(ov)ov.classList.remove('open');
  TQ='['+n+']';renderTQ();TKGO();}
