@@ -397,6 +397,7 @@ html.portrait .qrarr{animation:none;transform:scaleX(-1);transform-origin:50% 50
 .case.sleeves .grime{display:none} /* the brand tower stays clean */
 .dsbrand{display:none}
 .case.sleeves .dsbrand{display:block;position:absolute;inset:0;z-index:5;pointer-events:none}
+.case.sleeves.genshelf .dsbrand{display:none} /* board games / Warhammer: plain shelf */
 .dsbrand::before,.dsbrand::after{content:"";position:absolute;top:0;bottom:0;width:.55%;
  background:linear-gradient(180deg,#f5c33a,#e07818 40%,#f5c33a 72%,#c9611a)}
 .dsbrand::before{left:0}.dsbrand::after{right:0}
@@ -918,7 +919,18 @@ function slvView(){const src=SLVALL||[];const f=SLVF;
   :src.slice();
  // Known finishes lead; anything the title doesn't identify sorts to the end.
  out=out.filter(c=>c.fin).concat(out.filter(c=>!c.fin));
+ // Generic shelves (board games, Warhammer): customer sort chips. 'feed'
+ // keeps the collection's own order (newest first).
+ if(SETTINGS.shelfActive&&SHSORT!=='feed'){const p=x=>parseFloat(x.price)||0;
+  if(SHSORT==='pd')out.sort((a,b)=>p(b)-p(a));
+  else if(SHSORT==='pa')out.sort((a,b)=>p(a)-p(b));
+  else if(SHSORT==='az')out.sort((a,b)=>a.name.localeCompare(b.name));
+  else if(SHSORT==='za')out.sort((a,b)=>b.name.localeCompare(a.name));}
  out.COLOR_NAME=src.COLOR_NAME;out.GAME='sleeves';out.__slvView=true;return out;}
+let SHSORT='feed';
+function SHSET(v,el){if(el&&window.TOUCH)comicBurst(el,'SORTED!',true);SHSORT=v;
+ if(SLEEVES()){unzoom();selected=null;applyCards(slvView());draw();}
+ if(window.TOUCH)renderTouchTabs(SETTINGS);}
 function SLVSET(k,v,el){if(el&&window.TOUCH)comicBurst(el,'FILTERED!',true);
  SLVF[k]=v;if(k==='size'){SLVF.fin='all';SLVF.ct='all';} // new size = fresh slate
  if(window.REMOTE&&!REM_APPLY)RGO({a:'svf',f:Object.assign({},SLVF)});
@@ -1692,6 +1704,7 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
   +`</div><button class="tsarr tsr" onclick="TSCROLLBY(1)" aria-label="More tabs this way">›</button></div>`
   +slvbar
+  +((s.shelfActive&&!searching)?`<div class="slvbar"><div class="slvgrp">${[['feed','NEWEST'],['pd','PRICE ↓'],['pa','PRICE ↑'],['az','A–Z'],['za','Z–A']].map(([v,l])=>`<button class="slvchip${SHSORT===v?' on':''}" onclick="SHSET('${v}',this)">${l}</button>`).join('')}</div></div>`:'')
   +srtbar
   +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'')
   +(s.setBrowse===true?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:'');
@@ -1958,8 +1971,9 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-basketball',s.theme==='basketball'&&!srch);
  const tcc=document.getElementById('tcCounter');
  if(tcc)tcc.style.display=(s.counterEnabled===false||window.SITE)?'none':''; // per-screen toggle; never on the website
- cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive); // the sleeve wall never wears top-loaders
- cs.classList.toggle('sleeves',!!s.sleevesActive&&!srch);
+ cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive&&!s.shelfActive); // shelves never wear top-loaders
+ cs.classList.toggle('sleeves',(!!s.sleevesActive||!!s.shelfActive)&&!srch);
+ cs.classList.toggle('genshelf',!!s.shelfActive&&!srch); // generic shelf: no Dragon Shield dressing
  cs.classList.toggle('slvwhite',!!s.sleeveWhiteBg);
  if(!s.sleevesActive&&window.SLVWAS){SLVF={size:'std',fin:'all',ct:'all'};} // next shopper starts unfiltered
  window.SLVWAS=!!s.sleevesActive;
@@ -1970,7 +1984,7 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('showcase',!!s.showcaseActive&&!srch);
  document.body.classList.toggle('perf',!!s.perfMode);
  const ntNow=!!s.newTodayActive;
- if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
+ if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){SHSORT='feed';unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
  if(s.collection)CUR_COLLECTION=s.collection;
  CUR_NT=ntNow;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}

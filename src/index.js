@@ -80,7 +80,7 @@ export default {
         try {
           const s = await (await room.fetch(new Request(url.origin + "/settings"))).json();
           if (s && s.collection) collection = s.collection;
-          if (s) { newToday = !!s.newTodayActive; showcase = !!s.showcaseActive; sleeves = !!s.sleevesActive; }
+          if (s) { newToday = !!s.newTodayActive; showcase = !!s.showcaseActive; sleeves = !!s.sleevesActive || !!s.shelfActive; }
         } catch {}
       }
       return serveCards(request, ctx, collection || "new-arrivals", newToday, showcase, sleeves);

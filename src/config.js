@@ -40,6 +40,14 @@ export const DEFAULT_SETTINGS = {
   // where the product photos aren't transparent cut-outs. Off = current look.
   sleeveWhiteBg: false,
 
+  // Generic retail-shelf tabs: same wall treatment as the sleeves (product
+  // shots on black shelves, title + price stickers) for non-card lines.
+  // Collections are sorted newest-first in Shopify, so the default order is
+  // date; customers get NEWEST / PRICE / A-Z sort chips on screen.
+  boardTab: { enabled: false, label: "Board Games", collection: "board-games" },
+  whTab: { enabled: false, label: "Warhammer", collection: "gamesworkshop" },
+  shelfActive: false, // true while a generic shelf tab is on screen
+
   // Touch kiosks: expanded rows — the shelves stop shingling so the WHOLE
   // card (text box included) is visible without tapping. Fewer cards per
   // page. Off = the current overlapped stack.

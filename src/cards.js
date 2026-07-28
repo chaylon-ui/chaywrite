@@ -804,7 +804,9 @@ function buildSleeves(products) {
       jp,
       fin,
       color: "C",
-      set: "Dragon Shield",
+      // Generic shelves (board games, Warhammer) reuse this builder — only
+      // actual Dragon Shield product gets the brand as its set line.
+      set: /dragon\s*shield/i.test(title) ? "Dragon Shield" : "",
       game: "sleeves",
       type: "Card Sleeves",
       price: (+v.price).toFixed(2),

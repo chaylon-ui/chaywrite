@@ -164,6 +164,22 @@ a.tvlink:hover{color:var(--ember)}
       <div class="hint">Dragon Shield boxes stand on black gondola shelves, sorted by product line, with the usual dice-and-trinket clutter in the gaps. No $10 minimum, no top-loaders, no conditions. Use <code>all-regular-dragon-shield-sleeves</code> instead to hide Japanese &amp; Perfect Fit sizes.</div>
     </div>
 
+    <!-- Generic retail shelves: same wall as the sleeves, for non-card lines. -->
+    <div class="group">
+      <div class="gtitle">Board Games tab</div>
+      <div class="row" style="margin-top:.6rem"><input id="bgEnabled" type="checkbox"><label for="bgEnabled">Show a “Board Games” shelf tab — newest first, with NEWEST / PRICE / A–Z sort chips for customers</label></div>
+      <label for="bgCollection">Collection handle</label>
+      <input id="bgCollection" type="text" placeholder="board-games">
+      <div class="icorow" data-icon="board"></div>
+    </div>
+    <div class="group">
+      <div class="gtitle">Warhammer tab</div>
+      <div class="row" style="margin-top:.6rem"><input id="whEnabled" type="checkbox"><label for="whEnabled">Show a “Warhammer” shelf tab (All Games Workshop) — newest first, with NEWEST / PRICE / A–Z sort chips</label></div>
+      <label for="whCollection">Collection handle</label>
+      <input id="whCollection" type="text" placeholder="gamesworkshop">
+      <div class="icorow" data-icon="wh"></div>
+    </div>
+
     <!-- "New Today" showcases: extra phone tab per game, masking-tape banner
          on the TV, cards published today topped up to at least 10, over $10. -->
     <div class="group">
@@ -320,7 +336,7 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
     $(g.input).value=(t&&t.collection)||g.fallback;
     $(g.enable).checked=t?t.enabled!==false:g.defOn;
     ICONS[g.game]=(t&&t.icon)||'';});
-  ICONS.showcase=sc.icon||'';ICONS.sleeves=sv.icon||'';
+  ICONS.showcase=sc.icon||'';ICONS.sleeves=sv.icon||'';const bt=s.boardTab||{};$('bgEnabled').checked=!!bt.enabled;$('bgCollection').value=bt.collection||'board-games';ICONS.board=bt.icon||'';const wt=s.whTab||{};$('whEnabled').checked=!!wt.enabled;$('whCollection').value=wt.collection||'gamesworkshop';ICONS.wh=wt.icon||'';
   refreshIconRows();
 }catch(e){}}
 async function post(patch){const r=await fetch('/admin/api?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
@@ -344,7 +360,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
     perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,counterEnabled:$('counterEnabled').checked,fullCard:$('fullCard').checked,cartMax:($('cartMaxOn').checked?Math.max(1,Math.min(999,parseInt($('cartMaxN').value,10)||10)):0),sleeveWhiteBg:$('sleeveWhiteBg').checked,siteMode:$('siteMode').checked,setBrowse:$('setBrowse').checked,setRoll:$('setRoll').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,starwars:$('ntStarwars').checked,onepiece:$('ntOnepiece').checked,riftbound:$('ntRiftbound').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase',icon:ICONS.showcase||''},
-    sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},
+    sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},boardTab:{enabled:$('bgEnabled').checked,label:'Board Games',collection:($('bgCollection').value.trim().toLowerCase())||'board-games',icon:ICONS.board||''},whTab:{enabled:$('whEnabled').checked,label:'Warhammer',collection:($('whCollection').value.trim().toLowerCase())||'gamesworkshop',icon:ICONS.wh||''},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
     attractHome:$('attractHome').value,attractShow:$('attractShow').checked,

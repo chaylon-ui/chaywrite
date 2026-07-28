@@ -117,11 +117,16 @@ export class BinderRoom {
     const sl = sv.enabled
       ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true, icon: sv.icon || SLEEVES_TAB_ICON }]
       : [];
+    const shelves = [];
+    for (const [key, defLabel, defColl] of [["boardTab", "Board Games", "board-games"], ["whTab", "Warhammer", "gamesworkshop"]]) {
+      const tb = this.settings[key] || {};
+      if (tb.enabled) shelves.push({ label: String(tb.label || defLabel).slice(0, 24), collection: tb.collection || defColl, theme: "sleeves", game: "sleeves", shelf: true, icon: tb.icon || "" });
+    }
     const nt = this.settings.newToday || {};
     const extra = base
       .filter((t) => nt[t.game])
       .map((t) => ({ label: ("New Today · " + t.label).slice(0, 24), collection: t.collection, theme: t.theme, game: t.game, newToday: true }));
-    return [...base, ...sc, ...sl, ...extra];
+    return [...base, ...sc, ...sl, ...shelves, ...extra];
   }
   publicSettings() { return { ...this.settings, tabs: this.effectiveTabs() }; } // never includes the PIN
 
@@ -193,6 +198,21 @@ export class BinderRoom {
         const home = (Array.isArray(next.tabs) && next.tabs[0]) || null;
         if (home) { next.collection = home.collection; next.theme = home.theme; next.game = home.game; }
         next.sleevesActive = false;
+      }
+    }
+    // Generic retail-shelf tabs (Board Games, Warhammer) — same wall as the
+    // sleeves, minus the Dragon Shield dressing, plus customer sort chips.
+    for (const [key, defLabel, defColl] of [["boardTab", "Board Games", "board-games"], ["whTab", "Warhammer", "gamesworkshop"]]) {
+      if (!(key in patch)) continue;
+      const tb = patch[key];
+      if (!tb || typeof tb !== "object") return "bad " + key;
+      const c = String(tb.collection || defColl).trim().toLowerCase();
+      if (!HANDLE_RE.test(c)) return "bad " + key + " collection handle";
+      next[key] = { enabled: !!tb.enabled, label: String(tb.label || defLabel).slice(0, 24).trim() || defLabel, collection: c, icon: cleanIcon(tb.icon) };
+      if (!next[key].enabled && next.shelfActive && next.collection === next[key].collection) {
+        const home = (Array.isArray(next.tabs) && next.tabs[0]) || null;
+        if (home) { next.collection = home.collection; next.theme = home.theme; next.game = home.game; }
+        next.shelfActive = false;
       }
     }
     if ("theme" in patch) {
@@ -363,7 +383,7 @@ export class BinderRoom {
       const tabs = this.effectiveTabs();
       if (!(i >= 0 && i < tabs.length)) return Response.json({ error: "bad tab" }, { status: 400 });
       const t = tabs[i];
-      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme, newTodayActive: !!t.newToday, showcaseActive: !!t.showcase, sleevesActive: !!t.sleeves };
+      this.settings = { ...this.settings, collection: t.collection, theme: t.theme, game: t.game || t.theme, newTodayActive: !!t.newToday, showcaseActive: !!t.showcase, sleevesActive: !!t.sleeves, shelfActive: !!t.shelf };
       await this.state.storage.put("settings", this.settings);
       this.broadcastSettings();
       return Response.json({ ok: true, settings: this.publicSettings() });
