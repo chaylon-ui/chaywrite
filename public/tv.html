@@ -1742,7 +1742,7 @@ function SETSUG(q,prefixOnly){q=String(q||'').trim();clearTimeout(SUGT);
  if(!q){box.innerHTML='';return;}
  box.innerHTML='<div class="setshint">Searching sets…</div>';
  const seq=++SUGSEQ;
- SUGT=setTimeout(()=>{fetch('/setsuggest.json?q='+encodeURIComponent(q)).then(r=>r.ok?r.json():null).then(d=>{
+ SUGT=setTimeout(()=>{fetch('/setsuggest.json?q='+encodeURIComponent(q)+'&g='+encodeURIComponent(GAME||'')).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==SUGSEQ)return;const box2=document.getElementById('setsug');if(!box2)return;
   let sets=(d&&Array.isArray(d.sets))?d.sets:[];
   if(prefixOnly)sets=sets.filter(x=>x.toLowerCase().startsWith(q.toLowerCase()));
@@ -1753,7 +1753,9 @@ function SETSUG(q,prefixOnly){q=String(q||'').trim();clearTimeout(SUGT);
 function SETLETTER(l,el){if(el&&window.TOUCH)comicBurst(el,l,true);SETSUG(l,true);}
 function SETGO(n){n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,36);if(!n)return;
  const ov=document.getElementById('setsov');if(ov)ov.classList.remove('open');
- TQ='['+n+']';renderTQ();TKGO();}
+ // Set CODES (Yu-Gi-Oh's DUPO etc.) match titles as "[CODE-…" — full set
+ // names close their bracket.
+ TQ=/^[A-Z0-9]{2,6}$/.test(n)?'['+n+'-':'['+n+']';renderTQ();TKGO();}
 function TSEARCHCLOSE(){document.getElementById('tkb').classList.remove('open');}
 function TSEARCHCLEAR(){TQ='';TKSEQ++;clearTimeout(TKT);renderTQ();
  document.getElementById('tkres').textContent='Results fill the case behind this keyboard as you type.';
@@ -1766,7 +1768,7 @@ function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres
  SETMODE=q.startsWith('['); // bracketed query = set browse → filter/sort chips
  if(q.length<2){if(!q&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}res.textContent='Results fill the case behind this keyboard as you type.';return;}
  res.textContent='Searching…';TRACKQ(q);
- fetch('/search.json?q='+encodeURIComponent(q)).then(r=>r.ok?r.json():null).then(d=>{
+ fetch('/search.json?q='+encodeURIComponent(q)+((SETMODE&&GAME)?'&g='+encodeURIComponent(GAME):'')).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==TKSEQ||!d)return;
   const n=Array.isArray(d.cards)?d.cards.length:0;
   res.textContent=n?(n+' card'+(n===1?'':'s')+' found — tap Done to browse'):('Nothing in stock matches “'+q+'”');

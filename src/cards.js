@@ -258,6 +258,7 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
 export async function serveSearch(request, env) {
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim().slice(0, 60);
+  const g = String(url.searchParams.get("g") || "").slice(0, 16); // set browse scopes to the active game
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
   const out = { q, count: 0, cards: [] };
   if (q.length < 2) return Response.json(out, { headers: { "cache-control": "no-store" } });
@@ -265,7 +266,7 @@ export async function serveSearch(request, env) {
     const token = env && env.SHOPIFY_ADMIN_TOKEN;
     let prods = null;
     if (token) {
-      try { prods = await adminSearch(q, env); } catch { prods = null; }
+      try { prods = await adminSearch(q, env, GAME_PTQ[g] || ""); } catch { prods = null; }
     }
     if (!prods) prods = await suggestSearch(q, headers);
     const built = buildCards(prods.filter(Boolean), { minPrice: 0, perLane: 199 });
@@ -278,7 +279,7 @@ export async function serveSearch(request, env) {
 }
 
 /* Full-catalogue title search through the Admin API (up to 40 products). */
-async function adminSearch(q, env) {
+async function adminSearch(q, env, ptq = "") {
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const safe = q.replace(/[*"\\()]/g, " ").trim();
   if (!safe) return null;
@@ -295,7 +296,7 @@ async function adminSearch(q, env) {
     const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Shopify-Access-Token": env.SHOPIFY_ADMIN_TOKEN },
-      body: JSON.stringify({ query: gql, variables: { q: `status:active title:*${safe}*`, after } }),
+      body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} title:*${safe}*`.replace(/\s+/g, " "), after } }),
       signal: AbortSignal.timeout(6000),
     });
     if (!r.ok) { if (page) break; throw new Error("admin search HTTP " + r.status); }
@@ -384,12 +385,26 @@ export async function serveQty(request, env, ctx) {
 /* Set-name suggestions for the Browse-by-set panel: set names live in the
    [brackets] of product titles, so a title search doubles as a directory.
    Names that START with the query rank first. Cached 10 minutes per query. */
+/* Per-game product_type scoping so the Yu-Gi-Oh tab suggests Yu-Gi-Oh sets,
+   not Magic ones (types verified against the live catalogue). */
+const GAME_PTQ = {
+  mtg: 'product_type:"MTG Single"',
+  pokemon: 'product_type:"Pokemon Single"',
+  yugioh: 'product_type:"Yugioh Single"',
+  starwars: 'product_type:"Star Wars: Unlimited Single"',
+  onepiece: 'product_type:"One Piece Single"',
+  riftbound: "product_type:Riftbound*",
+  hockey: "product_type:Hockey*",
+  basketball: 'product_type:"Basketball Singles"',
+};
 export async function serveSetSuggest(request, env, ctx) {
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 30);
+  const g = String(url.searchParams.get("g") || "").slice(0, 16);
+  const ptq = GAME_PTQ[g] || "";
   if (!q) return Response.json({ sets: [] }, { headers: { "cache-control": "no-store" } });
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/setsuggest.json?q=" + encodeURIComponent(q), request.url).toString());
+  const cacheKey = new Request(new URL("/setsuggest.json?q=" + encodeURIComponent(q) + "&g=" + encodeURIComponent(g), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
   const token = env && env.SHOPIFY_ADMIN_TOKEN;
@@ -402,14 +417,18 @@ export async function serveSetSuggest(request, env, ctx) {
     const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
-      body: JSON.stringify({ query: gql, variables: { q: `status:active title:*${safe}*` } }),
+      body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} title:*${safe}*`.replace(/\s+/g, " ") } }),
       signal: AbortSignal.timeout(6000),
     });
     const edges = (await r.json())?.data?.products?.edges || [];
     for (const { node } of edges) {
       const m = String((node && node.title) || "").match(/\[([^\]]{2,60})\]/);
       if (!m) continue;
-      const name = m[1].trim();
+      let name = m[1].trim();
+      // Yu-Gi-Oh style brackets carry card codes ([DUPO-EN101]) — fold those
+      // into their set-code prefix so DUPO suggests once, not per card.
+      const code = name.match(/^([A-Z0-9]{2,6})-[A-Z]{0,4}\d/);
+      if (code) name = code[1];
       if (name.toLowerCase().includes(q)) found.set(name.toLowerCase(), name);
     }
   } catch {}
