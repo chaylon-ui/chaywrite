@@ -145,6 +145,10 @@ export class BinderRoom {
     if ("topLoaders" in patch) next.topLoaders = !!patch.topLoaders;
     if ("touchMode" in patch) next.touchMode = !!patch.touchMode;
     if ("counterEnabled" in patch) next.counterEnabled = !!patch.counterEnabled;
+    if ("cartMax" in patch) {
+      const n = Math.floor(+patch.cartMax);
+      next.cartMax = isFinite(n) && n > 0 ? Math.min(n, 999) : 0;
+    }
     if ("kbPos" in patch) {
       if (!["top", "midtop", "middle", "midbot", "bottom"].includes(patch.kbPos)) return "bad kbPos";
       next.kbPos = patch.kbPos;

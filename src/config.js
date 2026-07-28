@@ -74,6 +74,9 @@ export const DEFAULT_SETTINGS = {
   // staff to ring through). Untick per screen to leave only the QR
   // checkout-on-your-phone path.
   counterEnabled: true,
+  // Cap how many cards fit in a kiosk cart (0 = no limit). At the cap the
+  // add buttons bounce with a "cart limit" warning.
+  cartMax: 0,
   // Where the on-screen search keyboard sits on a touch kiosk (some totems
   // are mounted high, some low): top | midtop | middle | midbot | bottom.
   kbPos: "bottom",
