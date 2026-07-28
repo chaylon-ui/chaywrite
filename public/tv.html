@@ -922,16 +922,31 @@ function applyCards(list){
 /* ---- Phone-driven search: the phone mirrors its results here; the default
    deck is parked in SDECK and restored when the search is cleared. ---- */
 let SDECK=null;
+/* Set-browse view state: the raw result deck parks in SRAW; big chip
+   filters (colour/energy) and sorts re-cut the visible deck from it. */
+let SRAW=null,SETMODE=false,SFILT={col:'all',sort:'pd'};
+function srtView(){const src=SRAW||[];let v=SFILT.col==='all'?src.slice():src.filter(c=>c.color===SFILT.col);
+ const p=x=>parseFloat(x.price)||0;
+ if(SFILT.sort==='pd')v.sort((a,b)=>p(b)-p(a));
+ else if(SFILT.sort==='pa')v.sort((a,b)=>p(a)-p(b));
+ else if(SFILT.sort==='az')v.sort((a,b)=>a.name.localeCompare(b.name));
+ else v.sort((a,b)=>b.name.localeCompare(a.name));
+ v.COLOR_NAME=src.COLOR_NAME;v.GAME=src.GAME;return v;}
+function SRTSET(k,v,el){if(el&&window.TOUCH)comicBurst(el,k==='sort'?'SORTED!':'FILTERED!',true);
+ SFILT[k]=v;if(!SRAW)return;unzoom();selected=null;applyCards(srtView());draw();
+ if(window.TOUCH)renderTouchTabs(SETTINGS);}
 function startSearchDeck(d){if(!d)return;const q=String(d.q||'').slice(0,60);
  const cards=(Array.isArray(d.cards)?d.cards:[]).slice(0,120).map(sanitizeCard).filter(Boolean);
  if(!cards.length)return;
  if(!SDECK)SDECK={cards:CARDS,cn:CN};
  cards.COLOR_NAME=(d.colorNames&&typeof d.colorNames==='object')?d.colorNames:CN;
+ SRAW=cards;SFILT={col:'all',sort:'pd'};
  document.body.classList.add('searching'); // search results aren't "New Today" — park the tape
  applySettings(SETTINGS); // case swaps to the generic wooden look while searching
- unzoom();selected=null;applyCards(cards);draw();
+ unzoom();selected=null;applyCards(SETMODE?srtView():cards);draw();
  const el=document.getElementById('dvq');if(el)el.textContent='Search: “'+q+'” · '+cards.length+' found';}
 function endSearchDeck(){const el=document.getElementById('dvq');if(el)el.textContent='';
+ SRAW=null;SETMODE=false;SFILT={col:'all',sort:'pd'};
  document.body.classList.remove('searching');
  applySettings(SETTINGS); // restore the tab's own case dressing
  if(!SDECK)return;const d=SDECK.cards;d.COLOR_NAME=SDECK.cn;SDECK=null;
@@ -1637,11 +1652,22 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
   +`<div class="slvgrp">${chip('fin','all','ALL')}${chip('fin','brushed','BRUSHED')}${chip('fin','matte','MATTE')}${chip('fin','dual','DUAL MATTE')}${chip('fin','classic','CLASSIC')}${chip('fin','other','MORE')}</div>`
   +`<div class="slvgrp">${chip('ct','all','ANY PACK')}${chip('ct','100','100CT')}${chip('ct','60','60CT')}</div>`
   +`</div>`:'';
+ // Set-browse chip row: the colours/energies actually in the result set,
+ // plus price/alphabetical sorts.
+ const srtbar=(searching&&SETMODE&&Array.isArray(SRAW)&&SRAW.length)?(()=>{
+  const known=['W','U','B','R','G','M','C'];
+  const cols=[...new Set(SRAW.map(c=>c.color))].sort((a,b)=>{const i=known.indexOf(a),j=known.indexOf(b);return (i<0?99:i)-(j<0?99:j)||String(a).localeCompare(String(b));}).slice(0,12);
+  const NM={W:'WHITE',U:'BLUE',B:'BLACK',R:'RED',G:'GREEN',M:'MULTI',C:'COLORLESS'};
+  const nm=c=>NM[c]||String((CN&&CN[c])||c).toUpperCase();
+  const schip=(g,v,l)=>`<button class="slvchip${SFILT[g]===v?' on':''}" onclick="SRTSET('${g}','${H(String(v))}',this)">${l}</button>`;
+  return `<div class="slvbar"><div class="slvgrp">${schip('col','all','ALL')}${cols.map(c=>schip('col',c,H(nm(c)))).join('')}</div>`
+   +`<div class="slvgrp">${schip('sort','pd','PRICE ↓')}${schip('sort','pa','PRICE ↑')}${schip('sort','az','A–Z')}${schip('sort','za','Z–A')}</div></div>`;})():'';
  box.innerHTML=`<div class="tswrap"><button class="tsarr tsl" onclick="TSCROLLBY(-1)" aria-label="More tabs this way">‹</button>`
   +`<div class="tscroll" id="tscroll">${tabs.map(btn).join('')}`
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
   +`</div><button class="tsarr tsr" onclick="TSCROLLBY(1)" aria-label="More tabs this way">›</button></div>`
   +slvbar
+  +srtbar
   +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'')
   +(s.setBrowse===true?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:'');
  const sc=document.getElementById('tscroll');
@@ -1704,6 +1730,7 @@ function TKEY(k){if(window.REMOTE&&!REM_APPLY)RGO({a:'key',k},2500);
  if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
  renderTQ();clearTimeout(TKT);TKT=setTimeout(TKGO,350);}
 function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres');
+ SETMODE=q.startsWith('['); // bracketed query = set browse → filter/sort chips
  if(q.length<2){if(!q&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}res.textContent='Results fill the case behind this keyboard as you type.';return;}
  res.textContent='Searching…';TRACKQ(q);
  fetch('/search.json?q='+encodeURIComponent(q)).then(r=>r.ok?r.json():null).then(d=>{
