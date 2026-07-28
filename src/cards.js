@@ -234,6 +234,8 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
     );
   }
 
+  await nameYgoSets(built.cards, request, ctx); // codes → real set names before caching
+
   const version = fnv(built.cards.map((c) => c.variantId).join(","));
   const res = Response.json(
     {
@@ -248,6 +250,22 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
   );
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
+}
+
+/* Yu-Gi-Oh cards carry bracket CODES ([DUPO-EN101]) as their set — swap in
+   the real set name everywhere it shows (cue cards, set chips) and keep the
+   searchable code in setq so set-browse still matches the titles. */
+async function nameYgoSets(cards, request, ctx) {
+  const need = (cards || []).some((c) => c && c.game === "yugioh" && /^[A-Z0-9]{2,6}-/.test(String(c.set || "")));
+  if (!need) return;
+  const names = await ygoSetNames(request, ctx);
+  for (const c of cards) {
+    if (!c || c.game !== "yugioh") continue;
+    const m = String(c.set || "").match(/^([A-Z0-9]{2,6})-/);
+    if (!m) continue;
+    c.setq = m[1];
+    c.set = names[m[1]] || m[1];
+  }
 }
 
 /* Phone-driven search. With the SHOPIFY_ADMIN_TOKEN secret set the worker
@@ -272,6 +290,7 @@ export async function serveSearch(request, env) {
     const built = buildCards(prods.filter(Boolean), { minPrice: 0, perLane: 199 });
     out.cards = built.cards.slice(0, 120); out.count = out.cards.length;
     out.game = built.game; out.colorNames = built.colorNames;
+    await nameYgoSets(out.cards, request, null);
   } catch (e) {
     out.error = String((e && e.message) || e);
   }
@@ -415,6 +434,7 @@ async function ygoSetNames(request, ctx) {
     for (const s of arr || []) if (s && s.set_code && s.set_name) map[String(s.set_code).toUpperCase()] = String(s.set_name).slice(0, 60);
     const res = Response.json(map, { headers: { "cache-control": "public, max-age=86400" } });
     if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+    else await cache.put(key, res.clone());
     return map;
   } catch { return {}; }
 }

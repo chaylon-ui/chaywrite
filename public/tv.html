@@ -978,7 +978,7 @@ function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
   variantId:String(v.variantId||'').replace(/\D/g,'')||null,
   price:money(v.price),foil:!!v.foil,
   condition:String(v.condition||'').slice(0,60)}:null).filter(v=>v&&v.variantId):null;
- return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),type:String(d.type||'').slice(0,70),
+ return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),setq:String(d.setq||'').slice(0,12)||undefined,type:String(d.type||'').slice(0,70),
   color:(ART[d.color]?d.color:'C'),price:money(d.price),foil:!!d.foil,
   game:CARD_GAMES.includes(d.game)?d.game:null,
   condition:String(d.condition||'').slice(0,60),
@@ -1729,8 +1729,10 @@ function SETSOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SETS!',true);
  let ov=document.getElementById('setsov');
  if(!ov){ov=document.createElement('div');ov.id='setsov';document.body.appendChild(ov);
   ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');});}
- __SETS=[...new Set((Array.isArray(CARDS)?CARDS:[]).map(c=>String(c.set||'').trim())
-  .filter(x=>x.length>1&&x!=='Dragon Shield'))].slice(0,30);
+ __SETS=[...new Map((Array.isArray(CARDS)?CARDS:[])
+  .map(c=>({n:String(c.set||'').trim(),q:String(c.setq||c.set||'').trim()}))
+  .filter(x=>x.n.length>1&&x.n!=='Dragon Shield')
+  .map(x=>[x.n.toLowerCase(),x])).values()].slice(0,30);
  const roll=SETTINGS.setRoll===true; // admin option: A–Z roll instead of typing
  // Touch kiosks have no OS keyboard — deal one into the panel (the website
  // and remote mirrors type with their real keyboards).
@@ -1742,7 +1744,7 @@ function SETSOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SETS!',true);
   ${roll?'<div class="setshint">Pick a letter — sets we stock appear below.</div>':`<div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="36"${kb?' readonly':''}
    oninput="SETSUG(this.value)" onkeydown="if(event.key==='Enter')SETGO(this.value)"><button class="slvchip" onclick="SETGO(document.getElementById('setsin').value)">GO</button></div>`}
   ${kb}${rail}
-  <div id="setsug">${__SETS.length?`<div class="setshint">Sets on this page:</div><div class="setschips">${__SETS.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SETS[${i}])">${H(x)}</button>`).join('')}</div>`:''}</div>
+  <div id="setsug">${__SETS.length?`<div class="setshint">Sets on this page:</div><div class="setschips">${__SETS.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SETS[${i}])">${H(x.n)}</button>`).join('')}</div>`:''}</div>
   <button class="slvchip setsclose" onclick="document.getElementById('setsov').classList.remove('open')">✕ CLOSE</button></div>`;
  ov.classList.add('open');}
 function SETKEY(k){const i=document.getElementById('setsin');if(!i)return;
