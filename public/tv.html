@@ -456,6 +456,26 @@ html.fullcard .case:not(.sleeves) .shelf + .shelf{margin-top:.8vh}
 html.fullcard .case.tl:not(.sleeves) .tray{--chh:calc((min(85vh,900px) - 8vh)/4.15);--ch:min(var(--chw),var(--chh))}
 html.fullcard body.paired .case.tl:not(.sleeves) .tray{--chh:calc(92vh/4.15)}
 html.portrait.fullcard .case:not(.sleeves) .tray{--ch:min(calc(var(--cwv)/0.715),calc((var(--hbudget) - 5vh)/5.95))}
+/* Website mode extras: the site-cart checkout button (replaces the QR) and
+   the browse-by-set overlay. */
+.sitego{display:block;background:#c9342b;color:#fff;font-family:'Bangers','Comic Sans MS',cursive;font-size:1.5rem;letter-spacing:.05em;padding:1rem 1.4rem;border-radius:14px;border:3px solid #101010;box-shadow:.2rem .25rem 0 #101010;text-decoration:none;text-align:center}
+#setsov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:56}
+#setsov.open{display:flex;align-items:center;justify-content:center}
+.setsbox{background:#15151c;border:2px solid #34343e;border-radius:16px;padding:1.1rem 1.2rem;max-width:min(92vw,660px);max-height:80vh;overflow:auto;display:flex;flex-direction:column;gap:.65rem}
+.setstitle{font-family:'Bangers',cursive;color:#ffd94d;font-size:1.5rem;letter-spacing:.06em}
+.setsrow{display:flex;gap:.5rem}
+.setsrow input{flex:1;background:#0d0d12;border:1.5px solid #34343e;border-radius:10px;color:#efe9dd;padding:.6rem .8rem;font-size:1rem}
+.setshint{color:#8b8b96;font-size:.85rem}
+.setschips{display:flex;flex-wrap:wrap;gap:.4rem}
+.setsclose{align-self:flex-end}
+/* Phone website view: the case relaxes into a scrollable 3-column grid —
+   no page arrows, no shingling, every card full height. */
+html.sitemobile .case{height:100vh}
+html.sitemobile .tray{--cols:3;--gap:2vw;--wbudget:88vw;--ch:calc(var(--cwv)/0.715);position:absolute;inset:0;display:block;overflow-y:auto;padding:3vw 3vw 24vw}
+html.sitemobile .shelf{margin-bottom:2.5vw}
+html.sitemobile .shelf + .shelf{margin-top:0!important}
+html.sitemobile .tnav{display:none!important}
+html.sitemobile .glass{display:none}
 html.portrait.fullcard .case.tl:not(.sleeves) .tray{--chh:calc((min(88vh,1800px) - 11vh)/6.3);--ch:min(var(--chw),var(--chh))}
 html.portrait body.paired .case.sleeves .tray{padding-top:12.5vh;padding-bottom:4.5vh}
 /* ---- Christmas dressing (admin "Holiday" setting, per room): a sagging
@@ -816,12 +836,23 @@ window.URLTOUCH=new URLSearchParams(location.search).get('touch')==='1';
 window.REMOTE=new URLSearchParams(location.search).get('remote')==='1';
 window.RKEY=new URLSearchParams(location.search).get('k')||'';
 if(window.REMOTE){window.URLTOUCH=true;document.documentElement.classList.add('remote');}
+/* Website mode (?site=1 or the room's admin "Website mode" setting): the same
+   live showcase embedded on exorgames.com — full browsing UI but none of the
+   kiosk hardware extras. No send-to-counter, no QR handoff (the cart checks
+   out through the site itself), no attract show, no zoom lockdown, and no
+   usage analytics polluting the in-store stats. On phones the case becomes
+   a scrollable 3-column grid. */
+window.URLSITE=new URLSearchParams(location.search).get('site')==='1';
+window.SITE=window.URLSITE;
+if(window.SITE){window.URLTOUCH=true;document.documentElement.classList.add('site');}
+window.SITEMOBILE=window.SITE&&(Math.min(window.innerWidth,screen.width)<=760||/Android|iPhone|iPod|Mobile/i.test(navigator.userAgent||''));
+if(window.SITEMOBILE)document.documentElement.classList.add('sitemobile');
 window.TOUCH=window.URLTOUCH; // may also flip on later via the room's admin "touchMode" setting
 /* ---- Kiosk lockdown (not on remote mirrors): kill pinch/ctrl-wheel/keyboard
    zoom and the long-press menu, and self-heal fullscreen — if someone backs
    the browser out of fullscreen, the next customer tap puts it back. Leaving
    or minimizing the browser itself can only be blocked by OS kiosk mode. */
-if(!window.REMOTE){
+if(!window.REMOTE&&!window.SITE){
  const vp=document.querySelector('meta[name=viewport]');
  if(vp)vp.setAttribute('content','width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
  document.addEventListener('wheel',e=>{if(e.ctrlKey)e.preventDefault();},{passive:false});
@@ -854,7 +885,7 @@ Spell:'#3d9a82',Trap:'#c05a94',Dark:'#5a4a86',Light:'#e0cc84',Earth:'#9a8058',Wi
 const DARK=['U','B','R','G','Fire','Water','Psychic','Fighting','Darkness','Dragon','Grass','Spell','Trap','Dark','Earth','Wind','Monster'];
 /* The Showcase deck (the real case, mirrored) runs roomier: 3 rows of 8 with
    an ESL price tag on every card, so 24 per spread instead of 40. */
-let TRAY=40;const COLS=window.PORTRAIT?5:8;let trays=[],spreads=0,spread=0,selected=null,cart=[];
+let TRAY=40;const COLS=window.SITEMOBILE?3:(window.PORTRAIT?5:8);let trays=[],spreads=0,spread=0,selected=null,cart=[];
 const SHOWCASE=()=>!!(CARDS&&CARDS.GAME==='showcase');
 const SLEEVES=()=>!!(CARDS&&CARDS.GAME==='sleeves');
 /* Per-deck salt so switching tabs reshuffles the clutter/card-back piles —
@@ -881,6 +912,7 @@ function SLVSET(k,v,el){if(el&&window.TOUCH)comicBurst(el,'FILTERED!',true);
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 let FULLCARD_ON=false;
 function traySize(g){if(g==='showcase'||g==='sleeves')return 24;
+ if(window.SITEMOBILE)return 9999; // phone website view: one long scrollable grid
  return FULLCARD_ON?(window.PORTRAIT?30:24):40;} // portrait cards are width-bound: 6 full rows fit
 function applyCards(list){
  if(list&&list.GAME==='sleeves'&&!list.__slvView){SLVALL=list;list=slvView();}
@@ -1291,7 +1323,7 @@ function placeQrProps(){if(window.TOUCH||!document.body.classList.contains('attr
  if(arr){arr.style.right=Math.round(innerWidth-card.left+4)+'px';
   arr.style.bottom=Math.max(8,Math.round(innerHeight-(q.top+q.height*0.85)))+'px';}}
 window.addEventListener('resize',()=>{if(attractOn)requestAnimationFrame(placeQrProps);});
-function armAttract(){if(window.REMOTE)return;if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},attractDelayS()*1000);}
+function armAttract(){if(window.REMOTE||window.SITE)return;if(attractArm||attractOn)return;attractArm=setTimeout(()=>{attractArm=null;startAttract();},attractDelayS()*1000);}
 /* When the show starts, snap back to the admin-picked home tab (latest
    arrivals for a game, or the Showcase) — an abandoned Sleeves view or
    search shouldn't idle under the NEW ARRIVALS tape. */
@@ -1505,7 +1537,7 @@ function effT(){if(!ZCARD)return null;if(!ZVAR)return ZCARD;
    grouped by session. Nothing personal is recorded — just taps, searches,
    cart moves and how the visit ended. */
 let ASID=null,AQ=[],AFT=null;
-function TRACK(e,d,v){if(!window.TOUCH||window.REMOTE)return;
+function TRACK(e,d,v){if(!window.TOUCH||window.REMOTE||window.SITE)return;
  if(!ASID){ASID='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   AQ.push({t:Date.now(),e:'ss',d:'touch',v:0});}
  AQ.push({t:Date.now(),e,d:String(d||'').slice(0,e==='qr'?600:80),v:+v||0}); // qr keeps its full cart permalink
@@ -1584,6 +1616,8 @@ function renderTcheck(){const items=cartAgg();
    +`<button class="tcx" onclick="TCREMOVE('${vid}',this)">✕</button></div>`;}).join('');
  document.getElementById('tctotal').textContent=cart.length+' card'+(cart.length===1?'':'s')+' · $'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
  const qel=document.getElementById('tcqr');qel.innerHTML='';
+ if(window.SITE){ // website mode: no QR handoff — the site IS the phone
+  qel.innerHTML=`<a class="sitego" href="${H(kioskCartUrl(items))}" target="_top">CHECKOUT ON EXORGAMES.COM →</a>`;return;}
  try{new QRCode(qel,{text:kioskCartUrl(items),width:280,height:280,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){qel.textContent='QR';}}
 function TCKO(){if(!cart.length)return;renderTcheck();
  if(cart.length){ // log the exact cart permalink so admin can re-pop this QR
@@ -1608,7 +1642,8 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
   +`</div><button class="tsarr tsr" onclick="TSCROLLBY(1)" aria-label="More tabs this way">›</button></div>`
   +slvbar
-  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'');
+  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'')
+  +(s.setBrowse===true?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:'');
  const sc=document.getElementById('tscroll');
  sc.addEventListener('scroll',TSCROLLUPD,{passive:true});
  const cur=sc.querySelector('.ttab.on'); // keep the active tab in view
@@ -1633,6 +1668,25 @@ function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
 let TQ='',TKT=null,TKSEQ=0;
 function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);if(window.REMOTE&&!REM_APPLY)RGO({a:'sopen'});document.getElementById('tkb').classList.add('open');renderTQ();}
+/* ---- Browse by set (admin toggle): pick a set, see everything in stock
+   from it. Set names ride in the [brackets] of every product title, so a
+   bracketed search does the digging; the chips list the sets on screen. */
+let __SETS=[];
+function SETSOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SETS!',true);
+ let ov=document.getElementById('setsov');
+ if(!ov){ov=document.createElement('div');ov.id='setsov';document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');});}
+ __SETS=[...new Set((Array.isArray(CARDS)?CARDS:[]).map(c=>String(c.set||'').trim())
+  .filter(x=>x.length>1&&x!=='Dragon Shield'))].slice(0,30);
+ ov.innerHTML=`<div class="setsbox"><div class="setstitle">BROWSE BY SET</div>
+  <div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="36"
+   onkeydown="if(event.key==='Enter')SETGO(this.value)"><button class="slvchip" onclick="SETGO(document.getElementById('setsin').value)">GO</button></div>
+  ${__SETS.length?`<div class="setshint">Sets on this page:</div><div class="setschips">${__SETS.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SETS[${i}])">${H(x)}</button>`).join('')}</div>`:''}
+  <button class="slvchip setsclose" onclick="document.getElementById('setsov').classList.remove('open')">✕ CLOSE</button></div>`;
+ ov.classList.add('open');}
+function SETGO(n){n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,36);if(!n)return;
+ const ov=document.getElementById('setsov');if(ov)ov.classList.remove('open');
+ TQ='['+n+']';renderTQ();TKGO();}
 function TSEARCHCLOSE(){document.getElementById('tkb').classList.remove('open');}
 function TSEARCHCLEAR(){TQ='';TKSEQ++;clearTimeout(TKT);renderTQ();
  document.getElementById('tkres').textContent='Results fill the case behind this keyboard as you type.';
@@ -1816,7 +1870,7 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('theme-hockey',s.theme==='hockey'&&!srch);
  cs.classList.toggle('theme-basketball',s.theme==='basketball'&&!srch);
  const tcc=document.getElementById('tcCounter');
- if(tcc)tcc.style.display=(s.counterEnabled===false)?'none':''; // per-screen "Send to counter" toggle
+ if(tcc)tcc.style.display=(s.counterEnabled===false||window.SITE)?'none':''; // per-screen toggle; never on the website
  cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive); // the sleeve wall never wears top-loaders
  cs.classList.toggle('sleeves',!!s.sleevesActive&&!srch);
  cs.classList.toggle('slvwhite',!!s.sleeveWhiteBg);
@@ -1835,7 +1889,9 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}
  /* Touch-kiosk mode can flip live from admin (per room); ?touch=1 still
     forces it per-URL. Re-arm attract so the 2-minute kiosk leash applies. */
- const tm=window.URLTOUCH||!!s.touchMode;
+ const sm=window.URLSITE||!!s.siteMode; // website mode can flip on from admin too
+ if(sm!==window.SITE){window.SITE=sm;document.documentElement.classList.toggle('site',sm);if(sm)stopAttract();}
+ const tm=window.URLTOUCH||!!s.touchMode||window.SITE;
  if(tm!==window.TOUCH){window.TOUCH=tm;document.documentElement.classList.toggle('touch',tm);
   if(tm)initTouch();
   touchDress(tm);

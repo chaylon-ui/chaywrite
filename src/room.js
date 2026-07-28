@@ -157,6 +157,8 @@ export class BinderRoom {
     if ("perfMode" in patch) next.perfMode = !!patch.perfMode;
     if ("sleeveWhiteBg" in patch) next.sleeveWhiteBg = !!patch.sleeveWhiteBg;
     if ("fullCard" in patch) next.fullCard = !!patch.fullCard;
+    if ("siteMode" in patch) next.siteMode = !!patch.siteMode;
+    if ("setBrowse" in patch) next.setBrowse = !!patch.setBrowse;
     if ("newToday" in patch) {
       const nt = patch.newToday;
       if (!nt || typeof nt !== "object") return "bad newToday";

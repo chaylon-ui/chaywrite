@@ -45,6 +45,18 @@ export const DEFAULT_SETTINGS = {
   // page. Off = the current overlapped stack.
   fullCard: false,
 
+  // Website mode: this screen is EMBEDDED ON THE WEBSITE (e.g. the
+  // "exor-main-site" room on exorgames.com) rather than running a kiosk.
+  // Full browsing UI, but no send-to-counter, no QR handoff (checkout goes
+  // through the site's own Shopify cart), no attract show, no kiosk
+  // lockdown, and no usage analytics. Phones get a 3-column scroll grid.
+  // /tv?site=1 forces it per-URL regardless of this setting.
+  siteMode: false,
+
+  // "Browse by set" button beside the search bar (touch kiosks + website):
+  // pick any set and see everything in stock from it.
+  setBrowse: false,
+
   // Performance mode for weaker TV boxes: replaces the preview's backdrop
   // blur with a plain dim and stills the heavy filter animations.
   perfMode: false,
