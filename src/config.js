@@ -56,6 +56,9 @@ export const DEFAULT_SETTINGS = {
   // "Browse by set" button beside the search bar (touch kiosks + website):
   // pick any set and see everything in stock from it.
   setBrowse: false,
+  // Set panel style: false = type-to-search with live autocomplete;
+  // true = an A–Z roll — tap a letter, pick from the sets we stock.
+  setRoll: false,
 
   // Performance mode for weaker TV boxes: replaces the preview's backdrop
   // blur with a plain dim and stills the heavy filter animations.

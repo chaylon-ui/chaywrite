@@ -381,6 +381,47 @@ export async function serveQty(request, env, ctx) {
   return res;
 }
 
+/* Set-name suggestions for the Browse-by-set panel: set names live in the
+   [brackets] of product titles, so a title search doubles as a directory.
+   Names that START with the query rank first. Cached 10 minutes per query. */
+export async function serveSetSuggest(request, env, ctx) {
+  const url = new URL(request.url);
+  const q = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 30);
+  if (!q) return Response.json({ sets: [] }, { headers: { "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/setsuggest.json?q=" + encodeURIComponent(q), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const token = env && env.SHOPIFY_ADMIN_TOKEN;
+  const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
+  const found = new Map();
+  try {
+    if (!token) throw new Error("no token");
+    const safe = q.replace(/[*"\\()[\]]/g, " ").trim();
+    const gql = `query($q:String!){products(first:100,query:$q){edges{node{title}}}}`;
+    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ query: gql, variables: { q: `status:active title:*${safe}*` } }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const edges = (await r.json())?.data?.products?.edges || [];
+    for (const { node } of edges) {
+      const m = String((node && node.title) || "").match(/\[([^\]]{2,60})\]/);
+      if (!m) continue;
+      const name = m[1].trim();
+      if (name.toLowerCase().includes(q)) found.set(name.toLowerCase(), name);
+    }
+  } catch {}
+  const sets = [...found.values()].sort((a, b) => {
+    const ap = a.toLowerCase().startsWith(q) ? 0 : 1, bp = b.toLowerCase().startsWith(q) ? 0 : 1;
+    return ap - bp || a.localeCompare(b);
+  }).slice(0, 24);
+  const res = Response.json({ sets }, { headers: { "cache-control": "public, max-age=600" } });
+  if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 /* The pickup board: every OPEN draft order, newest first — the POS tablets
    can't list third-party drafts natively, so /pickups shows them all (staff
    PIN-gated at the worker layer). Needs SHOPIFY_ADMIN_TOKEN. */

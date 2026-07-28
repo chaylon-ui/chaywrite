@@ -159,6 +159,7 @@ export class BinderRoom {
     if ("fullCard" in patch) next.fullCard = !!patch.fullCard;
     if ("siteMode" in patch) next.siteMode = !!patch.siteMode;
     if ("setBrowse" in patch) next.setBrowse = !!patch.setBrowse;
+    if ("setRoll" in patch) next.setRoll = !!patch.setRoll;
     if ("newToday" in patch) {
       const nt = patch.newToday;
       if (!nt || typeof nt !== "object") return "bad newToday";

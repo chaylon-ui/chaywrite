@@ -468,6 +468,8 @@ html.portrait.fullcard .case:not(.sleeves) .tray{--ch:min(calc(var(--cwv)/0.715)
 .setshint{color:#8b8b96;font-size:.85rem}
 .setschips{display:flex;flex-wrap:wrap;gap:.4rem}
 .setsclose{align-self:flex-end}
+.setsrail{display:flex;flex-wrap:wrap;gap:.45rem;justify-content:center}
+.setsrail .setsl{flex:0 0 auto;width:4.2rem}
 /* Phone website view: the case relaxes into a scrollable 3-column grid —
    no page arrows, no shingling, every card full height. */
 html.sitemobile .case{height:100vh}
@@ -635,6 +637,14 @@ html.touch .tqbtn{background:#fffef4;color:#16161c;border:2.5px solid #101010;bo
 html.touch .tcx{background:#ffb9ad;color:#7a1f16;border:2.5px solid #101010;box-shadow:.12rem .16rem 0 #101010}
 html.touch .tkk{font-family:'Bangers',cursive;font-size:1.3rem;background:#fffef4;color:#16161c;border:2.5px solid #101010;border-radius:12px;box-shadow:.12rem .18rem 0 #101010}
 html.touch .tcbox,html.touch .tkbox{border:3px solid #101010;box-shadow:.4rem .55rem 0 rgba(16,16,16,.85)}
+/* Touch keyboards go WIDE with big keys — totem fingers, not mouse pointers. */
+html.touch .tkbox{width:min(97vw,1420px)}
+html.touch .tkk{max-width:7.5rem;height:4.6rem;font-size:1.9rem}
+html.touch .tkq{font-size:1.7rem;min-height:3.6rem}
+html.touch .tkgo{font-size:1.6rem;padding:1rem 2.6rem;background:#c9342b;color:#fff;border-color:#101010;flex:2}
+html.touch .setsbox{max-width:min(96vw,1240px)}
+html.touch .setsbox .tkk{max-width:6.6rem;height:4.1rem;font-size:1.7rem}
+html.touch .setsrow input{font-size:1.5rem;padding:.8rem 1rem}
 html.touch .ttab:active,html.touch .tchip:active,html.touch .tcbtn:active,html.touch .tqbtn:active,html.touch .tcx:active,html.touch .tkk:active,html.touch .tcko:active,html.touch .tclose:active,html.touch .tsbar:active{transform:scale(.92) rotate(-1deg)}
 .tburst.small{width:9.5rem}
 /* "Still there?" countdown before an idle cart clears — comic panel that
@@ -755,7 +765,7 @@ html.portrait .tsteps{grid-template-columns:1fr}
     <div class="tkq"><span id="tkq"></span></div>
     <div id="tkrows"></div>
     <div class="tkres" id="tkres">Results fill the case behind this keyboard as you type.</div>
-    <div class="tkrow2"><button class="tcbtn" id="tkclear">✕ Clear search</button><button class="tcbtn" id="tkdone">Done — browse results</button></div>
+    <div class="tkrow2"><button class="tcbtn" id="tkclear">✕ Clear search</button><button class="tcbtn tkgo" id="tkdone">SEARCH</button></div>
   </div></div>
   <div class="ttmo" id="ttmo"><div class="ttbox">
     <div class="tth">STILL THERE?</div>
@@ -1693,7 +1703,9 @@ function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
    keyboard. Results swap into the case live via the shared search-deck path
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
 let TQ='',TKT=null,TKSEQ=0;
-function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);if(window.REMOTE&&!REM_APPLY)RGO({a:'sopen'});document.getElementById('tkb').classList.add('open');renderTQ();}
+function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);if(window.REMOTE&&!REM_APPLY)RGO({a:'sopen'});
+ if(TQ){TQ='';TKSEQ++;clearTimeout(TKT);} // fresh slate on open — no hunting for Clear (results stay up until they type)
+ document.getElementById('tkb').classList.add('open');renderTQ();}
 /* ---- Browse by set (admin toggle): pick a set, see everything in stock
    from it. Set names ride in the [brackets] of every product title, so a
    bracketed search does the digging; the chips list the sets on screen. */
@@ -1704,20 +1716,40 @@ function SETSOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SETS!',true);
   ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');});}
  __SETS=[...new Set((Array.isArray(CARDS)?CARDS:[]).map(c=>String(c.set||'').trim())
   .filter(x=>x.length>1&&x!=='Dragon Shield'))].slice(0,30);
+ const roll=SETTINGS.setRoll===true; // admin option: A–Z roll instead of typing
  // Touch kiosks have no OS keyboard — deal one into the panel (the website
  // and remote mirrors type with their real keyboards).
- const kb=(window.TOUCH&&!window.SITE&&!window.REMOTE)?`<div class="setskb">${['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
+ const kb=(!roll&&window.TOUCH&&!window.SITE&&!window.REMOTE)?`<div class="setskb">${['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
   .map(r=>'<div class="tkr">'+[...r].map(k=>`<button class="tkk" onclick="SETKEY('${k}')">${k}</button>`).join('')+'</div>').join('')}
   <div class="tkr"><button class="tkk wide" onclick="SETKEY(' ')">space</button><button class="tkk wide" onclick="SETKEY('⌫')">⌫</button></div></div>`:'';
+ const rail=roll?`<div class="setsrail">${[...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map(l=>`<button class="tkk setsl" onclick="SETLETTER('${l}',this)">${l}</button>`).join('')}</div>`:'';
  ov.innerHTML=`<div class="setsbox"><div class="setstitle">BROWSE BY SET</div>
-  <div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="36"${kb?' readonly':''}
-   onkeydown="if(event.key==='Enter')SETGO(this.value)"><button class="slvchip" onclick="SETGO(document.getElementById('setsin').value)">GO</button></div>
-  ${kb}
-  ${__SETS.length?`<div class="setshint">Sets on this page:</div><div class="setschips">${__SETS.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SETS[${i}])">${H(x)}</button>`).join('')}</div>`:''}
+  ${roll?'<div class="setshint">Pick a letter — sets we stock appear below.</div>':`<div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="36"${kb?' readonly':''}
+   oninput="SETSUG(this.value)" onkeydown="if(event.key==='Enter')SETGO(this.value)"><button class="slvchip" onclick="SETGO(document.getElementById('setsin').value)">GO</button></div>`}
+  ${kb}${rail}
+  <div id="setsug">${__SETS.length?`<div class="setshint">Sets on this page:</div><div class="setschips">${__SETS.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SETS[${i}])">${H(x)}</button>`).join('')}</div>`:''}</div>
   <button class="slvchip setsclose" onclick="document.getElementById('setsov').classList.remove('open')">✕ CLOSE</button></div>`;
  ov.classList.add('open');}
 function SETKEY(k){const i=document.getElementById('setsin');if(!i)return;
- if(k==='⌫')i.value=i.value.slice(0,-1);else if(i.value.length<36)i.value+=k;}
+ if(k==='⌫')i.value=i.value.slice(0,-1);else if(i.value.length<36)i.value+=k;
+ SETSUG(i.value);}
+/* Live set-name autocomplete: every keystroke narrows the chips ("A" lists
+   A-sets, "AM" narrows to Amonkhet…) via /setsuggest.json. */
+let SUGT=null,SUGSEQ=0;
+function SETSUG(q,prefixOnly){q=String(q||'').trim();clearTimeout(SUGT);
+ const box=document.getElementById('setsug');if(!box)return;
+ if(!q){box.innerHTML='';return;}
+ box.innerHTML='<div class="setshint">Searching sets…</div>';
+ const seq=++SUGSEQ;
+ SUGT=setTimeout(()=>{fetch('/setsuggest.json?q='+encodeURIComponent(q)).then(r=>r.ok?r.json():null).then(d=>{
+  if(seq!==SUGSEQ)return;const box2=document.getElementById('setsug');if(!box2)return;
+  let sets=(d&&Array.isArray(d.sets))?d.sets:[];
+  if(prefixOnly)sets=sets.filter(x=>x.toLowerCase().startsWith(q.toLowerCase()));
+  window.__SUG=sets;
+  box2.innerHTML=sets.length?`<div class="setschips">${sets.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SUG[${i}])">${H(x)}</button>`).join('')}</div>`
+   :'<div class="setshint">No sets match that yet — keep typing or try another spelling.</div>';
+ }).catch(()=>{if(seq===SUGSEQ){const b=document.getElementById('setsug');if(b)b.innerHTML='<div class="setshint">Could not reach the set list — try again.</div>';}});},250);}
+function SETLETTER(l,el){if(el&&window.TOUCH)comicBurst(el,l,true);SETSUG(l,true);}
 function SETGO(n){n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,36);if(!n)return;
  const ov=document.getElementById('setsov');if(ov)ov.classList.remove('open');
  TQ='['+n+']';renderTQ();TKGO();}
