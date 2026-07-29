@@ -606,6 +606,11 @@ html.touch .tcko{display:block}
 .tkbox{background:rgba(20,20,25,.97);border:1px solid #2e2e38;border-radius:18px;padding:1.1rem 1.2rem;width:min(94vw,860px);display:flex;flex-direction:column;gap:.55rem;box-shadow:0 30px 70px -20px #000}
 .tkq{min-height:3.1rem;background:#0d0d12;border:1px solid #34343e;border-radius:12px;font-size:1.35rem;padding:.6rem 1rem;color:#f0ead8;letter-spacing:.04em}
 .tkq span:empty::before{content:'Type a card name…';color:#565660}
+.tkb.prod .tkq span:empty::before{content:'Type a product name…'} /* shelf tabs sell product, not cards */
+/* Website mode types with the REAL keyboard (physical on desktop, the
+   phone's own on mobile) — a plain input replaces the dealt key grid. */
+.tkq input{width:100%;background:transparent;border:none;outline:none;color:#f0ead8;font:inherit;letter-spacing:inherit;padding:0}
+.tkq input::placeholder{color:#565660}
 .tkq span::after{content:'|';color:#e8b04a;animation:tkblink 1.1s steps(1) infinite}
 @keyframes tkblink{50%{opacity:0}}
 .tkr{display:flex;gap:.45rem;justify-content:center;margin-top:.4rem}
@@ -1726,8 +1731,8 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
     ((SLVALL&&Array.isArray(SLVALL.CATS)&&SLVALL.CATS.length>1)?`<div class="slvbar"><div class="slvgrp" style="flex-wrap:wrap;justify-content:center">${[{k:'all',label:'ALL'},...SLVALL.CATS].map(c=>`<button class="slvchip${SHCAT===c.k?' on':''}" onclick="SHCATSET('${H(c.k)}',this)">${H(String(c.label||c.k).toUpperCase())}</button>`).join('')}</div></div>`:'')
     +`<div class="slvbar"><div class="slvgrp">${[['feed','NEWEST'],['pd','PRICE ↓'],['pa','PRICE ↑'],['az','A–Z'],['za','Z–A']].map(([v,l])=>`<button class="slvchip${SHSORT===v?' on':''}" onclick="SHSET('${v}',this)">${l}</button>`).join('')}</div></div>`):'')
   +srtbar
-  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'')
-  +(s.setBrowse===true?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:'');
+  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):H('Search for a '+IWone()+'…')}</span></button>`:'')
+  +((s.setBrowse===true&&!(s.sleevesActive||s.shelfActive))?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:'');
  const sc=document.getElementById('tscroll');
  sc.addEventListener('scroll',TSCROLLUPD,{passive:true});
  const cur=sc.querySelector('.ttab.on'); // keep the active tab in view
@@ -1751,9 +1756,28 @@ function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
    keyboard. Results swap into the case live via the shared search-deck path
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
 let TQ='',TKT=null,TKSEQ=0;
+/* Shelf tabs (sleeves, board games, Warhammer) sell product, not cards. */
+function NONCARD(){return !!(SETTINGS.sleevesActive||SETTINGS.shelfActive);}
+/* The dealt on-screen keys are for store totems only. The website — desktop
+   or phone — types with its real keyboard into a plain input instead. */
+function renderTKB(){const rows=document.getElementById('tkrows'),qw=document.querySelector('#tkb .tkq');
+ if(!rows||!qw)return;
+ if(window.SITE&&!window.REMOTE){
+  rows.innerHTML='';
+  if(!document.getElementById('tkqin'))qw.innerHTML=`<input id="tkqin" type="search" autocomplete="off" autocapitalize="off" maxlength="40"
+   oninput="TQ=this.value;clearTimeout(TKT);TKT=setTimeout(TKGO,350)" onkeydown="if(event.key==='Enter'){clearTimeout(TKT);TKGO();}">`;
+  document.getElementById('tkqin').placeholder='Type a '+IWone()+' name…';
+ }else if(!rows.querySelector('.tkk')){
+  qw.innerHTML='<span id="tkq"></span>';
+  rows.innerHTML=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
+   .map(r=>'<div class="tkr">'+[...r].map(k=>`<button class="tkk" onclick="TKEY('${k}')">${k}</button>`).join('')+'</div>').join('')
+   +`<div class="tkr"><button class="tkk wide" onclick="TKEY(' ')">space</button><button class="tkk wide" onclick="TKEY('⌫')">⌫</button></div>`;}}
 function TSEARCHOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SEARCH!',true);if(window.REMOTE&&!REM_APPLY)RGO({a:'sopen'});
  if(TQ){TQ='';TKSEQ++;clearTimeout(TKT);} // fresh slate on open — no hunting for Clear (results stay up until they type)
- document.getElementById('tkb').classList.add('open');renderTQ();}
+ renderTKB();
+ document.getElementById('tkb').classList.toggle('prod',NONCARD());
+ document.getElementById('tkb').classList.add('open');renderTQ();
+ const inp=document.getElementById('tkqin');if(inp){inp.value=TQ;setTimeout(()=>{try{inp.focus();}catch(e){}},60);}}
 /* ---- Browse by set (admin toggle): pick a set, see everything in stock
    from it. Set names ride in the [brackets] of every product title, so a
    bracketed search does the digging; the chips list the sets on screen. */
@@ -1810,7 +1834,8 @@ function TSEARCHCLOSE(){document.getElementById('tkb').classList.remove('open');
 function TSEARCHCLEAR(){TQ='';TKSEQ++;clearTimeout(TKT);renderTQ();
  document.getElementById('tkres').textContent='Results fill the case behind this keyboard as you type.';
  endSearchDeck();TSEARCHCLOSE();renderTouchTabs(SETTINGS);}
-function renderTQ(){const el=document.getElementById('tkq');if(el)el.textContent=TQ;}
+function renderTQ(){const el=document.getElementById('tkq');if(el)el.textContent=TQ;
+ const i=document.getElementById('tkqin');if(i&&i.value!==TQ)i.value=TQ;}
 function TKEY(k){if(window.REMOTE&&!REM_APPLY)RGO({a:'key',k},2500);
  if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
  renderTQ();clearTimeout(TKT);TKT=setTimeout(TKGO,350);}
@@ -1821,7 +1846,7 @@ function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres
  fetch('/search.json?q='+encodeURIComponent(q)+((SETMODE&&GAME)?'&g='+encodeURIComponent(GAME):'')).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==TKSEQ||!d)return;
   const n=Array.isArray(d.cards)?d.cards.length:0;
-  res.textContent=n?(n+' card'+(n===1?'':'s')+' found — tap Done to browse'):('Nothing in stock matches “'+q+'”');
+  res.textContent=n?(n+' '+(n===1?'card':'cards')+' found'+(window.SITE?'':' — tap Done to browse')):('Nothing in stock matches “'+q+'”');
   if(n){startSearchDeck({q,cards:d.cards,colorNames:d.colorNames});renderTouchTabs(SETTINGS);}
  }).catch(()=>{if(seq===TKSEQ)res.textContent='Search hiccuped — keep typing to retry.';});}
 /* Send the totem's cart to the counter: the room turns it into a Shopify
@@ -1895,9 +1920,7 @@ function initTouch(){if(TINITED)return;TINITED=true;
  document.getElementById('tcCounter').onclick=function(){comicBurst(this,'SENT!');if(window.REMOTE){RSEND({a:'counter'});return;}TCOUNTER();};
  document.getElementById('tcClose').onclick=()=>{if(window.REMOTE)RGO({a:'chkclose'});document.getElementById('tcheck').classList.remove('open');};
  document.getElementById('tcClear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE)RGO({a:'clearcart'});cart=[];updateCart();document.getElementById('tcheck').classList.remove('open');};
- document.getElementById('tkrows').innerHTML=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm']
-  .map(r=>'<div class="tkr">'+[...r].map(k=>`<button class="tkk" onclick="TKEY('${k}')">${k}</button>`).join('')+'</div>').join('')
-  +`<div class="tkr"><button class="tkk wide" onclick="TKEY(' ')">space</button><button class="tkk wide" onclick="TKEY('⌫')">⌫</button></div>`;
+ renderTKB();
  document.getElementById('tkclear').onclick=function(){comicBurst(this,'POOF!',true);if(window.REMOTE)RGO({a:'sclear'});TSEARCHCLEAR();};
  document.getElementById('tkdone').onclick=function(){comicBurst(this,'SHOW ME!',true);if(window.REMOTE)RGO({a:'sdone'});TSEARCHCLOSE();};
  document.getElementById('tkb').addEventListener('click',ev=>{if(ev.target.id==='tkb'){if(window.REMOTE)RGO({a:'sdone'});TSEARCHCLOSE();}});
@@ -1998,9 +2021,9 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  const shTab=s.shelfActive?((s.boardTab&&s.collection===s.boardTab.collection)?s.boardTab:(s.whTab&&s.collection===s.whTab.collection)?s.whTab:null):null;
  cs.classList.toggle('plainshelf',!!(shTab&&shTab.plain)&&!srch);
  cs.classList.toggle('slvwhite',!!s.sleeveWhiteBg);
- // What the stock is called on this screen ("cards" unless admin says
- // otherwise — a Warhammer or board-game screen might say "products").
- const iw=(String(s.itemWord||'').trim()||'cards').slice(0,20);
+ // What the stock is called on this screen: admin override first, then
+ // automatic by tab — card tabs say "cards", shelf/sleeve tabs "products".
+ const iw=(String(SETTINGS.itemWord||'').trim()||((SETTINGS.sleevesActive||SETTINGS.shelfActive)?'products':'cards')).slice(0,20);
  if(iw!==ITEMWORD){ITEMWORD=iw;
   const tlp=document.querySelector('#tload .tlp');if(tlp)tlp.textContent='Grabbing the '+iw+'…';
   const tss=document.querySelector('#tshow .tssub');if(tss)tss.textContent='This screen is a live showcase of the '+iw+' we stock — browse it, build a cart, take it home.';
