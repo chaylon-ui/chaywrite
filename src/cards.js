@@ -244,6 +244,7 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
       count: built.cards.length,
       game: built.game,
       colorNames: built.colorNames,
+      cats: built.cats,
       cards: built.cards,
     },
     { headers: { "cache-control": `public, max-age=${TTL_S}` } },
@@ -770,23 +771,26 @@ function buildShowcase(products) {
    trimmed of the shouty "DRAGON SHIELD SLEEVES … 100CT" wrapper. */
 function buildSleeves(products) {
   const seen = new Set();
-  const cards = [];
+  let cards = [];
   for (const p of products) {
     const eligible = (p.variants || []).filter((v2) => v2.available && +v2.price > 0 && +v2.price < MAX_PRICE);
     if (eligible.length === 0) continue;
     const v = eligible.reduce((a, b) => (+b.price < +a.price ? b : a)); // lead with the cheapest in-stock option
     const title = String(p.title || "");
+    const gw = /games\s*workshop/i.test(String(p.vendor || ""));
+    const cat = gw ? gwCat(title, p.product_type) : null;
     // Filter facts straight from the title: pack count ("100CT", "60CT",
     // tolerating the odd "100C" typo), Japanese small-size line, and the
-    // finish family. DUAL MATTE must be tested before MATTE.
-    const ctm = title.match(/\b(\d{2,3})\s*c\.?t?\b/i);
+    // finish family. DUAL MATTE must be tested before MATTE. GW product
+    // skips all this — its titles carry game systems, not sleeve specs.
+    const ctm = gw ? null : title.match(/\b(\d{2,3})\s*c\.?t?\b/i);
     const ct = ctm ? ctm[1] : null;
-    const jp = /japanese/i.test(title);
-    const fin = /dual\b[\s\S]*\bmatte|dual\s+matte/i.test(title) ? "dual"
+    const jp = !gw && /japanese/i.test(title);
+    const fin = gw ? "" : /dual\b[\s\S]*\bmatte|dual\s+matte/i.test(title) ? "dual"
       : /brushed/i.test(title) ? "brushed"
       : /matte/i.test(title) ? "matte"
       : /classic/i.test(title) ? "classic" : "";
-    const raw = title
+    const raw = (gw ? gwTrimTitle(title) : title)
       .replace(/^dragon\s*shield\s*(sleeves)?\s*/i, "")
       .replace(/\bjapanese\s*/gi, "") // the size switch says it; keep the sticker short
       .replace(/\b\d{2,3}\s*c\.?t?\b\.?/gi, "") // count moves to its own sticker
@@ -804,11 +808,13 @@ function buildSleeves(products) {
       jp,
       fin,
       color: "C",
+      cat: cat || undefined,
       // Generic shelves (board games, Warhammer) reuse this builder — only
-      // actual Dragon Shield product gets the brand as its set line.
-      set: /dragon\s*shield/i.test(title) ? "Dragon Shield" : "",
+      // actual Dragon Shield product gets the brand as its set line; GW
+      // product shows its game system (the cue card's second line).
+      set: gw ? (GW_LABEL[cat] || "") : /dragon\s*shield/i.test(title) ? "Dragon Shield" : "",
       game: "sleeves",
-      type: "Card Sleeves",
+      type: gw ? "Warhammer" : "Card Sleeves",
       price: (+v.price).toFixed(2),
       foil: false,
       condition: "",
@@ -818,7 +824,71 @@ function buildSleeves(products) {
       url: "https://exorgames.com/products/" + p.handle,
     });
   }
+  // Warhammer wall: group by game system so all the Kill Team boxes sit
+  // together (stable — the feed's newest-first order survives inside each
+  // group), and hand the kiosk the list of groups present for filter chips.
+  if (cards.some((c) => c.cat)) {
+    const ord = (c) => { const i = GW_ORDER.indexOf(c.cat || "other"); return i < 0 ? GW_ORDER.length : i; };
+    cards = cards.map((c, i) => [c, i]).sort((a, b) => ord(a[0]) - ord(b[0]) || a[1] - b[1]).map((x) => x[0]);
+    const cats = GW_ORDER.filter((k) => cards.some((c) => c.cat === k)).map((k) => ({ k, label: GW_LABEL[k] }));
+    return { game: "sleeves", colorNames: {}, cards, cats };
+  }
   return { game: "sleeves", colorNames: {}, cards };
+}
+
+/* ---- Games Workshop shelf lines ----
+   The store types nearly everything "Tabletop Wargames", so the game system
+   lives in the TITLE. Checked in order: tools before paints (brushes and
+   painting handles sit inside the Citadel/Warhammer Colour range), books
+   before systems (Black Library novels mention 40K/AoS), Kill Team before
+   40K (its titles start "WARHAMMER 40,000 KILL TEAM"). */
+const GW_ORDER = ["w40k", "aos", "killteam", "heresy", "necromunda", "bloodbowl", "oldworld", "middle", "figures", "books", "paints", "tools", "other"];
+const GW_LABEL = { w40k: "40K", aos: "Age of Sigmar", killteam: "Kill Team", heresy: "Horus Heresy", necromunda: "Necromunda",
+  bloodbowl: "Blood Bowl", oldworld: "The Old World", middle: "Middle-earth", figures: "Figures", books: "Books", paints: "Paints", tools: "Tools", other: "More" };
+const GW_TOOLS_RE = /\btool\s*(set|kit)s?\b|toolkit|painting\s+handle|dry\s*brush|\bbrush(es)?\b|clipper|mould\s+line|spray\s+stick|hobby\s+knife|emery|water\s+pot|super\s*glue|plastic\s+glue/i;
+const GW_CATS = [
+  ["tools", GW_TOOLS_RE],
+  ["books", /paperback|hardback|\((?:pb|hb)\)|black\s+library|omnibus\b|novel\b/i],
+  ["paints", /warhammer\s+colou?r|citadel|^\s*(?:base|layer|contrast|shade|technical|air|dry)\b\s*:?|\b1[28]\s*ml\b|\bspray\b|paint/i],
+  ["killteam", /kill\s*team/i],
+  ["necromunda", /necromunda/i],
+  ["heresy", /horus\s+heresy|legions\s+imperialis/i],
+  ["bloodbowl", /blood\s*bowl/i],
+  ["oldworld", /old\s+world/i],
+  ["aos", /age\s+of\s+sigmar|warcry|underworlds/i],
+  ["middle", /middle.?earth|lord\s+of\s+the\s+rings/i],
+  ["w40k", /warhammer\s*40|40[.,]000|\b40k\b/i],
+];
+function gwCat(title, ptype) {
+  const pt = String(ptype || "");
+  if (/figure/i.test(pt)) return "figures"; // Joy Toy collectibles
+  if (/^paint/i.test(pt)) return GW_TOOLS_RE.test(title) ? "tools" : "paints";
+  if (/^book/i.test(pt)) return "books";
+  for (const [k, re] of GW_CATS) if (re.test(title)) return k;
+  return "other";
+}
+/* Peel the system wrapper off the front of GW titles — the shelf tab and
+   category chip already say it. "WARHAMMER 40,000 KILL TEAM: LEGIONARIES"
+   sheds two layers and stickers as just "Legionaries". */
+const GW_STRIP = [
+  /^\s*warhammer\s*[:,–-]?\s+/i,
+  /^\s*(?:the\s+)?(?:40[.,]?\s*000|40k)\s*[:–-]?\s*/i,
+  /^\s*(?:the\s+)?age\s+of\s+sigmar\s*[:–-]?\s*/i,
+  /^\s*(?:the\s+)?horus\s+heresy(?:\s+saga)?\s*[:–-]?\s*/i,
+  /^\s*(?:the\s+)?old\s+world\s*[:–-]?\s*/i,
+  /^\s*black\s+library\s*[:–-]?\s*/i,
+  /^\s*(?:kill\s*team|necromunda|blood\s*bowl|warcry|underworlds|legions\s+imperialis)\s*[:–-]?\s*/i,
+  /^\s*(?:citadel|warhammer)?\s*colou?r\s*[:–-]?\s*/i,
+  /^\s*citadel\s*[:–-]?\s+/i,
+];
+function gwTrimTitle(title) {
+  let t = String(title || "");
+  for (let pass = 0; pass < 6; pass++) {
+    const before = t;
+    for (const re of GW_STRIP) t = t.replace(re, "");
+    if (t === before) break;
+  }
+  return t.trim() || title;
 }
 
 function fnv(s) {

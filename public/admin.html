@@ -73,6 +73,8 @@ a.tvlink:hover{color:var(--ember)}
     <a class="tvlink" id="remoteLink" target="_blank" style="margin:0 0 1rem;padding:.55rem;border:1px solid var(--line);border-radius:10px;color:var(--ember)">🖥 Watch &amp; control this screen live ↗</a>
     <label for="header">Header line (shown on the TV)</label>
     <input id="header" type="text" maxlength="200" placeholder="Featured Singles · New Arrivals over $10">
+    <label for="itemWord">What the stock is called on this screen (plural — used in “Grabbing the cards…”, “ADD cards to a cart”)</label>
+    <input id="itemWord" type="text" maxlength="20" placeholder="cards">
 
     <!-- One row per game: carry it on THIS TV (checkbox) + the collection it
          pulls from. Sports lanes group by Rookie/Auto/Young Guns from titles;
@@ -170,6 +172,7 @@ a.tvlink:hover{color:var(--ember)}
       <div class="row" style="margin-top:.6rem"><input id="bgEnabled" type="checkbox"><label for="bgEnabled">Show a “Board Games” shelf tab — newest first, with NEWEST / PRICE / A–Z sort chips for customers</label></div>
       <label for="bgCollection">Collection handle</label>
       <input id="bgCollection" type="text" placeholder="board-games">
+      <div class="row" style="margin-top:.4rem"><input id="bgPlain" type="checkbox"><label for="bgPlain">Plain look: hide the handwritten name stickers and the taped shopkeeper note on this shelf</label></div>
       <div class="icorow" data-icon="board"></div>
     </div>
     <div class="group">
@@ -177,6 +180,8 @@ a.tvlink:hover{color:var(--ember)}
       <div class="row" style="margin-top:.6rem"><input id="whEnabled" type="checkbox"><label for="whEnabled">Show a “Warhammer” shelf tab (All Games Workshop) — newest first, with NEWEST / PRICE / A–Z sort chips</label></div>
       <label for="whCollection">Collection handle</label>
       <input id="whCollection" type="text" placeholder="gamesworkshop">
+      <div class="row" style="margin-top:.4rem"><input id="whPlain" type="checkbox"><label for="whPlain">Plain look: hide the handwritten name stickers and the taped shopkeeper note on this shelf</label></div>
+      <div class="hint" style="margin-top:.3rem">The Warhammer wall auto-groups by game system (40K, Age of Sigmar, Kill Team, Horus Heresy, Necromunda, Blood Bowl, The Old World, Books, Paints, Tools) with big filter chips on touch screens.</div>
       <div class="icorow" data-icon="wh"></div>
     </div>
 
@@ -321,7 +326,7 @@ document.querySelectorAll('.icorow').forEach(row=>{const key=row.dataset.icon;
  clr.onclick=()=>{ICONS[key]='';row.refresh();};});
 function refreshIconRows(){document.querySelectorAll('.icorow').forEach(r=>r.refresh&&r.refresh());}
 async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json();
-  $('header').value=s.header||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('counterEnabled').checked=s.counterEnabled!==false;$('fullCard').checked=!!s.fullCard;$('cartMaxOn').checked=(+s.cartMax||0)>0;$('cartMaxN').value=(+s.cartMax||0)>0?String(s.cartMax):'';$('sleeveWhiteBg').checked=!!s.sleeveWhiteBg;$('siteMode').checked=!!s.siteMode;$('setBrowse').checked=!!s.setBrowse;$('setRoll').checked=!!s.setRoll;$('kbPos').value=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';$('holiday').value=s.holiday==='christmas'?'christmas':'none';
+  $('header').value=s.header||'';$('itemWord').value=s.itemWord||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('counterEnabled').checked=s.counterEnabled!==false;$('fullCard').checked=!!s.fullCard;$('cartMaxOn').checked=(+s.cartMax||0)>0;$('cartMaxN').value=(+s.cartMax||0)>0?String(s.cartMax):'';$('sleeveWhiteBg').checked=!!s.sleeveWhiteBg;$('siteMode').checked=!!s.siteMode;$('setBrowse').checked=!!s.setBrowse;$('setRoll').checked=!!s.setRoll;$('kbPos').value=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';$('holiday').value=s.holiday==='christmas'?'christmas':'none';
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntStarwars').checked=!!nt.starwars;$('ntOnepiece').checked=!!nt.onepiece;$('ntRiftbound').checked=!!nt.riftbound;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
   const sv=s.sleevesTab||{};$('svEnabled').checked=!!sv.enabled;$('svCollection').value=sv.collection||'all-dragon-shield-sleeves';
@@ -337,7 +342,7 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
     $(g.input).value=(t&&t.collection)||g.fallback;
     $(g.enable).checked=t?t.enabled!==false:g.defOn;
     ICONS[g.game]=gi[g.game]||(t&&t.icon)||'';});
-  ICONS.showcase=gi.showcase||sc.icon||'';ICONS.sleeves=gi.sleeves||sv.icon||'';const bt=s.boardTab||{};$('bgEnabled').checked=!!bt.enabled;$('bgCollection').value=bt.collection||'board-games';ICONS.board=gi.board||bt.icon||'';const wt=s.whTab||{};$('whEnabled').checked=!!wt.enabled;$('whCollection').value=wt.collection||'gamesworkshop';ICONS.wh=gi.wh||wt.icon||'';
+  ICONS.showcase=gi.showcase||sc.icon||'';ICONS.sleeves=gi.sleeves||sv.icon||'';const bt=s.boardTab||{};$('bgEnabled').checked=!!bt.enabled;$('bgCollection').value=bt.collection||'board-games';$('bgPlain').checked=!!bt.plain;ICONS.board=gi.board||bt.icon||'';const wt=s.whTab||{};$('whEnabled').checked=!!wt.enabled;$('whCollection').value=wt.collection||'gamesworkshop';$('whPlain').checked=!!wt.plain;ICONS.wh=gi.wh||wt.icon||'';
   refreshIconRows();
 }catch(e){}}
 async function post(patch){const r=await fetch('/admin/api?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
@@ -358,10 +363,10 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,enabled:$(g.enable).checked,
     collection:($(g.input).value.trim().toLowerCase())||g.fallback,icon:ICONS[g.game]||''}));
   if(!tabs.some(t=>t.enabled)){$('saveMsg').textContent='Enable at least one game';$('saveMsg').className='msg bad';return;}
-  const patch={header:$('header').value,tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
+  const patch={header:$('header').value,itemWord:$('itemWord').value.trim(),tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
     perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,counterEnabled:$('counterEnabled').checked,fullCard:$('fullCard').checked,cartMax:($('cartMaxOn').checked?Math.max(1,Math.min(999,parseInt($('cartMaxN').value,10)||10)):0),sleeveWhiteBg:$('sleeveWhiteBg').checked,siteMode:$('siteMode').checked,setBrowse:$('setBrowse').checked,setRoll:$('setRoll').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,starwars:$('ntStarwars').checked,onepiece:$('ntOnepiece').checked,riftbound:$('ntRiftbound').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase',icon:ICONS.showcase||''},
-    sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},boardTab:{enabled:$('bgEnabled').checked,label:'Board Games',collection:($('bgCollection').value.trim().toLowerCase())||'board-games',icon:ICONS.board||''},whTab:{enabled:$('whEnabled').checked,label:'Warhammer',collection:($('whCollection').value.trim().toLowerCase())||'gamesworkshop',icon:ICONS.wh||''},
+    sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},boardTab:{enabled:$('bgEnabled').checked,label:'Board Games',collection:($('bgCollection').value.trim().toLowerCase())||'board-games',icon:ICONS.board||'',plain:$('bgPlain').checked},whTab:{enabled:$('whEnabled').checked,label:'Warhammer',collection:($('whCollection').value.trim().toLowerCase())||'gamesworkshop',icon:ICONS.wh||'',plain:$('whPlain').checked},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),
     attractHome:$('attractHome').value,attractShow:$('attractShow').checked,

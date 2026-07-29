@@ -241,6 +241,9 @@ export class BinderRoom {
     if (!patch || typeof patch !== "object") return "empty";
     const next = { ...this.settings };
     if ("header" in patch) next.header = String(patch.header).slice(0, 200);
+    // What this screen calls its stock ("cards" when blank — a Warhammer or
+    // board-game screen might say "products"). Plain word, no markup.
+    if ("itemWord" in patch) next.itemWord = String(patch.itemWord).replace(/[^\p{L}\p{N} '&-]/gu, "").trim().slice(0, 20);
     if ("collection" in patch) {
       const c = String(patch.collection).trim().toLowerCase();
       if (!HANDLE_RE.test(c)) return "bad collection handle";
@@ -307,7 +310,7 @@ export class BinderRoom {
       if (!tb || typeof tb !== "object") return "bad " + key;
       const c = String(tb.collection || defColl).trim().toLowerCase();
       if (!HANDLE_RE.test(c)) return "bad " + key + " collection handle";
-      next[key] = { enabled: !!tb.enabled, label: String(tb.label || defLabel).slice(0, 24).trim() || defLabel, collection: c, icon: cleanIcon(tb.icon) };
+      next[key] = { enabled: !!tb.enabled, label: String(tb.label || defLabel).slice(0, 24).trim() || defLabel, collection: c, icon: cleanIcon(tb.icon), plain: !!tb.plain };
       if (!next[key].enabled && next.shelfActive && next.collection === next[key].collection) {
         const home = (Array.isArray(next.tabs) && next.tabs[0]) || null;
         if (home) { next.collection = home.collection; next.theme = home.theme; next.game = home.game; }

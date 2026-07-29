@@ -44,9 +44,16 @@ export const DEFAULT_SETTINGS = {
   // shots on black shelves, title + price stickers) for non-card lines.
   // Collections are sorted newest-first in Shopify, so the default order is
   // date; customers get NEWEST / PRICE / A-Z sort chips on screen.
-  boardTab: { enabled: false, label: "Board Games", collection: "board-games" },
-  whTab: { enabled: false, label: "Warhammer", collection: "gamesworkshop" },
+  // `plain` drops the handwritten name/count stickers and the taped
+  // shopkeeper note on that shelf (admin toggle, per tab).
+  boardTab: { enabled: false, label: "Board Games", collection: "board-games", plain: false },
+  whTab: { enabled: false, label: "Warhammer", collection: "gamesworkshop", plain: false },
   shelfActive: false, // true while a generic shelf tab is on screen
+
+  // What this screen calls its stock in on-screen copy ("Grabbing the
+  // cards…", "ADD cards to a cart"). Blank = "cards"; a Warhammer or
+  // board-game screen might say "products".
+  itemWord: "",
 
   // Touch kiosks: expanded rows — the shelves stop shingling so the WHOLE
   // card (text box included) is visible without tapping. Fewer cards per

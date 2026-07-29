@@ -443,6 +443,10 @@ html.portrait .case.sleeves .tray{--ch:min(calc(var(--cwv)/0.715),calc(var(--hbu
 /* Admin toggle: white backdrop behind each sleeve shot, for product photos
    that aren't transparent cut-outs (they'd otherwise float as white slabs). */
 .case.sleeves.slvwhite .tray .card .scan{background:#fff;border-radius:8px;padding:3% 2%;filter:none;box-shadow:0 5px 10px rgba(0,0,0,.5)}
+/* Admin toggle (per shelf tab): plain look — no handwritten name/count
+   stickers on the shelves, no taped shopkeeper note over the preview. */
+.case.sleeves.plainshelf .tray .card .slname,.case.sleeves.plainshelf .tray .card .slct{display:none}
+.case.sleeves.plainshelf .zbub{display:none!important}
 /* Sleeve wall filter chips (touch kiosks) — size switch, finish, pack count. */
 .slvbar{display:flex;flex-wrap:wrap;gap:.3rem .35rem;justify-content:center;margin-top:.45rem;max-width:96vw}
 .slvchip{font-family:'Bangers','Comic Sans MS','Chalkboard SE',cursive;font-size:.92rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2px solid #101010;border-radius:11px;box-shadow:.12rem .16rem 0 #101010;padding:.32rem .68rem;cursor:pointer}
@@ -784,9 +788,9 @@ html.portrait .tsteps{grid-template-columns:1fr}
     <div class="tshead">EVERY SINGLE, ONE TAP AWAY!</div>
     <div class="tssub">This screen is a live showcase of the cards we stock — browse it, build a cart, take it home.</div>
     <div class="tsteps">
-      <div class="tstep"><span class="tsemoji">👆</span><span><b>TAP</b> any card for a closer look</span></div>
+      <div class="tstep"><span class="tsemoji">👆</span><span><b>TAP</b> anything for a closer look</span></div>
       <div class="tstep"><span class="tsemoji">🔍</span><span><b>SEARCH</b> everything we stock</span></div>
-      <div class="tstep"><span class="tsemoji">🛒</span><span><b>ADD</b> cards to a cart, right here</span></div>
+      <div class="tstep"><span class="tsemoji">🛒</span><span id="tsadd"><b>ADD</b> cards to a cart, right here</span></div>
       <div class="tstep"><span class="tsemoji">📲</span><span><b>CHECK OUT</b> on your phone — or send it to the counter!</span></div>
     </div>
     <div class="tstouch"><span class="tsfinger">👇</span> TOUCH THE SCREEN TO START</div>
@@ -880,7 +884,7 @@ if(!window.REMOTE&&!window.SITE){
    document.documentElement.requestFullscreen({navigationUI:'hide'}).catch(()=>{});}catch(e){}},{capture:true});
 }
 if(window.TOUCH)document.documentElement.classList.add('touch');
-window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
+window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&d.cards&&d.cards.length){d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;d.cards.CATS=d.cats;window.BINDER_CARDS=d.cards;window.BINDER_GAME=d.game;window.BINDER_VERSION=d.version;}return null;}).catch(()=>null);
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
 <script>
@@ -919,16 +923,22 @@ function slvView(){const src=SLVALL||[];const f=SLVF;
   :src.slice();
  // Known finishes lead; anything the title doesn't identify sorts to the end.
  out=out.filter(c=>c.fin).concat(out.filter(c=>!c.fin));
- // Generic shelves (board games, Warhammer): customer sort chips. 'feed'
- // keeps the collection's own order (newest first).
- if(SETTINGS.shelfActive&&SHSORT!=='feed'){const p=x=>parseFloat(x.price)||0;
-  if(SHSORT==='pd')out.sort((a,b)=>p(b)-p(a));
-  else if(SHSORT==='pa')out.sort((a,b)=>p(a)-p(b));
-  else if(SHSORT==='az')out.sort((a,b)=>a.name.localeCompare(b.name));
-  else if(SHSORT==='za')out.sort((a,b)=>b.name.localeCompare(a.name));}
- out.COLOR_NAME=src.COLOR_NAME;out.GAME='sleeves';out.__slvView=true;return out;}
-let SHSORT='feed';
+ // Generic shelves (board games, Warhammer): category chips cut the wall
+ // down to one game system; sort chips reorder. 'feed' keeps the deck's own
+ // order (newest first, already grouped by system server-side).
+ if(SETTINGS.shelfActive){
+  if(SHCAT!=='all')out=out.filter(c=>(c.cat||'other')===SHCAT);
+  if(SHSORT!=='feed'){const p=x=>parseFloat(x.price)||0;
+   if(SHSORT==='pd')out.sort((a,b)=>p(b)-p(a));
+   else if(SHSORT==='pa')out.sort((a,b)=>p(a)-p(b));
+   else if(SHSORT==='az')out.sort((a,b)=>a.name.localeCompare(b.name));
+   else if(SHSORT==='za')out.sort((a,b)=>b.name.localeCompare(a.name));}}
+ out.COLOR_NAME=src.COLOR_NAME;out.GAME='sleeves';out.CATS=src.CATS;out.__slvView=true;return out;}
+let SHSORT='feed',SHCAT='all';
 function SHSET(v,el){if(el&&window.TOUCH)comicBurst(el,'SORTED!',true);SHSORT=v;
+ if(SLEEVES()){unzoom();selected=null;applyCards(slvView());draw();}
+ if(window.TOUCH)renderTouchTabs(SETTINGS);}
+function SHCATSET(v,el){if(el&&window.TOUCH)comicBurst(el,'FILTERED!',true);SHCAT=v;
  if(SLEEVES()){unzoom();selected=null;applyCards(slvView());draw();}
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 function SLVSET(k,v,el){if(el&&window.TOUCH)comicBurst(el,'FILTERED!',true);
@@ -990,7 +1000,7 @@ function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
   variantId:String(v.variantId||'').replace(/\D/g,'')||null,
   price:money(v.price),foil:!!v.foil,
   condition:String(v.condition||'').slice(0,60)}:null).filter(v=>v&&v.variantId):null;
- return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),setq:String(d.setq||'').slice(0,12)||undefined,type:String(d.type||'').slice(0,70),
+ return {name:String(d.name).slice(0,140),set:String(d.set||'').slice(0,90),setq:String(d.setq||'').slice(0,12)||undefined,cat:String(d.cat||'').slice(0,16)||undefined,type:String(d.type||'').slice(0,70),
   color:(ART[d.color]?d.color:'C'),price:money(d.price),foil:!!d.foil,
   game:CARD_GAMES.includes(d.game)?d.game:null,
   condition:String(d.condition||'').slice(0,60),
@@ -1001,6 +1011,10 @@ function sanitizeCard(d){if(!d||typeof d!=='object'||!d.name)return null;
    own game (cards.json carries it) — mixed decks (search, Showcase) used to
    caption MTG cards "Holo" whenever the TV sat on the Pokémon tab. */
 let GAME='mtg';
+/* What this screen calls its stock — admin can override "cards" per screen
+   (a Warhammer or board-game display might say "products" or "minis"). */
+let ITEMWORD='cards';
+const IWone=()=>ITEMWORD.replace(/s$/i,'')||ITEMWORD;
 const CARD_GAMES=['mtg','pokemon','yugioh','starwars','onepiece','riftbound','hockey','basketball'];
 function cardGame(c){return (c&&CARD_GAMES.includes(c.game))?c.game:GAME}
 function foilWordFor(c){return cardGame(c)==='pokemon'?'Holo':'foil'}
@@ -1187,7 +1201,7 @@ function draw(){const inner=document.getElementById('caseInner');inner.innerHTML
    in as a cropped copy; results cache by URL. Shots that are already tight,
    fail to load, or trim implausibly small are left untouched. ---- */
 const SLVTRIMC=new Map();
-function SLVUNIFY(root){root.querySelectorAll('.tray .card img.scan').forEach(img=>{
+function SLVUNIFY(root){root.querySelectorAll('img.scan').forEach(img=>{
  const orig=img.dataset.slvorig||img.src;
  const hit=SLVTRIMC.get(orig);
  if(hit){if(hit!=='skip'){img.dataset.slvorig=orig;img.src=hit;}return;}
@@ -1252,19 +1266,23 @@ function flagFlat(zc,url){
   FLATIMG[url]=flat;done(flat);};
  im.onerror=()=>{FLATIMG[url]=false;};
  im.src=url;}
-/* The shopkeeper pitches accessories differently than singles. */
+/* The shopkeeper pitches accessories differently than singles — and general
+   shelf stock (board games, Warhammer) differently than sleeves. */
 const SLEEVE_BUBS=["Naked cards?! Grab {card} and sleeve 'em before you wreck 'em!",
  "Treat the deck to {card} — scuffed corners don't win tournaments!",
  "{card}: fresh armor for the deck. Your rares will thank you!"];
+const SHELF_BUBS=["{card} — straight off the shelf and onto the table!",
+ "Game night upgrade detected: {card}!",
+ "{card}: staff approved, table tested!"];
 function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementById('ztvc');
  const sleevy=(c.game==='sleeves'||SLEEVES()); // accessories: no top-loader, no foil/condition talk
  zc.className='zc'+(c.foil?' foil':'')+(TOPLOAD&&!sleevy?' intl':'');
  if(window.TOUCH&&!ZKEEP){ZCARD=c;ZVAR=null;} // remember what's featured so the action row can re-price it
  document.body.classList.add('zopen'); // pause background effects while previewing
  zc.querySelectorAll('.card-frame,.ptag,.foil-badge,.psticker,.fsticker,.csticker,.esl,.oil,.scan,.emblbl,.slname,.slct').forEach(e=>e.remove());
- if(c.image){zc.insertAdjacentHTML('afterbegin',`<img class="scan" src="${H(IMGURL(c.image,800))}" alt="">`);
+ if(c.image){zc.insertAdjacentHTML('afterbegin',`<img class="scan"${sleevy?' crossorigin="anonymous"':''} src="${H(IMGURL(c.image,800))}" alt="">`);
   if(/placeholder/i.test(c.image))zc.insertAdjacentHTML('beforeend',`<div class="emblbl"><span>${H(c.name)}</span></div>`);
-  if(sleevy)flagFlat(zc,IMGURL(c.image,800));}
+  if(sleevy){flagFlat(zc,IMGURL(c.image,800));SLVUNIFY(zc);}} // trim the padded shot so the product fills the preview too
  else zc.insertAdjacentHTML('afterbegin',`<div class="card-frame" style="background:${FRAMEBG[c.color]||FRAMEBG.C}"><div class="ct" style="color:${tx(c.color)}"><span>${H(c.name)}</span><span class="pip" style="background:${PIP[c.color]||'#9aa0a8'}"></span></div><div class="cart2" style="background:${ART[c.color]||ART.C}"></div><div class="cty" ${DARK.includes(c.color)?'style="color:#f0ebdf;background:rgba(0,0,0,.28)"':''}>${H(c.type)}</div></div>`);
  /* Phone `select` messages don't carry condition — enrich from the local deck. */
  const full=CARDS.find(x=>x.name===c.name&&(!c.variantId||String(x.variantId)===String(c.variantId)))||{};
@@ -1276,7 +1294,7 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  zc.insertAdjacentHTML('beforeend',`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${cg==='pokemon'?'Holo':'foil'}</span></div>`:''}${cond?`<div class="csticker"><span class="cink">${H(cond)}</span></div>`:''}`);
  document.getElementById('cue').innerHTML=`<div class="cu-name">${H(c.name)}</div>${noTreat?'':`<div class="cu-line">${H(treatment)}</div>`}${cond?`<div class="cu-line">${H(cond)}</div>`:''}<div class="cu-line">${H(c.set||'—')}</div>`;
  /* Comic shopkeeper bubble — one random line per preview, {card} = card name. */
- const bub=document.getElementById('zbub'),msgs=(sleevy?SLEEVE_BUBS:(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[])).map(m=>String(m||'').trim()).filter(Boolean);
+ const bub=document.getElementById('zbub'),msgs=(sleevy?(SETTINGS.shelfActive?SHELF_BUBS:SLEEVE_BUBS):(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[])).map(m=>String(m||'').trim()).filter(Boolean);
  if(msgs.length){const m=msgs[Math.floor(Math.random()*msgs.length)];
   bub.innerHTML=m.split('{card}').map(H).join('<span class="bn">'+H(c.name)+'</span>');
   bub.style.display='';bub.style.animation='none';void bub.offsetWidth;bub.style.animation='';}
@@ -1320,7 +1338,7 @@ function findCard(n){return CARDS.find(c=>c.name===n)}
 function updateCart(){if(typeof MIRRORQ==='function')MIRRORQ();const box=document.getElementById('tvCartItems');box.innerHTML='';cart.forEach(c=>box.insertAdjacentHTML('beforeend',`<span class="chip">${H(c.name)} · $${money(c.price)}</span>`));document.getElementById('tvCartTotal').textContent='$'+cart.reduce((a,c)=>a+(parseFloat(c.price)||0),0).toFixed(2);
  if(window.TOUCH){document.getElementById('tvCart').classList.toggle('hide',cart.length===0);
   const ck=document.getElementById('tcko');
-  ck.textContent='🛒 VIEW CART · '+cart.length+(cart.length===1?' card':' cards');
+  ck.textContent='🛒 VIEW CART · '+cart.length+' '+(cart.length===1?IWone():ITEMWORD);
   if(cart.length>CKLAST){ck.classList.remove('boing');void ck.offsetWidth;ck.classList.add('boing');setTimeout(()=>ck.classList.remove('boing'),650);}
   CKLAST=cart.length;}}
 let CKLAST=0;
@@ -1704,7 +1722,9 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
   +`</div><button class="tsarr tsr" onclick="TSCROLLBY(1)" aria-label="More tabs this way">›</button></div>`
   +slvbar
-  +((s.shelfActive&&!searching)?`<div class="slvbar"><div class="slvgrp">${[['feed','NEWEST'],['pd','PRICE ↓'],['pa','PRICE ↑'],['az','A–Z'],['za','Z–A']].map(([v,l])=>`<button class="slvchip${SHSORT===v?' on':''}" onclick="SHSET('${v}',this)">${l}</button>`).join('')}</div></div>`:'')
+  +((s.shelfActive&&!searching)?(
+    ((SLVALL&&Array.isArray(SLVALL.CATS)&&SLVALL.CATS.length>1)?`<div class="slvbar"><div class="slvgrp" style="flex-wrap:wrap;justify-content:center">${[{k:'all',label:'ALL'},...SLVALL.CATS].map(c=>`<button class="slvchip${SHCAT===c.k?' on':''}" onclick="SHCATSET('${H(c.k)}',this)">${H(String(c.label||c.k).toUpperCase())}</button>`).join('')}</div></div>`:'')
+    +`<div class="slvbar"><div class="slvgrp">${[['feed','NEWEST'],['pd','PRICE ↓'],['pa','PRICE ↑'],['az','A–Z'],['za','Z–A']].map(([v,l])=>`<button class="slvchip${SHSORT===v?' on':''}" onclick="SHSET('${v}',this)">${l}</button>`).join('')}</div></div>`):'')
   +srtbar
   +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):'Search for a card…'}</span></button>`:'')
   +(s.setBrowse===true?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:'');
@@ -1954,7 +1974,7 @@ function refetchCards(){const seq=++CFSEQ;showTload();
  fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==CFSEQ)return; // a newer switch is already in flight — this deck is stale
   hideTload();
-  if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();if(window.TOUCH)renderTouchTabs(SETTINGS);}}).catch(()=>{if(seq===CFSEQ)hideTload();});}
+  if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;d.cards.CATS=d.cats;applyCards(d.cards);draw();if(window.TOUCH)renderTouchTabs(SETTINGS);}}).catch(()=>{if(seq===CFSEQ)hideTload();});}
 function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assign(SETTINGS,s);
  if(s.game&&['mtg','pokemon','yugioh','starwars','onepiece','riftbound'].includes(s.game))GAME=s.game;
  const sub=document.getElementById('subhead');if(sub&&typeof s.header==='string')sub.textContent=s.header;
@@ -1974,7 +1994,18 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('tl',!!s.topLoaders&&!s.sleevesActive&&!s.shelfActive); // shelves never wear top-loaders
  cs.classList.toggle('sleeves',(!!s.sleevesActive||!!s.shelfActive)&&!srch);
  cs.classList.toggle('genshelf',!!s.shelfActive&&!srch); // generic shelf: no Dragon Shield dressing
+ // Per-shelf-tab plain look (admin): no handwritten stickers or taped note.
+ const shTab=s.shelfActive?((s.boardTab&&s.collection===s.boardTab.collection)?s.boardTab:(s.whTab&&s.collection===s.whTab.collection)?s.whTab:null):null;
+ cs.classList.toggle('plainshelf',!!(shTab&&shTab.plain)&&!srch);
  cs.classList.toggle('slvwhite',!!s.sleeveWhiteBg);
+ // What the stock is called on this screen ("cards" unless admin says
+ // otherwise — a Warhammer or board-game screen might say "products").
+ const iw=(String(s.itemWord||'').trim()||'cards').slice(0,20);
+ if(iw!==ITEMWORD){ITEMWORD=iw;
+  const tlp=document.querySelector('#tload .tlp');if(tlp)tlp.textContent='Grabbing the '+iw+'…';
+  const tss=document.querySelector('#tshow .tssub');if(tss)tss.textContent='This screen is a live showcase of the '+iw+' we stock — browse it, build a cart, take it home.';
+  const ads=document.getElementById('tsadd');if(ads)ads.innerHTML='<b>ADD</b> '+H(iw)+' to a cart, right here';
+  updateCart();}
  if(!s.sleevesActive&&window.SLVWAS){SLVF={size:'std',fin:'all',ct:'all'};} // next shopper starts unfiltered
  window.SLVWAS=!!s.sleevesActive;
  const hx=(SETTINGS.holiday==='christmas');
@@ -1984,7 +2015,7 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('showcase',!!s.showcaseActive&&!srch);
  document.body.classList.toggle('perf',!!s.perfMode);
  const ntNow=!!s.newTodayActive;
- if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){SHSORT='feed';unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
+ if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){SHSORT='feed';SHCAT='all';unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
  if(s.collection)CUR_COLLECTION=s.collection;
  CUR_NT=ntNow;
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}
@@ -2007,7 +2038,7 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){const seq=CFSEQ; // background poll: never overwrite a tab switch that started after it
- fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(seq===CFSEQ&&d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;applyCards(d.cards);draw();}}).catch(()=>{});}
+ fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(seq===CFSEQ&&d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;d.cards.CATS=d.cats;applyCards(d.cards);draw();}}).catch(()=>{});}
 window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json());}catch(e){}if(window.BINDER_GAME)GAME=window.BINDER_GAME;applyCards(window.BINDER_CARDS);draw();connect();});
 /* Fresh stock without anyone touching the TV: the deck feed re-checks every
    10 minutes while idle (redraws only when the version actually changed —
