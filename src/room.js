@@ -1,4 +1,4 @@
-import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TAB_ICON } from "./config.js";
+import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TAB_ICON, BOARD_TAB_ICON, WH_TAB_ICON } from "./config.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -120,7 +120,7 @@ export class BinderRoom {
     const shelves = [];
     for (const [key, defLabel, defColl] of [["boardTab", "Board Games", "board-games"], ["whTab", "Warhammer", "gamesworkshop"]]) {
       const tb = this.settings[key] || {};
-      if (tb.enabled) shelves.push({ label: String(tb.label || defLabel).slice(0, 24), collection: tb.collection || defColl, theme: "sleeves", game: "sleeves", shelf: true, icon: tb.icon || "" });
+      if (tb.enabled) shelves.push({ label: String(tb.label || defLabel).slice(0, 24), collection: tb.collection || defColl, theme: "sleeves", game: "sleeves", shelf: true, icon: tb.icon || (key === "boardTab" ? BOARD_TAB_ICON : WH_TAB_ICON) });
     }
     const nt = this.settings.newToday || {};
     const extra = base
