@@ -6,6 +6,8 @@ const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
 // downsampled. Strict shape + size cap keeps settings well under DO limits.
 const cleanIcon = (v) =>
   (typeof v === "string" && v.length <= 12000 && /^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(v)) ? v : "";
+// Tab-icon slots shared across every screen: one per game plus the virtual tabs.
+const ICON_SLOTS = [...THEMES, "showcase", "sleeves", "board", "wh"];
 
 export class BinderRoom {
   constructor(state, env) {
@@ -21,6 +23,14 @@ export class BinderRoom {
     this.remotes = new Set(); // admin remote-control mirrors of this room's kiosk
     this.settings = { ...DEFAULT_SETTINGS };
     this.pin = DEFAULT_PIN;
+    // Shared tab icons: the DEFAULT room's DO keeps the one icon set every
+    // screen shows (same trick as the screen registry it already hosts), so
+    // uploading a logo on any screen carries it to all of them.
+    this.gicons = {};
+    this.giconsAt = 0;
+    this.gseeded = false;
+    this.isDefault = false;
+    try { this.isDefault = !!env.ROOM?.idFromName("default")?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -44,6 +54,20 @@ export class BinderRoom {
         this.settings.newToday = { ...DEFAULT_SETTINGS.newToday, ...(this.settings.newToday || {}) };
         const p = await this.state.storage.get("pin");
         if (p) this.pin = p;
+        this.gseeded = !!(await this.state.storage.get("gseeded"));
+        if (this.isDefault) {
+          const gi = await this.state.storage.list({ prefix: "gicon:" });
+          for (const [k, v] of gi) this.gicons[k.slice(6)] = v;
+          // One-time migration: icons saved per-screen before they went shared
+          // become the shared set (fill-empty so newer uploads aren't clobbered).
+          if (!this.gseeded) {
+            await this.applyGicons({ seed: this.ownIcons() });
+            this.gseeded = true;
+            await this.state.storage.put("gseeded", 1);
+          }
+        } else {
+          this.syncGicons(true); // not awaited — first fetch shouldn't block construction
+        }
       } catch {}
     });
     this.rotateToken();
@@ -108,19 +132,23 @@ export class BinderRoom {
   // The Showcase tab (the physical case, mirrored) and enabled "New Today"
   // games appear as extra virtual tabs after the base ones.
   effectiveTabs() {
-    const base = (Array.isArray(this.settings.tabs) ? this.settings.tabs : []).filter((t) => t.enabled !== false);
+    // Icon precedence: the shared set (uploaded on ANY screen) wins, then this
+    // screen's own pre-sharing upload, then the baked-in badge (specials only).
+    const gi = this.gicons || {};
+    const base = (Array.isArray(this.settings.tabs) ? this.settings.tabs : []).filter((t) => t.enabled !== false)
+      .map((t) => ({ ...t, icon: gi[t.game] || t.icon || "" }));
     const st = this.settings.showcaseTab || {};
     const sc = st.enabled
-      ? [{ label: String(st.label || "Showcase").slice(0, 24), collection: st.collection || "esl-showcase", theme: "mtg", game: "showcase", showcase: true, icon: st.icon || "" }]
+      ? [{ label: String(st.label || "Showcase").slice(0, 24), collection: st.collection || "esl-showcase", theme: "mtg", game: "showcase", showcase: true, icon: gi.showcase || st.icon || "" }]
       : [];
     const sv = this.settings.sleevesTab || {};
     const sl = sv.enabled
-      ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true, icon: sv.icon || SLEEVES_TAB_ICON }]
+      ? [{ label: String(sv.label || "Sleeves").slice(0, 24), collection: sv.collection || "all-dragon-shield-sleeves", theme: "sleeves", game: "sleeves", sleeves: true, icon: gi.sleeves || sv.icon || SLEEVES_TAB_ICON }]
       : [];
     const shelves = [];
     for (const [key, defLabel, defColl] of [["boardTab", "Board Games", "board-games"], ["whTab", "Warhammer", "gamesworkshop"]]) {
       const tb = this.settings[key] || {};
-      if (tb.enabled) shelves.push({ label: String(tb.label || defLabel).slice(0, 24), collection: tb.collection || defColl, theme: "sleeves", game: "sleeves", shelf: true, icon: tb.icon || (key === "boardTab" ? BOARD_TAB_ICON : WH_TAB_ICON) });
+      if (tb.enabled) shelves.push({ label: String(tb.label || defLabel).slice(0, 24), collection: tb.collection || defColl, theme: "sleeves", game: "sleeves", shelf: true, icon: gi[key === "boardTab" ? "board" : "wh"] || tb.icon || (key === "boardTab" ? BOARD_TAB_ICON : WH_TAB_ICON) });
     }
     const nt = this.settings.newToday || {};
     const extra = base
@@ -128,7 +156,78 @@ export class BinderRoom {
       .map((t) => ({ label: ("New Today · " + t.label).slice(0, 24), collection: t.collection, theme: t.theme, game: t.game, newToday: true }));
     return [...base, ...sc, ...sl, ...shelves, ...extra];
   }
-  publicSettings() { return { ...this.settings, tabs: this.effectiveTabs() }; } // never includes the PIN
+  publicSettings() { return { ...this.settings, tabs: this.effectiveTabs(), gicons: { ...this.gicons } }; } // never includes the PIN
+
+  // ---- Shared tab icons ----
+  // This screen's own saved icons, keyed by slot — used once to migrate
+  // pre-sharing uploads into the shared set.
+  ownIcons() {
+    const m = {};
+    for (const t of (Array.isArray(this.settings.tabs) ? this.settings.tabs : []))
+      if (t.icon && THEMES.includes(t.game)) m[t.game] = t.icon;
+    for (const [key, slug] of [["showcaseTab", "showcase"], ["sleevesTab", "sleeves"], ["boardTab", "board"], ["whTab", "wh"]])
+      if (this.settings[key]?.icon) m[slug] = this.settings[key].icon;
+    return m;
+  }
+
+  // DEFAULT room only: merge a delta into the shared set. `seed` fills empty
+  // slots (migration), `put` overwrites (fresh upload), `clear` removes.
+  // Each slot is its own storage key so twelve ~9KB logos never near the
+  // 128KB per-value cap. Returns whether anything changed.
+  async applyGicons({ seed, put, clear } = {}) {
+    let dirty = false;
+    for (const [src, overwrite] of [[seed, false], [put, true]]) {
+      if (!src || typeof src !== "object") continue;
+      for (const k of ICON_SLOTS) {
+        const v = cleanIcon(src[k]);
+        if (v && (overwrite || !this.gicons[k]) && this.gicons[k] !== v) {
+          this.gicons[k] = v;
+          await this.state.storage.put("gicon:" + k, v);
+          dirty = true;
+        }
+      }
+    }
+    if (Array.isArray(clear)) for (const k of clear) {
+      if (ICON_SLOTS.includes(k) && this.gicons[k]) {
+        delete this.gicons[k];
+        await this.state.storage.delete("gicon:" + k);
+        dirty = true;
+      }
+    }
+    return dirty;
+  }
+
+  // Push a delta to the shared set and pull the full result back. On the
+  // default room that's local; other rooms round-trip the default room's DO
+  // (same pattern as /rooms-register). Returns false if the hop failed.
+  async mergeGicons(delta) {
+    if (this.isDefault) { await this.applyGicons(delta); return true; }
+    try {
+      const stub = this.env.ROOM.get(this.env.ROOM.idFromName("default"));
+      const r = await stub.fetch(new Request("https://do/icons-sync", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(delta || {}),
+      }));
+      const j = await r.json();
+      if (j && j.icons && typeof j.icons === "object") { this.gicons = j.icons; return true; }
+    } catch {}
+    return false;
+  }
+
+  // Refresh this room's copy of the shared set (throttled). The first
+  // successful sync also contributes this screen's own pre-sharing uploads.
+  async syncGicons(force) {
+    if (this.isDefault || !this.env?.ROOM) return;
+    const now = Date.now();
+    if (!force && now - this.giconsAt < 60e3) return;
+    this.giconsAt = now;
+    const before = JSON.stringify(this.gicons);
+    const ok = await this.mergeGicons(this.gseeded ? {} : { seed: this.ownIcons() });
+    if (ok && !this.gseeded) {
+      this.gseeded = true;
+      try { await this.state.storage.put("gseeded", 1); } catch {}
+    }
+    if (ok && JSON.stringify(this.gicons) !== before) this.broadcastSettings();
+  }
 
   broadcastSettings() {
     const m = { type: "settings", data: this.publicSettings() };
@@ -269,6 +368,25 @@ export class BinderRoom {
     }
     this.settings = next;
     await this.state.storage.put("settings", next);
+    // Mirror this save's icon uploads/removals into the shared set so every
+    // other screen picks them up — only slots the patch explicitly carried.
+    {
+      const put = {}, clear = [];
+      const touch = (slug, obj) => {
+        if (!obj || typeof obj !== "object" || !("icon" in obj) || !ICON_SLOTS.includes(slug)) return;
+        const v = cleanIcon(obj.icon);
+        if (v) put[slug] = v; else clear.push(slug);
+      };
+      if (Array.isArray(patch.tabs)) for (const t of patch.tabs) {
+        if (!t || typeof t !== "object") continue;
+        touch(THEMES.includes(t.game) ? t.game : t.theme, t);
+      }
+      touch("showcase", "showcaseTab" in patch ? patch.showcaseTab : null);
+      touch("sleeves", "sleevesTab" in patch ? patch.sleevesTab : null);
+      touch("board", "boardTab" in patch ? patch.boardTab : null);
+      touch("wh", "whTab" in patch ? patch.whTab : null);
+      if (Object.keys(put).length || clear.length) await this.mergeGicons({ put, clear });
+    }
     if ("newPin" in patch && patch.newPin != null && patch.newPin !== "") {
       const np = String(patch.newPin);
       if (!/^\d{4,8}$/.test(np)) return "PIN must be 4–8 digits";
@@ -293,6 +411,7 @@ export class BinderRoom {
       if (role === "tv") {
         this.tv = server;
         this.send(server, { type: "settings", data: this.publicSettings() });
+        { const p = this.syncGicons(); this.state.waitUntil?.(p); } // rebroadcasts if the shared icons moved
         this.pushTvState();
         this.send(server, { type: "remotes", data: { n: this.remotes.size } });
         // The kiosk streams mirror snapshots; fan them out to the remotes.
@@ -353,7 +472,18 @@ export class BinderRoom {
     }
 
     if (url.pathname.endsWith("/settings") && request.method === "GET") {
+      await this.syncGicons(); // throttled shared-icon refresh (no-op on default)
       return Response.json(this.publicSettings(), { headers: { "cache-control": "no-store" } });
+    }
+
+    // ---- Shared tab icons (only ever called on the DEFAULT room's DO, via
+    // in-worker stubs — the router never exposes this path publicly). Other
+    // rooms POST their uploads/removals here and get the full set back.
+    if (url.pathname.endsWith("/icons-sync") && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { b = {}; }
+      const dirty = await this.applyGicons(b || {});
+      if (dirty) this.broadcastSettings(); // the default TV updates live too
+      return Response.json({ icons: this.gicons }, { headers: { "cache-control": "no-store" } });
     }
 
     // ---- Screen registry (only ever called on the DEFAULT room's DO) ----

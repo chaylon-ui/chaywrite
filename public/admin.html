@@ -312,7 +312,7 @@ function shrinkIcon(file,cb){const fr=new FileReader();
   img.onerror=()=>cb(null);img.src=fr.result;};
  fr.onerror=()=>cb(null);fr.readAsDataURL(file);}
 document.querySelectorAll('.icorow').forEach(row=>{const key=row.dataset.icon;
- row.innerHTML=`<img class="icoprev hide"><label class="icobtn">Tab icon…<input type="file" accept="image/*" style="display:none"></label><button type="button" class="icoclr hide">✕ remove</button><span class="icohint">optional — shows instead of the word</span>`;
+ row.innerHTML=`<img class="icoprev hide"><label class="icobtn">Tab icon…<input type="file" accept="image/*" style="display:none"></label><button type="button" class="icoclr hide">✕ remove</button><span class="icohint">optional — shared by every screen, shows instead of the word</span>`;
  const prev=row.querySelector('.icoprev'),file=row.querySelector('input[type=file]'),clr=row.querySelector('.icoclr');
  row.refresh=()=>{const u=ICONS[key]||'';prev.classList.toggle('hide',!u);if(u)prev.src=u;clr.classList.toggle('hide',!u);};
  file.addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
@@ -332,11 +332,12 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
   $('attractHome').value=['mtg','pokemon','yugioh','showcase'].includes(s.attractHome)?s.attractHome:'mtg';$('attractShow').checked=!!s.attractShow;
   $('reviewUrl').value=s.reviewUrl||'';$('adEnabled').checked=!!s.adEnabled;$('adText').value=s.adText||'';
   const tabs=Array.isArray(s.tabs)?s.tabs:[];
+  const gi=s.gicons||{}; // icons shared by every screen — uploads here update all of them
   GAME_TABS.forEach(g=>{const t=tabs.find(x=>x.game===g.game)||tabs.find(x=>x.theme===g.theme);
     $(g.input).value=(t&&t.collection)||g.fallback;
     $(g.enable).checked=t?t.enabled!==false:g.defOn;
-    ICONS[g.game]=(t&&t.icon)||'';});
-  ICONS.showcase=sc.icon||'';ICONS.sleeves=sv.icon||'';const bt=s.boardTab||{};$('bgEnabled').checked=!!bt.enabled;$('bgCollection').value=bt.collection||'board-games';ICONS.board=bt.icon||'';const wt=s.whTab||{};$('whEnabled').checked=!!wt.enabled;$('whCollection').value=wt.collection||'gamesworkshop';ICONS.wh=wt.icon||'';
+    ICONS[g.game]=gi[g.game]||(t&&t.icon)||'';});
+  ICONS.showcase=gi.showcase||sc.icon||'';ICONS.sleeves=gi.sleeves||sv.icon||'';const bt=s.boardTab||{};$('bgEnabled').checked=!!bt.enabled;$('bgCollection').value=bt.collection||'board-games';ICONS.board=gi.board||bt.icon||'';const wt=s.whTab||{};$('whEnabled').checked=!!wt.enabled;$('whCollection').value=wt.collection||'gamesworkshop';ICONS.wh=gi.wh||wt.icon||'';
   refreshIconRows();
 }catch(e){}}
 async function post(patch){const r=await fetch('/admin/api?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
