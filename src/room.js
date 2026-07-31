@@ -636,7 +636,7 @@ export class BinderRoom {
       // Search events carry the result count in v (v>0 hits, -2 explicit
       // zero results; 0/-1 = unknown, from before counts were recorded).
       const kpi = { engaged: 0, carted: 0, completed: 0, abandoned: 0, medianDoneS: 0, searchHits: 0, searchZero: 0 };
-      const zt = {}, tq = {}, tt = {}, ta = {}, doneTimes = [];
+      const zt = {}, tq = {}, tt = {}, ta = {}, doneTimes = [], hours = {};
       const bump = (m, label) => {
         label = String(label || "").trim().slice(0, 60);
         if (label.length < 2) return;
@@ -644,6 +644,10 @@ export class BinderRoom {
         (m[k2] = m[k2] || { n: 0, label }).n++;
       };
       for (const s of sessions) {
+        // Store-local hour of each walk-up, for the customers-per-hour graph
+        // (computed over EVERY session, not just the 200 shown).
+        const hr = parseInt(new Date(s.start).toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/Halifax" }), 10);
+        if (hr >= 0 && hr <= 24) hours[hr % 24] = (hours[hr % 24] || 0) + 1;
         let doneAt = 0, added = false, engaged = false;
         for (const ev of s.events) {
           if (ev.e === "tap") { engaged = true; sum.taps++; bump(tt, ev.d); }
@@ -664,6 +668,7 @@ export class BinderRoom {
       if (doneTimes.length) kpi.medianDoneS = Math.round(doneTimes[Math.floor((doneTimes.length - 1) / 2)] / 1000);
       const top = (m, n) => Object.values(m).sort((a, z) => z.n - a.n).slice(0, n).map((x) => [x.label, x.n]);
       kpi.zeroTerms = top(zt, 15); kpi.topQ = top(tq, 12); kpi.topTap = top(tt, 12); kpi.topAdd = top(ta, 12);
+      kpi.hours = hours;
       sum.counterTotal = Math.round(sum.counterTotal * 100) / 100;
       return Response.json({ day, summary: sum, kpi, sessions: sessions.slice(0, 200) }, { headers: { "cache-control": "no-store" } });
     }
