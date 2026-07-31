@@ -668,6 +668,32 @@ export class BinderRoom {
       return Response.json({ day, summary: sum, kpi, sessions: sessions.slice(0, 200) }, { headers: { "cache-control": "no-store" } });
     }
 
+    // ---- Review gate feedback ----
+    // The star widget (phone + kiosk) posts here: 4-5 stars head to Google,
+    // 1-3 come to us instead — the comment lands in admin, never in public.
+    // Same open trust level as /counter; capped and clamped hard.
+    if (url.pathname.endsWith("/feedback") && request.method === "POST") {
+      let d; try { d = await request.json(); } catch { return Response.json({ error: "bad body" }, { status: 400 }); }
+      const stars = Math.max(1, Math.min(5, parseInt(d && d.stars, 10) || 0));
+      if (!(parseInt(d && d.stars, 10) >= 1)) return Response.json({ error: "stars required" }, { status: 400 });
+      const item = {
+        t: Date.now(), s: stars,
+        c: String((d && d.comment) || "").replace(/\s+/g, " ").trim().slice(0, 400),
+        n: String((d && d.name) || "").replace(/\s+/g, " ").trim().slice(0, 40),
+      };
+      const list = (await this.state.storage.get("feedback")) || [];
+      list.unshift(item);
+      await this.state.storage.put("feedback", list.slice(0, 200));
+      return Response.json({ ok: true });
+    }
+    // Admin viewer for the comments (PIN-guarded, same as /alog).
+    if (url.pathname.endsWith("/fblist") && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { return Response.json({ error: "bad json" }, { status: 400 }); }
+      if (String((b && b.pin) || "") !== String(this.pin)) return Response.json({ error: "Incorrect PIN" }, { status: 403 });
+      const items = (await this.state.storage.get("feedback")) || [];
+      return Response.json({ items }, { headers: { "cache-control": "no-store" } });
+    }
+
     // Worker-internal: validates the staff key (this room's admin PIN) for
     // /staff pages and /alert calls. Not reachable from outside — the worker
     // only routes /ws, /alert etc. here. Light lockout blunts brute force.

@@ -750,6 +750,21 @@ html.portrait .tsteps{grid-template-columns:1fr}
 .tdnum{font-family:'Bangers',cursive;font-size:3.6rem;line-height:1;color:#c9342b;-webkit-text-stroke:1px #101010}
 .tdqr{background:#fff;border:3px solid #101010;border-radius:10px;padding:8px;margin:.5rem 0}
 .tdqr:empty{display:none}
+/* Kiosk review gate (pops after the pickup ticket): 4-5 stars = QR to the
+   Google review page; 1-3 = quick "tell the owner" chips, kept private. */
+.revk{position:fixed;inset:0;z-index:63;display:none;align-items:center;justify-content:center;background:rgba(6,6,9,.72)}
+.revk.open{display:flex;animation:bpop .38s cubic-bezier(.34,1.56,.64,1)}
+.revkbox{background:#fffef4;border:4px solid #101010;border-radius:22px;box-shadow:.5rem .7rem 0 rgba(16,16,16,.85);padding:1.6rem 2rem;text-align:center;max-width:min(92vw,560px)}
+.revkhead{display:flex;align-items:center;justify-content:center;gap:.7rem;font-family:'Bangers','Comic Sans MS',cursive;font-size:2rem;letter-spacing:.05em;color:#16161c}
+.revkhead svg{width:2.4rem;height:2.4rem;flex:none}
+.revksub{color:#4a4a52;margin-top:.2rem;font-size:1rem}
+.revkstars{display:flex;justify-content:center;gap:.5rem;margin-top:.8rem}
+.revkstars button{background:none;border:none;font-size:3.4rem;line-height:1;color:#d9d4c2;cursor:pointer;padding:.1rem}
+.revkstars button.on{color:#fbbc05}
+.revkmore{margin-top:.8rem}
+.revkqr{background:#fff;border:3px solid #101010;border-radius:10px;padding:8px;display:inline-block}
+.revkchips{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center}
+.revkdone{font-family:'Bangers','Comic Sans MS',cursive;font-size:1.4rem;color:#2d7d46;letter-spacing:.05em}
 .tdp3{font-family:'Bangers',cursive;font-size:1.15rem;color:#b8641b;letter-spacing:.03em}
 @keyframes ttshake{0%,100%{transform:translate(0,0) rotate(-1deg)}25%{transform:translate(-4px,2px) rotate(.6deg)}50%{transform:translate(3px,-2px) rotate(-1.8deg)}75%{transform:translate(-2px,3px) rotate(.2deg)}}
 /* Dymo-style embossed name label for "Image Coming Soon" placeholder cards —
@@ -1902,7 +1917,37 @@ function showTdone(count,total){TDPC=count;TDPT=total;
  document.getElementById('tdqr').innerHTML='';
  document.getElementById('tdone').classList.add('open');
  clearTimeout(TDONET);TDONET=setTimeout(hideTdone,20000);}
-function hideTdone(){clearTimeout(TDONET);document.getElementById('tdone').classList.remove('open');}
+function hideTdone(){clearTimeout(TDONET);document.getElementById('tdone').classList.remove('open');
+ if(TDPC>0){TDPC=0;setTimeout(showRevK,400);}} // ticket seen → ask how it went
+/* ---- Kiosk review gate ---- */
+const GLOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+let REVKT=null;
+function showRevK(){if(!SETTINGS.reviewUrl||!window.TOUCH||window.SITE||window.REMOTE)return;
+ let ov=document.getElementById('revk');
+ if(!ov){ov=document.createElement('div');ov.id='revk';ov.className='revk';document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)hideRevK();});}
+ ov.innerHTML=`<div class="revkbox"><div class="revkhead">${GLOGO}<span>HOW DID WE DO?</span></div>
+  <div class="revksub">Tap a star — it takes two seconds!</div>
+  <div class="revkstars">${[1,2,3,4,5].map(n=>`<button aria-label="${n} stars" onclick="REVKRATE(${n},this)">★</button>`).join('')}</div>
+  <div class="revkmore"></div></div>`;
+ ov.classList.add('open');clearTimeout(REVKT);REVKT=setTimeout(hideRevK,30000);}
+function hideRevK(){clearTimeout(REVKT);const ov=document.getElementById('revk');if(ov)ov.classList.remove('open');}
+/* 4-5 stars: log it + deal a QR straight to the Google review page.
+   1-3: quick "what went wrong" chips — the note lands in admin only. */
+function REVKRATE(n,btn){if(btn)comicBurst(btn,n>=4?'THANKS!':'HEARD!',true);
+ const ov=document.getElementById('revk');if(!ov)return;
+ ov.querySelectorAll('.revkstars button').forEach((b,i)=>b.classList.toggle('on',i<n));
+ const more=ov.querySelector('.revkmore');
+ clearTimeout(REVKT);REVKT=setTimeout(hideRevK,30000);
+ if(n>=4){fetch('/feedback?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({stars:n})}).catch(()=>{});
+  more.innerHTML='<div class="revkqr" id="revkqr"></div><div class="revksub" style="margin-top:.5rem">Scan to leave us a Google review — thank you!</div>';
+  try{new QRCode(document.getElementById('revkqr'),{text:SETTINGS.reviewUrl,width:170,height:170,colorDark:'#0a0a0a',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});}catch(e){}}
+ else{more.innerHTML='<div class="revksub" style="margin:.2rem 0 .5rem">Sorry! What went wrong? (goes straight to the owner, not online)</div>'
+  +`<div class="revkchips">${['Couldn’t find what I wanted','Prices','Screen was confusing','Wait at the counter','Something else'].map(c=>`<button class="slvchip" onclick="REVKSEND(${n},'${c}',this)">${c}</button>`).join('')}</div>`;}}
+function REVKSEND(n,c,btn){if(btn)comicBurst(btn,'SENT!',true);
+ fetch('/feedback?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({stars:n,comment:c})}).catch(()=>{});
+ const more=document.querySelector('#revk .revkmore');if(more)more.innerHTML='<div class="revkdone">THANK YOU — THE OWNER READS EVERY NOTE!</div>';
+ clearTimeout(REVKT);REVKT=setTimeout(hideRevK,4000);}
 function fillTdone(name){const d=document.getElementById('tdone');if(!d.classList.contains('open'))return;
  document.getElementById('tdnum').textContent=name||'—';
  const qel=document.getElementById('tdqr');qel.innerHTML='';

@@ -74,6 +74,23 @@ p{font-size:.85rem;color:var(--muted);line-height:1.45}
 .adcard .adtxt{font-size:.86rem;color:var(--ink);line-height:1.45;margin:.45rem auto .9rem;max-width:22rem}
 .adcard .adg{display:block;background:linear-gradient(180deg,#ffd23f,#e0a800);color:#1a1400;font-weight:700;font-size:.86rem;padding:.75rem 1rem;border-radius:12px;text-decoration:none;box-shadow:0 3px 12px rgba(245,197,24,.28)}
 .adcard .adg:active{transform:scale(.99)}
+/* Review gate: Google logo + tappable stars. 4-5 stars open the Google
+   review page; 1-3 open a private comment box that lands in admin. */
+.revcard{background:#fff;border-radius:14px;padding:.9rem 1rem 1rem;color:#1c1c22;box-shadow:0 6px 20px rgba(0,0,0,.25);text-align:center}
+.revhead{display:flex;align-items:center;justify-content:center;gap:.5rem;font-weight:700;font-size:.95rem}
+.revhead svg{width:22px;height:22px;flex:none}
+.revsub{font-size:.8rem;color:#5f6368;margin-top:.15rem}
+.revstars{display:flex;justify-content:center;gap:.35rem;margin-top:.55rem}
+.revstars button{background:none;border:none;font-size:2.1rem;line-height:1;color:#dadce0;cursor:pointer;padding:.1rem}
+.revstars button.on{color:#fbbc05}
+.revform{margin-top:.6rem;display:flex;flex-direction:column;gap:.5rem}
+.revform textarea{width:100%;min-height:4.4rem;border:1px solid #dadce0;border-radius:10px;padding:.6rem;font:inherit;font-size:.9rem;resize:vertical}
+.revform button{background:#1a73e8;color:#fff;border:none;border-radius:10px;padding:.7rem;font-weight:700;font-size:.9rem;cursor:pointer}
+.revdone{margin-top:.6rem;font-size:.9rem;font-weight:600;color:#188038}
+.revpop{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;background:rgba(8,8,10,.7);padding:1.2rem}
+.revpop.open{display:flex}
+.revpop .revcard{width:min(92vw,380px);position:relative}
+.revpop .revx{position:absolute;top:.4rem;right:.6rem;background:none;border:none;font-size:1.2rem;color:#5f6368;cursor:pointer}
 .clut{position:absolute;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
 .clut svg{width:100%;height:100%;display:block}
 .actionbar{border-top:1px solid #1c1c22;padding-top:.5rem;margin-top:auto}
@@ -210,7 +227,39 @@ function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a
 function phoneGrime(seed){const rng=mulberry32((seed*40503)^0x1234);let s='<svg viewBox="0 0 100 100" preserveAspectRatio="none">';for(let i=0;i<44;i++)s+=`<circle cx="${(rng()*100).toFixed(1)}" cy="${(rng()*100).toFixed(1)}" r="${(rng()*.5+.1).toFixed(2)}" fill="rgba(236,226,206,${(rng()*.12+.03).toFixed(2)})"/>`;return s+'</svg>';}
 /* Bottom of the deck: an Exor Games ad + Google-review card when enabled,
    otherwise dead flies + desk clutter. Either way it covers the last card row. */
-function adHTML(){const rev=PSET.reviewUrl?`<a class="adg" href="${H(PSET.reviewUrl)}" target="_blank" rel="noopener">★★★★★&nbsp;&nbsp;Loved the visit? Leave us a Google review</a>`:'';
+/* Review gate widget. Tapping 4-5 stars logs the rating and opens the
+   Google review page; 1-3 swaps in a private comment box instead — the
+   note goes to the owner (admin page), not to Google. */
+const GLOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+function revHTML(id){return `<div class="revcard" data-rev="${id}">
+ <div class="revhead">${GLOGO}<span>How was your visit?</span></div>
+ <div class="revsub">Tap a star to rate Exor Games</div>
+ <div class="revstars">${[1,2,3,4,5].map(n=>`<button aria-label="${n} star${n>1?'s':''}" onclick="RATE('${id}',${n})">★</button>`).join('')}</div>
+ <div class="revmore"></div></div>`;}
+let RATED={};
+function RATE(id,n){const card=document.querySelector(`[data-rev="${id}"]`);if(!card)return;
+ RATED[id]=n; // any rating stops the popup re-asking this session
+ card.querySelectorAll('.revstars button').forEach((b,i)=>b.classList.toggle('on',i<n));
+ const more=card.querySelector('.revmore');
+ if(n>=4){
+  fetch('/feedback?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({stars:n})}).catch(()=>{});
+  more.innerHTML='<div class="revdone">Thank you! Opening Google reviews…</div>';
+  if(PSET.reviewUrl)setTimeout(()=>{try{window.open(PSET.reviewUrl,'_blank','noopener');}catch(e){location.href=PSET.reviewUrl;}},700);}
+ else{more.innerHTML=`<div class="revform"><textarea maxlength="400" placeholder="Sorry it wasn’t a 5-star visit — what happened? The owner reads every note."></textarea>
+  <button onclick="RATESEND('${id}',${n},this)">Send to the owner</button></div>`;
+  more.querySelector('textarea').focus();}}
+function RATESEND(id,n,btn){const card=document.querySelector(`[data-rev="${id}"]`);if(!card)return;
+ const txt=(card.querySelector('textarea')||{}).value||'';
+ btn.disabled=true;
+ fetch('/feedback?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({stars:n,comment:txt})}).catch(()=>{});
+ card.querySelector('.revmore').innerHTML='<div class="revdone">Thank you — the owner reads every note. We’ll do better next time!</div>';}
+function showRevPop(){if(!PSET.reviewUrl||RATED.pop||document.querySelector('.revpop.open'))return;
+ let ov=document.getElementById('revpop');
+ if(!ov){ov=document.createElement('div');ov.id='revpop';ov.className='revpop';document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');});}
+ ov.innerHTML=revHTML('pop');ov.querySelector('.revcard').insertAdjacentHTML('afterbegin','<button class="revx" onclick="document.getElementById(\'revpop\').classList.remove(\'open\')">✕</button>');
+ ov.classList.add('open');}
+function adHTML(){const rev=PSET.reviewUrl?revHTML('ad'):'';
  return `<div class="adcard"><img class="adlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><div class="adtxt">${H(PSET.adText||'')}</div>${rev}</div>`;}
 function deckExtras(nCards,seed){const empty=Math.max(0,TRAY-nCards);const rng=mulberry32(((seed*2246822519)^0xabcdef^DECKSALT)>>>0);
  if(PSET.adEnabled)return `<div class="deckclutter adwrap">${adHTML()}</div>`;
@@ -265,7 +314,7 @@ function connect(){
    else if(m.type==='rejected'){SHOW('v-reject');if(m.reason==='expired'){document.getElementById('rjT').textContent='This code expired';document.getElementById('rjP').textContent='Codes refresh every 2 minutes. Scan the current code on the TV.';}}
    else if(m.type==='idle'){document.getElementById('phIdle').textContent=Math.floor(m.idleLeft/60)+':'+String(m.idleLeft%60).padStart(2,'0');}
    else if(m.type==='dropped'){if(!checkedOut){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent=m.reason==='idle'?'No activity for 2 minutes, so the showcase freed up for the next customer.':'Disconnected.';}}
-   else if(m.type==='counter_order'){if(m.data&&m.data.name){document.getElementById('doneP').textContent='Draft order '+m.data.name+' is waiting at the counter ('+m.data.count+' cards · $'+m.data.total+'). Give your name at the register.';}}
+   else if(m.type==='counter_order'){if(m.data&&m.data.name){document.getElementById('doneP').textContent='Draft order '+m.data.name+' is waiting at the counter ('+m.data.count+' cards · $'+m.data.total+'). Give your name at the register.';setTimeout(showRevPop,1500);}}
    else if(m.type==='settings'){applyPhoneSettings(m.data);}
    else if(m.type==='ack'){/* could sync cart count from server */}
  };
@@ -416,7 +465,7 @@ function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
  if(where==='phone'){
   if(items.length){document.getElementById('doneT').textContent='Off to checkout';document.getElementById('doneP').textContent='Opening your Shopify cart ('+cart.length+' cards · $'+t+')… Anything already in your exorgames.com cart stays put.';setTimeout(()=>{location.href=cartUrl(items);},800);}
   else{document.getElementById('doneT').textContent='See the counter';document.getElementById('doneP').textContent='These cards can’t be added to an online cart right now — please pay at the counter ('+cart.length+' cards · $'+t+').';}}
- else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Staff have your '+cart.length+' cards ($'+t+') — give your name at the register.';}}
+ else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Staff have your '+cart.length+' cards ($'+t+') — give your name at the register.';setTimeout(showRevPop,1800);}}
 window.BINDER_READY.then(()=>{applyCards(window.BINDER_CARDS);
  if(!token){SHOW('v-reject');document.getElementById('rjT').textContent='Scan the TV code';document.getElementById('rjP').textContent='Open this by scanning the QR on the showcase screen.';}
  else connect();});

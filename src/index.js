@@ -32,7 +32,9 @@ export default {
       url.pathname === "/counter" ||
       url.pathname === "/alert" ||
       url.pathname === "/track" ||
-      url.pathname === "/alog"
+      url.pathname === "/alog" ||
+      url.pathname === "/feedback" ||
+      url.pathname === "/fblist"
     ) {
       // PIN-gated connections. Staff alert pages and Flow's /alert POSTs check
       // against the DEFAULT room's admin PIN (one key covers every screen);

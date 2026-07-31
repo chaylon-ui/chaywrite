@@ -263,6 +263,15 @@ a.tvlink:hover{color:var(--ember)}
       <div id="usageSess" style="margin-top:.4rem"></div>
       <div class="hint">One row per person using the touch screen: what they tapped, searched and carted, and whether the visit became a counter draft order, a checkout QR handoff, timed out, or just browsing. Kept 14 days per screen. Paid pickups appear in Shopify as completed draft orders; online checkouts carry a hidden <code>_source: Kiosk</code> line-item property.</div>
     </div>
+
+    <!-- Review-gate feedback: 4-5 star raters get sent to Google; 1-3 land here. -->
+    <div class="group">
+      <div class="gtitle">Customer comments (review gate)</div>
+      <div class="hint" style="margin-top:.2rem">The star popup (on paired phones and after kiosk counter orders) sends 4–5★ raters to your Google review page — set the Review URL above for that — while 1–3★ visitors get a private “tell the owner” box instead. Their notes land here, never on Google. Newest first, last 200 kept per screen.</div>
+      <button class="btn btn-primary" id="fbLoad" style="margin-top:.7rem">Load comments</button>
+      <div id="fbSum" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem"></div>
+      <div id="fbList" style="margin-top:.4rem"></div>
+    </div>
     <a class="tvlink" href="/" target="_blank">Open the TV view ↗</a>
   </div>
 </div>
@@ -448,6 +457,19 @@ function showQrPop(i){const url=UQR[i];if(!url)return;
  catch(e){box.textContent='QR library did not load — use the link below.';}
  const a=ov.querySelector('#uqrLink');a.href=url;a.textContent='Open this cart link ↗';
  ov.style.display='flex';}
+/* Review-gate comments: PIN-guarded list, per screen. 4-5★ rows have no
+   comment (those customers were sent on to Google). */
+$('fbLoad').onclick=async()=>{if(!PIN){$('fbSum').innerHTML='<span class="uchip">Unlock with your PIN first</span>';return;}
+ $('fbSum').innerHTML='<span class="uchip">Loading…</span>';$('fbList').innerHTML='';
+ const r=await fetch('/fblist?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN})}).catch(()=>null);
+ const j=r?await r.json().catch(()=>null):null;
+ if(!r||!r.ok||!j){$('fbSum').innerHTML='<span class="uchip">'+((j&&j.error)||'Could not load comments')+'</span>';return;}
+ const items=j.items||[];const per={};items.forEach(x=>per[x.s]=(per[x.s]||0)+1);
+ $('fbSum').innerHTML=[5,4,3,2,1].map(s=>`<span class="uchip"><b>${per[s]||0}</b> ${'★'.repeat(s)}</span>`).join('');
+ const esc=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ $('fbList').innerHTML=items.length?items.map(x=>
+  `<div style="padding:.45rem .1rem;border-bottom:1px solid var(--line);font-size:.88rem"><span style="color:#e0a800">${'★'.repeat(x.s)}</span><span style="color:#555">${'☆'.repeat(5-x.s)}</span> · ${new Date(x.t).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}${x.c?' — '+esc(x.c):' <span style="color:var(--muted)">(no note — sent on to Google)</span>'}${x.n?' · '+esc(x.n):''}</div>`).join('')
+  :'<div class="hint" style="margin-top:.5rem">No ratings yet — they’ll appear as customers use the star popup.</div>';};
 loadSettings(); // prefill (read-only until unlocked)
 </script>
 </body></html>
