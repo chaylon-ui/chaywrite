@@ -259,6 +259,7 @@ a.tvlink:hover{color:var(--ember)}
         <button class="btn btn-primary" id="usageLoad" style="width:auto;margin:0;padding:.6rem 1rem;font-size:.85rem">Load</button>
       </div>
       <div id="usageSum" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.8rem"></div>
+      <div id="usageKpi" style="margin-top:.5rem"></div>
       <div id="usageSess" style="margin-top:.4rem"></div>
       <div class="hint">One row per person using the touch screen: what they tapped, searched and carted, and whether the visit became a counter draft order, a checkout QR handoff, timed out, or just browsing. Kept 14 days per screen. Paid pickups appear in Shopify as completed draft orders; online checkouts carry a hidden <code>_source: Kiosk</code> line-item property.</div>
     </div>
@@ -380,16 +381,37 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
    sessions. Days follow store (Atlantic) time; kept 14 days per screen. ---- */
 (function fillUsageDays(){const sel=$('usageDay');
  for(let i=0;i<14;i++){const d=new Date(Date.now()-i*864e5).toLocaleDateString('en-CA',{timeZone:'America/Halifax'});
-  const o=document.createElement('option');o.value=d;o.textContent=i===0?d+' (today)':d;sel.appendChild(o);}})();
+  const o=document.createElement('option');o.value=d;o.textContent=i===0?d+' (today)':d;sel.appendChild(o);
+  if(i===0){const a=document.createElement('option');a.value='all';a.textContent='Last 14 days — summary';sel.appendChild(a);}}})();
 const EVL={ss:'walked up',tap:'looked at',q:'searched',add:'added to cart',rm:'removed',qr:'checkout QR shown',send:'sent to counter',ord:'draft order',to:'cart timed out',se:'walked away'};
 $('usageLoad').onclick=()=>loadUsage();
-async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="uchip">Loading…</span>';$('usageSess').innerHTML='';
+async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="uchip">Loading…</span>';$('usageKpi').innerHTML='';$('usageSess').innerHTML='';
  const r=await fetch('/alog?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,day:$('usageDay').value})}).catch(()=>null);
  const j=r?await r.json().catch(()=>null):null;
  if(!r||!r.ok||!j){$('usageSum').innerHTML='<span class="uchip">'+((j&&j.error)||'Could not load usage')+'</span>';return;}
- const s=j.summary||{};
- $('usageSum').innerHTML=[['Sessions',s.sessions],['Card taps',s.taps],['Searches',s.searches],['Cart adds',s.adds],['Checkout QRs',s.qr],['Counter orders',s.counter],['Draft orders',s.orders],['Timeouts',s.timeouts],['$ to counter',(s.counterTotal||0).toFixed(2)]]
+ const s=j.summary||{},k=j.kpi||{};
+ const pct=(a,b)=>b?Math.round((a||0)/b*100)+'%':'—';
+ const mmss=t=>t?Math.floor(t/60)+':'+String(t%60).padStart(2,'0'):'—';
+ /* Headline task KPIs: completion (QR handoff, counter send or draft order),
+    how fast, and where carts die. Shared-device metrics like "users" are
+    meaningless on a kiosk — everything here is per SESSION. */
+ $('usageSum').innerHTML=[
+  ['Sessions',s.sessions],['Completed',k.completed??0],['Completion rate',pct(k.completed,s.sessions)],
+  ['Median time to done',mmss(k.medianDoneS)],['Abandoned carts',k.abandoned??0],['Timeouts',s.timeouts],
+  ['Draft orders',s.orders],['$ to counter',(s.counterTotal||0).toFixed(2)]]
   .map(([l,v])=>`<span class="uchip"><b>${v??0}</b> ${l}</span>`).join('');
+ const esc0=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ const list=(title,arr,empty)=>`<details class="usess"><summary>${title}${arr&&arr.length?' ('+arr.length+')':''}</summary>`
+  +((arr&&arr.length)?`<div style="display:flex;flex-wrap:wrap;gap:.35rem;padding:.5rem 0">${arr.map(([t,n])=>`<span class="uchip">${esc0(t)} <b>×${n}</b></span>`).join('')}</div>`
+  :`<div class="hint" style="padding:.4rem 0">${empty}</div>`)+`</details>`;
+ const known=(k.searchHits||0)+(k.searchZero||0);
+ $('usageKpi').innerHTML=
+  `<div class="hint" style="margin:.2rem 0 .4rem"><b>Funnel:</b> walked up <b>${s.sessions}</b> → browsed <b>${k.engaged??0}</b> (${pct(k.engaged,s.sessions)}) → carted <b>${k.carted??0}</b> (${pct(k.carted,k.engaged)}) → checked out <b>${k.completed??0}</b> (${pct(k.completed,k.carted)}) → draft orders <b>${s.orders}</b></div>`
+  +`<div class="hint" style="margin:0 0 .4rem"><b>Search:</b> ${s.searches} searches · success ${known?pct(k.searchHits,known):'— (counts start today)'} · <b>${k.searchZero??0}</b> came up empty</div>`
+  +list('🔎 Zero-result searches — products people wanted but did not find',k.zeroTerms,'None recorded yet (result counts started being tracked with this update).')
+  +list('Top searches',k.topQ,'No searches this day.')
+  +list('Most viewed',k.topTap,'No taps this day.')
+  +list('Most added to carts',k.topAdd,'No cart adds this day.');
  const fmt=t=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
  const esc=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
  UQR=[]; // per-load stash of cart permalinks, indexed by the [show QR] links

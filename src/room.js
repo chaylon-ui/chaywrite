@@ -593,20 +593,30 @@ export class BinderRoom {
       }
       return Response.json({ ok: true });
     }
-    // Admin usage viewer: PIN-guarded, groups a day's events into sessions.
+    // Admin usage viewer: PIN-guarded, groups a day's events into sessions
+    // and rolls them up into the task-based kiosk KPIs (completion rate,
+    // funnel, search success, zero-result terms). day:"all" = every stored
+    // day (14) aggregated.
     if (url.pathname.endsWith("/alog") && request.method === "POST") {
       let b; try { b = await request.json(); } catch { return Response.json({ error: "bad json" }, { status: 400 }); }
       if (String((b && b.pin) || "") !== String(this.pin)) return Response.json({ error: "Incorrect PIN" }, { status: 403 });
-      const day = /^\d{4}-\d{2}-\d{2}$/.test((b && b.day) || "") ? b.day
-        : new Date().toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
-      const rows = (await this.state.storage.get("alog:" + day)) || [];
+      let day, rows;
+      if ((b && b.day) === "all") {
+        day = "all"; rows = [];
+        const all = await this.state.storage.list({ prefix: "alog:" });
+        for (const v of all.values()) if (Array.isArray(v)) rows.push(...v);
+      } else {
+        day = /^\d{4}-\d{2}-\d{2}$/.test((b && b.day) || "") ? b.day
+          : new Date().toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+        rows = (await this.state.storage.get("alog:" + day)) || [];
+      }
       const bySid = {};
       for (const [sid, t, e, dd, v] of rows) {
         const s = (bySid[sid] = bySid[sid] || { sid, start: t, end: t, events: [] });
         s.start = Math.min(s.start, t); s.end = Math.max(s.end, t);
         s.events.push({ t, e, d: dd, v });
       }
-      const sessions = Object.values(bySid).sort((a, z) => z.start - a.start).slice(0, 200);
+      const sessions = Object.values(bySid).sort((a, z) => z.start - a.start);
       // Collapse letter-by-letter search chains (live search once fired per
       // keystroke; also cleans batches that crossed a flush boundary): while
       // consecutive q events extend/backspace the same text, keep the last.
@@ -621,13 +631,41 @@ export class BinderRoom {
         s.events = out;
       }
       const sum = { sessions: sessions.length, taps: 0, searches: 0, adds: 0, qr: 0, counter: 0, orders: 0, timeouts: 0, counterTotal: 0 };
-      for (const s of sessions) for (const ev of s.events) {
-        if (ev.e === "tap") sum.taps++; else if (ev.e === "q") sum.searches++; else if (ev.e === "add") sum.adds++;
-        else if (ev.e === "qr") sum.qr++; else if (ev.e === "send") { sum.counter++; sum.counterTotal += ev.v || 0; }
-        else if (ev.e === "ord") sum.orders++; else if (ev.e === "to") sum.timeouts++;
+      // Task-based KPIs. A session COMPLETES when it reaches any real
+      // outcome: checkout QR handoff, sent to counter, or a draft order.
+      // Search events carry the result count in v (v>0 hits, -2 explicit
+      // zero results; 0/-1 = unknown, from before counts were recorded).
+      const kpi = { engaged: 0, carted: 0, completed: 0, abandoned: 0, medianDoneS: 0, searchHits: 0, searchZero: 0 };
+      const zt = {}, tq = {}, tt = {}, ta = {}, doneTimes = [];
+      const bump = (m, label) => {
+        label = String(label || "").trim().slice(0, 60);
+        if (label.length < 2) return;
+        const k2 = label.toLowerCase();
+        (m[k2] = m[k2] || { n: 0, label }).n++;
+      };
+      for (const s of sessions) {
+        let doneAt = 0, added = false, engaged = false;
+        for (const ev of s.events) {
+          if (ev.e === "tap") { engaged = true; sum.taps++; bump(tt, ev.d); }
+          else if (ev.e === "q") { engaged = true; sum.searches++; bump(tq, ev.d);
+            if (ev.v > 0) kpi.searchHits++; else if (ev.v === -2) { kpi.searchZero++; bump(zt, ev.d); } }
+          else if (ev.e === "add") { engaged = true; added = true; sum.adds++; bump(ta, ev.d); }
+          else if (ev.e === "qr") { sum.qr++; if (!doneAt) doneAt = ev.t; }
+          else if (ev.e === "send") { sum.counter++; sum.counterTotal += ev.v || 0; if (!doneAt) doneAt = ev.t; }
+          else if (ev.e === "ord") { sum.orders++; if (!doneAt) doneAt = ev.t; }
+          else if (ev.e === "to") sum.timeouts++;
+        }
+        if (engaged) kpi.engaged++;
+        if (added) kpi.carted++;
+        if (doneAt) { kpi.completed++; doneTimes.push(Math.max(0, doneAt - s.start)); }
+        else if (added) kpi.abandoned++; // built a cart, walked away without checkout
       }
+      doneTimes.sort((a, z) => a - z);
+      if (doneTimes.length) kpi.medianDoneS = Math.round(doneTimes[Math.floor((doneTimes.length - 1) / 2)] / 1000);
+      const top = (m, n) => Object.values(m).sort((a, z) => z.n - a.n).slice(0, n).map((x) => [x.label, x.n]);
+      kpi.zeroTerms = top(zt, 15); kpi.topQ = top(tq, 12); kpi.topTap = top(tt, 12); kpi.topAdd = top(ta, 12);
       sum.counterTotal = Math.round(sum.counterTotal * 100) / 100;
-      return Response.json({ day, summary: sum, sessions }, { headers: { "cache-control": "no-store" } });
+      return Response.json({ day, summary: sum, kpi, sessions: sessions.slice(0, 200) }, { headers: { "cache-control": "no-store" } });
     }
 
     // Worker-internal: validates the staff key (this room's admin PIN) for

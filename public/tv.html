@@ -1648,8 +1648,13 @@ function FLUSHT(){clearTimeout(AFT);AFT=null;if(!AQ.length||!ASID)return;const b
    just extends (or backspaces) it, rewrite that event instead of adding. */
 let QEV=null;
 function TRACKQ(q){if(!window.TOUCH)return;q=String(q).slice(0,80);
- if(QEV&&AQ.includes(QEV)&&Date.now()-QEV.t<20000&&(String(QEV.d).startsWith(q)||q.startsWith(String(QEV.d)))){QEV.d=q;QEV.t=Date.now();return;}
- TRACK('q',q);QEV=AQ[AQ.length-1];}
+ if(QEV&&AQ.includes(QEV)&&Date.now()-QEV.t<20000&&(String(QEV.d).startsWith(q)||q.startsWith(String(QEV.d)))){QEV.d=q;QEV.t=Date.now();QEV.v=-1;return;}
+ TRACK('q',q,-1);QEV=AQ[AQ.length-1];} // v=-1 until the result count lands
+/* Stamp the search event with how many results came back (0 hits = a
+   product we may not carry — admin surfaces those terms). -2 encodes an
+   explicit zero so legacy events (v=0) don't read as misses. */
+function TRACKQN(q,n){if(!window.TOUCH)return;
+ if(QEV&&AQ.includes(QEV)&&String(QEV.d)===String(q).slice(0,80))QEV.v=(n>0?n:-2);}
 function ASESSEND(reason){if(!ASID)return;AQ.push({t:Date.now(),e:'se',d:reason,v:0});
  const sid=ASID;ASID=null;clearTimeout(AFT);AFT=null;
  while(AQ.length){const batch=AQ.splice(0,40);
@@ -1880,6 +1885,7 @@ function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres
  fetch('/search.json?q='+encodeURIComponent(q)+((SETMODE&&GAME)?'&g='+encodeURIComponent(GAME):'')).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==TKSEQ||!d)return;
   const n=Array.isArray(d.cards)?d.cards.length:0;
+  TRACKQN(q,n);
   res.textContent=n?(n+' '+(n===1?'card':'cards')+' found'+(window.SITE?'':' — tap Done to browse')):('Nothing in stock matches “'+q+'”');
   if(n){startSearchDeck({q,cards:d.cards,colorNames:d.colorNames});renderTouchTabs(SETTINGS);}
  }).catch(()=>{if(seq===TKSEQ)res.textContent='Search hiccuped — keep typing to retry.';});}
