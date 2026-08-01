@@ -105,6 +105,11 @@ function Modal() {
 
   async function addToCart(o) {
     setAdding(o.did);
+    // Stamp the sale with which kiosk pickup it came from — the rung-in
+    // order shows "Kiosk pickup: #D274" in its details, so the paper trail
+    // survives after the draft itself is cleared. Best-effort: a POS build
+    // without cart properties still adds the items fine.
+    try { await shopify.cart.addCartProperties({ "Kiosk pickup": String(o.name || o.did) }); } catch {}
     let added = 0;
     let skipped = 0;
     for (const it of o.items || []) {

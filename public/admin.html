@@ -476,8 +476,8 @@ async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="
    // link the filtered list instead: still one tap when it exists, an
    // empty list (not an error page) once it's been rung through.
    const [nm]=String(e.d).split('|');
-   const href='https://admin.shopify.com/store/most-wanted-ca/draft_orders?query='+encodeURIComponent(String(nm||'').replace(/^#/,''));
-   body=` — <b>${esc(nm)}</b> <a class="ulink" target="_blank" rel="noopener" href="${href}">find in Shopify ↗</a>`;}
+   const q=encodeURIComponent(String(nm||'').replace(/^#/,''));
+   body=` — <b>${esc(nm)}</b> <a class="ulink" target="_blank" rel="noopener" href="https://admin.shopify.com/store/most-wanted-ca/draft_orders?query=${q}">draft ↗</a> · <a class="ulink" target="_blank" rel="noopener" href="https://admin.shopify.com/store/most-wanted-ca/orders?query=${q}">sale ↗</a>`;}
   // A search event's number is its RESULT COUNT (-2 = explicit zero,
   // -1/0 = unknown), not money — only cart/checkout events carry dollars.
   const tail=e.e==='q'
