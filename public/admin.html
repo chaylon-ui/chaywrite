@@ -470,11 +470,14 @@ async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="
    const cut=String(e.d).indexOf('|'),label=String(e.d).slice(0,cut),url=String(e.d).slice(cut+1);
    const i=UQR.push(url)-1;
    body=' — '+esc(label)+` <a href="#" class="ulink" onclick="showQrPop(${i});return false">show QR ⤢</a>`;}
-  else if(e.e==='ord'&&e.d){ // "#D263|1234567890" → deep link into Shopify admin
-   const [nm,did]=String(e.d).split('|');
-   const href=did?'https://admin.shopify.com/store/most-wanted-ca/draft_orders/'+esc(did)
-    :'https://admin.shopify.com/store/most-wanted-ca/draft_orders?query='+encodeURIComponent(nm||'');
-   body=` — <b>${esc(nm)}</b> <a class="ulink" target="_blank" rel="noopener" href="${href}">open ↗</a>`;}
+  else if(e.e==='ord'&&e.d){ // "#D263|1234567890" → find it in Shopify admin.
+   // Completed pickups DELETE their draft (the POS tile clears them after
+   // ringing through), so a direct /draft_orders/<id> link 404s later —
+   // link the filtered list instead: still one tap when it exists, an
+   // empty list (not an error page) once it's been rung through.
+   const [nm]=String(e.d).split('|');
+   const href='https://admin.shopify.com/store/most-wanted-ca/draft_orders?query='+encodeURIComponent(String(nm||'').replace(/^#/,''));
+   body=` — <b>${esc(nm)}</b> <a class="ulink" target="_blank" rel="noopener" href="${href}">find in Shopify ↗</a>`;}
   return `${fmt(e.t)} — ${EVL[e.e]||e.e}${body}${e.v?' ($'+(+e.v).toFixed(2)+')':''}`;};
  $('usageSess').innerHTML=(j.sessions||[]).map(x=>{
   const mins=Math.max(1,Math.round((x.end-x.start)/6e4));
