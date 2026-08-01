@@ -478,7 +478,12 @@ async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="
    const [nm]=String(e.d).split('|');
    const href='https://admin.shopify.com/store/most-wanted-ca/draft_orders?query='+encodeURIComponent(String(nm||'').replace(/^#/,''));
    body=` — <b>${esc(nm)}</b> <a class="ulink" target="_blank" rel="noopener" href="${href}">find in Shopify ↗</a>`;}
-  return `${fmt(e.t)} — ${EVL[e.e]||e.e}${body}${e.v?' ($'+(+e.v).toFixed(2)+')':''}`;};
+  // A search event's number is its RESULT COUNT (-2 = explicit zero,
+  // -1/0 = unknown), not money — only cart/checkout events carry dollars.
+  const tail=e.e==='q'
+   ?(e.v>0?' · '+e.v+' result'+(e.v===1?'':'s'):e.v===-2?' · no results':'')
+   :(e.v?' ($'+(+e.v).toFixed(2)+')':'');
+  return `${fmt(e.t)} — ${EVL[e.e]||e.e}${body}${tail}`;};
  $('usageSess').innerHTML=(j.sessions||[]).map(x=>{
   const mins=Math.max(1,Math.round((x.end-x.start)/6e4));
   const ord=x.events.find(e=>e.e==='ord');
