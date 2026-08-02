@@ -365,8 +365,20 @@ html.portrait body.searching .case.showcase .shelf + .shelf{margin-top:calc(var(
 /* Preview: size the featured card by WIDTH; bubble on top, cue at the bottom,
    the alternatives strip lives on the phone in this orientation. */
 html.portrait .zoomtv .zc{height:auto;width:72vw}
-html.portrait .zoomtv .bubble{right:auto;left:50%;top:1.6vh;transform:translateX(-50%) rotate(-2deg);width:76vw;font-size:2.3vh;animation:none}
+html.portrait .zoomtv .bubble{right:auto;left:50%;top:1.6vh;transform:translateX(-50%) rotate(-2deg);width:auto;max-width:64vw;font-size:1.9vh;padding:1.4vh 1.8vh;max-height:12vh;overflow:hidden;animation:none}
 html.portrait .zoomtv .bubble::before,html.portrait .zoomtv .bubble::after{display:none}
+/* Portrait TOUCH totems: fixed zones so nothing buries the card — the note
+   clipped up top, the WHOLE card under it, the condition menu, then a slim
+   cue. Width-bound the card grew tall enough to hide under all three. */
+html.portrait.touch .zoomtv{flex-direction:column;justify-content:flex-start}
+html.portrait.touch .zoomtv .zc{height:34vh;width:auto;margin:15vh 0 0}
+html.portrait.touch .zoomtv .cue{min-height:0;max-height:11vh;overflow:hidden;bottom:1vh;width:70vw;padding:.6vh 1.4vh 1vh}
+html.portrait.touch .zoomtv .cue .cu-name{font-size:2.6vh;line-height:3.2vh}
+html.portrait.touch .zoomtv .cue .cu-line{font-size:2.1vh;line-height:2.7vh}
+html.portrait.touch .tact{bottom:12vh;gap:.4rem}
+html.portrait.touch .tact .tchips{gap:.35rem;width:80vw;justify-content:center} /* pack chips 2-3 per row, not a tower */
+html.portrait.touch .tact .tchip{font-size:.68rem;padding:.4rem .6rem}
+html.portrait.touch .tact .tadd{font-size:1.15rem;padding:.6rem 1.5rem}
 html.portrait .zoomtv .cue{left:50%;right:auto;top:auto;bottom:1.8vh;transform:translateX(-50%) rotate(1.6deg);width:76vw;min-height:13vh}
 html.portrait .zoomtv .betters{display:none}
 /* Attract-mode dressing on the narrow screen: the tape wraps instead of
@@ -558,7 +570,7 @@ html.touch .tnav{display:block}
 .tnav:active{background:rgba(40,40,52,.9)}
 .tact{display:none;position:absolute;left:50%;bottom:2.6vh;transform:translateX(-50%);z-index:9;flex-direction:column;align-items:center;gap:.6rem;max-width:92vw}
 html.touch .zoomtv .tact{display:flex}
-html.portrait .tact{bottom:16.5vh} /* clear the bottom-center cue card */
+html.portrait .tact{bottom:18vh} /* clear the bottom-center cue card */
 .tchips{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
 .tchip{font-size:.8rem;color:#d8d2c4;background:rgba(16,16,20,.92);border:1px solid #3a3a46;border-radius:20px;padding:.55rem .95rem;cursor:pointer}
 .tchip.on{color:#0d0d0f;background:#e8ddc2;border-color:transparent;font-weight:700}
@@ -1349,7 +1361,10 @@ function zoom(c){const z=document.getElementById('ztv'),zc=document.getElementBy
  /* Comic shopkeeper bubble — one random line per preview, {card} = card name. */
  const bub=document.getElementById('zbub'),msgs=(sleevy?(SETTINGS.shelfActive?SHELF_BUBS:SLEEVE_BUBS):(Array.isArray(SETTINGS.bubbleMsgs)?SETTINGS.bubbleMsgs:[])).map(m=>String(m||'').trim()).filter(Boolean);
  if(msgs.length){const m=msgs[Math.floor(Math.random()*msgs.length)];
-  bub.innerHTML=m.split('{card}').map(H).join('<span class="bn">'+H(c.name)+'</span>');
+  // Sports cards carry paragraph-length titles — clip the name inside the
+  // note so it stays a note, not a wall of red caps burying the card.
+  const bnm=String(c.name).length>48?String(c.name).slice(0,48).trim()+'…':c.name;
+  bub.innerHTML=m.split('{card}').map(H).join('<span class="bn">'+H(bnm)+'</span>');
   bub.style.display='';bub.style.animation='none';void bub.offsetWidth;bub.style.animation='';}
  else bub.style.display='none';
  loadBetters(c);
