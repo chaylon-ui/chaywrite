@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.1.0
+// @version      1.2.0
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @grant        none
@@ -63,6 +63,13 @@
     <button class="ep epGhost" id="epForget">forget PIN</button></div></div>
     <button class="epBtn" id="epToggle">📦 Pickups</button>`;
   document.body.appendChild(root);
+  // The till listens for scanner keystrokes globally and steals keyboard
+  // input (that's why typing the PIN did nothing) — keep every key event
+  // that starts inside our panel to ourselves. Default text insertion still
+  // happens; only the till's grabby listeners are cut out.
+  for (const ev of ["keydown", "keypress", "keyup", "paste"]) root.addEventListener(ev, (e) => e.stopPropagation(), true);
+  // And if the till re-steals focus from our PIN box, take it back.
+  root.addEventListener("focusin", (e) => { const el = e.target; if (el && el.id === "epPin") setTimeout(() => { if (document.activeElement !== el && root.contains(el)) el.focus(); }, 60); });
   const body = () => root.querySelector(".epBody");
   // Default spot: TOP-right, clear of the till's pay controls. The button is
   // draggable — park it anywhere; the spot sticks per computer.
@@ -93,10 +100,22 @@
   async function refresh() {
     const pin = LS("pin");
     if (!pin) {
+      // Tap-pad alongside the input: the till's global key-grabbing can't
+      // interfere with clicks, so the PIN always goes in one way or another.
       body().innerHTML = `<div>Enter the kiosk staff PIN (same as the /staff page):</div>
-        <input class="ep" id="epPin" type="password" inputmode="numeric" maxlength="8">
-        <button class="ep epLoad" id="epGo">Connect</button><div class="epStat"></div>`;
-      body().querySelector("#epGo").onclick = () => { LS("pin", body().querySelector("#epPin").value.trim()); refresh(); };
+        <input class="ep" id="epPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
+        <div id="epPad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:4px 0">${[1,2,3,4,5,6,7,8,9,"⌫",0,"OK"].map((k) => `<button class="ep ${k === "OK" ? "epLoad" : "epBars"}" data-k="${k}" style="margin:0;padding:10px 0;font-size:15px">${k}</button>`).join("")}</div>
+        <div class="epStat"></div>`;
+      const inp = body().querySelector("#epPin");
+      const go = () => { const v = inp.value.trim(); if (v) { LS("pin", v); refresh(); } };
+      body().querySelectorAll("#epPad button").forEach((b) => { b.onclick = () => {
+        const k = b.dataset.k;
+        if (k === "OK") return go();
+        if (k === "⌫") inp.value = inp.value.slice(0, -1);
+        else if (inp.value.length < 8) inp.value += k;
+      }; });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      setTimeout(() => inp.focus(), 100);
       return;
     }
     body().innerHTML = "Loading pickups…";
