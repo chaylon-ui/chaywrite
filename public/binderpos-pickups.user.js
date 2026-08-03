@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.4.2
+// @version      1.5.0
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @run-at       document-idle
@@ -357,6 +357,44 @@
       else row.querySelector(".epStat").textContent = "⚠ " + (j.error || "couldn't clear");
     } catch { row.querySelector(".epStat").textContent = "⚠ network problem"; }
   }
+
+  // ---- Cart Deletion guard ----
+  // Adding to a BinderPOS cart RESERVES stock. The Cart Deletion dialog's
+  // plain DELETE throws that reservation away (ghost cards in the physical
+  // box) — so whenever the dialog appears, DELETE gets disabled; CANCEL and
+  // DELETE AND RETURN STOCK stay live. Scoped to that dialog only: a plain
+  // "Delete" anywhere else in the portal is left alone.
+  function guardCartDeletion() {
+    const btns = [...document.querySelectorAll('button,[role="button"],a,input[type="button"],input[type="submit"]')].filter((b) => !b.closest("#exorPk"));
+    const drs = btns.find((b) => /delete\s+and\s+return\s+stock/i.test(b.textContent || b.value || ""));
+    if (!drs) return;
+    let scope = drs.parentElement;
+    for (let i = 0; i < 8 && scope && scope !== document.body; i++) {
+      if (/cart\s*deletion|how\s+you\s+want\s+to\s+delete/i.test(scope.textContent || "")) break;
+      scope = scope.parentElement;
+    }
+    if (!scope || scope === document.body) scope = drs.closest("div") || drs.parentElement;
+    for (const b of btns) {
+      if (!scope || !scope.contains(b) || b === drs) continue;
+      const t = ((b.textContent || b.value || "")).trim();
+      if (/^delete$/i.test(t) && b.getAttribute("data-exor-blocked") !== "1") {
+        b.setAttribute("data-exor-blocked", "1");
+        try { b.disabled = true; } catch {}
+        b.setAttribute("aria-disabled", "true");
+        b.style.cssText += ";opacity:.35!important;pointer-events:none!important;cursor:not-allowed!important;filter:grayscale(1)";
+        b.title = "Disabled — use DELETE AND RETURN STOCK so the cards go back into inventory";
+      }
+    }
+  }
+  // Belt & suspenders: swallow any click that still reaches a blocked button.
+  document.addEventListener("click", (e) => {
+    const b = e.target && e.target.closest && e.target.closest('[data-exor-blocked="1"]');
+    if (b) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  let GDT = null;
+  new MutationObserver(() => { clearTimeout(GDT); GDT = setTimeout(() => { try { guardCartDeletion(); } catch {} }, 120); })
+    .observe(document.body, { childList: true, subtree: true });
+  try { guardCartDeletion(); } catch {}
 
   // Refresh the badge count quietly every 90s while the till is open.
   setInterval(() => { if (LS("pin")) fetch(`${BASE}/pickups.json?k=${encodeURIComponent(LS("pin"))}`).then((r) => r.json()).then((j) => {
