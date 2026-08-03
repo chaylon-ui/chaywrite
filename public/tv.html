@@ -682,6 +682,10 @@ html.touch .tcko.boing{animation:ckboing .6s cubic-bezier(.34,1.56,.64,1)}
 @keyframes ckboing{0%{transform:scale(1.7) rotate(4deg)}100%{transform:scale(1)}}
 html.touch .tv-cart{background:linear-gradient(0deg,rgba(8,8,10,.99),rgba(8,8,10,.7) 75%,transparent);padding:.8rem 1.2rem .9rem}
 html.touch .tv-cart .total{font-size:1.35rem}
+/* While a card preview is open the cart bar sits under the dim overlay
+   anyway — hide it outright so VIEW CART never pokes out clipped beside
+   the portrait cue. It returns the moment the preview closes. */
+html.touch body.zopen .tv-cart{display:none}
 html.touch .tcbtn{font-family:'Bangers',cursive;font-size:1.02rem;letter-spacing:.05em;color:#16161c;background:#fffef4;border:2.5px solid #101010;border-radius:14px;box-shadow:.14rem .2rem 0 #101010}
 html.touch .tqbtn{background:#fffef4;color:#16161c;border:2.5px solid #101010;box-shadow:.12rem .16rem 0 #101010;font-weight:700}
 html.touch .tcx{background:#ffb9ad;color:#7a1f16;border:2.5px solid #101010;box-shadow:.12rem .16rem 0 #101010}
