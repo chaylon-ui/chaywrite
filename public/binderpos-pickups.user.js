@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.0.0
+// @version      1.1.0
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @grant        none
@@ -29,9 +29,11 @@
   // ---- styles ----
   const css = document.createElement("style");
   css.textContent = `
-  #exorPk{position:fixed;right:14px;bottom:14px;z-index:2147483000;font-family:Inter,system-ui,sans-serif}
-  #exorPk .epBtn{background:#17171d;color:#f2e9d8;border:2px solid #d9822b;border-radius:24px;padding:10px 16px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.45)}
-  #exorPk .epPanel{display:none;position:fixed;right:14px;bottom:64px;width:360px;max-height:72vh;overflow-y:auto;background:#14141a;color:#efe9dd;border:1px solid #33333d;border-radius:14px;padding:12px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  #exorPk{position:fixed;z-index:2147483000;font-family:Inter,system-ui,sans-serif}
+  #exorPk .epBtn{background:#17171d;color:#f2e9d8;border:2px solid #d9822b;border-radius:24px;padding:10px 16px;font-weight:700;font-size:14px;cursor:grab;box-shadow:0 8px 22px rgba(0,0,0,.45);touch-action:none;user-select:none}
+  #exorPk .epPanel{display:none;position:absolute;top:calc(100% + 8px);right:0;width:360px;max-height:72vh;overflow-y:auto;background:#14141a;color:#efe9dd;border:1px solid #33333d;border-radius:14px;padding:12px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  #exorPk.low .epPanel{top:auto;bottom:calc(100% + 8px)} /* parked near the bottom: open upward instead */
+  #exorPk.leftAnchor .epPanel{right:auto;left:0} /* parked near the left edge: panel grows rightward */
   #exorPk.open .epPanel{display:block}
   #exorPk h4{margin:0 0 6px;font-size:14px;color:#d9822b}
   #exorPk .epRow{border:1px solid #2a2a33;border-radius:10px;padding:8px 10px;margin-top:8px}
@@ -62,7 +64,24 @@
     <button class="epBtn" id="epToggle">📦 Pickups</button>`;
   document.body.appendChild(root);
   const body = () => root.querySelector(".epBody");
-  root.querySelector("#epToggle").onclick = () => { root.classList.toggle("open"); if (root.classList.contains("open")) refresh(); };
+  // Default spot: TOP-right, clear of the till's pay controls. The button is
+  // draggable — park it anywhere; the spot sticks per computer.
+  const btn = root.querySelector("#epToggle");
+  const savedPos = (() => { try { return JSON.parse(LS("pos") || ""); } catch { return null; } })();
+  const place = (x, y) => {
+    x = Math.max(4, Math.min(window.innerWidth - 150, x));
+    y = Math.max(4, Math.min(window.innerHeight - 52, y));
+    root.style.left = x + "px"; root.style.top = y + "px";
+    root.classList.toggle("low", y > window.innerHeight * 0.55);
+    root.classList.toggle("leftAnchor", x < 380);
+  };
+  place(savedPos ? savedPos.x : window.innerWidth - 175, savedPos ? savedPos.y : 12);
+  window.addEventListener("resize", () => { const r2 = root.getBoundingClientRect(); place(r2.left, r2.top); });
+  let drag = null, moved = false;
+  btn.addEventListener("pointerdown", (e) => { const r2 = root.getBoundingClientRect(); drag = { dx: e.clientX - r2.left, dy: e.clientY - r2.top }; moved = false; try { btn.setPointerCapture(e.pointerId); } catch {} });
+  btn.addEventListener("pointermove", (e) => { if (!drag) return; const nx = e.clientX - drag.dx, ny = e.clientY - drag.dy; const r2 = root.getBoundingClientRect(); if (moved || Math.abs(nx - r2.left) + Math.abs(ny - r2.top) > 5) { moved = true; place(nx, ny); } });
+  btn.addEventListener("pointerup", () => { if (moved) { const r2 = root.getBoundingClientRect(); LS("pos", JSON.stringify({ x: Math.round(r2.left), y: Math.round(r2.top) })); } drag = null; });
+  btn.onclick = () => { if (moved) { moved = false; return; } root.classList.toggle("open"); if (root.classList.contains("open")) refresh(); };
   root.querySelector("#epMode").value = LS("mode") || "input";
   root.querySelector("#epMode").onchange = (e) => LS("mode", e.target.value);
   root.querySelector("#epPace").onchange = (e) => LS("pace", e.target.value);
