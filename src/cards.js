@@ -497,7 +497,7 @@ export async function servePickups(env) {
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const gql = `{ draftOrders(first: 40, query: "status:open", reverse: true) { edges { node {
     id name createdAt totalPrice tags note2
-    lineItems(first: 25) { edges { node { title quantity variant { id } } } } } } } }`;
+    lineItems(first: 25) { edges { node { title quantity variant { id sku barcode } } } } } } } }`;
   try {
     const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: "POST",
@@ -524,6 +524,11 @@ export async function servePickups(env) {
         // Numeric variant id so the POS tile can drop the line straight into
         // the POS cart (shopify.cart.addLineItem wants the bare number).
         v: Number(String(li.variant?.id || "").replace(/\D/g, "")) || 0,
+        // BinderPOS's own per-condition barcode + SKU: the BinderPOS till
+        // resolves these on scan, so the auto-loader userscript (and manual
+        // screen-scanning) land the exact card/variant/condition.
+        b: String(li.variant?.barcode || "").slice(0, 32),
+        s: String(li.variant?.sku || "").slice(0, 48),
       })),
     }));
     // CORS: the POS tile app (Shopify-hosted extension origin) reads this
