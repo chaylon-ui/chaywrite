@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.3.0
+// @version      1.4.0
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @grant        none
@@ -213,21 +213,62 @@
     }
     return out.sort((a, z) => norm(a.textContent).length - norm(z.textContent).length);
   }
-  function clickEl(el) {
-    const row2 = el.closest('li,tr,[role="button"],[class*="result" i],[class*="item" i],[class*="product" i]') || el;
-    const btn = [...row2.querySelectorAll('button,[role="button"],a')].find((b) => /add|cart|\+/i.test((b.textContent || "") + " " + (b.className || "")));
-    const target = btn || row2;
-    for (const tp of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) target.dispatchEvent(new MouseEvent(tp, { bubbles: true, cancelable: true, view: window }));
+  // The till's result TILES each carry a condition <select> and a "+ Add"
+  // button, and the cart panel shows "SUBTOTAL (N ITEM)" — so we can find
+  // the tile, make sure the right condition is picked (barcode search
+  // preselects it; we double-check against the order line), press ITS Add,
+  // and then confirm the item count actually went up.
+  function cartCount() {
+    const m = (document.body.innerText || "").match(/\(\s*(\d+)\s*items?\s*\)/i);
+    return m ? +m[1] : null;
+  }
+  function tileFor(el) {
+    let n = el;
+    for (let i = 0; i < 7 && n && n !== document.body; i++) {
+      if ([...n.querySelectorAll("button")].some((b) => /add/i.test(b.textContent || ""))) return n;
+      n = n.parentElement;
+    }
+    return null;
+  }
+  const stripQty = (s) => s.replace(/\s*x\s*\d+$/, "").trim(); // "Lightly Played Holofoil x0" -> minus stock suffix
+  function setCondition(tile, vt) {
+    const sel = tile.querySelector("select");
+    if (!sel || !vt) return true;
+    const want = norm(vt);
+    const cur = stripQty(norm(sel.options[sel.selectedIndex]?.textContent || ""));
+    if (cur === want || cur.startsWith(want) || want.startsWith(cur)) return true;
+    for (let i = 0; i < sel.options.length; i++) {
+      const t2 = stripQty(norm(sel.options[i].textContent));
+      if (t2 === want || t2.startsWith(want) || want.startsWith(t2)) {
+        const dset = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;
+        dset.call(sel, sel.options[i].value);
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      }
+    }
+    return false; // condition not in the dropdown — don't add the wrong one
   }
   async function addViaSearch(it) {
+    const c0 = cartCount();
     const before = new Set(findMatches(it));
     await typeCode(it.b);
-    for (let t2 = 0; t2 < 8; t2++) { // give the result list ~2s to paint
-      await sleep(250);
-      const fresh = findMatches(it).filter((el) => !before.has(el) && el.isConnected);
-      if (fresh.length) { clickEl(fresh[0]); return true; }
+    let tile = null;
+    for (let t2 = 0; t2 < 20 && !tile; t2++) { // the search API can take a few seconds
+      await sleep(300);
+      const ms = findMatches(it);
+      const fresh = ms.filter((el) => !before.has(el) && el.isConnected);
+      const el = fresh[0] || (t2 > 8 && ms.length ? ms[0] : null); // late fallback: strong title match even if the tile pre-existed
+      if (el) tile = tileFor(el);
     }
-    return false;
+    if (!tile) return false;
+    if (!setCondition(tile, it.vt)) return false;
+    await sleep(180);
+    const btn = [...tile.querySelectorAll('button,[role="button"]')].find((b) => /add/i.test(b.textContent || ""));
+    if (!btn) return false;
+    for (const tp of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) btn.dispatchEvent(new MouseEvent(tp, { bubbles: true, cancelable: true, view: window }));
+    if (c0 === null) return true; // no visible item counter — assume the click landed
+    for (let t3 = 0; t3 < 14; t3++) { await sleep(220); const c1 = cartCount(); if (c1 !== null && c1 > c0) return true; }
+    return false; // clicked but the cart never moved — flag for a manual tap
   }
   async function loadOrder(o, row) {
     const stat = row.querySelector(".epStat");
