@@ -1,9 +1,11 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.4.0
+// @version      1.4.1
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
+// @run-at       document-idle
+// @noframes
 // @grant        none
 // @updateURL    https://exor-binder.nevski.workers.dev/binderpos-pickups.user.js
 // @downloadURL  https://exor-binder.nevski.workers.dev/binderpos-pickups.user.js
@@ -22,6 +24,16 @@
 */
 (() => {
   "use strict";
+  // Stay entirely out of BinderPOS's way while it boots: top window only
+  // (never its internal iframes), and don't touch the page until the load
+  // event has fired AND a grace period has passed — on slower machines,
+  // initializing during their loading screen could wedge it.
+  if (window !== window.top) return;
+  const start = () => setTimeout(() => { try { init(); } catch (e) { /* never take the till down */ } }, 4000);
+  if (document.readyState === "complete") start();
+  else window.addEventListener("load", start, { once: true });
+
+  function init() {
   const BASE = "https://exor-binder.nevski.workers.dev";
   const LS = (k, v) => (v === undefined ? localStorage.getItem("exor_" + k) : localStorage.setItem("exor_" + k, v));
   const H = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -335,4 +347,5 @@
   setInterval(() => { if (LS("pin")) fetch(`${BASE}/pickups.json?k=${encodeURIComponent(LS("pin"))}`).then((r) => r.json()).then((j) => {
     if (j && Array.isArray(j.orders)) { ORDERS = j.orders.filter((o) => o.kiosk); root.querySelector("#epToggle").textContent = `📦 Pickups (${ORDERS.length})`; if (root.classList.contains("open")) render(); }
   }).catch(() => {}); }, 90000);
+  } // init()
 })();
