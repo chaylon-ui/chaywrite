@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.4.1
+// @version      1.4.2
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @run-at       document-idle
@@ -25,11 +25,26 @@
 (() => {
   "use strict";
   // Stay entirely out of BinderPOS's way while it boots: top window only
-  // (never its internal iframes), and don't touch the page until the load
-  // event has fired AND a grace period has passed — on slower machines,
-  // initializing during their loading screen could wedge it.
+  // (never its internal iframes), and don't touch the page until the till's
+  // OWN "Loading… Please wait" screen is gone and its UI (an input) exists.
+  // A fixed delay wasn't enough — a cached refresh fires the load event
+  // early, and initializing during their app boot wedges it on slow tills.
   if (window !== window.top) return;
-  const start = () => setTimeout(() => { try { init(); } catch (e) { /* never take the till down */ } }, 4000);
+  const appReady = () => {
+    try {
+      const txt = (document.body && document.body.innerText) || "";
+      if (/loading[\s\S]{0,8}please\s+wait/i.test(txt)) return false;
+      return !!document.querySelector("input");
+    } catch { return false; }
+  };
+  const gate = () => {
+    let stable = 0;
+    const iv = setInterval(() => {
+      if (appReady()) { if (++stable >= 2) { clearInterval(iv); try { init(); } catch (e) { /* never take the till down */ } } }
+      else stable = 0;
+    }, 1200);
+  };
+  const start = () => setTimeout(gate, 2500);
   if (document.readyState === "complete") start();
   else window.addEventListener("load", start, { once: true });
 
