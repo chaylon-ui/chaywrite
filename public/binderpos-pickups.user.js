@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.2.0
+// @version      1.3.0
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @grant        none
@@ -193,21 +193,63 @@
       fireKey(t, "keydown", "Enter"); fireKey(t, "keypress", "Enter"); fireKey(t, "keyup", "Enter");
     }
   }
+  // ---- auto-clicking the search result ----
+  // Typing the barcode makes the till SEARCH, but only a click on the
+  // result actually adds it to the cart (a real scanner rides the till's
+  // own auto-add path we can't reach). So: search, wait for the result to
+  // paint, click it. Only elements that APPEARED after the search count —
+  // never cart rows or leftovers from the last search.
+  const norm = (s) => String(s || "").toLowerCase().replace(/\[.*?\]|\(.*?\)/g, " ").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  const visible = (el) => { const r2 = el.getBoundingClientRect(); return r2.width > 40 && r2.height > 12 && r2.bottom > 0 && r2.top < innerHeight; };
+  function findMatches(it) {
+    const words = norm(it.t).split(" ").filter((w) => w.length > 2).slice(0, 3);
+    if (!words.length) return [];
+    const out = [];
+    for (const el of document.querySelectorAll("body *")) {
+      if (el.closest("#exorPk") || el.children.length > 6 || !visible(el)) continue;
+      const t = norm(el.textContent);
+      if (!t || t.length > 220) continue;
+      if (words.every((w) => t.includes(w))) out.push(el);
+    }
+    return out.sort((a, z) => norm(a.textContent).length - norm(z.textContent).length);
+  }
+  function clickEl(el) {
+    const row2 = el.closest('li,tr,[role="button"],[class*="result" i],[class*="item" i],[class*="product" i]') || el;
+    const btn = [...row2.querySelectorAll('button,[role="button"],a')].find((b) => /add|cart|\+/i.test((b.textContent || "") + " " + (b.className || "")));
+    const target = btn || row2;
+    for (const tp of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) target.dispatchEvent(new MouseEvent(tp, { bubbles: true, cancelable: true, view: window }));
+  }
+  async function addViaSearch(it) {
+    const before = new Set(findMatches(it));
+    await typeCode(it.b);
+    for (let t2 = 0; t2 < 8; t2++) { // give the result list ~2s to paint
+      await sleep(250);
+      const fresh = findMatches(it).filter((el) => !before.has(el) && el.isConnected);
+      if (fresh.length) { clickEl(fresh[0]); return true; }
+    }
+    return false;
+  }
   async function loadOrder(o, row) {
     const stat = row.querySelector(".epStat");
     const pace = +(LS("pace") || 700);
-    const missing = o.items.filter((it) => !it.b);
+    const mode = LS("mode") || "input";
+    const missing = o.items.filter((it) => !it.b).map((it) => it.t);
+    const taps = [];
     let n = 0, total = o.items.reduce((a, it) => a + (it.b ? it.q : 0), 0);
     for (const it of o.items) {
       if (!it.b) continue;
       for (let q = 0; q < it.q; q++) {
         n++;
-        stat.textContent = `Scanning ${n}/${total} — ${it.t.slice(0, 40)}…`;
-        await typeCode(it.b);
+        stat.textContent = `Adding ${n}/${total} — ${it.t.slice(0, 40)}…`;
+        if (mode === "input") { if (!(await addViaSearch(it)) && !taps.includes(it.t)) taps.push(it.t); }
+        else await typeCode(it.b);
         await sleep(pace);
       }
     }
-    stat.textContent = `Done — ${n} scan${n === 1 ? "" : "s"} sent.` + (missing.length ? ` ⚠ ${missing.length} line(s) had no barcode — add manually.` : "") + " Check the till cart matches, then apply credit & pay.";
+    stat.textContent = `Done — ${n} of ${total} sent.`
+      + (taps.length ? ` ⚠ ${taps.length} searched but didn’t auto-add — tap them in the till’s result list.` : "")
+      + (missing.length ? ` ⚠ ${missing.length} line(s) had no barcode — add manually.` : "")
+      + " CHECK the till cart matches the order, then apply credit & pay.";
   }
 
   // ---- Code 39 barcodes (fallback: zap them off the screen) ----
