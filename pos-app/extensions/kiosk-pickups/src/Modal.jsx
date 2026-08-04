@@ -30,6 +30,7 @@ function Modal() {
   const [err, setErr] = useState("");
   const [confirmDid, setConfirmDid] = useState("");
   const [adding, setAdding] = useState("");
+  const [failed, setFailed] = useState({}); // did -> [titles POS refused to add]
 
   useEffect(() => {
     (async () => {
@@ -105,13 +106,14 @@ function Modal() {
 
   async function addToCart(o) {
     setAdding(o.did);
+    setFailed((f) => ({ ...f, [o.did]: [] }));
     // Stamp the sale with which kiosk pickup it came from — the rung-in
     // order shows "Kiosk pickup: #D274" in its details, so the paper trail
     // survives after the draft itself is cleared. Best-effort: a POS build
     // without cart properties still adds the items fine.
     try { await shopify.cart.addCartProperties({ "Kiosk pickup": String(o.name || o.did) }); } catch {}
     let added = 0;
-    let skipped = 0;
+    const misses = [];
     for (const it of o.items || []) {
       const q = it.q || 1;
       if (it.v) {
@@ -122,16 +124,17 @@ function Modal() {
           // pop its generic "something went wrong" banner even on success
           await new Promise((res) => setTimeout(res, 300));
         } catch {
-          skipped += q;
+          misses.push(it.t);
         }
       } else {
-        skipped += q;
+        misses.push(it.t);
       }
     }
     setAdding("");
+    setFailed((f) => ({ ...f, [o.did]: misses }));
     shopify.toast.show(
-      skipped
-        ? `${added} added — ${skipped} item${skipped === 1 ? "" : "s"} need manual add`
+      misses.length
+        ? `${added} added — ${misses.length} couldn't be added (see list)`
         : `${o.name}: ${added} item${added === 1 ? "" : "s"} in the cart`
     );
   }
@@ -220,6 +223,14 @@ function Modal() {
                 </s-text>
               ))}
               {o.note ? <s-text>“{o.note}”</s-text> : null}
+              {(failed[o.did] || []).length ? (
+                <s-banner tone="warning" heading="POS couldn't add these — usually the product isn't on the Point of Sale sales channel">
+                  {failed[o.did].map((t, i) => (
+                    <s-text key={i}>• {t}</s-text>
+                  ))}
+                  <s-text>Add them by search, or fix the product's Sales channels in Shopify admin.</s-text>
+                </s-banner>
+              ) : null}
               <s-stack direction="inline" gap="base">
                 <s-button onClick={() => addToCart(o)} disabled={adding === o.did}>
                   {adding === o.did ? "Adding…" : "🛒 Add items to cart"}
