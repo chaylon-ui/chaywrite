@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.5.0
+// @version      1.5.1
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @run-at       document-idle
@@ -178,18 +178,20 @@
   // ---- auto-typing ("software scanner") ----
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   function findScanInput() {
-    // Prefer whatever the till currently focuses; else the most likely
-    // search field on screen (BinderPOS till keeps a product search box).
-    const a = document.activeElement;
-    if (a && a.tagName === "INPUT" && a.type !== "password" && a.closest("body")) return a;
+    // ONLY an input that positively identifies as the product search.
+    // NEVER whatever happens to be focused and NEVER a generic fallback:
+    // the till focuses a line's discount/qty field after an add, and a
+    // barcode typed into a discount field once turned a $43 cart into
+    // -$405,040. If no bona fide search box is found, we don't type AT ALL.
     const cands = [...document.querySelectorAll('input[type="text"],input[type="search"],input:not([type])')].filter((el) => {
+      if (el.disabled || el.closest("#exorPk")) return false;
       const r2 = el.getBoundingClientRect();
-      const ph = ((el.placeholder || "") + " " + (el.name || "") + " " + (el.id || "")).toLowerCase();
-      return r2.width > 80 && r2.height > 10 && !el.disabled && !el.closest("#exorPk") && /search|scan|product|barcode|sku|item/.test(ph);
+      if (r2.width < 80 || r2.height < 10 || r2.bottom < 0 || r2.top > innerHeight) return false;
+      const hint = ((el.placeholder || "") + " " + (el.name || "") + " " + (el.id || "") + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
+      if (/discount|price|qty|quantity|note|credit|customer|amount/.test(hint)) return false;
+      return /search|scan|product|barcode|sku/.test(hint);
     });
-    return cands[0] || [...document.querySelectorAll('input[type="text"],input[type="search"]')].find((el) => {
-      const r2 = el.getBoundingClientRect(); return r2.width > 80 && !el.closest("#exorPk");
-    }) || null;
+    return cands[0] || null;
   }
   const setNative = (el, v) => {
     const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
@@ -199,26 +201,33 @@
     const code = key === "Enter" ? "Enter" : "Digit" + key;
     el.dispatchEvent(new KeyboardEvent(type, { key, code, keyCode: key === "Enter" ? 13 : key.charCodeAt(0), which: key === "Enter" ? 13 : key.charCodeAt(0), bubbles: true, cancelable: true }));
   }
+  // Types a barcode into the VERIFIED search box and returns true, or types
+  // nowhere and returns false. Before pressing Enter it re-checks the text
+  // actually landed in that box — any surprise means abort, never Enter.
   async function typeCode(code) {
     const mode = LS("mode") || "input";
     const el = findScanInput();
-    if (mode === "input" && el) {
-      el.focus();
+    if (!el) return false;
+    el.focus();
+    if (mode === "input") {
       setNative(el, "");
       el.dispatchEvent(new Event("input", { bubbles: true }));
       await sleep(40);
       setNative(el, code);
       el.dispatchEvent(new Event("input", { bubbles: true }));
       await sleep(120);
+      if (el.value !== String(code)) return false; // text didn't stick where we put it — do NOT confirm
       fireKey(el, "keydown", "Enter"); fireKey(el, "keypress", "Enter"); fireKey(el, "keyup", "Enter");
       el.dispatchEvent(new Event("change", { bubbles: true }));
     } else {
-      // wedge mode: raw keystrokes at whatever has focus, like a scanner
-      const t = el || document.activeElement || document.body;
-      if (el) el.focus();
-      for (const ch of String(code)) { fireKey(t, "keydown", ch); fireKey(t, "keypress", ch); if (t.tagName === "INPUT") { setNative(t, (t.value || "") + ch); t.dispatchEvent(new Event("input", { bubbles: true })); } fireKey(t, "keyup", ch); await sleep(18); }
-      fireKey(t, "keydown", "Enter"); fireKey(t, "keypress", "Enter"); fireKey(t, "keyup", "Enter");
+      // wedge mode: scanner-style keystrokes — but ONLY into the verified box
+      setNative(el, "");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      for (const ch of String(code)) { fireKey(el, "keydown", ch); fireKey(el, "keypress", ch); setNative(el, (el.value || "") + ch); el.dispatchEvent(new Event("input", { bubbles: true })); fireKey(el, "keyup", ch); await sleep(18); }
+      if (el.value !== String(code)) return false;
+      fireKey(el, "keydown", "Enter"); fireKey(el, "keypress", "Enter"); fireKey(el, "keyup", "Enter");
     }
+    return true;
   }
   // ---- auto-clicking the search result ----
   // Typing the barcode makes the till SEARCH, but only a click on the
@@ -278,7 +287,7 @@
   async function addViaSearch(it) {
     const c0 = cartCount();
     const before = new Set(findMatches(it));
-    await typeCode(it.b);
+    if (!(await typeCode(it.b))) return false; // no verified search box — don't touch anything
     let tile = null;
     for (let t2 = 0; t2 < 20 && !tile; t2++) { // the search API can take a few seconds
       await sleep(300);
@@ -310,7 +319,7 @@
         n++;
         stat.textContent = `Adding ${n}/${total} — ${it.t.slice(0, 40)}…`;
         if (mode === "input") { if (!(await addViaSearch(it)) && !taps.includes(it.t)) taps.push(it.t); }
-        else await typeCode(it.b);
+        else if (!(await typeCode(it.b)) && !taps.includes(it.t)) taps.push(it.t);
         await sleep(pace);
       }
     }
