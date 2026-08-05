@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.5.1
+// @version      1.6.0
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @run-at       document-idle
@@ -124,6 +124,7 @@
 
   // ---- data ----
   let ORDERS = [];
+  let LOADING = false; // true while a Load-into-cart run is in progress
   async function refresh() {
     const pin = LS("pin");
     if (!pin) {
@@ -164,7 +165,7 @@
     body().innerHTML = ORDERS.map((o, i) => `<div class="epRow" data-i="${i}">
       <div class="epName">${H(o.name)} <span class="epMeta">· ${o.items.length} line${o.items.length === 1 ? "" : "s"} · $${H(o.total)}</span></div>
       ${o.note ? `<div class="epMeta">${H(o.note)}</div>` : ""}
-      <div class="epItems">${o.items.map((it) => `<div>${it.q}× ${H(it.t)}${it.b ? "" : " ⚠ no barcode"}</div>`).join("")}</div>
+      <div class="epItems">${o.items.map((it) => `<div>${it.q}× ${H(it.t)}${it.b ? "" : it.s ? " (by SKU)" : " ⚠ manual add"}</div>`).join("")}</div>
       <button class="ep epLoad">▶ Load into cart</button><button class="ep epBars">Show barcodes</button><button class="ep epDone">✓ Mark done</button>
       <div class="epStat"></div><div class="epBarsOut"></div></div>`).join("");
     body().querySelectorAll(".epRow").forEach((row) => {
@@ -284,10 +285,10 @@
     }
     return false; // condition not in the dropdown — don't add the wrong one
   }
-  async function addViaSearch(it) {
+  async function addViaSearch(it, code) {
     const c0 = cartCount();
     const before = new Set(findMatches(it));
-    if (!(await typeCode(it.b))) return false; // no verified search box — don't touch anything
+    if (!(await typeCode(code))) return false; // no verified search box — don't touch anything
     let tile = null;
     for (let t2 = 0; t2 < 20 && !tile; t2++) { // the search API can take a few seconds
       await sleep(300);
@@ -310,22 +311,29 @@
     const stat = row.querySelector(".epStat");
     const pace = +(LS("pace") || 700);
     const mode = LS("mode") || "input";
-    const missing = o.items.filter((it) => !it.b).map((it) => it.t);
+    // Newer BinderPOS product (late-2025 on) has no barcode but always a
+    // SKU, and the till's search matches SKUs too — so barcode first, SKU
+    // fallback; only lines with neither need a human.
+    const missing = o.items.filter((it) => !it.b && !it.s).map((it) => it.t);
     const taps = [];
-    let n = 0, total = o.items.reduce((a, it) => a + (it.b ? it.q : 0), 0);
-    for (const it of o.items) {
-      if (!it.b) continue;
-      for (let q = 0; q < it.q; q++) {
-        n++;
-        stat.textContent = `Adding ${n}/${total} — ${it.t.slice(0, 40)}…`;
-        if (mode === "input") { if (!(await addViaSearch(it)) && !taps.includes(it.t)) taps.push(it.t); }
-        else if (!(await typeCode(it.b)) && !taps.includes(it.t)) taps.push(it.t);
-        await sleep(pace);
+    let n = 0, total = o.items.reduce((a, it) => a + ((it.b || it.s) ? it.q : 0), 0);
+    LOADING = true; // pause list refreshes so the status line survives the run
+    try {
+      for (const it of o.items) {
+        const code = it.b || it.s;
+        if (!code) continue;
+        for (let q = 0; q < it.q; q++) {
+          n++;
+          stat.textContent = `Adding ${n}/${total} — ${it.t.slice(0, 40)}…`;
+          if (mode === "input") { if (!(await addViaSearch(it, code)) && !taps.includes(it.t)) taps.push(it.t); }
+          else if (!(await typeCode(code)) && !taps.includes(it.t)) taps.push(it.t);
+          await sleep(pace);
+        }
       }
-    }
+    } finally { LOADING = false; }
     stat.textContent = `Done — ${n} of ${total} sent.`
       + (taps.length ? ` ⚠ ${taps.length} searched but didn’t auto-add — tap them in the till’s result list.` : "")
-      + (missing.length ? ` ⚠ ${missing.length} line(s) had no barcode — add manually.` : "")
+      + (missing.length ? ` ⚠ ${missing.length} line(s) need manual add (no barcode or SKU).` : "")
       + " CHECK the till cart matches the order, then apply credit & pay.";
   }
 
@@ -406,8 +414,13 @@
   try { guardCartDeletion(); } catch {}
 
   // Refresh the badge count quietly every 90s while the till is open.
-  setInterval(() => { if (LS("pin")) fetch(`${BASE}/pickups.json?k=${encodeURIComponent(LS("pin"))}`).then((r) => r.json()).then((j) => {
-    if (j && Array.isArray(j.orders)) { ORDERS = j.orders.filter((o) => o.kiosk); root.querySelector("#epToggle").textContent = `📦 Pickups (${ORDERS.length})`; if (root.classList.contains("open")) render(); }
+  setInterval(() => { if (LS("pin") && !LOADING) fetch(`${BASE}/pickups.json?k=${encodeURIComponent(LS("pin"))}`).then((r) => r.json()).then((j) => {
+    // Never re-render mid-load: it rebuilds the rows and wipes the live
+    // "Adding n/m…" status, which looks like the run stalled.
+    if (LOADING || !j || !Array.isArray(j.orders)) return;
+    ORDERS = j.orders.filter((o) => o.kiosk);
+    root.querySelector("#epToggle").textContent = `📦 Pickups (${ORDERS.length})`;
+    if (root.classList.contains("open")) render();
   }).catch(() => {}); }, 90000);
   } // init()
 })();
