@@ -52,6 +52,7 @@ export class BinderRoom {
             if (!this.settings.tabs.some((t) => t.game === d.game)) this.settings.tabs.push({ ...d });
         }
         this.settings.newToday = { ...DEFAULT_SETTINGS.newToday, ...(this.settings.newToday || {}) };
+        this.settings.jpTab = { ...DEFAULT_SETTINGS.jpTab, ...(this.settings.jpTab || {}) };
         const p = await this.state.storage.get("pin");
         if (p) this.pin = p;
         this.gseeded = !!(await this.state.storage.get("gseeded"));
@@ -275,6 +276,16 @@ export class BinderRoom {
       const nt = patch.newToday;
       if (!nt || typeof nt !== "object") return "bad newToday";
       next.newToday = Object.fromEntries(Object.keys(DEFAULT_SETTINGS.newToday).map((g) => [g, !!nt[g]]));
+    }
+    // Japanese Pokémon singles switch (the SortSwift catalogue lives in its
+    // own collection): per-screen chips on the Pokémon tab flip the case
+    // between the English and Japanese decks.
+    if ("jpTab" in patch) {
+      const jt = patch.jpTab;
+      if (!jt || typeof jt !== "object") return "bad jpTab";
+      const c = String(jt.collection || "pokemon-japanese-singles").trim().toLowerCase();
+      if (!HANDLE_RE.test(c)) return "bad jpTab collection handle";
+      next.jpTab = { enabled: !!jt.enabled, collection: c };
     }
     if ("showcaseTab" in patch) {
       const st = patch.showcaseTab;

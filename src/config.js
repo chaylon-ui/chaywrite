@@ -24,6 +24,12 @@ export const DEFAULT_SETTINGS = {
     { label: "Basketball", collection: "all-basketball-singles",        theme: "basketball", game: "basketball", enabled: false },
   ],
 
+  // Japanese Pokémon singles — a separate catalogue (SortSwift-managed;
+  // BinderPOS only carries English) in its own collection. When enabled,
+  // the Pokémon tab grows an ENGLISH / JAPANESE switch on touch kiosks and
+  // the website embed; Japanese re-points the case at this collection.
+  jpTab: { enabled: false, collection: "pokemon-japanese-singles" },
+
   // The physical showcase, mirrored: a tab showing every card tagged
   // ESL-SHOWCASE in the store (the "esl-showcase" smart collection gathers
   // the tag automatically). Mixed games, no price floor — the tag is the

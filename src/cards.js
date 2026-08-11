@@ -22,6 +22,17 @@ const PKM_TRAINER = ["Item", "Supporter", "Stadium", "Pokémon Tool", "Pokemon T
 
 const YGO_ATTRS = ["Dark", "Light", "Earth", "Water", "Fire", "Wind", "Divine"];
 
+/* Energy/Trainer read from a description's "Card Type: …" line — Japanese
+   Pokémon singles (the SortSwift catalogue) carry it there, not in tags. */
+function pkmBodyType(body) {
+  const m = /card\s*type:\s*([a-z]+)/i.exec(body || "");
+  if (!m) return null;
+  const e = PKM_ENERGIES.find((x) => x.toLowerCase() === m[1].toLowerCase());
+  if (e) return e;
+  if (/^(trainer|item|supporter|stadium|tool)$/i.test(m[1])) return "Trainer";
+  return null;
+}
+
 const GAMES = {
   mtg: {
     match: /^mtg\b/i,
@@ -40,7 +51,7 @@ const GAMES = {
     lanes: [...PKM_ENERGIES, "Trainer"],
     colorNames: Object.fromEntries([...PKM_ENERGIES, "Trainer"].map((l) => [l, l])),
     fallbackLane: "Colorless",
-    laneOf(tags) {
+    laneOf(tags, title, body) {
       // Weakness tags look like "Grass [x2]" — anything with '[' is not the
       // card's own energy type, so skip those before matching.
       const clean = tags.filter((t) => t.indexOf("[") === -1);
@@ -48,13 +59,20 @@ const GAMES = {
       if (energy) return energy;
       if (clean.some((t) => PKM_TRAINER.includes(t))) return "Trainer";
       if (clean.includes("Energy")) return "Colorless";
+      // Japanese singles (SortSwift) carry no energy tags — the type lives in
+      // the description instead: "Card Type: Psychic HP: 90 …".
+      const bt = pkmBodyType(body);
+      if (bt) return bt;
       return "Colorless";
     },
-    typeOf(tags) {
+    typeOf(tags, title, body) {
       const clean = tags.filter((t) => t.indexOf("[") === -1);
       if (clean.some((t) => PKM_TRAINER.includes(t))) return "Trainer";
       const energy = PKM_ENERGIES.find((e) => clean.includes(e));
-      return energy ? energy + " Pokémon" : "Pokémon";
+      if (energy) return energy + " Pokémon";
+      const bt = pkmBodyType(body);
+      if (bt) return bt === "Trainer" ? "Trainer" : bt + " Pokémon";
+      return "Pokémon";
     },
   },
 
@@ -153,7 +171,11 @@ function condOf(vtitle, game) {
   if (game && SPORTS_GAMES.has(game)) return "";
   const t = String(vtitle || "");
   if (/^default title$/i.test(t)) return "";
-  return t.replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ").trim();
+  return t.replace(/\s*(reverse\s+)?holofoil\s*/i, " ").replace(/\s*foil\s*/i, " ")
+    // SortSwift's Japanese singles variant like "Lightly Played / Japanese /
+    // Holofoil" — the language isn't a condition, so it comes off the label.
+    .replace(/\s*\/\s*japanese\s*\/?\s*/i, " ")
+    .replace(/\s*\/\s*$/, "").replace(/\s{2,}/g, " ").trim();
 }
 /* Every in-stock printing of the product, so the phone can offer a
    condition toggle. Only attached when there's actually a choice. */
@@ -308,7 +330,7 @@ async function adminSearch(q, env, ptq = "") {
   const gql = `query($q:String!,$after:String){products(first:40,query:$q,after:$after){
     pageInfo{hasNextPage endCursor}
     edges{node{
-    title handle productType tags description(truncateAt:400) featuredImage{url}
+    title handle productType vendor tags description(truncateAt:400) featuredImage{url}
     variants(first:20){edges{node{id title price availableForSale}}}}}}}`;
   let edges = [];
   let after = null;
@@ -327,7 +349,7 @@ async function adminSearch(q, env, ptq = "") {
     after = pr.pageInfo.endCursor;
   }
   return edges.map(({ node: p }) => ({
-    title: p.title, handle: p.handle, product_type: p.productType, tags: p.tags || [], body_html: p.description || "",
+    title: p.title, handle: p.handle, product_type: p.productType, vendor: p.vendor || "", tags: p.tags || [], body_html: p.description || "",
     images: p.featuredImage ? [{ src: p.featuredImage.url }] : [],
     variants: (p.variants?.edges || []).map(({ node: v }) => ({
       id: +String(v.id).replace(/\D/g, ""), title: v.title, price: String(v.price), available: !!v.availableForSale,
@@ -353,7 +375,7 @@ async function suggestSearch(q, headers) {
       const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
       const imgs = (p.images && p.images.length ? p.images : [p.featured_image]).filter(Boolean);
       return {
-        title: p.title, handle: p.handle, product_type: p.type, tags: p.tags || [], body_html: p.description || "",
+        title: p.title, handle: p.handle, product_type: p.type, vendor: p.vendor || "", tags: p.tags || [], body_html: p.description || "",
         images: imgs.map((src) => ({ src: abs(src) })),
         variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, price: (v.price / 100).toFixed(2), available: !!v.available })),
       };
@@ -671,7 +693,11 @@ function buildCards(products, opts = {}) {
     const ownGame = gameOf(p.product_type);
     const lane = ownGame === game ? spec.laneOf(tags, p.title, body) : spec.fallbackLane;
 
-    const set = (p.title.match(/\[([^\]]+)\]/) || [, ""])[1];
+    // Japanese Pokémon singles bracket the CARD NUMBER ("Muk [004/092]") and
+    // keep the set name in the vendor field — the cue card's set line should
+    // read "Mystery of the Fossils", not a number.
+    const jpk = /pokemon\s*japan/i.test(p.product_type || "");
+    const set = (jpk && String(p.vendor || "").trim()) || (p.title.match(/\[([^\]]+)\]/) || [, ""])[1];
     const name = p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim();
     const key = name + "|" + set;
     if (seen.has(key)) continue;
@@ -721,7 +747,10 @@ function buildShowcase(products) {
     if (eligible.length === 0) continue;
     const v = eligible.reduce((a, b) => (+b.price > +a.price ? b : a));
 
-    const set = (p.title.match(/\[([^\]]+)\]/) || [, ""])[1];
+    // Same swap as buildCards: Japanese Pokémon singles keep the set name in
+    // the vendor field; the title bracket is the card number.
+    const jpk = /pokemon\s*japan/i.test(p.product_type || "");
+    const set = (jpk && String(p.vendor || "").trim()) || (p.title.match(/\[([^\]]+)\]/) || [, ""])[1];
     const name = p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim();
     const key = name + "|" + set;
     if (seen.has(key)) continue;

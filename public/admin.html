@@ -163,6 +163,15 @@ a.tvlink:hover{color:var(--ember)}
       <div class="hint">Christmas strings twinkling lights along the top of the case, frosts the glass corners, and scatters candy canes, a bauble, holly and a little gift on the felt. Cards, prices and tabs are untouched — flip it back to None in January.</div>
     </div>
 
+    <!-- Japanese Pokémon singles: SortSwift's catalogue, its own collection. -->
+    <div class="group">
+      <div class="gtitle">Japanese Pokémon singles</div>
+      <div class="row" style="margin-top:.6rem"><input id="jpEnabled" type="checkbox"><label for="jpEnabled">Language switch on the Pokémon tab — customers flip the case between <b>ENGLISH</b> and <b>JAPANESE · 日本語</b> singles (touch kiosks &amp; website mode)</label></div>
+      <label for="jpCollection">Japanese collection handle</label>
+      <input id="jpCollection" type="text" placeholder="pokemon-japanese-singles">
+      <div class="hint">The Japanese singles are the SortSwift-managed catalogue (product type <code>Pokemon Japan Singles</code> — the <code>pokemon-japanese-singles</code> smart collection gathers it automatically). Same rules as the other singles: in stock and over $10, grouped by energy, set names shown from the set line. The switch resets to English for the next shopper. “Browse by set” hides while Japanese is selected.</div>
+    </div>
+
     <!-- The physical showcase, mirrored: a tab of every card tagged
          ESL-SHOWCASE (mixed games, no price floor), grouped game by game. -->
     <div class="group">
@@ -366,6 +375,7 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
   $('header').value=s.header||'';$('itemWord').value=s.itemWord||'';$('topLoaders').checked=!!s.topLoaders;$('searchEnabled').checked=!!s.searchEnabled;$('perfMode').checked=!!s.perfMode;$('touchMode').checked=!!s.touchMode;$('counterEnabled').checked=s.counterEnabled!==false;$('fullCard').checked=!!s.fullCard;$('cartMaxOn').checked=(+s.cartMax||0)>0;$('cartMaxN').value=(+s.cartMax||0)>0?String(s.cartMax):'';$('sleeveWhiteBg').checked=!!s.sleeveWhiteBg;$('siteMode').checked=!!s.siteMode;$('setBrowse').checked=!!s.setBrowse;$('setRoll').checked=!!s.setRoll;$('kbPos').value=['top','midtop','middle','midbot','bottom'].includes(s.kbPos)?s.kbPos:'bottom';$('holiday').value=s.holiday==='christmas'?'christmas':'none';
   const nt=s.newToday||{};$('ntMtg').checked=!!nt.mtg;$('ntPokemon').checked=!!nt.pokemon;$('ntYugioh').checked=!!nt.yugioh;$('ntStarwars').checked=!!nt.starwars;$('ntOnepiece').checked=!!nt.onepiece;$('ntRiftbound').checked=!!nt.riftbound;$('ntHockey').checked=!!nt.hockey;$('ntBasketball').checked=!!nt.basketball;
   const sc=s.showcaseTab||{};$('scEnabled').checked=!!sc.enabled;$('scCollection').value=sc.collection||'esl-showcase';
+  const jt=s.jpTab||{};$('jpEnabled').checked=!!jt.enabled;$('jpCollection').value=jt.collection||'pokemon-japanese-singles';
   const sv=s.sleevesTab||{};$('svEnabled').checked=!!sv.enabled;$('svCollection').value=sv.collection||'all-dragon-shield-sleeves';
   const bm=Array.isArray(s.bubbleMsgs)?s.bubbleMsgs:[];
   $('bub1').value=bm[0]||'';$('bub2').value=bm[1]||'';$('bub3').value=bm[2]||'';
@@ -403,6 +413,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const patch={header:$('header').value,itemWord:$('itemWord').value.trim(),tabs,topLoaders:$('topLoaders').checked,searchEnabled:$('searchEnabled').checked,
     perfMode:$('perfMode').checked,touchMode:$('touchMode').checked,counterEnabled:$('counterEnabled').checked,fullCard:$('fullCard').checked,cartMax:($('cartMaxOn').checked?Math.max(1,Math.min(999,parseInt($('cartMaxN').value,10)||10)):0),sleeveWhiteBg:$('sleeveWhiteBg').checked,siteMode:$('siteMode').checked,setBrowse:$('setBrowse').checked,setRoll:$('setRoll').checked,kbPos:$('kbPos').value,holiday:$('holiday').value,newToday:{mtg:$('ntMtg').checked,pokemon:$('ntPokemon').checked,yugioh:$('ntYugioh').checked,starwars:$('ntStarwars').checked,onepiece:$('ntOnepiece').checked,riftbound:$('ntRiftbound').checked,hockey:$('ntHockey').checked,basketball:$('ntBasketball').checked},
     showcaseTab:{enabled:$('scEnabled').checked,label:'Showcase',collection:($('scCollection').value.trim().toLowerCase())||'esl-showcase',icon:ICONS.showcase||''},
+    jpTab:{enabled:$('jpEnabled').checked,collection:($('jpCollection').value.trim().toLowerCase())||'pokemon-japanese-singles'},
     sleevesTab:{enabled:$('svEnabled').checked,label:'Sleeves',collection:($('svCollection').value.trim().toLowerCase())||'all-dragon-shield-sleeves',icon:ICONS.sleeves||''},boardTab:{enabled:$('bgEnabled').checked,label:'Board Games',collection:($('bgCollection').value.trim().toLowerCase())||'board-games',icon:ICONS.board||'',plain:$('bgPlain').checked},whTab:{enabled:$('whEnabled').checked,label:'Warhammer',collection:($('whCollection').value.trim().toLowerCase())||'gamesworkshop',icon:ICONS.wh||'',plain:$('whPlain').checked},
     bubbleMsgs:[$('bub1').value,$('bub2').value,$('bub3').value].map(v=>v.trim()).filter(Boolean),
     attractMsgs:[$('at1').value,$('at2').value,$('at3').value].map(v=>v.trim()).filter(Boolean),

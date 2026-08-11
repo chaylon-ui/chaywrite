@@ -1015,6 +1015,20 @@ function SLVSET(k,v,el){if(el&&window.TOUCH)comicBurst(el,'FILTERED!',true);
  if(window.REMOTE&&!REM_APPLY)RGO({a:'svf',f:Object.assign({},SLVF)});
  if(SLEEVES()){unzoom();selected=null;applyCards(slvView());draw();}
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
+/* ---- Japanese Pokémon switch (admin option, per screen): the Japanese
+   singles are their own SortSwift-managed collection, so the ENGLISH /
+   JAPANESE chips on the Pokémon tab just re-point the deck fetch. Resets to
+   English on tab switches and between shoppers. ---- */
+let JPMODE=false;
+function JPON(s){s=s||SETTINGS;const j=s.jpTab||{};
+ return !!(j.enabled&&j.collection&&s.game==='pokemon'&&!s.newTodayActive&&!s.showcaseActive&&!s.sleevesActive&&!s.shelfActive);}
+function jpQS(){return (JPMODE&&JPON())?'&collection='+encodeURIComponent(SETTINGS.jpTab.collection):'';}
+function JPSET(v,el){const on=(v==='jp');if(JPMODE===on)return;
+ if(el&&window.TOUCH)comicBurst(el,on?'日本語!':'ENGLISH!',true);
+ JPMODE=on;
+ if(window.REMOTE&&!REM_APPLY)RGO({a:'jpf',v:on?'jp':'en'});
+ unzoom();selected=null;markSel();refetchCards();
+ if(window.TOUCH)renderTouchTabs(SETTINGS);}
 let FULLCARD_ON=false;
 function traySize(g){if(g==='showcase'||g==='sleeves')return 24;
  if(window.SITEMOBILE)return 9999; // phone website view: one long scrollable grid
@@ -1501,6 +1515,7 @@ function touchAd(){const qb=document.querySelector('.qrbub');if(!qb)return;
 function startAttract(){if(window.REMOTE)return;if(attractOn||wasPaired)return;
  if(window.TOUCH&&cart.length){armAttract();return;} // a live cart gets the STILL THERE? countdown first
  attractOn=true;
+ if(JPMODE){JPMODE=false;refetchCards();if(window.TOUCH)renderTouchTabs(SETTINGS);} // next shopper starts on English
  attractGoHome();
  const welcome=window.TOUCH&&!!SETTINGS.attractShow;
  if(welcome)showTshow();
@@ -1600,6 +1615,7 @@ function MIRROR(force){if(window.REMOTE||(!force&&!REMN)||!ws||ws.readyState!==1
   kb:document.getElementById('tkb').classList.contains('open'),
   chk:document.getElementById('tcheck').classList.contains('open'),
   svf:Object.assign({},SLVF),
+  jp:JPMODE,
   att:document.body.classList.contains('attract')}}));}catch(e){}}
 setInterval(()=>MIRROR(),1000);
 function APPLYMIR(m){if(Date.now()<RGRACE)return;REM_APPLY=true;try{
@@ -1619,6 +1635,7 @@ function APPLYMIR(m){if(Date.now()<RGRACE)return;REM_APPLY=true;try{
  else if(!m.chk)document.getElementById('tcheck').classList.remove('open');
  if(m.svf&&typeof m.svf==='object'){const nf={size:m.svf.size==='jp'?'jp':'std',fin:SLVFINS.includes(m.svf.fin)?m.svf.fin:'all',ct:['all','100','60'].includes(String(m.svf.ct))?String(m.svf.ct):'all'};
   if(JSON.stringify(nf)!==JSON.stringify(SLVF)){SLVF=nf;if(SLEEVES()){selected=null;applyCards(slvView());draw();}renderTouchTabs(SETTINGS);}}
+ if(typeof m.jp==='boolean'&&m.jp!==JPMODE)JPSET(m.jp?'jp':'en',null); // REM_APPLY is set, so this won't echo back
  const ra=document.getElementById('rmatt');if(ra)ra.style.display=m.att?'inline':'none';
 }finally{REM_APPLY=false;}}
 function EXECRC(d){if(!d)return;lastAct=Date.now();stopAttract();armAttract();
@@ -1642,6 +1659,7 @@ function EXECRC(d){if(!d)return;lastAct=Date.now();stopAttract();armAttract();
   case 'reset':touchReset();break;
   case 'svf':if(d.f&&typeof d.f==='object'){SLVF={size:d.f.size==='jp'?'jp':'std',fin:SLVFINS.includes(d.f.fin)?d.f.fin:'all',ct:['all','100','60'].includes(String(d.f.ct))?String(d.f.ct):'all'};
    if(SLEEVES()){unzoom();selected=null;applyCards(slvView());draw();}renderTouchTabs(SETTINGS);}break;
+  case 'jpf':JPSET(d.v==='jp'?'jp':'en',null);break;
  }
  MIRROR(true);}
 /* ---- Touch mode: the totem drives itself. On-screen tabs and page arrows
@@ -1785,6 +1803,12 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
   +`<div class="slvgrp">${chip('fin','all','ALL')}${chip('fin','brushed','BRUSHED')}${chip('fin','matte','MATTE')}${chip('fin','dual','DUAL MATTE')}${chip('fin','classic','CLASSIC')}${chip('fin','other','MORE')}</div>`
   +`<div class="slvgrp">${chip('ct','all','ANY PACK')}${chip('ct','100','100CT')}${chip('ct','60','60CT')}</div>`
   +`</div>`:'';
+ // Pokémon language switch (admin option): the Japanese singles live in
+ // their own collection, so the chips swap the whole case between decks.
+ const jpbar=(JPON(s)&&!searching)?`<div class="slvbar"><div class="slvgrp">`
+  +`<button class="slvchip${JPMODE?'':' on'}" onclick="JPSET('en',this)">ENGLISH</button>`
+  +`<button class="slvchip${JPMODE?' on':''}" onclick="JPSET('jp',this)">JAPANESE · 日本語</button>`
+  +`</div></div>`:'';
  // Set-browse chip row: the colours/energies actually in the result set,
  // plus price/alphabetical sorts.
  const srtbar=(searching&&SETMODE&&Array.isArray(SRAW)&&SRAW.length)?(()=>{
@@ -1800,12 +1824,13 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
   +(searching?`<button class="ttab" onclick="comicBurst(this,'POOF!',true);TSEARCHCLEAR()">✕ Clear search</button>`:'')
   +`</div><button class="tsarr tsr" onclick="TSCROLLBY(1)" aria-label="More tabs this way">›</button></div>`
   +slvbar
+  +jpbar
   +((s.shelfActive&&!searching)?(
     ((SLVALL&&Array.isArray(SLVALL.CATS)&&SLVALL.CATS.length>1)?`<div class="slvbar"><div class="slvgrp" style="flex-wrap:wrap;justify-content:center">${[{k:'all',label:'ALL'},...SLVALL.CATS].map(c=>`<button class="slvchip${SHCAT===c.k?' on':''}" onclick="SHCATSET('${H(c.k)}',this)">${H(String(c.label||c.k).toUpperCase())}</button>`).join('')}</div></div>`:'')
     +`<div class="slvbar"><div class="slvgrp">${[['feed','NEWEST'],['pd','PRICE ↓'],['pa','PRICE ↑'],['az','A–Z'],['za','Z–A']].map(([v,l])=>`<button class="slvchip${SHSORT===v?' on':''}" onclick="SHSET('${v}',this)">${l}</button>`).join('')}</div></div>`):'')
   +srtbar
   +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):H('Search for a '+IWone()+'…')}</span></button>`:'')
-  +((s.setBrowse===true&&!(s.sleevesActive||s.shelfActive))?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:'');
+  +((s.setBrowse===true&&!(s.sleevesActive||s.shelfActive)&&!JPMODE)?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:''); // JP sets aren't in the title brackets, so set browse sits out
  const sc=document.getElementById('tscroll');
  sc.addEventListener('scroll',TSCROLLUPD,{passive:true});
  const cur=sc.querySelector('.ttab.on'); // keep the active tab in view
@@ -2098,7 +2123,7 @@ function showTload(){if(TLT||document.getElementById('tload').classList.contains
   clearTimeout(TLFS);TLFS=setTimeout(hideTload,12000);},250);}
 function hideTload(){clearTimeout(TLT);TLT=null;clearTimeout(TLFS);TLFS=null;document.getElementById('tload').classList.remove('open');}
 function refetchCards(){const seq=++CFSEQ;showTload();
- fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
+ fetch('/cards.json?v=1'+RQ+jpQS(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==CFSEQ)return; // a newer switch is already in flight — this deck is stale
   hideTload();
   if(d&&d.cards&&d.cards.length){SDECK=null;document.body.classList.remove('searching');const el=document.getElementById('dvq');if(el)el.textContent='';window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;d.cards.CATS=d.cats;applyCards(d.cards);draw();if(window.TOUCH)renderTouchTabs(SETTINGS);}}).catch(()=>{if(seq===CFSEQ)hideTload();});}
@@ -2142,9 +2167,10 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  cs.classList.toggle('showcase',!!s.showcaseActive&&!srch);
  document.body.classList.toggle('perf',!!s.perfMode);
  const ntNow=!!s.newTodayActive;
- if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){SHSORT='feed';SHCAT='all';unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
+ if((s.collection&&CUR_COLLECTION!==null&&s.collection!==CUR_COLLECTION)||(CUR_COLLECTION!==null&&ntNow!==CUR_NT)){SHSORT='feed';SHCAT='all';JPMODE=false;unzoom();selected=null;markSel();refetchCards();} // tab switch closes any open preview
  if(s.collection)CUR_COLLECTION=s.collection;
  CUR_NT=ntNow;
+ if(JPMODE&&!JPON(s)){JPMODE=false;refetchCards();} // admin turned the language switch off mid-browse
  const nt=!!s.topLoaders;if(nt!==TOPLOAD){TOPLOAD=nt;if(document.getElementById('slab'))draw();}
  /* Touch-kiosk mode can flip live from admin (per room); ?touch=1 still
     forces it per-URL. Re-arm attract so the 2-minute kiosk leash applies. */
@@ -2171,7 +2197,7 @@ function applySettings(s){if(!s||typeof s!=='object')return;SETTINGS=Object.assi
  if(window.TOUCH)renderTouchTabs(SETTINGS);}
 /* Between sessions, silently pick up a fresh deck if inventory changed. */
 function refreshCards(){const seq=CFSEQ; // background poll: never overwrite a tab switch that started after it
- fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(seq===CFSEQ&&d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;d.cards.CATS=d.cats;applyCards(d.cards);draw();}}).catch(()=>{});}
+ fetch('/cards.json?v=1'+RQ+jpQS(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(seq===CFSEQ&&d&&d.cards&&d.cards.length&&d.version!==window.BINDER_VERSION){window.BINDER_VERSION=d.version;if(d.game)GAME=d.game;d.cards.COLOR_NAME=d.colorNames;d.cards.GAME=d.game;d.cards.CATS=d.cats;applyCards(d.cards);draw();}}).catch(()=>{});}
 window.BINDER_READY.then(async ()=>{try{applySettings(await (await fetch('/settings?v=1'+RQ,{cache:'no-store'})).json());}catch(e){}if(window.BINDER_GAME)GAME=window.BINDER_GAME;applyCards(window.BINDER_CARDS);draw();connect();});
 /* Fresh stock without anyone touching the TV: the deck feed re-checks every
    10 minutes while idle (redraws only when the version actually changed —
