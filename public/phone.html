@@ -314,7 +314,7 @@ function connect(){
    else if(m.type==='rejected'){SHOW('v-reject');if(m.reason==='expired'){document.getElementById('rjT').textContent='This code expired';document.getElementById('rjP').textContent='Codes refresh every 2 minutes. Scan the current code on the TV.';}}
    else if(m.type==='idle'){document.getElementById('phIdle').textContent=Math.floor(m.idleLeft/60)+':'+String(m.idleLeft%60).padStart(2,'0');}
    else if(m.type==='dropped'){if(!checkedOut){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent=m.reason==='idle'?'No activity for 2 minutes, so the showcase freed up for the next customer.':'Disconnected.';}}
-   else if(m.type==='counter_order'){if(m.data&&m.data.name){document.getElementById('doneP').textContent='Draft order '+m.data.name+' is waiting at the counter ('+m.data.count+' cards · $'+m.data.total+'). Give your name at the register.';setTimeout(showRevPop,1500);}}
+   else if(m.type==='counter_order'){if(m.data&&m.data.name){document.getElementById('doneP').textContent='Order '+m.data.name+' is on the counter list ('+m.data.count+' cards · $'+m.data.total+'). Head up and give that number to a staff member — we don’t bring orders out; they’ll pull your cards and ring you up.';setTimeout(showRevPop,1500);}}
    else if(m.type==='settings'){applyPhoneSettings(m.data);}
    else if(m.type==='ack'){/* could sync cart count from server */}
  };
@@ -465,7 +465,7 @@ function CHECKOUT(where){if(!cart.length){toast('Your cart is empty');return;}
  if(where==='phone'){
   if(items.length){document.getElementById('doneT').textContent='Off to checkout';document.getElementById('doneP').textContent='Opening your Shopify cart ('+cart.length+' cards · $'+t+')… Anything already in your exorgames.com cart stays put.';setTimeout(()=>{location.href=cartUrl(items);},800);}
   else{document.getElementById('doneT').textContent='See the counter';document.getElementById('doneP').textContent='These cards can’t be added to an online cart right now — please pay at the counter ('+cart.length+' cards · $'+t+').';}}
- else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Staff have your '+cart.length+' cards ($'+t+') — give your name at the register.';setTimeout(showRevPop,1800);}}
+ else{document.getElementById('doneT').textContent='Sent to the counter';document.getElementById('doneP').textContent='Your '+cart.length+' cards ($'+t+') are on the counter list — now head up and speak with a staff member. We don’t bring orders out; they’ll pull your cards and ring you up when you check in.';setTimeout(showRevPop,1800);}}
 window.BINDER_READY.then(()=>{applyCards(window.BINDER_CARDS);
  if(!token){SHOW('v-reject');document.getElementById('rjT').textContent='Scan the TV code';document.getElementById('rjP').textContent='Open this by scanning the QR on the showcase screen.';}
  else connect();});

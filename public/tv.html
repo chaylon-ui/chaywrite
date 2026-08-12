@@ -781,7 +781,10 @@ html.portrait .tsteps{grid-template-columns:1fr}
 .revkqr{background:#fff;border:3px solid #101010;border-radius:10px;padding:8px;display:inline-block}
 .revkchips{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center}
 .revkdone{font-family:'Bangers','Comic Sans MS',cursive;font-size:1.4rem;color:#2d7d46;letter-spacing:.05em}
-.tdp3{font-family:'Bangers',cursive;font-size:1.15rem;color:#b8641b;letter-spacing:.03em}
+.tdp3{font-family:'Bangers',cursive;font-size:1.15rem;color:#b8641b;letter-spacing:.03em;max-width:24rem;line-height:1.35}
+/* The "come see us" call to action on the pickup ticket — the one line that
+   stops customers waiting for the order to be brought to them. */
+.tdgo{font-family:'Bangers',cursive;font-size:1.8rem;line-height:1.1;color:#c9342b;-webkit-text-stroke:.6px #101010;letter-spacing:.04em;margin-top:.45rem;max-width:24rem;animation:ttshake 1.6s ease-in-out infinite}
 @keyframes ttshake{0%,100%{transform:translate(0,0) rotate(-1deg)}25%{transform:translate(-4px,2px) rotate(.6deg)}50%{transform:translate(3px,-2px) rotate(-1.8deg)}75%{transform:translate(-2px,3px) rotate(.2deg)}}
 /* Dymo-style embossed name label for "Image Coming Soon" placeholder cards —
    raised white-on-black tape across the top so you know what it is at a glance. */
@@ -868,7 +871,8 @@ html.portrait .tsteps{grid-template-columns:1fr}
     <div class="tdp2">Your pickup number</div>
     <div class="tdnum" id="tdnum">…</div>
     <div class="tdqr" id="tdqr"></div>
-    <div class="tdp3">📸 Snap a photo — show it at the register!</div>
+    <div class="tdgo">🛎 NOW COME TELL A STAFF MEMBER!</div>
+    <div class="tdp3">We don’t bring orders out — head to the counter and give us this number, and we’ll pull your cards and ring you up. 📸 Snap a photo first!</div>
   </div></div>
   <div class="counter hide" id="counter"><div class="cbox">
     <div class="ct1">🛎 Order for the counter</div>
