@@ -596,15 +596,18 @@ export async function servePickupDone(env, did) {
    BROWSERS query strictlybetter.eu themselves (its API is CORS-open to
    browsers, but its Cloudflare zone 301-loops Worker-originated fetches),
    then hand the suggested names here to be mapped onto our actual stock.
-   Names are |-separated — card names contain commas. */
+   Names are |-separated — card names contain commas. CORS-open so the
+   exorgames.com product pages can reuse the same strip (read-only, public
+   product data only). */
 const BETTER_TTL_S = 600;
 
 export async function serveInstock(request, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
   const names = String(url.searchParams.get("names") || "")
     .split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2).slice(0, 8);
   const out = { count: 0, cards: [] };
-  if (!names.length) return Response.json(out, { headers: { "cache-control": "no-store" } });
+  if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
   const cache = caches.default;
   const cacheKey = new Request(new URL("/instock.json?n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
@@ -616,7 +619,7 @@ export async function serveInstock(request, ctx) {
     if (card) out.cards.push(card);
   }
   out.count = out.cards.length;
-  const res = Response.json(out, { headers: { "cache-control": `public, max-age=${BETTER_TTL_S}` } });
+  const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${BETTER_TTL_S}` } });
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }
