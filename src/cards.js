@@ -662,6 +662,79 @@ async function findInStock(name, headers) {
   } catch { return null; }
 }
 
+/* ---------------- Sister-store search ----------------
+   The other five Exor locations are separate Shopify stores, so their stock
+   can't join this store's cart. exorgames.com search pages call this once
+   per view; each sister's public predictive search answers (in-stock only),
+   results interleave round-robin so one deep catalogue doesn't crowd out
+   the rest, and the site renders link-out cards — each opens that store's
+   own product page with its own cart, checkout and shipping. Per-query
+   edge cache keeps it to five upstream fetches per unique search, not per
+   shopper. Everything fails to an empty list, never an error. */
+const SISTERS = [
+  { store: "Summerside",  base: "https://exor-games-summserside.myshopify.com" },
+  { store: "Bridgewater", base: "https://exor-games-bridgewater.myshopify.com" },
+  { store: "Dartmouth",   base: "https://exor-games-dartmouth.myshopify.com" },
+  { store: "New Glasgow", base: "https://exor-games-new-glasgow.myshopify.com" },
+  { store: "Truro",       base: "https://exor-games-truro.myshopify.com" },
+];
+const SISTERS_TTL_S = 300;   // sister stock drifts; keep the window short
+const SISTERS_PER_STORE = 5;
+const SISTERS_MAX = 12;
+
+export async function serveSisters(request, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
+  const url = new URL(request.url);
+  const q = String(url.searchParams.get("q") || "").trim().slice(0, 80);
+  const out = { query: q, count: 0, cards: [] };
+  if (q.length < 2) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/sisters.json?q=" + encodeURIComponent(q.toLowerCase()), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
+  const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
+  const perStore = await Promise.all(SISTERS.map(async (s) => {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 3500); // one slow store must not stall the band
+      const r = await fetch(
+        `${s.base}/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=${SISTERS_PER_STORE}&resources[options][unavailable_products]=hide&resources[options][fields]=title,product_type,variants.title`,
+        { headers, signal: ctrl.signal },
+      );
+      clearTimeout(t);
+      if (!r.ok) return [];
+      const hits = ((await r.json())?.resources?.results?.products) || [];
+      return hits
+        .filter((h) => h && h.title && h.url && h.available !== false)
+        .filter((h) => !(parseFloat(h.price) >= 99999)) // BinderPOS "email us" placeholder pricing
+        .map((h) => ({
+          store: s.store,
+          name: String(h.title),
+          price: h.price != null ? String(h.price) : "",
+          image: h.image ? abs(String(h.image))
+            : h.featured_image && h.featured_image.url ? abs(String(h.featured_image.url)) : null,
+          url: s.base + String(h.url),
+        }));
+    } catch { return []; }
+  }));
+  for (let i = 0; out.cards.length < SISTERS_MAX; i++) {
+    let added = false;
+    for (const list of perStore) {
+      if (list[i]) {
+        out.cards.push(list[i]);
+        added = true;
+        if (out.cards.length >= SISTERS_MAX) break;
+      }
+    }
+    if (!added) break;
+  }
+  out.count = out.cards.length;
+  const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${SISTERS_TTL_S}` } });
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 function buildCards(products, opts = {}) {
   const minPrice = opts.minPrice ?? MIN_PRICE;
 
