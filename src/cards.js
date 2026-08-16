@@ -627,7 +627,11 @@ export async function serveInstock(request, ctx) {
 }
 
 /* Exact-name in-stock lookup via the shop's predictive search; returns the
-   cheapest available copy normalised to the card shape the UIs speak. */
+   cheapest available copy normalised to the card shape the UIs speak.
+   MTG singles ONLY: card names collide across games ("Sacrifice" is MTG,
+   Riftbound and Star Wars all at once), and a bare title match let a
+   Riftbound card into the MTG Similar strip. If the first title match is
+   another game's card, one more candidate gets a look. */
 async function findInStock(name, headers) {
   try {
     const sr = await fetch(
@@ -637,30 +641,34 @@ async function findInStock(name, headers) {
     if (!sr.ok) return null;
     const hits = ((await sr.json())?.resources?.results?.products) || [];
     const want = name.toLowerCase();
-    const hit = hits.find((h) => String(h.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want);
-    if (!hit) return null;
-    const pr = await fetch(`${HOST}/products/${hit.handle}.js`, { headers });
-    if (!pr.ok) return null;
-    const p = await pr.json();
-    if (!/single/i.test(p.type || "")) return null;
-    const eligible = (p.variants || []).filter((v) => v.available && v.price > 0);
-    if (!eligible.length) return null;
-    const v = eligible.reduce((a, b) => (b.price < a.price ? b : a));
-    const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
-    const img = (p.images && p.images[0]) || p.featured_image || null;
-    return {
-      name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
-      set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
-      game: "mtg",
-      type: "MTG Single",
-      color: "C",
-      price: (v.price / 100).toFixed(2),
-      foil: /foil/i.test(v.title || ""),
-      condition: condOf(v.title, "mtg"),
-      image: img ? abs(img) : null,
-      variantId: v.id,
-      url: "https://exorgames.com/products/" + p.handle,
-    };
+    const matches = hits
+      .filter((h) => String(h.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want)
+      .slice(0, 2);
+    for (const hit of matches) {
+      const pr = await fetch(`${HOST}/products/${hit.handle}.js`, { headers });
+      if (!pr.ok) continue;
+      const p = await pr.json();
+      if (!/^mtg\b.*single/i.test(p.type || "")) continue;
+      const eligible = (p.variants || []).filter((v) => v.available && v.price > 0);
+      if (!eligible.length) continue;
+      const v = eligible.reduce((a, b) => (b.price < a.price ? b : a));
+      const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
+      const img = (p.images && p.images[0]) || p.featured_image || null;
+      return {
+        name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
+        set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
+        game: "mtg",
+        type: "MTG Single",
+        color: "C",
+        price: (v.price / 100).toFixed(2),
+        foil: /foil/i.test(v.title || ""),
+        condition: condOf(v.title, "mtg"),
+        image: img ? abs(img) : null,
+        variantId: v.id,
+        url: "https://exorgames.com/products/" + p.handle,
+      };
+    }
+    return null;
   } catch { return null; }
 }
 
