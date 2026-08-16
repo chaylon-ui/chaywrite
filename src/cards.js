@@ -592,32 +592,34 @@ export async function servePickupDone(env, did) {
   }
 }
 
-/* In-stock filter for the "Alternatives in stock" strip. The TV/phone
-   BROWSERS query strictlybetter.eu themselves (its API is CORS-open to
-   browsers, but its Cloudflare zone 301-loops Worker-originated fetches),
-   then hand the suggested names here to be mapped onto our actual stock.
-   Names are |-separated — card names contain commas. CORS-open so the
-   exorgames.com product pages can reuse the same strip (read-only, public
-   product data only). */
+/* In-stock filter for the "Alternatives in stock" / Similar strips. The
+   TV/phone BROWSERS query strictlybetter.eu themselves (its API is
+   CORS-open to browsers, but its Cloudflare zone 301-loops
+   Worker-originated fetches), then hand the suggested names here to be
+   mapped onto our actual stock. Names are |-separated — card names contain
+   commas. Up to 16 names checked in parallel; `max` (1–8, default 4 so the
+   kiosk tray keeps its size) caps how many in-stock hits return, ranked
+   order preserved. CORS-open so the exorgames.com product pages can reuse
+   the same strip (read-only, public product data only). */
 const BETTER_TTL_S = 600;
 
 export async function serveInstock(request, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
   const names = String(url.searchParams.get("names") || "")
-    .split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2).slice(0, 8);
+    .split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2).slice(0, 16);
+  const max = Math.min(8, Math.max(1, parseInt(url.searchParams.get("max"), 10) || 4));
   const out = { count: 0, cards: [] };
   if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/instock.json?n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
+  const cacheKey = new Request(new URL("/instock.json?m=" + max + "&n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
-  for (const n of names) {
-    if (out.cards.length >= 4) break;
-    const card = await findInStock(n, headers);
-    if (card) out.cards.push(card);
-  }
+  // Every name at once (two small same-store fetches each) — Promise.all
+  // keeps the ranked order, then the first `max` in-stock hits win.
+  const found = await Promise.all(names.map((n) => findInStock(n, headers)));
+  out.cards = found.filter(Boolean).slice(0, max);
   out.count = out.cards.length;
   const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${BETTER_TTL_S}` } });
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
@@ -660,6 +662,66 @@ async function findInStock(name, headers) {
       url: "https://exorgames.com/products/" + p.handle,
     };
   } catch { return null; }
+}
+
+/* ---------------- "Similar cards" candidate names ----------------
+   StrictlyBetter's crowd graph is precise but thin — plenty of cards carry
+   one pairing or none (Pyretic Ritual surfaced a single card). EDHREC
+   publishes a functional "similar cards" list for nearly every Magic card
+   as public page JSON; one fetch per card name per DAY (edge-cached) turns
+   that into extra candidate names for the Similar strip. Names only — the
+   strip still maps them onto real stock through /instock.json. Unknown
+   card, outage, or shape drift → empty list, and the strip quietly shows
+   whatever StrictlyBetter knew. */
+const SIMILAR_TTL_S = 86400;    // EDHREC's similarity barely moves; be a polite guest
+const SIMILAR_MISS_TTL_S = 600; // but never pin an outage's empty answer for a day
+const SIMILAR_MAX = 16;
+
+/* EDHREC page slugs: lowercased, accents flattened, punctuation dropped,
+   spaces to hyphens; double-faced cards go by their front face. */
+function edhSlug(name) {
+  let n = String(name || "").split("//")[0].trim().toLowerCase();
+  n = n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/æ/g, "ae").replace(/œ/g, "oe");
+  return n.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+export async function serveSimilar(request, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
+  const url = new URL(request.url);
+  const name = String(url.searchParams.get("name") || "").trim().slice(0, 80);
+  const slug = edhSlug(name);
+  const out = { name, count: 0, names: [] };
+  if (slug.length < 2) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/similar.json?n=" + encodeURIComponent(slug), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  try {
+    const r = await fetch(`https://json.edhrec.com/pages/cards/${slug}.json`, {
+      headers: { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      // The similar list has moved around EDHREC's page JSON before — check
+      // the shapes seen in the wild rather than one blessed path.
+      const spots = [j?.similar, j?.container?.json_dict?.similar, j?.container?.similar, j?.panels?.similar];
+      const list = spots.find((x) => Array.isArray(x) && x.length) || [];
+      const seen = new Set([name.toLowerCase()]);
+      for (const c of list) {
+        const n = typeof c === "string" ? c : c && typeof c.name === "string" ? c.name : null;
+        if (!n || seen.has(n.toLowerCase())) continue;
+        seen.add(n.toLowerCase());
+        out.names.push(n);
+        if (out.names.length >= SIMILAR_MAX) break;
+      }
+    }
+  } catch { /* fall through to the empty list */ }
+  out.count = out.names.length;
+  const ttl = out.count ? SIMILAR_TTL_S : SIMILAR_MISS_TTL_S;
+  const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${ttl}` } });
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
 }
 
 /* ---------------- Sister-store search ----------------

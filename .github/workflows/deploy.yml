@@ -44,3 +44,33 @@ jobs:
           else
             echo "No SHOPIFY_ADMIN_TOKEN repo secret set - skipping (add one to enable full search, stock caps and numbered draft orders)"
           fi
+
+      # Log-only probe of the freshly deployed similar-cards endpoints. The
+      # sandbox this worker is developed from has no outbound internet, so
+      # this step is where the real upstream shapes and live responses become
+      # visible (in the Action log). Failures here never fail the deploy.
+      - name: Smoke-test similar endpoints (log-only)
+        run: |
+          sleep 3
+          echo "=== EDHREC raw, first 900 chars ==="
+          curl -sS --max-time 20 "https://json.edhrec.com/pages/cards/pyretic-ritual.json" | head -c 900 || true
+          printf '\n'
+          echo "=== EDHREC top-level keys + similar[] names ==="
+          curl -sS --max-time 20 "https://json.edhrec.com/pages/cards/pyretic-ritual.json" | python3 -c '
+          import json, sys
+          try:
+              d = json.load(sys.stdin)
+          except Exception as e:
+              print("not json:", e); raise SystemExit
+          print("keys:", sorted(d.keys()))
+          s = d.get("similar")
+          print("similar:", type(s).__name__, len(s) if isinstance(s, list) else "")
+          if isinstance(s, list):
+              print([c.get("name") for c in s[:12] if isinstance(c, dict)])
+          ' || true
+          echo "=== /similar.json?name=Pyretic Ritual ==="
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/similar.json?name=Pyretic%20Ritual" || true
+          printf '\n'
+          echo "=== /instock.json max=8 over hand-picked ritual names ==="
+          curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/instock.json?names=Desperate%20Ritual|Seething%20Song|Rite%20of%20Flame|Mana%20Geyser|Battle%20Hymn|Inner%20Fire|Irencrag%20Feat|Pyretic%20Ritual&max=8" | head -c 1500 || true
+          printf '\n'
