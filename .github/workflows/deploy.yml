@@ -74,3 +74,6 @@ jobs:
           echo "=== /instock.json max=8 over hand-picked ritual names ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/instock.json?names=Desperate%20Ritual|Seething%20Song|Rite%20of%20Flame|Mana%20Geyser|Battle%20Hymn|Inner%20Fire|Irencrag%20Feat|Pyretic%20Ritual&max=8" | head -c 1500 || true
           printf '\n'
+          echo "=== /sisters.json?q=humility (expect cheapest IN-STOCK prices; New Glasgow Humility = 79.10 not 40.50; 5-min edge cache may lag one run) ==="
+          curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/sisters.json?q=humility" | head -c 1500 || true
+          printf '\n'

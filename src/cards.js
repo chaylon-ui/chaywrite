@@ -731,8 +731,9 @@ export async function serveSimilar(request, ctx) {
    results interleave round-robin so one deep catalogue doesn't crowd out
    the rest, and the site renders link-out cards — each opens that store's
    own product page with its own cart, checkout and shipping. Per-query
-   edge cache keeps it to five upstream fetches per unique search, not per
-   shopper. Everything fails to an empty list, never an error. */
+   edge cache keeps the upstream cost (5 suggests + a product hydration per
+   hit, ~30 fetches worst case) to once per unique search, not per shopper.
+   Everything fails to an empty list, never an error. */
 const SISTERS = [
   { store: "Summerside",  base: "https://exor-games-summserside.myshopify.com" },
   { store: "Bridgewater", base: "https://exor-games-bridgewater.myshopify.com" },
@@ -767,17 +768,36 @@ export async function serveSisters(request, ctx) {
       clearTimeout(t);
       if (!r.ok) return [];
       const hits = ((await r.json())?.resources?.results?.products) || [];
-      return hits
-        .filter((h) => h && h.title && h.url && h.available !== false)
-        .filter((h) => !(parseFloat(h.price) >= 99999)) // BinderPOS "email us" placeholder pricing
-        .map((h) => ({
-          store: s.store,
-          name: String(h.title),
-          price: h.price != null ? String(h.price) : "",
-          image: h.image ? abs(String(h.image))
-            : h.featured_image && h.featured_image.url ? abs(String(h.featured_image.url)) : null,
-          url: s.base + String(h.url),
+      // suggest.json's product `price` is the minimum across ALL variants,
+      // sold-out ones included — a $40.50 sold-out copy shadowed the $79.10
+      // MP actually on the shelf. Hydrate each hit and price it from its
+      // cheapest AVAILABLE variant; hits with nothing really available drop.
+      const priced = await Promise.all(hits
+        .filter((h) => h && h.title && h.url && h.handle && h.available !== false)
+        .map(async (h) => {
+          try {
+            const c2 = new AbortController();
+            const t2 = setTimeout(() => c2.abort(), 3500);
+            const pr = await fetch(`${s.base}/products/${h.handle}.js`, { headers, signal: c2.signal });
+            clearTimeout(t2);
+            if (!pr.ok) return null;
+            const p = await pr.json();
+            const eligible = (p.variants || []).filter((v) => v.available && v.price > 0);
+            if (!eligible.length) return null;
+            const cents = eligible.reduce((a, v) => Math.min(a, v.price), Infinity);
+            if (cents / 100 >= 99999) return null; // BinderPOS "email us" placeholder pricing
+            const img = h.image || (h.featured_image && h.featured_image.url) ||
+              (p.images && p.images[0]) || p.featured_image || null;
+            return {
+              store: s.store,
+              name: String(h.title),
+              price: (cents / 100).toFixed(2),
+              image: img ? abs(String(img)) : null,
+              url: s.base + String(h.url),
+            };
+          } catch { return null; }
         }));
+      return priced.filter(Boolean);
     } catch { return []; }
   }));
   for (let i = 0; out.cards.length < SISTERS_MAX; i++) {
