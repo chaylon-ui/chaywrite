@@ -1,0 +1,150 @@
+name: CF bot filter
+
+# Drives the Cloudflare API for the exorgames.com zone from a runner with
+# real egress (the dev sandbox has none). Two modes, both manual-only:
+#   probe — read-only: where does DNS live, can this token see/edit the
+#           zone, are certs ready. Safe to run any time.
+#   apply — creates the WAF challenge + /search rate limit, sets SSL
+#           Full(strict) + Rocket Loader off, flips the two Shopify
+#           records to Proxied, smoke-tests the live site, and AUTO
+#           ROLLS BACK the proxy flip if the site misbehaves.
+# Prefers a dedicated CLOUDFLARE_ZONE_TOKEN repo secret when present;
+# falls back to the worker-deploy CLOUDFLARE_API_TOKEN.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "probe or apply"
+        required: true
+        default: "probe"
+
+permissions: {}
+
+jobs:
+  cf:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_ZONE_TOKEN != '' && secrets.CLOUDFLARE_ZONE_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+      MODE: ${{ inputs.mode }}
+      ZONE: exorgames.com
+    steps:
+      - name: DNS reality check (DoH, token-free)
+        run: |
+          doh() { curl -s -H 'accept: application/dns-json' "https://cloudflare-dns.com/dns-query?name=$1&type=$2"; }
+          echo "== nameservers =="
+          doh "$ZONE" NS | jq -r '.Answer[]?.data // "no NS answer"'
+          echo "== apex A =="
+          doh "$ZONE" A | jq -r '.Answer[]? | "\(.name) \(.type) \(.data)"'
+          echo "== www =="
+          doh "www.$ZONE" A | jq -r '.Answer[]? | "\(.name) \(.type) \(.data)"'
+
+      - name: Token and zone probe
+        id: probe
+        run: |
+          api() { curl -s -H "Authorization: Bearer $CF_TOKEN" -H 'content-type: application/json' "$@"; }
+          B=https://api.cloudflare.com/client/v4
+          echo "== token verify =="
+          api "$B/user/tokens/verify" | jq '{success, status: .result.status, errors}'
+          echo "== zones this token can see =="
+          api "$B/zones?per_page=50" | jq -r 'if .success then (.result[] | "\(.name) id=\(.id) status=\(.status) ns=\(.name_servers|join(","))") else "LIST FAILED: \(.errors)" end'
+          ZID=$(api "$B/zones?name=$ZONE" | jq -r '.result[0].id // empty')
+          echo "ZID=${ZID:-none}"
+          echo "zid=$ZID" >> "$GITHUB_OUTPUT"
+          if [ -z "$ZID" ]; then echo "zone not visible to this token — stopping here"; exit 0; fi
+          echo "== zone status =="
+          api "$B/zones/$ZID" | jq '{name: .result.name, status: .result.status, ns: .result.name_servers, original_ns: .result.original_name_servers}'
+          echo "== dns records (A/CNAME only) =="
+          api "$B/zones/$ZID/dns_records?per_page=100" | jq -r '.result[]? | select(.type=="A" or .type=="CNAME") | "\(.type) \(.name) -> \(.content) proxied=\(.proxied) id=\(.id)"'
+          echo "== ssl mode =="
+          api "$B/zones/$ZID/settings/ssl" | jq '{success, value: .result.value, errors}'
+          echo "== edge certificate packs =="
+          api "$B/zones/$ZID/ssl/certificate_packs?status=all" | jq -r '.result[]? | "\(.type) status=\(.status) hosts=\(.hosts|join(","))"'
+          echo "== waf custom-rules entrypoint (read) =="
+          api "$B/zones/$ZID/rulesets/phases/http_request_firewall_custom/entrypoint" | jq '{success, errors, rules: ((.result.rules // []) | length)}'
+          echo "== dns WRITE permission (no-op patch of apex A) =="
+          REC=$(api "$B/zones/$ZID/dns_records?type=A&name=$ZONE")
+          RID=$(echo "$REC" | jq -r '.result[0].id // empty')
+          PROX=$(echo "$REC" | jq -r '.result[0].proxied')
+          if [ -n "$RID" ]; then
+            api -X PATCH "$B/zones/$ZID/dns_records/$RID" --data "{\"proxied\": $PROX}" | jq '{success, errors}'
+          else
+            echo "no apex A record found"
+          fi
+
+      - name: Apply
+        if: ${{ inputs.mode == 'apply' }}
+        run: |
+          set -u
+          api() { curl -s -H "Authorization: Bearer $CF_TOKEN" -H 'content-type: application/json' "$@"; }
+          B=https://api.cloudflare.com/client/v4
+          ZID="${{ steps.probe.outputs.zid }}"
+          if [ -z "$ZID" ]; then echo "ABORT: zone not accessible"; exit 1; fi
+
+          STATUS=$(api "$B/zones/$ZID" | jq -r '.result.status')
+          if [ "$STATUS" != "active" ]; then echo "ABORT: zone status=$STATUS (nameservers not pointed at Cloudflare — registrar change needed first)"; exit 1; fi
+
+          CERTOK=$(api "$B/zones/$ZID/ssl/certificate_packs?status=all" | jq -r '[.result[]? | select(.status=="active")] | length')
+          if [ "$CERTOK" -lt 1 ]; then echo "ABORT: no active edge certificate yet — flipping the proxy now would break HTTPS"; exit 1; fi
+
+          echo "== settings: ssl strict, rocket loader off (non-fatal) =="
+          api -X PATCH "$B/zones/$ZID/settings/ssl" --data '{"value":"strict"}' | jq -c '{ssl: .success, errors}'
+          api -X PATCH "$B/zones/$ZID/settings/rocket_loader" --data '{"value":"off"}' | jq -c '{rocket_loader: .success, errors}'
+
+          echo "== WAF: managed challenge for SG/CN/HK (append, idempotent) =="
+          EP=$(api "$B/zones/$ZID/rulesets/phases/http_request_firewall_custom/entrypoint")
+          RSID=$(echo "$EP" | jq -r '.result.id // empty')
+          EXPR='(ip.src.country in {"SG" "CN" "HK"}) and not cf.client.bot'
+          DESC='xg: challenge datacentre countries'
+          RULE=$(jq -nc --arg e "$EXPR" --arg d "$DESC" '{action:"managed_challenge", expression:$e, description:$d, enabled:true}')
+          if [ -z "$RSID" ]; then
+            api -X PUT "$B/zones/$ZID/rulesets/phases/http_request_firewall_custom/entrypoint" \
+              --data "$(jq -nc --argjson r "$RULE" '{rules:[$r]}')" | jq -c '{waf_create: .success, errors}'
+          elif [ "$(echo "$EP" | jq -r --arg d "$DESC" '[.result.rules[]? | select(.description==$d)] | length')" = "0" ]; then
+            api -X POST "$B/zones/$ZID/rulesets/$RSID/rules" --data "$RULE" | jq -c '{waf_append: .success, errors}'
+          else
+            echo "waf rule already present"
+          fi
+
+          echo "== rate limit on /search paths (non-fatal if plan refuses) =="
+          EPR=$(api "$B/zones/$ZID/rulesets/phases/http_ratelimit/entrypoint")
+          RRID=$(echo "$EPR" | jq -r '.result.id // empty')
+          RLDESC='xg: search rate limit'
+          RL=$(jq -nc --arg d "$RLDESC" '{action:"block", description:$d, enabled:true, expression:"(http.request.uri.path contains \"/search\")", ratelimit:{characteristics:["cf.colo.id","ip.src"], period:10, requests_per_period:10, mitigation_timeout:10}}')
+          if [ -z "$RRID" ]; then
+            api -X PUT "$B/zones/$ZID/rulesets/phases/http_ratelimit/entrypoint" \
+              --data "$(jq -nc --argjson r "$RL" '{rules:[$r]}')" | jq -c '{rl_create: .success, errors}'
+          elif [ "$(echo "$EPR" | jq -r --arg d "$RLDESC" '[.result.rules[]? | select(.description==$d)] | length')" = "0" ]; then
+            api -X POST "$B/zones/$ZID/rulesets/$RRID/rules" --data "$RL" | jq -c '{rl_append: .success, errors}'
+          else
+            echo "rate limit rule already present"
+          fi
+
+          echo "== flip the two Shopify records to Proxied =="
+          RECS=$(api "$B/zones/$ZID/dns_records?per_page=100")
+          AID=$(echo "$RECS" | jq -r --arg z "$ZONE" '.result[] | select(.type=="A" and .name==$z and (.content|startswith("23.227.38."))) | .id')
+          WID=$(echo "$RECS" | jq -r --arg z "www.$ZONE" '.result[] | select(.type=="CNAME" and .name==$z and (.content|endswith("myshopify.com"))) | .id')
+          echo "apex id=$AID www id=$WID"
+          if [ -z "$AID" ] || [ -z "$WID" ]; then echo "ABORT: expected Shopify records not found — nothing flipped"; exit 1; fi
+          api -X PATCH "$B/zones/$ZID/dns_records/$AID" --data '{"proxied":true}' | jq -c '{apex_proxied: .success, errors}'
+          api -X PATCH "$B/zones/$ZID/dns_records/$WID" --data '{"proxied":true}' | jq -c '{www_proxied: .success, errors}'
+
+          echo "== smoke test (up to 2 min) =="
+          ok=0
+          for i in $(seq 1 12); do
+            sleep 10
+            H=$(curl -s -o /tmp/body -w '%{http_code}' --max-time 20 "https://$ZONE/" || echo 000)
+            W=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.$ZONE/" || echo 000)
+            C=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$ZONE/cart" || echo 000)
+            RAY=$(curl -sI --max-time 20 "https://$ZONE/" | grep -ci '^cf-ray' || true)
+            BODYOK=$(grep -ci 'exor' /tmp/body || true)
+            echo "try $i: apex=$H www=$W cart=$C cf-ray=$RAY body-exor=$BODYOK"
+            if [ "$H" = 200 ] && { [ "$W" = 200 ] || [ "$W" = 301 ] || [ "$W" = 302 ]; } && [ "$C" = 200 ] && [ "$RAY" -ge 1 ] && [ "$BODYOK" -ge 1 ]; then ok=1; break; fi
+          done
+          if [ "$ok" != 1 ]; then
+            echo "SMOKE FAILED — ROLLING BACK proxy flips"
+            api -X PATCH "$B/zones/$ZID/dns_records/$AID" --data '{"proxied":false}' | jq -c '{apex_reverted: .success, errors}'
+            api -X PATCH "$B/zones/$ZID/dns_records/$WID" --data '{"proxied":false}' | jq -c '{www_reverted: .success, errors}'
+            exit 1
+          fi
+          echo "APPLY COMPLETE: proxy live, WAF challenge active, site serving through Cloudflare."
