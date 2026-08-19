@@ -38,6 +38,12 @@ jobs:
           doh "$ZONE" A | jq -r '.Answer[]? | "\(.name) \(.type) \(.data)"'
           echo "== www =="
           doh "www.$ZONE" A | jq -r '.Answer[]? | "\(.name) \(.type) \(.data)"'
+          echo "== subdomain sweep — what resolves TODAY (recreate any of these in Cloudflare before switching NS) =="
+          for s in esl kiosk tv pos showcase shop store app api mail ftp cpanel autodiscover; do
+            cn=$(doh "$s.$ZONE" CNAME | jq -r '.Answer[]? | select(.type==5) | "CNAME -> \(.data)"' | paste -sd" ; " -)
+            a=$(doh "$s.$ZONE" A | jq -r '.Answer[]? | select(.type==1) | "A -> \(.data)"' | paste -sd" ; " -)
+            if [ -n "$cn$a" ]; then echo "$s.$ZONE  ::  $cn $a"; else echo "$s.$ZONE  ::  (nothing)"; fi
+          done
 
       - name: Token and zone probe
         id: probe
