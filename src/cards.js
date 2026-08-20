@@ -604,7 +604,7 @@ export async function servePickupDone(env, did) {
 const BETTER_TTL_S = 600;
 const DECK_TTL_S = 120;   // deck lookups are inventory-sensitive — brief cache only
 
-export async function serveInstock(request, ctx) {
+export async function serveInstock(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
   const names = String(url.searchParams.get("names") || "")
@@ -619,7 +619,7 @@ export async function serveInstock(request, ctx) {
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
   // Every name at once (two small same-store fetches each) — Promise.all
   // keeps the ranked order, then the first `max` in-stock hits win.
-  const found = await Promise.all(names.map((n) => findInStock(n, headers)));
+  const found = await Promise.all(names.map((n) => findInStock(n, headers, env)));
   out.cards = found.filter(Boolean).slice(0, max);
   out.count = out.cards.length;
   const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${BETTER_TTL_S}` } });
@@ -651,7 +651,7 @@ async function mapLimit(items, limit, fn) {
    decklist never trips the exorgames.com /search rate-limit rule. Names are
    |-separated, de-duplicated, capped at 60/call (the front end batches larger
    decks). Results preserve input order: {q, found:true, ...card} | {q, found:false}. */
-export async function serveDeck(request, ctx) {
+export async function serveDeck(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
   const raw = String(url.searchParams.get("names") || "")
@@ -668,7 +668,7 @@ export async function serveDeck(request, ctx) {
   if (hit) return hit;
   const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
   const results = await mapLimit(names, 8, async (n) => {
-    const card = await findInStock(n, headers);
+    const card = await findInStock(n, headers, env);
     return card ? { q: n, found: true, ...card } : { q: n, found: false };
   });
   out.results = results;
@@ -685,43 +685,56 @@ export async function serveDeck(request, ctx) {
    Riftbound and Star Wars all at once), and a bare title match let a
    Riftbound card into the MTG Similar strip. If the first title match is
    another game's card, one more candidate gets a look. */
-async function findInStock(name, headers) {
+async function findInStock(name, headers, env) {
   try {
-    const sr = await fetch(
-      `${HOST}/search/suggest.json?q=${encodeURIComponent(name)}&resources[type]=product&resources[limit]=6&resources[options][unavailable_products]=hide`,
-      { headers },
-    );
-    if (!sr.ok) return null;
-    const hits = ((await sr.json())?.resources?.results?.products) || [];
     const want = name.toLowerCase();
-    const matches = hits
-      .filter((h) => String(h.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want)
-      .slice(0, 2);
-    for (const hit of matches) {
-      const pr = await fetch(`${HOST}/products/${hit.handle}.js`, { headers });
-      if (!pr.ok) continue;
-      const p = await pr.json();
-      if (!/^mtg\b.*single/i.test(p.type || "")) continue;
-      const eligible = (p.variants || []).filter((v) => v.available && v.price > 0);
-      if (!eligible.length) continue;
-      const v = eligible.reduce((a, b) => (b.price < a.price ? b : a));
-      const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
-      const img = (p.images && p.images[0]) || p.featured_image || null;
-      return {
-        name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
-        set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
-        game: "mtg",
-        type: "MTG Single",
-        color: "C",
-        price: (v.price / 100).toFixed(2),
-        foil: /foil/i.test(v.title || ""),
-        condition: condOf(v.title, "mtg"),
-        image: img ? abs(img) : null,
-        variantId: v.id,
-        url: "https://exorgames.com/products/" + p.handle,
-      };
+    // This store's native predictive search is disabled (Searchanise owns
+    // search here), so the public /search/suggest.json returns nothing — the
+    // Admin API is the only reliable catalogue search. Use it when a token is
+    // present; fall back to public predictive search otherwise (that path
+    // still works on stores that keep native search on, e.g. the sisters).
+    // Both helpers return the same normalised product shape.
+    let products = null;
+    if (env && env.SHOPIFY_ADMIN_TOKEN) {
+      try { products = await adminSearch(name, env, ""); } catch { products = null; }
     }
-    return null;
+    if (!products) {
+      try { products = (await suggestSearch(name, headers)).filter(Boolean); } catch { products = null; }
+    }
+    if (!products || !products.length) return null;
+    // Every printing of the exact card (title minus its trailing "[Set]"),
+    // MTG singles only — names collide across games ("Sacrifice" is MTG,
+    // Riftbound and Star Wars at once).
+    const matches = products
+      .filter((p) => String(p.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want)
+      .filter((p) => /^mtg\b.*single/i.test(p.product_type || ""))
+      .slice(0, 12);
+    // Cheapest available copy across every printing — budget decks first.
+    let bestP = null, bestV = null;
+    for (const p of matches) {
+      for (const v of (p.variants || [])) {
+        if (!v.available) continue;
+        const price = parseFloat(v.price);
+        if (!(price > 0)) continue;
+        if (!bestV || price < parseFloat(bestV.price)) { bestV = v; bestP = p; }
+      }
+    }
+    if (!bestV) return null;
+    const p = bestP, v = bestV;
+    const img = (p.images && p.images[0] && p.images[0].src) || null;
+    return {
+      name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
+      set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
+      game: "mtg",
+      type: "MTG Single",
+      color: "C",
+      price: parseFloat(v.price).toFixed(2),
+      foil: /foil/i.test(v.title || ""),
+      condition: condOf(v.title, "mtg"),
+      image: img,
+      variantId: v.id,
+      url: "https://exorgames.com/products/" + p.handle,
+    };
   } catch { return null; }
 }
 

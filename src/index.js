@@ -66,11 +66,11 @@ export default {
     }
 
     if (url.pathname === "/instock.json") {
-      return serveInstock(request, ctx);
+      return serveInstock(request, env, ctx);
     }
 
     if (url.pathname === "/deck.json") {
-      return serveDeck(request, ctx);
+      return serveDeck(request, env, ctx);
     }
 
     if (url.pathname === "/similar.json") {
