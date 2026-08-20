@@ -1,13 +1,13 @@
 name: CF bot filter
 
 # Drives the Cloudflare API for the exorgames.com zone from a runner with
-# real egress (the dev sandbox has none). Two modes, both manual-only:
-#   probe — read-only: where does DNS live, can this token see/edit the
-#           zone, are certs ready. Safe to run any time.
-#   apply — creates the WAF challenge + /search rate limit, sets SSL
-#           Full(strict) + Rocket Loader off, flips the two Shopify
-#           records to Proxied, smoke-tests the live site, and AUTO
-#           ROLLS BACK the proxy flip if the site misbehaves.
+# real egress (the dev sandbox has none). Modes, all manual-only:
+#   probe  — read-only: DNS location, token/zone access, certs, WAF state.
+#   apply  — WAF challenge + /search rate limit, SSL Full(strict) + Rocket
+#            Loader off, flip the two Shopify records to Proxied, live
+#            smoke test with AUTO ROLLBACK of the proxy flip on failure.
+#   events — read-only: what the firewall has challenged/blocked since the
+#            filter went live (GraphQL analytics).
 # Prefers a dedicated CLOUDFLARE_ZONE_TOKEN repo secret when present;
 # falls back to the worker-deploy CLOUDFLARE_API_TOKEN.
 
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "probe or apply"
+        description: "probe, apply, or events"
         required: true
         default: "probe"
 
@@ -77,6 +77,26 @@ jobs:
           else
             echo "no apex A record found"
           fi
+
+      - name: Firewall events
+        if: ${{ inputs.mode == 'events' }}
+        run: |
+          api() { curl -s -H "Authorization: Bearer $CF_TOKEN" -H 'content-type: application/json' "$@"; }
+          GQL=https://api.cloudflare.com/client/v4/graphql
+          ZID="${{ steps.probe.outputs.zid }}"
+          if [ -z "$ZID" ]; then echo "no zone"; exit 0; fi
+          SINCE="2026-08-19T19:30:00Z"   # a few min before the filter went live
+          Q='query($zid:String!,$since:Time!){viewer{zones(filter:{zoneTag:$zid}){summary:firewallEventsAdaptiveGroups(filter:{datetime_geq:$since},limit:60,orderBy:[count_DESC]){count dimensions{action clientCountryName}} recent:firewallEventsAdaptive(filter:{datetime_geq:$since},limit:20,orderBy:[datetime_DESC]){datetime action clientCountryName clientIP clientRequestHTTPHost clientRequestPath ruleId}}}}'
+          BODY=$(jq -nc --arg q "$Q" --arg zid "$ZID" --arg since "$SINCE" '{query:$q, variables:{zid:$zid, since:$since}}')
+          RESP=$(api -X POST "$GQL" --data "$BODY")
+          echo "== graphql errors (empty/null = good) =="
+          echo "$RESP" | jq -c '.errors'
+          echo "== total firewall events since go-live =="
+          echo "$RESP" | jq -r '[.data.viewer.zones[0].summary[]?.count] | add // 0'
+          echo "== counts by action + country (desc) =="
+          echo "$RESP" | jq -r '.data.viewer.zones[0].summary[]? | "\(.count)\t\(.dimensions.action)\t\(.dimensions.clientCountryName)"' | sort -rn
+          echo "== 20 most recent events =="
+          echo "$RESP" | jq -r '.data.viewer.zones[0].recent[]? | "\(.datetime) \(.action) \(.clientCountryName) \(.clientRequestHTTPHost)\(.clientRequestPath) rule=\(.ruleId)"'
 
       - name: Apply
         if: ${{ inputs.mode == 'apply' }}
