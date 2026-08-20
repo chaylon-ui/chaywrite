@@ -602,6 +602,7 @@ export async function servePickupDone(env, did) {
    order preserved. CORS-open so the exorgames.com product pages can reuse
    the same strip (read-only, public product data only). */
 const BETTER_TTL_S = 600;
+const DECK_TTL_S = 120;   // deck lookups are inventory-sensitive — brief cache only
 
 export async function serveInstock(request, ctx) {
   const cors = { "access-control-allow-origin": "*" };
@@ -622,6 +623,58 @@ export async function serveInstock(request, ctx) {
   out.cards = found.filter(Boolean).slice(0, max);
   out.count = out.cards.length;
   const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${BETTER_TTL_S}` } });
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
+/* Bounded-concurrency map — keeps the shop's predictive search from being
+   stampeded when a whole decklist is resolved at once. Preserves input order. */
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  const lanes = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (i < items.length) {
+      const idx = i++;
+      out[idx] = await fn(items[idx], idx);
+    }
+  });
+  await Promise.all(lanes);
+  return out;
+}
+
+/* Deck Builder: map a whole pasted decklist onto in-stock Exor product in ONE
+   request. Reuses findInStock (MTG singles only) so it inherits the exact-name,
+   cheapest-available-variant matching the Similar strip uses — and each hit
+   carries its variantId, so the storefront can add the entire deck to the cart
+   in a single /cart/add.js call. Runs server-side from the edge: the shop's
+   predictive search is hit from the Worker (not the shopper's IP), so a big
+   decklist never trips the exorgames.com /search rate-limit rule. Names are
+   |-separated, de-duplicated, capped at 60/call (the front end batches larger
+   decks). Results preserve input order: {q, found:true, ...card} | {q, found:false}. */
+export async function serveDeck(request, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
+  const url = new URL(request.url);
+  const raw = String(url.searchParams.get("names") || "")
+    .split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2);
+  const seen = new Set();
+  const list = [];
+  for (const n of raw) { const k = n.toLowerCase(); if (!seen.has(k)) { seen.add(k); list.push(n); } }
+  const names = list.slice(0, 60);
+  const out = { count: 0, found: 0, results: [] };
+  if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/deck.json?n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
+  const results = await mapLimit(names, 8, async (n) => {
+    const card = await findInStock(n, headers);
+    return card ? { q: n, found: true, ...card } : { q: n, found: false };
+  });
+  out.results = results;
+  out.count = results.length;
+  out.found = results.reduce((a, r) => a + (r.found ? 1 : 0), 0);
+  const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${DECK_TTL_S}` } });
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }

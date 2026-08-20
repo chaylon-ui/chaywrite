@@ -1,5 +1,5 @@
 import { BinderRoom } from "./room.js";
-import { serveCards, serveSearch, serveInstock, serveSimilar, serveSisters, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
+import { serveCards, serveSearch, serveInstock, serveDeck, serveSimilar, serveSisters, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 
 export { BinderRoom };
 
@@ -67,6 +67,10 @@ export default {
 
     if (url.pathname === "/instock.json") {
       return serveInstock(request, ctx);
+    }
+
+    if (url.pathname === "/deck.json") {
+      return serveDeck(request, ctx);
     }
 
     if (url.pathname === "/similar.json") {
