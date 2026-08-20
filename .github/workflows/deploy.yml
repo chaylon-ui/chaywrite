@@ -77,6 +77,9 @@ jobs:
           echo "=== /deck.json over known staples (Deck Builder backend; expect found>0, each hit carries variantId) ==="
           curl -sS --max-time 40 "https://exor-binder.nevski.workers.dev/deck.json?names=Sol%20Ring|Counterspell|Lightning%20Bolt|Command%20Tower|Arcane%20Signet|Cultivate" | head -c 3000 || true
           printf '\n'
+          echo "=== deck-builder assets (theme shell loads these; expect 200 + js/css content-type) ==="
+          curl -sS -o /dev/null -w 'deck-builder.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.js" || true
+          curl -sS -o /dev/null -w 'deck-builder.css: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.css" || true
           echo "=== /sisters.json?q=humility (expect cheapest IN-STOCK prices; New Glasgow Humility = 79.10 not 40.50; 5-min edge cache may lag one run) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/sisters.json?q=humility" | head -c 1500 || true
           printf '\n'
