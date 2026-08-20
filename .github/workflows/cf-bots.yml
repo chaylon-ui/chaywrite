@@ -7,7 +7,8 @@ name: CF bot filter
 #            Loader off, flip the two Shopify records to Proxied, live
 #            smoke test with AUTO ROLLBACK of the proxy flip on failure.
 #   events — read-only: what the firewall has challenged/blocked since the
-#            filter went live (GraphQL analytics).
+#            filter went live (GraphQL analytics), with a Free-plan
+#            traffic/threats fallback when the firewall dataset is gated.
 # Prefers a dedicated CLOUDFLARE_ZONE_TOKEN repo secret when present;
 # falls back to the worker-deploy CLOUDFLARE_API_TOKEN.
 
@@ -58,8 +59,8 @@ jobs:
           echo "ZID=${ZID:-none}"
           echo "zid=$ZID" >> "$GITHUB_OUTPUT"
           if [ -z "$ZID" ]; then echo "zone not visible to this token — stopping here"; exit 0; fi
-          echo "== zone status =="
-          api "$B/zones/$ZID" | jq '{name: .result.name, status: .result.status, ns: .result.name_servers, original_ns: .result.original_name_servers}'
+          echo "== zone status + plan =="
+          api "$B/zones/$ZID" | jq '{name: .result.name, status: .result.status, plan: .result.plan.name, ns: .result.name_servers, original_ns: .result.original_name_servers}'
           echo "== dns records (A/CNAME only) =="
           api "$B/zones/$ZID/dns_records?per_page=100" | jq -r '.result[]? | select(.type=="A" or .type=="CNAME") | "\(.type) \(.name) -> \(.content) proxied=\(.proxied) id=\(.id)"'
           echo "== ssl mode =="
@@ -82,21 +83,48 @@ jobs:
         if: ${{ inputs.mode == 'events' }}
         run: |
           api() { curl -s -H "Authorization: Bearer $CF_TOKEN" -H 'content-type: application/json' "$@"; }
+          B=https://api.cloudflare.com/client/v4
           GQL=https://api.cloudflare.com/client/v4/graphql
           ZID="${{ steps.probe.outputs.zid }}"
           if [ -z "$ZID" ]; then echo "no zone"; exit 0; fi
+
+          echo "== zone plan =="
+          api "$B/zones/$ZID" | jq -r '.result.plan | "name=\(.name)  legacy_id=\(.legacy_id)  price=\(.price)"'
+
           SINCE="2026-08-19T19:30:00Z"   # a few min before the filter went live
+          SINCED="2026-08-19"
+
+          echo "== [1] firewall events (Pro+/Enterprise dataset) =="
           Q='query($zid:String!,$since:Time!){viewer{zones(filter:{zoneTag:$zid}){summary:firewallEventsAdaptiveGroups(filter:{datetime_geq:$since},limit:60,orderBy:[count_DESC]){count dimensions{action clientCountryName}} recent:firewallEventsAdaptive(filter:{datetime_geq:$since},limit:20,orderBy:[datetime_DESC]){datetime action clientCountryName clientIP clientRequestHTTPHost clientRequestPath ruleId}}}}'
           BODY=$(jq -nc --arg q "$Q" --arg zid "$ZID" --arg since "$SINCE" '{query:$q, variables:{zid:$zid, since:$since}}')
           RESP=$(api -X POST "$GQL" --data "$BODY")
-          echo "== graphql errors (empty/null = good) =="
-          echo "$RESP" | jq -c '.errors'
-          echo "== total firewall events since go-live =="
-          echo "$RESP" | jq -r '[.data.viewer.zones[0].summary[]?.count] | add // 0'
-          echo "== counts by action + country (desc) =="
-          echo "$RESP" | jq -r '.data.viewer.zones[0].summary[]? | "\(.count)\t\(.dimensions.action)\t\(.dimensions.clientCountryName)"' | sort -rn
-          echo "== 20 most recent events =="
-          echo "$RESP" | jq -r '.data.viewer.zones[0].recent[]? | "\(.datetime) \(.action) \(.clientCountryName) \(.clientRequestHTTPHost)\(.clientRequestPath) rule=\(.ruleId)"'
+          ERR=$(echo "$RESP" | jq -c '.errors // empty')
+          if echo "$ERR" | grep -qi 'does not have access to the path'; then
+            echo ">> Firewall Events GraphQL is NOT exposed on this plan (Free)."
+            echo ">> The full challenge/block log is still in the dashboard: Security -> Events."
+          elif [ -n "$ERR" ] && [ "$ERR" != "null" ]; then
+            echo "graphql errors: $ERR"
+          else
+            echo "-- total firewall events since go-live --"
+            echo "$RESP" | jq -r '[.data.viewer.zones[0].summary[]?.count] | add // 0'
+            echo "-- counts by action + country (desc) --"
+            echo "$RESP" | jq -r '.data.viewer.zones[0].summary[]? | "\(.count)\t\(.dimensions.action)\t\(.dimensions.clientCountryName)"' | sort -rn
+            echo "-- 20 most recent events --"
+            echo "$RESP" | jq -r '.data.viewer.zones[0].recent[]? | "\(.datetime) \(.action) \(.clientCountryName) \(.clientRequestHTTPHost)\(.clientRequestPath) rule=\(.ruleId)"'
+          fi
+
+          echo "== [2] traffic + threats + top countries (Free-plan dataset) =="
+          Q2='query($zid:String!,$since:Date!){viewer{zones(filter:{zoneTag:$zid}){httpRequests1dGroups(filter:{date_geq:$since},limit:14,orderBy:[date_ASC]){dimensions{date} sum{requests threats countryMap{clientCountryName requests threats}}}}}}'
+          BODY2=$(jq -nc --arg q "$Q2" --arg zid "$ZID" --arg since "$SINCED" '{query:$q, variables:{zid:$zid, since:$since}}')
+          RESP2=$(api -X POST "$GQL" --data "$BODY2")
+          ERR2=$(echo "$RESP2" | jq -c '.errors // empty')
+          if [ -n "$ERR2" ] && [ "$ERR2" != "null" ]; then
+            echo "graphql errors: $ERR2"
+          fi
+          echo "-- per-day requests / threats --"
+          echo "$RESP2" | jq -r '.data.viewer.zones[0].httpRequests1dGroups[]? | "\(.dimensions.date)  requests=\(.sum.requests)  threats=\(.sum.threats)"'
+          echo "-- threats by country (since go-live, top 15) --"
+          echo "$RESP2" | jq -r '[.data.viewer.zones[0].httpRequests1dGroups[]?.sum.countryMap[]?] | group_by(.clientCountryName) | map({c:.[0].clientCountryName, threats:(map(.threats)|add), requests:(map(.requests)|add)}) | sort_by(-.threats)[] | select(.threats>0) | "\(.threats)\tthreats\t\(.c)\t(\(.requests) reqs)"' | head -15
 
       - name: Apply
         if: ${{ inputs.mode == 'apply' }}
