@@ -51,7 +51,7 @@ jobs:
       # visible (in the Action log). Failures here never fail the deploy.
       - name: Smoke-test similar endpoints (log-only)
         run: |
-          sleep 3
+          sleep 8   # let the new Worker version propagate before probing
           echo "=== EDHREC raw, first 900 chars ==="
           curl -sS --max-time 20 "https://json.edhrec.com/pages/cards/pyretic-ritual.json" | head -c 900 || true
           printf '\n'
@@ -77,8 +77,8 @@ jobs:
           echo "=== /deck.json MTG staples (cheapest across ALL printings; Command Tower should be the cheap one now) ==="
           curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=mtg&names=Sol%20Ring|Counterspell|Lightning%20Bolt|Command%20Tower|Arcane%20Signet|Cultivate" | head -c 3000 || true
           printf '\n'
-          echo "=== /deck.json game=pokemon (multi-game) ==="
-          curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=pokemon&names=Pikachu|Charizard|Snorlax" | head -c 1800 || true
+          echo "=== /deck.json game=pokemon (multi-game; names normalise past the (5/18) collector numbers) ==="
+          curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=pokemon&names=Charizard|Snorlax|Gengar" | head -c 1800 || true
           printf '\n'
           echo "=== deck-builder assets (theme shell loads these; expect 200 + js/css content-type) ==="
           curl -sS -o /dev/null -w 'deck-builder.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.js" || true

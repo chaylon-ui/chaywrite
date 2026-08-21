@@ -687,6 +687,17 @@ export async function serveDeck(request, env, ctx) {
   return res;
 }
 
+/* Card name minus its trailing set/printing decorations — the shared key both
+   sides of the match normalise to. Strips a trailing "[Set]" and "(...)" groups
+   (collector numbers "(5/18)", "(Extended Art)", "(Surge Foil)"), repeatedly,
+   so "Charizard (5/18) [Detective Pikachu]" and "Command Tower [Any Set]" both
+   reduce to the bare card name. */
+function baseName(title) {
+  let s = String(title || "").trim(), prev;
+  do { prev = s; s = s.replace(/\s*(\[[^\]]*\]|\([^)]*\))\s*$/, "").trim(); } while (s !== prev);
+  return s;
+}
+
 /* Exact-name in-stock lookup for the Similar strip and Deck Builder. Returns
    the cheapest available copy across EVERY printing, normalised to the card
    shape the UIs speak. Scoped to one game (default mtg): card names collide
@@ -714,7 +725,7 @@ async function findInStock(name, headers, env, game) {
     // Every printing of the exact card (title minus its trailing "[Set]") in
     // the chosen game — no cap, so the cheapest printing can't be truncated.
     const matches = products.filter((p) =>
-      String(p.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want &&
+      baseName(p.title).toLowerCase() === want &&
       gmatch.test(p.product_type || "")
     );
     // Cheapest available copy across every printing — budget decks first.
@@ -731,7 +742,7 @@ async function findInStock(name, headers, env, game) {
     const p = bestP, v = bestV;
     const img = (p.images && p.images[0] && p.images[0].src) || null;
     return {
-      name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
+      name: baseName(p.title),
       set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
       game: game,
       type: p.product_type || "",
