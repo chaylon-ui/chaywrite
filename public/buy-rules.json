@@ -10,7 +10,7 @@
       "match": "pokemon",
       "cash": 0.35,
       "credit": 0.45,
-      "minSell": 14.5,
+      "minSell": 11.4,
       "buyFoils": true,
       "tiers": [
         {
@@ -20,8 +20,10 @@
         }
       ],
       "_source": "binderpos-feed",
-      "_samples": 102
+      "_samples": 111
     }
   ],
-  "_alerts": []
+  "_alerts": [
+    "pokemon: lowest stamped sell is 11.4 - floor may reflect sampling bias, broaden probes"
+  ]
 }
