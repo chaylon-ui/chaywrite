@@ -1,0 +1,86 @@
+name: BinderPOS rules recon
+
+# Settles how a DAILY buy-rules updater can read the store's cash/credit
+# percentages. Read-only. Manual dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      store:
+        description: "storeUrl"
+        required: true
+        default: "most-wanted-ca.myshopify.com"
+
+permissions: {}
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    env:
+      STORE: ${{ inputs.store }}
+      B: https://portal.binderpos.com/external/shopify
+    steps:
+      - name: A — Public feed buy-price census (can we DERIVE % with no auth?)
+        run: |
+          : > /tmp/ratios.tsv
+          scan() { # $1 game, $2 card
+            BODY=$(jq -nc --arg s "$STORE" --arg g "$1" --arg t "$2" '{storeUrl:$s, game:$g, title:$t, instockOnly:false, limit:100, offset:0}')
+            curl -sS --max-time 30 -o /tmp/r.json -H 'content-type: application/json' -A 'Mozilla/5.0' \
+              -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" 2>/dev/null || return
+            # emit game, sell, cash, credit, cash%, credit% for every variant with ANY buy figure
+            jq -r --arg g "$1" '.products[]?.variants[]?
+              | select((.cashBuyPrice!=null) or (.storeCreditBuyPrice!=null) or (.cashBuyPercent!=null) or (.creditBuyPercent!=null))
+              | [$g, (.price//0), (.cashBuyPrice//""), (.storeCreditBuyPrice//""), (.cashBuyPercent//""), (.creditBuyPercent//""), (.title//"")] | @tsv' /tmp/r.json >> /tmp/ratios.tsv 2>/dev/null || true
+            sleep 0.5
+          }
+          for c in "Sol Ring" "Counterspell" "Lightning Bolt" "Rhystic Study" "Swords to Plowshares" "Cultivate" "Brainstorm" "Path to Exile" "Cyclonic Rift" "Smothering Tithe" "Llanowar Elves" "Demonic Tutor"; do scan mtg "$c"; done
+          for c in "Charizard" "Pikachu" "Snorlax" "Gengar" "Mewtwo" "Rayquaza" "Umbreon" "Gardevoir"; do scan pokemon "$c"; done
+          for c in "Pot of Greed" "Ash Blossom" "Dark Magician" "Blue-Eyes White Dragon" "Maxx C" "Ghost Ogre"; do scan yugioh "$c"; done
+          echo "== total variants carrying ANY buy field =="
+          wc -l < /tmp/ratios.tsv
+          echo "== rows with a NON-ZERO cash buy price (these are the ones we could derive % from) =="
+          awk -F'\t' '$3!="" && $3+0>0' /tmp/ratios.tsv | wc -l
+          echo "== sample of NON-ZERO priced rows: game sell cash credit cash% credit% title =="
+          awk -F'\t' '$3!="" && $3+0>0' /tmp/ratios.tsv | head -25
+          echo "== derived effective % where cash>0 (cash/sell, credit/sell), per game — median-ish via sort =="
+          awk -F'\t' '$3!="" && $3+0>0 && $2+0>0 {printf "%s\tcash%%=%.3f\tcredit%%=%.3f\tsell=%.2f\n",$1,$3/$2,($4==""?0:$4/$2),$2}' /tmp/ratios.tsv | sort | head -40
+          echo "== distinct NON-ZERO cashBuyPercent values seen (if the rule % is published directly) =="
+          awk -F'\t' '$5!="" && $5+0>0 {print $1"\t"$5}' /tmp/ratios.tsv | sort -u | head -30
+          echo "== distinct NON-ZERO creditBuyPercent values seen =="
+          awk -F'\t' '$6!="" && $6+0>0 {print $1"\t"$6}' /tmp/ratios.tsv | sort -u | head -30
+
+      - name: B — Settings / rules endpoints (direct % read?)
+        run: |
+          g() { echo "=== $1 ==="; code=$(curl -sS --max-time 15 -o /tmp/s.json -w '%{http_code}' -A 'Mozilla/5.0' -H 'accept: application/json' -H 'origin: https://exorgames.com' "$1") || code=000; echo "HTTP $code, $(wc -c < /tmp/s.json 2>/dev/null || echo 0)b"; head -c 500 /tmp/s.json; printf '\n'; }
+          for p in \
+            "$B/buylistRules/forStore/$STORE" \
+            "$B/buylist/rules/forStore/$STORE" \
+            "$B/buylistSettings/forStore/$STORE" \
+            "$B/pricingRules/forStore/$STORE" \
+            "$B/storeSettings/forStore/$STORE" \
+            "$B/store/forStore/$STORE" \
+            "$B/settings/$STORE" \
+            "https://portal.binderpos.com/external/shopify/config/forStore/$STORE" \
+            "https://portal.binderpos.com/api/external/shopify/buylist/rules?storeUrl=$STORE" ; do
+            g "$p"
+          done
+
+      - name: C — Public buylist token / widget for this store
+        run: |
+          echo "=== does BinderPOS serve a public buylist page for this store (would carry a client token) ==="
+          for u in \
+            "https://buylist.binderpos.com/$STORE" \
+            "https://portal.binderpos.com/buylist/$STORE" \
+            "https://portal.binderpos.com/#/buylist/$STORE" \
+            "https://exorgames.com/apps/binderpos" \
+            "https://exorgames.com/apps/binder" ; do
+            echo "--- $u ---"
+            code=$(curl -sSL --max-time 20 -o /tmp/p.html -w '%{http_code}' -A 'Mozilla/5.0' "$u" 2>/dev/null) || code=000
+            echo "HTTP $code, $(wc -c < /tmp/p.html 2>/dev/null || echo 0)b"
+            grep -oiE 'apiToken|api_token|storeToken|store_token|publicToken|buylistToken|"token"' /tmp/p.html 2>/dev/null | sort -u | head -5 || true
+          done
+          echo "=== BinderPOS buylist search WITH a trailing slash / alt method matrix (revisit the 401 route) ==="
+          for m in GET POST; do
+            code=$(curl -sS --max-time 15 -o /tmp/q.json -w '%{http_code}' -X "$m" -A 'Mozilla/5.0' -H 'content-type: application/json' -H 'origin: https://exorgames.com' "$B/buylist/cards/forStore?storeUrl=$STORE&game=mtg&keyword=Sol%20Ring&limit=3" ${m:+} ) || code=000
+            echo "[$m] keyword route -> HTTP $code, $(wc -c < /tmp/q.json 2>/dev/null || echo 0)b : $(head -c 200 /tmp/q.json)"
+          done
