@@ -1,0 +1,62 @@
+name: BinderPOS probe
+
+# Read-only discovery of BinderPOS's public "external" API (the store-URL
+# keyed endpoints BinderPOS-powered storefronts call from the browser).
+# Goal: can we read buylist cash/credit prices for this store without
+# credentials, and what does the response look like. Manual-only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      store:
+        description: "storeUrl (myshopify domain)"
+        required: true
+        default: "most-wanted-ca.myshopify.com"
+      card:
+        description: "card name to price"
+        required: true
+        default: "Sol Ring"
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      STORE: ${{ inputs.store }}
+      CARD: ${{ inputs.card }}
+      B: https://portal.binderpos.com/external/shopify
+    steps:
+      - name: Buylist cards search (POST, no auth)
+        run: |
+          hit() { # $1 label, $2 url, $3 body
+            echo "=== $1 ==="
+            code=$(curl -sS --max-time 25 -o /tmp/r.json -w '%{http_code}' \
+              -H 'content-type: application/json' -H 'accept: application/json' \
+              -H 'origin: https://exorgames.com' -H 'referer: https://exorgames.com/' \
+              -A 'Mozilla/5.0' -X POST "$2" --data "$3") || code=000
+            echo "HTTP $code, bytes $(wc -c < /tmp/r.json 2>/dev/null || echo 0)"
+            head -c 1400 /tmp/r.json; printf '\n'
+          }
+          BODY=$(jq -nc --arg s "$STORE" --arg t "$CARD" '{storeUrl:$s, game:"mtg", title:$t, instockOnly:false, limit:8, offset:0}')
+          hit "buylist/cards/forStore" "$B/buylist/cards/forStore" "$BODY"
+          hit "buylist/products/forStore" "$B/buylist/products/forStore" "$BODY"
+          hit "products/forStore (retail, sanity: known-good shape?)" "$B/products/forStore" "$BODY"
+
+      - name: Variant endpoint shapes (GET fallbacks)
+        run: |
+          g() { echo "=== GET $1 ==="; code=$(curl -sS --max-time 20 -o /tmp/r.json -w '%{http_code}' -A 'Mozilla/5.0' -H 'accept: application/json' "$1") || code=000; echo "HTTP $code, bytes $(wc -c < /tmp/r.json 2>/dev/null || echo 0)"; head -c 700 /tmp/r.json; printf '\n'; }
+          g "$B/buylist/settings/forStore/$STORE"
+          g "$B/settings/forStore/$STORE"
+          g "https://portal.binderpos.com/external/store/$STORE"
+
+      - name: Field-name scan of any successful response
+        run: |
+          echo "(re-running the cards search to scan its fields)"
+          BODY=$(jq -nc --arg s "$STORE" --arg t "$CARD" '{storeUrl:$s, game:"mtg", title:$t, instockOnly:false, limit:8, offset:0}')
+          curl -sS --max-time 25 -o /tmp/r.json -H 'content-type: application/json' -A 'Mozilla/5.0' \
+            -H 'origin: https://exorgames.com' -X POST "$B/buylist/cards/forStore" --data "$BODY" || true
+          echo "-- all JSON keys (unique) --"
+          jq -r 'paths | map(tostring) | join(".")' /tmp/r.json 2>/dev/null | sed -E 's/\.[0-9]+\./.N./g; s/\.[0-9]+$/.N/' | sort -u | head -60 || echo "not json"
+          echo "-- cash/credit/buy fields with sample values --"
+          jq -r '.. | objects | to_entries[] | select(.key | test("cash|credit|buy|price"; "i")) | "\(.key)=\(.value)"' /tmp/r.json 2>/dev/null | sort -u | head -40 || true
