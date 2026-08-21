@@ -60,7 +60,8 @@ jobs:
             sleep 0.3
           }
           for t in "dragon" "knight" "angel" "goblin" "elf" "bolt" "sword" "war" "dark" "commander"; do pull mtg "$t"; done
-          for t in "charizard" "umbreon" "rayquaza" "lugia" "mewtwo" "gengar" "pikachu" "eevee" "gardevoir" "dragonite" "snorlax" "sylveon"; do pull pokemon "$t"; done
+          # High-value names pin the upper tiers; cheap staples ground the floor.
+          for t in "charizard" "umbreon" "rayquaza" "lugia" "mewtwo" "gengar" "pikachu" "eevee" "gardevoir" "dragonite" "snorlax" "sylveon" "energy" "candy" "ball" "switch" "boss" "professor" "mimikyu" "promo"; do pull pokemon "$t"; done
           for t in "dragon" "magician" "hero" "dark" "eyes" "sky" "machine" "warrior"; do pull yugioh "$t"; done
           for t in "trooper" "vader" "force" "jedi" "star"; do pull starwars "$t"; done
           for t in "luffy" "zoro" "nami" "pirate" "king"; do pull onepiece "$t"; done
@@ -128,8 +129,12 @@ jobs:
                   else:
                       merged.append(dict(t))
               finite = [t for t in merged if t["upTo"] is not None]
-              sells = sorted(r['sell'] for r in rs)
-              min_sell = round(sells[max(0, int(len(sells) * 0.05) - 1)], 2)
+              # Floor = the LOWEST sell price we have positive rule evidence
+              # for. A p05 floor on a biased sample once hid most of the
+              # catalog (a $5 promo showed "not buying"); min() cannot.
+              min_sell = round(min(r['sell'] for r in rs), 2)
+              if min_sell > 5:
+                  alerts.append(f"{g}: lowest stamped sell is {min_sell} - floor may reflect sampling bias, broaden probes")
               entry = {
                   "key": g, "match": MATCH.get(g, g),
                   "cash": base["cash"], "credit": base["credit"],
@@ -156,7 +161,7 @@ jobs:
           with open('public/buy-rules.json', 'w') as f:
               json.dump(out, f, indent=2)
               f.write('\n')
-          print(json.dumps({"enabled": out["enabled"], "games": [(g['key'], g.get('cash'), g.get('credit'), g.get('_samples')) for g in games], "alerts": alerts}, indent=1))
+          print(json.dumps({"enabled": out["enabled"], "games": [(g['key'], g.get('cash'), g.get('credit'), g.get('minSell'), g.get('_samples')) for g in games], "alerts": alerts}, indent=1))
           PY
 
       - name: SortSwift shape probe (log-only, informs a future second source)
@@ -205,4 +210,4 @@ jobs:
         run: |
           sleep 6
           echo "== live /buy-rules.json summary =="
-          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, tiers: (.tiers|length), samples: ._samples}], alerts: ._alerts}' || true
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, tiers: (.tiers|length), samples: ._samples}], alerts: ._alerts}' || true
