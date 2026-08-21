@@ -1,17 +1,20 @@
 name: SortSwift probe
 
-# Read-only discovery of the SortSwift buylist API (the store's real
-# buy-price source — buylist.sortswift.com). The dev sandbox has no egress,
-# so this fetches the public buylist widget + its JS bundle from a runner and
-# greps for the API base, endpoints and price field names. Manual-only.
+# Round 2: store-config answered to ?storeId=61dfa8766c5f9fa6 (no auth).
+# Map the rest of the buylist API — the goal is per-card cash/credit buy
+# prices for every game. Read-only, manual-only.
 
 on:
   workflow_dispatch:
     inputs:
       store:
-        description: "SortSwift store token (?s=...)"
+        description: "SortSwift storeId"
         required: true
         default: "61dfa8766c5f9fa6"
+      card:
+        description: "card name to price"
+        required: true
+        default: "Charizard"
 
 permissions: {}
 
@@ -20,31 +23,58 @@ jobs:
     runs-on: ubuntu-latest
     env:
       S: ${{ inputs.store }}
-      B: https://buylist.sortswift.com
+      CARD: ${{ inputs.card }}
+      SS: https://buylist-api.sortswift-services.com/api/buylist
     steps:
-      - name: Landing HTML + asset srcs
+      - name: Full store-config (games list, settings)
         run: |
-          curl -sS --max-time 25 -A 'Mozilla/5.0' "$B/?s=$S" -o /tmp/bl.html || true
-          echo "== landing bytes =="; wc -c /tmp/bl.html || true
-          echo "== <script>/<link> srcs =="
-          grep -oE '(src|href)="[^"]+"' /tmp/bl.html | sed -E 's/^(src|href)="//; s/"$//' | sort -u | head -60
-          echo "== inline API/host/config hints =="
-          grep -oiE '(https?:)?//[a-z0-9._-]*(sortswift|amazonaws|cloudfront|herokuapp)[a-z0-9._/-]*|/api/[a-z0-9/_.-]+|"?(apiUrl|api_url|baseUrl|storeId|store_id|apiKey|api_key|token)"?\s*[:=]' /tmp/bl.html | sort -u | head -60
+          curl -sS --max-time 20 -A 'Mozilla/5.0' -H 'accept: application/json' \
+            -H 'origin: https://buylist.sortswift.com' -H "referer: https://buylist.sortswift.com/?s=$S" \
+            "$SS/store-config?storeId=$S" -o /tmp/cfg.json || true
+          echo "bytes: $(wc -c < /tmp/cfg.json 2>/dev/null || echo 0)"
+          echo "== top-level + config keys =="
+          jq -r '.data.config | keys | join(", ")' /tmp/cfg.json 2>/dev/null | head -4 || true
+          echo "== games / catalogs mentioned =="
+          jq -r '.data.config | to_entries[] | select(.key|test("game|catalog|tcg";"i")) | "\(.key)=\(.value)"' /tmp/cfg.json 2>/dev/null | head -20 || true
+          echo "== raw head =="
+          head -c 2500 /tmp/cfg.json; printf '\n'
 
-      - name: Fetch JS bundles, grep API + price fields
+      - name: Price-read battery (GET)
         run: |
-          for js in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/bl.html | sed -E 's/^src="//; s/"$//'); do
-            case "$js" in
-              http*) u="$js" ;;
-              //*)   u="https:$js" ;;
-              /*)    u="$B$js" ;;
-              *)     u="$B/$js" ;;
-            esac
-            echo "================= JS: $u ================="
-            curl -sS --max-time 40 -A 'Mozilla/5.0' "$u" -o /tmp/j.js || true
-            echo "bytes: $(wc -c < /tmp/j.js 2>/dev/null || echo 0)"
-            echo "-- hosts / api paths --"
-            grep -oiE '(https?:)?//[a-z0-9._-]*(sortswift|amazonaws|cloudfront|herokuapp)[a-z0-9._/-]*|/api/[a-z0-9/_.{}$:-]+|/graphql' /tmp/j.js | sort -u | head -60
-            echo "-- price/buylist field names --"
-            grep -oiE '(cash|credit|buy|trade|store[_ ]?credit)[a-z_]*(price|value|amount|percent|multiplier)?|(price|value)(cash|credit)' /tmp/j.js | sort -u | head -40
-          done
+          t() { # $1 url
+            code=$(curl -sS --max-time 20 -o /tmp/r.json -w '%{http_code}' -A 'Mozilla/5.0' -H 'accept: application/json' \
+              -H 'origin: https://buylist.sortswift.com' -H "referer: https://buylist.sortswift.com/?s=$S" "$1") || code=000
+            echo "[$code/$(wc -c < /tmp/r.json 2>/dev/null || echo 0)b] $1"
+            b=$(wc -c < /tmp/r.json 2>/dev/null || echo 0)
+            if [ "$code" = "200" ] && [ "$b" -gt 2 ]; then echo "  BODY: $(head -c 800 /tmp/r.json)"; fi
+            if [ "$code" != "200" ] && [ "$b" -gt 2 ]; then echo "  ERR:  $(head -c 250 /tmp/r.json)"; fi
+          }
+          N=$(python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['CARD']))")
+          t "$SS/search?storeId=$S&query=$N"
+          t "$SS/search?storeId=$S&q=$N"
+          t "$SS/search?storeId=$S&name=$N"
+          t "$SS/search?storeId=$S&query=$N&game=pokemon"
+          t "$SS/lookup-by-name?storeId=$S&name=$N"
+          t "$SS/lookup-by-name?storeId=$S&cardName=$N"
+          t "$SS/get-price?storeId=$S&name=$N"
+          t "$SS/get-price?storeId=$S&cardId=1"
+          t "$SS/hotlist?storeId=$S"
+          t "$SS/sets?storeId=$S"
+          t "$SS/sets?storeId=$S&game=pokemon"
+          t "$SS/filter-values?storeId=$S"
+
+      - name: Price-read battery (POST)
+        run: |
+          p() { # $1 url, $2 body
+            code=$(curl -sS --max-time 20 -o /tmp/r.json -w '%{http_code}' -X POST -A 'Mozilla/5.0' \
+              -H 'content-type: application/json' -H 'accept: application/json' \
+              -H 'origin: https://buylist.sortswift.com' -H "referer: https://buylist.sortswift.com/?s=$S" \
+              "$1" --data "$2") || code=000
+            echo "[$code/$(wc -c < /tmp/r.json 2>/dev/null || echo 0)b] POST $1  body=$2"
+            b=$(wc -c < /tmp/r.json 2>/dev/null || echo 0)
+            if [ "$b" -gt 2 ]; then echo "  BODY: $(head -c 800 /tmp/r.json)"; fi
+          }
+          p "$SS/search" "$(jq -nc --arg s "$S" --arg n "$CARD" '{storeId:$s, query:$n}')"
+          p "$SS/lookup-by-name" "$(jq -nc --arg s "$S" --arg n "$CARD" '{storeId:$s, name:$n}')"
+          p "$SS/get-price" "$(jq -nc --arg s "$S" --arg n "$CARD" '{storeId:$s, name:$n}')"
+          p "$SS/get-price/bulk" "$(jq -nc --arg s "$S" --arg n "$CARD" '{storeId:$s, names:[$n]}')"
