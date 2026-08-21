@@ -698,6 +698,77 @@ function baseName(title) {
   return s;
 }
 
+/* ---------------- "What we pay" — BinderPOS buylist prices ----------------
+   The owner's tills run BinderPOS, and its portal exposes a buylist search at
+   /external/shopify/buylist/cards/forStore?storeUrl=..&keyword=.. — but that
+   route requires the store's BinderPOS API key (verified: recognised params
+   401 without one; the public retail feed carries buy prices only as $0.00
+   art-card exclusions). The key lives in the BINDERPOS_API_KEY worker secret
+   (synced from a repo Actions secret on deploy, like SHOPIFY_ADMIN_TOKEN).
+   Until it's set, this endpoint answers {available:false} and the storefront
+   reveal button simply doesn't render. Cached 10 min per card+game. */
+const BUY_TTL_S = 600;
+const BUY_HOST = "https://portal.binderpos.com/external/shopify";
+const BUY_STORE = "most-wanted-ca.myshopify.com";
+
+export async function serveBuyPrice(request, env, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
+  const url = new URL(request.url);
+  const name = baseName(String(url.searchParams.get("name") || "").slice(0, 80));
+  const ptype = String(url.searchParams.get("type") || "").slice(0, 48);
+  const game = gameOf(ptype) || "mtg";
+  const out = { name, game, available: false, offers: [] };
+  const key = env && env.BINDERPOS_API_KEY;
+  if (!key || name.length < 2) {
+    return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
+  }
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/buyprice.json?g=" + game + "&n=" + encodeURIComponent(name.toLowerCase()), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  try {
+    const qs = new URLSearchParams({ storeUrl: BUY_STORE, keyword: name, game, buyingEnabled: "true", limit: "40", offset: "0" });
+    const r = await fetch(`${BUY_HOST}/buylist/cards/forStore?${qs}`, {
+      headers: { accept: "application/json", authorization: key, "user-agent": "ExorBuylistReveal/1.0 (+workers.dev)" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      // Accept both shapes seen from this portal: {products:[{..variants:[]}]}
+      // and a flat {cards:[..]} — normalise to per-variant offers.
+      const prods = Array.isArray(j?.products) ? j.products : Array.isArray(j?.cards) ? j.cards : Array.isArray(j) ? j : [];
+      const want = name.toLowerCase();
+      for (const p of prods) {
+        const title = p.title || p.name || p.cardName || "";
+        if (baseName(title).toLowerCase() !== want) continue;
+        const set = p.setName || (String(title).match(/\[([^\]]+)\]/) || [, ""])[1] || "";
+        for (const v of (p.variants || [p])) {
+          const cash = v.cashBuyPrice ?? v.cashPrice ?? null;
+          const credit = v.storeCreditBuyPrice ?? v.creditBuyPrice ?? v.creditPrice ?? null;
+          if (cash == null && credit == null) continue;
+          const c = parseFloat(cash), s = parseFloat(credit);
+          if (!(c > 0) && !(s > 0)) continue;   // 0.00 = not buying this one
+          out.offers.push({
+            set,
+            condition: condOf(v.title || v.condition || "", game),
+            foil: /foil/i.test(v.title || v.printing || ""),
+            cash: c > 0 ? c.toFixed(2) : null,
+            credit: s > 0 ? s.toFixed(2) : null,
+          });
+        }
+      }
+      out.offers.sort((a, b) => (parseFloat(b.cash || b.credit || 0)) - (parseFloat(a.cash || a.credit || 0)));
+      out.offers = out.offers.slice(0, 24);
+      out.available = true;   // key worked — even an empty list is an answer ("not buying")
+    } else if (r.status === 401 || r.status === 403) {
+      out.error = "auth";
+    }
+  } catch { /* fall through to unavailable */ }
+  const res = Response.json(out, { headers: { ...cors, "cache-control": out.available ? `public, max-age=${BUY_TTL_S}` : "no-store" } });
+  if (out.available) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 /* Exact-name in-stock lookup for the Similar strip and Deck Builder. Returns
    the cheapest available copy across EVERY printing, normalised to the card
    shape the UIs speak. Scoped to one game (default mtg): card names collide

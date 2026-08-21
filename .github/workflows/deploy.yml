@@ -45,6 +45,22 @@ jobs:
             echo "No SHOPIFY_ADMIN_TOKEN repo secret set - skipping (add one to enable full search, stock caps and numbered draft orders)"
           fi
 
+      # Same pattern for the BinderPOS store API key: powers the card-page
+      # "what we pay" buylist reveal (/buyprice.json). Paste the key as a repo
+      # Actions secret named BINDERPOS_API_KEY; it syncs on the next deploy and
+      # never appears in the repo or logs.
+      - name: Sync BINDERPOS_API_KEY worker secret (when configured)
+        env:
+          BINDERPOS_API_KEY: ${{ secrets.BINDERPOS_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$BINDERPOS_API_KEY" ]; then
+            printf '%s' "$BINDERPOS_API_KEY" | npx wrangler@4 secret put BINDERPOS_API_KEY
+          else
+            echo "No BINDERPOS_API_KEY repo secret set - skipping (add one to enable the what-we-pay buylist reveal)"
+          fi
+
       # Log-only probe of the freshly deployed similar-cards endpoints. The
       # sandbox this worker is developed from has no outbound internet, so
       # this step is where the real upstream shapes and live responses become
@@ -83,6 +99,10 @@ jobs:
           echo "=== deck-builder assets (theme shell loads these; expect 200 + js/css content-type) ==="
           curl -sS -o /dev/null -w 'deck-builder.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.js" || true
           curl -sS -o /dev/null -w 'deck-builder.css: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.css" || true
+          echo "=== /buyprice.json (what-we-pay reveal; available:false until BINDERPOS_API_KEY is set) ==="
+          curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Sol%20Ring&type=MTG%20Single" | head -c 1200 || true
+          printf '\n'
+          curl -sS -o /dev/null -w 'buyprice-reveal.js: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buyprice-reveal.js" || true
           echo "=== /sisters.json?q=humility (expect cheapest IN-STOCK prices; New Glasgow Humility = 79.10 not 40.50; 5-min edge cache may lag one run) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/sisters.json?q=humility" | head -c 1500 || true
           printf '\n'
