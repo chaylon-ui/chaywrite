@@ -5,7 +5,8 @@ name: Buy-rules daily sync
 # public product feed stamps each variant with the rule-derived
 # cashBuyPercent / creditBuyPercent for games where the store's buylist
 # rules are materialized (verified live for Pokémon: 25/30/35/45% cash
-# tiers). This job samples hundreds of variants per game each morning,
+# tiers). This job samples hundreds of variants per game each morning via
+# fast titled queries (untitled catalog dumps proved 30s-slow server-side),
 # derives per-game price-tiered percentages (medians per price band),
 # applies sanity guardrails, commits the result to the worker branch, and
 # deploys the worker itself (GITHUB_TOKEN pushes cannot trigger deploy.yml).
@@ -40,25 +41,29 @@ jobs:
         with:
           ref: claude/shopify-site-improvements-ztgdt8
 
-      - name: Sample BinderPOS percent stamps per game
+      - name: Sample BinderPOS percent stamps per game (titled probes — fast path)
+        timeout-minutes: 10
         run: |
           : > /tmp/samples.ndjson
-          pull() { # $1 game, $2 offset, $3 optional title probe
-            BODY=$(jq -nc --arg s "$STORE" --arg g "$1" --arg t "${3:-}" --argjson o "$2" \
-              '{storeUrl:$s, game:$g, limit:100, offset:$o, instockOnly:false} + (if $t != "" then {title:$t} else {} end)')
-            curl -sS --max-time 30 -H 'content-type: application/json' -A 'Mozilla/5.0' \
-              -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" 2>/dev/null \
-            | jq -c --arg g "$1" '.products[]? as $p | $p.variants[]?
+          pull() { # $1 game, $2 title probe
+            BODY=$(jq -nc --arg s "$STORE" --arg g "$1" --arg t "$2" \
+              '{storeUrl:$s, game:$g, title:$t, limit:100, offset:0, instockOnly:false}')
+            t0=$(date +%s%N)
+            curl -sS --max-time 20 -H 'content-type: application/json' -A 'Mozilla/5.0' \
+              -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" -o /tmp/pull.json 2>/dev/null || true
+            n=$(jq -c --arg g "$1" '.products[]? as $p | $p.variants[]?
                 | select((.cashBuyPercent!=null and .cashBuyPercent>0) or (.creditBuyPercent!=null and .creditBuyPercent>0))
-                | {g:$g, pid:$p.id, sell:(.price//0), cashPct:(.cashBuyPercent//0), creditPct:(.creditBuyPercent//0)}' \
-              >> /tmp/samples.ndjson 2>/dev/null || true
-            sleep 0.4
+                | {g:$g, pid:$p.id, sell:(.price//0), cashPct:(.cashBuyPercent//0), creditPct:(.creditBuyPercent//0)}' /tmp/pull.json 2>/dev/null | tee -a /tmp/samples.ndjson | wc -l)
+            echo "  [$1] '$2' -> $n stamped variants ($(( ($(date +%s%N)-t0)/1000000 ))ms)"
+            sleep 0.3
           }
-          for g in mtg pokemon yugioh starwars onepiece riftbound; do
-            for o in 0 100 200; do pull "$g" "$o"; done
-            # breadth probes in case the untitled dump is empty or narrow
-            for t in a e o; do pull "$g" 0 "$t"; done
-          done
+          # Common title words per game — broad coverage without catalog scans.
+          for t in "dragon" "knight" "angel" "goblin" "elf" "island" "bolt" "sword" "war" "dark"; do pull mtg "$t"; done
+          for t in "chu" "eevee" "ex" "star" "ball" "energy" "dragon" "cat" "fish" "bird"; do pull pokemon "$t"; done
+          for t in "dragon" "magician" "hero" "dark" "eyes" "sky" "machine" "warrior"; do pull yugioh "$t"; done
+          for t in "trooper" "vader" "force" "jedi" "star"; do pull starwars "$t"; done
+          for t in "luffy" "zoro" "nami" "pirate" "king"; do pull onepiece "$t"; done
+          for t in "jinx" "vi" "blade" "light" "rift"; do pull riftbound "$t"; done
           echo "sampled rows: $(wc -l < /tmp/samples.ndjson)"
           echo "per game:"; jq -r .g /tmp/samples.ndjson | sort | uniq -c || true
 
