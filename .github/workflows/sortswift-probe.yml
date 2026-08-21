@@ -1,0 +1,50 @@
+name: SortSwift probe
+
+# Read-only discovery of the SortSwift buylist API (the store's real
+# buy-price source — buylist.sortswift.com). The dev sandbox has no egress,
+# so this fetches the public buylist widget + its JS bundle from a runner and
+# greps for the API base, endpoints and price field names. Manual-only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      store:
+        description: "SortSwift store token (?s=...)"
+        required: true
+        default: "61dfa8766c5f9fa6"
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      S: ${{ inputs.store }}
+      B: https://buylist.sortswift.com
+    steps:
+      - name: Landing HTML + asset srcs
+        run: |
+          curl -sS --max-time 25 -A 'Mozilla/5.0' "$B/?s=$S" -o /tmp/bl.html || true
+          echo "== landing bytes =="; wc -c /tmp/bl.html || true
+          echo "== <script>/<link> srcs =="
+          grep -oE '(src|href)="[^"]+"' /tmp/bl.html | sed -E 's/^(src|href)="//; s/"$//' | sort -u | head -60
+          echo "== inline API/host/config hints =="
+          grep -oiE '(https?:)?//[a-z0-9._-]*(sortswift|amazonaws|cloudfront|herokuapp)[a-z0-9._/-]*|/api/[a-z0-9/_.-]+|"?(apiUrl|api_url|baseUrl|storeId|store_id|apiKey|api_key|token)"?\s*[:=]' /tmp/bl.html | sort -u | head -60
+
+      - name: Fetch JS bundles, grep API + price fields
+        run: |
+          for js in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/bl.html | sed -E 's/^src="//; s/"$//'); do
+            case "$js" in
+              http*) u="$js" ;;
+              //*)   u="https:$js" ;;
+              /*)    u="$B$js" ;;
+              *)     u="$B/$js" ;;
+            esac
+            echo "================= JS: $u ================="
+            curl -sS --max-time 40 -A 'Mozilla/5.0' "$u" -o /tmp/j.js || true
+            echo "bytes: $(wc -c < /tmp/j.js 2>/dev/null || echo 0)"
+            echo "-- hosts / api paths --"
+            grep -oiE '(https?:)?//[a-z0-9._-]*(sortswift|amazonaws|cloudfront|herokuapp)[a-z0-9._/-]*|/api/[a-z0-9/_.{}$:-]+|/graphql' /tmp/j.js | sort -u | head -60
+            echo "-- price/buylist field names --"
+            grep -oiE '(cash|credit|buy|trade|store[_ ]?credit)[a-z_]*(price|value|amount|percent|multiplier)?|(price|value)(cash|credit)' /tmp/j.js | sort -u | head -40
+          done
