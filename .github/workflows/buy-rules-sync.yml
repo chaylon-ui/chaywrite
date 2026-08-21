@@ -4,12 +4,16 @@ name: Buy-rules daily sync
 # rewrites public/buy-rules.json — nothing hardcoded. Mechanism: BinderPOS
 # applies ("syncs") the portal's Buylist Rules onto card variants as
 # cashBuyPercent / creditBuyPercent stamps in its public product feed; this
-# job samples those stamps per game each morning, derives the price-banded
-# percentages on the portal's own band edges ($20/$50/$100/$250), applies
-# sanity guardrails, commits the result to the worker branch, and deploys
-# the worker itself (GITHUB_TOKEN pushes cannot trigger deploy.yml). Games
-# whose rules have not synced any stamps are OMITTED so the storefront
-# reveal never guesses one game from another's numbers. Exclusion stamps
+# job samples those stamps per game each morning and derives percentages on
+# the portal's own rule band edges ($8.01 / $15.01 / $20.01 / $50.01 /
+# $100.01 / $250.01, per the owner's rules list). The stamps step by the
+# variant's CONDITION (observed: NM 45/55, LP 35/45, MP 25/35 on the same
+# product; cheap modern cards flat 50/70), so the derivation is
+# per-condition first with all-condition medians as fallback. Guardrails
+# applied, result committed to the worker branch, and the worker deployed
+# right here (GITHUB_TOKEN pushes cannot trigger deploy.yml). Games whose
+# rules have not synced any stamps are OMITTED so the storefront reveal
+# never guesses one game from another's numbers. Exclusion stamps
 # (cash 0% / credit ≤1% = "not buying this variant") are filtered out.
 
 on:
@@ -38,7 +42,7 @@ jobs:
           ref: claude/shopify-site-improvements-ztgdt8
 
       - name: Sample BinderPOS percent stamps per game (titled probes — fast path)
-        timeout-minutes: 10
+        timeout-minutes: 12
         run: |
           : > /tmp/samples.ndjson
           pull() { # $1 game, $2 title probe
@@ -49,8 +53,8 @@ jobs:
               -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" -o /tmp/pull.json 2>/dev/null || true
             jq -c --arg g "$1" '.products[]? as $p | $p.variants[]?
                 | select((.cashBuyPercent!=null and .cashBuyPercent>0) or (.creditBuyPercent!=null and .creditBuyPercent>0))
-                | {g:$g, pid:$p.id, sell:(.price//0), cashPct:(.cashBuyPercent//0), creditPct:(.creditBuyPercent//0)}' /tmp/pull.json >> /tmp/samples.ndjson 2>/dev/null || true
-            genuine=$(jq -c --arg g "$1" '.products[]?.variants[]? | select((.cashBuyPercent//0) >= 5 or (.creditBuyPercent//0) >= 5) | 1' /tmp/pull.json 2>/dev/null | wc -l)
+                | {g:$g, pid:$p.id, sell:(.price//0), cashPct:(.cashBuyPercent//0), creditPct:(.creditBuyPercent//0), cond:(.title//"")}' /tmp/pull.json >> /tmp/samples.ndjson 2>/dev/null || true
+            genuine=$(jq -c '.products[]?.variants[]? | select((.cashBuyPercent//0) >= 5 or (.creditBuyPercent//0) >= 5) | 1' /tmp/pull.json 2>/dev/null | wc -l)
             echo "  [$1] '$2' -> $genuine genuine rule stamps ($(( ($(date +%s%N)-t0)/1000000 ))ms)"
             sleep 0.3
           }
@@ -58,7 +62,10 @@ jobs:
           # $100+ bands, so if their sync materializes stamps anywhere it will
           # be on these.
           for t in "ring" "tutor" "cradle" "mox" "force" "will" "dual" "tabernacle" "lotus" "crypt" "rhystic" "tithe" "commander" "bolt" "dragon" "elf"; do pull mtg "$t"; done
-          for t in "charizard" "umbreon" "rayquaza" "lugia" "mewtwo" "gengar" "pikachu" "eevee" "gardevoir" "dragonite" "snorlax" "sylveon" "energy" "candy" "ball" "switch" "boss" "professor" "mimikyu" "promo"; do pull pokemon "$t"; done
+          # Pokemon spans the full price range on purpose: arven/iono are the
+          # modern cheap trainers that carry the flat 50/70 stamps, the Fossil
+          # birds carry the mid-range condition ladder.
+          for t in "charizard" "umbreon" "rayquaza" "lugia" "mewtwo" "gengar" "pikachu" "eevee" "gardevoir" "dragonite" "snorlax" "sylveon" "energy" "candy" "ball" "switch" "boss" "professor" "mimikyu" "promo" "arven" "iono" "moltres" "zapdos" "articuno" "nest" "lucario" "greninja" "vmax" "ex"; do pull pokemon "$t"; done
           for t in "dragon" "magician" "hero" "dark" "eyes" "sky" "machine" "warrior" "ash" "maxx" "accesscode" "snake" "baronne"; do pull yugioh "$t"; done
           for t in "trooper" "vader" "force" "jedi" "star"; do pull starwars "$t"; done
           for t in "luffy" "zoro" "nami" "pirate" "king"; do pull onepiece "$t"; done
@@ -66,10 +73,10 @@ jobs:
           echo "sampled rows (any stamp): $(wc -l < /tmp/samples.ndjson)"
           echo "per game:"; jq -r .g /tmp/samples.ndjson | sort | uniq -c || true
 
-      - name: Derive per-game tiered percentages + guardrails
+      - name: Derive per-game, per-condition tiered percentages + guardrails
         run: |
           python3 - <<'PY'
-          import json, statistics, collections, datetime
+          import json, re, statistics, collections, datetime
           rows = []
           with open('/tmp/samples.ndjson') as f:
               for line in f:
@@ -77,9 +84,19 @@ jobs:
                   if line:
                       try: rows.append(json.loads(line))
                       except Exception: pass
+          def cond_of(t):
+              t = (t or "").lower()
+              if "near mint" in t or re.search(r'\bnm\b', t): return "NM"
+              if "light" in t: return "LP"
+              if "moderate" in t: return "MP"
+              if "heav" in t: return "HP"
+              if "damag" in t or re.search(r'\bdmg\b', t): return "DM"
+              return ""
+          for r in rows:
+              r['c'] = cond_of(r.get('cond'))
           seen, uniq = set(), []
           for r in rows:
-              k = (r['g'], r.get('pid'), r['sell'], r['cashPct'], r['creditPct'])
+              k = (r['g'], r.get('pid'), r['sell'], r['cashPct'], r['creditPct'], r['c'])
               if k not in seen:
                   seen.add(k); uniq.append(r)
           rows = uniq
@@ -89,11 +106,29 @@ jobs:
           rows = [r for r in rows if (r['cashPct'] or 0) >= 5 or (r['creditPct'] or 0) >= 5]
           MATCH = {"mtg":"mtg","pokemon":"pokemon","yugioh":"yugioh",
                    "starwars":"star wars","onepiece":"one piece","riftbound":"riftbound"}
-          # Band edges mirror the portal's own Buylist Rules boundaries
-          # ($20/$50/$100/$250 per the owner's rules list), plus a $5 low
-          # band in case sub-$20 rules exist.
-          BANDS = [5,20,50,100,250,None]
+          # Band edges are the portal's own Buylist Rules boundaries — rules
+          # like "$8.01 - $15.00" have inclusive tops, so edges sit at .01 and
+          # each emitted tier's upTo is the inclusive top (8.00, 15.00, ...).
+          BANDS = [8.01, 15.01, 20.01, 50.01, 100.01, 250.01, None]
           def clamp(x): return max(0.0, min(0.90, x))
+          def derive(rs, need):
+              tiers, lo = [], 0
+              for hi in BANDS:
+                  band = [r for r in rs if r['sell'] >= lo and (hi is None or r['sell'] < hi)]
+                  if len(band) >= need:
+                      cash = clamp(statistics.median(r['cashPct'] for r in band) / 100.0)
+                      credit = clamp(statistics.median(r['creditPct'] for r in band) / 100.0)
+                      tiers.append({"upTo": (round(hi - 0.01, 2) if hi is not None else None),
+                                    "cash": round(cash, 3), "credit": round(credit, 3)})
+                  if hi is not None:
+                      lo = hi
+              merged = []
+              for t in tiers:
+                  if merged and merged[-1]["cash"] == t["cash"] and merged[-1]["credit"] == t["credit"]:
+                      merged[-1]["upTo"] = t["upTo"]
+                  else:
+                      merged.append(dict(t))
+              return merged
           by_game = collections.defaultdict(list)
           for r in rows:
               if r['sell'] and 0 < r['sell'] < 99999:
@@ -109,26 +144,23 @@ jobs:
               if len(rs) < 12:
                   alerts.append(f"{g}: only {len(rs)} genuine rule stamps sampled - skipped")
                   continue
-              tiers, lo = [], 0
-              for hi in BANDS:
-                  band = [r for r in rs if r['sell'] >= lo and (hi is None or r['sell'] < hi)]
-                  if len(band) >= 5:
-                      cash = clamp(statistics.median(r['cashPct'] for r in band) / 100.0)
-                      credit = clamp(statistics.median(r['creditPct'] for r in band) / 100.0)
-                      tiers.append({"upTo": hi, "cash": round(cash, 3), "credit": round(credit, 3), "_n": len(band)})
-                  if hi is not None:
-                      lo = hi
-              if not tiers:
+              merged = derive(rs, 5)
+              if not merged:
                   alerts.append(f"{g}: no band had enough samples - skipped")
                   continue
-              base = tiers[-1]
-              merged = []
-              for t in tiers:
-                  if merged and merged[-1]["cash"] == t["cash"] and merged[-1]["credit"] == t["credit"]:
-                      merged[-1]["upTo"] = t["upTo"]
-                  else:
-                      merged.append(dict(t))
+              base = merged[-1]
               finite = [t for t in merged if t["upTo"] is not None]
+              # The stamps step by condition (NM > LP > MP on the same card),
+              # so derive each condition's own tier ladder; the flat medians
+              # above stay as the fallback for unrecognized variant titles.
+              conds = {}
+              for c in ("NM", "LP", "MP", "HP", "DM"):
+                  crs = [r for r in rs if r['c'] == c]
+                  m = derive(crs, 4)
+                  if m:
+                      conds[c] = {"cash": m[-1]["cash"], "credit": m[-1]["credit"],
+                                  "tiers": [t for t in m if t["upTo"] is not None],
+                                  "_n": len(crs)}
               # Floor = the LOWEST sell price we have positive rule evidence
               # for; min() so a biased sample can only widen coverage, never
               # hide most of the catalog.
@@ -139,9 +171,11 @@ jobs:
                   "key": g, "match": MATCH.get(g, g),
                   "cash": base["cash"], "credit": base["credit"],
                   "minSell": min_sell, "buyFoils": True,
-                  "tiers": [{"upTo": t["upTo"], "cash": t["cash"], "credit": t["credit"]} for t in finite],
+                  "tiers": finite,
                   "_source": "binderpos-feed", "_samples": len(rs),
               }
+              if conds:
+                  entry["conds"] = conds
               # Day-over-day guardrail — only against a previously DERIVED
               # value; never resurrect hand-seeded placeholders.
               p = prev.get(g)
@@ -150,7 +184,7 @@ jobs:
                   entry = p
               games.append(entry)
           out = {
-              "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to medians on the portal's own price bands; exclusion stamps are ignored.",
+              "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to per-condition medians on the portal's own price bands; exclusion stamps are ignored.",
               "enabled": bool(games),
               "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
               "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
@@ -161,7 +195,12 @@ jobs:
           with open('public/buy-rules.json', 'w') as f:
               json.dump(out, f, indent=2)
               f.write('\n')
-          print(json.dumps({"enabled": out["enabled"], "games": [(g['key'], g.get('cash'), g.get('credit'), g.get('minSell'), g.get('_samples')) for g in games], "alerts": alerts}, indent=1))
+          print(json.dumps({"enabled": out["enabled"],
+                            "games": [{ "key": g['key'], "cash": g.get('cash'), "credit": g.get('credit'),
+                                        "minSell": g.get('minSell'), "samples": g.get('_samples'),
+                                        "conds": {c: (v['cash'], v['credit'], v['_n']) for c, v in (g.get('conds') or {}).items()} }
+                                      for g in games],
+                            "alerts": alerts}, indent=1))
           PY
 
       - name: Commit when changed
@@ -201,4 +240,4 @@ jobs:
         run: |
           sleep 6
           echo "== live /buy-rules.json summary =="
-          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, tiers: (.tiers|length), samples: ._samples}], alerts: ._alerts}' || true
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, tiers: (.tiers|length), conds: ((.conds//{})|keys), samples: ._samples}], alerts: ._alerts}' || true
