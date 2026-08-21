@@ -1,0 +1,48 @@
+name: BinderPOS band probe
+
+# One-off diagnostic (log-only, writes nothing): prints every genuine
+# rule stamp on Pokemon cards with sell <= $30, then counts the distinct
+# cash%/credit% pairs inside the portal's own rule bands. Purpose: the
+# portal shows a "Pokemon Singles, $8.01 - $15.00" rule at 50% cash /
+# 70% credit while the feed's sub-$20 median came out 25/35 — this shows
+# which numbers BinderPOS actually stamps down there, per price band.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STORE: most-wanted-ca.myshopify.com
+      B: https://portal.binderpos.com/external/shopify
+    steps:
+      - name: Pull cheap-Pokemon stamps
+        run: |
+          : > /tmp/rows.tsv
+          pull() {
+            BODY=$(jq -nc --arg s "$STORE" --arg t "$1" '{storeUrl:$s, game:"pokemon", title:$t, limit:100, offset:0, instockOnly:false}')
+            curl -sS --max-time 20 -H 'content-type: application/json' -A 'Mozilla/5.0' \
+              -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" -o /tmp/pull.json 2>/dev/null || true
+            jq -r '.products[]? as $p | $p.variants[]?
+                | select((.cashBuyPercent//0) >= 5 or (.creditBuyPercent//0) >= 5)
+                | [(.price//0), (.cashBuyPercent//0), (.creditBuyPercent//0), ($p.title | .[0:70])] | @tsv' /tmp/pull.json \
+              >> /tmp/rows.tsv 2>/dev/null || true
+            sleep 0.3
+          }
+          for t in pikachu charizard gengar snorlax mewtwo dragonite eevee umbreon boss professor ball switch energy ex vmax vstar promo mimikyu iono arven candy nest gardevoir lucario greninja moltres zapdos articuno; do
+            pull "$t"
+          done
+          sort -u /tmp/rows.tsv | sort -n > /tmp/uniq.tsv
+          echo "== ALL genuine stamps with sell <= 30  (sell / cash% / credit% / title) =="
+          awk -F'\t' '$1 <= 30' /tmp/uniq.tsv
+          echo ""
+          echo "== distinct cash/credit stamp pairs per portal band =="
+          for band in "5.00 8.00" "8.01 15.00" "15.01 20.00" "20.01 50.00" "50.01 100.00" "100.01 250.00"; do
+            set -- $band
+            echo "-- \$$1 - \$$2 --"
+            awk -F'\t' -v lo="$1" -v hi="$2" '$1 >= lo && $1 <= hi {print $2"/"$3}' /tmp/uniq.tsv | sort | uniq -c | sort -rn || true
+          done
+          echo ""
+          echo "== total unique stamped rows: $(wc -l < /tmp/uniq.tsv); lowest stamped sell: $(head -1 /tmp/uniq.tsv | cut -f1) =="
