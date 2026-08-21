@@ -99,7 +99,8 @@
     if (!rule) return [];
     var minSell = typeof rule.minSell === 'number' ? rule.minSell : 0;
     var buyFoils = rule.buyFoils !== false;
-    var offers = [];
+    var RANK = { DM: 0, HP: 1, MP: 2, LP: 3, NM: 4 };
+    var rows = [];
     (product.variants || []).forEach(function (v) {
       var sell = (v.price || 0) / 100;
       if (!(sell > 0) || sell >= 99999) return;           // placeholder pricing
@@ -107,12 +108,35 @@
       var foil = /foil/i.test(v.title || '');
       if (foil && !buyFoils) return;
       var r2 = condRule(rule, v.title);
-      var cash = pct(r2, sell, 'cash') * sell;
-      var credit = pct(r2, sell, 'credit') * sell;
+      var rank = RANK[condOf(v.title)];
+      rows.push({
+        title: v.title || '', foil: foil, sell: sell,
+        rank: typeof rank === 'number' ? rank : -1,
+        cashPct: pct(r2, sell, 'cash'), creditPct: pct(r2, sell, 'credit')
+      });
+    });
+    // A better condition never pays a lower RATE than a worse condition of
+    // the same card. Sparse per-condition data can invert the ladder (a
+    // condition with no derived data falls back to the blended rate), so
+    // lift each variant's percentages to the max across equal-or-worse
+    // conditions before pricing.
+    rows.forEach(function (r) {
+      if (r.rank < 0) return;
+      rows.forEach(function (o) {
+        if (o.rank > -1 && o.rank <= r.rank) {
+          if (o.cashPct > r.cashPct) r.cashPct = o.cashPct;
+          if (o.creditPct > r.creditPct) r.creditPct = o.creditPct;
+        }
+      });
+    });
+    var offers = [];
+    rows.forEach(function (r) {
+      var cash = r.cashPct * r.sell;
+      var credit = r.creditPct * r.sell;
       if (!(cash > 0) && !(credit > 0)) return;
       offers.push({
-        condition: v.title || '',
-        foil: foil,
+        condition: r.title,
+        foil: r.foil,
         cash: cash > 0 ? cash : null,
         credit: credit > 0 ? credit : null
       });
