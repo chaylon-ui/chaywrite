@@ -7,9 +7,11 @@ name: Buy-rules daily sync
 # job samples those stamps per game each morning and derives percentages on
 # the portal's own rule band edges ($8.01 / $15.01 / $20.01 / $50.01 /
 # $100.01 / $250.01, per the owner's rules list). The stamps step by the
-# variant's CONDITION (observed live: MP 45/55, HP 35/45, DM 25/35 on the
-# same vintage product; cheap modern cards flat 50/70), so the derivation
-# is per-condition first with all-condition medians as fallback.
+# variant's CONDITION (observed live: NM/LP 50/70 on cheap modern cards;
+# MP 45/55, HP 35/45, DM 25/35 on the same vintage product), so the
+# derivation is per-condition first with all-condition medians as
+# fallback — and a condition's rate is never extrapolated to price bands
+# it has no samples in.
 #
 # The feed rate-limits: ~50 rapid requests in, it starts returning empty
 # bodies in ~65ms. Hence a short, highest-yield-first probe list with 0.7s
@@ -171,13 +173,19 @@ jobs:
               finite = [t for t in merged if t["upTo"] is not None]
               # The stamps step by condition (best listed condition highest),
               # so derive each condition's own ladder; the flat medians stay
-              # as the fallback for unrecognized variant titles.
+              # as the fallback for unrecognized variant titles. A condition's
+              # own base applies only when its top (open-ended) band had
+              # samples — prices above a condition's observed tiers fall back
+              # to the all-condition banded medians instead of extrapolating
+              # (e.g. NM 50/70 measured on sub-$8 cards must not promise 50%
+              # cash on a $200 card).
               conds = {}
               for c in ("NM", "LP", "MP", "HP", "DM"):
                   crs = [r for r in rs if r['c'] == c]
                   m = derive(crs, 4)
                   if m:
-                      conds[c] = {"cash": m[-1]["cash"], "credit": m[-1]["credit"],
+                      cbase = m[-1] if m[-1]["upTo"] is None else base
+                      conds[c] = {"cash": cbase["cash"], "credit": cbase["credit"],
                                   "tiers": [t for t in m if t["upTo"] is not None],
                                   "_n": len(crs)}
               # Floor = the LOWEST sell price we have positive rule evidence
@@ -257,7 +265,7 @@ jobs:
       - name: Verify served rules
         if: ${{ steps.commit.outputs.changed == '1' }}
         run: |
-          sleep 6
+          sleep 30   # let the new worker version propagate before probing
           V="$(git rev-parse --short HEAD)"
           echo "== live /buy-rules.json summary (cache-busted with ?v=$V) =="
           curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json?v=$V" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, tiers: (.tiers|length), conds: ((.conds//{})|keys), samples: ._samples}], alerts: ._alerts}' || true
