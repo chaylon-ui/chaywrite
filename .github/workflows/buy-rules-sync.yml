@@ -1,0 +1,196 @@
+name: Buy-rules daily sync
+
+# Reads the store's buylist percentages out of BinderPOS EVERY DAY and
+# rewrites public/buy-rules.json — nothing hardcoded. Mechanism: BinderPOS's
+# public product feed stamps each variant with the rule-derived
+# cashBuyPercent / creditBuyPercent for games where the store's buylist
+# rules are materialized (verified live for Pokémon: 25/30/35/45% cash
+# tiers). This job samples hundreds of variants per game each morning,
+# derives per-game price-tiered percentages (medians per price band),
+# applies sanity guardrails, commits the result to the worker branch, and
+# deploys the worker itself (GITHUB_TOKEN pushes cannot trigger deploy.yml).
+# Games with no derivable data are OMITTED so the storefront reveal simply
+# doesn't show there (it never guesses one game from another's numbers).
+#
+# Also probes the SortSwift buylist API each run (log-only) so its response
+# shape is on record if the owner ever wants it as a second source.
+
+on:
+  schedule:
+    - cron: "23 9 * * *"   # daily 09:23 UTC ≈ 6:23am Atlantic
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = derive + log only, no commit/deploy"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      STORE: most-wanted-ca.myshopify.com
+      B: https://portal.binderpos.com/external/shopify
+      BRANCH: claude/shopify-site-improvements-ztgdt8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/shopify-site-improvements-ztgdt8
+
+      - name: Sample BinderPOS percent stamps per game
+        run: |
+          : > /tmp/samples.ndjson
+          pull() { # $1 game, $2 offset, $3 optional title probe
+            BODY=$(jq -nc --arg s "$STORE" --arg g "$1" --arg t "${3:-}" --argjson o "$2" \
+              '{storeUrl:$s, game:$g, limit:100, offset:$o, instockOnly:false} + (if $t != "" then {title:$t} else {} end)')
+            curl -sS --max-time 30 -H 'content-type: application/json' -A 'Mozilla/5.0' \
+              -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" 2>/dev/null \
+            | jq -c --arg g "$1" '.products[]? as $p | $p.variants[]?
+                | select((.cashBuyPercent!=null and .cashBuyPercent>0) or (.creditBuyPercent!=null and .creditBuyPercent>0))
+                | {g:$g, pid:$p.id, sell:(.price//0), cashPct:(.cashBuyPercent//0), creditPct:(.creditBuyPercent//0)}' \
+              >> /tmp/samples.ndjson 2>/dev/null || true
+            sleep 0.4
+          }
+          for g in mtg pokemon yugioh starwars onepiece riftbound; do
+            for o in 0 100 200; do pull "$g" "$o"; done
+            # breadth probes in case the untitled dump is empty or narrow
+            for t in a e o; do pull "$g" 0 "$t"; done
+          done
+          echo "sampled rows: $(wc -l < /tmp/samples.ndjson)"
+          echo "per game:"; jq -r .g /tmp/samples.ndjson | sort | uniq -c || true
+
+      - name: Derive per-game tiered percentages + guardrails
+        run: |
+          python3 - <<'PY'
+          import json, statistics, collections, datetime
+          rows = []
+          with open('/tmp/samples.ndjson') as f:
+              for line in f:
+                  line = line.strip()
+                  if line:
+                      try: rows.append(json.loads(line))
+                      except Exception: pass
+          seen, uniq = set(), []
+          for r in rows:
+              k = (r['g'], r.get('pid'), r['sell'], r['cashPct'], r['creditPct'])
+              if k not in seen:
+                  seen.add(k); uniq.append(r)
+          rows = uniq
+          MATCH = {"mtg":"mtg","pokemon":"pokemon","yugioh":"yugioh",
+                   "starwars":"star wars","onepiece":"one piece","riftbound":"riftbound"}
+          BANDS = [1,3,5,10,25,50,None]
+          def clamp(x): return max(0.0, min(0.90, x))
+          by_game = collections.defaultdict(list)
+          for r in rows:
+              if r['sell'] and 0 < r['sell'] < 99999:
+                  by_game[r['g']].append(r)
+          prev = {}
+          try:
+              with open('public/buy-rules.json') as f:
+                  for g in (json.load(f).get('games') or []):
+                      prev[g.get('key')] = g
+          except Exception: pass
+          alerts, games = [], []
+          for g, rs in sorted(by_game.items()):
+              if len(rs) < 12:
+                  alerts.append(f"{g}: only {len(rs)} percent-stamped variants sampled - skipped")
+                  continue
+              tiers, lo = [], 0
+              for hi in BANDS:
+                  band = [r for r in rs if r['sell'] >= lo and (hi is None or r['sell'] < hi)]
+                  if len(band) >= 5:
+                      cash = clamp(statistics.median(r['cashPct'] for r in band) / 100.0)
+                      credit = clamp(statistics.median(r['creditPct'] for r in band) / 100.0)
+                      tiers.append({"upTo": hi, "cash": round(cash, 3), "credit": round(credit, 3), "_n": len(band)})
+                  if hi is not None:
+                      lo = hi
+              if not tiers:
+                  alerts.append(f"{g}: no band had enough samples - skipped")
+                  continue
+              base = tiers[-1]
+              merged = []
+              for t in tiers:
+                  if merged and merged[-1]["cash"] == t["cash"] and merged[-1]["credit"] == t["credit"]:
+                      merged[-1]["upTo"] = t["upTo"]
+                  else:
+                      merged.append(dict(t))
+              finite = [t for t in merged if t["upTo"] is not None]
+              sells = sorted(r['sell'] for r in rs)
+              min_sell = round(sells[max(0, int(len(sells) * 0.05) - 1)], 2)
+              entry = {
+                  "key": g, "match": MATCH.get(g, g),
+                  "cash": base["cash"], "credit": base["credit"],
+                  "minSell": min_sell, "buyFoils": True,
+                  "tiers": [{"upTo": t["upTo"], "cash": t["cash"], "credit": t["credit"]} for t in finite],
+                  "_source": "binderpos-feed", "_samples": len(rs),
+              }
+              p = prev.get(g)
+              if p and isinstance(p.get('cash'), (int, float)) and abs(p['cash'] - entry['cash']) > 0.15:
+                  alerts.append(f"{g}: derived cash {entry['cash']} vs prev {p['cash']} moved >15pts - kept previous")
+                  entry = p
+              games.append(entry)
+          out = {
+              "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Per-variant cashBuyPercent/creditBuyPercent stamps in the public product feed are sampled per game and reduced to price-tiered medians.",
+              "enabled": bool(games),
+              "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
+              "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
+              "defaults": None,
+              "games": games,
+              "_alerts": alerts,
+          }
+          with open('public/buy-rules.json', 'w') as f:
+              json.dump(out, f, indent=2)
+              f.write('\n')
+          print(json.dumps({"enabled": out["enabled"], "games": [(g['key'], g.get('cash'), g.get('credit'), g.get('_samples')) for g in games], "alerts": alerts}, indent=1))
+          PY
+
+      - name: SortSwift shape probe (log-only, informs a future second source)
+        run: |
+          SS=https://buylist-api.sortswift-services.com/api/buylist
+          for u in "$SS/store-config?s=61dfa8766c5f9fa6" "$SS/store-config?store=61dfa8766c5f9fa6" "$SS/store-config?token=61dfa8766c5f9fa6"; do
+            echo "=== GET $u ==="
+            curl -sS --max-time 15 -A 'Mozilla/5.0' -H 'accept: application/json' -H 'origin: https://buylist.sortswift.com' -H 'referer: https://buylist.sortswift.com/' "$u" | head -c 600 || true
+            printf '\n'
+          done
+
+      - name: Commit when changed
+        id: commit
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          if git diff --quiet public/buy-rules.json; then
+            echo "buy-rules.json unchanged - nothing to commit"
+            echo "changed=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "buy-rules-sync"
+          git config user.email "actions@github.com"
+          git add public/buy-rules.json
+          git commit -m "buy-rules: daily sync $(date -u +%F)"
+          git push origin "$BRANCH"
+          echo "changed=1" >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN pushes never trigger other workflows, so deploy.yml will
+      # NOT fire on the commit above — deploy the worker right here instead,
+      # replicating deploy.yml's build stamp so the TV auto-update stays sane.
+      - name: Stamp build version
+        if: ${{ steps.commit.outputs.changed == '1' }}
+        run: |
+          sed -i "s/__BUILD__/$(git rev-parse --short HEAD)/" public/tv.html
+          printf '{"v":"%s"}' "$(git rev-parse --short HEAD)" > public/version.json
+
+      - name: Deploy worker with fresh rules
+        if: ${{ steps.commit.outputs.changed == '1' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify served rules
+        if: ${{ steps.commit.outputs.changed == '1' }}
+        run: |
+          sleep 6
+          echo "== live /buy-rules.json summary =="
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, tiers: (.tiers|length), samples: ._samples}], alerts: ._alerts}' || true
