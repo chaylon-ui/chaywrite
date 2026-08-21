@@ -1,5 +1,5 @@
 {
-  "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to medians on the portal's own price bands; exclusion stamps are ignored.",
+  "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to per-condition medians on the portal's own price bands; exclusion stamps are ignored.",
   "enabled": true,
   "updated": "2026-08-21",
   "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
@@ -14,23 +14,48 @@
       "buyFoils": true,
       "tiers": [
         {
-          "upTo": 20,
+          "upTo": 15.0,
           "cash": 0.25,
           "credit": 0.35
         },
         {
-          "upTo": 100,
+          "upTo": 20.0,
+          "cash": 0.3,
+          "credit": 0.4
+        },
+        {
+          "upTo": 100.0,
           "cash": 0.35,
           "credit": 0.45
         },
         {
-          "upTo": 250,
+          "upTo": 250.0,
           "cash": 0.3,
           "credit": 0.4
         }
       ],
       "_source": "binderpos-feed",
-      "_samples": 111
+      "_samples": 102,
+      "conds": {
+        "MP": {
+          "cash": 0.45,
+          "credit": 0.55,
+          "tiers": [],
+          "_n": 33
+        },
+        "HP": {
+          "cash": 0.35,
+          "credit": 0.45,
+          "tiers": [],
+          "_n": 33
+        },
+        "DM": {
+          "cash": 0.25,
+          "credit": 0.35,
+          "tiers": [],
+          "_n": 33
+        }
+      }
     }
   ],
   "_alerts": [
