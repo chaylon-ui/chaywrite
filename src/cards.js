@@ -698,72 +698,151 @@ function baseName(title) {
   return s;
 }
 
-/* ---------------- "What we pay" — BinderPOS buylist prices ----------------
-   The owner's tills run BinderPOS, and its portal exposes a buylist search at
-   /external/shopify/buylist/cards/forStore?storeUrl=..&keyword=.. — but that
-   route requires the store's BinderPOS API key (verified: recognised params
-   401 without one; the public retail feed carries buy prices only as $0.00
-   art-card exclusions). The key lives in the BINDERPOS_API_KEY worker secret
-   (synced from a repo Actions secret on deploy, like SHOPIFY_ADMIN_TOKEN).
-   Until it's set, this endpoint answers {available:false} and the storefront
-   reveal button simply doesn't render. Cached 10 min per card+game. */
+/* ---------------- "What we pay" — buylist prices ----------------
+   Two real-price sources, best first:
+   1. BinderPOS keyed buylist search (needs the BINDERPOS_API_KEY worker
+      secret — its portal 401s without one). Wins when configured.
+   2. SortSwift — the store's LIVE online buylist (the widget on the sell
+      page). Its API is public per store token: lookup-by-name resolves a
+      card to productId(s), get-price returns the store's programmed final
+      offers per condition (NM/LP/MP/HP/DM FinalCash/FinalCredit, computed
+      from the rules the owner sets — chosenPriceType "market"). All-zero
+      means the buylist genuinely isn't buying that printing. Covers the
+      games on the online buylist (Pokémon/YGO/Lorcana/One Piece/Star Wars/
+      Riftbound; MTG is not on it — verified: Sol Ring 404s).
+   Neither answering → {available:false} and the storefront falls back to
+   the daily-derived percentage estimates, or hides. Cached 10 min. */
 const BUY_TTL_S = 600;
 const BUY_HOST = "https://portal.binderpos.com/external/shopify";
 const BUY_STORE = "most-wanted-ca.myshopify.com";
+const SS_API = "https://buylist-api.sortswift-services.com/api/buylist";
+const SS_STORE = "61dfa8766c5f9fa6";   // public store token from the sell page's own widget
+const SS_CONDS = [["NM", "Near Mint"], ["LP", "Lightly Played"], ["MP", "Moderately Played"], ["HP", "Heavily Played"], ["DM", "Damaged"]];
+// TCGplayer category ids, to keep same-name cards from other games out.
+const SS_CATEGORY = { mtg: 1, yugioh: 2, pokemon: 3, onepiece: 68, lorcana: 71, starwars: 79, riftbound: 89 };
+
+async function sortswiftOffers(name, pageTitle, game) {
+  const h = { accept: "application/json", origin: "https://buylist.sortswift.com", "user-agent": "ExorBuylistReveal/1.0 (+workers.dev)" };
+  // The page title may carry a trailing collector code ("Mimikyu - SVP075");
+  // try the base name, then with the code stripped.
+  const tries = [...new Set([name, name.replace(/\s*[-–]\s*[A-Za-z0-9/#.]+$/, "").trim()])].filter((s) => s.length >= 2);
+  let cands = null;
+  for (const q of tries) {
+    const r = await fetch(`${SS_API}/lookup-by-name?storeId=${SS_STORE}&name=${encodeURIComponent(q)}`, { headers: h, signal: AbortSignal.timeout(6000) });
+    if (!r.ok) continue;
+    const j = await r.json();
+    cands = Array.isArray(j?.candidates) ? j.candidates.map((c) => c.product || c) : j?.product ? [j.product] : [];
+    if (cands.length) break;
+  }
+  if (!cands || !cands.length) return null;   // not on the online buylist
+  const wantCat = SS_CATEGORY[game];
+  if (wantCat) cands = cands.filter((p) => !p.categoryId || p.categoryId === wantCat);
+  if (!cands.length) return null;
+  // Prefer the printing from this product page: match its [Set] / number.
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const pageSet = norm((String(pageTitle).match(/\[([^\]]+)\]/) || [, ""])[1]);
+  const pageNum = (String(pageTitle).match(/\b(\d{2,4})\s*\/\s*\d{2,4}\b|\b[A-Z]{2,4}\s?0*(\d{1,4})\b/) || [])[1];
+  const scored = cands.map((p) => {
+    let s = 0;
+    const g = norm(p.groupName);
+    if (pageSet && g && (g.includes(pageSet) || pageSet.includes(g))) s += 2;
+    if (pageNum && String(p.number || "").includes(pageNum)) s += 1;
+    return { p, s };
+  }).sort((a, b) => b.s - a.s);
+  const top = (scored[0].s > 0 ? scored.filter((x) => x.s === scored[0].s) : scored).slice(0, 3).map((x) => x.p);
+  const offers = [];
+  for (const p of top) {
+    try {
+      const r = await fetch(`${SS_API}/get-price?storeId=${SS_STORE}&productId=${p.productId}`, { headers: h, signal: AbortSignal.timeout(6000) });
+      if (!r.ok) continue;
+      const price = (await r.json())?.price || {};
+      const set = [p.groupName, p.number].filter(Boolean).join(" · ");
+      for (const [abbr, label] of SS_CONDS) {
+        const cash = parseFloat(price[abbr + "FinalCash"]);
+        const credit = parseFloat(price[abbr + "FinalCredit"]);
+        if (!(cash > 0) && !(credit > 0)) continue;
+        offers.push({
+          set,
+          condition: label,
+          foil: false,
+          cash: cash > 0 ? cash.toFixed(2) : null,
+          credit: credit > 0 ? credit.toFixed(2) : null,
+        });
+      }
+    } catch { /* skip this printing */ }
+  }
+  offers.sort((a, b) => (parseFloat(b.cash || b.credit || 0)) - (parseFloat(a.cash || a.credit || 0)));
+  return offers.slice(0, 24);   // may be [] — an honest "not buying" from the live buylist
+}
 
 export async function serveBuyPrice(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
-  const name = baseName(String(url.searchParams.get("name") || "").slice(0, 80));
+  const rawName = String(url.searchParams.get("name") || "").slice(0, 120);
+  const name = baseName(rawName.slice(0, 80));
   const ptype = String(url.searchParams.get("type") || "").slice(0, 48);
   const game = gameOf(ptype) || "mtg";
   const out = { name, game, available: false, offers: [] };
-  const key = env && env.BINDERPOS_API_KEY;
-  if (!key || name.length < 2) {
+  if (name.length < 2) {
     return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
   }
   const cache = caches.default;
   const cacheKey = new Request(new URL("/buyprice.json?g=" + game + "&n=" + encodeURIComponent(name.toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  try {
-    const qs = new URLSearchParams({ storeUrl: BUY_STORE, keyword: name, game, buyingEnabled: "true", limit: "40", offset: "0" });
-    const r = await fetch(`${BUY_HOST}/buylist/cards/forStore?${qs}`, {
-      headers: { accept: "application/json", authorization: key, "user-agent": "ExorBuylistReveal/1.0 (+workers.dev)" },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (r.ok) {
-      const j = await r.json();
-      // Accept both shapes seen from this portal: {products:[{..variants:[]}]}
-      // and a flat {cards:[..]} — normalise to per-variant offers.
-      const prods = Array.isArray(j?.products) ? j.products : Array.isArray(j?.cards) ? j.cards : Array.isArray(j) ? j : [];
-      const want = name.toLowerCase();
-      for (const p of prods) {
-        const title = p.title || p.name || p.cardName || "";
-        if (baseName(title).toLowerCase() !== want) continue;
-        const set = p.setName || (String(title).match(/\[([^\]]+)\]/) || [, ""])[1] || "";
-        for (const v of (p.variants || [p])) {
-          const cash = v.cashBuyPrice ?? v.cashPrice ?? null;
-          const credit = v.storeCreditBuyPrice ?? v.creditBuyPrice ?? v.creditPrice ?? null;
-          if (cash == null && credit == null) continue;
-          const c = parseFloat(cash), s = parseFloat(credit);
-          if (!(c > 0) && !(s > 0)) continue;   // 0.00 = not buying this one
-          out.offers.push({
-            set,
-            condition: condOf(v.title || v.condition || "", game),
-            foil: /foil/i.test(v.title || v.printing || ""),
-            cash: c > 0 ? c.toFixed(2) : null,
-            credit: s > 0 ? s.toFixed(2) : null,
-          });
+
+  // 1) BinderPOS keyed buylist — real till prices, when the key exists.
+  const key = env && env.BINDERPOS_API_KEY;
+  if (key) {
+    try {
+      const qs = new URLSearchParams({ storeUrl: BUY_STORE, keyword: name, game, buyingEnabled: "true", limit: "40", offset: "0" });
+      const r = await fetch(`${BUY_HOST}/buylist/cards/forStore?${qs}`, {
+        headers: { accept: "application/json", authorization: key, "user-agent": "ExorBuylistReveal/1.0 (+workers.dev)" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const prods = Array.isArray(j?.products) ? j.products : Array.isArray(j?.cards) ? j.cards : Array.isArray(j) ? j : [];
+        const want = name.toLowerCase();
+        for (const p of prods) {
+          const title = p.title || p.name || p.cardName || "";
+          if (baseName(title).toLowerCase() !== want) continue;
+          const set = p.setName || (String(title).match(/\[([^\]]+)\]/) || [, ""])[1] || "";
+          for (const v of (p.variants || [p])) {
+            const cash = v.cashBuyPrice ?? v.cashPrice ?? null;
+            const credit = v.storeCreditBuyPrice ?? v.creditBuyPrice ?? v.creditPrice ?? null;
+            if (cash == null && credit == null) continue;
+            const c = parseFloat(cash), s = parseFloat(credit);
+            if (!(c > 0) && !(s > 0)) continue;   // 0.00 = not buying this one
+            out.offers.push({
+              set,
+              condition: condOf(v.title || v.condition || "", game),
+              foil: /foil/i.test(v.title || v.printing || ""),
+              cash: c > 0 ? c.toFixed(2) : null,
+              credit: s > 0 ? s.toFixed(2) : null,
+            });
+          }
         }
+        out.offers.sort((a, b) => (parseFloat(b.cash || b.credit || 0)) - (parseFloat(a.cash || a.credit || 0)));
+        out.offers = out.offers.slice(0, 24);
+        out.available = true;
+        out.source = "binderpos";
       }
-      out.offers.sort((a, b) => (parseFloat(b.cash || b.credit || 0)) - (parseFloat(a.cash || a.credit || 0)));
-      out.offers = out.offers.slice(0, 24);
-      out.available = true;   // key worked — even an empty list is an answer ("not buying")
-    } else if (r.status === 401 || r.status === 403) {
-      out.error = "auth";
-    }
-  } catch { /* fall through to unavailable */ }
+    } catch { /* fall through to SortSwift */ }
+  }
+
+  // 2) SortSwift — the store's live online buylist, public per store token.
+  if (!out.available) {
+    try {
+      const offers = await sortswiftOffers(name, rawName, game);
+      if (offers !== null) {
+        out.offers = offers;
+        out.available = true;
+        out.source = "sortswift";
+      }
+    } catch { /* fall through to unavailable */ }
+  }
+
   const res = Response.json(out, { headers: { ...cors, "cache-control": out.available ? `public, max-age=${BUY_TTL_S}` : "no-store" } });
   if (out.available) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
