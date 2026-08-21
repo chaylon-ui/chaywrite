@@ -10,55 +10,95 @@
       "match": "pokemon",
       "cash": 0.35,
       "credit": 0.45,
-      "minSell": 11.4,
+      "minSell": 0.21,
       "buyFoils": true,
       "tiers": [
+        {
+          "upTo": 8.0,
+          "cash": 0.5,
+          "credit": 0.7
+        },
         {
           "upTo": 15.0,
           "cash": 0.25,
           "credit": 0.35
         },
         {
-          "upTo": 20.0,
-          "cash": 0.3,
-          "credit": 0.4
-        },
-        {
-          "upTo": 100.0,
+          "upTo": 50.0,
           "cash": 0.35,
           "credit": 0.45
         },
         {
-          "upTo": 250.0,
-          "cash": 0.3,
-          "credit": 0.4
+          "upTo": 100.0,
+          "cash": 0.4,
+          "credit": 0.5
         }
       ],
       "_source": "binderpos-feed",
-      "_samples": 102,
+      "_samples": 178,
       "conds": {
+        "NM": {
+          "cash": 0.5,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 8.0,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ],
+          "_n": 6
+        },
+        "LP": {
+          "cash": 0.5,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 8.0,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ],
+          "_n": 7
+        },
         "MP": {
           "cash": 0.45,
           "credit": 0.55,
-          "tiers": [],
-          "_n": 33
+          "tiers": [
+            {
+              "upTo": 8.0,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ],
+          "_n": 55
         },
         "HP": {
           "cash": 0.35,
           "credit": 0.45,
-          "tiers": [],
-          "_n": 33
+          "tiers": [
+            {
+              "upTo": 8.0,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ],
+          "_n": 55
         },
         "DM": {
           "cash": 0.25,
           "credit": 0.35,
-          "tiers": [],
-          "_n": 33
+          "tiers": [
+            {
+              "upTo": 8.0,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ],
+          "_n": 55
         }
       }
     }
   ],
-  "_alerts": [
-    "pokemon: lowest stamped sell is 11.4 - floor may reflect sampling bias, broaden probes"
-  ]
+  "_alerts": []
 }
