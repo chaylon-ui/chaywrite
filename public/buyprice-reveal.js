@@ -115,6 +115,9 @@
       return Promise.resolve(p).then(function (product) {
         if (!product) return;
         var offers = estimateOffers(rules, product);
+        // Estimates come from per-game derived rules; a game with no derived
+        // data gets NO button (never guess one game's offer from another's).
+        if (!offers.length) return;
         payload = { mode: 'estimate', name: NAME, offers: offers, disclaimer: rules.disclaimer || '', updated: rules.updated || '' };
         btn.hidden = false;
       });
