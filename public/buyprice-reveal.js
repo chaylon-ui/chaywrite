@@ -76,6 +76,24 @@
     return typeof rule[kind] === 'number' ? rule[kind] : 0;
   }
 
+  // The store's rules pay different percentages by condition (same card,
+  // NM > LP > MP). buy-rules.json carries a per-condition ladder in
+  // rule.conds when the daily sync could derive one; fall back to the
+  // all-condition rule otherwise.
+  function condOf(title) {
+    var t = String(title || '').toLowerCase();
+    if (/near mint|\bnm\b/.test(t)) return 'NM';
+    if (/light/.test(t)) return 'LP';
+    if (/moderate/.test(t)) return 'MP';
+    if (/heav/.test(t)) return 'HP';
+    if (/damag|\bdmg\b/.test(t)) return 'DM';
+    return '';
+  }
+  function condRule(rule, vtitle) {
+    var c = condOf(vtitle);
+    return (c && rule.conds && rule.conds[c]) || rule;
+  }
+
   function estimateOffers(rules, product) {
     var rule = gameRule(rules);
     if (!rule) return [];
@@ -88,8 +106,9 @@
       if (sell < minSell) return;                          // bulk floor
       var foil = /foil/i.test(v.title || '');
       if (foil && !buyFoils) return;
-      var cash = pct(rule, sell, 'cash') * sell;
-      var credit = pct(rule, sell, 'credit') * sell;
+      var r2 = condRule(rule, v.title);
+      var cash = pct(r2, sell, 'cash') * sell;
+      var credit = pct(r2, sell, 'credit') * sell;
       if (!(cash > 0) && !(credit > 0)) return;
       offers.push({
         condition: v.title || '',
