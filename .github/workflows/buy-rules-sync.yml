@@ -7,13 +7,20 @@ name: Buy-rules daily sync
 # job samples those stamps per game each morning and derives percentages on
 # the portal's own rule band edges ($8.01 / $15.01 / $20.01 / $50.01 /
 # $100.01 / $250.01, per the owner's rules list). The stamps step by the
-# variant's CONDITION (observed: NM 45/55, LP 35/45, MP 25/35 on the same
-# product; cheap modern cards flat 50/70), so the derivation is
-# per-condition first with all-condition medians as fallback. Guardrails
-# applied, result committed to the worker branch, and the worker deployed
-# right here (GITHUB_TOKEN pushes cannot trigger deploy.yml). Games whose
-# rules have not synced any stamps are OMITTED so the storefront reveal
-# never guesses one game from another's numbers. Exclusion stamps
+# variant's CONDITION (observed live: MP 45/55, HP 35/45, DM 25/35 on the
+# same vintage product; cheap modern cards flat 50/70), so the derivation
+# is per-condition first with all-condition medians as fallback.
+#
+# The feed rate-limits: ~50 rapid requests in, it starts returning empty
+# bodies in ~65ms. Hence a short, highest-yield-first probe list with 0.7s
+# spacing, and a carry-forward guardrail: a game whose sample comes back
+# thin while yesterday's entry was itself feed-derived keeps yesterday's
+# rules (with an alert) instead of dropping off the storefront for a day.
+#
+# Guardrails applied, result committed to the worker branch, worker
+# deployed right here (GITHUB_TOKEN pushes cannot trigger deploy.yml).
+# Games that have never synced any stamps are OMITTED so the storefront
+# reveal never guesses one game from another's numbers. Exclusion stamps
 # (cash 0% / credit ≤1% = "not buying this variant") are filtered out.
 
 on:
@@ -56,20 +63,21 @@ jobs:
                 | {g:$g, pid:$p.id, sell:(.price//0), cashPct:(.cashBuyPercent//0), creditPct:(.creditBuyPercent//0), cond:(.title//"")}' /tmp/pull.json >> /tmp/samples.ndjson 2>/dev/null || true
             genuine=$(jq -c '.products[]?.variants[]? | select((.cashBuyPercent//0) >= 5 or (.creditBuyPercent//0) >= 5) | 1' /tmp/pull.json 2>/dev/null | wc -l)
             echo "  [$1] '$2' -> $genuine genuine rule stamps ($(( ($(date +%s%N)-t0)/1000000 ))ms)"
-            sleep 0.3
+            sleep 0.7
           }
-          # MTG probes lean high-value: the portal has MTG rules for $20+ and
-          # $100+ bands, so if their sync materializes stamps anywhere it will
-          # be on these.
-          for t in "ring" "tutor" "cradle" "mox" "force" "will" "dual" "tabernacle" "lotus" "crypt" "rhystic" "tithe" "commander" "bolt" "dragon" "elf"; do pull mtg "$t"; done
-          # Pokemon spans the full price range on purpose: arven/iono are the
-          # modern cheap trainers that carry the flat 50/70 stamps, the Fossil
-          # birds carry the mid-range condition ladder.
-          for t in "charizard" "umbreon" "rayquaza" "lugia" "mewtwo" "gengar" "pikachu" "eevee" "gardevoir" "dragonite" "snorlax" "sylveon" "energy" "candy" "ball" "switch" "boss" "professor" "mimikyu" "promo" "arven" "iono" "moltres" "zapdos" "articuno" "nest" "lucario" "greninja" "vmax" "ex"; do pull pokemon "$t"; done
-          for t in "dragon" "magician" "hero" "dark" "eyes" "sky" "machine" "warrior" "ash" "maxx" "accesscode" "snake" "baronne"; do pull yugioh "$t"; done
-          for t in "trooper" "vader" "force" "jedi" "star"; do pull starwars "$t"; done
-          for t in "luffy" "zoro" "nami" "pirate" "king"; do pull onepiece "$t"; done
-          for t in "jinx" "vi" "blade" "light" "rift"; do pull riftbound "$t"; done
+          # Highest-information probes FIRST — if the feed rate-limits
+          # mid-run, the rows that anchor the derivation are already in.
+          # arven/iono carry the flat 50/70 cheap-card stamps; the Fossil
+          # birds carry the vintage condition ladder.
+          for t in "arven" "iono" "moltres" "zapdos" "articuno" "charizard" "mewtwo" "gengar" "pikachu" "dragonite" "snorlax" "switch" "professor" "promo" "mimikyu" "ex" "vmax"; do pull pokemon "$t"; done
+          # MTG/YGO sentinels: the portal HAS rules for these games ($20+ /
+          # $100+ bands) but BinderPOS has not synced them into the feed yet.
+          # The day the owner's re-sync lands, these light up.
+          for t in "ring" "tutor" "cradle" "mox" "lotus" "dual" "bolt" "elf"; do pull mtg "$t"; done
+          for t in "dragon" "magician" "ash" "maxx" "accesscode" "baronne"; do pull yugioh "$t"; done
+          for t in "vader" "trooper" "jedi"; do pull starwars "$t"; done
+          for t in "luffy" "zoro" "nami"; do pull onepiece "$t"; done
+          for t in "jinx" "vi" "rift"; do pull riftbound "$t"; done
           echo "sampled rows (any stamp): $(wc -l < /tmp/samples.ndjson)"
           echo "per game:"; jq -r .g /tmp/samples.ndjson | sort | uniq -c || true
 
@@ -140,19 +148,30 @@ jobs:
                       prev[g.get('key')] = g
           except Exception: pass
           alerts, games = [], []
-          for g, rs in sorted(by_game.items()):
+          def carry(g, why):
+              # Feed cold or sample thin: a game that once derived real rules
+              # keeps them (stale beats flapping off the storefront); a game
+              # that never derived anything stays omitted.
+              p = prev.get(g)
+              if p and p.get('_source') == 'binderpos-feed':
+                  alerts.append(f"{g}: {why} - carried previous rules forward")
+                  games.append(p)
+              else:
+                  alerts.append(f"{g}: {why} - skipped")
+          for g in sorted(set(by_game) | {k for k, v in prev.items() if v.get('_source') == 'binderpos-feed'}):
+              rs = by_game.get(g, [])
               if len(rs) < 12:
-                  alerts.append(f"{g}: only {len(rs)} genuine rule stamps sampled - skipped")
+                  carry(g, f"only {len(rs)} genuine rule stamps sampled (feed cold or rules unsynced)")
                   continue
               merged = derive(rs, 5)
               if not merged:
-                  alerts.append(f"{g}: no band had enough samples - skipped")
+                  carry(g, "no band had enough samples")
                   continue
               base = merged[-1]
               finite = [t for t in merged if t["upTo"] is not None]
-              # The stamps step by condition (NM > LP > MP on the same card),
-              # so derive each condition's own tier ladder; the flat medians
-              # above stay as the fallback for unrecognized variant titles.
+              # The stamps step by condition (best listed condition highest),
+              # so derive each condition's own ladder; the flat medians stay
+              # as the fallback for unrecognized variant titles.
               conds = {}
               for c in ("NM", "LP", "MP", "HP", "DM"):
                   crs = [r for r in rs if r['c'] == c]
@@ -239,5 +258,8 @@ jobs:
         if: ${{ steps.commit.outputs.changed == '1' }}
         run: |
           sleep 6
-          echo "== live /buy-rules.json summary =="
-          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, tiers: (.tiers|length), conds: ((.conds//{})|keys), samples: ._samples}], alerts: ._alerts}' || true
+          V="$(git rev-parse --short HEAD)"
+          echo "== live /buy-rules.json summary (cache-busted with ?v=$V) =="
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json?v=$V" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, tiers: (.tiers|length), conds: ((.conds//{})|keys), samples: ._samples}], alerts: ._alerts}' || true
+          echo "== plain URL (may lag a few minutes behind on the edge cache) =="
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq -c '{updated, samples: [.games[]?._samples]}' || true
