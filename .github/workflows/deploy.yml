@@ -74,8 +74,11 @@ jobs:
           echo "=== /instock.json max=8 over hand-picked ritual names ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/instock.json?names=Desperate%20Ritual|Seething%20Song|Rite%20of%20Flame|Mana%20Geyser|Battle%20Hymn|Inner%20Fire|Irencrag%20Feat|Pyretic%20Ritual&max=8" | head -c 1500 || true
           printf '\n'
-          echo "=== /deck.json over known staples (Deck Builder backend; expect found>0, each hit carries variantId) ==="
-          curl -sS --max-time 40 "https://exor-binder.nevski.workers.dev/deck.json?names=Sol%20Ring|Counterspell|Lightning%20Bolt|Command%20Tower|Arcane%20Signet|Cultivate" | head -c 3000 || true
+          echo "=== /deck.json MTG staples (cheapest across ALL printings; Command Tower should be the cheap one now) ==="
+          curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=mtg&names=Sol%20Ring|Counterspell|Lightning%20Bolt|Command%20Tower|Arcane%20Signet|Cultivate" | head -c 3000 || true
+          printf '\n'
+          echo "=== /deck.json game=pokemon (multi-game) ==="
+          curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=pokemon&names=Pikachu|Charizard|Snorlax" | head -c 1800 || true
           printf '\n'
           echo "=== deck-builder assets (theme shell loads these; expect 200 + js/css content-type) ==="
           curl -sS -o /dev/null -w 'deck-builder.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.js" || true

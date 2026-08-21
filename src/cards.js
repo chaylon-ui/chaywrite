@@ -321,7 +321,7 @@ export async function serveSearch(request, env) {
 }
 
 /* Full-catalogue title search through the Admin API (up to 40 products). */
-async function adminSearch(q, env, ptq = "") {
+async function adminSearch(q, env, ptq = "", pages = 2) {
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const safe = q.replace(/[*"\\()]/g, " ").trim();
   if (!safe) return null;
@@ -334,13 +334,20 @@ async function adminSearch(q, env, ptq = "") {
     variants(first:20){edges{node{id title price availableForSale}}}}}}}`;
   let edges = [];
   let after = null;
-  for (let page = 0; page < 2; page++) {
-    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "X-Shopify-Access-Token": env.SHOPIFY_ADMIN_TOKEN },
-      body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} title:*${safe}*`.replace(/\s+/g, " "), after } }),
-      signal: AbortSignal.timeout(6000),
-    });
+  for (let page = 0; page < pages; page++) {
+    let r;
+    // Retry the throttle response (429) with a short backoff — a whole
+    // decklist resolves through here at once, so bursts are expected.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "X-Shopify-Access-Token": env.SHOPIFY_ADMIN_TOKEN },
+        body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} title:*${safe}*`.replace(/\s+/g, " "), after } }),
+        signal: AbortSignal.timeout(6000),
+      });
+      if (r.status !== 429) break;
+      await new Promise((res) => setTimeout(res, 500 * (attempt + 1)));
+    }
     if (!r.ok) { if (page) break; throw new Error("admin search HTTP " + r.status); }
     const pr = (await r.json())?.data?.products;
     if (!Array.isArray(pr?.edges)) { if (page) break; throw new Error("admin search shape"); }
@@ -660,15 +667,16 @@ export async function serveDeck(request, env, ctx) {
   const list = [];
   for (const n of raw) { const k = n.toLowerCase(); if (!seen.has(k)) { seen.add(k); list.push(n); } }
   const names = list.slice(0, 60);
-  const out = { count: 0, found: 0, results: [] };
+  const game = String(url.searchParams.get("game") || "mtg").toLowerCase().slice(0, 16);
+  const out = { count: 0, found: 0, game, results: [] };
   if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/deck.json?n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
+  const cacheKey = new Request(new URL("/deck.json?g=" + encodeURIComponent(game) + "&n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
   const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
-  const results = await mapLimit(names, 8, async (n) => {
-    const card = await findInStock(n, headers, env);
+  const results = await mapLimit(names, 6, async (n) => {
+    const card = await findInStock(n, headers, env, game);
     return card ? { q: n, found: true, ...card } : { q: n, found: false };
   });
   out.results = results;
@@ -679,36 +687,36 @@ export async function serveDeck(request, env, ctx) {
   return res;
 }
 
-/* Exact-name in-stock lookup via the shop's predictive search; returns the
-   cheapest available copy normalised to the card shape the UIs speak.
-   MTG singles ONLY: card names collide across games ("Sacrifice" is MTG,
-   Riftbound and Star Wars all at once), and a bare title match let a
-   Riftbound card into the MTG Similar strip. If the first title match is
-   another game's card, one more candidate gets a look. */
-async function findInStock(name, headers, env) {
+/* Exact-name in-stock lookup for the Similar strip and Deck Builder. Returns
+   the cheapest available copy across EVERY printing, normalised to the card
+   shape the UIs speak. Scoped to one game (default mtg): card names collide
+   across games ("Sacrifice" is MTG, Riftbound and Star Wars at once), so the
+   Admin search is filtered to that game's product_type and the match is
+   double-checked against it. */
+async function findInStock(name, headers, env, game) {
   try {
+    game = (game && GAME_PTQ[game]) ? game : "mtg";
     const want = name.toLowerCase();
+    const gmatch = (GAMES[game] && GAMES[game].match) || /^mtg\b/i;
     // This store's native predictive search is disabled (Searchanise owns
     // search here), so the public /search/suggest.json returns nothing — the
-    // Admin API is the only reliable catalogue search. Use it when a token is
-    // present; fall back to public predictive search otherwise (that path
-    // still works on stores that keep native search on, e.g. the sisters).
-    // Both helpers return the same normalised product shape.
+    // Admin API is the only reliable catalogue search. Scope it to the game's
+    // product_type (3 pages, so heavily-reprinted staples aren't truncated);
+    // fall back to public predictive search where native search still answers.
     let products = null;
     if (env && env.SHOPIFY_ADMIN_TOKEN) {
-      try { products = await adminSearch(name, env, ""); } catch { products = null; }
+      try { products = await adminSearch(name, env, GAME_PTQ[game] || "", 3); } catch { products = null; }
     }
     if (!products) {
       try { products = (await suggestSearch(name, headers)).filter(Boolean); } catch { products = null; }
     }
     if (!products || !products.length) return null;
-    // Every printing of the exact card (title minus its trailing "[Set]"),
-    // MTG singles only — names collide across games ("Sacrifice" is MTG,
-    // Riftbound and Star Wars at once).
-    const matches = products
-      .filter((p) => String(p.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want)
-      .filter((p) => /^mtg\b.*single/i.test(p.product_type || ""))
-      .slice(0, 12);
+    // Every printing of the exact card (title minus its trailing "[Set]") in
+    // the chosen game — no cap, so the cheapest printing can't be truncated.
+    const matches = products.filter((p) =>
+      String(p.title || "").toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, "").trim() === want &&
+      gmatch.test(p.product_type || "")
+    );
     // Cheapest available copy across every printing — budget decks first.
     let bestP = null, bestV = null;
     for (const p of matches) {
@@ -725,12 +733,12 @@ async function findInStock(name, headers, env) {
     return {
       name: p.title.replace(/\s*\[[^\]]*\]\s*/g, " ").trim(),
       set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1],
-      game: "mtg",
-      type: "MTG Single",
+      game: game,
+      type: p.product_type || "",
       color: "C",
       price: parseFloat(v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
-      condition: condOf(v.title, "mtg"),
+      condition: condOf(v.title, game),
       image: img,
       variantId: v.id,
       url: "https://exorgames.com/products/" + p.handle,

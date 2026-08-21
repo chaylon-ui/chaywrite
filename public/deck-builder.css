@@ -9,6 +9,14 @@
 }
 .xg-deck__intro { font-family: var(--xg-font-body, "Inter", sans-serif); color: var(--xg-text, #3d454b); font-size: 15.5px; line-height: 1.5; margin: 0 0 20px; max-width: 660px; }
 .xg-deck__form { margin: 0 0 24px; }
+.xg-deck__gamerow { margin: 0 0 16px; max-width: 340px; }
+.xg-deck__select {
+  width: 100%; box-sizing: border-box; font-family: var(--xg-font-body, "Inter", sans-serif);
+  font-size: 15px; color: var(--xg-ink, #171b1d); background: var(--xg-surface, #fff);
+  border: 1px solid var(--xg-border, #d7dbdf); border-radius: var(--xg-radius, 10px);
+  padding: 11px 14px; cursor: pointer;
+}
+.xg-deck__select:focus { outline: none; border-color: var(--xg-accent, #d62c28); box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.12); }
 .xg-deck__label { display: block; font-family: var(--xg-font-body, "Inter", sans-serif); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--xg-text, #3d454b); margin: 0 0 8px; }
 .xg-deck__input {
   width: 100%; box-sizing: border-box; min-height: 200px; resize: vertical;

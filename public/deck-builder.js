@@ -22,12 +22,21 @@
   if (root.className.indexOf('xg-deck') === -1) root.className = ('xg-deck ' + root.className).trim();
 
   function attr(name, dflt) { var v = root.getAttribute(name); return (v == null || v === '') ? dflt : v; }
-  var HEADING = attr('data-heading', 'MTG Deck Builder');
-  var INTRO = attr('data-intro', 'Paste your decklist and we’ll check it against everything in stock at Exor — cheapest available printing, condition and price for each card — then let you add the whole in-stock deck to your cart in one click.');
+  var HEADING = attr('data-heading', 'Deck Builder');
+  var INTRO = attr('data-intro', 'Pick your game, paste your decklist, and we’ll check it against everything in stock at Exor — cheapest available printing, condition and price for each card — then let you add the whole in-stock deck to your cart in one click.');
   var GOLABEL = attr('data-golabel', 'Find my deck');
   var ADDALL = attr('data-addall', 'Add in-stock cards to cart');
   var FOOTNOTE = attr('data-footnote', 'We match the cheapest in-stock printing.');
   var PLACEHOLDER = attr('data-placeholder', '4 Lightning Bolt\n4 Counterspell\n2 Wrath of God\n1 Sol Ring\n9 Island\n...paste your whole list — quantities and set tags are fine');
+  var GAMES = [
+    { key: 'mtg', label: 'Magic: The Gathering' },
+    { key: 'pokemon', label: 'Pokémon' },
+    { key: 'yugioh', label: 'Yu-Gi-Oh!' },
+    { key: 'starwars', label: 'Star Wars: Unlimited' },
+    { key: 'onepiece', label: 'One Piece' },
+    { key: 'riftbound', label: 'Riftbound' }
+  ];
+  var DEFAULT_GAME = attr('data-game', 'mtg');
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
   function money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); }
@@ -39,12 +48,18 @@
       '<p class="xg-deck__intro">' + esc(INTRO) + '</p>' +
     '</div>' +
     '<form class="xg-deck__form" id="xg-deck-form">' +
+      '<div class="xg-deck__gamerow">' +
+        '<label class="xg-deck__label" for="xg-deck-game">Game</label>' +
+        '<select id="xg-deck-game" class="xg-deck__select">' +
+          GAMES.map(function (g) { return '<option value="' + esc(g.key) + '"' + (g.key === DEFAULT_GAME ? ' selected' : '') + '>' + esc(g.label) + '</option>'; }).join('') +
+        '</select>' +
+      '</div>' +
       '<label class="xg-deck__label" for="xg-deck-input">Your decklist</label>' +
       '<textarea id="xg-deck-input" class="xg-deck__input" rows="10" spellcheck="false"></textarea>' +
       '<div class="xg-deck__actions">' +
         '<button type="submit" class="xg-deck__btn xg-deck__btn--go" id="xg-deck-go">' + esc(GOLABEL) + '</button>' +
         '<button type="button" class="xg-deck__btn xg-deck__btn--ghost" id="xg-deck-clear" hidden>Clear</button>' +
-        '<span class="xg-deck__hint">Magic: The Gathering singles. ' + esc(FOOTNOTE) + '</span>' +
+        '<span class="xg-deck__hint">Card singles. ' + esc(FOOTNOTE) + '</span>' +
       '</div>' +
     '</form>' +
     '<div class="xg-deck__results" id="xg-deck-results" aria-live="polite"></div>';
@@ -54,6 +69,7 @@
   var go = document.getElementById('xg-deck-go');
   var clearBtn = document.getElementById('xg-deck-clear');
   var out = document.getElementById('xg-deck-results');
+  var gameSel = document.getElementById('xg-deck-game');
   input.setAttribute('placeholder', PLACEHOLDER);
 
   var SKIP = /^(deck|sideboard|side board|commander|companion|maybeboard|maybe board|tokens?|lands?|creatures?|spells?|artifacts?|enchantments?|planeswalkers?|instants?|sorceries)\s*:?\s*(\(\d+\))?\s*$/i;
@@ -106,11 +122,11 @@
 
   function chunk(arr, n) { var o = []; for (var i = 0; i < arr.length; i += n) o.push(arr.slice(i, i + n)); return o; }
 
-  function resolveNames(names) {
+  function resolveNames(names, game) {
     var map = Object.create(null);
     var batches = chunk(names, 30);
     return runLimited(batches, 2, function (b) {
-      return fetch(W + '/deck.json?names=' + encodeURIComponent(b.join('|')))
+      return fetch(W + '/deck.json?game=' + encodeURIComponent(game || 'mtg') + '&names=' + encodeURIComponent(b.join('|')))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
           if (d && d.results) d.results.forEach(function (x) { if (x && x.q) map[String(x.q).toLowerCase()] = x; });
@@ -234,7 +250,8 @@
     }
     go.disabled = true; go.textContent = 'Checking stock…';
     out.innerHTML = '<div class="xg-deck__loading">Checking ' + lines.length + ' cards against live stock…</div>';
-    resolveNames(lines.map(function (l) { return l.name; })).then(function (map) {
+    var game = gameSel ? gameSel.value : DEFAULT_GAME;
+    resolveNames(lines.map(function (l) { return l.name; }), game).then(function (map) {
       render(lines, map);
     }).catch(function () {
       out.innerHTML = '<p class="xg-deck__none">Something went wrong checking stock. Please try again in a moment.</p>';
