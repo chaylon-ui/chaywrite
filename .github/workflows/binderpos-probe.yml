@@ -1,9 +1,8 @@
 name: BinderPOS probe
 
-# Read-only discovery of BinderPOS's public "external" API for this store.
-# Round 2: does ANY variant carry non-null buy prices (cashBuyPrice /
-# storeCreditBuyPrice / *Percent / priceOverride), and what method does the
-# buylist/cards route take. Manual-only.
+# Round 3: the buylist/cards/forStore route exists (allow: GET,HEAD,OPTIONS)
+# but 400s on guessed params. Battery likely param spellings, and try to find
+# BinderPOS's hosted buylist frontend to read the real call shape. Manual-only.
 
 on:
   workflow_dispatch:
@@ -22,49 +21,49 @@ jobs:
       STORE: ${{ inputs.store }}
       B: https://portal.binderpos.com/external/shopify
     steps:
-      - name: Buy-field census over popular cards (retail endpoint, 100 products each)
+      - name: Param battery on GET buylist/cards/forStore
         run: |
-          census() { # $1 card title
-            BODY=$(jq -nc --arg s "$STORE" --arg t "$1" '{storeUrl:$s, game:"mtg", title:$t, instockOnly:false, limit:100, offset:0}')
-            curl -sS --max-time 30 -o /tmp/r.json -H 'content-type: application/json' -A 'Mozilla/5.0' \
-              -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" || true
-            echo "=== $1 ==="
-            jq -r '"products=\(.count // 0) returned=\(.products|length)"' /tmp/r.json 2>/dev/null || { echo "not json"; return; }
-            jq -r '[.products[].variants[]] as $v |
-              "variants=\($v|length)" +
-              "  cashBuyPrice set=\([$v[]|select(.cashBuyPrice!=null)]|length)" +
-              "  storeCreditBuyPrice set=\([$v[]|select(.storeCreditBuyPrice!=null)]|length)" +
-              "  cashBuyPercent set=\([$v[]|select(.cashBuyPercent!=null)]|length)" +
-              "  creditBuyPercent set=\([$v[]|select(.creditBuyPercent!=null)]|length)" +
-              "  priceOverride set=\([$v[]|select(.priceOverride!=null)]|length)"' /tmp/r.json
-            echo "-- sample variants with ANY buy field set --"
-            jq -r '.products[] as $p | $p.variants[] | select(.cashBuyPrice!=null or .storeCreditBuyPrice!=null or .cashBuyPercent!=null or .creditBuyPercent!=null) |
-              "\($p.name // $p.title // "?") | \(.title) | price=\(.price) cash=\(.cashBuyPrice) credit=\(.storeCreditBuyPrice) cash%=\(.cashBuyPercent) credit%=\(.creditBuyPercent) qty=\(.quantity)"' /tmp/r.json | head -12
-            echo "-- product-level keys (first product) --"
-            jq -r '.products[0] | keys | join(", ")' /tmp/r.json 2>/dev/null | head -3
-            echo "-- product-level buy/buylist-ish fields (first 3 products) --"
-            jq -r '.products[:3][] | to_entries[] | select(.key|test("buy|sell|list";"i")) | "\(.key)=\(.value)"' /tmp/r.json 2>/dev/null | sort -u | head -12
+          t() { # $1 query string
+            code=$(curl -sS --max-time 15 -o /tmp/r.json -w '%{http_code}' -A 'Mozilla/5.0' -H 'accept: application/json' -H 'origin: https://exorgames.com' "$B/buylist/cards/forStore?$1") || code=000
+            b=$(wc -c < /tmp/r.json 2>/dev/null || echo 0)
+            echo "[$code/${b}b] ?$1"
+            if [ "$code" = "200" ] && [ "$b" -gt 2 ]; then echo "  BODY: $(head -c 600 /tmp/r.json)"; fi
           }
-          census "Sol Ring"
-          census "Rhystic Study"
-          census "Lightning Bolt"
+          N="Sol%20Ring"
+          t "storeUrl=$STORE&title=$N&game=mtg&limit=5&offset=0"
+          t "storeUrl=$STORE&name=$N&game=mtg&limit=5&offset=0"
+          t "storeUrl=$STORE&cardName=$N&game=mtg&limit=5"
+          t "storeUrl=$STORE&keyword=$N&game=mtg&limit=5"
+          t "storeUrl=$STORE&q=$N&game=mtg&limit=5"
+          t "storeUrl=$STORE&search=$N&game=mtg&limit=5"
+          t "storeUrl=$STORE&title=$N&game=mtg"
+          t "storeUrl=$STORE&title=$N"
+          t "storeUrl=$STORE&game=mtg&limit=5&offset=0"
+          t "storeUrl=$STORE&limit=5&offset=0"
+          t "storeUrl=$STORE"
+          t "store=$STORE&title=$N&game=mtg&limit=5"
+          t "shopUrl=$STORE&title=$N&game=mtg&limit=5"
+          t "url=$STORE&title=$N&game=mtg&limit=5"
 
-      - name: buylist/cards/forStore — method + shape hunt
+      - name: Hunt hosted buylist frontends + read their JS
         run: |
-          try() { # $1 label, $2 method, $3 url, $4 body(optional)
+          look() { # $1 url
             echo "=== $1 ==="
-            if [ -n "${4:-}" ]; then
-              code=$(curl -sS --max-time 20 -o /tmp/r.json -w '%{http_code}' -X "$2" -H 'content-type: application/json' -H 'accept: application/json' -A 'Mozilla/5.0' -H 'origin: https://exorgames.com' "$3" --data "$4") || code=000
-            else
-              code=$(curl -sS --max-time 20 -o /tmp/r.json -w '%{http_code}' -X "$2" -H 'accept: application/json' -A 'Mozilla/5.0' -H 'origin: https://exorgames.com' "$3") || code=000
-            fi
-            echo "HTTP $code, bytes $(wc -c < /tmp/r.json 2>/dev/null || echo 0)"
-            head -c 900 /tmp/r.json; printf '\n'
+            code=$(curl -sSL --max-time 20 -o /tmp/p.html -w '%{http_code}' -A 'Mozilla/5.0' "$1") || code=000
+            echo "HTTP $code, bytes $(wc -c < /tmp/p.html 2>/dev/null || echo 0)"
+            grep -oiE '(src|href)="[^"]+\.js[^"]*"' /tmp/p.html | head -8 || true
           }
-          BODY=$(jq -nc --arg s "$STORE" '{storeUrl:$s, game:"mtg", title:"Sol Ring", limit:5, offset:0}')
-          try "GET  buylist/cards/forStore?storeUrl" GET "$B/buylist/cards/forStore?storeUrl=$STORE&game=mtg&title=Sol%20Ring&limit=5&offset=0"
-          try "GET  buylist/cards/forStore/{store}" GET "$B/buylist/cards/forStore/$STORE?game=mtg&title=Sol%20Ring&limit=5"
-          try "POST buylist/cards/forStore/{store}" POST "$B/buylist/cards/forStore/$STORE" "$BODY"
-          try "OPTIONS buylist/cards/forStore (allow header?)" OPTIONS "$B/buylist/cards/forStore"
-          echo "=== OPTIONS raw headers ==="
-          curl -sSI --max-time 20 -X OPTIONS -A 'Mozilla/5.0' -H 'origin: https://exorgames.com' "$B/buylist/cards/forStore" | head -20 || true
+          look "https://buylist.binderpos.com/?store=$STORE"
+          look "https://portal.binderpos.com/public/buylist/$STORE"
+          look "https://$STORE/apps/buylist"
+          look "https://exorgames.com/apps/buylist"
+          echo "=== exorgames.com/apps/buylist deeper (BinderPOS Shopify app proxy is usually /apps/*) ==="
+          curl -sSL --max-time 20 -A 'Mozilla/5.0' "https://exorgames.com/apps/buylist" -o /tmp/ab.html || true
+          wc -c /tmp/ab.html || true
+          grep -oiE 'portal\.binderpos\.com[^"'"'"' ]*|/external/shopify/[a-z/]+' /tmp/ab.html | sort -u | head -20 || true
+          for js in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/ab.html | sed -E 's/^src="//; s/"$//' | head -6); do
+            case "$js" in http*) u="$js";; //*) u="https:$js";; /*) u="https://exorgames.com$js";; *) continue;; esac
+            echo "--- JS: $u ---"
+            curl -sS --max-time 25 -A 'Mozilla/5.0' "$u" -o /tmp/j.js || continue
+            grep -oiE 'portal\.binderpos\.com[^"'"'"' ]*|/external/shopify/[a-zA-Z/{}$-]+|buylist[a-zA-Z/]*' /tmp/j.js | sort -u | head -20 || true
+          done
