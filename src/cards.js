@@ -698,82 +698,20 @@ function baseName(title) {
   return s;
 }
 
-/* ---------------- "What we pay" — buylist prices ----------------
-   Two real-price sources, best first:
-   1. BinderPOS keyed buylist search (needs the BINDERPOS_API_KEY worker
-      secret — its portal 401s without one). Wins when configured.
-   2. SortSwift — the store's LIVE online buylist (the widget on the sell
-      page). Its API is public per store token: lookup-by-name resolves a
-      card to productId(s), get-price returns the store's programmed final
-      offers per condition (NM/LP/MP/HP/DM FinalCash/FinalCredit, computed
-      from the rules the owner sets — chosenPriceType "market"). All-zero
-      means the buylist genuinely isn't buying that printing. Covers the
-      games on the online buylist (Pokémon/YGO/Lorcana/One Piece/Star Wars/
-      Riftbound; MTG is not on it — verified: Sol Ring 404s).
-   Neither answering → {available:false} and the storefront falls back to
-   the daily-derived percentage estimates, or hides. Cached 10 min. */
+/* ---------------- "What we pay" — BinderPOS buylist prices ----------------
+   BinderPOS ONLY, per the owner: the rules live at portal.binderpos.com
+   (Buylist Rules + Settings→Pricing), configured per game and price band
+   for every game they buy. Two reads of that one source:
+   1. Keyed buylist search (BINDERPOS_API_KEY worker secret) — the portal's
+      computed offers for every game, live. 401 without the key.
+   2. Without the key, the storefront falls back to /buy-rules.json — the
+      daily derivation of the SAME rules, read from the percent stamps
+      BinderPOS's rule sync materializes into its public product feed (per
+      game, whenever that game's rules have synced; buy-rules-sync.yml).
+   Neither → {available:false} and the reveal hides. Cached 10 min. */
 const BUY_TTL_S = 600;
 const BUY_HOST = "https://portal.binderpos.com/external/shopify";
 const BUY_STORE = "most-wanted-ca.myshopify.com";
-const SS_API = "https://buylist-api.sortswift-services.com/api/buylist";
-const SS_STORE = "61dfa8766c5f9fa6";   // public store token from the sell page's own widget
-const SS_CONDS = [["NM", "Near Mint"], ["LP", "Lightly Played"], ["MP", "Moderately Played"], ["HP", "Heavily Played"], ["DM", "Damaged"]];
-// TCGplayer category ids, to keep same-name cards from other games out.
-const SS_CATEGORY = { mtg: 1, yugioh: 2, pokemon: 3, onepiece: 68, lorcana: 71, starwars: 79, riftbound: 89 };
-
-async function sortswiftOffers(name, pageTitle, game) {
-  const h = { accept: "application/json", origin: "https://buylist.sortswift.com", "user-agent": "ExorBuylistReveal/1.0 (+workers.dev)" };
-  // The page title may carry a trailing collector code ("Mimikyu - SVP075");
-  // try the base name, then with the code stripped.
-  const tries = [...new Set([name, name.replace(/\s*[-–]\s*[A-Za-z0-9/#.]+$/, "").trim()])].filter((s) => s.length >= 2);
-  let cands = null;
-  for (const q of tries) {
-    const r = await fetch(`${SS_API}/lookup-by-name?storeId=${SS_STORE}&name=${encodeURIComponent(q)}`, { headers: h, signal: AbortSignal.timeout(6000) });
-    if (!r.ok) continue;
-    const j = await r.json();
-    cands = Array.isArray(j?.candidates) ? j.candidates.map((c) => c.product || c) : j?.product ? [j.product] : [];
-    if (cands.length) break;
-  }
-  if (!cands || !cands.length) return null;   // not on the online buylist
-  const wantCat = SS_CATEGORY[game];
-  if (wantCat) cands = cands.filter((p) => !p.categoryId || p.categoryId === wantCat);
-  if (!cands.length) return null;
-  // Prefer the printing from this product page: match its [Set] / number.
-  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const pageSet = norm((String(pageTitle).match(/\[([^\]]+)\]/) || [, ""])[1]);
-  const pageNum = (String(pageTitle).match(/\b(\d{2,4})\s*\/\s*\d{2,4}\b|\b[A-Z]{2,4}\s?0*(\d{1,4})\b/) || [])[1];
-  const scored = cands.map((p) => {
-    let s = 0;
-    const g = norm(p.groupName);
-    if (pageSet && g && (g.includes(pageSet) || pageSet.includes(g))) s += 2;
-    if (pageNum && String(p.number || "").includes(pageNum)) s += 1;
-    return { p, s };
-  }).sort((a, b) => b.s - a.s);
-  const top = (scored[0].s > 0 ? scored.filter((x) => x.s === scored[0].s) : scored).slice(0, 3).map((x) => x.p);
-  const offers = [];
-  for (const p of top) {
-    try {
-      const r = await fetch(`${SS_API}/get-price?storeId=${SS_STORE}&productId=${p.productId}`, { headers: h, signal: AbortSignal.timeout(6000) });
-      if (!r.ok) continue;
-      const price = (await r.json())?.price || {};
-      const set = [p.groupName, p.number].filter(Boolean).join(" · ");
-      for (const [abbr, label] of SS_CONDS) {
-        const cash = parseFloat(price[abbr + "FinalCash"]);
-        const credit = parseFloat(price[abbr + "FinalCredit"]);
-        if (!(cash > 0) && !(credit > 0)) continue;
-        offers.push({
-          set,
-          condition: label,
-          foil: false,
-          cash: cash > 0 ? cash.toFixed(2) : null,
-          credit: credit > 0 ? credit.toFixed(2) : null,
-        });
-      }
-    } catch { /* skip this printing */ }
-  }
-  offers.sort((a, b) => (parseFloat(b.cash || b.credit || 0)) - (parseFloat(a.cash || a.credit || 0)));
-  return offers.slice(0, 24);   // may be [] — an honest "not buying" from the live buylist
-}
 
 export async function serveBuyPrice(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
@@ -827,18 +765,6 @@ export async function serveBuyPrice(request, env, ctx) {
         out.offers = out.offers.slice(0, 24);
         out.available = true;
         out.source = "binderpos";
-      }
-    } catch { /* fall through to SortSwift */ }
-  }
-
-  // 2) SortSwift — the store's live online buylist, public per store token.
-  if (!out.available) {
-    try {
-      const offers = await sortswiftOffers(name, rawName, game);
-      if (offers !== null) {
-        out.offers = offers;
-        out.available = true;
-        out.source = "sortswift";
       }
     } catch { /* fall through to unavailable */ }
   }
