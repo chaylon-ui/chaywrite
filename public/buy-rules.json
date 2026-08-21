@@ -38,8 +38,8 @@
       "_samples": 178,
       "conds": {
         "NM": {
-          "cash": 0.5,
-          "credit": 0.7,
+          "cash": 0.35,
+          "credit": 0.45,
           "tiers": [
             {
               "upTo": 8.0,
@@ -50,8 +50,8 @@
           "_n": 6
         },
         "LP": {
-          "cash": 0.5,
-          "credit": 0.7,
+          "cash": 0.35,
+          "credit": 0.45,
           "tiers": [
             {
               "upTo": 8.0,
