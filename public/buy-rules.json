@@ -1,29 +1,27 @@
 {
-  "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Per-variant cashBuyPercent/creditBuyPercent stamps in the public product feed are sampled per game and reduced to price-tiered medians.",
+  "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to price-tiered medians; exclusion stamps are ignored.",
   "enabled": true,
   "updated": "2026-08-21",
   "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
   "defaults": null,
   "games": [
     {
-      "key": "mtg",
-      "match": "mtg",
-      "cash": 0.35,
-      "credit": 0.45,
-      "minSell": 2.0,
-      "tiers": []
-    },
-    {
       "key": "pokemon",
       "match": "pokemon",
       "cash": 0.35,
       "credit": 0.45,
-      "minSell": 2.0,
-      "tiers": []
+      "minSell": 14.5,
+      "buyFoils": true,
+      "tiers": [
+        {
+          "upTo": 25,
+          "cash": 0.25,
+          "credit": 0.35
+        }
+      ],
+      "_source": "binderpos-feed",
+      "_samples": 102
     }
   ],
-  "_alerts": [
-    "mtg: derived cash 0.0 vs prev 0.35 moved >15pts - kept previous",
-    "pokemon: derived cash 0.0 vs prev 0.35 moved >15pts - kept previous"
-  ]
+  "_alerts": []
 }
