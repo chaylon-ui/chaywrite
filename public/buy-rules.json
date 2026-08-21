@@ -1,24 +1,29 @@
 {
-  "_what": "Buylist estimate rules for the card-page 'what we pay' reveal. Estimates are computed in the shopper's browser as a percentage of the LIVE sell price on the page (variant by variant, so conditions and foils inherit automatically). Sell prices reprice daily, so estimates track daily on their own — this file only changes when the store's buy percentages change.",
-  "_howToUpdate": "Edit this file (repo chaylon-ui/chaywrite, branch claude/shopify-site-improvements-ztgdt8) and push — the worker auto-deploys. Percentages are fractions: 0.40 = 40% of sell price.",
-  "enabled": false,
+  "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Per-variant cashBuyPercent/creditBuyPercent stamps in the public product feed are sampled per game and reduced to price-tiered medians.",
+  "enabled": true,
   "updated": "2026-08-21",
-  "disclaimer": "Estimate only, based on a percentage of today's sell price. Final offer is confirmed when we check your cards — condition and demand can change it. Prices move daily.",
-  "defaults": {
-    "cash": 0.35,
-    "credit": 0.45,
-    "minSell": 2.0,
-    "buyFoils": true
-  },
+  "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
+  "defaults": null,
   "games": [
-    { "key": "mtg",       "match": "mtg",         "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] },
-    { "key": "pokemon",   "match": "pokemon",     "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] },
-    { "key": "yugioh",    "match": "yugioh",      "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] },
-    { "key": "starwars",  "match": "star wars",   "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] },
-    { "key": "onepiece",  "match": "one piece",   "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] },
-    { "key": "riftbound", "match": "riftbound",   "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] },
-    { "key": "lorcana",   "match": "lorcana",     "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] },
-    { "key": "fab",       "match": "flesh",       "cash": 0.35, "credit": 0.45, "minSell": 2.0, "tiers": [] }
+    {
+      "key": "mtg",
+      "match": "mtg",
+      "cash": 0.35,
+      "credit": 0.45,
+      "minSell": 2.0,
+      "tiers": []
+    },
+    {
+      "key": "pokemon",
+      "match": "pokemon",
+      "cash": 0.35,
+      "credit": 0.45,
+      "minSell": 2.0,
+      "tiers": []
+    }
   ],
-  "_tiersExample": "tiers let the percentage vary by sell price: [{\"upTo\": 5, \"cash\": 0.30, \"credit\": 0.40}, {\"upTo\": 50, \"cash\": 0.40, \"credit\": 0.50}] — first tier whose upTo >= sell price wins; above the last tier the game's base cash/credit apply. minSell: below this sell price the card is bulk-only (not listed)."
+  "_alerts": [
+    "mtg: derived cash 0.0 vs prev 0.35 moved >15pts - kept previous",
+    "pokemon: derived cash 0.0 vs prev 0.35 moved >15pts - kept previous"
+  ]
 }
