@@ -31,8 +31,8 @@
         },
         {
           "upTo": 100.0,
-          "cash": 0.45,
-          "credit": 0.55
+          "cash": 0.4,
+          "credit": 0.5
         }
       ],
       "_source": "binderpos-feed",
