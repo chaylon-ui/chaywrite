@@ -28,6 +28,9 @@
   var css = '' +
     '.xg-buy{margin:14px 0;font-family:var(--xg-font-body,"Inter",sans-serif)}' +
     '.xg-buy__btn{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--xg-ink,#171b1d);border:1.5px dashed var(--xg-accent,#d62c28);border-radius:var(--xg-radius,10px);padding:10px 18px;font-weight:700;font-size:14.5px;cursor:pointer;transition:background-color 120ms ease,color 120ms ease}' +
+    /* author CSS outranks the UA's [hidden]{display:none} — restate it, or
+       the button shows before (or without) any prices being ready */
+    '.xg-buy__btn[hidden]{display:none !important}' +
     '.xg-buy__btn:hover{background:var(--xg-accent,#d62c28);color:#fff}' +
     '.xg-buy__btn[disabled]{opacity:.6;cursor:default}' +
     '.xg-buy__panel{margin-top:10px;border:1px solid var(--xg-border,#e3e6e8);border-radius:var(--xg-radius,12px);background:var(--xg-surface,#fff);padding:14px 16px;max-width:520px}' +

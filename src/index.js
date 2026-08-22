@@ -77,6 +77,16 @@ export default {
       return serveBuyPrice(request, env, ctx);
     }
 
+    // The card-page reveal script on exorgames.com reads this file with a
+    // cross-origin fetch(); the raw asset response carries no CORS header,
+    // so browsers block it (curl/node never see this). Wrap it.
+    if (url.pathname === "/buy-rules.json") {
+      const res = await env.ASSETS.fetch(request);
+      const h = new Headers(res.headers);
+      h.set("access-control-allow-origin", "*");
+      return new Response(res.body, { status: res.status, headers: h });
+    }
+
     if (url.pathname === "/similar.json") {
       return serveSimilar(request, ctx);
     }
