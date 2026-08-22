@@ -769,6 +769,18 @@ export async function serveBuyPrice(request, env, ctx) {
     } catch { /* fall through to unavailable */ }
   }
 
+  // Without usable real offers the storefront computes estimates from the
+  // daily rules file. Ship those rules INSIDE this response: the asset
+  // layer serves /buy-rules.json directly without invoking the worker, so
+  // the raw asset carries no CORS header and browsers block a cross-origin
+  // fetch of it (curl never sees that).
+  if (!out.available) {
+    try {
+      const a = await env.ASSETS.fetch(new Request(new URL("/buy-rules.json", request.url)));
+      if (a && a.ok) out.rules = await a.json();
+    } catch { /* estimates just stay unavailable */ }
+  }
+
   const res = Response.json(out, { headers: { ...cors, "cache-control": out.available ? `public, max-age=${BUY_TTL_S}` : "no-store" } });
   if (out.available) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;

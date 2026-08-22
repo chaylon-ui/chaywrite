@@ -155,7 +155,11 @@
       btn.hidden = false;
       return;
     }
-    return jget(W + '/buy-rules.json').then(function (rules) {
+    // The probe response carries the daily rules (the raw /buy-rules.json
+    // asset has no CORS header, so fetching it directly is blocked in real
+    // browsers — the direct fetch stays only as a fallback).
+    var rulesSrc = (real && real.rules) ? Promise.resolve(real.rules) : jget(W + '/buy-rules.json');
+    return rulesSrc.then(function (rules) {
       if (!rules || !rules.enabled) return;
       var p = HANDLE ? jget('/products/' + HANDLE + '.js') : Promise.resolve(null);
       return Promise.resolve(p).then(function (product) {
