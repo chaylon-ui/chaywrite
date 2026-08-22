@@ -101,13 +101,19 @@
     var rule = gameRule(rules);
     if (!rule) return [];
     var minSell = typeof rule.minSell === 'number' ? rule.minSell : 0;
+    // Evidence ceiling: rates are derived from cards the sync has actually
+    // seen stamped. Above the highest observed sell, an estimate would be
+    // pure extrapolation (a $2,600 card quoted from sub-$300 evidence), so
+    // no estimate renders at all — the card's own stamps take over the
+    // moment BinderPOS syncs them.
+    var maxSell = typeof rule.maxSell === 'number' ? rule.maxSell : Infinity;
     var buyFoils = rule.buyFoils !== false;
     var RANK = { DM: 0, HP: 1, MP: 2, LP: 3, NM: 4 };
     var rows = [];
     (product.variants || []).forEach(function (v) {
       var sell = (v.price || 0) / 100;
       if (!(sell > 0) || sell >= 99999) return;           // placeholder pricing
-      if (sell < minSell) return;                          // bulk floor
+      if (sell < minSell || sell > maxSell) return;        // evidence bounds
       var foil = /foil/i.test(v.title || '');
       if (foil && !buyFoils) return;
       var r2 = condRule(rule, v.title);
