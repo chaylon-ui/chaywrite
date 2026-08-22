@@ -18,61 +18,23 @@ jobs:
         with:
           ref: claude/shopify-site-improvements-ztgdt8
 
-      - name: Live client + endpoints
+      - name: Feed truth for the comparison card (runner-side)
+        run: |
+          B=https://portal.binderpos.com/external/shopify
+          echo "== raw feed query: pokemon title 'Gengar & Mimikyu' — every variant with price + stamps =="
+          BODY=$(jq -nc '{storeUrl:"most-wanted-ca.myshopify.com", game:"pokemon", title:"Gengar & Mimikyu", limit:25, offset:0, instockOnly:false}')
+          curl -sS --max-time 30 -H 'content-type: application/json' -A 'Mozilla/5.0' \
+            -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" -o /tmp/gm.json || true
+          jq -r '.products[]? | .title as $t | .variants[]? | [$t[0:60], .title, (.price//"-"), (.cashBuyPercent//"null"), (.creditBuyPercent//"null")] | @tsv' /tmp/gm.json || head -c 400 /tmp/gm.json
+          echo ""
+          echo "== CORS preflight of the feed endpoint (viability of a browser-side lookup) =="
+          curl -sS --max-time 20 -o /dev/null -D - -X OPTIONS "$B/products/forStore" \
+            -H 'origin: https://exorgames.com' \
+            -H 'access-control-request-method: POST' \
+            -H 'access-control-request-headers: content-type' | tr -d '\r' | grep -i -e '^HTTP' -e '^access-control' || true
+
+      - name: Worker path for the same card
         run: |
           W=https://exor-binder.nevski.workers.dev
-          echo "== served buyprice-reveal.js vs repo =="
-          curl -sS --max-time 20 -D /tmp/js.h "$W/buyprice-reveal.js" -o /tmp/live.js || true
-          echo "live md5: $(md5sum /tmp/live.js | cut -d' ' -f1)"
-          echo "repo md5: $(md5sum public/buyprice-reveal.js | cut -d' ' -f1)"
-          echo ""
-          echo "== /buyprice.json for the owner's comparison card (expect source binderpos-feed, Damaged ~= 20%/30% of its sell) =="
-          curl -sS --max-time 30 "$W/buyprice.json?name=Gengar%20%26%20Mimikyu%20GX%20(165%2F181)%20%5BSun%20%26%20Moon%3A%20Team%20Up%5D&type=Pokemon%20Single" | jq '{name, game, available, estimate, source, offers}' || true
-          echo ""
-          echo "== /buyprice.json Mimikyu (cheap promo; stamps or rules fallback) =="
-          curl -sS --max-time 30 "$W/buyprice.json?name=Mimikyu%20(SVP075)&type=Pokemon%20Single" | jq -c '{available, estimate, source, offers: (.offers|length), rules: (has("rules"))}' || true
-          echo ""
-          echo "== /buyprice.json Sol Ring (MTG; rules not synced -> no offers, rules ride along) =="
-          curl -sS --max-time 30 "$W/buyprice.json?name=Sol%20Ring&type=MTG%20Single" | jq -c '{available, offers: (.offers|length), rules: (has("rules"))}' || true
-
-      - name: Drive the reveal in real headless Chrome
-        run: |
-          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
-          node <<'EOF'
-          const puppeteer = require('puppeteer-core');
-          (async () => {
-            const UA = {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'};
-            // The owner's comparison card, if listed; else first live Pokemon single.
-            const prods = await (await fetch('https://exorgames.com/products.json?limit=250', {headers: UA})).json();
-            const p = prods.products.find(x => /gengar.*mimikyu/i.test(x.title || ''))
-                   || prods.products.find(x => /pokemon/i.test(x.product_type || '') && /single/i.test(x.product_type || ''));
-            if (!p) { console.log('no pokemon single found in products.json'); return; }
-            const target = 'https://exorgames.com/products/' + p.handle + '?preview_theme_id=157462692013';
-            console.log('target:', p.title, '|', target);
-
-            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
-            const page = await browser.newPage();
-            const logs = [];
-            page.on('console', m => logs.push(m.type() + ': ' + m.text()));
-            page.on('pageerror', e => logs.push('pageerror: ' + e.message));
-            await page.goto(target, { waitUntil: 'networkidle2', timeout: 60000 });
-
-            const armed = await page.waitForFunction(() => {
-              const b = document.getElementById('xg-buy-go');
-              return b && !b.hidden && b.offsetParent;
-            }, { timeout: 20000 }).then(() => true).catch(() => false);
-            console.log('button armed (prices ready):', armed);
-
-            if (armed) {
-              await page.click('#xg-buy-go');
-              await page.waitForSelector('#xg-buy-out .xg-buy__panel', { timeout: 10000 }).catch(() => {});
-              const panel = await page.evaluate(() => (document.querySelector('#xg-buy-out') || {}).innerText || '(empty)');
-              console.log('=== REVEALED PANEL ===');
-              console.log(panel);
-            }
-            const errs = logs.filter(l => /error|failed|cors|blocked/i.test(l)).filter(l => /exor-binder/i.test(l));
-            console.log('=== our-endpoint errors ===');
-            console.log(errs.length ? errs.join('\n') : '(none)');
-            await browser.close();
-          })().catch(e => console.log('browser test error:', e.message));
-          EOF
+          echo "== /buyprice.json for the comparison card (worker-side feed lookup) =="
+          curl -sS --max-time 30 "$W/buyprice.json?name=Gengar%20%26%20Mimikyu%20GX%20(165%2F181)%20%5BSun%20%26%20Moon%3A%20Team%20Up%5D&type=Pokemon%20Single" | jq '{name, available, estimate, source, offers: (.offers | length), sample: .offers[0:3]}' || true
