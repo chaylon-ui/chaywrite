@@ -151,7 +151,10 @@
   // rules-based estimates from today's sell prices.
   jget(W + '/buyprice.json?name=' + encodeURIComponent(NAME) + '&type=' + encodeURIComponent(TYPE)).then(function (real) {
     if (real && real.available) {
-      payload = { mode: 'real', name: real.name, offers: real.offers || [] };
+      // real.estimate marks rule-derived numbers (the card's own BinderPOS
+      // rule stamps × today's sell prices) — shown with the disclaimer,
+      // unlike keyed till quotes.
+      payload = { mode: real.estimate ? 'estimate' : 'real', name: real.name, offers: real.offers || [] };
       btn.hidden = false;
       return;
     }

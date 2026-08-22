@@ -769,6 +769,57 @@ export async function serveBuyPrice(request, env, ctx) {
     } catch { /* fall through to unavailable */ }
   }
 
+  // 2) No key: BinderPOS's public feed still carries the portal rules'
+  //    OUTPUT for this exact card — per-variant cashBuyPercent /
+  //    creditBuyPercent stamps wherever this game's Buylist Rules have
+  //    synced. The card's own stamps × its own sell prices beat band-median
+  //    estimates: price-band and rarity-specific rules resolve exactly
+  //    (verified against the owner's live buylist: Damaged Gengar & Mimikyu
+  //    GX = 20%/30% of sell, where the band median guessed 25%/35%).
+  if (!out.available) {
+    try {
+      const r = await fetch(`${BUY_HOST}/products/forStore`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", origin: "https://exorgames.com", "user-agent": "ExorBuylistReveal/1.0 (+workers.dev)" },
+        body: JSON.stringify({ storeUrl: BUY_STORE, game, title: name, limit: 25, offset: 0, instockOnly: false }),
+        signal: AbortSignal.timeout(6500),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const want = name.toLowerCase();
+        for (const p of (Array.isArray(j?.products) ? j.products : [])) {
+          if (baseName(p.title || "").toLowerCase() !== want) continue;
+          const set = (String(p.title || "").match(/\[([^\]]+)\]/) || [, ""])[1] || "";
+          for (const v of (p.variants || [])) {
+            // Genuine rule stamps only; null = rules not synced for this
+            // card, cash 0/credit <=1 = exclusion — both fall through to
+            // the derived estimates instead.
+            if (!(((v.cashBuyPercent ?? 0) >= 5) || ((v.creditBuyPercent ?? 0) >= 5))) continue;
+            const sell = parseFloat(v.price);
+            if (!(sell > 0) || sell >= 99999) continue;
+            const c = (Math.max(0, v.cashBuyPercent || 0) / 100) * sell;
+            const s = (Math.max(0, v.creditBuyPercent || 0) / 100) * sell;
+            if (!(c > 0) && !(s > 0)) continue;
+            out.offers.push({
+              set,
+              condition: v.title || "",
+              foil: /foil/i.test(v.title || ""),
+              cash: c > 0 ? c.toFixed(2) : null,
+              credit: s > 0 ? s.toFixed(2) : null,
+            });
+          }
+        }
+        if (out.offers.length) {
+          out.offers.sort((a, b) => (parseFloat(b.cash || b.credit || 0)) - (parseFloat(a.cash || a.credit || 0)));
+          out.offers = out.offers.slice(0, 24);
+          out.available = true;
+          out.estimate = true;   // rule-derived, not a till quote — client shows the disclaimer
+          out.source = "binderpos-feed";
+        }
+      }
+    } catch { /* feed cold — fall through to derived rules */ }
+  }
+
   // Without usable real offers the storefront computes estimates from the
   // daily rules file. Ship those rules INSIDE this response: the asset
   // layer serves /buy-rules.json directly without invoking the worker, so
