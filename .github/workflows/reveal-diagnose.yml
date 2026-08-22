@@ -3,7 +3,8 @@ name: Reveal diagnose
 # One-shot, log-only: reproduce exactly what the card-page reveal does in a
 # shopper's browser, against the LIVE worker + storefront, so "button says
 # not-buying" reports can be pinned to a layer (stale client, stale rules,
-# probe response, rule matching, or product data).
+# probe response, rule matching, product data — or browser-only behavior
+# like CORS and [hidden] semantics, which curl and node cannot see).
 
 on:
   workflow_dispatch:
@@ -25,108 +26,65 @@ jobs:
           grep -i -e '^cache-control' -e '^etag' -e '^content-type' /tmp/js.h || true
           echo "live md5: $(md5sum /tmp/live.js | cut -d' ' -f1)"
           echo "repo md5: $(md5sum public/buyprice-reveal.js | cut -d' ' -f1)"
-          echo "condRule occurrences in live js: $(grep -c condRule /tmp/live.js || true)"
+          echo "hidden-css fix in live js: $(grep -c 'xg-buy__btn\[hidden\]' /tmp/live.js || true)"
           echo ""
-          echo "== /buyprice.json (no key -> expect available:false + no-store) =="
-          curl -sS --max-time 20 -D - "$W/buyprice.json?name=Mimikyu&type=Pokemon%20Single" | tr -d '\r' | sed -n '1p;/^cache-control/Ip;/^{/p'
-          curl -sS --max-time 20 "$W/buyprice.json?name=Sol%20Ring&type=MTG%20Single"; echo
+          echo "== /buyprice.json (no key -> expect available:false) =="
+          curl -sS --max-time 20 "$W/buyprice.json?name=Mimikyu&type=Pokemon%20Single"; echo
           echo ""
-          echo "== served buy-rules.json (plain and cache-busted) =="
-          curl -sS --max-time 20 -D /tmp/br.h "$W/buy-rules.json" -o /tmp/br.json || true
-          grep -i -e '^cache-control' -e '^etag' /tmp/br.h || true
+          echo "== buy-rules.json headers (CORS must be present now) =="
+          curl -sS --max-time 20 -D - -o /tmp/br.json "$W/buy-rules.json" | tr -d '\r' | grep -i -e '^HTTP' -e '^access-control' -e '^cache-control' || true
           jq -c '{updated, enabled, minSell: .games[0].minSell, samples: .games[0]._samples, conds: ((.games[0].conds//{})|keys)}' /tmp/br.json || true
-          curl -sS --max-time 20 "$W/buy-rules.json?v=diag$$" | jq -c '{updated, minSell: .games[0].minSell, samples: .games[0]._samples}' || true
 
-      - name: Storefront product types + preview-theme mount
+      - name: Drive the reveal in real headless Chrome
         run: |
-          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
-          curl -sS -A "$UA" --max-time 30 "https://exorgames.com/products.json?limit=250" -o /tmp/prods.json || true
-          echo "== product_type spellings on the storefront =="
-          jq -r '.products[].product_type' /tmp/prods.json 2>/dev/null | sort | uniq -c | sort -rn | head -12 || head -c 300 /tmp/prods.json
-          echo "== sample single handles (type / handle / price of first variant) =="
-          jq -r '.products[] | select((.product_type//"")|test("single";"i")) | [.product_type, .handle, (.variants[0].price//"-")] | @tsv' /tmp/prods.json 2>/dev/null | head -12 || true
-          H=$(jq -r '[.products[] | select((.product_type//"")|test("pokemon";"i")) | .handle][0] // empty' /tmp/prods.json 2>/dev/null)
-          echo "== preview-theme page mount for handle: ${H:-NONE FOUND} =="
-          if [ -n "$H" ]; then
-            curl -sS -A "$UA" --max-time 30 "https://exorgames.com/products/$H?preview_theme_id=157462692013" -o /tmp/page.html || true
-            grep -o 'id="xg-buyprice"[^>]*' /tmp/page.html || echo "xg-buyprice div NOT in page HTML"
-            grep -o 'buyprice-reveal.js[^"]*' /tmp/page.html | head -2 || echo "reveal script tag NOT in page HTML"
-            grep -c 'cf-chl\|Just a moment' /tmp/page.html | sed 's/^/challenge markers: /' || true
-          fi
-
-      - name: Simulate the client math on real Pokemon products
-        run: |
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
           node <<'EOF'
-          const W = 'https://exor-binder.nevski.workers.dev';
-          const UA = {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'};
-          // ==== verbatim client logic (buyprice-reveal.js) ====
-          function gameRule(rules, TYPE) {
-            var t = TYPE.toLowerCase();
-            var gs = rules.games || [];
-            for (var i = 0; i < gs.length; i++) {
-              if (gs[i] && gs[i].match && t.indexOf(String(gs[i].match).toLowerCase()) > -1) return gs[i];
-            }
-            return rules.defaults || null;
-          }
-          function pct(rule, sell, kind) {
-            var tiers = rule.tiers || [];
-            for (var i = 0; i < tiers.length; i++) {
-              if (sell <= (tiers[i].upTo || 0)) {
-                var v = tiers[i][kind];
-                if (typeof v === 'number') return v;
-              }
-            }
-            return typeof rule[kind] === 'number' ? rule[kind] : 0;
-          }
-          function condOf(title) {
-            var t = String(title || '').toLowerCase();
-            if (/near mint|\bnm\b/.test(t)) return 'NM';
-            if (/light/.test(t)) return 'LP';
-            if (/moderate/.test(t)) return 'MP';
-            if (/heav/.test(t)) return 'HP';
-            if (/damag|\bdmg\b/.test(t)) return 'DM';
-            return '';
-          }
-          function condRule(rule, vtitle) {
-            var c = condOf(vtitle);
-            return (c && rule.conds && rule.conds[c]) || rule;
-          }
-          function estimateOffers(rules, product, TYPE) {
-            var rule = gameRule(rules, TYPE);
-            if (!rule) return {rule: null, offers: []};
-            var minSell = typeof rule.minSell === 'number' ? rule.minSell : 0;
-            var buyFoils = rule.buyFoils !== false;
-            var offers = [];
-            (product.variants || []).forEach(function (v) {
-              var sell = (v.price || 0) / 100;
-              if (!(sell > 0) || sell >= 99999) return;
-              if (sell < minSell) return;
-              var foil = /foil/i.test(v.title || '');
-              if (foil && !buyFoils) return;
-              var r2 = condRule(rule, v.title);
-              var cash = pct(r2, sell, 'cash') * sell;
-              var credit = pct(r2, sell, 'credit') * sell;
-              if (!(cash > 0) && !(credit > 0)) return;
-              offers.push({condition: v.title, sell: sell.toFixed(2), cash: cash.toFixed(2), credit: credit.toFixed(2)});
-            });
-            return {rule: rule.key, minSell, offers};
-          }
-          // ==== drive it against live data ====
+          const puppeteer = require('puppeteer-core');
           (async () => {
-            const rules = await (await fetch(W + '/buy-rules.json?v=sim' + Date.now())).json();
-            const prods = await (await fetch('https://exorgames.com/products.json?limit=250', {headers: UA})).json().catch(() => null);
-            if (!prods || !prods.products) { console.log('could not read products.json'); return; }
-            const poke = prods.products.filter(p => /pokemon/i.test(p.product_type || '') && /single/i.test(p.product_type || '')).slice(0, 3);
-            const mtg = prods.products.filter(p => /mtg/i.test(p.product_type || '') && /single/i.test(p.product_type || '')).slice(0, 1);
-            for (const p of [...poke, ...mtg]) {
-              const pj = await (await fetch('https://exorgames.com/products/' + p.handle + '.js', {headers: UA})).json().catch(() => null);
-              if (!pj) { console.log(p.handle, ': product .js unreadable'); continue; }
-              const probe = await (await fetch(W + '/buyprice.json?name=' + encodeURIComponent(p.title) + '&type=' + encodeURIComponent(p.product_type))).json().catch(() => null);
-              const est = estimateOffers(rules, pj, p.product_type || '');
-              const button = (probe && probe.available) ? 'REAL mode button' : (est.offers.length ? 'ESTIMATE button' : 'NO button');
-              console.log('---', p.product_type, '|', p.title.slice(0, 60), '(' + p.handle + ')');
-              console.log('    probe.available:', probe && probe.available, '| rule matched:', est.rule, '| verdict:', button);
-              est.offers.slice(0, 4).forEach(o => console.log('    ', o.condition, 'sell $' + o.sell, '-> cash $' + o.cash, '/ credit $' + o.credit));
+            // pick a live Pokemon single straight from the storefront
+            const prods = await (await fetch('https://exorgames.com/products.json?limit=250', {
+              headers: {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'}
+            })).json();
+            const p = prods.products.find(x => /pokemon/i.test(x.product_type || '') && /single/i.test(x.product_type || ''));
+            if (!p) { console.log('no pokemon single found in products.json'); return; }
+            const target = 'https://exorgames.com/products/' + p.handle + '?preview_theme_id=157462692013';
+            console.log('target:', p.title, '|', target);
+
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            const logs = [];
+            page.on('console', m => logs.push(m.type() + ': ' + m.text()));
+            page.on('pageerror', e => logs.push('pageerror: ' + e.message));
+            page.on('requestfailed', r => logs.push('requestfailed: ' + r.url() + ' -> ' + ((r.failure() || {}).errorText || '')));
+            await page.goto(target, { waitUntil: 'networkidle2', timeout: 60000 });
+            console.log('page title:', await page.title());
+
+            const state = await page.evaluate(() => {
+              const d = document.getElementById('xg-buyprice');
+              const b = document.getElementById('xg-buy-go');
+              if (!d) return 'NO xg-buyprice DIV (preview render or template issue)';
+              if (!b) return 'div present, button not created (script blocked?)';
+              const cs = getComputedStyle(b);
+              return JSON.stringify({ hiddenAttr: b.hidden, computedDisplay: cs.display, visible: !!b.offsetParent });
+            });
+            console.log('button state right after load:', state);
+
+            const armed = await page.waitForFunction(() => {
+              const b = document.getElementById('xg-buy-go');
+              return b && !b.hidden && b.offsetParent;
+            }, { timeout: 20000 }).then(() => true).catch(() => false);
+            console.log('button armed (prices ready):', armed);
+
+            if (armed) {
+              await page.click('#xg-buy-go');
+              await page.waitForSelector('#xg-buy-out .xg-buy__panel', { timeout: 10000 }).catch(() => {});
+              const panel = await page.evaluate(() => (document.querySelector('#xg-buy-out') || {}).innerText || '(empty)');
+              console.log('=== REVEALED PANEL ===');
+              console.log(panel);
             }
-          })();
+            const errs = logs.filter(l => /error|failed|cors|blocked/i.test(l));
+            console.log('=== browser errors (if any) ===');
+            console.log(errs.length ? errs.join('\n') : '(none)');
+            await browser.close();
+          })().catch(e => console.log('browser test error:', e.message));
           EOF
