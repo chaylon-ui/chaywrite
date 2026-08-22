@@ -10,8 +10,9 @@ name: Buy-rules daily sync
 # variant's CONDITION (observed live: NM/LP 50/70 on cheap modern cards;
 # MP 45/55, HP 35/45, DM 25/35 on the same vintage product), so the
 # derivation is per-condition first with all-condition medians as
-# fallback — and a condition's rate is never extrapolated to price bands
-# it has no samples in.
+# fallback — and rates are never extrapolated past the evidence: not to
+# price bands a condition has no samples in, and not above the highest
+# stamped sell observed (maxSell — the storefront hides estimates there).
 #
 # The feed rate-limits: ~50 rapid requests in, it starts returning empty
 # bodies in ~65ms. Hence a short, highest-yield-first probe list with 0.7s
@@ -188,16 +189,21 @@ jobs:
                       conds[c] = {"cash": cbase["cash"], "credit": cbase["credit"],
                                   "tiers": [t for t in m if t["upTo"] is not None],
                                   "_n": len(crs)}
-              # Floor = the LOWEST sell price we have positive rule evidence
-              # for; min() so a biased sample can only widen coverage, never
-              # hide most of the catalog.
+              # Evidence bounds: the LOWEST and HIGHEST sell prices we have
+              # positive rule evidence for. The storefront only estimates
+              # inside [minSell, maxSell] — above the ceiling an estimate
+              # would be pure extrapolation (a $2,600 card priced from
+              # sub-$300 samples ran ~25% over the owner's real buylist).
               min_sell = round(min(r['sell'] for r in rs), 2)
+              max_sell = round(max(r['sell'] for r in rs), 2)
               if min_sell > 5:
                   alerts.append(f"{g}: lowest stamped sell is {min_sell} - floor may reflect sampling bias, broaden probes")
+              if max_sell < 500:
+                  alerts.append(f"{g}: highest stamped sell is {max_sell} - estimates capped there until pricier stamps appear")
               entry = {
                   "key": g, "match": MATCH.get(g, g),
                   "cash": base["cash"], "credit": base["credit"],
-                  "minSell": min_sell, "buyFoils": True,
+                  "minSell": min_sell, "maxSell": max_sell, "buyFoils": True,
                   "tiers": finite,
                   "_source": "binderpos-feed", "_samples": len(rs),
               }
@@ -211,7 +217,7 @@ jobs:
                   entry = p
               games.append(entry)
           out = {
-              "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to per-condition medians on the portal's own price bands; exclusion stamps are ignored.",
+              "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to per-condition medians on the portal's own price bands; exclusion stamps are ignored, and estimates apply only between the lowest and highest stamped sells observed.",
               "enabled": bool(games),
               "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
               "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
@@ -224,7 +230,7 @@ jobs:
               f.write('\n')
           print(json.dumps({"enabled": out["enabled"],
                             "games": [{ "key": g['key'], "cash": g.get('cash'), "credit": g.get('credit'),
-                                        "minSell": g.get('minSell'), "samples": g.get('_samples'),
+                                        "minSell": g.get('minSell'), "maxSell": g.get('maxSell'), "samples": g.get('_samples'),
                                         "conds": {c: (v['cash'], v['credit'], v['_n']) for c, v in (g.get('conds') or {}).items()} }
                                       for g in games],
                             "alerts": alerts}, indent=1))
@@ -268,6 +274,6 @@ jobs:
           sleep 30   # let the new worker version propagate before probing
           V="$(git rev-parse --short HEAD)"
           echo "== live /buy-rules.json summary (cache-busted with ?v=$V) =="
-          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json?v=$V" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, tiers: (.tiers|length), conds: ((.conds//{})|keys), samples: ._samples}], alerts: ._alerts}' || true
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json?v=$V" | jq '{enabled, updated, games: [.games[]? | {key, cash, credit, minSell, maxSell, tiers: (.tiers|length), conds: ((.conds//{})|keys), samples: ._samples}], alerts: ._alerts}' || true
           echo "== plain URL (may lag a few minutes behind on the edge cache) =="
           curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq -c '{updated, samples: [.games[]?._samples]}' || true
