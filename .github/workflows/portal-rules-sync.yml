@@ -1,0 +1,107 @@
+name: Portal rules sync
+
+# Reads the store's buylist percentages from the BinderPOS PORTAL itself
+# (portal.binderpos.com -> Buylist Rules + Settings/Pricing), authenticated
+# with the owner's login held as repo Actions secrets. Stage 1 = probe:
+# log in, open both pages, inventory the JSON endpoints the portal app
+# fetches them from. Stage 2 (wired after the probe shows the shapes)
+# parses that JSON into public/buy-rules.json daily for EVERY game.
+#
+# Secrets required (owner adds under Settings -> Secrets and variables ->
+# Actions; values never appear in logs — GitHub masks them):
+#   BINDERPOS_LOGIN_EMAIL      portal login email
+#   BINDERPOS_LOGIN_PASSWORD   portal login password
+#
+# Log hygiene: responses from URLs that look auth-related (login, token,
+# session, password) are listed by status only — their bodies are never
+# printed. Rule/pricing JSON is store business config and prints truncated.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Login + map the rules endpoints
+        env:
+          EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
+          PASS: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
+        run: |
+          if [ -z "$EMAIL" ] || [ -z "$PASS" ]; then
+            echo "Secrets not set. Add BINDERPOS_LOGIN_EMAIL and BINDERPOS_LOGIN_PASSWORD"
+            echo "under repo Settings -> Secrets and variables -> Actions, then re-run."
+            exit 0
+          fi
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const SENSITIVE = /login|auth|token|session|password|signin|oauth/i;
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1366, height: 900 });
+            const seen = [];
+            page.on('response', async (res) => {
+              try {
+                const url = res.url();
+                if (!/binderpos/i.test(url)) return;
+                const ct = String(res.headers()['content-type'] || '');
+                if (!/json/i.test(ct)) return;
+                const entry = { url, status: res.status(), body: null };
+                if (!SENSITIVE.test(url)) {
+                  const text = await res.text().catch(() => '');
+                  entry.body = text.slice(0, 2400);
+                  entry.size = text.length;
+                }
+                seen.push(entry);
+              } catch {}
+            });
+
+            console.log('-> opening portal');
+            await page.goto('https://portal.binderpos.com/', { waitUntil: 'networkidle2', timeout: 60000 });
+            console.log('landed on:', page.url(), '| title:', await page.title());
+            const challenged = await page.evaluate(() => document.body.innerText.slice(0, 200));
+            if (/just a moment|verify you are human|cloudflare/i.test(challenged)) {
+              console.log('CLOUDFLARE CHALLENGE on portal login page - headless login blocked at the edge.');
+              await browser.close(); return;
+            }
+
+            const emailSel = await page.waitForSelector('input[type="email"], input[name*="email" i], input[placeholder*="email" i]', { timeout: 20000 }).catch(() => null);
+            const passSel = await page.$('input[type="password"]');
+            if (!emailSel || !passSel) {
+              console.log('LOGIN FORM NOT FOUND. Page text head:', (await page.evaluate(() => document.body.innerText.slice(0, 300))).replace(/\s+/g, ' '));
+              await browser.close(); return;
+            }
+            await emailSel.type(process.env.EMAIL, { delay: 25 });
+            await passSel.type(process.env.PASS, { delay: 25 });
+            await Promise.all([
+              page.keyboard.press('Enter'),
+              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 }).catch(() => null),
+            ]);
+            await new Promise(r => setTimeout(r, 6000));
+            const afterText = (await page.evaluate(() => document.body.innerText.slice(0, 260))).replace(/\s+/g, ' ');
+            console.log('after login attempt:', page.url());
+            console.log('page text head:', afterText);
+            if (/verify|verification|code|two.?factor|2fa/i.test(afterText)) {
+              console.log('VERIFICATION STEP DETECTED - the portal wants a code. Owner action needed on first login.');
+            }
+
+            for (const route of ['#/buylists/rules', '#/settings/pricing']) {
+              console.log('-> visiting', route);
+              await page.goto('https://portal.binderpos.com/' + route, { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
+              await new Promise(r => setTimeout(r, 9000));
+              const head = (await page.evaluate(() => document.body.innerText.slice(0, 300))).replace(/\s+/g, ' ');
+              console.log('   page text head:', head);
+            }
+
+            console.log('');
+            console.log('=== JSON endpoints observed (auth-ish bodies withheld) ===');
+            for (const e of seen) {
+              console.log('---', e.status, e.url, e.size != null ? '(' + e.size + ' bytes)' : '(body withheld)');
+              if (e.body) console.log(e.body);
+            }
+            await browser.close();
+          })().catch(e => console.log('probe error:', e.message));
+          EOF
