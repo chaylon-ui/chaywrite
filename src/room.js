@@ -527,37 +527,54 @@ export class BinderRoom {
       const c = String((b && b.c) || "").slice(0, 80);
       const hs = (Array.isArray(b && b.hs) ? b.hs : []).map((h) => String(h).slice(0, 16)).filter(Boolean).slice(0, 4200);
       if (!c || !hs.length) return Response.json({ fresh: [] });
-      const key = "ntseen:" + c;
       const day = Math.floor(Date.now() / 864e5);
-      // d = the day this collection's memory was seeded (nothing counts as an
-      // arrival that day — the whole feed is "first seen"); p = last poll day
-      // (a card only counts as "back in stock" if a real poll saw it missing —
-      // a quiet week without polls must not make everything look new);
-      // m = hash -> [firstSeenDay, lastSeenDay]
-      const rec = (await this.state.storage.get(key)) || { d: day, m: {} };
-      const seen = rec.m || {};
-      const prevPoll = rec.p ?? rec.d;
-      const fresh = [];
+      // Memory layout: "nts:<c>:meta" = { p: lastPollDay } and six hash-
+      // sharded maps "nts:<c>:s0..s5" of hash -> [firstSeenDay, lastSeenDay]
+      // (a big MTG collection is ~8k entries — too large for one DO value).
+      // A guarded entry stores firstSeenDay 0 ("ancient, never flag").
+      await this.state.storage.delete("ntseen:" + c); // pre-shard format, hours old — drop, the guard reseeds
+      const SHARDS = 6;
+      // Shard on the LAST hash character — the first is a magnitude digit
+      // (most hashes share it), the last is uniform.
+      const shardOf = (h) => (parseInt(h[h.length - 1], 36) || 0) % SHARDS;
+      const meta = (await this.state.storage.get("nts:" + c + ":meta")) || null;
+      const maps = [];
+      for (let i = 0; i < SHARDS; i++) maps.push((await this.state.storage.get("nts:" + c + ":s" + i)) || {});
+      const prevPoll = (meta && meta.p) || day;
+      let fresh = [];
       for (const h of hs) {
-        const e = seen[h];
-        if (!e) { seen[h] = [day, day]; if (day > rec.d) fresh.push(h); }
+        const m = maps[shardOf(h)];
+        const e = m[h];
+        if (!e) { m[h] = [day, day]; fresh.push(h); }
         else {
-          if (e[1] < prevPoll && e[1] < day - 2) { e[0] = day; fresh.push(h); } // seen missing for days, now back — an arrival
-          else if (e[0] === day && day > rec.d) fresh.push(h); // arrived earlier today — stays fresh all day
+          if (e[1] < prevPoll && e[1] < day - 2) { e[0] = day; fresh.push(h); } // a poll saw it missing for days, now back — an arrival
+          else if (e[0] === day) fresh.push(h); // arrived earlier today — stays fresh all day
           e[1] = day;
         }
       }
-      // Forget what hasn't been seen in 60 days, and cap the map so it stays
-      // inside the DO's per-value limit — evicting by OLDEST last-seen so
-      // currently-stocked entries (last seen today) are never the ones cut.
-      for (const h of Object.keys(seen)) if (day - seen[h][1] > 60) delete seen[h];
-      const keys = Object.keys(seen);
-      if (keys.length > 4200) {
-        keys.sort((a, z) => seen[a][1] - seen[z][1]);
-        for (const k of keys.slice(0, keys.length - 4200)) delete seen[k];
+      // Anomaly guard: a real day brings tens of arrivals. Hundreds+ means a
+      // first seed, a coverage change or a feed hiccup — record those quietly
+      // (firstSeen 0 so they never flag) and report nothing. This is also
+      // what makes seeding silent, so genuine same-day arrivals AFTER the
+      // first poll still show the same day.
+      if (fresh.length > 150) {
+        for (const h of fresh) { const e = maps[shardOf(h)][h]; if (e && e[0] === day) e[0] = 0; }
+        fresh = [];
       }
-      await this.state.storage.put(key, { d: rec.d, p: day, m: seen });
-      return Response.json({ fresh, seeded: day === rec.d });
+      // Forget what hasn't been seen in 60 days, and cap each shard well
+      // inside the DO per-value limit — evicting oldest-last-seen first so
+      // currently-stocked entries are never the ones cut.
+      for (const m of maps) {
+        for (const h of Object.keys(m)) if (day - m[h][1] > 60) delete m[h];
+        const keys = Object.keys(m);
+        if (keys.length > 1650) {
+          keys.sort((a, z) => m[a][1] - m[z][1]);
+          for (const k of keys.slice(0, keys.length - 1650)) delete m[k];
+        }
+      }
+      await this.state.storage.put("nts:" + c + ":meta", { p: day });
+      for (let i = 0; i < SHARDS; i++) await this.state.storage.put("nts:" + c + ":s" + i, maps[i]);
+      return Response.json({ fresh, seeded: !meta });
     }
     if (url.pathname.endsWith("/rooms-list")) {
       if (!this.roomsSeen) this.roomsSeen = (await this.state.storage.get("roomsSeen")) || {};

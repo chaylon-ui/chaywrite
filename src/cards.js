@@ -215,21 +215,24 @@ export async function serveCards(request, env, ctx, collection = "new-arrivals",
   const products = [];
   const trouble = [];
   const feedHeaders = { accept: "application/json", "user-agent": "ExorBinderTV/1.0 (+workers.dev)" };
-  // "New Today" scans the WHOLE collection, not just the newest 1000 —
+  // "New Today" scans the WHOLE collection (up to 10k, in waves of 8 pages) —
   // today's arrivals are mostly RESTOCKS of old cards (fresh collection
-  // buys), and those sit deep in a created-sorted collection.
-  const maxPages = newToday ? 16 : PAGES;
+  // buys), and those sit deep in the big collections. Partial coverage is
+  // worse than slow: a moving window (MTG sorts by best-selling) makes
+  // boundary cards look like arrivals and hides real ones.
+  const maxPages = newToday ? 40 : PAGES;
   try {
     const r1 = await fetch(feedUrl(collection, 1), { headers: feedHeaders });
     if (!r1.ok) trouble.push(`page 1: HTTP ${r1.status}`);
     else {
       const d1 = await r1.json();
       products.push(...(d1.products || []));
-      if ((d1.products || []).length === 250 && maxPages > 1) {
-        const rest = await Promise.all(Array.from({ length: maxPages - 1 }, (_, i) =>
-          fetch(feedUrl(collection, i + 2), { headers: feedHeaders }).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
-        for (const d of rest) {
-          if (!d || !Array.isArray(d.products) || d.products.length === 0) break;
+      let more = (d1.products || []).length === 250;
+      for (let base = 2; more && base <= maxPages; base += 8) {
+        const wave = await Promise.all(Array.from({ length: Math.min(8, maxPages - base + 1) }, (_, i) =>
+          fetch(feedUrl(collection, base + i), { headers: feedHeaders }).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
+        for (const d of wave) {
+          if (!d || !Array.isArray(d.products) || d.products.length === 0) { more = false; break; }
           products.push(...d.products);
         }
       }
