@@ -230,6 +230,39 @@ export class BinderRoom {
     if (ok && JSON.stringify(this.gicons) !== before) this.broadcastSettings();
   }
 
+  // Small Admin GraphQL helper (returns .data or null; never throws).
+  async adminGql(query, variables) {
+    const token = this.env.SHOPIFY_ADMIN_TOKEN;
+    if (!token) return null;
+    const shop = this.env.SHOPIFY_SHOP || "most-wanted-ca.myshopify.com";
+    try {
+      const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
+        body: JSON.stringify({ query, variables: variables || {} }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) return null;
+      return (await r.json())?.data || null;
+    } catch { return null; }
+  }
+
+  // Keep the INVENTORY_LEVELS_UPDATE webhook pointed at this worker so
+  // restocks flow into /inv-hint without anyone setting it up by hand.
+  // Called from the New Today poll path, at most twice a day; failures
+  // (e.g. an app token without the scope) are silent and retried later.
+  async ensureInvHook(origin) {
+    const now = Date.now();
+    if (!this.env.SHOPIFY_ADMIN_TOKEN || now - (this.invHookAt || 0) < 43200e3) return;
+    this.invHookAt = now;
+    const cb = origin + "/hook/inv";
+    const j = await this.adminGql(`{webhookSubscriptions(first:20,topics:[INVENTORY_LEVELS_UPDATE]){edges{node{endpoint{... on WebhookHttpEndpoint{callbackUrl}}}}}}`);
+    const subs = (j && j.webhookSubscriptions && j.webhookSubscriptions.edges) || [];
+    if (j && !subs.some((e) => e.node && e.node.endpoint && e.node.endpoint.callbackUrl === cb)) {
+      await this.adminGql(`mutation($cb:URL!){webhookSubscriptionCreate(topic:INVENTORY_LEVELS_UPDATE,webhookSubscription:{callbackUrl:$cb,format:JSON}){userErrors{message}}}`, { cb });
+    }
+  }
+
   broadcastSettings() {
     const m = { type: "settings", data: this.publicSettings() };
     if (this.tv) this.send(this.tv, m);
@@ -515,6 +548,65 @@ export class BinderRoom {
       }
       return Response.json({ ok: true });
     }
+    // ---- "New Today" restock hints (DEFAULT room only; /hook/inv relays
+    // Shopify's inventory webhook here). The hint names an inventory item;
+    // we resolve it to its product and LIVE total with our own Admin token,
+    // then compare with the last total we stored for that product. More
+    // stock than before = an arrival for the New Today tabs — this is what
+    // catches "added 4 copies of a card we already stocked", which the
+    // collection feed can never show. First sighting has no baseline, so
+    // it flags only when today's recent orders rule out a plain sale.
+    if (url.pathname.endsWith("/inv-hint") && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { b = {}; }
+      const item = String((b && b.item) || "").replace(/\D/g, "").slice(0, 24);
+      const token = this.env.SHOPIFY_ADMIN_TOKEN;
+      if (!item || !token) return Response.json({ ok: false });
+      // Bulk syncs hammer this — at most one lookup per item per 20s.
+      this.invSeen = this.invSeen || new Map();
+      const nowMs = Date.now();
+      if (nowMs - (this.invSeen.get(item) || 0) < 20e3) return Response.json({ ok: true, throttled: true });
+      this.invSeen.set(item, nowMs);
+      if (this.invSeen.size > 4000) this.invSeen.clear();
+      const j1 = await this.adminGql(`query($id:ID!){inventoryItem(id:$id){variant{product{handle totalInventory status}}}}`,
+        { id: "gid://shopify/InventoryItem/" + item });
+      const p = j1 && j1.inventoryItem && j1.inventoryItem.variant && j1.inventoryItem.variant.product;
+      if (!p || p.status !== "ACTIVE" || !p.handle) return Response.json({ ok: true });
+      const handle = String(p.handle).slice(0, 160);
+      const total = Math.max(0, p.totalInventory | 0);
+      const prev = await this.state.storage.get("pinv:" + handle);
+      await this.state.storage.put("pinv:" + handle, total);
+      let arrival = false;
+      if (typeof prev === "number") arrival = total > prev;
+      else if (total > 0) {
+        // No baseline for this product yet — flag it unless a just-made sale
+        // explains the stock movement (sales fire this same webhook).
+        const since = new Date(nowMs - 30 * 60e3).toISOString();
+        const j2 = await this.adminGql(`query($q:String!){orders(first:20,query:$q){edges{node{lineItems(first:20){edges{node{product{handle}}}}}}}}`,
+          { q: `created_at:>'${since}'` });
+        const sold = ((j2 && j2.orders && j2.orders.edges) || []).some((o) =>
+          ((o.node && o.node.lineItems && o.node.lineItems.edges) || []).some((li) => li.node && li.node.product && li.node.product.handle === handle));
+        arrival = !sold;
+      }
+      if (arrival) {
+        const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+        const k = "ntarr:" + day;
+        const list = (await this.state.storage.get(k)) || [];
+        if (!list.includes(handle) && list.length < 300) {
+          list.push(handle);
+          await this.state.storage.put(k, list);
+          const old = "ntarr:" + new Date(Date.now() - 2 * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+          await this.state.storage.delete(old);
+        }
+      }
+      return Response.json({ ok: true, arrival });
+    }
+    // Today's webhook-confirmed restocks, for the New Today deck builder.
+    if (url.pathname.endsWith("/nt-arrivals")) {
+      const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
+      const handles = (await this.state.storage.get("ntarr:" + day)) || [];
+      return Response.json({ handles }, { headers: { "cache-control": "no-store" } });
+    }
+
     // ---- "New Today" stock memory (only ever called on the DEFAULT room's
     // DO, via in-worker stubs — the router never exposes this path). The card
     // feed POSTs a hash per in-stock product it can see in a collection; a
@@ -527,6 +619,7 @@ export class BinderRoom {
       const c = String((b && b.c) || "").slice(0, 80);
       const hs = (Array.isArray(b && b.hs) ? b.hs : []).map((h) => String(h).slice(0, 16)).filter(Boolean).slice(0, 4200);
       if (!c || !hs.length) return Response.json({ fresh: [] });
+      { const p = this.ensureInvHook(url.origin); this.state.waitUntil ? this.state.waitUntil(p) : await p; }
       const day = Math.floor(Date.now() / 864e5);
       // Memory layout: "nts:<c>:meta" = { p: lastPollDay } and six hash-
       // sharded maps "nts:<c>:s0..s5" of hash -> [firstSeenDay, lastSeenDay]

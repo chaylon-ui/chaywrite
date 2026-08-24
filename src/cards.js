@@ -258,6 +258,7 @@ export async function serveCards(request, env, ctx, collection = "new-arrivals",
     const stocked = products.filter((p) => /single/i.test(p.product_type || "")
       && (p.variants || []).some((v) => v.available && +v.price > MIN_PRICE && +v.price < MAX_PRICE));
     let freshH = new Set();
+    let arrH = new Set();
     try {
       if (env && env.ROOM) {
         const stub = env.ROOM.get(env.ROOM.idFromName("default"));
@@ -267,9 +268,14 @@ export async function serveCards(request, env, ctx, collection = "new-arrivals",
         }));
         const j = await r.json();
         if (Array.isArray(j && j.fresh)) freshH = new Set(j.fresh);
+        // Webhook-confirmed restocks (added copies of already-stocked cards —
+        // invisible to the feed-membership signal above).
+        const ra = await stub.fetch(new Request(new URL("/nt-arrivals", request.url).toString()));
+        const ja = await ra.json();
+        if (Array.isArray(ja && ja.handles)) arrH = new Set(ja.handles);
       }
     } catch {}
-    const isNew = (p) => freshH.has(fnv(String(p.handle || ""))) || dayKey(p.published_at || p.created_at) === today;
+    const isNew = (p) => arrH.has(p.handle) || freshH.has(fnv(String(p.handle || ""))) || dayKey(p.published_at || p.created_at) === today;
     const freshOnes = stocked.filter(isNew);
     // Top up to at least 10 with a day-rotating sample of the rest, so a
     // slow day still fills the case without idling on the same cards forever.

@@ -99,6 +99,18 @@ export default {
       return serveQty(request, env, ctx);
     }
 
+    // Shopify's inventory webhook: stock moved on some item. The payload is
+    // treated as an untrusted HINT — the default room re-reads the real
+    // numbers with its own Admin token before believing anything, so a
+    // spoofed post can at worst cause a lookup. Reply fast, work after.
+    if (url.pathname === "/hook/inv" && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { b = {}; }
+      const item = String((b && b.inventory_item_id) || "").replace(/\D/g, "").slice(0, 24);
+      if (item) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
+        .fetch(new Request(url.origin + "/inv-hint", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item }) })));
+      return Response.json({ ok: true });
+    }
+
     if (url.pathname === "/cards.json") {
       let collection = url.searchParams.get("collection") || "";
       let newToday = url.searchParams.get("nt") === "1";
