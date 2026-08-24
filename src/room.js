@@ -515,6 +515,50 @@ export class BinderRoom {
       }
       return Response.json({ ok: true });
     }
+    // ---- "New Today" stock memory (only ever called on the DEFAULT room's
+    // DO, via in-worker stubs — the router never exposes this path). The card
+    // feed POSTs a hash per in-stock product it can see in a collection; a
+    // hash never seen before — or gone for days and now back — is today's
+    // arrival (BinderPOS restocks don't touch published_at, so appearing in
+    // the feed is the only honest signal). The very first call per collection
+    // just seeds the memory, so day one shows the usual newest cards.
+    if (url.pathname.endsWith("/nt-mark") && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { b = {}; }
+      const c = String((b && b.c) || "").slice(0, 80);
+      const hs = (Array.isArray(b && b.hs) ? b.hs : []).map((h) => String(h).slice(0, 16)).filter(Boolean).slice(0, 4200);
+      if (!c || !hs.length) return Response.json({ fresh: [] });
+      const key = "ntseen:" + c;
+      const day = Math.floor(Date.now() / 864e5);
+      // d = the day this collection's memory was seeded (nothing counts as an
+      // arrival that day — the whole feed is "first seen"); p = last poll day
+      // (a card only counts as "back in stock" if a real poll saw it missing —
+      // a quiet week without polls must not make everything look new);
+      // m = hash -> [firstSeenDay, lastSeenDay]
+      const rec = (await this.state.storage.get(key)) || { d: day, m: {} };
+      const seen = rec.m || {};
+      const prevPoll = rec.p ?? rec.d;
+      const fresh = [];
+      for (const h of hs) {
+        const e = seen[h];
+        if (!e) { seen[h] = [day, day]; if (day > rec.d) fresh.push(h); }
+        else {
+          if (e[1] < prevPoll && e[1] < day - 2) { e[0] = day; fresh.push(h); } // seen missing for days, now back — an arrival
+          else if (e[0] === day && day > rec.d) fresh.push(h); // arrived earlier today — stays fresh all day
+          e[1] = day;
+        }
+      }
+      // Forget what hasn't been seen in 60 days, and cap the map so it stays
+      // inside the DO's per-value limit — evicting by OLDEST last-seen so
+      // currently-stocked entries (last seen today) are never the ones cut.
+      for (const h of Object.keys(seen)) if (day - seen[h][1] > 60) delete seen[h];
+      const keys = Object.keys(seen);
+      if (keys.length > 4200) {
+        keys.sort((a, z) => seen[a][1] - seen[z][1]);
+        for (const k of keys.slice(0, keys.length - 4200)) delete seen[k];
+      }
+      await this.state.storage.put(key, { d: rec.d, p: day, m: seen });
+      return Response.json({ fresh, seeded: day === rec.d });
+    }
     if (url.pathname.endsWith("/rooms-list")) {
       if (!this.roomsSeen) this.roomsSeen = (await this.state.storage.get("roomsSeen")) || {};
       const rooms = [{ name: "default" },

@@ -111,7 +111,7 @@ export default {
           if (s) { newToday = !!s.newTodayActive; showcase = !!s.showcaseActive; sleeves = !!s.sleevesActive || !!s.shelfActive; }
         } catch {}
       }
-      return serveCards(request, ctx, collection || "new-arrivals", newToday, showcase, sleeves);
+      return serveCards(request, env, ctx, collection || "new-arrivals", newToday, showcase, sleeves);
     }
 
     if (url.pathname === "/admin" || url.pathname === "/admin.html") {

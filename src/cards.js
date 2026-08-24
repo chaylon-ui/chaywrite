@@ -205,7 +205,7 @@ function gameOf(productType) {
   return null;
 }
 
-export async function serveCards(request, ctx, collection = "new-arrivals", newToday = false, showcase = false, sleeves = false) {
+export async function serveCards(request, env, ctx, collection = "new-arrivals", newToday = false, showcase = false, sleeves = false) {
   collection = /^[a-z0-9][a-z0-9-]{0,80}$/.test(collection) ? collection : "new-arrivals";
   const cache = caches.default;
   const cacheKey = new Request(new URL("/cards.json?c=" + collection + (newToday ? "&nt=1" : "") + (showcase ? "&sc=1" : "") + (sleeves ? "&sv=1" : ""), request.url).toString());
@@ -214,15 +214,25 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
 
   const products = [];
   const trouble = [];
+  const feedHeaders = { accept: "application/json", "user-agent": "ExorBinderTV/1.0 (+workers.dev)" };
+  // "New Today" scans the WHOLE collection, not just the newest 1000 —
+  // today's arrivals are mostly RESTOCKS of old cards (fresh collection
+  // buys), and those sit deep in a created-sorted collection.
+  const maxPages = newToday ? 16 : PAGES;
   try {
-    for (let p = 1; p <= PAGES; p++) {
-      const r = await fetch(feedUrl(collection, p), {
-        headers: { accept: "application/json", "user-agent": "ExorBinderTV/1.0 (+workers.dev)" },
-      });
-      if (!r.ok) { trouble.push(`page ${p}: HTTP ${r.status}`); break; }
-      const d = await r.json();
-      if (!d.products || d.products.length === 0) break;
-      products.push(...d.products);
+    const r1 = await fetch(feedUrl(collection, 1), { headers: feedHeaders });
+    if (!r1.ok) trouble.push(`page 1: HTTP ${r1.status}`);
+    else {
+      const d1 = await r1.json();
+      products.push(...(d1.products || []));
+      if ((d1.products || []).length === 250 && maxPages > 1) {
+        const rest = await Promise.all(Array.from({ length: maxPages - 1 }, (_, i) =>
+          fetch(feedUrl(collection, i + 2), { headers: feedHeaders }).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
+        for (const d of rest) {
+          if (!d || !Array.isArray(d.products) || d.products.length === 0) break;
+          products.push(...d.products);
+        }
+      }
     }
   } catch (e) {
     trouble.push(String((e && e.message) || e));
@@ -234,17 +244,39 @@ export async function serveCards(request, ctx, collection = "new-arrivals", newT
   } else if (showcase) {
     built = buildShowcase(products);
   } else if (newToday) {
-    // Cards published today (store-local time), topped up with the next-newest
-    // until at least 10 make the case. Same in-stock/over-$10 rules as always.
+    // "New today" at this store means ARRIVED IN STOCK today, not created
+    // today — BinderPOS pre-creates whole sets months ahead, and daily
+    // arrivals are restocks that never touch published_at. The default
+    // room's DO remembers which products this collection has shown in
+    // stock; first-time entrants (and returners after days away) are the
+    // arrivals. Products genuinely published today count too (set drops).
     const dayKey = (d) => new Date(d || 0).toLocaleDateString("en-CA", { timeZone: "America/Halifax" });
     const today = dayKey(Date.now());
-    const pool = [...products].sort((a, b) => new Date(b.published_at || b.created_at || 0) - new Date(a.published_at || a.created_at || 0));
-    let take = pool.findIndex((p) => dayKey(p.published_at || p.created_at) !== today);
-    if (take === -1) take = pool.length;
-    built = buildCards(pool.slice(0, Math.max(take, 1)), { perLane: 99 });
-    while (built.cards.length < 10 && take < pool.length) {
+    const stocked = products.filter((p) => /single/i.test(p.product_type || "")
+      && (p.variants || []).some((v) => v.available && +v.price > MIN_PRICE && +v.price < MAX_PRICE));
+    let freshH = new Set();
+    try {
+      if (env && env.ROOM) {
+        const stub = env.ROOM.get(env.ROOM.idFromName("default"));
+        const r = await stub.fetch(new Request(new URL("/nt-mark", request.url).toString(), {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ c: collection, hs: stocked.map((p) => fnv(String(p.handle || ""))) }),
+        }));
+        const j = await r.json();
+        if (Array.isArray(j && j.fresh)) freshH = new Set(j.fresh);
+      }
+    } catch {}
+    const isNew = (p) => freshH.has(fnv(String(p.handle || ""))) || dayKey(p.published_at || p.created_at) === today;
+    const freshOnes = stocked.filter(isNew);
+    // Top up to at least 10 with a day-rotating sample of the rest, so a
+    // slow day still fills the case without idling on the same cards forever.
+    const fill = stocked.filter((p) => !isNew(p))
+      .map((p) => [fnv(today + "|" + p.handle), p]).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map((x) => x[1]);
+    built = buildCards(freshOnes, { perLane: 99 });
+    let take = 0;
+    while (built.cards.length < 10 && take < fill.length) {
       take += 5;
-      built = buildCards(pool.slice(0, take), { perLane: 99 });
+      built = buildCards([...freshOnes, ...fill.slice(0, take)], { perLane: 99 });
     }
   } else {
     built = buildCards(products);
