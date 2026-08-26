@@ -1,7 +1,7 @@
 {
   "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to per-condition medians on the portal's own price bands; exclusion stamps are ignored, and estimates apply only between the lowest and highest stamped sells observed.",
   "enabled": true,
-  "updated": "2026-08-25",
+  "updated": "2026-08-26",
   "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
   "defaults": null,
   "games": [
