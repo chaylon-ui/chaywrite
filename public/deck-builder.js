@@ -214,7 +214,7 @@
           var o = offers[oi];
           var avail = (typeof o.qty === 'number') ? o.qty : 99;
           var take = Math.min(remaining, avail);
-          if (take > 0) { chunks.push({ o: o, take: take }); remaining -= take; }
+          if (take > 0) { chunks.push({ o: o, take: take, stock: avail }); remaining -= take; }
         }
         var filledQ = ln.qty - remaining;
         if (filledQ > 0) {
@@ -225,7 +225,7 @@
             var unit = parseFloat(o.price) || 0;
             var lineTotal = unit * c.take;
             subtotal += lineTotal;
-            addItems.push({ id: o.variantId, quantity: c.take });
+            addItems.push({ id: o.variantId, quantity: c.take, stock: c.stock });
             var meta = [o.set, o.foil ? 'Foil' : '', o.condition].filter(Boolean).join(' · ');
             return '<div class="xg-deck__row" role="row">' +
               '<span class="xg-deck__qty" role="cell">' + c.take + '&times;</span>' +
@@ -356,6 +356,27 @@
     if (!items || !items.length) return;
     var buttons = [document.getElementById('xg-deck-add'), document.getElementById('xg-deck-add2')].filter(Boolean);
     buttons.forEach(function (b) { b.disabled = true; b.textContent = 'Adding…'; });
+    /* The cart may already hold copies of these variants (a prior run, or
+       the product page) — cart + add must never exceed the shelf count, so
+       read the live cart and cap each add at stock minus what's in there.
+       That's how "2 owned" once became a 6-copy cart line. */
+    fetch('/cart.js', { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+      .then(function (cart) {
+        var have = {};
+        if (cart && cart.items) cart.items.forEach(function (it) { have[it.variant_id] = (have[it.variant_id] || 0) + it.quantity; });
+        var send = [];
+        items.forEach(function (it) {
+          var cap = typeof it.stock === 'number' ? Math.max(0, it.stock - (have[it.id] || 0)) : it.quantity;
+          var q = Math.min(it.quantity, cap);
+          if (q > 0) send.push({ id: it.id, quantity: q });
+        });
+        if (!send.length) { window.location.href = '/cart'; return; }   // all copies already in the cart
+        addToCartSend(send, buttons);
+      });
+  }
+
+  function addToCartSend(items, buttons) {
     postCart({ items: items }).then(function (r) {
       if (r.ok) { window.location.href = '/cart'; return null; }
       /* One item sold out since lookup -> Shopify rejects the whole batch.
