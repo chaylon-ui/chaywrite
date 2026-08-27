@@ -1,10 +1,6 @@
 name: Reveal diagnose
 
-# One-shot, log-only: reproduce exactly what the card-page reveal does in a
-# shopper's browser, against the LIVE worker + storefront, so "button says
-# not-buying" reports can be pinned to a layer (stale client, stale rules,
-# probe response, rule matching, product data — or browser-only behavior
-# like CORS and [hidden] semantics, which curl and node cannot see).
+# Scratch diagnostics against the LIVE site (log-only).
 
 on:
   workflow_dispatch:
@@ -12,29 +8,27 @@ on:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: claude/shopify-site-improvements-ztgdt8
-
-      - name: Feed truth for the comparison card (runner-side)
+      - name: Live deck-builder page + nav source
         run: |
-          B=https://portal.binderpos.com/external/shopify
-          echo "== raw feed query: pokemon title 'Gengar & Mimikyu' — every variant with price + stamps =="
-          BODY=$(jq -nc '{storeUrl:"most-wanted-ca.myshopify.com", game:"pokemon", title:"Gengar & Mimikyu", limit:25, offset:0, instockOnly:false}')
-          curl -sS --max-time 30 -H 'content-type: application/json' -A 'Mozilla/5.0' \
-            -H 'origin: https://exorgames.com' -X POST "$B/products/forStore" --data "$BODY" -o /tmp/gm.json || true
-          jq -r '.products[]? | .title as $t | .variants[]? | [$t[0:60], .title, (.price//"-"), (.cashBuyPercent//"null"), (.creditBuyPercent//"null")] | @tsv' /tmp/gm.json || head -c 400 /tmp/gm.json
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+          echo "== LIVE /pages/deck-builder (no preview param) =="
+          curl -sSL -A "$UA" --max-time 30 "https://exorgames.com/pages/deck-builder" -o /tmp/page.html || true
+          echo "HTTP body bytes: $(wc -c < /tmp/page.html)"
+          echo "xg-deck div:        $(grep -c 'id="xg-deck"' /tmp/page.html || true)"
+          echo "deck-builder.js:    $(grep -c 'deck-builder.js' /tmp/page.html || true)"
+          echo "deck-builder.css:   $(grep -c 'deck-builder.css' /tmp/page.html || true)"
+          echo "page title present: $(grep -c 'Deck Builder' /tmp/page.html || true)"
           echo ""
-          echo "== CORS preflight of the feed endpoint (viability of a browser-side lookup) =="
-          curl -sS --max-time 20 -o /dev/null -D - -X OPTIONS "$B/products/forStore" \
-            -H 'origin: https://exorgames.com' \
-            -H 'access-control-request-method: POST' \
-            -H 'access-control-request-headers: content-type' | tr -d '\r' | grep -i -e '^HTTP' -e '^access-control' || true
-
-      - name: Worker path for the same card
-        run: |
-          W=https://exor-binder.nevski.workers.dev
-          echo "== /buyprice.json for the comparison card (worker-side feed lookup) =="
-          curl -sS --max-time 30 "$W/buyprice.json?name=Gengar%20%26%20Mimikyu%20GX%20(165%2F181)%20%5BSun%20%26%20Moon%3A%20Team%20Up%5D&type=Pokemon%20Single" | jq '{name, available, estimate, source, offers: (.offers | length), sample: .offers[0:3]}' || true
+          echo "== LIVE homepage nav source =="
+          curl -sSL -A "$UA" --max-time 30 "https://exorgames.com/" -o /tmp/home.html || true
+          echo "HTTP body bytes: $(wc -c < /tmp/home.html)"
+          echo "qikify/tmenu markers: $(grep -c -i 'tmenu\|qikify' /tmp/home.html || true)"
+          echo "'TCG - SPORTS' label: $(grep -c 'TCG - SPORTS' /tmp/home.html || true)"
+          echo "'BOARD GAMES' label:  $(grep -c 'BOARD GAMES' /tmp/home.html || true)"
+          echo "'DECK BUILDER' label: $(grep -c -i 'DECK BUILDER' /tmp/home.html || true)"
+          echo "deck-builder link:    $(grep -c '/pages/deck-builder' /tmp/home.html || true)"
+          echo ""
+          echo "== nav excerpt around first menu list =="
+          grep -o -i 'tmenu[^\"]*' /tmp/home.html | head -5 || true
