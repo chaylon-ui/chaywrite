@@ -1,11 +1,11 @@
 name: Reveal diagnose
 
-# Scratch diagnostics against the LIVE site (log-only). Current probe: A/B
-# the "Find next-cheapest versions" toggle in a real headless Chrome on the
-# live Deck Builder page. 4x Stardust Dragon (Yu-Gi-Oh) is the fixture: the
-# store's ladder is 3x NM Limited $2.50 + 1x LP $4.50 + deeper copies, so
-# toggle ON should fill 4 across two rows while OFF (single cheapest
-# version) fills 3 and shows the warm "3 of 4 available" remainder row.
+# Scratch diagnostics against the LIVE site (log-only). Current probe: the
+# per-line tick boxes + version picker in a real headless Chrome. Fixture:
+# "4 Command Tower / 2 Sol Ring" (MTG) — Command Tower exists in several
+# printings (the $5 Secret Lair flavor copy cheapest), so its row must carry
+# a picker with the cheapest selected; switching to option 2 must re-price
+# the row; unticking Sol Ring must dim its row and shrink the add count.
 
 on:
   workflow_dispatch:
@@ -17,10 +17,11 @@ jobs:
     steps:
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22 2>&1 | tail -1
-      - name: Deck Builder toggle A/B (real Chrome, live page)
+      - name: Deck Builder ticks + version picker (real Chrome, live page)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
+          const price = s => { const m = /\$([0-9.]+)/.exec(String(s)); return m ? parseFloat(m[1]) : NaN; };
           (async () => {
             const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
             const p = await b.newPage();
@@ -30,42 +31,44 @@ jobs:
             p.on('requestfailed', r => { if (r.url().indexOf('exor-binder') > -1) errs.push('reqfail: ' + r.url() + ' ' + (r.failure() || {}).errorText); });
             await p.goto('https://exorgames.com/pages/deck-builder', { waitUntil: 'domcontentloaded', timeout: 60000 });
             await p.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            const toggle = await p.evaluate(() => {
-              const t = document.getElementById('xg-deck-nextcheap');
-              return t ? { present: true, checked: t.checked, label: (t.closest('label') || {}).innerText || '' } : { present: false };
+            await p.type('#xg-deck-input', '4 Command Tower\n2 Sol Ring');
+            await p.evaluate(() => document.getElementById('xg-deck-go').click());
+            await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
+            const read = () => p.evaluate(() => {
+              const btn = document.querySelector('.xg-deck__btn--add');
+              const ver = document.querySelector('.xg-deck__ver[data-i="0"]');
+              const firstUnit = document.querySelector('.xg-deck__row .xg-deck__unit');
+              return {
+                master: (() => { const m = document.getElementById('xg-deck-checkall'); return m ? { present: true, checked: m.checked } : { present: false }; })(),
+                pickboxes: Array.from(document.querySelectorAll('.xg-deck__pickbox')).map(x => x.getAttribute('data-i') + ':' + x.checked),
+                ver: ver ? { present: true, options: ver.options.length, selectedIndex: ver.selectedIndex, opt0: ver.options[0].text, opt1: ver.options[1] ? ver.options[1].text : null, selText: ver.options[ver.selectedIndex].text } : { present: false },
+                firstUnit: firstUnit ? firstUnit.textContent : null,
+                addButton: btn ? btn.innerText.replace(/\s+/g, ' ') : null,
+                offRows: document.querySelectorAll('.xg-deck__row--off').length,
+                subtotal: (document.querySelector('.xg-deck__subtotal') || {}).innerText || null,
+                rows: Array.from(document.querySelectorAll('.xg-deck__row')).map(el => el.innerText.replace(/\s+/g, ' ').trim().slice(0, 110))
+              };
             });
-            console.log('TOGGLE: ' + JSON.stringify(toggle));
-            async function submitAndRead(label) {
-              await p.evaluate(() => document.getElementById('xg-deck-go').click());
-              await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
-              const r = await p.evaluate(() => {
-                const cs = (el, prop) => el ? getComputedStyle(el).getPropertyValue(prop) : null;
-                const short = document.querySelector('.xg-deck__stat--short .xg-deck__pill');
-                return {
-                  rows: Array.from(document.querySelectorAll('.xg-deck__row')).map(el =>
-                    el.innerText.replace(/\s+/g, ' ').trim().slice(0, 120)),
-                  greenRows: document.querySelectorAll('.xg-deck__stat--ok').length,
-                  shortPill: short ? short.textContent.trim() + ' bg=' + cs(short, 'background-color') + ' fg=' + cs(short, 'color') : null,
-                  shortName: (document.querySelector('.xg-deck__row--short .xg-deck__name') || {}) .textContent || null,
-                  shortNameColor: cs(document.querySelector('.xg-deck__row--short .xg-deck__name'), 'color'),
-                  summary: (document.querySelector('.xg-deck__sumhead') || {}).innerText || null,
-                  addButton: (document.querySelector('.xg-deck__btn--add') || {}).innerText || null
-                };
-              });
-              console.log(label + ': ' + JSON.stringify(r, null, 1));
-              return r;
-            }
-            await p.select('#xg-deck-game', 'yugioh');
-            await p.type('#xg-deck-input', '4 Stardust Dragon');
-            const on = await submitAndRead('TOGGLE ON');
-            await p.evaluate(() => { document.getElementById('xg-deck-results').innerHTML = ''; document.getElementById('xg-deck-nextcheap').checked = false; });
-            const off = await submitAndRead('TOGGLE OFF');
+            const s1 = await read();
+            console.log('INITIAL: ' + JSON.stringify(s1, null, 1));
+            await p.select('.xg-deck__ver[data-i="0"]', '1');
+            const s2 = await read();
+            console.log('AFTER VERSION PICK (option 2): ' + JSON.stringify(s2, null, 1));
+            await p.evaluate(() => document.querySelector('.xg-deck__pickbox[data-i="1"]').click());
+            const s3 = await read();
+            console.log('AFTER UNTICK SOL RING: ' + JSON.stringify(s3, null, 1));
             console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
             await b.close();
-            const ok = !!(toggle.present && toggle.checked &&
-              on.greenRows >= 2 && !on.shortPill &&
-              off.greenRows === 1 && off.shortPill && off.shortPill.indexOf('available') > -1 &&
-              off.shortPill.indexOf('bg=rgb(255, 244, 221)') > -1);
+            const count = t => { const m = /\((\d+)\)/.exec(String(t)); return m ? +m[1] : NaN; };
+            const ok = !!(s1.master.present && s1.master.checked &&
+              s1.pickboxes.length === 2 && s1.pickboxes.every(x => x.indexOf(':true') > -1) &&
+              s1.ver.present && s1.ver.options > 1 && s1.ver.selectedIndex === 0 &&
+              price(s1.ver.opt0) <= price(s1.ver.opt1) &&
+              Math.abs(price(s1.firstUnit) - price(s1.ver.opt0)) < 0.005 &&
+              s2.ver.selectedIndex === 1 &&
+              Math.abs(price(s2.firstUnit) - price(s2.ver.opt1)) < 0.005 &&
+              s3.offRows >= 1 && !s3.master.checked &&
+              count(s3.addButton) === count(s2.addButton) - 2);
             console.log(ok ? 'VERDICT: PASS' : 'VERDICT: FAIL');
           })().catch(e => { console.log('probe error: ' + e.message); });
           EOF
