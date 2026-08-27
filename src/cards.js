@@ -1051,9 +1051,12 @@ async function findAtSisters(name, game) {
       clearTimeout(t);
       if (!r.ok) return null;
       const hits = (((await r.json()) || {}).resources?.results?.products) || [];
+      // Name-match on the suggest hit only — suggest.json exposes the
+      // product type inconsistently (`type`, when at all), so the GAME
+      // check waits for hydration: /products/<handle>.js always carries
+      // `type` authoritatively.
       const matches = hits.filter((h) => h && h.title && h.handle && h.available !== false
-        && baseName(h.title).toLowerCase() === want
-        && gmatch.test(String(h.product_type || "")));
+        && baseName(h.title).toLowerCase() === want);
       let best = null;
       for (const h of matches.slice(0, 2)) {   // hydrate at most 2 printings per store
         try {
@@ -1063,6 +1066,7 @@ async function findAtSisters(name, game) {
           clearTimeout(t2);
           if (!pr.ok) continue;
           const p = await pr.json();
+          if (!gmatch.test(String(p.type || ""))) continue;
           for (const v of (p.variants || [])) {
             if (!v.available || !(v.price > 0) || v.price / 100 >= 99999) continue;
             if (!best || v.price < best.cents) {
