@@ -364,7 +364,7 @@ export async function serveSearch(request, env) {
 /* Full-catalogue title search through the Admin API (up to 40 products). */
 async function adminSearch(q, env, ptq = "", pages = 2) {
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
-  const safe = q.replace(/[*"\\()]/g, " ").trim();
+  const safe = q.replace(/[*"\\():]/g, " ").trim();
   if (!safe) return null;
   // Two pages of 40 (the per-query cost stays at the long-proven level) so a
   // deep name like "charizard" surfaces the EXs and GXs, not just page one.
@@ -699,6 +699,39 @@ async function mapLimit(items, limit, fn) {
    decklist never trips the exorgames.com /search rate-limit rule. Names are
    |-separated, de-duplicated, capped at 60/call (the front end batches larger
    decks). Results preserve input order: {q, found:true, ...card} | {q, found:false}. */
+/* ---- Deck gate: a small proof-of-work before every /deck.json ----
+   The deck endpoint bulk-reads stock, which makes it the natural target for
+   scrapers mapping the catalogue. Each lookup must present a nonce whose
+   SHA-256 over (per-IP seed : exact names string : nonce) starts with
+   GATE_BITS zero bits. A browser solves it in a fraction of a second; a
+   scraper pays that CPU for EVERY distinct query, and seeds expire with
+   their 10-minute bucket. No accounts, no third parties, no state. */
+const GATE_BITS = 13;
+const GATE_BUCKET_MS = 600000;
+
+async function gateSeed(env, ip, bucket) {
+  const raw = "deck-gate|" + ((env && env.SHOPIFY_ADMIN_TOKEN) || "exor-public-pepper");
+  const km = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
+  const key = await crypto.subtle.importKey("raw", km, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip + "|" + bucket));
+  return [...new Uint8Array(sig).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function gateLeadZeros(bytes, bits) {
+  const full = bits >> 3, rem = bits & 7;
+  for (let i = 0; i < full; i++) if (bytes[i] !== 0) return false;
+  return rem === 0 || (bytes[full] >> (8 - rem)) === 0;
+}
+
+export async function serveDeckGate(request, env) {
+  const ip = request.headers.get("cf-connecting-ip") || "";
+  const bucket = Math.floor(Date.now() / GATE_BUCKET_MS);
+  const seed = await gateSeed(env, ip, bucket);
+  return Response.json({ bucket, seed, bits: GATE_BITS }, {
+    headers: { "access-control-allow-origin": "*", "cache-control": "no-store" },
+  });
+}
+
 export async function serveDeck(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
@@ -711,6 +744,28 @@ export async function serveDeck(request, env, ctx) {
   const game = String(url.searchParams.get("game") || "mtg").toLowerCase().slice(0, 16);
   const out = { count: 0, found: 0, game, results: [] };
   if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
+
+  // Verify the proof-of-work before any lookup or cache read. The hash is
+  // bound to the caller's IP-derived seed, the current (or previous) 10-min
+  // bucket, and the EXACT names string — a replayed nonce only ever re-buys
+  // the same answer, and a new probe always costs fresh work.
+  {
+    const pb = parseInt(url.searchParams.get("pb") || "", 10);
+    const pn = String(url.searchParams.get("pn") || "").slice(0, 20);
+    const bucketNow = Math.floor(Date.now() / GATE_BUCKET_MS);
+    let gateOk = false;
+    if (pn && Number.isFinite(pb) && (pb === bucketNow || pb === bucketNow - 1)) {
+      const ip = request.headers.get("cf-connecting-ip") || "";
+      const seed = await gateSeed(env, ip, pb);
+      const namesRaw = String(url.searchParams.get("names") || "").toLowerCase();
+      const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed + ":" + namesRaw + ":" + pn)));
+      gateOk = gateLeadZeros(h, GATE_BITS);
+    }
+    if (!gateOk) {
+      return Response.json({ error: "verification required", gate: "/deck-gate" }, { status: 403, headers: { ...cors, "cache-control": "no-store" } });
+    }
+  }
+
   const cache = caches.default;
   const cacheKey = new Request(new URL("/deck.json?g=" + encodeURIComponent(game) + "&n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
@@ -739,14 +794,17 @@ export async function serveDeck(request, env, ctx) {
   return res;
 }
 
-/* Card name minus its trailing set/printing decorations — the shared key both
-   sides of the match normalise to. Strips a trailing "[Set]" and "(...)" groups
-   (collector numbers "(5/18)", "(Extended Art)", "(Surge Foil)"), repeatedly,
-   so "Charizard (5/18) [Detective Pikachu]" and "Command Tower [Any Set]" both
-   reduce to the bare card name. */
+/* Card name minus its set/printing decorations — the shared key both sides
+   of the match normalise to. Cuts at the FIRST "[": set codes sit mid-title
+   on Yu-Gi-Oh products with the rarity/edition AFTER them ("Stardust Dragon
+   [DUPO-EN103] Ultra Rare"), which trailing-only stripping never reduced.
+   Then strips trailing "(...)" groups (Pokemon collector numbers "(5/18)",
+   MTG "(Extended Art)"/"(Surge Foil)") repeatedly, so "Charizard (5/18)
+   [Detective Pikachu]" and "Command Tower [Any Set]" reduce to the bare
+   card name too. Strictly widens the old trailing-only behaviour. */
 function baseName(title) {
-  let s = String(title || "").trim(), prev;
-  do { prev = s; s = s.replace(/\s*(\[[^\]]*\]|\([^)]*\))\s*$/, "").trim(); } while (s !== prev);
+  let s = String(title || "").split("[")[0].trim(), prev;
+  do { prev = s; s = s.replace(/\s*\([^)]*\)\s*$/, "").trim(); } while (s !== prev);
   return s;
 }
 

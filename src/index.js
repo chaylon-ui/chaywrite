@@ -1,5 +1,5 @@
 import { BinderRoom } from "./room.js";
-import { serveCards, serveSearch, serveInstock, serveDeck, serveBuyPrice, serveSimilar, serveSisters, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
+import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 
 export { BinderRoom };
 
@@ -71,6 +71,12 @@ export default {
 
     if (url.pathname === "/deck.json") {
       return serveDeck(request, env, ctx);
+    }
+
+    // Issues the proof-of-work seed the Deck Builder must solve before each
+    // /deck.json call (anti-scrape gate; see serveDeckGate in cards.js).
+    if (url.pathname === "/deck-gate") {
+      return serveDeckGate(request, env);
     }
 
     if (url.pathname === "/buyprice.json") {

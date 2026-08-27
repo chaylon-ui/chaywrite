@@ -90,15 +90,29 @@ jobs:
           echo "=== /instock.json max=8 over hand-picked ritual names ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/instock.json?names=Desperate%20Ritual|Seething%20Song|Rite%20of%20Flame|Mana%20Geyser|Battle%20Hymn|Inner%20Fire|Irencrag%20Feat|Pyretic%20Ritual&max=8" | head -c 1500 || true
           printf '\n'
-          echo "=== /deck.json MTG staples (cheapest across ALL printings; Command Tower should be the cheap one now) ==="
-          curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=mtg&names=Sol%20Ring|Counterspell|Lightning%20Bolt|Command%20Tower|Arcane%20Signet|Cultivate" | head -c 3000 || true
-          printf '\n'
-          echo "=== /deck.json game=pokemon (multi-game; names normalise past the (5/18) collector numbers) ==="
-          curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=pokemon&names=Charizard|Snorlax|Gengar" | head -c 1800 || true
-          printf '\n'
-          echo "=== /deck.json sister fallback (a local miss should carry sister:{store,price,url}; Humility was last seen at New Glasgow) ==="
-          curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/deck.json?game=mtg&names=Humility|Timetwister" | head -c 1800 || true
-          printf '\n'
+          echo "=== /deck.json without proof-of-work (expect 403 verification required) ==="
+          curl -sS -o /dev/null -w 'no-pow deck.json: HTTP %{http_code}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck.json?game=mtg&names=Sol%20Ring" || true
+          echo "=== /deck.json probes (gate-solved: staples, pokemon, YGO title fix, sister fallback) ==="
+          node <<'EOF'
+          const crypto = require('crypto');
+          const W = 'https://exor-binder.nevski.workers.dev';
+          function lead(b, bits) { const f = bits >> 3, r = bits & 7; for (let i = 0; i < f; i++) if (b[i] !== 0) return false; return r === 0 || (b[f] >> (8 - r)) === 0; }
+          async function deck(game, names) {
+            const g = await (await fetch(W + '/deck-gate')).json();
+            const prefix = g.seed + ':' + names.toLowerCase() + ':';
+            let n = 0;
+            for (;;) { const h = crypto.createHash('sha256').update(prefix + n).digest(); if (lead(h, g.bits)) break; n++; }
+            const r = await fetch(W + '/deck.json?game=' + game + '&names=' + encodeURIComponent(names) + '&pb=' + g.bucket + '&pn=' + n);
+            console.log('--- ' + game + ' :: ' + names.slice(0, 70) + ' -> HTTP ' + r.status + ' (nonce ' + n + ')');
+            console.log((await r.text()).slice(0, 1700));
+          }
+          (async () => {
+            await deck('mtg', 'Sol Ring|Counterspell|Lightning Bolt|Command Tower|Arcane Signet|Cultivate');
+            await deck('pokemon', 'Charizard|Snorlax|Gengar');
+            await deck('yugioh', 'Stardust Dragon|Ash Blossom & Joyous Spring|Blue-Eyes White Dragon');
+            await deck('mtg', 'Humility|Timetwister');
+          })().catch(e => console.log('deck probe error:', e.message));
+          EOF
           echo "=== deck-builder assets (theme shell loads these; expect 200 + js/css content-type) ==="
           curl -sS -o /dev/null -w 'deck-builder.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.js" || true
           curl -sS -o /dev/null -w 'deck-builder.css: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.css" || true

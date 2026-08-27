@@ -55,7 +55,7 @@
         '</select>' +
       '</div>' +
       '<label class="xg-deck__label" for="xg-deck-input">Your decklist</label>' +
-      '<textarea id="xg-deck-input" class="xg-deck__input" rows="10" spellcheck="false"></textarea>' +
+      '<textarea id="xg-deck-input" class="xg-deck__input" rows="10" maxlength="12000" spellcheck="false"></textarea>' +
       '<div class="xg-deck__actions">' +
         '<button type="submit" class="xg-deck__btn xg-deck__btn--go" id="xg-deck-go">' + esc(GOLABEL) + '</button>' +
         '<button type="button" class="xg-deck__btn xg-deck__btn--ghost" id="xg-deck-clear" hidden>Clear</button>' +
@@ -75,7 +75,14 @@
   var SKIP = /^(deck|sideboard|side board|commander|companion|maybeboard|maybe board|tokens?|lands?|creatures?|spells?|artifacts?|enchantments?|planeswalkers?|instants?|sorceries)\s*:?\s*(\(\d+\))?\s*$/i;
 
   function parseDeck(text) {
-    var lines = String(text || '').split(/\r?\n/);
+    // Pasted text is treated as card NAMES only: control characters are
+    // dropped, lists cap at 200 lines, and every string that reaches the
+    // page again goes through esc() — nothing pasted is ever executed or
+    // rendered raw.
+    var lines = String(text || '')
+      .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+      .split(/\r?\n/)
+      .slice(0, 200);
     var order = [], index = Object.create(null);
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
@@ -100,7 +107,44 @@
       if (index[key]) { index[key].qty += qty; }
       else { var e = { qty: qty, name: name }; index[key] = e; order.push(e); }
     }
-    return order.slice(0, 120);
+    return order.slice(0, 200);
+  }
+
+  /* Anti-scrape gate: /deck.json only answers when the request carries a
+     small proof-of-work — a nonce whose SHA-256 over (per-IP seed : exact
+     names string : nonce) starts with `bits` zero bits. A shopper's browser
+     solves it in a fraction of a second per batch; a bot mapping the
+     catalogue pays that CPU for every distinct probe, and seeds expire
+     every 10 minutes. */
+  function gateHash(str) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  }
+  function gateLeadZeros(bytes, bits) {
+    var full = bits >> 3, rem = bits & 7;
+    for (var i = 0; i < full; i++) if (bytes[i] !== 0) return false;
+    return rem === 0 || (bytes[full] >> (8 - rem)) === 0;
+  }
+  function fetchGate() {
+    return fetch(W + '/deck-gate').then(function (r) { return r.ok ? r.json() : null; });
+  }
+  function solveGate(gate, namesStr) {
+    var prefix = gate.seed + ':' + namesStr.toLowerCase() + ':';
+    var n = 0;
+    function round() {
+      var xs = [];
+      for (var i = 0; i < 64; i++) xs.push(n + i);
+      n += 64;
+      return Promise.all(xs.map(function (x) {
+        return gateHash(prefix + x).then(function (buf) {
+          return gateLeadZeros(new Uint8Array(buf), gate.bits) ? x : null;
+        });
+      })).then(function (rs) {
+        for (var i = 0; i < rs.length; i++) if (rs[i] !== null) return rs[i];
+        if (n > 4000000) throw new Error('gate exhausted');
+        return round();
+      });
+    }
+    return round();
   }
 
   function runLimited(items, limit, fn) {
@@ -125,12 +169,21 @@
   function resolveNames(names, game) {
     var map = Object.create(null);
     var batches = chunk(names, 30);
-    return runLimited(batches, 2, function (b) {
-      return fetch(W + '/deck.json?game=' + encodeURIComponent(game || 'mtg') + '&names=' + encodeURIComponent(b.join('|')))
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) {
-          if (d && d.results) d.results.forEach(function (x) { if (x && x.q) map[String(x.q).toLowerCase()] = x; });
-        });
+    // One gate seed per submit (it's bound to IP + 10-min window), one
+    // solved nonce per batch (each is bound to that batch's exact names).
+    return fetchGate().then(function (gate) {
+      if (!gate || !gate.seed) throw new Error('gate unavailable');
+      return runLimited(batches, 2, function (b) {
+        var namesStr = b.join('|');
+        return solveGate(gate, namesStr).then(function (nonce) {
+          return fetch(W + '/deck.json?game=' + encodeURIComponent(game || 'mtg') +
+            '&names=' + encodeURIComponent(namesStr) +
+            '&pb=' + encodeURIComponent(gate.bucket) + '&pn=' + encodeURIComponent(nonce));
+        }).then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) {
+            if (d && d.results) d.results.forEach(function (x) { if (x && x.q) map[String(x.q).toLowerCase()] = x; });
+          });
+      });
     }).then(function () { return map; });
   }
 
@@ -274,7 +327,7 @@
       out.innerHTML = '<p class="xg-deck__none">Paste a decklist above — one card per line, quantities optional.</p>';
       return;
     }
-    go.disabled = true; go.textContent = 'Checking stock…';
+    go.disabled = true; go.textContent = 'Verifying…';
     out.innerHTML = '<div class="xg-deck__loading">Checking ' + lines.length + ' cards against live stock…</div>';
     var game = gameSel ? gameSel.value : DEFAULT_GAME;
     resolveNames(lines.map(function (l) { return l.name; }), game).then(function (map) {
