@@ -81,6 +81,19 @@ jobs:
               };
             });
             console.log('RESTYLE CHECK: ' + JSON.stringify(r, null, 1));
+            // Click "Add in-stock cards to cart" and read the resulting cart:
+            // it must hold EXACTLY the shelf count (2 Solitudes), even after
+            // a second run against a cart that already holds them. Headless
+            // session cart, discarded with the browser — no order, no reserve.
+            let cartCheck = null;
+            try {
+              await p.evaluate(() => document.getElementById('xg-deck-add').click());
+              await p.waitForFunction(() => location.pathname === '/cart', { timeout: 30000 });
+              cartCheck = await p.evaluate(() =>
+                fetch('/cart.js', { headers: { Accept: 'application/json' } }).then(r => r.json())
+                  .then(c => c.items.map(i => i.quantity + 'x ' + i.title + ' (v' + i.variant_id + ')')));
+            } catch (e) { cartCheck = ['cart check error: ' + e.message]; }
+            console.log('CART AFTER ADD: ' + JSON.stringify(cartCheck));
             console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
             await b.close();
             const ok = !!(r.headers && /qty/i.test(r.headers) && /availability/i.test(r.headers) &&
