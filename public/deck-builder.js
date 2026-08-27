@@ -135,7 +135,7 @@
   }
 
   function render(lines, map) {
-    var inStock = 0, totalCards = 0, subtotal = 0, addItems = [], missNames = [];
+    var inStock = 0, atSisters = 0, totalCards = 0, subtotal = 0, addItems = [], missNames = [];
     var rows = lines.map(function (ln) {
       totalCards += ln.qty;
       var r = map[ln.name.toLowerCase()];
@@ -160,6 +160,26 @@
           '<td class="xg-deck__stat xg-deck__stat--ok">In stock</td>' +
         '</tr>';
       }
+      var s = r && r.sister;
+      if (s) {
+        // In stock at another Exor Games location — separate store, separate
+        // cart, so this row links out and never joins the add-to-cart batch.
+        atSisters++;
+        var smeta = [s.set, s.foil ? 'Foil' : '', s.condition].filter(Boolean).join(' · ');
+        return '<tr class="xg-deck__row xg-deck__row--sister">' +
+          '<td class="xg-deck__qty">' + ln.qty + '&times;</td>' +
+          '<td class="xg-deck__card">' +
+            '<a class="xg-deck__cardlink" href="' + esc(s.url) + '" target="_blank" rel="noopener">' +
+              (s.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(s.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
+              '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(s.name) + '</span>' +
+              (smeta ? '<span class="xg-deck__meta">' + esc(smeta) + '</span>' : '') + '</span>' +
+            '</a>' +
+          '</td>' +
+          '<td class="xg-deck__unit">' + money(parseFloat(s.price) || 0) + '</td>' +
+          '<td class="xg-deck__line">—</td>' +
+          '<td class="xg-deck__stat xg-deck__stat--sister"><a href="' + esc(s.url) + '" target="_blank" rel="noopener">At Exor ' + esc(s.store) + ' ›</a></td>' +
+        '</tr>';
+      }
       missNames.push(ln.name);
       return '<tr class="xg-deck__row xg-deck__row--miss">' +
         '<td class="xg-deck__qty">' + ln.qty + '&times;</td>' +
@@ -177,6 +197,7 @@
         '<div class="xg-deck__sumbar"><span style="width:' + pct + '%"></span></div>' +
         '<div class="xg-deck__sumnums">' +
           '<span>' + totalCards + ' cards total</span>' +
+          (atSisters ? '<span class="xg-deck__sisternote">' + atSisters + ' more at other Exor Games stores</span>' : '') +
           '<span class="xg-deck__subtotal">In-stock subtotal <strong>' + money(subtotal) + '</strong></span>' +
         '</div>' +
       '</div>';
@@ -193,10 +214,15 @@
         '</ul></details>'
       : '';
 
+    var sisterHelp = atSisters
+      ? '<p class="xg-deck__sisterhelp">Cards marked &ldquo;At Exor &hellip;&rdquo; are in stock at another Exor Games location &mdash; the link opens that store&rsquo;s site, with its own cart and checkout.</p>'
+      : '';
+
     out.innerHTML =
       summary +
       '<div class="xg-deck__addrow">' + addButton('xg-deck-add') + '</div>' +
       '<div class="xg-deck__tablewrap"><table class="xg-deck__table"><thead><tr><th></th><th>Card</th><th>Unit</th><th>Line</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      sisterHelp +
       missBlock +
       '<div class="xg-deck__addrow xg-deck__addrow--bottom">' + addButton('xg-deck-add2') + '</div>';
 

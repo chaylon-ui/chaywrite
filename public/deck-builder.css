@@ -91,3 +91,12 @@
   .xg-deck__btn, .xg-deck__sumbar span { transition: none; }
   .xg-deck__loading::before { animation: none; }
 }
+
+/* Sister-store rows: in stock at another Exor Games location. Amber, not
+   green — visually distinct from local stock, and the row links out to that
+   store's own site (separate cart), so it never blends into the add-all. */
+.xg-deck__row--sister { background: #fff9ef; }
+.xg-deck__stat--sister a { color: #b07514; font-weight: 700; text-decoration: none; }
+.xg-deck__stat--sister a:hover { text-decoration: underline; }
+.xg-deck__sisternote { color: #b07514; font-weight: 600; }
+.xg-deck__sisterhelp { margin: 10px 0 0; font-family: var(--xg-font-body, "Inter", sans-serif); font-size: 12.5px; color: #8a9299; }

@@ -716,9 +716,20 @@ export async function serveDeck(request, env, ctx) {
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
   const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
+  // Charlottetown stock always wins; a miss here falls through to the five
+  // sister Exor stores (separate Shopify stores — link-out only, their
+  // stock can't join this cart). Budgeted so a pathological all-miss list
+  // can't fan out into hundreds of cross-store fetches.
+  let sisterBudget = 18;
   const results = await mapLimit(names, 6, async (n) => {
     const card = await findInStock(n, headers, env, game);
-    return card ? { q: n, found: true, ...card } : { q: n, found: false };
+    if (card) return { q: n, found: true, ...card };
+    if (sisterBudget > 0) {
+      sisterBudget--;
+      const sister = await findAtSisters(n, game).catch(() => null);
+      if (sister) return { q: n, found: false, sister };
+    }
+    return { q: n, found: false };
   });
   out.results = results;
   out.count = results.length;
@@ -1017,6 +1028,73 @@ const SISTERS = [
 const SISTERS_TTL_S = 300;   // sister stock drifts; keep the window short
 const SISTERS_PER_STORE = 5;
 const SISTERS_MAX = 12;
+
+/* Deck Builder fallback: when Charlottetown has no copy of a card, look for
+   it at the sister Exor stores. Same exact-name + game discipline as
+   findInStock — suggest per store, hydrate only exact matches, cheapest
+   AVAILABLE variant across all five stores wins. Sister stock is link-out
+   only (separate Shopify stores, separate carts), so the result carries the
+   store name and that store's product URL for the UI to label clearly. */
+async function findAtSisters(name, game) {
+  const gmatch = (GAMES[game] && GAMES[game].match) || /^mtg\b/i;
+  const want = baseName(name).toLowerCase();
+  const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
+  const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
+  const per = await Promise.all(SISTERS.map(async (s) => {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 3500);
+      const r = await fetch(
+        `${s.base}/search/suggest.json?q=${encodeURIComponent(name)}&resources[type]=product&resources[limit]=6&resources[options][unavailable_products]=hide&resources[options][fields]=title,product_type,variants.title`,
+        { headers, signal: ctrl.signal },
+      );
+      clearTimeout(t);
+      if (!r.ok) return null;
+      const hits = (((await r.json()) || {}).resources?.results?.products) || [];
+      const matches = hits.filter((h) => h && h.title && h.handle && h.available !== false
+        && baseName(h.title).toLowerCase() === want
+        && gmatch.test(String(h.product_type || "")));
+      let best = null;
+      for (const h of matches.slice(0, 2)) {   // hydrate at most 2 printings per store
+        try {
+          const c2 = new AbortController();
+          const t2 = setTimeout(() => c2.abort(), 3500);
+          const pr = await fetch(`${s.base}/products/${h.handle}.js`, { headers, signal: c2.signal });
+          clearTimeout(t2);
+          if (!pr.ok) continue;
+          const p = await pr.json();
+          for (const v of (p.variants || [])) {
+            if (!v.available || !(v.price > 0) || v.price / 100 >= 99999) continue;
+            if (!best || v.price < best.cents) {
+              best = {
+                cents: v.price,
+                title: String(h.title),
+                condition: condOf(String(v.title || ""), game),
+                foil: /foil/i.test(String(v.title || "")),
+                image: abs(h.image || (h.featured_image && h.featured_image.url) || (p.images && p.images[0]) || p.featured_image || null),
+                url: `${s.base}/products/${h.handle}`,
+              };
+            }
+          }
+        } catch { /* one bad hydration must not sink the store */ }
+      }
+      return best ? { store: s.store, ...best } : null;
+    } catch { return null; }
+  }));
+  let win = null;
+  for (const b of per) if (b && (!win || b.cents < win.cents)) win = b;
+  if (!win) return null;
+  return {
+    store: win.store,
+    name: baseName(win.title),
+    set: (win.title.match(/\[([^\]]+)\]/) || [, ""])[1] || "",
+    condition: win.condition || "",
+    foil: !!win.foil,
+    price: (win.cents / 100).toFixed(2),
+    image: win.image || null,
+    url: win.url,
+  };
+}
 
 export async function serveSisters(request, ctx) {
   const cors = { "access-control-allow-origin": "*" };
