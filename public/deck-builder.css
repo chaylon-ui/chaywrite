@@ -84,6 +84,8 @@
 #xg-deck .xg-deck__row:hover { background: #fafbfc; }
 
 /* Shared column widths (rows + header) */
+#xg-deck .xg-deck__pick, #xg-deck .xg-deck__h--pick { flex: 0 0 22px; }
+#xg-deck .xg-deck__pick input, #xg-deck .xg-deck__h--pick input { display: block; width: 16px; height: 16px; margin: 0; accent-color: var(--xg-accent, #d62c28); cursor: pointer; }
 #xg-deck .xg-deck__qty,  #xg-deck .xg-deck__h--qty  { flex: 0 0 42px; }
 #xg-deck .xg-deck__card, #xg-deck .xg-deck__h--card { flex: 1 1 auto; min-width: 0; }
 #xg-deck .xg-deck__unit, #xg-deck .xg-deck__h--unit { flex: 0 0 74px; text-align: right; }
@@ -97,6 +99,12 @@
 #xg-deck .xg-deck__name { font-size: 15px; line-height: 1.35; color: var(--xg-ink, #171b1d); font-weight: 600; }
 #xg-deck .xg-deck__cardlink:hover .xg-deck__name { color: var(--xg-accent, #d62c28); text-decoration: underline; }
 #xg-deck .xg-deck__meta { font-size: 12.5px; line-height: 1.35; color: #8a9299; margin-top: 2px; }
+/* Per-line version picker: cheapest pre-selected, pricier printings below.
+   Sits under the card name, outside the product link. */
+#xg-deck .xg-deck__ver { display: block; margin: 5px 0 2px 52px; max-width: 360px; font-family: inherit; font-size: 12.5px; color: var(--xg-text, #3d454b); background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #d7dbdf); border-radius: 7px; padding: 5px 8px; cursor: pointer; }
+#xg-deck .xg-deck__ver:focus { outline: none; border-color: var(--xg-accent, #d62c28); }
+/* An unticked line stays visible but clearly out of the cart batch. */
+#xg-deck .xg-deck__row--off > :not(.xg-deck__pick) { opacity: 0.45; }
 #xg-deck .xg-deck__unit { font-size: 14.5px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--xg-text, #3d454b); }
 #xg-deck .xg-deck__line { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; color: var(--xg-ink, #171b1d); }
 #xg-deck .xg-deck__stat { white-space: nowrap; font-size: 12.5px; }
@@ -130,9 +138,11 @@
 
 @media (max-width: 640px) {
   #xg-deck .xg-deck__hrow { display: none; }
-  #xg-deck .xg-deck__row { display: block; position: relative; padding: 12px 14px 12px 56px; }
-  #xg-deck .xg-deck__qty { position: absolute; left: 14px; top: 14px; }
+  #xg-deck .xg-deck__row { display: block; position: relative; padding: 12px 14px 12px 78px; }
+  #xg-deck .xg-deck__pick { position: absolute; left: 14px; top: 15px; }
+  #xg-deck .xg-deck__qty { position: absolute; left: 40px; top: 14px; }
   #xg-deck .xg-deck__card { display: block; margin-bottom: 6px; }
+  #xg-deck .xg-deck__ver { margin-left: 0; max-width: 100%; }
   #xg-deck .xg-deck__unit, #xg-deck .xg-deck__line, #xg-deck .xg-deck__stat { display: inline-block; text-align: left; margin-right: 16px; }
   #xg-deck .xg-deck__unit::before { content: "Unit "; color: #98a0a6; font-weight: 400; }
   #xg-deck .xg-deck__line::before { content: "Line "; color: #98a0a6; font-weight: 400; }

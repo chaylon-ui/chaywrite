@@ -30,7 +30,7 @@
   if (LOGO === 'none') LOGO = '';
   var INTRO = attr('data-intro', 'Pick your game, paste your decklist, and we’ll check it against everything in stock at Exor. Deck Builder will attempt to find the cheapest available printing, condition and price for each card. If we can’t find it at our Charlottetown location, we will look at inventory in other Exor Games locations.');
   var GOLABEL = attr('data-golabel', 'Find my deck');
-  var ADDALL = attr('data-addall', 'Add in-stock cards to cart');
+  var ADDALL = attr('data-addall', 'Add selected to cart');
   var FOOTNOTE = attr('data-footnote', 'We match the cheapest in-stock printing.');
   var PLACEHOLDER = attr('data-placeholder', '4 Lightning Bolt\n4 Counterspell\n2 Wrath of God\n1 Sol Ring\n9 Island\n...paste your whole list — quantities and set tags are fine');
   var GAMES = [
@@ -199,49 +199,103 @@
     }).then(function () { return map; });
   }
 
-  function render(lines, map) {
-    // "Find next-cheapest versions" toggle: ON fills a line across versions
-    // and conditions, cheapest first; OFF sticks to the single cheapest
-    // version (matching playsets), reporting whatever it can't cover.
+  // Results state: which lines are ticked for the cart and which version
+  // leads each line's fill. Fresh per search; every control repaints from it.
+  var state = null;
+
+  function nextCheapOn() {
     var ncEl = document.getElementById('xg-deck-nextcheap');
-    var nextCheap = !ncEl || ncEl.checked;
-    var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addItems = [], missNames = [];
-    var rows = lines.map(function (ln) {
+    return !ncEl || ncEl.checked;
+  }
+
+  // Fill one decklist line from the card's in-stock versions. The chosen
+  // version (cheapest by default; the row's picker can promote a pricier
+  // printing) leads; with the next-cheapest toggle on, the rest stay in the
+  // running, cheapest first, to cover whatever it can't.
+  function allocate(ln, r, selIdx, nextCheap) {
+    var offers = (r.offers && r.offers.length) ? r.offers : [{ variantId: r.variantId, qty: 99, price: r.price, condition: r.condition, foil: r.foil, set: r.set, name: r.name, image: r.image, url: r.url }];
+    var sel = Math.min(Math.max(selIdx || 0, 0), offers.length - 1);
+    var order = nextCheap ? [offers[sel]].concat(offers.filter(function (_, i) { return i !== sel; })) : [offers[sel]];
+    var remaining = ln.qty, chunks = [];
+    for (var oi = 0; oi < order.length && remaining > 0; oi++) {
+      var o = order[oi];
+      var avail = (typeof o.qty === 'number') ? o.qty : 99;
+      var take = Math.min(remaining, avail);
+      if (take > 0) { chunks.push({ o: o, take: take, stock: avail }); remaining -= take; }
+    }
+    return { offers: offers, sel: sel, chunks: chunks, filledQ: ln.qty - remaining, remaining: remaining };
+  }
+
+  // Cart payload from the CURRENT ticks and version picks (ticked lines only).
+  function collectItems() {
+    var items = [];
+    if (!state) return items;
+    state.lines.forEach(function (ln, li) {
+      if (state.checked[li] === false) return;
+      var r = state.map[ln.name.toLowerCase()];
+      if (!(r && r.found)) return;
+      allocate(ln, r, state.sel[li], nextCheapOn()).chunks.forEach(function (c) {
+        items.push({ id: c.o.variantId, quantity: c.take, stock: c.stock });
+      });
+    });
+    return items;
+  }
+
+  function render(lines, map) {
+    state = { lines: lines, map: map, sel: {}, checked: {} };
+    paint();
+  }
+
+  function paint() {
+    var lines = state.lines, map = state.map;
+    var nextCheap = nextCheapOn();
+    var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addQty = 0, fillable = 0, ticked = 0, missNames = [];
+    var rows = lines.map(function (ln, li) {
       totalCards += ln.qty;
       var r = map[ln.name.toLowerCase()];
       if (r && r.found) {
-        // Fill the requested quantity across the card's in-stock variants,
-        // cheapest first (worker sends per-condition/printing stock counts).
-        // 3 NM + 1 LP fills a 4; owning 2 of a wanted 4 adds the 2 and SAYS
-        // only 2 of 4 — the cart never gets more copies than the shelf has.
-        var offers = (r.offers && r.offers.length) ? r.offers : [{ variantId: r.variantId, qty: 99, price: r.price, condition: r.condition, foil: r.foil, set: r.set, name: r.name, image: r.image, url: r.url }];
-        if (!nextCheap) offers = offers.slice(0, 1);
-        var remaining = ln.qty, chunks = [];
-        for (var oi = 0; oi < offers.length && remaining > 0; oi++) {
-          var o = offers[oi];
-          var avail = (typeof o.qty === 'number') ? o.qty : 99;
-          var take = Math.min(remaining, avail);
-          if (take > 0) { chunks.push({ o: o, take: take, stock: avail }); remaining -= take; }
-        }
-        var filledQ = ln.qty - remaining;
+        // Fill the requested quantity across the card's in-stock variants
+        // (worker sends per-condition/printing stock counts). 3 NM + 1 LP
+        // fills a 4; owning 2 of a wanted 4 adds the 2 and says 2 of 4 —
+        // the cart never gets more copies than the shelf has.
+        var a = allocate(ln, r, state.sel[li], nextCheap);
+        var chunks = a.chunks, remaining = a.remaining, filledQ = a.filledQ;
+        var isOn = state.checked[li] !== false;
         if (filledQ > 0) {
           filledCards += filledQ;
+          fillable++; if (isOn) ticked++;
           if (remaining === 0) { inStock++; } else { partialLines++; shortQ += remaining; }
-          var html = chunks.map(function (c) {
+          var offClass = isOn ? '' : ' xg-deck__row--off';
+          var html = chunks.map(function (c, ci) {
             var o = c.o;
             var unit = parseFloat(o.price) || 0;
             var lineTotal = unit * c.take;
-            subtotal += lineTotal;
-            addItems.push({ id: o.variantId, quantity: c.take, stock: c.stock });
+            if (isOn) { subtotal += lineTotal; addQty += c.take; }
             var meta = [o.set, o.foil ? 'Foil' : '', o.condition].filter(Boolean).join(' · ');
-            return '<div class="xg-deck__row" role="row">' +
+            // The line's first row carries its tick and, when the card comes
+            // in several versions, the version picker — cheapest pre-selected,
+            // pricier printings selectable; picking one re-fills led by it.
+            var lead = ci === 0
+              ? '<span class="xg-deck__pick" role="cell"><input type="checkbox" class="xg-deck__pickbox" data-i="' + li + '"' + (isOn ? ' checked' : '') + ' aria-label="Include ' + esc(o.name || r.name) + '"></span>'
+              : '<span class="xg-deck__pick" role="cell"></span>';
+            var picker = '';
+            if (ci === 0 && a.offers.length > 1) {
+              picker = '<select class="xg-deck__ver" data-i="' + li + '" aria-label="Version of ' + esc(o.name || r.name) + '">' +
+                a.offers.map(function (v, vi) {
+                  var vlabel = [v.set, v.foil ? 'Foil' : '', v.condition].filter(Boolean).join(' · ') || 'Standard';
+                  var vqty = (typeof v.qty === 'number' && v.qty < 99) ? ' · ' + v.qty + ' in stock' : '';
+                  return '<option value="' + vi + '"' + (vi === a.sel ? ' selected' : '') + '>' + esc(vlabel + ' — $' + (parseFloat(v.price) || 0).toFixed(2) + vqty) + '</option>';
+                }).join('') + '</select>';
+            }
+            return '<div class="xg-deck__row' + offClass + '" role="row">' +
+              lead +
               '<span class="xg-deck__qty" role="cell">' + c.take + '&times;</span>' +
               '<span class="xg-deck__card" role="cell">' +
                 '<a class="xg-deck__cardlink" href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
                   (o.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(o.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
                   '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(o.name || r.name) + '</span>' +
-                  (meta ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
-                '</a>' +
+                  ((meta && !picker) ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
+                '</a>' + picker +
               '</span>' +
               '<span class="xg-deck__unit" role="cell">' + money(unit) + '</span>' +
               '<span class="xg-deck__line" role="cell">' + money(lineTotal) + '</span>' +
@@ -252,7 +306,8 @@
             // Positive framing on purpose: the copies we DO have are in the
             // rows above and ride along with Add to cart — this row only
             // accounts for the remainder.
-            html += '<div class="xg-deck__row xg-deck__row--short" role="row">' +
+            html += '<div class="xg-deck__row xg-deck__row--short' + offClass + '" role="row">' +
+              '<span class="xg-deck__pick" role="cell"></span>' +
               '<span class="xg-deck__qty" role="cell">' + remaining + '&times;</span>' +
               '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(chunks[0].o.name || r.name || ln.name) + '</span>' +
                 '<span class="xg-deck__meta">' + filledQ + ' of your ' + ln.qty + ' are in stock above and ready to add &mdash; ' + remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now</span></span></span>' +
@@ -273,6 +328,7 @@
         atSisters++;
         var smeta = [s.set, s.foil ? 'Foil' : '', s.condition].filter(Boolean).join(' · ');
         return '<div class="xg-deck__row xg-deck__row--sister" role="row">' +
+          '<span class="xg-deck__pick" role="cell"></span>' +
           '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
           '<span class="xg-deck__card" role="cell">' +
             '<a class="xg-deck__cardlink" href="' + esc(s.url) + '" target="_blank" rel="noopener">' +
@@ -288,6 +344,7 @@
       }
       missNames.push(ln.name);
       return '<div class="xg-deck__row xg-deck__row--miss" role="row">' +
+        '<span class="xg-deck__pick" role="cell"></span>' +
         '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
         '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(ln.name) + '</span></span></span>' +
         '<span class="xg-deck__unit" role="cell">&mdash;</span>' +
@@ -307,16 +364,13 @@
           '<span>' + lines.length + ' different cards</span>' +
           (shortQ ? '<span class="xg-deck__shortnote">' + shortQ + (shortQ === 1 ? ' copy' : ' copies') + ' not in stock</span>' : '') +
           (atSisters ? '<span class="xg-deck__sisternote">' + atSisters + ' more at other Exor Games stores</span>' : '') +
-          '<span class="xg-deck__subtotal">In-stock subtotal <strong>' + money(subtotal) + '</strong></span>' +
+          '<span class="xg-deck__subtotal">Selected subtotal <strong>' + money(subtotal) + '</strong></span>' +
         '</div>' +
       '</div>';
 
-    var addQty = 0;
-    addItems.forEach(function (it) { addQty += it.quantity; });
     function addButton(id) {
-      return addItems.length
-        ? '<button type="button" class="xg-deck__btn xg-deck__btn--add" id="' + id + '">' + esc(ADDALL) + ' <span class="xg-deck__dim">(' + addQty + ')</span></button>'
-        : '<p class="xg-deck__none">None of these are in stock right now.</p>';
+      if (!fillable) return '<p class="xg-deck__none">None of these are in stock right now.</p>';
+      return '<button type="button" class="xg-deck__btn xg-deck__btn--add" id="' + id + '"' + (addQty ? '' : ' disabled') + '>' + esc(ADDALL) + ' <span class="xg-deck__dim">(' + addQty + ')</span></button>';
     }
 
     var missBlock = missNames.length
@@ -337,6 +391,7 @@
       // cell borders, table-layout, small text) would crush the markup.
       '<div class="xg-deck__listwrap" role="table" aria-label="Deck availability">' +
         '<div class="xg-deck__hrow" role="row">' +
+          '<span class="xg-deck__h xg-deck__h--pick" role="columnheader"><input type="checkbox" id="xg-deck-checkall"' + (fillable && ticked === fillable ? ' checked' : '') + (fillable ? '' : ' disabled') + ' aria-label="Select all cards"></span>' +
           '<span class="xg-deck__h xg-deck__h--qty" role="columnheader">Qty</span>' +
           '<span class="xg-deck__h xg-deck__h--card" role="columnheader">Card</span>' +
           '<span class="xg-deck__h xg-deck__h--unit" role="columnheader">Unit</span>' +
@@ -349,10 +404,29 @@
 
     ['xg-deck-add', 'xg-deck-add2'].forEach(function (id) {
       var b = document.getElementById(id);
-      if (b) b.addEventListener('click', function () { addToCart(addItems); });
+      if (b) b.addEventListener('click', function () { addToCart(collectItems()); });
     });
     clearBtn.hidden = false;
   }
+
+  // One delegated listener drives the per-line ticks, the select-all box and
+  // the version pickers across repaints; flipping the next-cheapest toggle
+  // re-fills the current results instantly too.
+  out.addEventListener('change', function (e) {
+    if (!state) return;
+    var t = e.target;
+    if (t.classList && t.classList.contains('xg-deck__pickbox')) { state.checked[t.getAttribute('data-i')] = t.checked; paint(); }
+    else if (t.classList && t.classList.contains('xg-deck__ver')) { state.sel[t.getAttribute('data-i')] = +t.value || 0; paint(); }
+    else if (t.id === 'xg-deck-checkall') {
+      var v = t.checked;
+      state.lines.forEach(function (_, i) { state.checked[i] = v; });
+      paint();
+    }
+  });
+  (function () {
+    var nc = document.getElementById('xg-deck-nextcheap');
+    if (nc) nc.addEventListener('change', function () { if (state) paint(); });
+  })();
 
   function postCart(body) {
     return fetch('/cart/add.js', {
