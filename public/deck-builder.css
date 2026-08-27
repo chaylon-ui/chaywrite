@@ -54,6 +54,8 @@
 #xg-deck .xg-deck__btn--add { font-size: 16px; padding: 14px 26px; }
 #xg-deck .xg-deck__btn--ghost { background: transparent; color: var(--xg-text, #3d454b); border: 1px solid var(--xg-border, #d7dbdf); }
 #xg-deck .xg-deck__hint { font-size: 12.5px; color: #8a9299; }
+#xg-deck .xg-deck__toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--xg-text, #3d454b); cursor: pointer; user-select: none; }
+#xg-deck .xg-deck__toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--xg-accent, #d62c28); cursor: pointer; }
 #xg-deck .xg-deck__loading, #xg-deck .xg-deck__none { color: var(--xg-text, #3d454b); font-size: 15px; padding: 18px 2px; margin: 0; }
 #xg-deck .xg-deck__loading::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 9px; vertical-align: -2px; border: 2px solid #c9ced3; border-top-color: var(--xg-accent, #d62c28); border-radius: 50%; animation: xgspin 0.7s linear infinite; }
 @keyframes xgspin { to { transform: rotate(360deg); } }
@@ -103,10 +105,11 @@
 #xg-deck .xg-deck__stat--no a { color: #a6adb4; font-weight: 600; }
 #xg-deck .xg-deck__stat--no a:hover { color: var(--xg-accent, #d62c28); text-decoration: underline; }
 #xg-deck .xg-deck__row--miss .xg-deck__name { color: #98a0a6; font-weight: 500; }
-/* Shortfall row: the copies the shelf can't cover ("Only 2 of 4"). */
-#xg-deck .xg-deck__row--short .xg-deck__name { color: #98a0a6; font-weight: 500; }
-#xg-deck .xg-deck__stat--short .xg-deck__pill { background: #fdeaea; color: #b3352e; }
-#xg-deck .xg-deck__shortnote { color: #b3352e; font-weight: 600; }
+/* Partial-fill row: the copies the shelf can't cover. Warm and informational
+   (not alarm-red, not miss-grey) — the found copies sit in the rows above
+   and ARE part of Add to cart; this row only accounts for the remainder. */
+#xg-deck .xg-deck__stat--short .xg-deck__pill { background: #fff4dd; color: #996c07; }
+#xg-deck .xg-deck__shortnote { color: #996c07; font-weight: 600; }
 #xg-deck .xg-deck__missing { margin: 16px 0 0; font-size: 14px; }
 #xg-deck .xg-deck__missing summary { cursor: pointer; color: var(--xg-text, #3d454b); font-weight: 600; }
 #xg-deck .xg-deck__misslist { columns: 2; margin: 10px 0 0; padding-left: 18px; }

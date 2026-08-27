@@ -67,6 +67,7 @@
       '<div class="xg-deck__actions">' +
         '<button type="submit" class="xg-deck__btn xg-deck__btn--go" id="xg-deck-go">' + esc(GOLABEL) + '</button>' +
         '<button type="button" class="xg-deck__btn xg-deck__btn--ghost" id="xg-deck-clear" hidden>Clear</button>' +
+        '<label class="xg-deck__toggle" for="xg-deck-nextcheap"><input type="checkbox" id="xg-deck-nextcheap" checked> Find next-cheapest versions to fill quantities</label>' +
         '<span class="xg-deck__hint">Card singles. ' + esc(FOOTNOTE) + '</span>' +
       '</div>' +
     '</form>' +
@@ -199,6 +200,11 @@
   }
 
   function render(lines, map) {
+    // "Find next-cheapest versions" toggle: ON fills a line across versions
+    // and conditions, cheapest first; OFF sticks to the single cheapest
+    // version (matching playsets), reporting whatever it can't cover.
+    var ncEl = document.getElementById('xg-deck-nextcheap');
+    var nextCheap = !ncEl || ncEl.checked;
     var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addItems = [], missNames = [];
     var rows = lines.map(function (ln) {
       totalCards += ln.qty;
@@ -209,6 +215,7 @@
         // 3 NM + 1 LP fills a 4; owning 2 of a wanted 4 adds the 2 and SAYS
         // only 2 of 4 — the cart never gets more copies than the shelf has.
         var offers = (r.offers && r.offers.length) ? r.offers : [{ variantId: r.variantId, qty: 99, price: r.price, condition: r.condition, foil: r.foil, set: r.set, name: r.name, image: r.image, url: r.url }];
+        if (!nextCheap) offers = offers.slice(0, 1);
         var remaining = ln.qty, chunks = [];
         for (var oi = 0; oi < offers.length && remaining > 0; oi++) {
           var o = offers[oi];
@@ -242,13 +249,16 @@
             '</div>';
           }).join('');
           if (remaining > 0) {
+            // Positive framing on purpose: the copies we DO have are in the
+            // rows above and ride along with Add to cart — this row only
+            // accounts for the remainder.
             html += '<div class="xg-deck__row xg-deck__row--short" role="row">' +
               '<span class="xg-deck__qty" role="cell">' + remaining + '&times;</span>' +
               '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(chunks[0].o.name || r.name || ln.name) + '</span>' +
-                '<span class="xg-deck__meta">only ' + filledQ + ' of the ' + ln.qty + ' you need are in stock</span></span></span>' +
+                '<span class="xg-deck__meta">' + filledQ + ' of your ' + ln.qty + ' are in stock above and ready to add &mdash; ' + remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now</span></span></span>' +
               '<span class="xg-deck__unit" role="cell">&mdash;</span>' +
               '<span class="xg-deck__line" role="cell">&mdash;</span>' +
-              '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">Only ' + filledQ + ' of ' + ln.qty + '</span></span>' +
+              '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">' + filledQ + ' of ' + ln.qty + ' available</span></span>' +
             '</div>';
           }
           return html;
@@ -295,7 +305,7 @@
         '<div class="xg-deck__sumbar"><span style="width:' + pct + '%"></span></div>' +
         '<div class="xg-deck__sumnums">' +
           '<span>' + lines.length + ' different cards</span>' +
-          (shortQ ? '<span class="xg-deck__shortnote">' + shortQ + (shortQ === 1 ? ' copy' : ' copies') + ' short on stock</span>' : '') +
+          (shortQ ? '<span class="xg-deck__shortnote">' + shortQ + (shortQ === 1 ? ' copy' : ' copies') + ' not in stock</span>' : '') +
           (atSisters ? '<span class="xg-deck__sisternote">' + atSisters + ' more at other Exor Games stores</span>' : '') +
           '<span class="xg-deck__subtotal">In-stock subtotal <strong>' + money(subtotal) + '</strong></span>' +
         '</div>' +
