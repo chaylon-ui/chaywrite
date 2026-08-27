@@ -23,7 +23,7 @@
 
   function attr(name, dflt) { var v = root.getAttribute(name); return (v == null || v === '') ? dflt : v; }
   var HEADING = attr('data-heading', 'Deck Builder');
-  var INTRO = attr('data-intro', 'Pick your game, paste your decklist, and we’ll check it against everything in stock at Exor — cheapest available printing, condition and price for each card — then let you add the whole in-stock deck to your cart in one click.');
+  var INTRO = attr('data-intro', 'Pick your game, paste your decklist, and we’ll check it against everything in stock at Exor. Deck Builder will attempt to find the cheapest available printing, condition and price for each card. If we can’t find it at our Charlottetown location, we will look at inventory in other Exor Games locations.');
   var GOLABEL = attr('data-golabel', 'Find my deck');
   var ADDALL = attr('data-addall', 'Add in-stock cards to cart');
   var FOOTNOTE = attr('data-footnote', 'We match the cheapest in-stock printing.');
