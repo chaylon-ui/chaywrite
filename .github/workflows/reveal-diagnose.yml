@@ -43,7 +43,7 @@ jobs:
               setTimeout(done, 8000);
             }));
             console.log('TITLE LOGO: ' + JSON.stringify(logo));
-            await p.type('#xg-deck-input', '2 Sol Ring\n1 Command Tower\n1 Zzz Not A Real Card');
+            await p.type('#xg-deck-input', '4 Solitude\n1 Humility\n1 Zzz Not A Real Card');
             await p.evaluate(() => document.getElementById('xg-deck-go').click());
             await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
             const r = await p.evaluate(() => {
@@ -69,6 +69,13 @@ jobs:
                 rowBorderTop: cs(row, 'border-top-width') + ' / bottom ' + cs(row, 'border-bottom-width'),
                 pill: pill ? pill.textContent + ' bg=' + cs(pill, 'background-color') + ' radius=' + cs(pill, 'border-radius') : null,
                 missLink: miss ? miss.textContent.trim() + ' underline=' + cs(miss, 'text-decoration-line') : null,
+                sisterPill: (() => { const a = document.querySelector('.xg-deck__stat--sister a');
+                  return a ? a.textContent.trim() + ' bg=' + cs(a, 'background-color') + ' fg=' + cs(a, 'color') : null; })(),
+                shortPill: (() => { const s = document.querySelector('.xg-deck__stat--short .xg-deck__pill');
+                  return s ? s.textContent.trim() + ' bg=' + cs(s, 'background-color') + ' fg=' + cs(s, 'color') : null; })(),
+                summaryHead: (document.querySelector('.xg-deck__sumhead') || {}).innerText || null,
+                shortNote: (document.querySelector('.xg-deck__shortnote') || {}).textContent || null,
+                addButton: (document.querySelector('.xg-deck__btn--add') || {}).innerText || null,
                 rowsText: Array.from(document.querySelectorAll('.xg-deck__row')).map(el =>
                   el.innerText.replace(/\s+/g, ' ').trim().slice(0, 110))
               };
@@ -79,7 +86,8 @@ jobs:
             const ok = !!(r.headers && /qty/i.test(r.headers) && /availability/i.test(r.headers) &&
               parseFloat(r.nameSize) >= 15 && r.linkUnderline === 'none' &&
               r.rowDisplay === 'flex' && !r.legacyTablePresent && r.rows >= 3 &&
-              logo.loaded && Math.abs(logo.renderedH - parseFloat(logo.titleFontSize)) <= 2);
+              logo.loaded && Math.abs(logo.renderedH - parseFloat(logo.titleFontSize)) <= 2 &&
+              (!r.sisterPill || r.sisterPill.indexOf('bg=rgb(176, 117, 20)') > -1));
             console.log(ok ? 'VERDICT: PASS' : 'VERDICT: FAIL');
           })().catch(e => { console.log('probe error: ' + e.message); });
           EOF
