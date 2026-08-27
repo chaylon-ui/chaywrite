@@ -117,6 +117,7 @@ jobs:
           echo "=== deck-builder assets (theme shell loads these; expect 200 + js/css content-type) ==="
           curl -sS -o /dev/null -w 'deck-builder.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.js" || true
           echo "owner intro copy served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'Charlottetown location' || true)"
+          echo "list layout served (js hrow + Qty header, css id-anchored): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck__hrow' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.css' | grep -c '#xg-deck .xg-deck__row' || true)"
           curl -sS -o /dev/null -w 'deck-builder.css: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.css" || true
           echo "=== /buyprice.json (BinderPOS only; available:false until BINDERPOS_API_KEY — storefront then uses daily buy-rules estimates) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Sol%20Ring&type=MTG%20Single" | head -c 600 || true

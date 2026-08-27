@@ -202,19 +202,19 @@
         subtotal += lineTotal;
         addItems.push({ id: r.variantId, quantity: ln.qty });
         var meta = [r.set, r.foil ? 'Foil' : '', r.condition].filter(Boolean).join(' · ');
-        return '<tr class="xg-deck__row">' +
-          '<td class="xg-deck__qty">' + ln.qty + '&times;</td>' +
-          '<td class="xg-deck__card">' +
+        return '<div class="xg-deck__row" role="row">' +
+          '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
+          '<span class="xg-deck__card" role="cell">' +
             '<a class="xg-deck__cardlink" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
               (r.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(r.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
               '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(r.name) + '</span>' +
               (meta ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
             '</a>' +
-          '</td>' +
-          '<td class="xg-deck__unit">' + money(unit) + '</td>' +
-          '<td class="xg-deck__line">' + money(lineTotal) + '</td>' +
-          '<td class="xg-deck__stat xg-deck__stat--ok">In stock</td>' +
-        '</tr>';
+          '</span>' +
+          '<span class="xg-deck__unit" role="cell">' + money(unit) + '</span>' +
+          '<span class="xg-deck__line" role="cell">' + money(lineTotal) + '</span>' +
+          '<span class="xg-deck__stat xg-deck__stat--ok" role="cell"><span class="xg-deck__pill">In stock</span></span>' +
+        '</div>';
       }
       var s = r && r.sister;
       if (s) {
@@ -222,28 +222,28 @@
         // cart, so this row links out and never joins the add-to-cart batch.
         atSisters++;
         var smeta = [s.set, s.foil ? 'Foil' : '', s.condition].filter(Boolean).join(' · ');
-        return '<tr class="xg-deck__row xg-deck__row--sister">' +
-          '<td class="xg-deck__qty">' + ln.qty + '&times;</td>' +
-          '<td class="xg-deck__card">' +
+        return '<div class="xg-deck__row xg-deck__row--sister" role="row">' +
+          '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
+          '<span class="xg-deck__card" role="cell">' +
             '<a class="xg-deck__cardlink" href="' + esc(s.url) + '" target="_blank" rel="noopener">' +
               (s.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(s.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
               '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(s.name) + '</span>' +
               (smeta ? '<span class="xg-deck__meta">' + esc(smeta) + '</span>' : '') + '</span>' +
             '</a>' +
-          '</td>' +
-          '<td class="xg-deck__unit">' + money(parseFloat(s.price) || 0) + '</td>' +
-          '<td class="xg-deck__line">—</td>' +
-          '<td class="xg-deck__stat xg-deck__stat--sister"><a href="' + esc(s.url) + '" target="_blank" rel="noopener">At Exor ' + esc(s.store) + ' ›</a></td>' +
-        '</tr>';
+          '</span>' +
+          '<span class="xg-deck__unit" role="cell">' + money(parseFloat(s.price) || 0) + '</span>' +
+          '<span class="xg-deck__line" role="cell">&mdash;</span>' +
+          '<span class="xg-deck__stat xg-deck__stat--sister" role="cell"><a href="' + esc(s.url) + '" target="_blank" rel="noopener">At Exor ' + esc(s.store) + ' ›</a></span>' +
+        '</div>';
       }
       missNames.push(ln.name);
-      return '<tr class="xg-deck__row xg-deck__row--miss">' +
-        '<td class="xg-deck__qty">' + ln.qty + '&times;</td>' +
-        '<td class="xg-deck__card"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(ln.name) + '</span></span></td>' +
-        '<td class="xg-deck__unit">—</td>' +
-        '<td class="xg-deck__line">—</td>' +
-        '<td class="xg-deck__stat xg-deck__stat--no"><a href="/search?q=' + encodeURIComponent(ln.name) + '" target="_blank" rel="noopener">Not in stock ›</a></td>' +
-      '</tr>';
+      return '<div class="xg-deck__row xg-deck__row--miss" role="row">' +
+        '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
+        '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(ln.name) + '</span></span></span>' +
+        '<span class="xg-deck__unit" role="cell">&mdash;</span>' +
+        '<span class="xg-deck__line" role="cell">&mdash;</span>' +
+        '<span class="xg-deck__stat xg-deck__stat--no" role="cell"><a href="/search?q=' + encodeURIComponent(ln.name) + '" target="_blank" rel="noopener">Not in stock ›</a></span>' +
+      '</div>';
     }).join('');
 
     var pct = lines.length ? Math.round((inStock / lines.length) * 100) : 0;
@@ -277,7 +277,17 @@
     out.innerHTML =
       summary +
       '<div class="xg-deck__addrow">' + addButton('xg-deck-add') + '</div>' +
-      '<div class="xg-deck__tablewrap"><table class="xg-deck__table"><thead><tr><th></th><th>Card</th><th>Unit</th><th>Line</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      // Rendered as a flex list, not a <table>: on the live site the page
+      // body sits inside the theme's .rte styling, whose table rules (full
+      // cell borders, table-layout, small text) would crush the markup.
+      '<div class="xg-deck__listwrap" role="table" aria-label="Deck availability">' +
+        '<div class="xg-deck__hrow" role="row">' +
+          '<span class="xg-deck__h xg-deck__h--qty" role="columnheader">Qty</span>' +
+          '<span class="xg-deck__h xg-deck__h--card" role="columnheader">Card</span>' +
+          '<span class="xg-deck__h xg-deck__h--unit" role="columnheader">Unit</span>' +
+          '<span class="xg-deck__h xg-deck__h--line" role="columnheader">Line</span>' +
+          '<span class="xg-deck__h xg-deck__h--stat" role="columnheader">Availability</span>' +
+        '</div>' + rows + '</div>' +
       sisterHelp +
       missBlock +
       '<div class="xg-deck__addrow xg-deck__addrow--bottom">' + addButton('xg-deck-add2') + '</div>';
