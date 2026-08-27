@@ -16,10 +16,13 @@
 #xg-deck img { margin: 0; border: 0; box-shadow: none; }
 
 #xg-deck .xg-deck__title {
+  display: flex; align-items: center; gap: 0.35em;
   font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
   font-size: clamp(26px, 4vw, 38px); font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.01em; color: var(--xg-ink, #171b1d); margin: 0 0 8px;
 }
+/* Store logo beside the title, exactly letter height (1em of the heading). */
+#xg-deck .xg-deck__logo { display: block; height: 1em; width: auto; flex: 0 0 auto; }
 #xg-deck .xg-deck__intro { color: var(--xg-text, #3d454b); font-size: 15.5px; line-height: 1.5; margin: 0 0 20px; max-width: 660px; }
 #xg-deck .xg-deck__form { margin: 0 0 24px; }
 #xg-deck .xg-deck__gamerow { margin: 0 0 16px; max-width: 340px; }

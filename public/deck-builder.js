@@ -23,6 +23,11 @@
 
   function attr(name, dflt) { var v = root.getAttribute(name); return (v == null || v === '') ? dflt : v; }
   var HEADING = attr('data-heading', 'Deck Builder');
+  // The store's own header logo (the live theme's header-top logo file) —
+  // rendered letter-height beside the title. data-logo="none" on the shell
+  // hides it; any other value swaps the image.
+  var LOGO = attr('data-logo', 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/WE_BUY_CARDS_951e0f40-efac-4b8a-97b3-8ee6330881bd.png?v=1706987808');
+  if (LOGO === 'none') LOGO = '';
   var INTRO = attr('data-intro', 'Pick your game, paste your decklist, and we’ll check it against everything in stock at Exor. Deck Builder will attempt to find the cheapest available printing, condition and price for each card. If we can’t find it at our Charlottetown location, we will look at inventory in other Exor Games locations.');
   var GOLABEL = attr('data-golabel', 'Find my deck');
   var ADDALL = attr('data-addall', 'Add in-stock cards to cart');
@@ -44,7 +49,10 @@
 
   root.innerHTML =
     '<div class="xg-deck__head">' +
-      '<h1 class="xg-deck__title">' + esc(HEADING) + '</h1>' +
+      '<h1 class="xg-deck__title">' +
+        (LOGO ? '<img class="xg-deck__logo" src="' + esc(LOGO) + '" alt="Exor Games">' : '') +
+        '<span>' + esc(HEADING) + '</span>' +
+      '</h1>' +
       '<p class="xg-deck__intro">' + esc(INTRO) + '</p>' +
     '</div>' +
     '<form class="xg-deck__form" id="xg-deck-form">' +

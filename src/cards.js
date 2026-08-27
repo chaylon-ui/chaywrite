@@ -811,6 +811,20 @@ function baseName(title) {
   return s;
 }
 
+/* Exact-name match, widened for Secret Lair / crossover "flavor titles":
+   the product is listed as "Master Emerald Shrine - Command Tower (7030)
+   [Secret Lair Drop Series]" but the functional card is Command Tower — the
+   real name rides one " - " segment of the title. A segment must EQUAL the
+   whole requested name, so distinct cards can never collide. Without this
+   the $5.00 SLD Command Tower lost the cheapest-printing race to an $18.10
+   plain copy because its title never exact-matched (owner screenshot). */
+function nameMatches(title, want) {
+  const b = baseName(title).toLowerCase();
+  if (b === want) return true;
+  if (b.indexOf(" - ") === -1) return false;
+  return b.split(" - ").some((seg) => seg.trim() === want);
+}
+
 /* ---------------- "What we pay" — BinderPOS buylist prices ----------------
    BinderPOS ONLY, per the owner: the rules live at portal.binderpos.com
    (Buylist Rules + Settings→Pricing), configured per game and price band
@@ -989,7 +1003,7 @@ async function findInStock(name, headers, env, game) {
     // Every printing of the exact card (title minus its trailing "[Set]") in
     // the chosen game — no cap, so the cheapest printing can't be truncated.
     const matches = products.filter((p) =>
-      (codeMode ? codeMatches(p, name) : baseName(p.title).toLowerCase() === want) &&
+      (codeMode ? codeMatches(p, name) : nameMatches(p.title, want)) &&
       gmatch.test(p.product_type || "")
     );
     // Cheapest available copy across every printing — budget decks first.
@@ -1130,7 +1144,7 @@ async function findAtSisters(name, game) {
       // check waits for hydration: /products/<handle>.js always carries
       // `type` authoritatively.
       const matches = hits.filter((h) => h && h.title && h.handle && h.available !== false
-        && (codeMode || baseName(h.title).toLowerCase() === want));
+        && (codeMode || nameMatches(h.title, want)));
       let best = null;
       for (const h of matches.slice(0, 2)) {   // hydrate at most 2 printings per store
         try {
