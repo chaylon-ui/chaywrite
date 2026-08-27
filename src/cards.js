@@ -362,7 +362,7 @@ export async function serveSearch(request, env) {
 }
 
 /* Full-catalogue title search through the Admin API (up to 40 products). */
-async function adminSearch(q, env, ptq = "", pages = 2) {
+async function adminSearch(q, env, ptq = "", pages = 2, codeMode = false) {
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const safe = q.replace(/[*"\\():]/g, " ").trim();
   if (!safe) return null;
@@ -372,7 +372,7 @@ async function adminSearch(q, env, ptq = "", pages = 2) {
     pageInfo{hasNextPage endCursor}
     edges{node{
     title handle productType vendor tags description(truncateAt:400) featuredImage{url}
-    variants(first:20){edges{node{id title price availableForSale}}}}}}}`;
+    variants(first:20){edges{node{id title sku price availableForSale}}}}}}}`;
   let edges = [];
   let after = null;
   for (let page = 0; page < pages; page++) {
@@ -383,7 +383,10 @@ async function adminSearch(q, env, ptq = "", pages = 2) {
       r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
         method: "POST",
         headers: { "content-type": "application/json", "X-Shopify-Access-Token": env.SHOPIFY_ADMIN_TOKEN },
-        body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} title:*${safe}*`.replace(/\s+/g, " "), after } }),
+        // Collector-code lookups (One Piece "OP16-003", YGO "SDBE-EN001", ...)
+        // go by SKU prefix — every BinderPOS variant SKU starts with the
+        // code, while titles carry it inconsistently.
+        body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} ${codeMode ? `sku:${safe}*` : `title:*${safe}*`}`.replace(/\s+/g, " "), after } }),
         signal: AbortSignal.timeout(6000),
       });
       if (r.status !== 429) break;
@@ -400,7 +403,7 @@ async function adminSearch(q, env, ptq = "", pages = 2) {
     title: p.title, handle: p.handle, product_type: p.productType, vendor: p.vendor || "", tags: p.tags || [], body_html: p.description || "",
     images: p.featuredImage ? [{ src: p.featuredImage.url }] : [],
     variants: (p.variants?.edges || []).map(({ node: v }) => ({
-      id: +String(v.id).replace(/\D/g, ""), title: v.title, price: String(v.price), available: !!v.availableForSale,
+      id: +String(v.id).replace(/\D/g, ""), title: v.title, sku: v.sku || "", price: String(v.price), available: !!v.availableForSale,
     })),
   }));
 }
@@ -425,7 +428,7 @@ async function suggestSearch(q, headers) {
       return {
         title: p.title, handle: p.handle, product_type: p.type, vendor: p.vendor || "", tags: p.tags || [], body_html: p.description || "",
         images: imgs.map((src) => ({ src: abs(src) })),
-        variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, price: (v.price / 100).toFixed(2), available: !!v.available })),
+        variants: (p.variants || []).map((v) => ({ id: v.id, title: v.title, sku: v.sku || "", price: (v.price / 100).toFixed(2), available: !!v.available })),
       };
     } catch { return null; }
   }));
@@ -953,10 +956,22 @@ export async function serveBuyPrice(request, env, ctx) {
    across games ("Sacrifice" is MTG, Riftbound and Star Wars at once), so the
    Admin search is filtered to that game's product_type and the match is
    double-checked against it. */
+/* Collector-code deck lines ("OP16-003", "ST23-001", "SDBE-EN001"):
+   One Piece and Yu-Gi-Oh lists ship as codes, not names. Every BinderPOS
+   variant SKU starts with the code (ST03-011-EN-NF-1), so codes match by
+   SKU prefix — with a title fallback for listings that embed "(OP16-098)". */
+const CODE_RE = /^[a-z]{1,5}\d{0,3}-[a-z]{0,3}\d{1,4}$/i;
+function codeMatches(p, code) {
+  const c = code.toUpperCase();
+  if ((p.title || "").toUpperCase().includes(c)) return true;
+  return (p.variants || []).some((v) => String(v.sku || "").toUpperCase().startsWith(c + "-") || String(v.sku || "").toUpperCase() === c);
+}
+
 async function findInStock(name, headers, env, game) {
   try {
     game = (game && GAME_PTQ[game]) ? game : "mtg";
     const want = name.toLowerCase();
+    const codeMode = CODE_RE.test(name);
     const gmatch = (GAMES[game] && GAMES[game].match) || /^mtg\b/i;
     // This store's native predictive search is disabled (Searchanise owns
     // search here), so the public /search/suggest.json returns nothing — the
@@ -965,7 +980,7 @@ async function findInStock(name, headers, env, game) {
     // fall back to public predictive search where native search still answers.
     let products = null;
     if (env && env.SHOPIFY_ADMIN_TOKEN) {
-      try { products = await adminSearch(name, env, GAME_PTQ[game] || "", 3); } catch { products = null; }
+      try { products = await adminSearch(name, env, GAME_PTQ[game] || "", codeMode ? 1 : 3, codeMode); } catch { products = null; }
     }
     if (!products) {
       try { products = (await suggestSearch(name, headers)).filter(Boolean); } catch { products = null; }
@@ -974,7 +989,7 @@ async function findInStock(name, headers, env, game) {
     // Every printing of the exact card (title minus its trailing "[Set]") in
     // the chosen game — no cap, so the cheapest printing can't be truncated.
     const matches = products.filter((p) =>
-      baseName(p.title).toLowerCase() === want &&
+      (codeMode ? codeMatches(p, name) : baseName(p.title).toLowerCase() === want) &&
       gmatch.test(p.product_type || "")
     );
     // Cheapest available copy across every printing — budget decks first.
@@ -1096,6 +1111,7 @@ const SISTERS_MAX = 12;
 async function findAtSisters(name, game) {
   const gmatch = (GAMES[game] && GAMES[game].match) || /^mtg\b/i;
   const want = baseName(name).toLowerCase();
+  const codeMode = CODE_RE.test(name);
   const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
   const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
   const per = await Promise.all(SISTERS.map(async (s) => {
@@ -1103,7 +1119,7 @@ async function findAtSisters(name, game) {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 3500);
       const r = await fetch(
-        `${s.base}/search/suggest.json?q=${encodeURIComponent(name)}&resources[type]=product&resources[limit]=6&resources[options][unavailable_products]=hide&resources[options][fields]=title,product_type,variants.title`,
+        `${s.base}/search/suggest.json?q=${encodeURIComponent(name)}&resources[type]=product&resources[limit]=6&resources[options][unavailable_products]=hide&resources[options][fields]=${codeMode ? "title,variants.sku" : "title,product_type,variants.title"}`,
         { headers, signal: ctrl.signal },
       );
       clearTimeout(t);
@@ -1114,7 +1130,7 @@ async function findAtSisters(name, game) {
       // check waits for hydration: /products/<handle>.js always carries
       // `type` authoritatively.
       const matches = hits.filter((h) => h && h.title && h.handle && h.available !== false
-        && baseName(h.title).toLowerCase() === want);
+        && (codeMode || baseName(h.title).toLowerCase() === want));
       let best = null;
       for (const h of matches.slice(0, 2)) {   // hydrate at most 2 printings per store
         try {
@@ -1125,6 +1141,7 @@ async function findAtSisters(name, game) {
           if (!pr.ok) continue;
           const p = await pr.json();
           if (!gmatch.test(String(p.type || ""))) continue;
+          if (codeMode && !codeMatches({ title: p.title, variants: p.variants }, name)) continue;
           for (const v of (p.variants || [])) {
             if (!v.available || !(v.price > 0) || v.price / 100 >= 99999) continue;
             if (!best || v.price < best.cents) {

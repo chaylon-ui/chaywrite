@@ -110,6 +110,7 @@ jobs:
             await deck('mtg', 'Sol Ring|Counterspell|Lightning Bolt|Command Tower|Arcane Signet|Cultivate');
             await deck('pokemon', 'Charizard|Snorlax|Gengar');
             await deck('yugioh', 'Stardust Dragon|Ash Blossom & Joyous Spring|Blue-Eyes White Dragon');
+            await deck('onepiece', 'ST03-011|OP16-098|OP16-003');
             await deck('mtg', 'Humility|Timetwister');
           })().catch(e => console.log('deck probe error:', e.message));
           EOF

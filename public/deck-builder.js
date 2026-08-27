@@ -90,7 +90,10 @@
       if (SKIP.test(line)) continue;
       line = line.replace(/^sb:\s*/i, '');
       var qty = 1, name = line, m;
-      if ((m = /^(\d{1,3})\s*[xX]?\s+(.+)$/.exec(line))) { qty = parseInt(m[1], 10) || 1; name = m[2]; }
+      // "3xOP16-003" — One Piece sim exports glue the qty straight onto the
+      // collector code with no space; the code then matches by SKU prefix.
+      if ((m = /^(\d{1,3})[xX](\S.*)$/.exec(line))) { qty = parseInt(m[1], 10) || 1; name = m[2]; }
+      else if ((m = /^(\d{1,3})\s*[xX]?\s+(.+)$/.exec(line))) { qty = parseInt(m[1], 10) || 1; name = m[2]; }
       else if ((m = /^(.+?)\s+[xX](\d{1,3})$/.exec(line))) { name = m[1]; qty = parseInt(m[2], 10) || 1; }
       name = name
         .replace(/\s*\([^)]*\)\s*[0-9A-Za-z\-]*\s*$/, '')
