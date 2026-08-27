@@ -372,7 +372,7 @@ async function adminSearch(q, env, ptq = "", pages = 2, codeMode = false) {
     pageInfo{hasNextPage endCursor}
     edges{node{
     title handle productType vendor tags description(truncateAt:400) featuredImage{url}
-    variants(first:20){edges{node{id title sku price availableForSale}}}}}}}`;
+    variants(first:20){edges{node{id title sku price availableForSale inventoryQuantity inventoryPolicy}}}}}}}`;
   let edges = [];
   let after = null;
   for (let page = 0; page < pages; page++) {
@@ -404,6 +404,13 @@ async function adminSearch(q, env, ptq = "", pages = 2, codeMode = false) {
     images: p.featuredImage ? [{ src: p.featuredImage.url }] : [],
     variants: (p.variants?.edges || []).map(({ node: v }) => ({
       id: +String(v.id).replace(/\D/g, ""), title: v.title, sku: v.sku || "", price: String(v.price), available: !!v.availableForSale,
+      // Sellable copies. Oversell-allowed is uncapped; available with a
+      // non-positive count means untracked (tracked+DENY at zero would have
+      // made availableForSale false), so that's uncapped too. inventoryItem
+      // {tracked} would say it directly but costs a GraphQL point per
+      // variant, which would blow the query's cost cap at 40x20.
+      qty: v.inventoryPolicy === "CONTINUE" || (v.availableForSale && !((v.inventoryQuantity | 0) > 0))
+        ? 99 : Math.max(0, v.inventoryQuantity | 0),
     })),
   }));
 }
@@ -1006,18 +1013,25 @@ async function findInStock(name, headers, env, game) {
       (codeMode ? codeMatches(p, name) : nameMatches(p.title, want)) &&
       gmatch.test(p.product_type || "")
     );
-    // Cheapest available copy across every printing — budget decks first.
-    let bestP = null, bestV = null;
+    // Every AVAILABLE variant across every printing, cheapest first. The top
+    // entry keeps the response's original single-pick shape; the offers list
+    // carries per-variant STOCK COUNTS so the client can fill a requested
+    // quantity across conditions/printings and say so honestly when the
+    // shelf runs short (owner: 2 owned Solitudes must never fill a 4).
+    const pool = [];
+    const seenV = new Set();
     for (const p of matches) {
       for (const v of (p.variants || [])) {
-        if (!v.available) continue;
+        if (!v.available || seenV.has(v.id)) continue;
         const price = parseFloat(v.price);
         if (!(price > 0)) continue;
-        if (!bestV || price < parseFloat(bestV.price)) { bestV = v; bestP = p; }
+        seenV.add(v.id);
+        pool.push({ p, v, price });
       }
     }
-    if (!bestV) return null;
-    const p = bestP, v = bestV;
+    if (!pool.length) return null;
+    pool.sort((a, b) => a.price - b.price);
+    const { p, v } = pool[0];
     const img = (p.images && p.images[0] && p.images[0].src) || null;
     return {
       name: baseName(p.title),
@@ -1031,6 +1045,17 @@ async function findInStock(name, headers, env, game) {
       image: img,
       variantId: v.id,
       url: "https://exorgames.com/products/" + p.handle,
+      offers: pool.slice(0, 8).map(({ p: op, v: ov, price: oprice }) => ({
+        variantId: ov.id,
+        qty: typeof ov.qty === "number" ? ov.qty : 99,   // suggest fallback carries no counts
+        price: oprice.toFixed(2),
+        condition: condOf(ov.title, game),
+        foil: /foil/i.test(ov.title || ""),
+        set: (op.title.match(/\[([^\]]+)\]/) || [, ""])[1] || "",
+        name: baseName(op.title),
+        image: (op.images && op.images[0] && op.images[0].src) || null,
+        url: "https://exorgames.com/products/" + op.handle,
+      })),
     };
   } catch { return null; }
 }

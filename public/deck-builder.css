@@ -103,6 +103,10 @@
 #xg-deck .xg-deck__stat--no a { color: #a6adb4; font-weight: 600; }
 #xg-deck .xg-deck__stat--no a:hover { color: var(--xg-accent, #d62c28); text-decoration: underline; }
 #xg-deck .xg-deck__row--miss .xg-deck__name { color: #98a0a6; font-weight: 500; }
+/* Shortfall row: the copies the shelf can't cover ("Only 2 of 4"). */
+#xg-deck .xg-deck__row--short .xg-deck__name { color: #98a0a6; font-weight: 500; }
+#xg-deck .xg-deck__stat--short .xg-deck__pill { background: #fdeaea; color: #b3352e; }
+#xg-deck .xg-deck__shortnote { color: #b3352e; font-weight: 600; }
 #xg-deck .xg-deck__missing { margin: 16px 0 0; font-size: 14px; }
 #xg-deck .xg-deck__missing summary { cursor: pointer; color: var(--xg-text, #3d454b); font-weight: 600; }
 #xg-deck .xg-deck__misslist { columns: 2; margin: 10px 0 0; padding-left: 18px; }
@@ -114,8 +118,10 @@
    store's own site (separate cart), so it never blends into the add-all. */
 #xg-deck .xg-deck__row--sister { background: #fffaf0; }
 #xg-deck .xg-deck__row--sister:hover { background: #fdf5e6; }
-#xg-deck .xg-deck__stat--sister a { display: inline-block; padding: 4px 11px; border-radius: 999px; font-weight: 700; background: #fdf3df; color: #a4690b; }
-#xg-deck .xg-deck__stat--sister a:hover { background: #fbead0; }
+/* Solid amber with white text — a pale pill on the pale amber row read as
+   yellow-on-yellow (owner screenshot). */
+#xg-deck .xg-deck__stat--sister a { display: inline-block; padding: 4px 11px; border-radius: 999px; font-weight: 700; background: #b07514; color: #fff; }
+#xg-deck .xg-deck__stat--sister a:hover { background: #9a640f; }
 #xg-deck .xg-deck__sisternote { color: #b07514; font-weight: 600; }
 #xg-deck .xg-deck__sisterhelp { margin: 10px 0 0; font-size: 12.5px; color: #8a9299; }
 

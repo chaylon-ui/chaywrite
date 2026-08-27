@@ -199,30 +199,62 @@
   }
 
   function render(lines, map) {
-    var inStock = 0, atSisters = 0, totalCards = 0, subtotal = 0, addItems = [], missNames = [];
+    var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addItems = [], missNames = [];
     var rows = lines.map(function (ln) {
       totalCards += ln.qty;
       var r = map[ln.name.toLowerCase()];
       if (r && r.found) {
-        inStock++;
-        var unit = parseFloat(r.price) || 0;
-        var lineTotal = unit * ln.qty;
-        subtotal += lineTotal;
-        addItems.push({ id: r.variantId, quantity: ln.qty });
-        var meta = [r.set, r.foil ? 'Foil' : '', r.condition].filter(Boolean).join(' · ');
-        return '<div class="xg-deck__row" role="row">' +
-          '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
-          '<span class="xg-deck__card" role="cell">' +
-            '<a class="xg-deck__cardlink" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
-              (r.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(r.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
-              '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(r.name) + '</span>' +
-              (meta ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
-            '</a>' +
-          '</span>' +
-          '<span class="xg-deck__unit" role="cell">' + money(unit) + '</span>' +
-          '<span class="xg-deck__line" role="cell">' + money(lineTotal) + '</span>' +
-          '<span class="xg-deck__stat xg-deck__stat--ok" role="cell"><span class="xg-deck__pill">In stock</span></span>' +
-        '</div>';
+        // Fill the requested quantity across the card's in-stock variants,
+        // cheapest first (worker sends per-condition/printing stock counts).
+        // 3 NM + 1 LP fills a 4; owning 2 of a wanted 4 adds the 2 and SAYS
+        // only 2 of 4 — the cart never gets more copies than the shelf has.
+        var offers = (r.offers && r.offers.length) ? r.offers : [{ variantId: r.variantId, qty: 99, price: r.price, condition: r.condition, foil: r.foil, set: r.set, name: r.name, image: r.image, url: r.url }];
+        var remaining = ln.qty, chunks = [];
+        for (var oi = 0; oi < offers.length && remaining > 0; oi++) {
+          var o = offers[oi];
+          var avail = (typeof o.qty === 'number') ? o.qty : 99;
+          var take = Math.min(remaining, avail);
+          if (take > 0) { chunks.push({ o: o, take: take }); remaining -= take; }
+        }
+        var filledQ = ln.qty - remaining;
+        if (filledQ > 0) {
+          filledCards += filledQ;
+          if (remaining === 0) { inStock++; } else { partialLines++; shortQ += remaining; }
+          var html = chunks.map(function (c) {
+            var o = c.o;
+            var unit = parseFloat(o.price) || 0;
+            var lineTotal = unit * c.take;
+            subtotal += lineTotal;
+            addItems.push({ id: o.variantId, quantity: c.take });
+            var meta = [o.set, o.foil ? 'Foil' : '', o.condition].filter(Boolean).join(' · ');
+            return '<div class="xg-deck__row" role="row">' +
+              '<span class="xg-deck__qty" role="cell">' + c.take + '&times;</span>' +
+              '<span class="xg-deck__card" role="cell">' +
+                '<a class="xg-deck__cardlink" href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
+                  (o.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(o.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
+                  '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(o.name || r.name) + '</span>' +
+                  (meta ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
+                '</a>' +
+              '</span>' +
+              '<span class="xg-deck__unit" role="cell">' + money(unit) + '</span>' +
+              '<span class="xg-deck__line" role="cell">' + money(lineTotal) + '</span>' +
+              '<span class="xg-deck__stat xg-deck__stat--ok" role="cell"><span class="xg-deck__pill">In stock</span></span>' +
+            '</div>';
+          }).join('');
+          if (remaining > 0) {
+            html += '<div class="xg-deck__row xg-deck__row--short" role="row">' +
+              '<span class="xg-deck__qty" role="cell">' + remaining + '&times;</span>' +
+              '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(chunks[0].o.name || r.name || ln.name) + '</span>' +
+                '<span class="xg-deck__meta">only ' + filledQ + ' of the ' + ln.qty + ' you need are in stock</span></span></span>' +
+              '<span class="xg-deck__unit" role="cell">&mdash;</span>' +
+              '<span class="xg-deck__line" role="cell">&mdash;</span>' +
+              '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">Only ' + filledQ + ' of ' + ln.qty + '</span></span>' +
+            '</div>';
+          }
+          return html;
+        }
+        // found but nothing allocatable right now — fall through to the
+        // miss/sister rendering below.
       }
       var s = r && r.sister;
       if (s) {
@@ -254,21 +286,26 @@
       '</div>';
     }).join('');
 
-    var pct = lines.length ? Math.round((inStock / lines.length) * 100) : 0;
+    // Card-count basis (real copies, not lines): the fill knows exactly how
+    // many copies the shelf covers, so the headline says that number.
+    var pct = totalCards ? Math.round((filledCards / totalCards) * 100) : 0;
     var summary =
       '<div class="xg-deck__summary">' +
-        '<div class="xg-deck__sumhead"><strong>' + inStock + '</strong> of ' + lines.length + ' cards in stock <span class="xg-deck__dim">(' + pct + '%)</span></div>' +
+        '<div class="xg-deck__sumhead"><strong>' + filledCards + '</strong> of ' + totalCards + ' cards in stock <span class="xg-deck__dim">(' + pct + '%)</span></div>' +
         '<div class="xg-deck__sumbar"><span style="width:' + pct + '%"></span></div>' +
         '<div class="xg-deck__sumnums">' +
-          '<span>' + totalCards + ' cards total</span>' +
+          '<span>' + lines.length + ' different cards</span>' +
+          (shortQ ? '<span class="xg-deck__shortnote">' + shortQ + (shortQ === 1 ? ' copy' : ' copies') + ' short on stock</span>' : '') +
           (atSisters ? '<span class="xg-deck__sisternote">' + atSisters + ' more at other Exor Games stores</span>' : '') +
           '<span class="xg-deck__subtotal">In-stock subtotal <strong>' + money(subtotal) + '</strong></span>' +
         '</div>' +
       '</div>';
 
+    var addQty = 0;
+    addItems.forEach(function (it) { addQty += it.quantity; });
     function addButton(id) {
       return addItems.length
-        ? '<button type="button" class="xg-deck__btn xg-deck__btn--add" id="' + id + '">' + esc(ADDALL) + ' <span class="xg-deck__dim">(' + addItems.length + ')</span></button>'
+        ? '<button type="button" class="xg-deck__btn xg-deck__btn--add" id="' + id + '">' + esc(ADDALL) + ' <span class="xg-deck__dim">(' + addQty + ')</span></button>'
         : '<p class="xg-deck__none">None of these are in stock right now.</p>';
     }
 

@@ -104,7 +104,7 @@ jobs:
             for (;;) { const h = crypto.createHash('sha256').update(prefix + n).digest(); if (lead(h, g.bits)) break; n++; }
             const r = await fetch(W + '/deck.json?game=' + game + '&names=' + encodeURIComponent(names) + '&pb=' + g.bucket + '&pn=' + n);
             console.log('--- ' + game + ' :: ' + names.slice(0, 70) + ' -> HTTP ' + r.status + ' (nonce ' + n + ')');
-            console.log((await r.text()).slice(0, 1700));
+            console.log((await r.text()).slice(0, 2400));
           }
           (async () => {
             await deck('mtg', 'Sol Ring|Counterspell|Lightning Bolt|Command Tower|Arcane Signet|Cultivate');
@@ -112,6 +112,7 @@ jobs:
             await deck('yugioh', 'Stardust Dragon|Ash Blossom & Joyous Spring|Blue-Eyes White Dragon');
             await deck('onepiece', 'OP16-015|ST03-011|OP16-003');
             await deck('mtg', 'Humility|Timetwister');
+            await deck('mtg', 'Solitude');   // offers[] must carry per-condition qty (owner owns 2)
           })().catch(e => console.log('deck probe error:', e.message));
           EOF
           echo "=== deck-builder assets (theme shell loads these; expect 200 + js/css content-type) ==="
