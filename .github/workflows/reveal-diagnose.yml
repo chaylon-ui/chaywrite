@@ -10,131 +10,131 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Mana symbols in oracle text (preview + live control)
+      - name: Fetch BinderPOS calendar widget CSS
+        run: |
+          curl -sS -m 30 -o eventCalendar.css https://cdn.binderpos.com/eventCalendar.css || true
+          curl -sS -m 30 -o eventCalendar.js https://cdn.binderpos.com/eventCalendar.js || true
+          echo "--- sizes:"; wc -c eventCalendar.css eventCalendar.js || true
+          echo "--- eventCalendar.css FULL:"; cat eventCalendar.css || true
+          echo; echo "--- eventCalendar.js class/markup strings:"
+          grep -oE '(className|createElement|classList\.add)[^;]{0,120}' eventCalendar.js | head -60 || true
+          grep -oE '"[a-zA-Z][a-zA-Z0-9 _-]{3,60}"' eventCalendar.js | sort -u | head -120 || true
+
+      - name: Dump calendar DOM + footer computed styles (preview)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-
-          const PREVIEW = 'https://exorgames.com/products/sol-ring-commander-2018?preview_theme_id=157462692013';
-          const LIVE = 'https://exorgames.com/products/sol-ring-commander-2018';
-
-          async function inspect(browser, label, url, settleMs, pollFor) {
-            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
-            const ctx = await mkCtx.call(browser);
-            const page = await ctx.newPage();
-            const pageErrors = [];
-            page.on('pageerror', (e) => { if (pageErrors.length < 5) pageErrors.push(String(e && e.message).slice(0, 160)); });
-            await page.setViewport({ width: 1366, height: 900 });
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-            const t0 = Date.now();
-            for (;;) {
-              const ready = await page.evaluate((wantSymbols) => {
-                const imgs = document.querySelectorAll('img.xg-mana');
-                const bet = document.getElementById('exor-betters');
-                const betOk = !!bet && bet.style.display !== 'none' && bet.querySelectorAll('a').length >= 3;
-                const imgsDone = imgs.length >= 3 && Array.prototype.every.call(imgs, (i) => i.complete);
-                return wantSymbols ? (imgsDone && betOk) : true;
-              }, pollFor);
-              if (ready || Date.now() - t0 > settleMs) break;
-              await new Promise((res) => setTimeout(res, 500));
-            }
-            await new Promise((res) => setTimeout(res, 1500));
-
-            const r = await page.evaluate(() => {
-              const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
-              out.manaFlag = document.documentElement.getAttribute('data-xg-mana');
-              const imgs = Array.from(document.querySelectorAll('img.xg-mana'));
-              out.imgs = imgs.map((i) => ({
-                src: i.src, alt: i.alt, complete: i.complete,
-                nw: i.naturalWidth, box: Math.round(i.getBoundingClientRect().width),
-              }));
-              // Same scan the section script does: text nodes under the
-              // product container + tabs, minus script/style/textarea.
-              out.leftoverTokens = (function () {
-                var toks = [];
-                var roots = document.querySelectorAll('.product-template__container, .tab-content');
-                for (var ri = 0; ri < roots.length; ri++) {
-                  var w = document.createTreeWalker(roots[ri], NodeFilter.SHOW_TEXT, null);
-                  while (w.nextNode()) {
-                    var n = w.currentNode, p = n.parentNode;
-                    if (!p || /^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/.test(p.nodeName)) continue;
-                    var m = n.nodeValue.match(/\{[0-9A-Za-z]+(?:\/[0-9A-Za-z]+){0,2}\}/g);
-                    if (m) toks = toks.concat(m);
-                  }
-                }
-                return toks;
-              })();
-              const first = imgs[0];
-              out.context = first && first.parentNode ? String(first.parentNode.textContent).trim().slice(0, 120) : null;
-              const bet = document.getElementById('exor-betters');
-              out.bettersVisible = !!bet && bet.style.display !== 'none' && bet.offsetParent !== null;
-              out.bettersCount = bet ? bet.querySelectorAll('a').length : 0;
-              return out;
-            });
-
-            // Load-proof independent of SVG intrinsic sizing: fetch each
-            // distinct symbol URL from the page origin and record status.
-            r.probes = await page.evaluate(async (srcs) => {
-              const out = [];
-              for (const s of srcs) {
-                try {
-                  const resp = await fetch(s, { mode: 'cors' });
-                  out.push({ src: s.split('/').pop(), ok: resp.ok, status: resp.status, type: resp.headers.get('content-type') });
-                } catch (e) {
-                  out.push({ src: s.split('/').pop(), err: String(e).slice(0, 80) });
-                }
-              }
-              return out;
-            }, Array.from(new Set(r.imgs.map((i) => i.src))));
-
-            r.pageErrors = pageErrors;
-            console.log(label, JSON.stringify(r));
-            await ctx.close();
-            return r;
-          }
+          const URL = 'https://exorgames.com/?preview_theme_id=157462692013';
 
           (async () => {
             const browser = await puppeteer.launch({
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
-            const a = await inspect(browser, 'preview:', PREVIEW, 25000, true);
-            const b = await inspect(browser, 'live:', LIVE, 6000, false);
-            await browser.close();
+            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
+            const ctx = await mkCtx.call(browser);
+            const page = await ctx.newPage();
+            await page.setViewport({ width: 1366, height: 900 });
+            await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-            const pa = [];
-            if (a.themeId !== 157462692013) pa.push('wrong theme: ' + a.themeId);
-            if (a.manaFlag !== '1') pa.push('mana script never ran (flag=' + a.manaFlag + ')');
-            if (a.imgs.length < 3) pa.push('expected >=3 symbol imgs ({T}{C}{C}), got ' + a.imgs.length);
-            const badSrc = a.imgs.filter((i) => !/^https:\/\/svgs\.scryfall\.io\/card-symbols\/[0-9A-Z]+\.svg$/.test(i.src));
-            if (badSrc.length) pa.push('unexpected src: ' + badSrc.map((i) => i.src).join(', '));
-            const codes = a.imgs.map((i) => (i.src.match(/\/([0-9A-Z]+)\.svg$/) || [])[1]);
-            if (!codes.includes('T')) pa.push('no tap symbol rendered');
-            if (codes.filter((c) => c === 'C').length < 2) pa.push('expected two colorless symbols, codes=' + codes.join(','));
-            const altBad = a.imgs.filter((i) => !/^\{[0-9A-Za-z/]+\}$/.test(i.alt));
-            if (altBad.length) pa.push('alt text missing on ' + altBad.length + ' imgs');
-            const loadedByNW = a.imgs.length > 0 && a.imgs.every((i) => i.complete && i.nw > 0);
-            const loadedByProbe = a.probes.length > 0 && a.probes.every((p) => p.ok && /svg/.test(p.type || ''));
-            if (!loadedByNW && !loadedByProbe) pa.push('symbol SVGs did not load: ' + JSON.stringify(a.probes));
-            const leftKnown = (a.leftoverTokens || []).filter((t) => /^\{(T|Q|C|S|X|P|[0-9]+|[WUBRG](\/[WUBRGP])?)\}$/i.test(t));
-            if (leftKnown.length) pa.push('known tokens still raw text: ' + leftKnown.join(' '));
-            if (!a.bettersVisible || a.bettersCount < 3) pa.push('similar-effects strip regressed: visible=' + a.bettersVisible + ' count=' + a.bettersCount);
-
-            const pb = [];
-            if (b.themeId !== 157458727085) pb.push('live control on wrong theme: ' + b.themeId);
-            if (b.imgs.length !== 0) pb.push('live page has ' + b.imgs.length + ' xg-mana imgs - live theme must be untouched');
-            const liveRaw = (b.leftoverTokens || []).some((t) => /^\{T\}$/i.test(t));
-            if (!liveRaw) pb.push('control invalid: live description shows no raw {T} token');
-
-            if (pa.length) console.log('preview problems:', pa);
-            if (pb.length) console.log('live problems:', pb);
-
-            if (!pa.length && !pb.length) {
-              console.log('VERDICT: PASS - preview renders ' + a.imgs.length + ' Scryfall symbols (' + codes.join(',') + '), raw tokens gone, SVGs loaded (' + (loadedByNW ? 'naturalWidth' : 'fetch probe') + '), betters strip ' + a.bettersCount + ' cards; live still raw text, zero symbols.');
-            } else {
-              console.log('VERDICT: FAIL');
-              process.exitCode = 1;
+            const t0 = Date.now();
+            for (;;) {
+              const n = await page.evaluate(() => document.querySelectorAll('#binderpos-calendar td').length);
+              if (n > 20 || Date.now() - t0 > 30000) break;
+              await new Promise((r) => setTimeout(r, 800));
             }
+            await new Promise((r) => setTimeout(r, 2500));
+
+            const cal = await page.evaluate(() => {
+              const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
+              const root = document.getElementById('binderpos-calendar');
+              out.present = !!root;
+              if (!root) return out;
+              out.wrapperStyle = (document.querySelector('.calendar-contents') || {}).getAttribute
+                ? document.querySelector('.calendar-contents').getAttribute('style') : null;
+              const h3 = document.querySelector('section.calendar-container h3');
+              out.sectionTitle = h3 ? h3.textContent.trim() : null;
+              out.htmlLength = root.outerHTML.length;
+              const inv = {};
+              root.querySelectorAll('*').forEach((el) => {
+                const key = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' && el.className ? '.' + el.className.trim().replace(/\s+/g, '.') : '');
+                inv[key] = (inv[key] || 0) + 1;
+              });
+              out.inventory = inv;
+              const top = Array.from(root.children).map((c) => c.tagName.toLowerCase() + (c.className ? '.' + String(c.className).trim().replace(/\s+/g, '.') : ''));
+              out.topChildren = top;
+              const header = root.querySelector('.current-month-container');
+              out.headerHTML = header ? header.outerHTML.slice(0, 1600) : null;
+              if (!header) {
+                out.firstChildHTML = root.children[0] ? root.children[0].outerHTML.slice(0, 1600) : null;
+              }
+              const tds = Array.from(root.querySelectorAll('td'));
+              const withImg = tds.find((td) => td.querySelector('img'));
+              out.cellWithEventsHTML = withImg ? withImg.outerHTML.slice(0, 1800) : null;
+              const empty = tds.find((td) => !td.querySelector('img'));
+              out.emptyCellHTML = empty ? empty.outerHTML.slice(0, 500) : null;
+              const table = root.querySelector('table');
+              out.tableClass = table ? table.className : null;
+              const headRow = root.querySelector('tr');
+              out.headRowHTML = headRow ? headRow.outerHTML.slice(0, 900) : null;
+              function cs(el, props) {
+                if (!el) return null;
+                const c = getComputedStyle(el);
+                const o = {};
+                props.forEach((p) => { o[p] = c.getPropertyValue(p); });
+                return o;
+              }
+              out.css = {
+                td: cs(withImg || empty, ['background-color', 'background-image', 'border', 'border-radius', 'padding', 'height', 'width', 'vertical-align']),
+                th: cs(root.querySelector('th'), ['background-color', 'background-image', 'color', 'font-family', 'font-size', 'padding']),
+                monthHeader: cs(header, ['color', 'font-family', 'font-size', 'font-weight', 'text-align', 'display', 'justify-content']),
+                table: cs(table, ['background-color', 'border-collapse', 'border-spacing', 'width']),
+                eventImg: cs(root.querySelector('td img'), ['width', 'height', 'border-radius', 'object-fit', 'display', 'margin']),
+                dayNumSpan: cs((withImg || empty || {}).querySelector ? (withImg || empty).querySelector('span') : null, ['color', 'font-size', 'font-weight', 'text-shadow', 'display', 'position']),
+              };
+              const navLinks = Array.from(root.querySelectorAll('a, button, [onclick]')).slice(0, 8).map((a) => ({
+                tag: a.tagName, cls: String(a.className).slice(0, 60), text: (a.textContent || '').trim().slice(0, 24),
+              }));
+              out.navLinks = navLinks;
+              return out;
+            });
+            console.log('CAL1:', JSON.stringify({ themeId: cal.themeId, present: cal.present, htmlLength: cal.htmlLength, sectionTitle: cal.sectionTitle, wrapperStyle: cal.wrapperStyle, tableClass: cal.tableClass, topChildren: cal.topChildren }));
+            console.log('CAL2 inventory:', JSON.stringify(cal.inventory));
+            console.log('CAL3 header:', JSON.stringify({ headerHTML: cal.headerHTML, firstChildHTML: cal.firstChildHTML, headRowHTML: cal.headRowHTML, navLinks: cal.navLinks }));
+            console.log('CAL4 cells:', JSON.stringify({ cellWithEventsHTML: cal.cellWithEventsHTML, emptyCellHTML: cal.emptyCellHTML }));
+            console.log('CAL5 css:', JSON.stringify(cal.css));
+
+            const foot = await page.evaluate(() => {
+              function cs(sel, props) {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                const c = getComputedStyle(el);
+                const o = {};
+                props.forEach((p) => { o[p] = c.getPropertyValue(p); });
+                return o;
+              }
+              return {
+                footer: cs('.site-footer', ['background-color', 'background-image', 'color', 'padding-top', 'padding-bottom', 'font-family']),
+                heading: cs('.site-footer .footer-heading', ['color', 'font-family', 'font-size', 'font-weight', 'text-transform', 'letter-spacing', 'margin-bottom']),
+                link: cs('.site-footer .bottom-link-list .site-footer__linklist-item a', ['color', 'font-size', 'text-decoration-line', 'padding', 'display']),
+                addr: cs('.site-footer .shop-address .content p', ['color', 'font-size', 'line-height']),
+                input: cs('.site-footer input.newsletter__input', ['background-color', 'border', 'border-radius', 'color', 'height', 'padding', 'font-size', 'width']),
+                btn: cs('.site-footer button.newsletter__submit', ['background-color', 'color', 'border-radius', 'height', 'font-size', 'text-transform', 'width', 'border']),
+                bottom: cs('.footer-bottom', ['background-color', 'color', 'padding-top', 'padding-bottom', 'font-size']),
+                hoursP: cs('#newsletter-container .block-newsletter-label p, .site-footer .block-newsletter-label', ['color', 'font-size', 'line-height']),
+                icons: cs('.site-footer .contact-info-inner .fa, .site-footer .contact-info-inner i', ['color', 'font-size', 'display', 'width']),
+                footerH: (document.querySelector('.site-footer') || { offsetHeight: 0 }).offsetHeight,
+                bottomHTML: (document.querySelector('.footer-bottom') || { outerHTML: '' }).outerHTML.slice(0, 1200),
+                hoursHTML: (function () { const n = document.querySelectorAll('.site-footer .block-newsletter-label'); return Array.from(n).map((x) => x.outerHTML.slice(0, 700)); })(),
+              };
+            });
+            console.log('FOOT1:', JSON.stringify({ footer: foot.footer, heading: foot.heading, link: foot.link, addr: foot.addr, footerH: foot.footerH }));
+            console.log('FOOT2:', JSON.stringify({ input: foot.input, btn: foot.btn, bottom: foot.bottom, hoursP: foot.hoursP, icons: foot.icons }));
+            console.log('FOOT3:', JSON.stringify({ bottomHTML: foot.bottomHTML, hoursHTML: foot.hoursHTML }));
+
+            await browser.close();
+            const ok = cal.present && cal.themeId === 157462692013 && Object.keys(cal.inventory || {}).length > 0;
+            console.log(ok ? 'VERDICT: PASS - recon data captured' : 'VERDICT: FAIL - calendar not captured');
+            if (!ok) process.exitCode = 1;
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
