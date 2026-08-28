@@ -10,7 +10,7 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Footer + calendar restyle round 2 (1568 desktop, 390 mobile, live)
+      - name: Footer + calendar restyle round 3 (1568 desktop, 390 mobile, live)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -152,6 +152,8 @@ jobs:
             if (a.hoursRows < 3 || a.hoursDays < 3) pa.push('hours rows built: rows=' + a.hoursRows + ' days=' + a.hoursDays + ' raw=' + a.hoursRawHTML);
             if (a.hoursRows >= 3 && a.hoursRowDisplay !== 'flex') pa.push('hours row display: ' + a.hoursRowDisplay);
             if (!a.btnW || a.btnW === 0) pa.push('newsletter hidden at 1568 (btnW=' + a.btnW + ') mounts=' + JSON.stringify(a.mounts) + ' bands=' + JSON.stringify(a.bands));
+            const deadBands = (a.bands || []).filter((x) => x.w >= 1100 && (!x.btnW || x.btnW === 0));
+            if (deadBands.length) pa.push('rail still hidden in desktop bands: ' + JSON.stringify(deadBands));
             if (a.btnW > 0 && a.igW > 0 && a.btnW > a.igW * 0.6) pa.push('button too wide: ' + a.btnW + '/' + a.igW);
             if (a.btnW > 0 && (!a.inputGroup || a.inputGroup.display !== 'flex' || parseInt(a.inputGroup['border-radius']) < 100)) pa.push('newsletter pill: ' + JSON.stringify(a.inputGroup));
             const oursOverflowA = (a.offenders || []).filter((o) => o.ours);
