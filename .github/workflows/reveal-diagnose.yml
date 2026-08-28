@@ -1,11 +1,10 @@
 name: Reveal diagnose
 
 # Scratch diagnostics against the LIVE site (log-only). Current probe: the
-# partial-line sister follow-up. "4 Solitude" (2 owned locally) renders the
-# info strip, the page then asks /sisterstock.json in the background; when
-# that endpoint reports a sister hit for Solitude, the strip must upgrade
-# to the "... at Exor <Store> ›" link. Consistency-gated: strip link is
-# required exactly when the endpoint says a sister has it.
+# version picker must appear ONLY when a version is left out of the fill.
+# Stardust Dragon (Yu-Gi-Oh, several printings) makes it deterministic:
+# "99 Stardust Dragon" consumes every copy of every version -> no picker;
+# "1 Stardust Dragon" leaves alternatives -> picker with 2+ options.
 
 on:
   workflow_dispatch:
@@ -17,7 +16,7 @@ jobs:
     steps:
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22 2>&1 | tail -1
-      - name: Deck Builder partial-line sister follow-up (real Chrome, live page)
+      - name: Deck Builder picker-usefulness A/B (real Chrome, live page)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -27,33 +26,29 @@ jobs:
             await p.setViewport({ width: 1280, height: 900 });
             const errs = [];
             p.on('pageerror', e => errs.push('pageerror: ' + e.message));
-            p.on('requestfailed', r => { if (r.url().indexOf('exor-binder') > -1) errs.push('reqfail: ' + r.url() + ' ' + (r.failure() || {}).errorText); });
             await p.goto('https://exorgames.com/pages/deck-builder', { waitUntil: 'domcontentloaded', timeout: 60000 });
             await p.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await p.type('#xg-deck-input', '4 Solitude');
+            await p.select('#xg-deck-game', 'yugioh');
+            const read = () => p.evaluate(() => ({
+              pickers: document.querySelectorAll('.xg-deck__ver').length,
+              pickerOptions: (document.querySelector('.xg-deck__ver') || { options: [] }).options.length,
+              stockRows: document.querySelectorAll('.xg-deck__pickbox').length,
+              shortStrip: !!document.querySelector('.xg-deck__row--short'),
+              rows: Array.from(document.querySelectorAll('.xg-deck__row')).slice(0, 8).map(el => el.innerText.replace(/\s+/g, ' ').trim().slice(0, 90))
+            }));
+            await p.type('#xg-deck-input', '99 Stardust Dragon');
             await p.evaluate(() => document.getElementById('xg-deck-go').click());
-            await p.waitForSelector('.xg-deck__row--short', { timeout: 90000 });
-            let gotLink = false;
-            try {
-              await p.waitForFunction(() => !!document.querySelector('.xg-deck__shortsister'), { timeout: 20000 });
-              gotLink = true;
-            } catch (e) { /* no sister link appeared — valid iff endpoint agrees */ }
-            const strip = await p.evaluate(() => {
-              const s = document.querySelector('.xg-deck__shortinfo');
-              const a = document.querySelector('.xg-deck__shortsister');
-              return { text: s ? s.textContent : null, link: a ? { text: a.textContent, href: a.href } : null };
-            });
-            const ep = await p.evaluate(() =>
-              fetch('https://exor-binder.nevski.workers.dev/sisterstock.json?game=mtg&names=Solitude')
-                .then(r => r.ok ? r.json() : null).catch(() => null));
-            console.log('STRIP: ' + JSON.stringify(strip));
-            console.log('ENDPOINT: ' + JSON.stringify(ep));
+            await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
+            const exhaust = await read();
+            console.log('EXHAUSTED (99x): ' + JSON.stringify(exhaust, null, 1));
+            await p.evaluate(() => { document.getElementById('xg-deck-results').innerHTML = ''; document.getElementById('xg-deck-input').value = '1 Stardust Dragon'; document.getElementById('xg-deck-go').click(); });
+            await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
+            const single = await read();
+            console.log('SINGLE (1x): ' + JSON.stringify(single, null, 1));
             console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
             await b.close();
-            const epOk = !!(ep && Array.isArray(ep.results) && ep.results.length === 1 && ep.results[0].q === 'Solitude');
-            const sisterHit = epOk && !!ep.results[0].sister;
-            const consistent = sisterHit ? (gotLink && strip.link && strip.link.text.indexOf('at Exor') > -1) : !gotLink;
-            console.log('sisterHit=' + sisterHit + ' gotLink=' + gotLink);
-            console.log(epOk && consistent && strip.text ? 'VERDICT: PASS' : 'VERDICT: FAIL');
+            const ok = !!(exhaust.stockRows >= 2 && exhaust.pickers === 0 && exhaust.shortStrip &&
+              single.pickers === 1 && single.pickerOptions >= 2);
+            console.log(ok ? 'VERDICT: PASS' : 'VERDICT: FAIL');
           })().catch(e => { console.log('probe error: ' + e.message); });
           EOF
