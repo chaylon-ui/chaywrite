@@ -7,89 +7,25 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Install puppeteer-core
-        run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-
-      - name: Sol Ring page recommendations stay relevant (preview)
+      - name: What does Shopify recommend for Sol Ring (Commander 2018)?
         run: |
-          node <<'EOF'
-          const puppeteer = require('puppeteer-core');
-
-          const PAGE = 'https://exorgames.com/products/sol-ring-commander-2018?preview_theme_id=157462692013';
-
-          async function inspect(browser, label) {
-            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
-            const ctx = await mkCtx.call(browser);
-            const page = await ctx.newPage();
-            await page.setViewport({ width: 1366, height: 900 });
-            await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            // Both features fetch after load (betters: 3 requests incl.
-            // strictlybetter from the browser; related: section-render fetch).
-            await new Promise((res) => setTimeout(res, 9000));
-            const r = await page.evaluate(() => {
-              const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
-              const bet = document.getElementById('exor-betters');
-              out.bettersPresent = !!bet;
-              if (bet) {
-                out.bettersVisible = bet.style.display !== 'none' && bet.offsetParent !== null;
-                out.bettersHeading = (bet.querySelector('h2, h3, .exor-betters__title') || {}).textContent || null;
-                out.bettersCards = Array.from(bet.querySelectorAll('a')).slice(0, 10)
-                  .map((a) => (a.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40)).filter(Boolean);
-              }
-              const rel = document.querySelector('.xg-related');
-              out.relatedPresent = !!rel;
-              if (rel) {
-                out.relatedVisible = rel.style.display !== 'none';
-                const items = Array.from(rel.querySelectorAll('#relatedproduct-carousel .grid__item, #relatedproduct-carousel .grid-view-item'));
-                out.relatedTitles = items.slice(0, 12).map((it) => {
-                  const t = it.querySelector('.grid-view-item__title, .h4, a');
-                  return t ? t.textContent.trim().replace(/\s+/g, ' ').slice(0, 60) : '';
-                }).filter(Boolean);
-              }
-              return out;
-            });
-            console.log(label, JSON.stringify(r));
-            await ctx.close();
-            return r;
-          }
-
-          // Card-game tells: a recommendation clearly from another game is a fail.
-          const OFF_GAME = /pok[eé]mon|\bex\b \[|greninja|gengar|charizard|pikachu|tyrantrum|gardevoir|yu-?gi-?oh|lorcana|one piece/i;
-
-          function verdictOf(r) {
-            const p = [];
-            if (r.themeId !== 157462692013) p.push('wrong theme: ' + r.themeId);
-            if (!r.bettersPresent) p.push('similar-effects strip (#exor-betters) missing from the page');
-            const rt = r.relatedTitles || [];
-            const offGame = rt.filter((t) => OFF_GAME.test(t));
-            if (r.relatedVisible && offGame.length) p.push('off-game recommendations: ' + JSON.stringify(offGame));
-            // Related may legitimately stay hidden (no recommendations); betters
-            // may stay hidden if sources are down - report, only off-game fails.
-            return p;
-          }
-
-          (async () => {
-            const browser = await puppeteer.launch({
-              executablePath: '/usr/bin/google-chrome',
-              args: ['--no-sandbox', '--disable-dev-shm-usage'],
-            });
-            const a = await inspect(browser, 'runA:');
-            const b = await inspect(browser, 'runB:');
-            const pa = verdictOf(a);
-            const pb = verdictOf(b);
-            await browser.close();
-
-            if (pa.length) console.log('runA problems:', pa);
-            if (pb.length) console.log('runB problems:', pb);
-
-            if (!pa.length && !pb.length) {
-              console.log('VERDICT: PASS - betters strip ' + (a.bettersVisible ? 'visible with ' + (a.bettersCards || []).length + ' cards' : 'present (hidden this load)') + '; related ' + (a.relatedVisible ? (a.relatedTitles || []).length + ' items, all in-game' : 'hidden (no recommendations)'));
-            } else if (pa.join('|') !== pb.join('|')) {
-              console.log('VERDICT: INCONSISTENT - runs disagree; re-run before acting');
-              process.exitCode = 1;
-            } else {
-              console.log('VERDICT: FAIL');
-              process.exitCode = 1;
-            }
-          })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
-          EOF
+          set -e
+          PID=$(curl -sS --max-time 20 "https://exorgames.com/products/sol-ring-commander-2018.js" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["id"]); print(d["type"], file=sys.stderr)')
+          echo "product_id: $PID"
+          curl -sS --max-time 30 "https://exorgames.com/recommendations/products.json?product_id=$PID&limit=10&intent=related" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          prods = d.get("products", [])
+          print("count:", len(prods))
+          off = 0
+          for p in prods:
+              t = p.get("type", "")
+              print("-", p.get("title", "")[:70], "|", t, "|", p.get("price", ""))
+              if t and t != "MTG Single":
+                  off += 1
+          print("off-type count:", off)
+          if off:
+              print("VERDICT: FAIL - recommendations cross product types")
+              raise SystemExit(1)
+          print("VERDICT: PASS - every recommendation is an MTG Single")
+          '
