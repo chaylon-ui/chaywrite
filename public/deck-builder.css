@@ -136,9 +136,13 @@
 #xg-deck .xg-deck__row--sister { background: #fffaf0; }
 #xg-deck .xg-deck__row--sister:hover { background: #fdf5e6; }
 /* Solid amber with white text — a pale pill on the pale amber row read as
-   yellow-on-yellow (owner screenshot). */
+   yellow-on-yellow (owner screenshot). The cheapest store is the pill;
+   further stores stack under it as plain amber links with their prices. */
+#xg-deck .xg-deck__stat--sister { white-space: normal; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 #xg-deck .xg-deck__stat--sister a { display: inline-block; padding: 4px 11px; border-radius: 999px; font-weight: 700; background: #b07514; color: #fff; }
 #xg-deck .xg-deck__stat--sister a:hover { background: #9a640f; }
+#xg-deck .xg-deck__stat--sister a.xg-deck__sistermore { background: transparent; color: #b07514; padding: 0; border-radius: 0; font-size: 12px; font-weight: 600; }
+#xg-deck .xg-deck__stat--sister a.xg-deck__sistermore:hover { background: transparent; text-decoration: underline; }
 #xg-deck .xg-deck__sisternote { color: #b07514; font-weight: 600; }
 #xg-deck .xg-deck__sisterhelp { margin: 10px 0 0; font-size: 12.5px; color: #8a9299; }
 
@@ -154,6 +158,7 @@
   #xg-deck .xg-deck__line::before { content: "Line "; color: #98a0a6; font-weight: 400; }
   #xg-deck .xg-deck__row--short { padding: 10px 14px; }
   #xg-deck .xg-deck__shortinfo { display: block; margin-bottom: 5px; }
+  #xg-deck .xg-deck__stat--sister { align-items: flex-start; }
   #xg-deck .xg-deck__misslist { columns: 1; }
 }
 @media (prefers-reduced-motion: reduce) {

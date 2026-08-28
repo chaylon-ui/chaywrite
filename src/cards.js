@@ -1210,9 +1210,9 @@ async function findAtSisters(name, game) {
       return best ? { store: s.store, ...best } : null;
     } catch { return null; }
   }));
-  let win = null;
-  for (const b of per) if (b && (!win || b.cents < win.cents)) win = b;
-  if (!win) return null;
+  const hits = per.filter(Boolean).sort((a, b) => a.cents - b.cents);
+  if (!hits.length) return null;
+  const win = hits[0];
   return {
     store: win.store,
     name: baseName(win.title),
@@ -1223,6 +1223,17 @@ async function findAtSisters(name, game) {
     qty: typeof win.qty === "number" ? win.qty : null,
     image: win.image || null,
     url: win.url,
+    // EVERY sister store holding the card, cheapest first — the UI links
+    // each store name individually (owner: "Summerside and Truro", each
+    // clickable to that store's own product page).
+    stores: hits.map((h) => ({
+      store: h.store,
+      price: (h.cents / 100).toFixed(2),
+      qty: typeof h.qty === "number" ? h.qty : null,
+      condition: h.condition || "",
+      foil: !!h.foil,
+      url: h.url,
+    })),
   };
 }
 

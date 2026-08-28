@@ -343,8 +343,17 @@
             var sx = state.sisterExtra[ln.name.toLowerCase()];
             var tail;
             if (sx) {
-              var moreN = (typeof sx.qty === 'number' && sx.qty > 0) ? Math.min(sx.qty, remaining) + ' more' : 'more';
-              tail = '<a class="xg-deck__shortsister" href="' + esc(sx.url) + '" target="_blank" rel="noopener">' + moreN + ' at Exor ' + esc(sx.store) + ' &rsaquo;</a>';
+              // Name every store that has it, each its own link; count only
+              // when every store's number is known (never an undercount).
+              var sxs = (sx.stores && sx.stores.length) ? sx.stores : [sx];
+              var knownQ = 0, allKnown = true;
+              sxs.forEach(function (st) {
+                if (typeof st.qty === 'number' && st.qty > 0) knownQ += st.qty; else allKnown = false;
+              });
+              var moreN = (allKnown && knownQ > 0) ? Math.min(knownQ, remaining) + ' more' : 'more';
+              tail = moreN + ' at Exor ' + sxs.map(function (st) {
+                return '<a class="xg-deck__shortsister" href="' + esc(st.url) + '" target="_blank" rel="noopener">' + esc(st.store) + ' &rsaquo;</a>';
+              }).join(' or ');
             } else {
               tail = remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now';
             }
@@ -376,7 +385,15 @@
           '</span>' +
           '<span class="xg-deck__unit" role="cell">' + money(parseFloat(s.price) || 0) + '</span>' +
           '<span class="xg-deck__line" role="cell">&mdash;</span>' +
-          '<span class="xg-deck__stat xg-deck__stat--sister" role="cell"><a href="' + esc(s.url) + '" target="_blank" rel="noopener">At Exor ' + esc(s.store) + ' ›</a></span>' +
+          // Cheapest store leads as the pill; every OTHER store holding the
+          // card follows as its own smaller link with its price.
+          '<span class="xg-deck__stat xg-deck__stat--sister" role="cell">' +
+            ((s.stores && s.stores.length) ? s.stores : [{ store: s.store, url: s.url, price: s.price }]).map(function (st, si) {
+              return si === 0
+                ? '<a href="' + esc(st.url) + '" target="_blank" rel="noopener">At Exor ' + esc(st.store) + ' ›</a>'
+                : '<a class="xg-deck__sistermore" href="' + esc(st.url) + '" target="_blank" rel="noopener">also ' + esc(st.store) + ' &middot; $' + esc(st.price) + ' ›</a>';
+            }).join('') +
+          '</span>' +
         '</div>';
       }
       missNames.push(ln.name);
