@@ -10,76 +10,54 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Remove-all-items link clears the preview cart
+      - name: Hero images drift subtly on scroll (preview homepage)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
 
-          const PREVIEW_CART = 'https://exorgames.com/cart?preview_theme_id=157462692013';
-          const LIVE_CART = 'https://exorgames.com/cart';
-          const VARIANT = 40397329203373; // Sol Ring [Kaldheim Commander] $3.00 NM, in stock
+          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
+          const LIVE = 'https://exorgames.com/';
 
-          async function flow(browser, label) {
-            // Fresh context per run: each gets its own empty session cart.
+          function readState(page) {
+            return page.evaluate(() => {
+              const main = document.querySelector('.xg-hero__main');
+              if (!main) return { noMain: true };
+              const bg = main.querySelector('.xg-hero__slide.is-active .xg-hero__bg') || main.querySelector('.xg-hero__bg');
+              const t = bg ? getComputedStyle(bg).transform : null;
+              let ty = null, scale = null;
+              if (t && t.startsWith('matrix(')) {
+                const m = t.slice(7, -1).split(',').map(Number);
+                scale = m[0];
+                ty = m[5];
+              }
+              return {
+                parallaxAttr: main.hasAttribute('data-parallax'),
+                inited: main.getAttribute('data-xg-par') === '1',
+                box: { w: main.offsetWidth, h: main.offsetHeight },
+                transform: t,
+                ty: ty,
+                scale: scale,
+                varPar: main.style.getPropertyValue('--xg-par') || null,
+                img: bg ? { natW: bg.naturalWidth, natH: bg.naturalHeight, src: (bg.currentSrc || bg.src || '').split('?')[0].split('/').pop() } : null,
+              };
+            });
+          }
+
+          async function flow(browser, label, reducedMotion) {
             const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
             const ctx = await mkCtx.call(browser);
             const page = await ctx.newPage();
             await page.setViewport({ width: 1366, height: 900 });
-            const r = { dialogMsg: null };
-
-            // Empty-cart baseline: the link must NOT render without items.
-            await page.goto(PREVIEW_CART, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            r.themeId = await page.evaluate(() => (window.Shopify && Shopify.theme && Shopify.theme.id) || null);
-            r.emptyHasLink = await page.evaluate(() => !!document.querySelector('.cart__clear-all'));
-
-            // Add one Sol Ring through the storefront cart API (session cart,
-            // discarded with the context; the flow ends with the cart cleared).
-            r.addStatus = await page.evaluate(async (v) => {
-              const resp = await fetch('/cart/add.js', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ id: v, quantity: 1 }),
-              });
-              return resp.status;
-            }, VARIANT);
-            await page.goto(PREVIEW_CART, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            // Let async injections settle (Shopify's preview bar, app widgets)
-            // before hit-testing - they flash over the page mid-load.
-            await new Promise((res) => setTimeout(res, 2000));
-            r.countBefore = await page.evaluate(() => fetch('/cart.js').then((x) => x.json()).then((j) => j.item_count));
-
-            const link = await page.$('.cart__clear-all');
-            r.linkPresent = !!link;
-            if (link) {
-              r.link = await page.evaluate((a) => {
-                a.scrollIntoView({ block: 'center' });
-                const b = a.getBoundingClientRect();
-                const at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-                const foreign = !!at && at !== a && !a.contains(at);
-                const cs = foreign ? getComputedStyle(at) : null;
-                return {
-                  text: a.textContent.trim(),
-                  href: a.getAttribute('href'),
-                  icon: !!a.querySelector('.fa-trash-o'),
-                  visible: a.offsetParent !== null,
-                  covered: foreign,
-                  coveredBy: foreign ? { tag: at.tagName, id: at.id, cls: String(at.className).slice(0, 60), pos: cs.position, z: cs.zIndex, html: at.outerHTML.slice(0, 160) } : null,
-                };
-              }, link);
-              page.on('dialog', (d) => { r.dialogMsg = d.message(); d.accept(); });
-              // DOM click: runs the inline onclick (confirm) and follows the
-              // href exactly like a user click, independent of overlays.
-              await Promise.all([
-                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }),
-                page.evaluate((a) => a.click(), link),
-              ]);
-              r.urlAfterClick = page.url();
-              // Deterministic final state: a fresh cart load.
-              await page.goto(PREVIEW_CART, { waitUntil: 'domcontentloaded', timeout: 60000 });
-              r.countAfter = await page.evaluate(() => fetch('/cart.js').then((x) => x.json()).then((j) => j.item_count));
-              r.emptyMessageShown = await page.evaluate(() => !!document.querySelector('.cart--empty-message'));
-              r.linkGoneAfterClear = await page.evaluate(() => !document.querySelector('.cart__clear-all'));
+            if (reducedMotion) {
+              await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
             }
+            await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await new Promise((res) => setTimeout(res, 2200));
+            const r = { reducedMotion: !!reducedMotion };
+            r.atTop = await readState(page);
+            await page.evaluate(() => window.scrollTo({ top: 420, behavior: 'instant' }));
+            await new Promise((res) => setTimeout(res, 400));
+            r.scrolled = await readState(page);
             console.log(label, JSON.stringify(r));
             await ctx.close();
             return r;
@@ -87,24 +65,24 @@ jobs:
 
           function verdictOf(r) {
             const p = [];
-            if (r.themeId !== 157462692013) p.push('preview load served theme ' + r.themeId);
-            if (r.emptyHasLink) p.push('link rendered on an EMPTY cart');
-            if (r.addStatus !== 200) p.push('cart add failed: HTTP ' + r.addStatus);
-            if (!(r.countBefore >= 1)) p.push('cart not populated before clear: ' + r.countBefore);
-            if (!r.linkPresent) p.push('no .cart__clear-all link on the populated cart');
-            if (r.link) {
-              if (!/Remove all items/.test(r.link.text)) p.push('unexpected link text: ' + JSON.stringify(r.link.text));
-              if (r.link.href !== '/cart/clear') p.push('unexpected href: ' + r.link.href);
-              if (!r.link.icon) p.push('trash icon missing');
-              if (!r.link.visible) p.push('link not visible');
-              // covered is reported as a WARN in the run JSON, not a failure:
-              // async injections (preview bar, app widgets) hit-test over the
-              // page transiently and only exist in preview/first-load states.
+            const a = r.atTop, b = r.scrolled;
+            if (!a || a.noMain) { p.push('hero main not found'); return p; }
+            if (!a.parallaxAttr) p.push('data-parallax attribute missing (setting default not applied?)');
+            if (r.reducedMotion) {
+              if (a.transform !== 'none') p.push('reduced motion: transform should be none, got ' + a.transform);
+              if (b.transform !== 'none') p.push('reduced motion: transform after scroll should be none, got ' + b.transform);
+              return p;
             }
-            if (!/Remove all items from your cart\?/.test(r.dialogMsg || '')) p.push('confirm dialog missing/unexpected: ' + JSON.stringify(r.dialogMsg));
-            if (r.countAfter !== 0) p.push('cart not empty after clear: ' + r.countAfter);
-            if (!r.emptyMessageShown) p.push('empty-cart message not shown after clear');
-            if (!r.linkGoneAfterClear) p.push('link still present after clear');
+            if (!a.inited) p.push('parallax script did not initialize');
+            if (a.scale == null || Math.abs(a.scale - 1.1) > 0.01) p.push('bg scale not 1.1: ' + a.scale);
+            if (b.scale == null || Math.abs(b.scale - 1.1) > 0.01) p.push('bg scale after scroll not 1.1: ' + b.scale);
+            if (a.ty == null || b.ty == null) p.push('no matrix transform on bg');
+            else {
+              const delta = b.ty - a.ty;
+              if (!(delta > 1)) p.push('image did not drift down vs page (delta ' + delta.toFixed(1) + 'px - expected a few px)');
+              if (Math.abs(a.ty) > 16 * 1.1 + 1 || Math.abs(b.ty) > 16 * 1.1 + 1) p.push('drift exceeds the 14px clamp (x1.1 scale): ' + a.ty + ' -> ' + b.ty);
+            }
+            if (!a.box || a.box.w < 500 || a.box.h < 300) p.push('unexpected hero box: ' + JSON.stringify(a.box));
             return p;
           }
 
@@ -114,31 +92,34 @@ jobs:
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
 
-            const a = await flow(browser, 'runA:');
-            const b = await flow(browser, 'runB:');
+            const a = await flow(browser, 'runA:', false);
+            const b = await flow(browser, 'runB:', false);
+            const rm = await flow(browser, 'reduced:', true);
             const pa = verdictOf(a);
             const pb = verdictOf(b);
+            const pr = verdictOf(rm);
 
-            // Negative control: LIVE cart page in its own fresh context.
             const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
             const ctx = await mkCtx.call(browser);
             const lp = await ctx.newPage();
-            await lp.goto(LIVE_CART, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await lp.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await new Promise((res) => setTimeout(res, 2000));
             const live = await lp.evaluate(() => ({
               themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null,
-              hasLink: !!document.querySelector('.cart__clear-all'),
+              hasParallax: !!document.querySelector('[data-parallax]'),
             }));
-            console.log('live cart (fresh context):', JSON.stringify(live), '(must be live theme 157458727085 with no clear-all link)');
-            const liveBad = live.hasLink || live.themeId !== 157458727085;
+            console.log('live homepage (fresh context):', JSON.stringify(live), '(must be live theme, no data-parallax)');
+            const liveBad = live.hasParallax || live.themeId !== 157458727085;
             await ctx.close();
             await browser.close();
 
             if (pa.length) console.log('runA problems:', pa);
             if (pb.length) console.log('runB problems:', pb);
-            if (liveBad) console.log('PROBLEM: live cart control failed');
+            if (pr.length) console.log('reduced-motion problems:', pr);
+            if (liveBad) console.log('PROBLEM: live control failed');
 
-            if (!pa.length && !pb.length && !liveBad) {
-              console.log('VERDICT: PASS - Remove-all link renders only with items, confirms, and empties the preview cart; live cart untouched');
+            if (!pa.length && !pb.length && !pr.length && !liveBad) {
+              console.log('VERDICT: PASS - hero image drifts ' + (b.scrolled.ty - b.atTop.ty).toFixed(1) + 'px over a 420px scroll (scale 1.1 bleed), off under reduced motion, live untouched; hero box ' + a.atTop.box.w + 'x' + a.atTop.box.h);
             } else if (pa.join('|') !== pb.join('|')) {
               console.log('VERDICT: INCONSISTENT - the two runs disagree; treat as flaky, re-run before acting');
               process.exitCode = 1;
