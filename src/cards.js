@@ -293,7 +293,7 @@ export async function serveCards(request, env, ctx, collection = "new-arrivals",
   if (built.cards.length === 0) {
     return Response.json(
       { error: "feed unavailable", detail: trouble, cards: [] },
-      { status: 503, headers: { "cache-control": "no-store" } },
+      { status: 503, headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } },
     );
   }
 
@@ -310,7 +310,9 @@ export async function serveCards(request, env, ctx, collection = "new-arrivals",
       cats: built.cats,
       cards: built.cards,
     },
-    { headers: { "cache-control": `public, max-age=${TTL_S}` } },
+    // CORS: the storefront's New Today strip reads this cross-origin (the
+    // TVs are same-origin and unaffected).
+    { headers: { "cache-control": `public, max-age=${TTL_S}`, "access-control-allow-origin": "*" } },
   );
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;

@@ -123,6 +123,8 @@ jobs:
           echo "next-cheapest toggle served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-nextcheap' || true)"
           echo "ticks + version picker served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-checkall' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck__ver' || true)"
           echo "thumb zoom served (js/css): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-zoom' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.css' | grep -c 'xg-deck-zoom' || true)"
+          curl -sS -o /dev/null -w 'new-today.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/new-today.js" || true
+          echo "cards.json nt=1 CORS + count: $(curl -sS --max-time 120 'https://exor-binder.nevski.workers.dev/cards.json?collection=new-arrivals&nt=1' -D /tmp/nt-h -o /tmp/nt-b && grep -ci 'access-control-allow-origin' /tmp/nt-h || true) / $(python3 -c 'import json;print(json.load(open("/tmp/nt-b")).get("count"))' 2>/dev/null || echo parse-fail)"
           curl -sS -o /dev/null -w 'deck-builder.css: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.css" || true
           echo "=== /buyprice.json (BinderPOS only; available:false until BINDERPOS_API_KEY — storefront then uses daily buy-rules estimates) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Sol%20Ring&type=MTG%20Single" | head -c 600 || true
