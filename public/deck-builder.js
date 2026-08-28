@@ -351,9 +351,9 @@
                 if (typeof st.qty === 'number' && st.qty > 0) knownQ += st.qty; else allKnown = false;
               });
               var moreN = (allKnown && knownQ > 0) ? Math.min(knownQ, remaining) + ' more' : 'more';
-              tail = moreN + ' at Exor ' + sxs.map(function (st) {
+              tail = moreN + ' in stock at: ' + sxs.map(function (st) {
                 return '<a class="xg-deck__shortsister" href="' + esc(st.url) + '" target="_blank" rel="noopener">' + esc(st.store) + ' &rsaquo;</a>';
-              }).join(' or ');
+              }).join(' &middot; ');
             } else {
               tail = remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now';
             }
@@ -385,14 +385,16 @@
           '</span>' +
           '<span class="xg-deck__unit" role="cell">' + money(parseFloat(s.price) || 0) + '</span>' +
           '<span class="xg-deck__line" role="cell">&mdash;</span>' +
-          // Cheapest store leads as the pill; every OTHER store holding the
-          // card follows as its own smaller link with its price.
+          // Uniform store list (owner): a quiet label, then every store as an
+          // identical pill link — no prices here; the Unit column already
+          // carries the cheapest one, and stores are ordered cheapest-first.
           '<span class="xg-deck__stat xg-deck__stat--sister" role="cell">' +
-            ((s.stores && s.stores.length) ? s.stores : [{ store: s.store, url: s.url, price: s.price }]).map(function (st, si) {
-              return si === 0
-                ? '<a href="' + esc(st.url) + '" target="_blank" rel="noopener">At Exor ' + esc(st.store) + ' ›</a>'
-                : '<a class="xg-deck__sistermore" href="' + esc(st.url) + '" target="_blank" rel="noopener">also ' + esc(st.store) + ' &middot; $' + esc(st.price) + ' ›</a>';
-            }).join('') +
+            '<span class="xg-deck__sisterlabel">Copies in stock at:</span>' +
+            '<span class="xg-deck__sisterstores">' +
+              ((s.stores && s.stores.length) ? s.stores : [{ store: s.store, url: s.url }]).map(function (st) {
+                return '<a href="' + esc(st.url) + '" target="_blank" rel="noopener">' + esc(st.store) + ' ›</a>';
+              }).join('') +
+            '</span>' +
           '</span>' +
         '</div>';
       }
@@ -434,7 +436,7 @@
       : '';
 
     var sisterHelp = atSisters
-      ? '<p class="xg-deck__sisterhelp">Cards marked &ldquo;At Exor &hellip;&rdquo; are in stock at another Exor Games location &mdash; the link opens that store&rsquo;s site, with its own cart and checkout.</p>'
+      ? '<p class="xg-deck__sisterhelp">Cards marked &ldquo;Copies in stock at:&rdquo; are at another Exor Games location &mdash; each store link opens that store&rsquo;s site, with its own cart and checkout.</p>'
       : '';
 
     out.innerHTML =
