@@ -10,195 +10,84 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Footer + calendar restyle round 3 (1568 desktop, 390 mobile, live)
+      - name: Screenshot the live Deck Builder with a filled list
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
+          const crypto = require('crypto');
 
-          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
-          const LIVE = 'https://exorgames.com/';
-
-          async function inspect(browser, label, url, vw, vh, waitCal) {
-            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
-            const ctx = await mkCtx.call(browser);
-            const page = await ctx.newPage();
-            await page.setViewport({ width: vw, height: vh });
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            const t0 = Date.now();
-            for (;;) {
-              const n = await page.evaluate(() => document.querySelectorAll('#binderpos-calendar td').length);
-              if ((waitCal ? n > 20 : true) && Date.now() - t0 > 2500) break;
-              if (Date.now() - t0 > 30000) break;
-              await new Promise((r) => setTimeout(r, 700));
-            }
-            const r = await page.evaluate(() => {
-              function cs(el, props, pseudo) {
-                if (!el) return null;
-                const c = getComputedStyle(el, pseudo || null);
-                const o = {};
-                props.forEach((p) => { o[p] = c.getPropertyValue(p); });
-                return o;
-              }
-              const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
-              const foot = document.querySelector('.site-footer');
-              out.footerBg = foot ? getComputedStyle(foot).backgroundImage.slice(0, 60) : null;
-              out.accent = foot ? cs(foot, ['content', 'height'], '::before') : null;
-              const row = document.querySelector('.site-footer .footer-container > .page-width > .row');
-              out.rowDisplay = row ? getComputedStyle(row).display : null;
-              out.headingFont = cs(document.querySelector('.site-footer .footer-heading'), ['font-family']);
-              out.chip = cs(document.querySelector('.site-footer .contact-info .site-footer__linklist-item > i'), ['width', 'border-radius']);
-              const dn = document.getElementById('_desktop_newsletter');
-              const mn = document.getElementById('_mobile_newsletter');
-              out.mounts = {
-                desktop: dn ? getComputedStyle(dn).display : null,
-                mobile: mn ? getComputedStyle(mn).display : null,
-              };
-              const ig = document.querySelector('.site-footer .xg-newsletter .input-group');
-              const btn = document.querySelector('.site-footer .xg-newsletter button.newsletter__submit');
-              out.inputGroup = cs(ig, ['display', 'border-radius']);
-              out.btn = cs(btn, ['border-radius']);
-              out.btnW = btn ? btn.offsetWidth : null;
-              out.igW = ig ? ig.offsetWidth : null;
-              out.hoursRows = document.querySelectorAll('.site-footer .xg-hours .xg-hours__row').length;
-              out.hoursDays = document.querySelectorAll('.site-footer .xg-hours .xg-hours__day').length;
-              const hr = document.querySelector('.site-footer .xg-hours .xg-hours__row');
-              out.hoursRowDisplay = hr ? getComputedStyle(hr).display : null;
-              out.hoursSample = hr ? hr.textContent.trim().slice(0, 60) : null;
-              out.hoursRawHTML = (function () {
-                const w = document.querySelector('.site-footer .xg-hours .newsletter_text');
-                return w ? w.innerHTML.replace(/\s+/g, ' ').slice(0, 300) : null;
-              })();
-              out.pageScrollX = document.documentElement.scrollWidth - document.documentElement.clientWidth;
-              out.offenders = (function () {
-                const vwNow = document.documentElement.clientWidth;
-                const bad = [];
-                document.querySelectorAll('body *').forEach((el) => {
-                  const r2 = el.getBoundingClientRect();
-                  if (r2.width > 20 && r2.right > vwNow + 2 && bad.length < 6) {
-                    if (el.closest('.xg-nt__row, script, style')) return;
-                    const parentAlready = bad.some((b) => b.el.contains(el));
-                    if (parentAlready) return;
-                    bad.push({ el, sel: el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''), right: Math.round(r2.right), ours: !!el.closest('.site-footer, section.calendar-container, #binderpos-calendar') });
-                  }
-                });
-                return bad.map((b) => ({ sel: b.sel, right: b.right, ours: b.ours }));
-              })();
-
-              const cal = document.getElementById('binderpos-calendar');
-              out.calTds = cal ? cal.querySelectorAll('td').length : 0;
-              if (cal && out.calTds > 0) {
-                const wrap = document.querySelector('.calendar-contents');
-                out.overlay = cs(wrap, ['content'], '::after');
-                const h3 = document.querySelector('section.calendar-container h3');
-                out.calTitle = h3 ? { display: getComputedStyle(h3).display, text: h3.textContent.trim().slice(0, 24) } : null;
-                out.actions = cs(cal.querySelector('.calendar-actions-container'), ['display']);
-                const table = cal.querySelector('table.calendar-table');
-                out.table = cs(table, ['border-spacing']);
-                out.tableW = table ? table.offsetWidth : null;
-                out.td = cs(cal.querySelector('td.calendar-data-block:not(.calendar-inactive-block)'), ['border-radius']);
-                out.th = cs(cal.querySelector('th'), ['background-image']);
-                out.icon = cs(cal.querySelector('td img.calendar-icon'), ['width', 'height', 'object-fit']);
-                out.today = cs(cal.querySelector('td.calendar-selected-date'), ['border-top-color']);
-                const inner = document.querySelector('.calendar-inner-container');
-                out.calScrollable = inner ? inner.scrollWidth > inner.clientWidth + 1 : null;
-                out.calInnerW = inner ? inner.clientWidth : null;
-              }
-              return out;
-            });
-
-            if (label === 'desk:') {
-              r.bands = [];
-              for (const w of [1568, 1440, 1366, 1200, 1100, 991, 768, 390]) {
-                await page.setViewport({ width: w, height: vh });
-                await new Promise((res) => setTimeout(res, 250));
-                const b = await page.evaluate(() => {
-                  function d(sel) { const el = document.querySelector(sel); return el ? getComputedStyle(el).display : null; }
-                  const btn = document.querySelector('.site-footer .xg-newsletter button.newsletter__submit');
-                  return {
-                    dn: d('#_desktop_newsletter'),
-                    mn: d('#_mobile_newsletter'),
-                    h2: d('.site-footer h2.footer-heading'),
-                    ft: d('.site-footer .footer-title'),
-                    btnW: btn ? btn.offsetWidth : null,
-                  };
-                });
-                r.bands.push({ w, ...b });
-              }
-              await page.setViewport({ width: vw, height: vh });
-            }
-
-            console.log(label, JSON.stringify(r));
-            await ctx.close();
-            return r;
-          }
+          const URL = 'https://exorgames.com/pages/deck-builder';
+          const LIST = [
+            '1 Sol Ring',
+            '1 Command Tower',
+            '1 Arcane Signet',
+            '1 Counterspell',
+            '1 Lightning Bolt',
+            '1 Cultivate',
+            '1 Swords to Plowshares',
+          ].join('\n');
 
           (async () => {
             const browser = await puppeteer.launch({
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
-            const a = await inspect(browser, 'desk:', PREVIEW, 1568, 900, true);
-            const m = await inspect(browser, 'mob:', PREVIEW, 390, 844, true);
-            const b = await inspect(browser, 'live:', LIVE, 1568, 900, false);
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1380, height: 980, deviceScaleFactor: 1.5 });
+            await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
+            await new Promise((r) => setTimeout(r, 1500));
+
+            await page.evaluate((list) => {
+              // clear floating widgets (chat bubbles etc) so the crop stays clean
+              document.querySelectorAll('iframe, [id*="chat" i], [class*="chat-" i], [id*="gorgias" i], [id*="tidio" i]').forEach((el) => {
+                if (!el.closest('#xg-deck')) el.style.display = 'none';
+              });
+              const input = document.getElementById('xg-deck-input');
+              input.value = list;
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+            }, LIST);
+            await page.click('#xg-deck-go');
+
+            const t0 = Date.now();
+            for (;;) {
+              const ready = await page.evaluate(() => {
+                const out = document.getElementById('xg-deck-results');
+                if (!out) return false;
+                const imgs = out.querySelectorAll('img');
+                return out.textContent.indexOf('$') > -1 && imgs.length >= 5 &&
+                  Array.prototype.every.call(imgs, (i) => i.complete);
+              });
+              if (ready || Date.now() - t0 > 75000) break;
+              await new Promise((r) => setTimeout(r, 800));
+            }
+            await new Promise((r) => setTimeout(r, 2500));
+
+            const info = await page.evaluate(() => {
+              const out = document.getElementById('xg-deck-results');
+              const rect = document.getElementById('xg-deck').getBoundingClientRect();
+              return {
+                resultChars: out ? out.textContent.replace(/\s+/g, ' ').trim().length : 0,
+                sample: out ? out.textContent.replace(/\s+/g, ' ').trim().slice(0, 300) : null,
+                imgs: out ? out.querySelectorAll('img').length : 0,
+                h: Math.round(rect.height),
+              };
+            });
+            console.log('STATE:', JSON.stringify(info));
+
+            const el = await page.$('#xg-deck');
+            await el.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 74 });
             await browser.close();
 
-            const pa = [];
-            if (a.themeId !== 157462692013) pa.push('wrong theme: ' + a.themeId);
-            if (!a.accent || a.accent.content === 'none' || a.accent.height !== '3px') pa.push('accent bar: ' + JSON.stringify(a.accent));
-            if (!/gradient/.test(a.footerBg || '')) pa.push('footer bg: ' + a.footerBg);
-            if (a.rowDisplay !== 'grid') pa.push('footer row not grid: ' + a.rowDisplay);
-            if (!/Oswald/.test((a.headingFont || {})['font-family'] || '')) pa.push('heading font lost again: ' + JSON.stringify(a.headingFont));
-            if (!a.chip || a.chip.width !== '36px' || a.chip['border-radius'] !== '10px') pa.push('contact chip: ' + JSON.stringify(a.chip));
-            if (a.hoursRows < 3 || a.hoursDays < 3) pa.push('hours rows built: rows=' + a.hoursRows + ' days=' + a.hoursDays + ' raw=' + a.hoursRawHTML);
-            if (a.hoursRows >= 3 && a.hoursRowDisplay !== 'flex') pa.push('hours row display: ' + a.hoursRowDisplay);
-            if (!a.btnW || a.btnW === 0) pa.push('newsletter hidden at 1568 (btnW=' + a.btnW + ') mounts=' + JSON.stringify(a.mounts) + ' bands=' + JSON.stringify(a.bands));
-            const deadBands = (a.bands || []).filter((x) => x.w >= 1100 && (!x.btnW || x.btnW === 0));
-            if (deadBands.length) pa.push('rail still hidden in desktop bands: ' + JSON.stringify(deadBands));
-            if (a.btnW > 0 && a.igW > 0 && a.btnW > a.igW * 0.6) pa.push('button too wide: ' + a.btnW + '/' + a.igW);
-            if (a.btnW > 0 && (!a.inputGroup || a.inputGroup.display !== 'flex' || parseInt(a.inputGroup['border-radius']) < 100)) pa.push('newsletter pill: ' + JSON.stringify(a.inputGroup));
-            const oursOverflowA = (a.offenders || []).filter((o) => o.ours);
-            if (a.pageScrollX > 1 && oursOverflowA.length) pa.push('our elements overflow at 1568: ' + JSON.stringify(oursOverflowA));
-            if (a.calTds < 21) pa.push('calendar never rendered');
-            if (a.calTds > 20) {
-              if (!a.overlay || a.overlay.content === 'none') pa.push('calendar overlay missing');
-              if (!a.calTitle || a.calTitle.display !== 'block') pa.push('calendar title: ' + JSON.stringify(a.calTitle));
-              if ((a.actions || {}).display !== 'flex') pa.push('month bar: ' + JSON.stringify(a.actions));
-              if (!/^6px( 6px)?$/.test((a.table || {})['border-spacing'] || '')) pa.push('spacing: ' + JSON.stringify(a.table));
-              if (!a.td || a.td['border-radius'] !== '12px') pa.push('cells: ' + JSON.stringify(a.td));
-              if (!/none/.test((a.th || {})['background-image'] || '')) pa.push('th gradient: ' + JSON.stringify(a.th));
-              if (!a.icon || a.icon.width !== '30px' || a.icon['object-fit'] !== 'contain') pa.push('icons: ' + JSON.stringify(a.icon));
-              if (a.today && !/214, 44, 40/.test(a.today['border-top-color'])) pa.push('today ring: ' + JSON.stringify(a.today));
+            const buf = fs.readFileSync('shot.jpg');
+            console.log('SHOT_SIZE:', buf.length, 'SHOT_MD5:', crypto.createHash('md5').update(buf).digest('hex'));
+            const b64 = buf.toString('base64');
+            console.log('SHOT_BEGIN');
+            for (let i = 0; i < b64.length; i += 6000) {
+              console.log('B64:' + b64.slice(i, i + 6000));
             }
-
-            const pm = [];
-            if (m.themeId !== 157462692013) pm.push('wrong theme: ' + m.themeId);
-            if (m.rowDisplay === 'grid') pm.push('grid leaked to mobile');
-            if (m.chip && (m.chip.width !== '36px' || m.chip['border-radius'] !== '10px')) pm.push('mobile chip: ' + JSON.stringify(m.chip));
-            const oursOverflowM = (m.offenders || []).filter((o) => o.ours);
-            if (oursOverflowM.length) pm.push('our elements overflow at 390: ' + JSON.stringify(oursOverflowM));
-            if (m.pageScrollX > 1 && !oursOverflowM.length) console.log('NOTE: pre-existing mobile overflow ' + m.pageScrollX + 'px from ' + JSON.stringify(m.offenders));
-            if (m.calTds > 20) {
-              if (m.calScrollable !== true && m.tableW > (m.calInnerW || 0) + 1) pm.push('mobile calendar container not clipping: tableW=' + m.tableW + ' innerW=' + m.calInnerW);
-              if (!m.icon || m.icon.width !== '24px') pm.push('mobile icons: ' + JSON.stringify(m.icon));
-            } else {
-              pm.push('mobile calendar never rendered');
-            }
-
-            const pb = [];
-            if (b.themeId !== 157458727085) pb.push('live wrong theme: ' + b.themeId);
-            if (b.accent && b.accent.content !== 'none') pb.push('live has accent bar');
-            if (b.hoursRows !== 0) pb.push('live has built hours rows: ' + b.hoursRows);
-            if (/gradient/.test(b.footerBg || '')) pb.push('live footer bg changed');
-
-            if (pa.length) console.log('desktop problems:', pa);
-            if (pm.length) console.log('mobile problems:', pm);
-            if (pb.length) console.log('live problems:', pb);
-
-            if (!pa.length && !pm.length && !pb.length) {
-              console.log('VERDICT: PASS - footer: Oswald headings, 36px chips, pill newsletter visible (' + a.btnW + 'px btn), ' + a.hoursRows + ' hours rows ("' + a.hoursSample + '"); calendar: ' + a.calTds + ' cells styled, icons 30/24px contain, today ring; no overflow from restyled areas; live untouched. bands=' + JSON.stringify(a.bands));
-            } else {
-              console.log('VERDICT: FAIL');
-              process.exitCode = 1;
-            }
+            console.log('SHOT_END');
+            console.log('VERDICT: PASS - screenshot captured (' + info.imgs + ' card images, results ' + info.resultChars + ' chars)');
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
