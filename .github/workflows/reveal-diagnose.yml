@@ -1,10 +1,11 @@
 name: Reveal diagnose
 
-# Scratch diagnostics against the LIVE site (log-only). Current probe: the
-# version picker must appear ONLY when a version is left out of the fill.
-# Stardust Dragon (Yu-Gi-Oh, several printings) makes it deterministic:
-# "99 Stardust Dragon" consumes every copy of every version -> no picker;
-# "1 Stardust Dragon" leaves alternatives -> picker with 2+ options.
+# Scratch diagnostics against the LIVE site (log-only). Current probe:
+# multi-store sister links. "99 Sol Ring" runs Charlottetown dry, the info
+# strip then names EVERY sister store holding Sol Ring, each store name its
+# own link. Consistency-gated against /sisterstock.json: the strip must
+# carry exactly as many store links as the endpoint reports stores, and the
+# endpoint's stores[] must be sorted cheapest-first.
 
 on:
   workflow_dispatch:
@@ -16,7 +17,7 @@ jobs:
     steps:
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22 2>&1 | tail -1
-      - name: Deck Builder picker-usefulness A/B (real Chrome, live page)
+      - name: Deck Builder multi-store sister links (real Chrome, live page)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -28,27 +29,30 @@ jobs:
             p.on('pageerror', e => errs.push('pageerror: ' + e.message));
             await p.goto('https://exorgames.com/pages/deck-builder', { waitUntil: 'domcontentloaded', timeout: 60000 });
             await p.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await p.select('#xg-deck-game', 'yugioh');
-            const read = () => p.evaluate(() => ({
-              pickers: document.querySelectorAll('.xg-deck__ver').length,
-              pickerOptions: (document.querySelector('.xg-deck__ver') || { options: [] }).options.length,
-              stockRows: document.querySelectorAll('.xg-deck__pickbox').length,
-              shortStrip: !!document.querySelector('.xg-deck__row--short'),
-              rows: Array.from(document.querySelectorAll('.xg-deck__row')).slice(0, 8).map(el => el.innerText.replace(/\s+/g, ' ').trim().slice(0, 90))
-            }));
-            await p.type('#xg-deck-input', '99 Stardust Dragon');
+            await p.type('#xg-deck-input', '99 Sol Ring');
             await p.evaluate(() => document.getElementById('xg-deck-go').click());
-            await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
-            const exhaust = await read();
-            console.log('EXHAUSTED (99x): ' + JSON.stringify(exhaust, null, 1));
-            await p.evaluate(() => { document.getElementById('xg-deck-results').innerHTML = ''; document.getElementById('xg-deck-input').value = '1 Stardust Dragon'; document.getElementById('xg-deck-go').click(); });
-            await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
-            const single = await read();
-            console.log('SINGLE (1x): ' + JSON.stringify(single, null, 1));
+            await p.waitForSelector('.xg-deck__row--short', { timeout: 90000 });
+            let gotLink = false;
+            try {
+              await p.waitForFunction(() => !!document.querySelector('.xg-deck__shortsister'), { timeout: 20000 });
+              gotLink = true;
+            } catch (e) { /* no sister link — valid iff endpoint agrees */ }
+            const strip = await p.evaluate(() => ({
+              text: (document.querySelector('.xg-deck__shortinfo') || {}).textContent || null,
+              links: Array.from(document.querySelectorAll('.xg-deck__shortsister')).map(a => a.textContent.trim() + ' -> ' + a.href)
+            }));
+            const ep = await p.evaluate(() =>
+              fetch('https://exor-binder.nevski.workers.dev/sisterstock.json?game=mtg&names=Sol%20Ring')
+                .then(r => r.ok ? r.json() : null).catch(() => null));
+            console.log('STRIP: ' + JSON.stringify(strip, null, 1));
+            console.log('ENDPOINT: ' + JSON.stringify(ep));
             console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
             await b.close();
-            const ok = !!(exhaust.stockRows >= 2 && exhaust.pickers === 0 && exhaust.shortStrip &&
-              single.pickers === 1 && single.pickerOptions >= 2);
-            console.log(ok ? 'VERDICT: PASS' : 'VERDICT: FAIL');
+            const sister = ep && ep.results && ep.results[0] && ep.results[0].sister;
+            const stores = (sister && sister.stores) || [];
+            const sorted = stores.every((s, i) => i === 0 || parseFloat(stores[i - 1].price) <= parseFloat(s.price));
+            const consistent = sister ? (gotLink && strip.links.length === stores.length && stores.length >= 1 && sorted) : !gotLink;
+            console.log('stores=' + stores.length + ' stripLinks=' + strip.links.length + ' sortedByPrice=' + sorted);
+            console.log(ep && consistent ? 'VERDICT: PASS' : 'VERDICT: FAIL');
           })().catch(e => { console.log('probe error: ' + e.message); });
           EOF
