@@ -1,10 +1,4 @@
-name: Reveal diagnose
-
-# Scratch diagnostics against the LIVE site (log-only). Current probe: the
-# same-card group bar. "99 Sol Ring" splits into many version rows + a
-# short strip: every one of those rows must carry the group class with the
-# inset bar, exactly one (the strip) closes the group, and the single-row
-# "1 Island" line must carry none of it.
+name: Diagnose storefront reveal
 
 on:
   workflow_dispatch:
@@ -12,44 +6,128 @@ on:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
     steps:
       - name: Install puppeteer-core
-        run: npm i --no-save puppeteer-core@22 2>&1 | tail -1
-      - name: Deck Builder same-card group bar (real Chrome, live page)
+        run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
+
+      - name: New Today strip renders below the hero on the preview homepage
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          (async () => {
-            const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
-            const p = await b.newPage();
-            await p.setViewport({ width: 1280, height: 900 });
-            const errs = [];
-            p.on('pageerror', e => errs.push('pageerror: ' + e.message));
-            await p.goto('https://exorgames.com/pages/deck-builder', { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await p.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await p.type('#xg-deck-input', '99 Sol Ring\n1 Island');
-            await p.evaluate(() => document.getElementById('xg-deck-go').click());
-            await p.waitForSelector('.xg-deck__row--short', { timeout: 90000 });
-            const r = await p.evaluate(() => {
-              const rows = Array.from(document.querySelectorAll('.xg-deck__row'));
-              const island = rows.find(el => /Island/.test(el.innerText));
-              const grp = document.querySelectorAll('.xg-deck__row--grp');
-              const shadow = grp.length ? getComputedStyle(grp[0]).boxShadow : null;
-              return {
-                totalRows: rows.length,
-                grpRows: grp.length,
-                gendRows: document.querySelectorAll('.xg-deck__row--gend').length,
-                stripIsGend: !!document.querySelector('.xg-deck__row--short.xg-deck__row--gend'),
-                islandGrouped: island ? island.classList.contains('xg-deck__row--grp') : null,
-                grpShadow: shadow
-              };
+
+          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
+          const LIVE = 'https://exorgames.com/';
+
+          async function inspectPreview(browser, label) {
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1366, height: 900 });
+            await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            // The strip fetches /cards.json (edge-cached) then paints; give it time.
+            let mounted = true;
+            try {
+              await page.waitForSelector('#xg-newtoday .xg-nt__card', { timeout: 25000 });
+            } catch (e) {
+              mounted = false;
+            }
+            const r = await page.evaluate(() => {
+              const out = {};
+              const root = document.getElementById('xg-newtoday');
+              out.mountPresent = !!root;
+              if (!root) return out;
+              const secs = Array.from(document.querySelectorAll('.shopify-section'))
+                .map((s) => s.id || '');
+              out.heroIdx = secs.findIndex((id) => id.endsWith('__hero_modern'));
+              out.ntIdx = secs.findIndex((id) => id.endsWith('__new_today'));
+              out.trustIdx = secs.findIndex((id) => id.endsWith('__trust_bar'));
+              const hero = out.heroIdx > -1 ? document.getElementById(secs[out.heroIdx]) : null;
+              out.heroBottom = hero ? Math.round(hero.getBoundingClientRect().bottom + window.scrollY) : null;
+              out.ntTop = Math.round(root.getBoundingClientRect().top + window.scrollY);
+              out.title = (root.querySelector('.xg-nt__title') || {}).textContent || '';
+              const cards = Array.from(root.querySelectorAll('.xg-nt__card'));
+              out.cardCount = cards.length;
+              const c0 = cards[0];
+              if (c0) {
+                out.card0 = {
+                  href: c0.getAttribute('href') || '',
+                  img: (c0.querySelector('.xg-nt__img') || {}).currentSrc || (c0.querySelector('.xg-nt__img') || {}).src || '',
+                  name: ((c0.querySelector('.xg-nt__name') || {}).textContent || '').trim(),
+                  price: ((c0.querySelector('.xg-nt__price') || {}).textContent || '').trim(),
+                };
+              }
+              out.chevrons = root.querySelectorAll('.xg-nt__btn').length;
+              return out;
             });
-            console.log('GROUP CHECK: ' + JSON.stringify(r, null, 1));
-            console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
-            await b.close();
-            const ok = !!(r.grpRows >= 3 && r.gendRows === 1 && r.stripIsGend &&
-              r.islandGrouped === false && /inset/.test(r.grpShadow || ''));
-            console.log(ok ? 'VERDICT: PASS' : 'VERDICT: FAIL');
-          })().catch(e => { console.log('probe error: ' + e.message); });
+            r.mounted = mounted;
+            // Functional: forward chevron scrolls the strip.
+            if (mounted && r.chevrons === 2) {
+              r.scrollMoved = await page.evaluate(async () => {
+                const strip = document.getElementById('xg-nt-strip');
+                const before = strip.scrollLeft;
+                document.querySelector('#xg-newtoday .xg-nt__btn[data-d="1"]').click();
+                await new Promise((res) => setTimeout(res, 1200));
+                return strip.scrollLeft > before;
+              });
+            }
+            console.log(label, JSON.stringify(r));
+            await page.close();
+            return r;
+          }
+
+          function verdictOf(r) {
+            const problems = [];
+            if (!r.mountPresent) problems.push('no #xg-newtoday mount in preview DOM (template section missing?)');
+            if (!r.mounted) problems.push('strip never painted a card (feed empty/CORS/script error?)');
+            if (r.cardCount < 4) problems.push('fewer than 4 cards rendered: ' + r.cardCount);
+            if (!(r.heroIdx > -1)) problems.push('hero_modern section not found');
+            if (!(r.ntIdx === r.heroIdx + 1)) problems.push('new_today is not the section right after hero_modern (hero ' + r.heroIdx + ', nt ' + r.ntIdx + ')');
+            if (!(r.trustIdx === r.ntIdx + 1)) problems.push('trust_bar does not follow new_today');
+            if (r.heroBottom != null && !(r.ntTop >= r.heroBottom - 40)) problems.push('strip does not sit below the hero (ntTop ' + r.ntTop + ' vs heroBottom ' + r.heroBottom + ')');
+            if (!/new today/i.test(r.title)) problems.push('unexpected title: ' + JSON.stringify(r.title));
+            if (r.card0) {
+              if (!/\/products\//.test(r.card0.href)) problems.push('card link is not a product URL: ' + r.card0.href);
+              if (!/cdn\.shopify\.com/.test(r.card0.img)) problems.push('card image not from store CDN: ' + r.card0.img);
+              if (!r.card0.name) problems.push('card has no name text');
+              if (!/^\$\d/.test(r.card0.price)) problems.push('card price missing/odd: ' + JSON.stringify(r.card0.price));
+            } else problems.push('no first card to inspect');
+            if (r.chevrons !== 2) problems.push('expected 2 scroll chevrons, saw ' + r.chevrons);
+            if (r.scrollMoved === false) problems.push('forward chevron did not scroll the strip');
+            return problems;
+          }
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              executablePath: '/usr/bin/google-chrome',
+              args: ['--no-sandbox', '--disable-dev-shm-usage'],
+            });
+
+            // Consistency gate: two independent page loads must agree.
+            const a = await inspectPreview(browser, 'runA:');
+            const b = await inspectPreview(browser, 'runB:');
+            const pa = verdictOf(a);
+            const pb = verdictOf(b);
+
+            // Negative control: the LIVE homepage (live theme) must not carry the mount.
+            const lp = await browser.newPage();
+            await lp.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await new Promise((res) => setTimeout(res, 3000));
+            const liveHasMount = await lp.evaluate(() => !!document.getElementById('xg-newtoday'));
+            console.log('live homepage has #xg-newtoday:', liveHasMount, '(must be false - live theme untouched)');
+            await lp.close();
+
+            await browser.close();
+
+            if (pa.length) console.log('runA problems:', pa);
+            if (pb.length) console.log('runB problems:', pb);
+            if (liveHasMount) console.log('PROBLEM: live homepage unexpectedly shows the strip');
+
+            if (!pa.length && !pb.length && !liveHasMount) {
+              console.log('VERDICT: PASS - New Today strip renders below the hero on the preview homepage (' + a.cardCount + ' cards, chevron scroll works), live homepage untouched');
+            } else if (pa.join('|') !== pb.join('|')) {
+              console.log('VERDICT: INCONSISTENT - the two runs disagree; treat as flaky, re-run before acting');
+              process.exitCode = 1;
+            } else {
+              console.log('VERDICT: FAIL');
+              process.exitCode = 1;
+            }
+          })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
