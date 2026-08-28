@@ -39,6 +39,22 @@ jobs:
             await page.setCookie({ name: 'customer_posted', value: 'true', domain: 'exorgames.com', path: '/' });
             await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
             await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
+
+            // the newsletter popup opens on its own timer and ignored the
+            // cookie, so just keep deleting any overlay DOM for the whole
+            // session (nothing overlay-like lives inside #xg-deck)
+            await page.evaluate(() => {
+              const purge = () => {
+                document.querySelectorAll('.modal, .modal-backdrop, [id*="popup" i], [id*="newsletter" i], [class*="popup" i]').forEach((el) => {
+                  if (!el.closest('#xg-deck')) el.remove();
+                });
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+              };
+              purge();
+              window.__xgPurge = purge;
+              setInterval(purge, 250);
+            });
             await new Promise((r) => setTimeout(r, 1500));
 
             await page.evaluate((list) => {
@@ -95,6 +111,8 @@ jobs:
             });
             console.log('STATE:', JSON.stringify(info));
 
+            // last-instant purge so a late-opening popup can't sneak in
+            await page.evaluate(() => window.__xgPurge && window.__xgPurge());
             const el = await page.$('#xg-deck');
             await el.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 74 });
             await browser.close();
