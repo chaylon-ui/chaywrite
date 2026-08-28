@@ -1181,11 +1181,22 @@ async function findAtSisters(name, game) {
           const p = await pr.json();
           if (!gmatch.test(String(p.type || ""))) continue;
           if (codeMode && !codeMatches({ title: p.title, variants: p.variants }, name)) continue;
+          // Copies at this store, when the public product JSON still carries
+          // inventory_quantity (many BinderPOS stores do). Any available
+          // variant without a positive count makes the total unknowable —
+          // report null rather than an undercount.
+          let pq = 0, pqKnown = true;
+          for (const v of (p.variants || [])) {
+            if (!v.available) continue;
+            if (typeof v.inventory_quantity === "number" && v.inventory_quantity > 0) pq += v.inventory_quantity;
+            else pqKnown = false;
+          }
           for (const v of (p.variants || [])) {
             if (!v.available || !(v.price > 0) || v.price / 100 >= 99999) continue;
             if (!best || v.price < best.cents) {
               best = {
                 cents: v.price,
+                qty: pqKnown && pq > 0 ? pq : null,
                 title: String(h.title),
                 condition: condOf(String(v.title || ""), game),
                 foil: /foil/i.test(String(v.title || "")),
@@ -1209,9 +1220,34 @@ async function findAtSisters(name, game) {
     condition: win.condition || "",
     foil: !!win.foil,
     price: (win.cents / 100).toFixed(2),
+    qty: typeof win.qty === "number" ? win.qty : null,
     image: win.image || null,
     url: win.url,
   };
+}
+
+/* Deck Builder follow-up: a line only PARTIALLY covered by Charlottetown
+   stock asks here whether the sister stores hold the rest. Batched (a few
+   names per call), served from the same public sister-store surface as
+   /sisters.json, and edge-cached — no local stock is exposed. */
+const SISTER_CHECK_TTL_S = 300;
+export async function serveSisterCheck(request, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
+  const url = new URL(request.url);
+  const game = String(url.searchParams.get("game") || "mtg").toLowerCase().slice(0, 20);
+  const names = [...new Set(String(url.searchParams.get("names") || "").split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2))].slice(0, 6);
+  const out = { game, count: 0, results: [] };
+  if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/sisterstock.json?g=" + game + "&n=" + encodeURIComponent(names.map((n) => n.toLowerCase()).sort().join("|")), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const found = await Promise.all(names.map((n) => findAtSisters(n, game).catch(() => null)));
+  names.forEach((n, i) => out.results.push({ q: n, sister: found[i] || null }));
+  out.count = out.results.filter((r) => r.sister).length;
+  const res = Response.json(out, { headers: { ...cors, "cache-control": "public, max-age=" + SISTER_CHECK_TTL_S } });
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
 }
 
 export async function serveSisters(request, ctx) {

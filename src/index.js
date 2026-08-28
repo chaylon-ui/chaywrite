@@ -1,5 +1,5 @@
 import { BinderRoom } from "./room.js";
-import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
+import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 
 export { BinderRoom };
 
@@ -99,6 +99,12 @@ export default {
 
     if (url.pathname === "/sisters.json") {
       return serveSisters(request, ctx);
+    }
+
+    // Deck Builder follow-up: are the copies Charlottetown can't cover in
+    // stock at a sister store? Batched over their public search (cards.js).
+    if (url.pathname === "/sisterstock.json") {
+      return serveSisterCheck(request, ctx);
     }
 
     if (url.pathname === "/qty.json") {

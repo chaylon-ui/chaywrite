@@ -132,6 +132,9 @@ jobs:
           curl -sS -o /dev/null -w 'buyprice-reveal.js: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buyprice-reveal.js" || true
           echo "=== /buy-rules.json (estimate rules; enabled flag gates the storefront) ==="
           curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq -c '{enabled, updated, games: (.games|length)}' || true
+          echo "=== /sisterstock.json (partial-line follow-up; sister qty is opportunistic - null when their product JSON hides counts) ==="
+          curl -sS --max-time 40 "https://exor-binder.nevski.workers.dev/sisterstock.json?game=mtg&names=Solitude%7CHumility" | head -c 900 || true
+          printf '\n'
           echo "=== /sisters.json?q=humility (expect cheapest IN-STOCK prices; New Glasgow Humility = 79.10 not 40.50; 5-min edge cache may lag one run) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/sisters.json?q=humility" | head -c 1500 || true
           printf '\n'

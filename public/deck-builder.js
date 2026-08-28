@@ -246,14 +246,33 @@
   }
 
   function render(lines, map) {
-    state = { lines: lines, map: map, sel: {}, checked: {} };
+    state = { lines: lines, map: map, sel: {}, checked: {}, sisterExtra: {}, sisterPending: {}, game: (gameSel && gameSel.value) || 'mtg' };
     paint();
+  }
+
+  // A short line quietly asks the sister stores whether they hold the rest
+  // of its quantity; answers upgrade the info strip in place ("2 more at
+  // Exor Summerside ›"). One batched request, cached at the edge.
+  function maybeFetchSisterExtra(shorts) {
+    if (!state) return;
+    var mine = state;
+    var need = shorts.filter(function (s) { return !(s.key in mine.sisterExtra) && !mine.sisterPending[s.key]; }).slice(0, 6);
+    if (!need.length) return;
+    need.forEach(function (s) { mine.sisterPending[s.key] = 1; });
+    fetch(W + '/sisterstock.json?game=' + encodeURIComponent(mine.game || 'mtg') + '&names=' + encodeURIComponent(need.map(function (s) { return s.name; }).join('|')))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        ((j && j.results) || []).forEach(function (row) { mine.sisterExtra[String(row.q || '').toLowerCase()] = row.sister || null; });
+        need.forEach(function (s) { if (!(s.key in mine.sisterExtra)) mine.sisterExtra[s.key] = null; });
+        if (state === mine) paint();
+      })
+      .catch(function () { need.forEach(function (s) { mine.sisterExtra[s.key] = null; }); });
   }
 
   function paint() {
     var lines = state.lines, map = state.map;
     var nextCheap = nextCheapOn();
-    var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addQty = 0, fillable = 0, ticked = 0, missNames = [];
+    var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addQty = 0, fillable = 0, ticked = 0, missNames = [], shorts = [];
     var rows = lines.map(function (ln, li) {
       totalCards += ln.qty;
       var r = map[ln.name.toLowerCase()];
@@ -310,9 +329,19 @@
           if (remaining > 0) {
             // Information strip, not a product row (owner feedback): it only
             // annotates the rows above — the copies we DO have are up there
-            // and ride along with Add to cart.
+            // and ride along with Add to cart. When a sister store holds the
+            // rest, the strip says so and links out.
+            shorts.push({ name: ln.name, key: ln.name.toLowerCase() });
+            var sx = state.sisterExtra[ln.name.toLowerCase()];
+            var tail;
+            if (sx) {
+              var moreN = (typeof sx.qty === 'number' && sx.qty > 0) ? Math.min(sx.qty, remaining) + ' more' : 'more';
+              tail = '<a class="xg-deck__shortsister" href="' + esc(sx.url) + '" target="_blank" rel="noopener">' + moreN + ' at Exor ' + esc(sx.store) + ' &rsaquo;</a>';
+            } else {
+              tail = remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now';
+            }
             html += '<div class="xg-deck__row xg-deck__row--short" role="row">' +
-              '<span class="xg-deck__shortinfo" role="cell">' + esc(chunks[0].o.name || r.name || ln.name) + ': ' + filledQ + ' of your ' + ln.qty + ' are in stock above &mdash; ' + remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now</span>' +
+              '<span class="xg-deck__shortinfo" role="cell">' + esc(chunks[0].o.name || r.name || ln.name) + ': ' + filledQ + ' of your ' + ln.qty + ' are in stock above &mdash; ' + tail + '</span>' +
               '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">' + filledQ + ' of ' + ln.qty + ' available</span></span>' +
             '</div>';
           }
@@ -407,6 +436,7 @@
       if (b) b.addEventListener('click', function () { addToCart(collectItems()); });
     });
     clearBtn.hidden = false;
+    maybeFetchSisterExtra(shorts);
   }
 
   // Floating card preview: clicking a thumbnail enlarges the card in a
