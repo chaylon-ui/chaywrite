@@ -111,8 +111,56 @@ jobs:
             });
             console.log('STATE:', JSON.stringify(info));
 
-            // last-instant purge so a late-opening popup can't sneak in
-            await page.evaluate(() => window.__xgPurge && window.__xgPurge());
+            // the popup survived cookie + selector purges, so it is not the
+            // theme modal: log whatever paints over the builder, then strip
+            // the page to the builder's own ancestor chain and drop any
+            // positioned element still overlapping its box
+            const diag = await page.evaluate(() => {
+              const deck = document.getElementById('xg-deck');
+              const dr = deck.getBoundingClientRect();
+              const cx = Math.floor(dr.left + dr.width / 2);
+              const cy = Math.floor(Math.max(0, dr.top) + Math.min(window.innerHeight, dr.height) / 2);
+              const chain = (el) => {
+                const parts = [];
+                for (let n = el; n && n !== document.documentElement && parts.length < 8; n = n.parentElement) {
+                  let cls = '';
+                  if (typeof n.className === 'string' && n.className.trim()) {
+                    cls = '.' + n.className.trim().split(/\s+/).slice(0, 3).join('.');
+                  }
+                  parts.push(n.tagName + (n.id ? '#' + n.id : '') + cls);
+                }
+                return parts.join(' < ');
+              };
+              const before = document.elementFromPoint(cx, cy);
+              const beforeChain = before ? chain(before) : 'none';
+              const beforeInDeck = !!(before && deck.contains(before));
+
+              const keep = new Set();
+              for (let n = deck; n; n = n.parentElement) keep.add(n);
+              let removed = 0;
+              Array.from(document.querySelectorAll('body > *')).forEach((el) => {
+                if (!keep.has(el)) { el.remove(); removed++; }
+              });
+              document.querySelectorAll('body *').forEach((el) => {
+                if (deck.contains(el) || el.contains(deck)) return;
+                const cs = getComputedStyle(el);
+                if (cs.position === 'static') return;
+                const r = el.getBoundingClientRect();
+                const d2 = deck.getBoundingClientRect();
+                const overlap = r.width > 0 && r.height > 0 &&
+                  !(r.right <= d2.left || r.left >= d2.right || r.bottom <= d2.top || r.top >= d2.bottom);
+                if (overlap) { el.remove(); removed++; }
+              });
+              if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+              const after = document.elementFromPoint(cx, cy);
+              return {
+                beforeChain, beforeInDeck, removed,
+                afterInDeck: !!(after && (after === deck || deck.contains(after))),
+                afterChain: after ? chain(after) : 'none',
+              };
+            });
+            console.log('OVERLAY:', JSON.stringify(diag));
+
             const el = await page.$('#xg-deck');
             await el.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 74 });
             await browser.close();
@@ -125,6 +173,8 @@ jobs:
               console.log('B64:' + b64.slice(i, i + 6000));
             }
             console.log('SHOT_END');
-            console.log('VERDICT: PASS - screenshot captured (' + info.imgs + ' card images, results ' + info.resultChars + ' chars)');
+            const clean = diag.afterInDeck && info.imgs >= 5;
+            console.log('VERDICT: ' + (clean ? 'PASS' : 'FAIL') + ' - center resolves ' + (diag.afterInDeck ? 'inside' : 'OUTSIDE') + ' the builder after strip; removed ' + diag.removed + ' nodes; ' + info.imgs + ' card images, results ' + info.resultChars + ' chars');
+            if (!clean) process.exitCode = 1;
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
