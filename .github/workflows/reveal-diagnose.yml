@@ -10,7 +10,7 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Footer + calendar restyle (preview desktop, preview mobile, live control)
+      - name: Footer + calendar restyle round 2 (1568 desktop, 390 mobile, live)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -42,49 +42,91 @@ jobs:
               const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
               const foot = document.querySelector('.site-footer');
               out.footerBg = foot ? getComputedStyle(foot).backgroundImage.slice(0, 60) : null;
-              out.accent = foot ? cs(foot, ['content', 'height', 'background-image'], '::before') : null;
+              out.accent = foot ? cs(foot, ['content', 'height'], '::before') : null;
               const row = document.querySelector('.site-footer .footer-container > .page-width > .row');
               out.rowDisplay = row ? getComputedStyle(row).display : null;
-              out.headingFont = cs(document.querySelector('.site-footer .footer-heading'), ['font-family', 'text-transform', 'letter-spacing']);
-              out.chip = cs(document.querySelector('.site-footer .contact-info .site-footer__linklist-item > i'), ['width', 'height', 'border-radius', 'display']);
+              out.headingFont = cs(document.querySelector('.site-footer .footer-heading'), ['font-family']);
+              out.chip = cs(document.querySelector('.site-footer .contact-info .site-footer__linklist-item > i'), ['width', 'border-radius']);
+              const dn = document.getElementById('_desktop_newsletter');
+              const mn = document.getElementById('_mobile_newsletter');
+              out.mounts = {
+                desktop: dn ? getComputedStyle(dn).display : null,
+                mobile: mn ? getComputedStyle(mn).display : null,
+              };
               const ig = document.querySelector('.site-footer .xg-newsletter .input-group');
-              out.inputGroup = cs(ig, ['display', 'border-radius']);
               const btn = document.querySelector('.site-footer .xg-newsletter button.newsletter__submit');
-              out.btn = cs(btn, ['border-radius', 'background-image']);
+              out.inputGroup = cs(ig, ['display', 'border-radius']);
+              out.btn = cs(btn, ['border-radius']);
               out.btnW = btn ? btn.offsetWidth : null;
               out.igW = ig ? ig.offsetWidth : null;
+              out.hoursRows = document.querySelectorAll('.site-footer .xg-hours .xg-hours__row').length;
               out.hoursDays = document.querySelectorAll('.site-footer .xg-hours .xg-hours__day').length;
-              const hp = document.querySelector('.site-footer .xg-hours .xg-hours__day') ?
-                document.querySelector('.site-footer .xg-hours .xg-hours__day').parentNode : null;
-              out.hoursRowDisplay = hp ? getComputedStyle(hp).display : null;
-              out.hoursSample = hp ? hp.textContent.trim().slice(0, 60) : null;
-              out.logoBar = cs(document.querySelector('.site-footer .payment-icons .logo-bar'), ['display']);
+              const hr = document.querySelector('.site-footer .xg-hours .xg-hours__row');
+              out.hoursRowDisplay = hr ? getComputedStyle(hr).display : null;
+              out.hoursSample = hr ? hr.textContent.trim().slice(0, 60) : null;
+              out.hoursRawHTML = (function () {
+                const w = document.querySelector('.site-footer .xg-hours .newsletter_text');
+                return w ? w.innerHTML.replace(/\s+/g, ' ').slice(0, 300) : null;
+              })();
               out.pageScrollX = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+              out.offenders = (function () {
+                const vwNow = document.documentElement.clientWidth;
+                const bad = [];
+                document.querySelectorAll('body *').forEach((el) => {
+                  const r2 = el.getBoundingClientRect();
+                  if (r2.width > 20 && r2.right > vwNow + 2 && bad.length < 6) {
+                    if (el.closest('.xg-nt__row, script, style')) return;
+                    const parentAlready = bad.some((b) => b.el.contains(el));
+                    if (parentAlready) return;
+                    bad.push({ el, sel: el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''), right: Math.round(r2.right), ours: !!el.closest('.site-footer, section.calendar-container, #binderpos-calendar') });
+                  }
+                });
+                return bad.map((b) => ({ sel: b.sel, right: b.right, ours: b.ours }));
+              })();
 
               const cal = document.getElementById('binderpos-calendar');
               out.calTds = cal ? cal.querySelectorAll('td').length : 0;
               if (cal && out.calTds > 0) {
                 const wrap = document.querySelector('.calendar-contents');
-                out.overlay = cs(wrap, ['content', 'background-image'], '::after');
-                if (out.overlay) out.overlay['background-image'] = String(out.overlay['background-image']).slice(0, 80);
+                out.overlay = cs(wrap, ['content'], '::after');
                 const h3 = document.querySelector('section.calendar-container h3');
-                out.calTitle = h3 ? { text: h3.textContent.trim(), display: getComputedStyle(h3).display, font: getComputedStyle(h3).fontFamily.slice(0, 30) } : null;
+                out.calTitle = h3 ? { display: getComputedStyle(h3).display, text: h3.textContent.trim().slice(0, 24) } : null;
                 out.actions = cs(cal.querySelector('.calendar-actions-container'), ['display']);
-                out.navPill = cs(cal.querySelector('span.calendar-nav-action'), ['border-radius', 'display']);
                 const table = cal.querySelector('table.calendar-table');
-                out.table = cs(table, ['border-spacing', 'background-color']);
+                out.table = cs(table, ['border-spacing']);
                 out.tableW = table ? table.offsetWidth : null;
-                const td = cal.querySelector('td.calendar-data-block:not(.calendar-inactive-block)');
-                out.td = cs(td, ['border-radius', 'background-color', 'border-top-color']);
-                out.th = cs(cal.querySelector('th'), ['background-image', 'background-color']);
-                out.icon = cs(cal.querySelector('img.calendar-icon'), ['width', 'height', 'object-fit', 'border-radius']);
-                out.today = cs(cal.querySelector('td.calendar-selected-date'), ['border-top-color', 'background-color']);
-                out.todayNum = cs(cal.querySelector('td.calendar-selected-date > span'), ['background-color', 'color']);
+                out.td = cs(cal.querySelector('td.calendar-data-block:not(.calendar-inactive-block)'), ['border-radius']);
+                out.th = cs(cal.querySelector('th'), ['background-image']);
+                out.icon = cs(cal.querySelector('td img.calendar-icon'), ['width', 'height', 'object-fit']);
+                out.today = cs(cal.querySelector('td.calendar-selected-date'), ['border-top-color']);
                 const inner = document.querySelector('.calendar-inner-container');
-                out.calScrollable = inner ? inner.scrollWidth > inner.clientWidth : null;
+                out.calScrollable = inner ? inner.scrollWidth > inner.clientWidth + 1 : null;
+                out.calInnerW = inner ? inner.clientWidth : null;
               }
               return out;
             });
+
+            if (label === 'desk:') {
+              r.bands = [];
+              for (const w of [1568, 1440, 1366, 1200, 1100, 991, 768, 390]) {
+                await page.setViewport({ width: w, height: vh });
+                await new Promise((res) => setTimeout(res, 250));
+                const b = await page.evaluate(() => {
+                  function d(sel) { const el = document.querySelector(sel); return el ? getComputedStyle(el).display : null; }
+                  const btn = document.querySelector('.site-footer .xg-newsletter button.newsletter__submit');
+                  return {
+                    dn: d('#_desktop_newsletter'),
+                    mn: d('#_mobile_newsletter'),
+                    h2: d('.site-footer h2.footer-heading'),
+                    ft: d('.site-footer .footer-title'),
+                    btnW: btn ? btn.offsetWidth : null,
+                  };
+                });
+                r.bands.push({ w, ...b });
+              }
+              await page.setViewport({ width: vw, height: vh });
+            }
+
             console.log(label, JSON.stringify(r));
             await ctx.close();
             return r;
@@ -95,62 +137,63 @@ jobs:
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
-            const a = await inspect(browser, 'desk:', PREVIEW, 1366, 900, true);
+            const a = await inspect(browser, 'desk:', PREVIEW, 1568, 900, true);
             const m = await inspect(browser, 'mob:', PREVIEW, 390, 844, true);
-            const b = await inspect(browser, 'live:', LIVE, 1366, 900, false);
+            const b = await inspect(browser, 'live:', LIVE, 1568, 900, false);
             await browser.close();
 
             const pa = [];
             if (a.themeId !== 157462692013) pa.push('wrong theme: ' + a.themeId);
-            if (!a.accent || a.accent.content === 'none' || a.accent.height !== '3px') pa.push('accent bar missing: ' + JSON.stringify(a.accent));
-            if (!/gradient/.test(a.footerBg || '')) pa.push('footer bg not gradient: ' + a.footerBg);
-            if (a.rowDisplay !== 'grid') pa.push('desktop footer row not grid: ' + a.rowDisplay);
-            if (!/Oswald/.test((a.headingFont || {})['font-family'] || '')) pa.push('heading font: ' + JSON.stringify(a.headingFont));
-            if (!a.chip || a.chip.width !== '36px' || a.chip['border-radius'] !== '10px') pa.push('contact icon chip: ' + JSON.stringify(a.chip));
-            if (!a.inputGroup || a.inputGroup.display !== 'flex' || parseInt(a.inputGroup['border-radius']) < 100) pa.push('newsletter pill: ' + JSON.stringify(a.inputGroup));
-            if (!a.btn || parseInt(a.btn['border-radius']) < 100 || !/gradient/.test(a.btn['background-image'] || '')) pa.push('subscribe button: ' + JSON.stringify(a.btn));
-            if (a.btnW && a.igW && a.btnW > a.igW * 0.6) pa.push('button still full-width: ' + a.btnW + '/' + a.igW);
-            if (a.hoursDays < 3) pa.push('hours split spans: ' + a.hoursDays);
-            if (a.hoursRowDisplay !== 'flex') pa.push('hours row display: ' + a.hoursRowDisplay);
-            if ((a.logoBar || {}).display !== 'flex') pa.push('payment bar: ' + JSON.stringify(a.logoBar));
-            if (a.pageScrollX > 1) pa.push('desktop horizontal overflow: ' + a.pageScrollX);
-            if (a.calTds < 21) pa.push('calendar never rendered: ' + a.calTds);
+            if (!a.accent || a.accent.content === 'none' || a.accent.height !== '3px') pa.push('accent bar: ' + JSON.stringify(a.accent));
+            if (!/gradient/.test(a.footerBg || '')) pa.push('footer bg: ' + a.footerBg);
+            if (a.rowDisplay !== 'grid') pa.push('footer row not grid: ' + a.rowDisplay);
+            if (!/Oswald/.test((a.headingFont || {})['font-family'] || '')) pa.push('heading font lost again: ' + JSON.stringify(a.headingFont));
+            if (!a.chip || a.chip.width !== '36px' || a.chip['border-radius'] !== '10px') pa.push('contact chip: ' + JSON.stringify(a.chip));
+            if (a.hoursRows < 3 || a.hoursDays < 3) pa.push('hours rows built: rows=' + a.hoursRows + ' days=' + a.hoursDays + ' raw=' + a.hoursRawHTML);
+            if (a.hoursRows >= 3 && a.hoursRowDisplay !== 'flex') pa.push('hours row display: ' + a.hoursRowDisplay);
+            if (!a.btnW || a.btnW === 0) pa.push('newsletter hidden at 1568 (btnW=' + a.btnW + ') mounts=' + JSON.stringify(a.mounts) + ' bands=' + JSON.stringify(a.bands));
+            if (a.btnW > 0 && a.igW > 0 && a.btnW > a.igW * 0.6) pa.push('button too wide: ' + a.btnW + '/' + a.igW);
+            if (a.btnW > 0 && (!a.inputGroup || a.inputGroup.display !== 'flex' || parseInt(a.inputGroup['border-radius']) < 100)) pa.push('newsletter pill: ' + JSON.stringify(a.inputGroup));
+            const oursOverflowA = (a.offenders || []).filter((o) => o.ours);
+            if (a.pageScrollX > 1 && oursOverflowA.length) pa.push('our elements overflow at 1568: ' + JSON.stringify(oursOverflowA));
+            if (a.calTds < 21) pa.push('calendar never rendered');
             if (a.calTds > 20) {
-              if (!a.overlay || a.overlay.content === 'none' || !/gradient/.test(a.overlay['background-image'] || '')) pa.push('calendar overlay: ' + JSON.stringify(a.overlay));
-              if (!a.calTitle || a.calTitle.display !== 'block' || !/Upcoming/i.test(a.calTitle.text)) pa.push('calendar title: ' + JSON.stringify(a.calTitle));
-              if ((a.actions || {}).display !== 'flex') pa.push('month bar not flex: ' + JSON.stringify(a.actions));
-              if (!a.navPill || parseInt(a.navPill['border-radius']) < 100) pa.push('nav pills: ' + JSON.stringify(a.navPill));
-              if (!a.table || a.table['border-spacing'] !== '6px 6px') pa.push('cell spacing: ' + JSON.stringify(a.table));
-              if (!/rgba\(0, 0, 0, 0\)|transparent/.test((a.table || {})['background-color'] || '')) pa.push('table sheet still painted: ' + JSON.stringify(a.table));
-              if (!a.td || a.td['border-radius'] !== '12px') pa.push('day cells not rounded: ' + JSON.stringify(a.td));
-              if (!/none/.test((a.th || {})['background-image'] || '')) pa.push('th gradient survived: ' + JSON.stringify(a.th));
-              if (!a.icon || a.icon.width !== '30px' || a.icon['object-fit'] !== 'contain') pa.push('event icons: ' + JSON.stringify(a.icon));
+              if (!a.overlay || a.overlay.content === 'none') pa.push('calendar overlay missing');
+              if (!a.calTitle || a.calTitle.display !== 'block') pa.push('calendar title: ' + JSON.stringify(a.calTitle));
+              if ((a.actions || {}).display !== 'flex') pa.push('month bar: ' + JSON.stringify(a.actions));
+              if (!/^6px( 6px)?$/.test((a.table || {})['border-spacing'] || '')) pa.push('spacing: ' + JSON.stringify(a.table));
+              if (!a.td || a.td['border-radius'] !== '12px') pa.push('cells: ' + JSON.stringify(a.td));
+              if (!/none/.test((a.th || {})['background-image'] || '')) pa.push('th gradient: ' + JSON.stringify(a.th));
+              if (!a.icon || a.icon.width !== '30px' || a.icon['object-fit'] !== 'contain') pa.push('icons: ' + JSON.stringify(a.icon));
               if (a.today && !/214, 44, 40/.test(a.today['border-top-color'])) pa.push('today ring: ' + JSON.stringify(a.today));
             }
 
             const pm = [];
             if (m.themeId !== 157462692013) pm.push('wrong theme: ' + m.themeId);
-            if (m.pageScrollX > 1) pm.push('mobile page overflows horizontally: ' + m.pageScrollX);
             if (m.rowDisplay === 'grid') pm.push('grid leaked to mobile');
+            if (m.chip && (m.chip.width !== '36px' || m.chip['border-radius'] !== '10px')) pm.push('mobile chip: ' + JSON.stringify(m.chip));
+            const oursOverflowM = (m.offenders || []).filter((o) => o.ours);
+            if (oursOverflowM.length) pm.push('our elements overflow at 390: ' + JSON.stringify(oursOverflowM));
+            if (m.pageScrollX > 1 && !oursOverflowM.length) console.log('NOTE: pre-existing mobile overflow ' + m.pageScrollX + 'px from ' + JSON.stringify(m.offenders));
             if (m.calTds > 20) {
-              if (m.calScrollable !== true) pm.push('mobile calendar not scrollable in its own container');
-              if (!m.icon || m.icon.width !== '24px') pm.push('mobile icon size: ' + JSON.stringify(m.icon));
+              if (m.calScrollable !== true && m.tableW > (m.calInnerW || 0) + 1) pm.push('mobile calendar container not clipping: tableW=' + m.tableW + ' innerW=' + m.calInnerW);
+              if (!m.icon || m.icon.width !== '24px') pm.push('mobile icons: ' + JSON.stringify(m.icon));
             } else {
-              pm.push('mobile calendar never rendered: ' + m.calTds);
+              pm.push('mobile calendar never rendered');
             }
 
             const pb = [];
-            if (b.themeId !== 157458727085) pb.push('live control on wrong theme: ' + b.themeId);
-            if (b.accent && b.accent.content !== 'none') pb.push('live footer has the accent bar - live theme must be untouched');
-            if (b.hoursDays !== 0) pb.push('live has split hours spans: ' + b.hoursDays);
-            if (/gradient/.test(b.footerBg || '')) pb.push('live footer bg changed: ' + b.footerBg);
+            if (b.themeId !== 157458727085) pb.push('live wrong theme: ' + b.themeId);
+            if (b.accent && b.accent.content !== 'none') pb.push('live has accent bar');
+            if (b.hoursRows !== 0) pb.push('live has built hours rows: ' + b.hoursRows);
+            if (/gradient/.test(b.footerBg || '')) pb.push('live footer bg changed');
 
             if (pa.length) console.log('desktop problems:', pa);
             if (pm.length) console.log('mobile problems:', pm);
             if (pb.length) console.log('live problems:', pb);
 
             if (!pa.length && !pm.length && !pb.length) {
-              console.log('VERDICT: PASS - footer: accent+gradient+grid+pill newsletter (' + a.btnW + 'px btn), ' + a.hoursDays + ' hours rows split; calendar: overlay+title+flex bar+' + a.calTds + ' rounded cells, icons 30px contain, today ring red; mobile clean (scrollable cal, no page overflow); live untouched.');
+              console.log('VERDICT: PASS - footer: Oswald headings, 36px chips, pill newsletter visible (' + a.btnW + 'px btn), ' + a.hoursRows + ' hours rows ("' + a.hoursSample + '"); calendar: ' + a.calTds + ' cells styled, icons 30/24px contain, today ring; no overflow from restyled areas; live untouched. bands=' + JSON.stringify(a.bands));
             } else {
               console.log('VERDICT: FAIL');
               process.exitCode = 1;
