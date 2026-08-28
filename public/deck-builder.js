@@ -286,6 +286,14 @@
         if (filledQ > 0) {
           filledCards += filledQ;
           if (remaining === 0) { inStock++; } else { partialLines++; shortQ += remaining; }
+          // The version picker only earns its place when some version is
+          // left OUT of the fill (a real alternative to swap to). When the
+          // fill already uses every copy of every version — 4 wanted, 3 in
+          // stock total — each option is already a row below, so a dropdown
+          // would offer nothing (owner feedback on a 4x Polluted Delta).
+          var lastC = chunks[chunks.length - 1];
+          var pickerUseful = a.offers.length > 1 &&
+            !(remaining > 0 || (chunks.length === a.offers.length && lastC.take === lastC.stock));
           var html = chunks.map(function (c, ci) {
             var o = c.o;
             var unit = parseFloat(o.price) || 0;
@@ -303,7 +311,7 @@
             // card comes in several versions — cheapest pre-selected,
             // pricier printings selectable; picking one re-fills led by it.
             var picker = '';
-            if (ci === 0 && a.offers.length > 1) {
+            if (ci === 0 && pickerUseful) {
               picker = '<select class="xg-deck__ver" data-i="' + li + '" aria-label="Version of ' + esc(o.name || r.name) + '">' +
                 a.offers.map(function (v, vi) {
                   var vlabel = [v.set, v.foil ? 'Foil' : '', v.condition].filter(Boolean).join(' · ') || 'Standard';
