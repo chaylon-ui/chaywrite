@@ -31,6 +31,7 @@ jobs:
             }
             const r = await page.evaluate(() => {
               const out = {};
+              out.themeId = (window.Shopify && Shopify.theme && Shopify.theme.id) || null;
               const root = document.getElementById('xg-newtoday');
               out.mountPresent = !!root;
               if (!root) return out;
@@ -75,6 +76,7 @@ jobs:
 
           function verdictOf(r) {
             const problems = [];
+            if (r.themeId !== 157462692013) problems.push('preview load served theme ' + r.themeId + ', not the preview theme');
             if (!r.mountPresent) problems.push('no #xg-newtoday mount in preview DOM (template section missing?)');
             if (!r.mounted) problems.push('strip never painted a card (feed empty/CORS/script error?)');
             if (r.cardCount < 4) problems.push('fewer than 4 cards rendered: ' + r.cardCount);
@@ -106,19 +108,28 @@ jobs:
             const pa = verdictOf(a);
             const pb = verdictOf(b);
 
-            // Negative control: the LIVE homepage (live theme) must not carry the mount.
-            const lp = await browser.newPage();
+            // Negative control: the LIVE homepage must not carry the mount.
+            // MUST run in a fresh incognito context - visiting a preview URL sets
+            // Shopify's preview_theme cookie on the shared context, which would
+            // silently serve the preview theme to the "live" load too.
+            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
+            const ctx = await mkCtx.call(browser);
+            const lp = await ctx.newPage();
             await lp.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
             await new Promise((res) => setTimeout(res, 3000));
-            const liveHasMount = await lp.evaluate(() => !!document.getElementById('xg-newtoday'));
-            console.log('live homepage has #xg-newtoday:', liveHasMount, '(must be false - live theme untouched)');
-            await lp.close();
+            const live = await lp.evaluate(() => ({
+              themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null,
+              hasMount: !!document.getElementById('xg-newtoday'),
+            }));
+            const liveHasMount = live.hasMount || live.themeId !== 157458727085;
+            console.log('live homepage (fresh context):', JSON.stringify(live), '(must be live theme 157458727085 with no mount)');
+            await ctx.close();
 
             await browser.close();
 
             if (pa.length) console.log('runA problems:', pa);
             if (pb.length) console.log('runB problems:', pb);
-            if (liveHasMount) console.log('PROBLEM: live homepage unexpectedly shows the strip');
+            if (liveHasMount) console.log('PROBLEM: live homepage control failed (mount present or wrong theme served)');
 
             if (!pa.length && !pb.length && !liveHasMount) {
               console.log('VERDICT: PASS - New Today strip renders below the hero on the preview homepage (' + a.cardCount + ' cards, chevron scroll works), live homepage untouched');
