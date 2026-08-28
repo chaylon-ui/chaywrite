@@ -95,6 +95,7 @@
 #xg-deck .xg-deck__qty { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--xg-ink, #171b1d); white-space: nowrap; }
 #xg-deck .xg-deck__cardlink { display: flex; align-items: center; gap: 12px; color: inherit; min-width: 0; }
 #xg-deck .xg-deck__thumb { display: block; width: 40px; height: 56px; object-fit: cover; border-radius: 5px; background: #eef0f2; flex: 0 0 auto; }
+#xg-deck img.xg-deck__thumb[data-zoom] { cursor: zoom-in; }
 #xg-deck .xg-deck__names { display: flex; flex-direction: column; min-width: 0; }
 #xg-deck .xg-deck__name { font-size: 15px; line-height: 1.35; color: var(--xg-ink, #171b1d); font-weight: 600; }
 #xg-deck .xg-deck__cardlink:hover .xg-deck__name { color: var(--xg-accent, #d62c28); text-decoration: underline; }
@@ -152,3 +153,8 @@
   #xg-deck .xg-deck__btn, #xg-deck .xg-deck__sumbar span { transition: none; }
   #xg-deck .xg-deck__loading::before { animation: none; }
 }
+
+/* Floating card preview (thumbnail click). Mounted on <body>, outside
+   #xg-deck and the theme's .rte, so it gets its own top-level rules. */
+.xg-deck-zoom { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15, 18, 20, 0.78); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+.xg-deck-zoom img { display: block; max-width: min(92vw, 480px); max-height: 86vh; border-radius: 4.75% / 3.5%; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55); background: #fff; }

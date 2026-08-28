@@ -46,6 +46,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
   function money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); }
   function imgSrc(u) { return u ? (u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=96') : ''; }
+  function zoomSrc(u) { return u ? (u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=640') : ''; }
 
   root.innerHTML =
     '<div class="xg-deck__head">' +
@@ -292,7 +293,7 @@
               '<span class="xg-deck__qty" role="cell">' + c.take + '&times;</span>' +
               '<span class="xg-deck__card" role="cell">' +
                 '<a class="xg-deck__cardlink" href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
-                  (o.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(o.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
+                  (o.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(o.image)) + '" data-zoom="' + esc(zoomSrc(o.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
                   '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(o.name || r.name) + '</span>' +
                   ((meta && !picker) ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
                 '</a>' + picker +
@@ -332,7 +333,7 @@
           '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
           '<span class="xg-deck__card" role="cell">' +
             '<a class="xg-deck__cardlink" href="' + esc(s.url) + '" target="_blank" rel="noopener">' +
-              (s.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(s.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
+              (s.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(s.image)) + '" data-zoom="' + esc(zoomSrc(s.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
               '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(s.name) + '</span>' +
               (smeta ? '<span class="xg-deck__meta">' + esc(smeta) + '</span>' : '') + '</span>' +
             '</a>' +
@@ -408,6 +409,36 @@
     });
     clearBtn.hidden = false;
   }
+
+  // Floating card preview: clicking a thumbnail enlarges the card in a
+  // centered overlay (like the card pages); clicking the enlarged card —
+  // or anywhere else, or Escape — closes it. The thumb click never follows
+  // the product link; the card NAME still does.
+  var zoomEl = null;
+  function closeZoom() {
+    if (zoomEl && zoomEl.parentNode) zoomEl.parentNode.removeChild(zoomEl);
+    zoomEl = null;
+    document.removeEventListener('keydown', zoomKey);
+  }
+  function zoomKey(e) { if (e.key === 'Escape') closeZoom(); }
+  function openZoom(src) {
+    closeZoom();
+    var d = document.createElement('div');
+    d.className = 'xg-deck-zoom';
+    d.innerHTML = '<img src="' + esc(src) + '" alt="Card preview">';
+    d.addEventListener('click', closeZoom);
+    document.addEventListener('keydown', zoomKey);
+    document.body.appendChild(d);
+    zoomEl = d;
+  }
+  out.addEventListener('click', function (e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('xg-deck__thumb') && t.getAttribute('data-zoom')) {
+      e.preventDefault();
+      e.stopPropagation();
+      openZoom(t.getAttribute('data-zoom'));
+    }
+  });
 
   // One delegated listener drives the per-line ticks, the select-all box and
   // the version pickers across repaints; flipping the next-cheapest toggle

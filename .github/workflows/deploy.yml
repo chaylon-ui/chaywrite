@@ -122,6 +122,7 @@ jobs:
           curl -sS -o /dev/null -w 'title logo asset (store CDN): %{http_code} %{content_type}\n' --max-time 20 "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/WE_BUY_CARDS_951e0f40-efac-4b8a-97b3-8ee6330881bd.png?v=1706987808" || true
           echo "next-cheapest toggle served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-nextcheap' || true)"
           echo "ticks + version picker served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-checkall' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck__ver' || true)"
+          echo "thumb zoom served (js/css): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-zoom' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.css' | grep -c 'xg-deck-zoom' || true)"
           curl -sS -o /dev/null -w 'deck-builder.css: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.css" || true
           echo "=== /buyprice.json (BinderPOS only; available:false until BINDERPOS_API_KEY — storefront then uses daily buy-rules estimates) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Sol%20Ring&type=MTG%20Single" | head -c 600 || true
