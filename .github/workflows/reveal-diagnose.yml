@@ -10,90 +10,82 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: New Today strip renders below the hero on the preview homepage
+      - name: Remove-all-items link clears the preview cart
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
 
-          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
-          const LIVE = 'https://exorgames.com/';
+          const PREVIEW_CART = 'https://exorgames.com/cart?preview_theme_id=157462692013';
+          const LIVE_CART = 'https://exorgames.com/cart';
+          const VARIANT = 40397329203373; // Sol Ring [Kaldheim Commander] $3.00 NM, in stock
 
-          async function inspectPreview(browser, label) {
-            const page = await browser.newPage();
+          async function flow(browser, label) {
+            // Fresh context per run: each gets its own empty session cart.
+            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
+            const ctx = await mkCtx.call(browser);
+            const page = await ctx.newPage();
             await page.setViewport({ width: 1366, height: 900 });
-            await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            // The strip fetches /cards.json (edge-cached) then paints; give it time.
-            let mounted = true;
-            try {
-              await page.waitForSelector('#xg-newtoday .xg-nt__card', { timeout: 25000 });
-            } catch (e) {
-              mounted = false;
-            }
-            const r = await page.evaluate(() => {
-              const out = {};
-              out.themeId = (window.Shopify && Shopify.theme && Shopify.theme.id) || null;
-              const root = document.getElementById('xg-newtoday');
-              out.mountPresent = !!root;
-              if (!root) return out;
-              const secs = Array.from(document.querySelectorAll('.shopify-section'))
-                .map((s) => s.id || '');
-              out.heroIdx = secs.findIndex((id) => id.endsWith('__hero_modern'));
-              out.ntIdx = secs.findIndex((id) => id.endsWith('__new_today'));
-              out.trustIdx = secs.findIndex((id) => id.endsWith('__trust_bar'));
-              const hero = out.heroIdx > -1 ? document.getElementById(secs[out.heroIdx]) : null;
-              out.heroBottom = hero ? Math.round(hero.getBoundingClientRect().bottom + window.scrollY) : null;
-              out.ntTop = Math.round(root.getBoundingClientRect().top + window.scrollY);
-              out.title = (root.querySelector('.xg-nt__title') || {}).textContent || '';
-              const cards = Array.from(root.querySelectorAll('.xg-nt__card'));
-              out.cardCount = cards.length;
-              const c0 = cards[0];
-              if (c0) {
-                out.card0 = {
-                  href: c0.getAttribute('href') || '',
-                  img: (c0.querySelector('.xg-nt__img') || {}).currentSrc || (c0.querySelector('.xg-nt__img') || {}).src || '',
-                  name: ((c0.querySelector('.xg-nt__name') || {}).textContent || '').trim(),
-                  price: ((c0.querySelector('.xg-nt__price') || {}).textContent || '').trim(),
-                };
-              }
-              out.chevrons = root.querySelectorAll('.xg-nt__btn').length;
-              return out;
-            });
-            r.mounted = mounted;
-            // Functional: forward chevron scrolls the strip.
-            if (mounted && r.chevrons === 2) {
-              r.scrollMoved = await page.evaluate(async () => {
-                const strip = document.getElementById('xg-nt-strip');
-                const before = strip.scrollLeft;
-                document.querySelector('#xg-newtoday .xg-nt__btn[data-d="1"]').click();
-                await new Promise((res) => setTimeout(res, 1200));
-                return strip.scrollLeft > before;
+            const r = { dialogMsg: null };
+
+            // Empty-cart baseline: the link must NOT render without items.
+            await page.goto(PREVIEW_CART, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            r.themeId = await page.evaluate(() => (window.Shopify && Shopify.theme && Shopify.theme.id) || null);
+            r.emptyHasLink = await page.evaluate(() => !!document.querySelector('.cart__clear-all'));
+
+            // Add one Sol Ring through the storefront cart API (session cart,
+            // discarded with the context; the flow ends with the cart cleared).
+            r.addStatus = await page.evaluate(async (v) => {
+              const resp = await fetch('/cart/add.js', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ id: v, quantity: 1 }),
               });
+              return resp.status;
+            }, VARIANT);
+            await page.goto(PREVIEW_CART, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            r.countBefore = await page.evaluate(() => fetch('/cart.js').then((x) => x.json()).then((j) => j.item_count));
+
+            const link = await page.$('.cart__clear-all');
+            r.linkPresent = !!link;
+            if (link) {
+              r.link = await page.evaluate((a) => ({
+                text: a.textContent.trim(),
+                href: a.getAttribute('href'),
+                icon: !!a.querySelector('.fa-trash-o'),
+                visible: a.offsetParent !== null,
+              }), link);
+              page.on('dialog', (d) => { r.dialogMsg = d.message(); d.accept(); });
+              await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }),
+                link.click(),
+              ]);
+              r.countAfter = await page.evaluate(() => fetch('/cart.js').then((x) => x.json()).then((j) => j.item_count));
+              r.emptyMessageShown = await page.evaluate(() => !!document.querySelector('.cart--empty-message'));
+              r.linkGoneAfterClear = await page.evaluate(() => !document.querySelector('.cart__clear-all'));
             }
             console.log(label, JSON.stringify(r));
-            await page.close();
+            await ctx.close();
             return r;
           }
 
           function verdictOf(r) {
-            const problems = [];
-            if (r.themeId !== 157462692013) problems.push('preview load served theme ' + r.themeId + ', not the preview theme');
-            if (!r.mountPresent) problems.push('no #xg-newtoday mount in preview DOM (template section missing?)');
-            if (!r.mounted) problems.push('strip never painted a card (feed empty/CORS/script error?)');
-            if (r.cardCount < 4) problems.push('fewer than 4 cards rendered: ' + r.cardCount);
-            if (!(r.heroIdx > -1)) problems.push('hero_modern section not found');
-            if (!(r.ntIdx === r.heroIdx + 1)) problems.push('new_today is not the section right after hero_modern (hero ' + r.heroIdx + ', nt ' + r.ntIdx + ')');
-            if (!(r.trustIdx === r.ntIdx + 1)) problems.push('trust_bar does not follow new_today');
-            if (r.heroBottom != null && !(r.ntTop >= r.heroBottom - 40)) problems.push('strip does not sit below the hero (ntTop ' + r.ntTop + ' vs heroBottom ' + r.heroBottom + ')');
-            if (!/new today/i.test(r.title)) problems.push('unexpected title: ' + JSON.stringify(r.title));
-            if (r.card0) {
-              if (!/\/products\//.test(r.card0.href)) problems.push('card link is not a product URL: ' + r.card0.href);
-              if (!/cdn\.shopify\.com/.test(r.card0.img)) problems.push('card image not from store CDN: ' + r.card0.img);
-              if (!r.card0.name) problems.push('card has no name text');
-              if (!/^\$\d/.test(r.card0.price)) problems.push('card price missing/odd: ' + JSON.stringify(r.card0.price));
-            } else problems.push('no first card to inspect');
-            if (r.chevrons !== 2) problems.push('expected 2 scroll chevrons, saw ' + r.chevrons);
-            if (r.scrollMoved === false) problems.push('forward chevron did not scroll the strip');
-            return problems;
+            const p = [];
+            if (r.themeId !== 157462692013) p.push('preview load served theme ' + r.themeId);
+            if (r.emptyHasLink) p.push('link rendered on an EMPTY cart');
+            if (r.addStatus !== 200) p.push('cart add failed: HTTP ' + r.addStatus);
+            if (!(r.countBefore >= 1)) p.push('cart not populated before clear: ' + r.countBefore);
+            if (!r.linkPresent) p.push('no .cart__clear-all link on the populated cart');
+            if (r.link) {
+              if (!/Remove all items/.test(r.link.text)) p.push('unexpected link text: ' + JSON.stringify(r.link.text));
+              if (r.link.href !== '/cart/clear') p.push('unexpected href: ' + r.link.href);
+              if (!r.link.icon) p.push('trash icon missing');
+              if (!r.link.visible) p.push('link not visible');
+            }
+            if (!/Remove all items from your cart\?/.test(r.dialogMsg || '')) p.push('confirm dialog missing/unexpected: ' + JSON.stringify(r.dialogMsg));
+            if (r.countAfter !== 0) p.push('cart not empty after clear: ' + r.countAfter);
+            if (!r.emptyMessageShown) p.push('empty-cart message not shown after clear');
+            if (!r.linkGoneAfterClear) p.push('link still present after clear');
+            return p;
           }
 
           (async () => {
@@ -102,37 +94,31 @@ jobs:
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
 
-            // Consistency gate: two independent page loads must agree.
-            const a = await inspectPreview(browser, 'runA:');
-            const b = await inspectPreview(browser, 'runB:');
+            const a = await flow(browser, 'runA:');
+            const b = await flow(browser, 'runB:');
             const pa = verdictOf(a);
             const pb = verdictOf(b);
 
-            // Negative control: the LIVE homepage must not carry the mount.
-            // MUST run in a fresh incognito context - visiting a preview URL sets
-            // Shopify's preview_theme cookie on the shared context, which would
-            // silently serve the preview theme to the "live" load too.
+            // Negative control: LIVE cart page in its own fresh context.
             const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
             const ctx = await mkCtx.call(browser);
             const lp = await ctx.newPage();
-            await lp.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await new Promise((res) => setTimeout(res, 3000));
+            await lp.goto(LIVE_CART, { waitUntil: 'domcontentloaded', timeout: 60000 });
             const live = await lp.evaluate(() => ({
               themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null,
-              hasMount: !!document.getElementById('xg-newtoday'),
+              hasLink: !!document.querySelector('.cart__clear-all'),
             }));
-            const liveHasMount = live.hasMount || live.themeId !== 157458727085;
-            console.log('live homepage (fresh context):', JSON.stringify(live), '(must be live theme 157458727085 with no mount)');
+            console.log('live cart (fresh context):', JSON.stringify(live), '(must be live theme 157458727085 with no clear-all link)');
+            const liveBad = live.hasLink || live.themeId !== 157458727085;
             await ctx.close();
-
             await browser.close();
 
             if (pa.length) console.log('runA problems:', pa);
             if (pb.length) console.log('runB problems:', pb);
-            if (liveHasMount) console.log('PROBLEM: live homepage control failed (mount present or wrong theme served)');
+            if (liveBad) console.log('PROBLEM: live cart control failed');
 
-            if (!pa.length && !pb.length && !liveHasMount) {
-              console.log('VERDICT: PASS - New Today strip renders below the hero on the preview homepage (' + a.cardCount + ' cards, chevron scroll works), live homepage untouched');
+            if (!pa.length && !pb.length && !liveBad) {
+              console.log('VERDICT: PASS - Remove-all link renders only with items, confirms, and empties the preview cart; live cart untouched');
             } else if (pa.join('|') !== pb.join('|')) {
               console.log('VERDICT: INCONSISTENT - the two runs disagree; treat as flaky, re-run before acting');
               process.exitCode = 1;
