@@ -64,6 +64,23 @@ jobs:
             }
             await new Promise((r) => setTimeout(r, 2500));
 
+            // hide everything floating over the page (sticky nav, the
+            // newsletter popup + its backdrop) so the crop is clean
+            const sweep = () => page.evaluate(() => {
+              const deck = document.getElementById('xg-deck');
+              document.querySelectorAll('body *').forEach((el) => {
+                if (deck.contains(el)) return;
+                const cs = getComputedStyle(el);
+                if (cs.position === 'fixed' || cs.position === 'sticky') el.style.display = 'none';
+              });
+              const input = document.getElementById('xg-deck-input');
+              if (input) input.scrollTop = 0;
+              if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+            });
+            await sweep();
+            await new Promise((r) => setTimeout(r, 1200));
+            await sweep();
+
             const info = await page.evaluate(() => {
               const out = document.getElementById('xg-deck-results');
               const rect = document.getElementById('xg-deck').getBoundingClientRect();
