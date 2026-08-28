@@ -57,6 +57,17 @@ jobs:
             await p.evaluate(() => document.querySelector('.xg-deck__pickbox[data-i="1"]').click());
             const s3 = await read();
             console.log('AFTER UNTICK SOL RING: ' + JSON.stringify(s3, null, 1));
+            // Thumbnail click must open the floating card preview (no
+            // navigation), and clicking the overlay must close it.
+            await p.evaluate(() => document.querySelector('.xg-deck__row img.xg-deck__thumb').click());
+            const z1 = await p.evaluate(() => {
+              const z = document.querySelector('.xg-deck-zoom');
+              const img = z && z.querySelector('img');
+              return { open: !!z, imgSrc: img ? img.getAttribute('src').slice(-30) : null, path: location.pathname };
+            });
+            await p.evaluate(() => { const z = document.querySelector('.xg-deck-zoom'); if (z) z.click(); });
+            const z2 = await p.evaluate(() => ({ open: !!document.querySelector('.xg-deck-zoom'), path: location.pathname }));
+            console.log('ZOOM OPEN: ' + JSON.stringify(z1) + '  ZOOM AFTER CLICK: ' + JSON.stringify(z2));
             console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
             await b.close();
             const count = t => { const m = /\((\d+)\)/.exec(String(t)); return m ? +m[1] : NaN; };
@@ -68,7 +79,9 @@ jobs:
               s2.ver.selectedIndex === 1 &&
               Math.abs(price(s2.firstUnit) - price(s2.ver.opt1)) < 0.005 &&
               s3.offRows >= 1 && !s3.master.checked &&
-              count(s3.addButton) === count(s2.addButton) - 2);
+              count(s3.addButton) === count(s2.addButton) - 2 &&
+              z1.open && /width=640/.test(z1.imgSrc || '') && z1.path === '/pages/deck-builder' &&
+              !z2.open && z2.path === '/pages/deck-builder');
             console.log(ok ? 'VERDICT: PASS' : 'VERDICT: FAIL');
           })().catch(e => { console.log('probe error: ' + e.message); });
           EOF
