@@ -10,49 +10,88 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Same-game guard on You May Also Like (preview)
+      - name: Mana symbols in oracle text (preview + live control)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
 
-          const SOL = 'https://exorgames.com/products/sol-ring-commander-2018?preview_theme_id=157462692013';
-          const PKM = 'https://exorgames.com/products/charizard-3-70-lets-play-eevee-3-deck-exclusives?preview_theme_id=157462692013';
+          const PREVIEW = 'https://exorgames.com/products/sol-ring-commander-2018?preview_theme_id=157462692013';
+          const LIVE = 'https://exorgames.com/products/sol-ring-commander-2018';
 
-          async function inspect(browser, label, url) {
+          async function inspect(browser, label, url, settleMs, pollFor) {
             const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
             const ctx = await mkCtx.call(browser);
             const page = await ctx.newPage();
+            const pageErrors = [];
+            page.on('pageerror', (e) => { if (pageErrors.length < 5) pageErrors.push(String(e && e.message).slice(0, 160)); });
             await page.setViewport({ width: 1366, height: 900 });
             await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await new Promise((res) => setTimeout(res, 9000));
+
+            const t0 = Date.now();
+            for (;;) {
+              const ready = await page.evaluate((wantSymbols) => {
+                const imgs = document.querySelectorAll('img.xg-mana');
+                const bet = document.getElementById('exor-betters');
+                const betOk = !!bet && bet.style.display !== 'none' && bet.querySelectorAll('a').length >= 3;
+                const imgsDone = imgs.length >= 3 && Array.prototype.every.call(imgs, (i) => i.complete);
+                return wantSymbols ? (imgsDone && betOk) : true;
+              }, pollFor);
+              if (ready || Date.now() - t0 > settleMs) break;
+              await new Promise((res) => setTimeout(res, 500));
+            }
+            await new Promise((res) => setTimeout(res, 1500));
+
             const r = await page.evaluate(() => {
               const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
-              const rel = document.querySelector('.xg-related');
-              out.relatedPresent = !!rel;
-              if (rel) {
-                out.pageType = rel.getAttribute('data-page-type');
-                out.relatedVisible = rel.style.display !== 'none';
-                const items = Array.from(rel.querySelectorAll('#relatedproduct-carousel [data-rec-type]'));
-                out.itemTypes = items.map((it) => it.getAttribute('data-rec-type'));
-              }
+              out.manaFlag = document.documentElement.getAttribute('data-xg-mana');
+              const imgs = Array.from(document.querySelectorAll('img.xg-mana'));
+              out.imgs = imgs.map((i) => ({
+                src: i.src, alt: i.alt, complete: i.complete,
+                nw: i.naturalWidth, box: Math.round(i.getBoundingClientRect().width),
+              }));
+              // Same scan the section script does: text nodes under the
+              // product container + tabs, minus script/style/textarea.
+              out.leftoverTokens = (function () {
+                var toks = [];
+                var roots = document.querySelectorAll('.product-template__container, .tab-content');
+                for (var ri = 0; ri < roots.length; ri++) {
+                  var w = document.createTreeWalker(roots[ri], NodeFilter.SHOW_TEXT, null);
+                  while (w.nextNode()) {
+                    var n = w.currentNode, p = n.parentNode;
+                    if (!p || /^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/.test(p.nodeName)) continue;
+                    var m = n.nodeValue.match(/\{[0-9A-Za-z]+(?:\/[0-9A-Za-z]+){0,2}\}/g);
+                    if (m) toks = toks.concat(m);
+                  }
+                }
+                return toks;
+              })();
+              const first = imgs[0];
+              out.context = first && first.parentNode ? String(first.parentNode.textContent).trim().slice(0, 120) : null;
               const bet = document.getElementById('exor-betters');
               out.bettersVisible = !!bet && bet.style.display !== 'none' && bet.offsetParent !== null;
               out.bettersCount = bet ? bet.querySelectorAll('a').length : 0;
               return out;
             });
+
+            // Load-proof independent of SVG intrinsic sizing: fetch each
+            // distinct symbol URL from the page origin and record status.
+            r.probes = await page.evaluate(async (srcs) => {
+              const out = [];
+              for (const s of srcs) {
+                try {
+                  const resp = await fetch(s, { mode: 'cors' });
+                  out.push({ src: s.split('/').pop(), ok: resp.ok, status: resp.status, type: resp.headers.get('content-type') });
+                } catch (e) {
+                  out.push({ src: s.split('/').pop(), err: String(e).slice(0, 80) });
+                }
+              }
+              return out;
+            }, Array.from(new Set(r.imgs.map((i) => i.src))));
+
+            r.pageErrors = pageErrors;
             console.log(label, JSON.stringify(r));
             await ctx.close();
             return r;
-          }
-
-          function verdictOf(r) {
-            const p = [];
-            if (r.themeId !== 157462692013) p.push('wrong theme: ' + r.themeId);
-            if (!r.relatedPresent) p.push('related shell missing');
-            const off = (r.itemTypes || []).filter((t) => t && r.pageType && t !== r.pageType);
-            if (r.relatedVisible && off.length) p.push('off-type items survived the guard: ' + JSON.stringify(off));
-            if (!r.relatedVisible && (r.itemTypes || []).length) p.push('items injected but section hidden - inconsistent state');
-            return p;
           }
 
           (async () => {
@@ -60,25 +99,39 @@ jobs:
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
-            const a = await inspect(browser, 'solA:', SOL);
-            const b = await inspect(browser, 'solB:', SOL);
-            const c = await inspect(browser, 'pokemon:', PKM);
-            const pa = verdictOf(a);
-            const pb = verdictOf(b);
-            const pc = verdictOf(c);
-            // Sol Ring's engine output is currently 10/10 Pokemon, so the
-            // guard should leave its block hidden while the betters strip
-            // carries the page.
-            if (a.relatedVisible) pa.push('Sol Ring related visible - expected the guard to filter all 10 Pokemon recs');
-            if (!a.bettersVisible || a.bettersCount < 3) pa.push('Sol Ring similar-effects strip missing/thin: ' + a.bettersCount);
+            const a = await inspect(browser, 'preview:', PREVIEW, 25000, true);
+            const b = await inspect(browser, 'live:', LIVE, 6000, false);
             await browser.close();
 
-            if (pa.length) console.log('solA problems:', pa);
-            if (pb.length) console.log('solB problems:', pb);
-            if (pc.length) console.log('pokemon problems:', pc);
+            const pa = [];
+            if (a.themeId !== 157462692013) pa.push('wrong theme: ' + a.themeId);
+            if (a.manaFlag !== '1') pa.push('mana script never ran (flag=' + a.manaFlag + ')');
+            if (a.imgs.length < 3) pa.push('expected >=3 symbol imgs ({T}{C}{C}), got ' + a.imgs.length);
+            const badSrc = a.imgs.filter((i) => !/^https:\/\/svgs\.scryfall\.io\/card-symbols\/[0-9A-Z]+\.svg$/.test(i.src));
+            if (badSrc.length) pa.push('unexpected src: ' + badSrc.map((i) => i.src).join(', '));
+            const codes = a.imgs.map((i) => (i.src.match(/\/([0-9A-Z]+)\.svg$/) || [])[1]);
+            if (!codes.includes('T')) pa.push('no tap symbol rendered');
+            if (codes.filter((c) => c === 'C').length < 2) pa.push('expected two colorless symbols, codes=' + codes.join(','));
+            const altBad = a.imgs.filter((i) => !/^\{[0-9A-Za-z/]+\}$/.test(i.alt));
+            if (altBad.length) pa.push('alt text missing on ' + altBad.length + ' imgs');
+            const loadedByNW = a.imgs.length > 0 && a.imgs.every((i) => i.complete && i.nw > 0);
+            const loadedByProbe = a.probes.length > 0 && a.probes.every((p) => p.ok && /svg/.test(p.type || ''));
+            if (!loadedByNW && !loadedByProbe) pa.push('symbol SVGs did not load: ' + JSON.stringify(a.probes));
+            const leftKnown = (a.leftoverTokens || []).filter((t) => /^\{(T|Q|C|S|X|P|[0-9]+|[WUBRG](\/[WUBRGP])?)\}$/i.test(t));
+            if (leftKnown.length) pa.push('known tokens still raw text: ' + leftKnown.join(' '));
+            if (!a.bettersVisible || a.bettersCount < 3) pa.push('similar-effects strip regressed: visible=' + a.bettersVisible + ' count=' + a.bettersCount);
 
-            if (!pa.length && !pb.length && !pc.length) {
-              console.log('VERDICT: PASS - Sol Ring: junk block hidden, betters strip up (' + a.bettersCount + ' cards); Pokemon page: related ' + (c.relatedVisible ? 'visible, ' + (c.itemTypes || []).length + ' items all ' + c.pageType : 'hidden (no same-type recs)'));
+            const pb = [];
+            if (b.themeId !== 157458727085) pb.push('live control on wrong theme: ' + b.themeId);
+            if (b.imgs.length !== 0) pb.push('live page has ' + b.imgs.length + ' xg-mana imgs - live theme must be untouched');
+            const liveRaw = (b.leftoverTokens || []).some((t) => /^\{T\}$/i.test(t));
+            if (!liveRaw) pb.push('control invalid: live description shows no raw {T} token');
+
+            if (pa.length) console.log('preview problems:', pa);
+            if (pb.length) console.log('live problems:', pb);
+
+            if (!pa.length && !pb.length) {
+              console.log('VERDICT: PASS - preview renders ' + a.imgs.length + ' Scryfall symbols (' + codes.join(',') + '), raw tokens gone, SVGs loaded (' + (loadedByNW ? 'naturalWidth' : 'fetch probe') + '), betters strip ' + a.bettersCount + ' cards; live still raw text, zero symbols.');
             } else {
               console.log('VERDICT: FAIL');
               process.exitCode = 1;
