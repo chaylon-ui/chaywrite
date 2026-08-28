@@ -15,7 +15,7 @@
 
   function attr(n, d) { var v = root.getAttribute(n); return (v == null || v === '') ? d : v; }
   var TITLE = attr('data-title', 'New today');
-  var SUB = attr('data-sub', 'Fresh singles on the shelf — updated through the day.');
+  var SUB = attr('data-sub', 'Fresh singles on the shelf.');
   var COLLECTION = attr('data-collection', 'new-arrivals');
   var MAX = Math.max(4, Math.min(24, +attr('data-max', '16') || 16));
 
@@ -39,7 +39,9 @@
         '#xg-newtoday .xg-nt__btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--xg-border,#d7dbdf);background:var(--xg-surface,#fff);color:var(--xg-ink,#171b1d);font-size:20px;line-height:1;cursor:pointer}' +
         '#xg-newtoday .xg-nt__btn:hover{border-color:var(--xg-accent,#d62c28);color:var(--xg-accent,#d62c28)}' +
         '#xg-newtoday .xg-nt__strip{display:flex;gap:14px;overflow-x:auto;padding:2px 2px 14px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}' +
-        '#xg-newtoday .xg-nt__card{flex:0 0 148px;scroll-snap-align:start;display:flex;flex-direction:column}' +
+        // overflow:hidden zeroes the flex min-size so long names/sets ellipsize
+        // instead of widening the tile and tearing a gap in the strip
+        '#xg-newtoday .xg-nt__card{flex:0 0 148px;width:148px;min-width:0;overflow:hidden;scroll-snap-align:start;display:flex;flex-direction:column}' +
         '#xg-newtoday .xg-nt__img{display:block;width:148px;height:207px;object-fit:cover;border-radius:7px;background:#eef0f2;margin:0 0 8px;border:0;box-shadow:0 4px 14px rgba(23,27,29,.10);transition:transform 140ms ease}' +
         '#xg-newtoday .xg-nt__card:hover .xg-nt__img{transform:translateY(-3px)}' +
         '#xg-newtoday .xg-nt__name{font-size:13.5px;font-weight:600;color:var(--xg-ink,#171b1d);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}' +
