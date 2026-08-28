@@ -1,11 +1,10 @@
 name: Reveal diagnose
 
 # Scratch diagnostics against the LIVE site (log-only). Current probe: the
-# uniform "Copies in stock at:" sister presentation. "99 Sol Ring" makes a
-# partial line (strip must read "... in stock at: <Store> › · <Store> ›");
-# "1 Atraxa, Grand Unifier" is a full local miss held by several sisters
-# (row must show the label + one identical pill per store, NO prices).
-# Consistency-gated against /sisterstock.json for both cards.
+# same-card group bar. "99 Sol Ring" splits into many version rows + a
+# short strip: every one of those rows must carry the group class with the
+# inset bar, exactly one (the strip) closes the group, and the single-row
+# "1 Island" line must carry none of it.
 
 on:
   workflow_dispatch:
@@ -17,7 +16,7 @@ jobs:
     steps:
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22 2>&1 | tail -1
-      - name: Deck Builder uniform sister list (real Chrome, live page)
+      - name: Deck Builder same-card group bar (real Chrome, live page)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -29,37 +28,28 @@ jobs:
             p.on('pageerror', e => errs.push('pageerror: ' + e.message));
             await p.goto('https://exorgames.com/pages/deck-builder', { waitUntil: 'domcontentloaded', timeout: 60000 });
             await p.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await p.type('#xg-deck-input', '99 Sol Ring\n1 Atraxa, Grand Unifier');
+            await p.type('#xg-deck-input', '99 Sol Ring\n1 Island');
             await p.evaluate(() => document.getElementById('xg-deck-go').click());
-            await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
-            try { await p.waitForFunction(() => !!document.querySelector('.xg-deck__shortsister'), { timeout: 20000 }); } catch (e) {}
-            const ui = await p.evaluate(() => {
-              const strip = document.querySelector('.xg-deck__shortinfo');
-              const sisterStat = document.querySelector('.xg-deck__stat--sister');
+            await p.waitForSelector('.xg-deck__row--short', { timeout: 90000 });
+            const r = await p.evaluate(() => {
+              const rows = Array.from(document.querySelectorAll('.xg-deck__row'));
+              const island = rows.find(el => /Island/.test(el.innerText));
+              const grp = document.querySelectorAll('.xg-deck__row--grp');
+              const shadow = grp.length ? getComputedStyle(grp[0]).boxShadow : null;
               return {
-                stripText: strip ? strip.textContent : null,
-                stripLinks: document.querySelectorAll('.xg-deck__shortsister').length,
-                rowLabel: sisterStat ? (sisterStat.querySelector('.xg-deck__sisterlabel') || {}).textContent : null,
-                rowPills: sisterStat ? sisterStat.querySelectorAll('.xg-deck__sisterstores a').length : 0,
-                rowText: sisterStat ? sisterStat.textContent : null
+                totalRows: rows.length,
+                grpRows: grp.length,
+                gendRows: document.querySelectorAll('.xg-deck__row--gend').length,
+                stripIsGend: !!document.querySelector('.xg-deck__row--short.xg-deck__row--gend'),
+                islandGrouped: island ? island.classList.contains('xg-deck__row--grp') : null,
+                grpShadow: shadow
               };
             });
-            const ep = await p.evaluate(() =>
-              fetch('https://exor-binder.nevski.workers.dev/sisterstock.json?game=mtg&names=' + encodeURIComponent('Sol Ring|Atraxa, Grand Unifier'))
-                .then(r => r.ok ? r.json() : null).catch(() => null));
-            console.log('UI: ' + JSON.stringify(ui, null, 1));
-            console.log('ENDPOINT: ' + JSON.stringify(ep));
+            console.log('GROUP CHECK: ' + JSON.stringify(r, null, 1));
             console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
             await b.close();
-            const by = {}; ((ep && ep.results) || []).forEach(r => { by[r.q] = r.sister; });
-            const sol = by['Sol Ring'], atx = by['Atraxa, Grand Unifier'];
-            const stripOk = sol
-              ? (ui.stripLinks === (sol.stores || []).length && /in stock at:/.test(ui.stripText || '') && !/\$/.test(ui.stripText || ''))
-              : ui.stripLinks === 0;
-            const rowOk = atx
-              ? (ui.rowLabel === 'Copies in stock at:' && ui.rowPills === (atx.stores || []).length && !/\$/.test(ui.rowText || ''))
-              : !ui.rowLabel;
-            console.log('stripOk=' + stripOk + ' rowOk=' + rowOk);
-            console.log(ep && stripOk && rowOk ? 'VERDICT: PASS' : 'VERDICT: FAIL');
+            const ok = !!(r.grpRows >= 3 && r.gendRows === 1 && r.stripIsGend &&
+              r.islandGrouped === false && /inset/.test(r.grpShadow || ''));
+            console.log(ok ? 'VERDICT: PASS' : 'VERDICT: FAIL');
           })().catch(e => { console.log('probe error: ' + e.message); });
           EOF
