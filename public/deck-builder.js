@@ -294,6 +294,10 @@
           var lastC = chunks[chunks.length - 1];
           var pickerUseful = a.offers.length > 1 &&
             !(remaining > 0 || (chunks.length === a.offers.length && lastC.take === lastC.stock));
+          // One card split across several rows (versions + its info strip)
+          // reads as a single block: an inset bar spans the group and the
+          // separators inside it soften (owner: show they're the same card).
+          var grouped = (chunks.length + (remaining > 0 ? 1 : 0)) > 1;
           var html = chunks.map(function (c, ci) {
             var o = c.o;
             var unit = parseFloat(o.price) || 0;
@@ -319,7 +323,10 @@
                   return '<option value="' + vi + '"' + (vi === a.sel ? ' selected' : '') + '>' + esc(vlabel + ' — $' + (parseFloat(v.price) || 0).toFixed(2) + vqty) + '</option>';
                 }).join('') + '</select>';
             }
-            return '<div class="xg-deck__row' + offClass + '" role="row">' +
+            var grpClass = grouped
+              ? ' xg-deck__row--grp' + ((ci === chunks.length - 1 && remaining === 0) ? ' xg-deck__row--gend' : '')
+              : '';
+            return '<div class="xg-deck__row' + offClass + grpClass + '" role="row">' +
               lead +
               '<span class="xg-deck__qty" role="cell">' + c.take + '&times;</span>' +
               '<span class="xg-deck__card" role="cell">' +
@@ -357,7 +364,7 @@
             } else {
               tail = remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now';
             }
-            html += '<div class="xg-deck__row xg-deck__row--short" role="row">' +
+            html += '<div class="xg-deck__row xg-deck__row--short xg-deck__row--grp xg-deck__row--gend" role="row">' +
               '<span class="xg-deck__shortinfo" role="cell">' + esc(chunks[0].o.name || r.name || ln.name) + ': ' + filledQ + ' of your ' + ln.qty + ' are in stock above &mdash; ' + tail + '</span>' +
               '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">' + filledQ + ' of ' + ln.qty + ' available</span></span>' +
             '</div>';

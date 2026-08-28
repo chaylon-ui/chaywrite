@@ -82,6 +82,12 @@
 #xg-deck .xg-deck__row { border-bottom: 1px solid #f1f3f5; }
 #xg-deck .xg-deck__row:last-child { border-bottom: 0; }
 #xg-deck .xg-deck__row:hover { background: #fafbfc; }
+/* Same-card group: when one decklist line spans several rows (different
+   versions, plus its info strip), an inset bar runs down the whole block
+   and the separators INSIDE it soften — visibly one card, subtly. Inset
+   shadow, not border, so columns stay aligned with ungrouped rows. */
+#xg-deck .xg-deck__row--grp { box-shadow: inset 3px 0 0 0 #d4dae0; }
+#xg-deck .xg-deck__row--grp:not(.xg-deck__row--gend) { border-bottom-color: #f7f8fa; }
 
 /* Shared column widths (rows + header) */
 #xg-deck .xg-deck__pick, #xg-deck .xg-deck__h--pick { flex: 0 0 22px; }
