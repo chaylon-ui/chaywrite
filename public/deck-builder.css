@@ -114,9 +114,12 @@
 #xg-deck .xg-deck__stat--no a { color: #a6adb4; font-weight: 600; }
 #xg-deck .xg-deck__stat--no a:hover { color: var(--xg-accent, #d62c28); text-decoration: underline; }
 #xg-deck .xg-deck__row--miss .xg-deck__name { color: #98a0a6; font-weight: 500; }
-/* Partial-fill row: the copies the shelf can't cover. Warm and informational
-   (not alarm-red, not miss-grey) — the found copies sit in the rows above
-   and ARE part of Add to cart; this row only accounts for the remainder. */
+/* Partial-fill INFO STRIP: annotates the stock rows above ("2 of 4
+   available"), so it must not read as another product line — tinted band,
+   smaller text, no qty/price cells. Warm, not alarm-red. */
+#xg-deck .xg-deck__row--short { background: #fffcf2; padding-top: 8px; padding-bottom: 8px; }
+#xg-deck .xg-deck__row--short:hover { background: #fdf8e9; }
+#xg-deck .xg-deck__shortinfo { flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.45; color: #8f7325; white-space: normal; }
 #xg-deck .xg-deck__stat--short .xg-deck__pill { background: #fff4dd; color: #996c07; }
 #xg-deck .xg-deck__shortnote { color: #996c07; font-weight: 600; }
 #xg-deck .xg-deck__missing { margin: 16px 0 0; font-size: 14px; }
@@ -147,6 +150,8 @@
   #xg-deck .xg-deck__unit, #xg-deck .xg-deck__line, #xg-deck .xg-deck__stat { display: inline-block; text-align: left; margin-right: 16px; }
   #xg-deck .xg-deck__unit::before { content: "Unit "; color: #98a0a6; font-weight: 400; }
   #xg-deck .xg-deck__line::before { content: "Line "; color: #98a0a6; font-weight: 400; }
+  #xg-deck .xg-deck__row--short { padding: 10px 14px; }
+  #xg-deck .xg-deck__shortinfo { display: block; margin-bottom: 5px; }
   #xg-deck .xg-deck__misslist { columns: 1; }
 }
 @media (prefers-reduced-motion: reduce) {

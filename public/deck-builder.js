@@ -227,15 +227,18 @@
     return { offers: offers, sel: sel, chunks: chunks, filledQ: ln.qty - remaining, remaining: remaining };
   }
 
-  // Cart payload from the CURRENT ticks and version picks (ticked lines only).
+  // Cart payload from the CURRENT ticks and version picks. Ticks are per
+  // ROW (line + variant), so the NM and LP copies of one card can be taken
+  // or left independently.
+  function chunkKey(li, c) { return li + ':' + c.o.variantId; }
   function collectItems() {
     var items = [];
     if (!state) return items;
     state.lines.forEach(function (ln, li) {
-      if (state.checked[li] === false) return;
       var r = state.map[ln.name.toLowerCase()];
       if (!(r && r.found)) return;
       allocate(ln, r, state.sel[li], nextCheapOn()).chunks.forEach(function (c) {
+        if (state.checked[chunkKey(li, c)] === false) return;
         items.push({ id: c.o.variantId, quantity: c.take, stock: c.stock });
       });
     });
@@ -261,24 +264,25 @@
         // the cart never gets more copies than the shelf has.
         var a = allocate(ln, r, state.sel[li], nextCheap);
         var chunks = a.chunks, remaining = a.remaining, filledQ = a.filledQ;
-        var isOn = state.checked[li] !== false;
         if (filledQ > 0) {
           filledCards += filledQ;
-          fillable++; if (isOn) ticked++;
           if (remaining === 0) { inStock++; } else { partialLines++; shortQ += remaining; }
-          var offClass = isOn ? '' : ' xg-deck__row--off';
           var html = chunks.map(function (c, ci) {
             var o = c.o;
             var unit = parseFloat(o.price) || 0;
             var lineTotal = unit * c.take;
-            if (isOn) { subtotal += lineTotal; addQty += c.take; }
+            // Every stock row has its own tick (keyed line+variant), so the
+            // NM and LP copies of one card can be taken or left separately.
+            var key = chunkKey(li, c);
+            var chOn = state.checked[key] !== false;
+            fillable++; if (chOn) ticked++;
+            if (chOn) { subtotal += lineTotal; addQty += c.take; }
+            var offClass = chOn ? '' : ' xg-deck__row--off';
             var meta = [o.set, o.foil ? 'Foil' : '', o.condition].filter(Boolean).join(' · ');
-            // The line's first row carries its tick and, when the card comes
-            // in several versions, the version picker — cheapest pre-selected,
+            var lead = '<span class="xg-deck__pick" role="cell"><input type="checkbox" class="xg-deck__pickbox" data-k="' + key + '"' + (chOn ? ' checked' : '') + ' aria-label="Include ' + c.take + ' ' + esc(o.name || r.name) + '"></span>';
+            // The line's first row also carries the version picker when the
+            // card comes in several versions — cheapest pre-selected,
             // pricier printings selectable; picking one re-fills led by it.
-            var lead = ci === 0
-              ? '<span class="xg-deck__pick" role="cell"><input type="checkbox" class="xg-deck__pickbox" data-i="' + li + '"' + (isOn ? ' checked' : '') + ' aria-label="Include ' + esc(o.name || r.name) + '"></span>'
-              : '<span class="xg-deck__pick" role="cell"></span>';
             var picker = '';
             if (ci === 0 && a.offers.length > 1) {
               picker = '<select class="xg-deck__ver" data-i="' + li + '" aria-label="Version of ' + esc(o.name || r.name) + '">' +
@@ -304,16 +308,11 @@
             '</div>';
           }).join('');
           if (remaining > 0) {
-            // Positive framing on purpose: the copies we DO have are in the
-            // rows above and ride along with Add to cart — this row only
-            // accounts for the remainder.
-            html += '<div class="xg-deck__row xg-deck__row--short' + offClass + '" role="row">' +
-              '<span class="xg-deck__pick" role="cell"></span>' +
-              '<span class="xg-deck__qty" role="cell">' + remaining + '&times;</span>' +
-              '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(chunks[0].o.name || r.name || ln.name) + '</span>' +
-                '<span class="xg-deck__meta">' + filledQ + ' of your ' + ln.qty + ' are in stock above and ready to add &mdash; ' + remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now</span></span></span>' +
-              '<span class="xg-deck__unit" role="cell">&mdash;</span>' +
-              '<span class="xg-deck__line" role="cell">&mdash;</span>' +
+            // Information strip, not a product row (owner feedback): it only
+            // annotates the rows above — the copies we DO have are up there
+            // and ride along with Add to cart.
+            html += '<div class="xg-deck__row xg-deck__row--short" role="row">' +
+              '<span class="xg-deck__shortinfo" role="cell">' + esc(chunks[0].o.name || r.name || ln.name) + ': ' + filledQ + ' of your ' + ln.qty + ' are in stock above &mdash; ' + remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now</span>' +
               '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">' + filledQ + ' of ' + ln.qty + ' available</span></span>' +
             '</div>';
           }
@@ -446,11 +445,17 @@
   out.addEventListener('change', function (e) {
     if (!state) return;
     var t = e.target;
-    if (t.classList && t.classList.contains('xg-deck__pickbox')) { state.checked[t.getAttribute('data-i')] = t.checked; paint(); }
+    if (t.classList && t.classList.contains('xg-deck__pickbox')) { state.checked[t.getAttribute('data-k')] = t.checked; paint(); }
     else if (t.classList && t.classList.contains('xg-deck__ver')) { state.sel[t.getAttribute('data-i')] = +t.value || 0; paint(); }
     else if (t.id === 'xg-deck-checkall') {
       var v = t.checked;
-      state.lines.forEach(function (_, i) { state.checked[i] = v; });
+      state.lines.forEach(function (ln, i) {
+        var r = state.map[ln.name.toLowerCase()];
+        if (!(r && r.found)) return;
+        allocate(ln, r, state.sel[i], nextCheapOn()).chunks.forEach(function (c) {
+          state.checked[chunkKey(i, c)] = v;
+        });
+      });
       paint();
     }
   });
