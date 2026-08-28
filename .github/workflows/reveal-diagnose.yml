@@ -10,131 +10,150 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Fetch BinderPOS calendar widget CSS
-        run: |
-          curl -sS -m 30 -o eventCalendar.css https://cdn.binderpos.com/eventCalendar.css || true
-          curl -sS -m 30 -o eventCalendar.js https://cdn.binderpos.com/eventCalendar.js || true
-          echo "--- sizes:"; wc -c eventCalendar.css eventCalendar.js || true
-          echo "--- eventCalendar.css FULL:"; cat eventCalendar.css || true
-          echo; echo "--- eventCalendar.js class/markup strings:"
-          grep -oE '(className|createElement|classList\.add)[^;]{0,120}' eventCalendar.js | head -60 || true
-          grep -oE '"[a-zA-Z][a-zA-Z0-9 _-]{3,60}"' eventCalendar.js | sort -u | head -120 || true
-
-      - name: Dump calendar DOM + footer computed styles (preview)
+      - name: Footer + calendar restyle (preview desktop, preview mobile, live control)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const URL = 'https://exorgames.com/?preview_theme_id=157462692013';
+
+          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
+          const LIVE = 'https://exorgames.com/';
+
+          async function inspect(browser, label, url, vw, vh, waitCal) {
+            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
+            const ctx = await mkCtx.call(browser);
+            const page = await ctx.newPage();
+            await page.setViewport({ width: vw, height: vh });
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            const t0 = Date.now();
+            for (;;) {
+              const n = await page.evaluate(() => document.querySelectorAll('#binderpos-calendar td').length);
+              if ((waitCal ? n > 20 : true) && Date.now() - t0 > 2500) break;
+              if (Date.now() - t0 > 30000) break;
+              await new Promise((r) => setTimeout(r, 700));
+            }
+            const r = await page.evaluate(() => {
+              function cs(el, props, pseudo) {
+                if (!el) return null;
+                const c = getComputedStyle(el, pseudo || null);
+                const o = {};
+                props.forEach((p) => { o[p] = c.getPropertyValue(p); });
+                return o;
+              }
+              const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
+              const foot = document.querySelector('.site-footer');
+              out.footerBg = foot ? getComputedStyle(foot).backgroundImage.slice(0, 60) : null;
+              out.accent = foot ? cs(foot, ['content', 'height', 'background-image'], '::before') : null;
+              const row = document.querySelector('.site-footer .footer-container > .page-width > .row');
+              out.rowDisplay = row ? getComputedStyle(row).display : null;
+              out.headingFont = cs(document.querySelector('.site-footer .footer-heading'), ['font-family', 'text-transform', 'letter-spacing']);
+              out.chip = cs(document.querySelector('.site-footer .contact-info .site-footer__linklist-item > i'), ['width', 'height', 'border-radius', 'display']);
+              const ig = document.querySelector('.site-footer .xg-newsletter .input-group');
+              out.inputGroup = cs(ig, ['display', 'border-radius']);
+              const btn = document.querySelector('.site-footer .xg-newsletter button.newsletter__submit');
+              out.btn = cs(btn, ['border-radius', 'background-image']);
+              out.btnW = btn ? btn.offsetWidth : null;
+              out.igW = ig ? ig.offsetWidth : null;
+              out.hoursDays = document.querySelectorAll('.site-footer .xg-hours .xg-hours__day').length;
+              const hp = document.querySelector('.site-footer .xg-hours .xg-hours__day') ?
+                document.querySelector('.site-footer .xg-hours .xg-hours__day').parentNode : null;
+              out.hoursRowDisplay = hp ? getComputedStyle(hp).display : null;
+              out.hoursSample = hp ? hp.textContent.trim().slice(0, 60) : null;
+              out.logoBar = cs(document.querySelector('.site-footer .payment-icons .logo-bar'), ['display']);
+              out.pageScrollX = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+
+              const cal = document.getElementById('binderpos-calendar');
+              out.calTds = cal ? cal.querySelectorAll('td').length : 0;
+              if (cal && out.calTds > 0) {
+                const wrap = document.querySelector('.calendar-contents');
+                out.overlay = cs(wrap, ['content', 'background-image'], '::after');
+                if (out.overlay) out.overlay['background-image'] = String(out.overlay['background-image']).slice(0, 80);
+                const h3 = document.querySelector('section.calendar-container h3');
+                out.calTitle = h3 ? { text: h3.textContent.trim(), display: getComputedStyle(h3).display, font: getComputedStyle(h3).fontFamily.slice(0, 30) } : null;
+                out.actions = cs(cal.querySelector('.calendar-actions-container'), ['display']);
+                out.navPill = cs(cal.querySelector('span.calendar-nav-action'), ['border-radius', 'display']);
+                const table = cal.querySelector('table.calendar-table');
+                out.table = cs(table, ['border-spacing', 'background-color']);
+                out.tableW = table ? table.offsetWidth : null;
+                const td = cal.querySelector('td.calendar-data-block:not(.calendar-inactive-block)');
+                out.td = cs(td, ['border-radius', 'background-color', 'border-top-color']);
+                out.th = cs(cal.querySelector('th'), ['background-image', 'background-color']);
+                out.icon = cs(cal.querySelector('img.calendar-icon'), ['width', 'height', 'object-fit', 'border-radius']);
+                out.today = cs(cal.querySelector('td.calendar-selected-date'), ['border-top-color', 'background-color']);
+                out.todayNum = cs(cal.querySelector('td.calendar-selected-date > span'), ['background-color', 'color']);
+                const inner = document.querySelector('.calendar-inner-container');
+                out.calScrollable = inner ? inner.scrollWidth > inner.clientWidth : null;
+              }
+              return out;
+            });
+            console.log(label, JSON.stringify(r));
+            await ctx.close();
+            return r;
+          }
 
           (async () => {
             const browser = await puppeteer.launch({
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
-            const mkCtx = browser.createBrowserContext || browser.createIncognitoBrowserContext;
-            const ctx = await mkCtx.call(browser);
-            const page = await ctx.newPage();
-            await page.setViewport({ width: 1366, height: 900 });
-            await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-            const t0 = Date.now();
-            for (;;) {
-              const n = await page.evaluate(() => document.querySelectorAll('#binderpos-calendar td').length);
-              if (n > 20 || Date.now() - t0 > 30000) break;
-              await new Promise((r) => setTimeout(r, 800));
-            }
-            await new Promise((r) => setTimeout(r, 2500));
-
-            const cal = await page.evaluate(() => {
-              const out = { themeId: (window.Shopify && Shopify.theme && Shopify.theme.id) || null };
-              const root = document.getElementById('binderpos-calendar');
-              out.present = !!root;
-              if (!root) return out;
-              out.wrapperStyle = (document.querySelector('.calendar-contents') || {}).getAttribute
-                ? document.querySelector('.calendar-contents').getAttribute('style') : null;
-              const h3 = document.querySelector('section.calendar-container h3');
-              out.sectionTitle = h3 ? h3.textContent.trim() : null;
-              out.htmlLength = root.outerHTML.length;
-              const inv = {};
-              root.querySelectorAll('*').forEach((el) => {
-                const key = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' && el.className ? '.' + el.className.trim().replace(/\s+/g, '.') : '');
-                inv[key] = (inv[key] || 0) + 1;
-              });
-              out.inventory = inv;
-              const top = Array.from(root.children).map((c) => c.tagName.toLowerCase() + (c.className ? '.' + String(c.className).trim().replace(/\s+/g, '.') : ''));
-              out.topChildren = top;
-              const header = root.querySelector('.current-month-container');
-              out.headerHTML = header ? header.outerHTML.slice(0, 1600) : null;
-              if (!header) {
-                out.firstChildHTML = root.children[0] ? root.children[0].outerHTML.slice(0, 1600) : null;
-              }
-              const tds = Array.from(root.querySelectorAll('td'));
-              const withImg = tds.find((td) => td.querySelector('img'));
-              out.cellWithEventsHTML = withImg ? withImg.outerHTML.slice(0, 1800) : null;
-              const empty = tds.find((td) => !td.querySelector('img'));
-              out.emptyCellHTML = empty ? empty.outerHTML.slice(0, 500) : null;
-              const table = root.querySelector('table');
-              out.tableClass = table ? table.className : null;
-              const headRow = root.querySelector('tr');
-              out.headRowHTML = headRow ? headRow.outerHTML.slice(0, 900) : null;
-              function cs(el, props) {
-                if (!el) return null;
-                const c = getComputedStyle(el);
-                const o = {};
-                props.forEach((p) => { o[p] = c.getPropertyValue(p); });
-                return o;
-              }
-              out.css = {
-                td: cs(withImg || empty, ['background-color', 'background-image', 'border', 'border-radius', 'padding', 'height', 'width', 'vertical-align']),
-                th: cs(root.querySelector('th'), ['background-color', 'background-image', 'color', 'font-family', 'font-size', 'padding']),
-                monthHeader: cs(header, ['color', 'font-family', 'font-size', 'font-weight', 'text-align', 'display', 'justify-content']),
-                table: cs(table, ['background-color', 'border-collapse', 'border-spacing', 'width']),
-                eventImg: cs(root.querySelector('td img'), ['width', 'height', 'border-radius', 'object-fit', 'display', 'margin']),
-                dayNumSpan: cs((withImg || empty || {}).querySelector ? (withImg || empty).querySelector('span') : null, ['color', 'font-size', 'font-weight', 'text-shadow', 'display', 'position']),
-              };
-              const navLinks = Array.from(root.querySelectorAll('a, button, [onclick]')).slice(0, 8).map((a) => ({
-                tag: a.tagName, cls: String(a.className).slice(0, 60), text: (a.textContent || '').trim().slice(0, 24),
-              }));
-              out.navLinks = navLinks;
-              return out;
-            });
-            console.log('CAL1:', JSON.stringify({ themeId: cal.themeId, present: cal.present, htmlLength: cal.htmlLength, sectionTitle: cal.sectionTitle, wrapperStyle: cal.wrapperStyle, tableClass: cal.tableClass, topChildren: cal.topChildren }));
-            console.log('CAL2 inventory:', JSON.stringify(cal.inventory));
-            console.log('CAL3 header:', JSON.stringify({ headerHTML: cal.headerHTML, firstChildHTML: cal.firstChildHTML, headRowHTML: cal.headRowHTML, navLinks: cal.navLinks }));
-            console.log('CAL4 cells:', JSON.stringify({ cellWithEventsHTML: cal.cellWithEventsHTML, emptyCellHTML: cal.emptyCellHTML }));
-            console.log('CAL5 css:', JSON.stringify(cal.css));
-
-            const foot = await page.evaluate(() => {
-              function cs(sel, props) {
-                const el = document.querySelector(sel);
-                if (!el) return null;
-                const c = getComputedStyle(el);
-                const o = {};
-                props.forEach((p) => { o[p] = c.getPropertyValue(p); });
-                return o;
-              }
-              return {
-                footer: cs('.site-footer', ['background-color', 'background-image', 'color', 'padding-top', 'padding-bottom', 'font-family']),
-                heading: cs('.site-footer .footer-heading', ['color', 'font-family', 'font-size', 'font-weight', 'text-transform', 'letter-spacing', 'margin-bottom']),
-                link: cs('.site-footer .bottom-link-list .site-footer__linklist-item a', ['color', 'font-size', 'text-decoration-line', 'padding', 'display']),
-                addr: cs('.site-footer .shop-address .content p', ['color', 'font-size', 'line-height']),
-                input: cs('.site-footer input.newsletter__input', ['background-color', 'border', 'border-radius', 'color', 'height', 'padding', 'font-size', 'width']),
-                btn: cs('.site-footer button.newsletter__submit', ['background-color', 'color', 'border-radius', 'height', 'font-size', 'text-transform', 'width', 'border']),
-                bottom: cs('.footer-bottom', ['background-color', 'color', 'padding-top', 'padding-bottom', 'font-size']),
-                hoursP: cs('#newsletter-container .block-newsletter-label p, .site-footer .block-newsletter-label', ['color', 'font-size', 'line-height']),
-                icons: cs('.site-footer .contact-info-inner .fa, .site-footer .contact-info-inner i', ['color', 'font-size', 'display', 'width']),
-                footerH: (document.querySelector('.site-footer') || { offsetHeight: 0 }).offsetHeight,
-                bottomHTML: (document.querySelector('.footer-bottom') || { outerHTML: '' }).outerHTML.slice(0, 1200),
-                hoursHTML: (function () { const n = document.querySelectorAll('.site-footer .block-newsletter-label'); return Array.from(n).map((x) => x.outerHTML.slice(0, 700)); })(),
-              };
-            });
-            console.log('FOOT1:', JSON.stringify({ footer: foot.footer, heading: foot.heading, link: foot.link, addr: foot.addr, footerH: foot.footerH }));
-            console.log('FOOT2:', JSON.stringify({ input: foot.input, btn: foot.btn, bottom: foot.bottom, hoursP: foot.hoursP, icons: foot.icons }));
-            console.log('FOOT3:', JSON.stringify({ bottomHTML: foot.bottomHTML, hoursHTML: foot.hoursHTML }));
-
+            const a = await inspect(browser, 'desk:', PREVIEW, 1366, 900, true);
+            const m = await inspect(browser, 'mob:', PREVIEW, 390, 844, true);
+            const b = await inspect(browser, 'live:', LIVE, 1366, 900, false);
             await browser.close();
-            const ok = cal.present && cal.themeId === 157462692013 && Object.keys(cal.inventory || {}).length > 0;
-            console.log(ok ? 'VERDICT: PASS - recon data captured' : 'VERDICT: FAIL - calendar not captured');
-            if (!ok) process.exitCode = 1;
+
+            const pa = [];
+            if (a.themeId !== 157462692013) pa.push('wrong theme: ' + a.themeId);
+            if (!a.accent || a.accent.content === 'none' || a.accent.height !== '3px') pa.push('accent bar missing: ' + JSON.stringify(a.accent));
+            if (!/gradient/.test(a.footerBg || '')) pa.push('footer bg not gradient: ' + a.footerBg);
+            if (a.rowDisplay !== 'grid') pa.push('desktop footer row not grid: ' + a.rowDisplay);
+            if (!/Oswald/.test((a.headingFont || {})['font-family'] || '')) pa.push('heading font: ' + JSON.stringify(a.headingFont));
+            if (!a.chip || a.chip.width !== '36px' || a.chip['border-radius'] !== '10px') pa.push('contact icon chip: ' + JSON.stringify(a.chip));
+            if (!a.inputGroup || a.inputGroup.display !== 'flex' || parseInt(a.inputGroup['border-radius']) < 100) pa.push('newsletter pill: ' + JSON.stringify(a.inputGroup));
+            if (!a.btn || parseInt(a.btn['border-radius']) < 100 || !/gradient/.test(a.btn['background-image'] || '')) pa.push('subscribe button: ' + JSON.stringify(a.btn));
+            if (a.btnW && a.igW && a.btnW > a.igW * 0.6) pa.push('button still full-width: ' + a.btnW + '/' + a.igW);
+            if (a.hoursDays < 3) pa.push('hours split spans: ' + a.hoursDays);
+            if (a.hoursRowDisplay !== 'flex') pa.push('hours row display: ' + a.hoursRowDisplay);
+            if ((a.logoBar || {}).display !== 'flex') pa.push('payment bar: ' + JSON.stringify(a.logoBar));
+            if (a.pageScrollX > 1) pa.push('desktop horizontal overflow: ' + a.pageScrollX);
+            if (a.calTds < 21) pa.push('calendar never rendered: ' + a.calTds);
+            if (a.calTds > 20) {
+              if (!a.overlay || a.overlay.content === 'none' || !/gradient/.test(a.overlay['background-image'] || '')) pa.push('calendar overlay: ' + JSON.stringify(a.overlay));
+              if (!a.calTitle || a.calTitle.display !== 'block' || !/Upcoming/i.test(a.calTitle.text)) pa.push('calendar title: ' + JSON.stringify(a.calTitle));
+              if ((a.actions || {}).display !== 'flex') pa.push('month bar not flex: ' + JSON.stringify(a.actions));
+              if (!a.navPill || parseInt(a.navPill['border-radius']) < 100) pa.push('nav pills: ' + JSON.stringify(a.navPill));
+              if (!a.table || a.table['border-spacing'] !== '6px 6px') pa.push('cell spacing: ' + JSON.stringify(a.table));
+              if (!/rgba\(0, 0, 0, 0\)|transparent/.test((a.table || {})['background-color'] || '')) pa.push('table sheet still painted: ' + JSON.stringify(a.table));
+              if (!a.td || a.td['border-radius'] !== '12px') pa.push('day cells not rounded: ' + JSON.stringify(a.td));
+              if (!/none/.test((a.th || {})['background-image'] || '')) pa.push('th gradient survived: ' + JSON.stringify(a.th));
+              if (!a.icon || a.icon.width !== '30px' || a.icon['object-fit'] !== 'contain') pa.push('event icons: ' + JSON.stringify(a.icon));
+              if (a.today && !/214, 44, 40/.test(a.today['border-top-color'])) pa.push('today ring: ' + JSON.stringify(a.today));
+            }
+
+            const pm = [];
+            if (m.themeId !== 157462692013) pm.push('wrong theme: ' + m.themeId);
+            if (m.pageScrollX > 1) pm.push('mobile page overflows horizontally: ' + m.pageScrollX);
+            if (m.rowDisplay === 'grid') pm.push('grid leaked to mobile');
+            if (m.calTds > 20) {
+              if (m.calScrollable !== true) pm.push('mobile calendar not scrollable in its own container');
+              if (!m.icon || m.icon.width !== '24px') pm.push('mobile icon size: ' + JSON.stringify(m.icon));
+            } else {
+              pm.push('mobile calendar never rendered: ' + m.calTds);
+            }
+
+            const pb = [];
+            if (b.themeId !== 157458727085) pb.push('live control on wrong theme: ' + b.themeId);
+            if (b.accent && b.accent.content !== 'none') pb.push('live footer has the accent bar - live theme must be untouched');
+            if (b.hoursDays !== 0) pb.push('live has split hours spans: ' + b.hoursDays);
+            if (/gradient/.test(b.footerBg || '')) pb.push('live footer bg changed: ' + b.footerBg);
+
+            if (pa.length) console.log('desktop problems:', pa);
+            if (pm.length) console.log('mobile problems:', pm);
+            if (pb.length) console.log('live problems:', pb);
+
+            if (!pa.length && !pm.length && !pb.length) {
+              console.log('VERDICT: PASS - footer: accent+gradient+grid+pill newsletter (' + a.btnW + 'px btn), ' + a.hoursDays + ' hours rows split; calendar: overlay+title+flex bar+' + a.calTds + ' rounded cells, icons 30px contain, today ring red; mobile clean (scrollable cal, no page overflow); live untouched.');
+            } else {
+              console.log('VERDICT: FAIL');
+              process.exitCode = 1;
+            }
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
