@@ -1,11 +1,11 @@
 name: Reveal diagnose
 
-# Scratch diagnostics against the LIVE site (log-only). Current probe:
-# multi-store sister links. "99 Sol Ring" runs Charlottetown dry, the info
-# strip then names EVERY sister store holding Sol Ring, each store name its
-# own link. Consistency-gated against /sisterstock.json: the strip must
-# carry exactly as many store links as the endpoint reports stores, and the
-# endpoint's stores[] must be sorted cheapest-first.
+# Scratch diagnostics against the LIVE site (log-only). Current probe: the
+# uniform "Copies in stock at:" sister presentation. "99 Sol Ring" makes a
+# partial line (strip must read "... in stock at: <Store> › · <Store> ›");
+# "1 Atraxa, Grand Unifier" is a full local miss held by several sisters
+# (row must show the label + one identical pill per store, NO prices).
+# Consistency-gated against /sisterstock.json for both cards.
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22 2>&1 | tail -1
-      - name: Deck Builder multi-store sister links (real Chrome, live page)
+      - name: Deck Builder uniform sister list (real Chrome, live page)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -29,30 +29,37 @@ jobs:
             p.on('pageerror', e => errs.push('pageerror: ' + e.message));
             await p.goto('https://exorgames.com/pages/deck-builder', { waitUntil: 'domcontentloaded', timeout: 60000 });
             await p.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await p.type('#xg-deck-input', '99 Sol Ring');
+            await p.type('#xg-deck-input', '99 Sol Ring\n1 Atraxa, Grand Unifier');
             await p.evaluate(() => document.getElementById('xg-deck-go').click());
-            await p.waitForSelector('.xg-deck__row--short', { timeout: 90000 });
-            let gotLink = false;
-            try {
-              await p.waitForFunction(() => !!document.querySelector('.xg-deck__shortsister'), { timeout: 20000 });
-              gotLink = true;
-            } catch (e) { /* no sister link — valid iff endpoint agrees */ }
-            const strip = await p.evaluate(() => ({
-              text: (document.querySelector('.xg-deck__shortinfo') || {}).textContent || null,
-              links: Array.from(document.querySelectorAll('.xg-deck__shortsister')).map(a => a.textContent.trim() + ' -> ' + a.href)
-            }));
+            await p.waitForSelector('.xg-deck__row', { timeout: 90000 });
+            try { await p.waitForFunction(() => !!document.querySelector('.xg-deck__shortsister'), { timeout: 20000 }); } catch (e) {}
+            const ui = await p.evaluate(() => {
+              const strip = document.querySelector('.xg-deck__shortinfo');
+              const sisterStat = document.querySelector('.xg-deck__stat--sister');
+              return {
+                stripText: strip ? strip.textContent : null,
+                stripLinks: document.querySelectorAll('.xg-deck__shortsister').length,
+                rowLabel: sisterStat ? (sisterStat.querySelector('.xg-deck__sisterlabel') || {}).textContent : null,
+                rowPills: sisterStat ? sisterStat.querySelectorAll('.xg-deck__sisterstores a').length : 0,
+                rowText: sisterStat ? sisterStat.textContent : null
+              };
+            });
             const ep = await p.evaluate(() =>
-              fetch('https://exor-binder.nevski.workers.dev/sisterstock.json?game=mtg&names=Sol%20Ring')
+              fetch('https://exor-binder.nevski.workers.dev/sisterstock.json?game=mtg&names=' + encodeURIComponent('Sol Ring|Atraxa, Grand Unifier'))
                 .then(r => r.ok ? r.json() : null).catch(() => null));
-            console.log('STRIP: ' + JSON.stringify(strip, null, 1));
+            console.log('UI: ' + JSON.stringify(ui, null, 1));
             console.log('ENDPOINT: ' + JSON.stringify(ep));
             console.log('page errors: ' + (errs.length ? errs.join(' | ') : 'none'));
             await b.close();
-            const sister = ep && ep.results && ep.results[0] && ep.results[0].sister;
-            const stores = (sister && sister.stores) || [];
-            const sorted = stores.every((s, i) => i === 0 || parseFloat(stores[i - 1].price) <= parseFloat(s.price));
-            const consistent = sister ? (gotLink && strip.links.length === stores.length && stores.length >= 1 && sorted) : !gotLink;
-            console.log('stores=' + stores.length + ' stripLinks=' + strip.links.length + ' sortedByPrice=' + sorted);
-            console.log(ep && consistent ? 'VERDICT: PASS' : 'VERDICT: FAIL');
+            const by = {}; ((ep && ep.results) || []).forEach(r => { by[r.q] = r.sister; });
+            const sol = by['Sol Ring'], atx = by['Atraxa, Grand Unifier'];
+            const stripOk = sol
+              ? (ui.stripLinks === (sol.stores || []).length && /in stock at:/.test(ui.stripText || '') && !/\$/.test(ui.stripText || ''))
+              : ui.stripLinks === 0;
+            const rowOk = atx
+              ? (ui.rowLabel === 'Copies in stock at:' && ui.rowPills === (atx.stores || []).length && !/\$/.test(ui.rowText || ''))
+              : !ui.rowLabel;
+            console.log('stripOk=' + stripOk + ' rowOk=' + rowOk);
+            console.log(ep && stripOk && rowOk ? 'VERDICT: PASS' : 'VERDICT: FAIL');
           })().catch(e => { console.log('probe error: ' + e.message); });
           EOF
