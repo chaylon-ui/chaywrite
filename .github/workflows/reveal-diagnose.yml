@@ -15,7 +15,7 @@ jobs:
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
 
-          const URL = 'https://exorgames.com/pages/deck-builder';
+          const PAGE = 'https://exorgames.com/pages/deck-builder';
           const W = 'https://exor-binder.nevski.workers.dev';
 
           (async () => {
@@ -28,7 +28,7 @@ jobs:
             });
             const page = await browser.newPage();
             await page.setViewport({ width: 1380, height: 980 });
-            await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
             await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
             await new Promise((r) => setTimeout(r, 1200));
 
