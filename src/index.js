@@ -9,6 +9,29 @@ export { BinderRoom };
    (the original TV keeps its state). Rooms create themselves on first use. */
 const ROOM_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
+// Deck Builder ban list, cached per isolate so banned IPs cost one DO read
+// a minute instead of one per request. Fails open: tracking problems must
+// never take the Deck Builder down for real customers.
+let deckBans = { at: 0, ips: null };
+async function deckBanned(env, origin, ip) {
+  try {
+    if (!deckBans.ips || Date.now() - deckBans.at > 60e3) {
+      const r = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(origin + "/deck-banlist"));
+      deckBans = { at: Date.now(), ips: new Set(((await r.json()).ips || [])) };
+    }
+    return ip && deckBans.ips.has(ip);
+  } catch { return false; }
+}
+
+// Staff-PIN check against the default room (same lockout as /staff, /pickups).
+async function staffOk(env, origin, k) {
+  try {
+    const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
+      .fetch(new Request(origin + "/staff-check?k=" + encodeURIComponent(k || "")));
+    return !!(await chk.json()).ok;
+  } catch { return false; }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -69,6 +92,16 @@ export default {
       return serveInstock(request, env, ctx);
     }
 
+    // Owner-managed IP bans cover the Deck Builder surface: the search, its
+    // gate, the sister-store follow-up and the activity beacon.
+    if (url.pathname === "/deck.json" || url.pathname === "/deck-gate" ||
+        url.pathname === "/sisterstock.json" || url.pathname === "/deck-track") {
+      const ip = request.headers.get("cf-connecting-ip") || "";
+      if (await deckBanned(env, url.origin, ip)) {
+        return Response.json({ error: "unavailable" }, { status: 403, headers: { "access-control-allow-origin": "*" } });
+      }
+    }
+
     if (url.pathname === "/deck.json") {
       return serveDeck(request, env, ctx);
     }
@@ -79,27 +112,60 @@ export default {
       return serveDeckGate(request, env);
     }
 
-    // Deck Builder usage report. /deckstats is the owner-friendly page
-    // (tiles, per-game table, daily bars); /deckstats.json is the raw feed
-    // the page reads. Aggregate tallies only — no shopper data, list
-    // contents or cart details, so both can stay public.
+    // Deck Builder admin. The page ships to anyone, but every read and
+    // action behind it requires the staff PIN (with the default room's
+    // brute-force lockout), because the data now includes shopper IPs,
+    // carted card names and sales.
     if (url.pathname === "/deckstats") {
       return serveAsset(env, "/deckstats.html", request);
     }
     if (url.pathname === "/deckstats.json") {
-      const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-stats"));
-      const h = new Headers(res.headers);
-      h.set("access-control-allow-origin", "*");
-      return new Response(res.body, { status: res.status, headers: h });
+      if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
+        return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
+      }
+      const op = url.searchParams.get("op") === "orders" ? "orders" : "overview";
+      const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-admin?op=" + op));
+      return new Response(res.body, { status: res.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+    }
+    if (url.pathname === "/deck-admin" && request.method === "POST") {
+      if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
+        return Response.json({ error: "staff key required" }, { status: 403 });
+      }
+      const op = url.searchParams.get("op");
+      if (op !== "ban" && op !== "unban") return Response.json({ error: "bad op" }, { status: 400 });
+      deckBans = { at: 0, ips: null }; // this isolate re-reads the list next request
+      const qs = new URLSearchParams({ op, ip: url.searchParams.get("ip") || "", note: url.searchParams.get("note") || "" });
+      const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-admin?" + qs));
+      return new Response(res.body, { status: res.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
     }
 
-    // The storefront's add-to-cart beacon. Searches are tallied worker-side
-    // inside serveDeck (behind the proof-of-work), so the public surface
-    // accepts only ev=cart and drops anything else on the floor.
+    // The storefront's activity beacon (write-only, rate-limited in the
+    // DO). ev=cart carries the carted names in the body; ev=act carries a
+    // control interaction. Searches are logged worker-side in serveDeck
+    // behind the proof-of-work, so they are not accepted here.
     if (url.pathname === "/deck-track") {
-      if (url.searchParams.get("ev") === "cart") {
+      const ev = url.searchParams.get("ev");
+      if (ev === "cart" || ev === "act") {
+        let body = {};
+        try {
+          const txt = (await request.text()).slice(0, 4096);
+          if (txt) body = JSON.parse(txt);
+        } catch { body = {}; }
+        const payload = {
+          ev,
+          ip: request.headers.get("cf-connecting-ip") || "",
+          sid: url.searchParams.get("sid") || "",
+          game: url.searchParams.get("game") || "",
+          n: url.searchParams.get("n") || 0,
+          v: url.searchParams.get("v") || 0,
+          a: url.searchParams.get("a") || "",
+          d: url.searchParams.get("d") || "",
+          names: Array.isArray(body.names) ? body.names : [],
+        };
         ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
-          .fetch(new Request(url.origin + "/deck-track?" + url.searchParams.toString())).catch(() => {}));
+          .fetch(new Request(url.origin + "/deck-event", {
+            method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+          })).catch(() => {}));
       }
       return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*" } });
     }

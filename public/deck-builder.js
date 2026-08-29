@@ -190,7 +190,7 @@
         var namesStr = b.join('|');
         return solveGate(gate, namesStr).then(function (nonce) {
           return fetch(W + '/deck.json?game=' + encodeURIComponent(game || 'mtg') +
-            '&names=' + encodeURIComponent(namesStr) +
+            '&names=' + encodeURIComponent(namesStr) + '&sid=' + SID +
             '&pb=' + encodeURIComponent(gate.bucket) + '&pn=' + encodeURIComponent(nonce));
         }).then(function (r) { return r.ok ? r.json() : null; })
           .then(function (d) {
@@ -204,6 +204,23 @@
   // leads each line's fill. Fresh per search; every control repaints from it.
   var state = null;
   var lastPick = null;   // game + ticked copies/dollars at last paint, for cart tracking
+  var SID = Math.random().toString(16).slice(2, 8);   // anonymous per-load session id for the owner's live view
+
+  /* Write-only activity beacon to the worker (rate-limited server-side).
+     Carries control interactions and cart adds so the owner's PIN-gated
+     stats page can show live usage; no shopper identity is sent, and the
+     server attaches the IP itself. */
+  function beacon(a, d, extraParams, bodyObj) {
+    try {
+      var q = W + '/deck-track?ev=' + (a === 'cart' ? 'cart' : 'act') + '&sid=' + SID +
+        '&game=' + encodeURIComponent((state && state.game) || (gameSel ? gameSel.value : 'mtg')) +
+        (a === 'cart' ? '' : '&a=' + encodeURIComponent(a) + '&d=' + encodeURIComponent(String(d || '').slice(0, 90))) +
+        (extraParams || '');
+      if (navigator.sendBeacon && bodyObj) navigator.sendBeacon(q, new Blob([JSON.stringify(bodyObj)], { type: 'text/plain' }));
+      else if (navigator.sendBeacon) navigator.sendBeacon(q);
+      else fetch(q, { method: 'POST', keepalive: true, body: bodyObj ? JSON.stringify(bodyObj) : undefined }).catch(function () {});
+    } catch (e) {}
+  }
 
   function nextCheapOn() {
     var ncEl = document.getElementById('xg-deck-nextcheap');
@@ -426,7 +443,16 @@
     (function () {
       var gm = null;
       for (var gi = 0; gi < GAMES.length; gi++) if (GAMES[gi].key === state.game) gm = GAMES[gi];
-      lastPick = { game: state.game || 'mtg', label: gm ? gm.label : (state.game || 'mtg'), qty: addQty, subtotal: subtotal };
+      var picks = [];
+      state.lines.forEach(function (ln, li) {
+        var r = state.map[ln.name.toLowerCase()];
+        if (!(r && r.found)) return;
+        allocate(ln, r, state.sel[li], nextCheap).chunks.forEach(function (c) {
+          if (state.checked[chunkKey(li, c)] === false) return;
+          if (picks.length < 40) picks.push(c.take + 'x ' + ln.name);
+        });
+      });
+      lastPick = { game: state.game || 'mtg', label: gm ? gm.label : (state.game || 'mtg'), qty: addQty, subtotal: subtotal, picks: picks };
     })();
 
     var summary =
@@ -519,8 +545,20 @@
   out.addEventListener('change', function (e) {
     if (!state) return;
     var t = e.target;
-    if (t.classList && t.classList.contains('xg-deck__pickbox')) { state.checked[t.getAttribute('data-k')] = t.checked; paint(); }
-    else if (t.classList && t.classList.contains('xg-deck__ver')) { state.sel[t.getAttribute('data-i')] = +t.value || 0; paint(); }
+    if (t.classList && t.classList.contains('xg-deck__pickbox')) {
+      var pk = t.getAttribute('data-k');
+      state.checked[pk] = t.checked;
+      var pl = state.lines[parseInt(pk, 10)];
+      beacon('tick', (t.checked ? '+' : '-') + (pl ? pl.name : ''));
+      paint();
+    }
+    else if (t.classList && t.classList.contains('xg-deck__ver')) {
+      state.sel[t.getAttribute('data-i')] = +t.value || 0;
+      var vl = state.lines[+t.getAttribute('data-i')];
+      var vo = t.options && t.options[t.selectedIndex] ? t.options[t.selectedIndex].text : '';
+      beacon('ver', (vl ? vl.name : '') + ' > ' + vo);
+      paint();
+    }
     else if (t.id === 'xg-deck-checkall') {
       var v = t.checked;
       state.lines.forEach(function (ln, i) {
@@ -530,12 +568,13 @@
           state.checked[chunkKey(i, c)] = v;
         });
       });
+      beacon('all', v ? 'on' : 'off');
       paint();
     }
   });
   (function () {
     var nc = document.getElementById('xg-deck-nextcheap');
-    if (nc) nc.addEventListener('change', function () { if (state) paint(); });
+    if (nc) nc.addEventListener('change', function () { beacon('ncheap', nc.checked ? 'on' : 'off'); if (state) paint(); });
   })();
 
   function postCart(body) {
@@ -562,10 +601,8 @@
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ attributes: { 'Deck Builder': tag } })
       }).catch(function () {});
-      var q = W + '/deck-track?ev=cart&game=' + encodeURIComponent(p.game || 'mtg') +
-        '&n=' + (p.qty || 0) + '&v=' + Math.round((p.subtotal || 0) * 100);
-      if (navigator.sendBeacon) navigator.sendBeacon(q);
-      else fetch(q, { method: 'POST', keepalive: true }).catch(function () {});
+      beacon('cart', '', '&n=' + (p.qty || 0) + '&v=' + Math.round((p.subtotal || 0) * 100),
+        p.picks && p.picks.length ? { names: p.picks } : null);
     } catch (e) {}
   }
 

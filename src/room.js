@@ -549,41 +549,192 @@ export class BinderRoom {
       return Response.json({ ok: true });
     }
 
-    // ---- Deck Builder usage tallies (DEFAULT room only, via in-worker
-    // stubs). serveDeck relays every proof-of-work-verified search and the
-    // storefront beacons add-to-carts; aggregates only — counts, card
-    // quantities and cent totals per game per UTC day, never list contents
-    // or shopper data. One storage object per day plus a running total.
-    if (url.pathname.endsWith("/deck-track")) {
-      const ev = url.searchParams.get("ev") === "cart" ? "cart" : "search";
-      const game = String(url.searchParams.get("game") || "other").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12) || "other";
-      const n = Math.min(500, Math.max(0, parseInt(url.searchParams.get("n") || "0", 10) || 0));
-      const v = Math.min(5e6, Math.max(0, parseInt(url.searchParams.get("v") || "0", 10) || 0));
+    // ---- Deck Builder tracking (DEFAULT room only, via in-worker stubs;
+    // the router PIN-gates every read). /deck-event ingests one activity
+    // event: serveDeck relays proof-of-work-verified searches, the router
+    // relays storefront beacons (cart adds, ticks, version swaps). Kept per
+    // UTC day: aggregate tallies (dstat), a rolling activity log with IPs
+    // for the admin page's ban tooling (dlog, 14 days), and a most-wanted
+    // misses tally (dmiss, 60 days). Every event also broadcasts live to
+    // staff-role sockets. Card names and IPs stay inside this DO and are
+    // only served through the PIN-gated admin endpoints; decklists beyond
+    // the capped name summaries are never stored.
+    if (url.pathname.endsWith("/deck-event") && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { b = {}; }
+      const ev = ["search", "cart", "act"].indexOf(b.ev) > -1 ? b.ev : "act";
+      const ip = String(b.ip || "").slice(0, 45);
+      const game = String(b.game || "other").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12) || "other";
+      const n = Math.min(500, Math.max(0, parseInt(b.n, 10) || 0));
+      const v = Math.min(5e6, Math.max(0, parseInt(b.v, 10) || 0));
+      const found = Math.min(500, Math.max(0, parseInt(b.found, 10) || 0));
+      const cleanList = (a, max, len) => (Array.isArray(a) ? a.slice(0, max).map((s) => String(s).slice(0, len)) : []);
+      const names = cleanList(b.names, 40, 70);
+      const miss = cleanList(b.miss, 25, 70);
+      const act = String(b.a || "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 12);
+      const detail = String(b.d || "").slice(0, 90);
+      const sid = String(b.sid || "").replace(/[^a-z0-9]/gi, "").slice(0, 8);
+
+      // Per-IP limiter so a bot can't flood the log or the live feed.
+      this.dRate = this.dRate || new Map();
+      const nowMs = Date.now();
+      const rl = this.dRate.get(ip) || { win: nowMs, ct: 0 };
+      if (nowMs - rl.win > 60e3) { rl.win = nowMs; rl.ct = 0; }
+      rl.ct++;
+      this.dRate.set(ip, rl);
+      if (this.dRate.size > 3000) this.dRate.clear();
+      if (rl.ct > 40) return Response.json({ ok: false, limited: true });
+
       const day = new Date().toISOString().slice(0, 10);
-      for (const key of ["dstat:" + day, "dstat:total"]) {
-        const s = (await this.state.storage.get(key)) || {};
-        const g = (s[ev] = s[ev] || {});
-        const row = (g[game] = g[game] || { c: 0, n: 0, v: 0 });
-        row.c += 1; row.n += n; row.v += v;
-        await this.state.storage.put(key, s);
+      if (ev === "search" || ev === "cart") {
+        for (const key of ["dstat:" + day, "dstat:total"]) {
+          const s = (await this.state.storage.get(key)) || {};
+          const g = (s[ev] = s[ev] || {});
+          const row = (g[game] = g[game] || { c: 0, n: 0, v: 0 });
+          row.c += 1; row.n += n; row.v += v;
+          await this.state.storage.put(key, s);
+        }
       }
-      if (Math.random() < 0.02) { // occasional prune; day keys start "dstat:2" so the total is never swept
-        const cut = "dstat:" + new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
-        const all = await this.state.storage.list({ prefix: "dstat:2" });
-        for (const k of all.keys()) if (k < cut) await this.state.storage.delete(k);
+      const entry = { t: nowMs, ev, ip, sid, game };
+      if (ev === "search") { entry.n = n; entry.found = found; if (miss.length) entry.miss = miss; }
+      if (ev === "cart") { entry.n = n; entry.v = v; if (names.length) entry.names = names; }
+      if (ev === "act") { entry.a = act; entry.d = detail; }
+      {
+        const lk = "dlog:" + day;
+        const log = (await this.state.storage.get(lk)) || [];
+        log.unshift(entry);
+        await this.state.storage.put(lk, log.slice(0, 800));
       }
+      if (ev === "search" && miss.length) {
+        const mk = "dmiss:" + day;
+        const m = (await this.state.storage.get(mk)) || {};
+        const mg = (m[game] = m[game] || {});
+        for (const name of miss) {
+          const key = Object.keys(mg).length >= 300 && !(name in mg) ? "(more)" : name;
+          mg[key] = (mg[key] || 0) + 1;
+        }
+        await this.state.storage.put(mk, m);
+      }
+      if (Math.random() < 0.02) { // day keys start "…:2…", totals are never swept
+        for (const [prefix, days] of [["dstat:2", 400], ["dlog:2", 14], ["dmiss:2", 60]]) {
+          const cut = prefix.slice(0, -1) + new Date(nowMs - days * 864e5).toISOString().slice(0, 10);
+          const all = await this.state.storage.list({ prefix });
+          for (const k of all.keys()) if (k < cut) await this.state.storage.delete(k);
+        }
+      }
+      for (const s of this.staff) this.send(s, { type: "deck", data: entry });
       return Response.json({ ok: true });
     }
-    if (url.pathname.endsWith("/deck-stats")) {
+
+    // Ban list for the router's edge check (cached in the isolate).
+    if (url.pathname.endsWith("/deck-banlist")) {
+      const bans = (await this.state.storage.get("dban")) || {};
+      return Response.json({ ips: Object.keys(bans) }, { headers: { "cache-control": "no-store" } });
+    }
+
+    // Admin reads/actions for the PIN-gated stats page. The router has
+    // already validated the staff PIN before anything reaches here.
+    if (url.pathname.endsWith("/deck-admin")) {
+      const op = url.searchParams.get("op") || "overview";
+
+      if (op === "ban" || op === "unban") {
+        const ip = String(url.searchParams.get("ip") || "").slice(0, 45);
+        if (!/^[0-9a-fA-F.:]{3,45}$/.test(ip)) return Response.json({ ok: false, error: "bad ip" });
+        const bans = (await this.state.storage.get("dban")) || {};
+        if (op === "ban") bans[ip] = { note: String(url.searchParams.get("note") || "").slice(0, 80), at: Date.now() };
+        else delete bans[ip];
+        await this.state.storage.put("dban", bans);
+        return Response.json({ ok: true, bans });
+      }
+
+      if (op === "orders") {
+        // Which carts became real sales: scan new orders for the cart's
+        // "Deck Builder" attribute. Incremental with a 1h overlap, cached
+        // 15 min, capped pages per refresh so a busy order feed can't run
+        // away. Needs the Admin token to be allowed to read orders.
+        const nowMs = Date.now();
+        let ds = (await this.state.storage.get("dsales")) || { list: [], scanAt: 0, startAt: nowMs - 3 * 864e5 };
+        if (nowMs - (ds.scanAt || 0) > 15 * 60e3) {
+          const sinceMs = Math.max(ds.startAt, (ds.scanAt || ds.startAt) - 3600e3);
+          const since = new Date(sinceMs).toISOString();
+          let cursor = null, pages = 0, sawAny = false, denied = false;
+          const q = `query($q:String!,$after:String){orders(first:50,query:$q,after:$after,reverse:false){nodes{name createdAt displayFinancialStatus totalPriceSet{shopMoney{amount}}customAttributes{key value}lineItems(first:40){nodes{title quantity}}}pageInfo{hasNextPage endCursor}}}`;
+          for (;;) {
+            const d = await this.adminGql(q, { q: "created_at:>='" + since + "'", after: cursor });
+            const o = d && d.orders;
+            if (!o) { denied = !sawAny; break; }
+            sawAny = true;
+            for (const nd of o.nodes || []) {
+              const tag = (nd.customAttributes || []).find((a) => a && a.key === "Deck Builder");
+              if (!tag) continue;
+              if (ds.list.some((x) => x.name === nd.name)) continue;
+              ds.list.unshift({
+                name: nd.name,
+                at: nd.createdAt,
+                status: nd.displayFinancialStatus || "",
+                cents: Math.round(parseFloat((nd.totalPriceSet && nd.totalPriceSet.shopMoney && nd.totalPriceSet.shopMoney.amount) || "0") * 100),
+                tag: String(tag.value || "").slice(0, 90),
+                items: ((nd.lineItems && nd.lineItems.nodes) || []).slice(0, 40).map((li) => ({ t: String(li.title || "").slice(0, 90), q: li.quantity | 0 })),
+              });
+            }
+            pages++;
+            if (!o.pageInfo || !o.pageInfo.hasNextPage || pages >= 6) break;
+            cursor = o.pageInfo.endCursor;
+          }
+          ds.available = !denied;
+          if (!denied) ds.scanAt = nowMs;
+          ds.list.sort((a, b) => (a.at < b.at ? 1 : -1));
+          ds.list = ds.list.slice(0, 200);
+          await this.state.storage.put("dsales", ds);
+        }
+        const cents = ds.list.reduce((a, x) => a + (x.cents || 0), 0);
+        return Response.json({
+          available: ds.available !== false,
+          count: ds.list.length, cents,
+          scanAt: ds.scanAt || 0, startAt: ds.startAt,
+          list: ds.list.slice(0, 60),
+        }, { headers: { "cache-control": "no-store" } });
+      }
+
+      // op=overview: stats + activity log + per-IP rollup + bans + misses
       const total = (await this.state.storage.get("dstat:total")) || {};
-      const all = await this.state.storage.list({ prefix: "dstat:2", reverse: true, limit: 31 });
+      const statDays = await this.state.storage.list({ prefix: "dstat:2", reverse: true, limit: 31 });
       const days = [];
-      for (const [k, s] of all) days.push({ day: k.slice(6), ...s });
+      for (const [k, s] of statDays) days.push({ day: k.slice(6), ...s });
+
+      let log = [];
+      for (let i = 0; i < 3 && log.length < 150; i++) {
+        const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+        log = log.concat((await this.state.storage.get("dlog:" + d)) || []);
+      }
+      log = log.slice(0, 150);
+      const ips = {};
+      for (const e of log) {
+        const r = (ips[e.ip] = ips[e.ip] || { searches: 0, carts: 0, acts: 0, last: 0 });
+        if (e.ev === "search") r.searches++; else if (e.ev === "cart") r.carts++; else r.acts++;
+        if (e.t > r.last) r.last = e.t;
+      }
+
+      const missDays = await this.state.storage.list({ prefix: "dmiss:2", reverse: true, limit: 30 });
+      const missAgg = {};
+      for (const [, m] of missDays) {
+        for (const g of Object.keys(m)) {
+          const tgt = (missAgg[g] = missAgg[g] || {});
+          for (const name of Object.keys(m[g])) tgt[name] = (tgt[name] || 0) + m[g][name];
+        }
+      }
+      const miss = {};
+      for (const g of Object.keys(missAgg)) {
+        miss[g] = Object.keys(missAgg[g]).map((name) => ({ name, c: missAgg[g][name] }))
+          .sort((a, b) => b.c - a.c).slice(0, 30);
+      }
+
+      const bans = (await this.state.storage.get("dban")) || {};
       return Response.json(
-        { note: "searches and add-to-carts from the Deck Builder; c = times, n = cards, v = cents", total, days },
+        { note: "c = times, n = cards, v = cents", total, days, log, ips, miss, bans },
         { headers: { "cache-control": "no-store" } }
       );
     }
+
     // ---- "New Today" restock hints (DEFAULT room only; /hook/inv relays
     // Shopify's inventory webhook here). The hint names an inventory item;
     // we resolve it to its product and LIVE total with our own Admin token,

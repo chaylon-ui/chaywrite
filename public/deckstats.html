@@ -3,131 +3,367 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Deck Builder Stats - Exor Games</title>
+<title>Deck Builder Admin - Exor Games</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
 <style>
-  :root { --red: #d62c28; --amber: #ff7a2f; --teal: #34b2c2; --ink: #eef3f5; --dim: #8fa0a8; }
+  :root { --red: #d62c28; --amber: #ff7a2f; --teal: #34b2c2; --ink: #eef3f5; --dim: #8fa0a8; --ok: #4caf7d; }
   * { box-sizing: border-box; }
   body { margin: 0; background: linear-gradient(160deg, #12181a, #0c1013 60%); color: var(--ink);
          font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 18px 60px; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 18px 60px; }
   h1 { font-size: 26px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .06em; }
   h1::after { content: ""; display: block; width: 72px; height: 3px; margin-top: 8px; border-radius: 3px;
               background: linear-gradient(90deg, var(--red), var(--amber)); }
   .sub { color: var(--dim); margin: 10px 0 22px; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 26px; }
-  .tile { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 14px 16px; }
-  .tile .k { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-  .tile .v { font-size: 30px; font-weight: 700; margin-top: 2px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 10px; }
+  .tile { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 13px 15px; }
+  .tile .k { color: var(--dim); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
+  .tile .v { font-size: 27px; font-weight: 700; margin-top: 2px; }
   .tile .d { color: var(--dim); font-size: 12.5px; }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 26px 0 10px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 28px 0 10px; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.07); white-space: nowrap; }
-  th { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid rgba(255,255,255,.07); vertical-align: top; }
+  th { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; white-space: nowrap; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.nw { white-space: nowrap; }
   .bar { height: 7px; border-radius: 4px; background: linear-gradient(90deg, var(--red), var(--amber)); min-width: 2px; }
   .bar--cart { background: var(--teal); margin-top: 3px; }
-  .barcell { width: 34%; min-width: 120px; }
+  .barcell { width: 30%; min-width: 110px; }
+  .scroll { overflow-x: auto; }
   .empty { background: rgba(255,255,255,.045); border: 1px dashed rgba(255,255,255,.16); border-radius: 12px;
-           padding: 26px; text-align: center; color: var(--dim); }
+           padding: 22px; text-align: center; color: var(--dim); }
   .note { color: var(--dim); font-size: 13px; margin-top: 28px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; }
   .err { color: #ff9b8f; }
-  .scroll { overflow-x: auto; }
-  @media (max-width: 560px) { .tile .v { font-size: 24px; } }
+  .okx { color: var(--ok); }
+  button { font: inherit; border: 0; border-radius: 999px; cursor: pointer; padding: 5px 13px; }
+  .btn-ban { background: rgba(214,44,40,.16); color: #ff9b8f; border: 1px solid rgba(214,44,40,.45); font-size: 12.5px; }
+  .btn-ban:hover { background: var(--red); color: #fff; }
+  .btn-dim { background: rgba(255,255,255,.08); color: var(--ink); border: 1px solid rgba(255,255,255,.14); font-size: 12.5px; }
+  .btn-main { background: linear-gradient(135deg, var(--red), #ff5a36); color: #fff; font-weight: 600; padding: 9px 20px; }
+  .login { max-width: 380px; margin: 12vh auto 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+           border-radius: 14px; padding: 26px; text-align: center; }
+  .login input { width: 100%; font: inherit; font-size: 19px; letter-spacing: .35em; text-align: center; color: var(--ink);
+                 background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 11px; margin: 14px 0; }
+  .login input:focus { outline: 2px solid var(--amber); }
+  #feed { background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.09); border-radius: 12px;
+          padding: 10px 14px; max-height: 300px; overflow-y: auto; font-size: 13.5px; }
+  #feed div { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+  #feed .t { color: var(--dim); margin-right: 8px; font-variant-numeric: tabular-nums; }
+  #feed .ip { color: var(--teal); margin-right: 8px; }
+  .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-right: 6px; vertical-align: 1px; }
+  .live-dot.on { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .chip { display: inline-block; background: rgba(255,255,255,.07); border-radius: 6px; padding: 0 6px; margin: 1px 2px 1px 0; font-size: 12px; }
+  .muted { color: var(--dim); }
+  details summary { cursor: pointer; color: var(--dim); }
+  @media (max-width: 560px) { .tile .v { font-size: 22px; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Deck Builder Stats</h1>
-  <p class="sub" id="stamp">Loading live numbers…</p>
-  <div id="app"></div>
-  <p class="note">Searches count every “Find my deck” click. Carts count every “Add selected to cart” click,
-  with the copies and dollar value that were selected. Orders placed through the Deck Builder are also labeled
-  on the order itself in Shopify admin, under the order’s Additional details, as
-  “Deck Builder: game, cards, subtotal”. No decklists or customer details are stored here, only counts.
-  Days roll over on UTC time.</p>
-</div>
+<div class="wrap" id="page"></div>
 <script>
 (function () {
   var LABELS = { mtg: 'Magic: The Gathering', pokemon: 'Pokémon', yugioh: 'Yu-Gi-Oh!',
                  starwars: 'Star Wars: Unlimited', onepiece: 'One Piece', riftbound: 'Riftbound', other: 'Other' };
-  function money(cents) { return '$' + (cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var K = '';
+  try { K = localStorage.getItem('xgdk') || ''; } catch (e) {}
+  var page = document.getElementById('page');
+  var overview = null, orders = null, ws = null, wsTimer = null;
+
+  function money(cents) { return '$' + ((cents || 0) / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function sum(group) {
     var t = { c: 0, n: 0, v: 0 };
     Object.keys(group || {}).forEach(function (g) { t.c += group[g].c || 0; t.n += group[g].n || 0; t.v += group[g].v || 0; });
     return t;
   }
+  function gl(g) { return LABELS[g] || g; }
+  function tstr(ms) { return new Date(ms).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
   function niceDay(iso) {
     var d = new Date(iso + 'T12:00:00Z');
     return isNaN(d) ? iso : d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
   }
 
-  function render(data) {
-    var total = data.total || {};
-    var s = sum(total.search), c = sum(total.cart);
-    var app = document.getElementById('app');
-    document.getElementById('stamp').textContent = 'Live from the store. Updated ' + new Date().toLocaleTimeString('en-CA');
+  /* One shared renderer turns a raw event into a readable line for both
+     the live feed and the activity table. */
+  function evText(e) {
+    if (e.ev === 'search') {
+      var s = 'searched ' + (e.n || 0) + ' cards (' + gl(e.game) + '), ' + (e.found || 0) + ' found';
+      if (e.miss && e.miss.length) s += ' · missing: ' + e.miss.slice(0, 6).join(', ') + (e.miss.length > 6 ? '…' : '');
+      return s;
+    }
+    if (e.ev === 'cart') {
+      var c = 'added ' + (e.n || 0) + ' cards to cart (' + money(e.v) + ')';
+      if (e.names && e.names.length) c += ' · ' + e.names.slice(0, 8).join(', ') + (e.names.length > 8 ? '…' : '');
+      return c;
+    }
+    var d = e.d || '';
+    if (e.a === 'tick') return (d.charAt(0) === '-' ? 'unticked ' : 'ticked ') + d.slice(1);
+    if (e.a === 'ver') return 'swapped version: ' + d;
+    if (e.a === 'all') return d === 'on' ? 'selected all cards' : 'cleared all cards';
+    if (e.a === 'ncheap') return 'next-cheapest fill ' + d;
+    return (e.a || 'action') + (d ? ' ' + d : '');
+  }
 
-    if (!s.c && !c.c) {
-      app.innerHTML = '<div class="empty">No Deck Builder uses recorded yet. This page fills in on its own once customers start searching.</div>';
+  function api(op) {
+    return fetch('/deckstats.json?k=' + encodeURIComponent(K) + (op ? '&op=' + op : ''), { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 403) throw new Error('pin');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+  }
+
+  /* ---------------- login ---------------- */
+  function showLogin(msg) {
+    stopLive();
+    page.innerHTML =
+      '<div class="login"><h1 style="font-size:20px">Deck Builder Admin</h1>' +
+      '<p class="sub">Enter your staff PIN (same one as the staff and pickups screens).</p>' +
+      '<input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="24">' +
+      (msg ? '<p class="err">' + esc(msg) + '</p>' : '') +
+      '<button class="btn-main" id="go">Open</button></div>';
+    var input = document.getElementById('pin');
+    input.focus();
+    function go() {
+      K = input.value.trim();
+      if (!K) return;
+      api('').then(function (d) {
+        try { localStorage.setItem('xgdk', K); } catch (e) {}
+        overview = d;
+        renderAll();
+        startLive();
+        loadOrders();
+      }).catch(function () {
+        showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.');
+      });
+    }
+    document.getElementById('go').addEventListener('click', go);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+  }
+
+  /* ---------------- live feed ---------------- */
+  function startLive() {
+    stopLive();
+    try {
+      ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=staff&k=' + encodeURIComponent(K));
+      ws.onopen = function () { setDot(true); };
+      ws.onclose = function () { setDot(false); wsTimer = setTimeout(startLive, 5000); };
+      ws.onmessage = function (m) {
+        var d; try { d = JSON.parse(m.data); } catch (e) { return; }
+        if (!d || d.type !== 'deck' || !d.data) return;
+        var feed = document.getElementById('feed');
+        if (!feed) return;
+        var row = document.createElement('div');
+        row.innerHTML = '<span class="t">' + esc(new Date(d.data.t).toLocaleTimeString('en-CA')) + '</span>' +
+          '<span class="ip">' + esc(d.data.ip || '?') + '</span>' + esc(evText(d.data));
+        feed.insertBefore(row, feed.firstChild);
+        while (feed.children.length > 100) feed.removeChild(feed.lastChild);
+      };
+    } catch (e) { setDot(false); }
+  }
+  function stopLive() {
+    if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+    if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} ws = null; }
+  }
+  function setDot(on) {
+    var d = document.getElementById('livedot');
+    if (d) d.className = 'live-dot' + (on ? ' on' : '');
+  }
+
+  /* ---------------- sections ---------------- */
+  function tilesHtml(t) {
+    var s = sum(t.search), c = sum(t.cart);
+    var conv = s.c ? Math.round((c.c / s.c) * 100) : 0;
+    return '<div class="tiles">' +
+      '<div class="tile"><div class="k">Deck searches</div><div class="v">' + s.c.toLocaleString() + '</div><div class="d">' + s.n.toLocaleString() + ' cards looked up</div></div>' +
+      '<div class="tile"><div class="k">Decks added to cart</div><div class="v">' + c.c.toLocaleString() + '</div><div class="d">' + c.n.toLocaleString() + ' copies added</div></div>' +
+      '<div class="tile"><div class="k">Value added to cart</div><div class="v">' + money(c.v) + '</div><div class="d">before checkout</div></div>' +
+      '<div class="tile"><div class="k">Search to cart</div><div class="v">' + conv + '%</div><div class="d">of searches end in an add</div></div>' +
+      '</div><div id="salestiles"></div>';
+  }
+
+  function gameTableHtml(t) {
+    var games = {};
+    Object.keys(t.search || {}).forEach(function (g) { games[g] = 1; });
+    Object.keys(t.cart || {}).forEach(function (g) { games[g] = 1; });
+    var gk = Object.keys(games);
+    if (!gk.length) return '';
+    gk.sort(function (a, b) { return (((t.search || {})[b] || {}).c || 0) - (((t.search || {})[a] || {}).c || 0); });
+    var h = '<h2>By game (all time)</h2><div class="scroll"><table><tr><th>Game</th><th class="num">Searches</th><th class="num">Decks carted</th><th class="num">Copies</th><th class="num">Value</th></tr>';
+    gk.forEach(function (g) {
+      var sg = (t.search || {})[g] || { c: 0 };
+      var cg = (t.cart || {})[g] || { c: 0, n: 0, v: 0 };
+      h += '<tr><td>' + esc(gl(g)) + '</td><td class="num">' + (sg.c || 0) + '</td><td class="num">' + (cg.c || 0) +
+           '</td><td class="num">' + (cg.n || 0) + '</td><td class="num">' + money(cg.v) + '</td></tr>';
+    });
+    return h + '</table></div>';
+  }
+
+  function daysHtml(days) {
+    if (!days || !days.length) return '';
+    var max = 1;
+    days.forEach(function (d) { max = Math.max(max, sum(d.search).c); });
+    var h = '<h2>Day by day (last 31 days)</h2><div class="scroll"><table><tr><th>Day</th><th class="num">Searches</th><th class="num">Carts</th><th class="num">Value</th><th class="barcell"></th></tr>';
+    days.forEach(function (d) {
+      var ds = sum(d.search), dc = sum(d.cart);
+      h += '<tr><td class="nw">' + esc(niceDay(d.day)) + '</td><td class="num">' + ds.c + '</td><td class="num">' + dc.c +
+           '</td><td class="num">' + money(dc.v) + '</td><td class="barcell">' +
+           '<div class="bar" style="width:' + Math.max(2, Math.round((ds.c / max) * 100)) + '%"></div>' +
+           (dc.c ? '<div class="bar bar--cart" style="width:' + Math.max(2, Math.round((dc.c / max) * 100)) + '%"></div>' : '') +
+           '</td></tr>';
+    });
+    return h + '</table></div>';
+  }
+
+  function missHtml(miss) {
+    var gk = Object.keys(miss || {});
+    var h = '<h2>Most wanted cards you did not have (last 30 days)</h2>';
+    var any = false;
+    gk.forEach(function (g) {
+      if (!miss[g] || !miss[g].length) return;
+      any = true;
+      h += '<div class="scroll"><table><tr><th>' + esc(gl(g)) + '</th><th class="num">Times searched and missed</th></tr>';
+      miss[g].forEach(function (row) {
+        h += '<tr><td>' + esc(row.name) + '</td><td class="num">' + row.c + '</td></tr>';
+      });
+      h += '</table></div>';
+    });
+    if (!any) h += '<div class="empty">Nothing yet. When shoppers search cards you do not stock, the tally shows up here as a restock list.</div>';
+    return h;
+  }
+
+  function activityHtml(log, ips, bans) {
+    var h = '<h2>Recent activity (last 3 days, newest first)</h2>';
+    if (!log || !log.length) return h + '<div class="empty">No activity logged yet.</div>';
+    h += '<div class="scroll"><table><tr><th>When</th><th>IP</th><th>What</th><th></th></tr>';
+    log.slice(0, 60).forEach(function (e) {
+      var r = ips[e.ip] || {};
+      var banned = bans && bans[e.ip];
+      h += '<tr><td class="nw">' + esc(tstr(e.t)) + '</td>' +
+        '<td class="nw"><span class="ip">' + esc(e.ip || '?') + '</span><br><span class="muted" style="font-size:12px">' +
+        (r.searches || 0) + 's / ' + (r.carts || 0) + 'c</span></td>' +
+        '<td>' + esc(evText(e)) + '</td>' +
+        '<td class="nw">' + (banned ? '<span class="muted">banned</span>' :
+          '<button class="btn-ban" data-ban="' + esc(e.ip) + '">Ban IP</button>') + '</td></tr>';
+    });
+    return h + '</table></div>';
+  }
+
+  function bansHtml(bans) {
+    var ips = Object.keys(bans || {});
+    var h = '<h2>Banned IPs</h2>';
+    if (!ips.length) return h + '<div class="empty">No banned IPs. Use the Ban button beside any activity row.</div>';
+    h += '<div class="scroll"><table><tr><th>IP</th><th>Note</th><th>Banned</th><th></th></tr>';
+    ips.forEach(function (ip) {
+      var b = bans[ip] || {};
+      h += '<tr><td class="nw"><span class="ip">' + esc(ip) + '</span></td><td>' + esc(b.note || '') + '</td>' +
+        '<td class="nw">' + esc(b.at ? tstr(b.at) : '') + '</td>' +
+        '<td class="nw"><button class="btn-dim" data-unban="' + esc(ip) + '">Unban</button></td></tr>';
+    });
+    return h + '</table></div>';
+  }
+
+  function renderAll() {
+    var d = overview;
+    page.innerHTML =
+      '<h1>Deck Builder Admin</h1>' +
+      '<p class="sub">Updated ' + new Date().toLocaleTimeString('en-CA') +
+      ' &nbsp;·&nbsp; <button class="btn-dim" id="refresh">Refresh</button> <button class="btn-dim" id="logout">Lock</button></p>' +
+      tilesHtml(d.total || {}) +
+      '<h2><span id="livedot" class="live-dot"></span>Live right now</h2><div id="feed"><div class="muted">Waiting for activity… leave this page open and events appear the moment they happen.</div></div>' +
+      '<div id="sales"></div>' +
+      missHtml(d.miss) +
+      activityHtml(d.log || [], d.ips || {}, d.bans || {}) +
+      bansHtml(d.bans || {}) +
+      gameTableHtml(d.total || {}) +
+      daysHtml(d.days || []) +
+      '<p class="note">Searches, ticks, version swaps and cart adds are logged with the shopper’s IP so bots and competitors can be spotted and banned; the activity log keeps 14 days and only tallies are kept long-term. Banned IPs get a plain “unavailable” error from the Deck Builder. Everything on this page needs the staff PIN, and wrong guesses lock out for 10 minutes after 20 tries. No customer names or emails are collected here.</p>';
+    document.getElementById('refresh').addEventListener('click', function () { refresh(); loadOrders(); });
+    document.getElementById('logout').addEventListener('click', function () {
+      try { localStorage.removeItem('xgdk'); } catch (e) {}
+      K = ''; showLogin();
+    });
+    renderOrders();
+  }
+  page.addEventListener('click', onTableClick);   // once; renderAll rebuilds page.innerHTML under it
+
+  function onTableClick(e) {
+    var t = e.target;
+    if (t.getAttribute && t.getAttribute('data-ban')) {
+      var ip = t.getAttribute('data-ban');
+      var note = prompt('Ban ' + ip + '?\nOptional note (e.g. "competitor scraping"):');
+      if (note === null) return;
+      adminPost('ban', ip, note);
+    } else if (t.getAttribute && t.getAttribute('data-unban')) {
+      adminPost('unban', t.getAttribute('data-unban'), '');
+    }
+  }
+
+  function adminPost(op, ip, note) {
+    fetch('/deck-admin?op=' + op + '&ip=' + encodeURIComponent(ip) + '&note=' + encodeURIComponent(note || '') + '&k=' + encodeURIComponent(K), { method: 'POST' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function () { refresh(); })
+      .catch(function () { alert('That did not go through. Refresh and try again.'); });
+  }
+
+  function loadOrders() {
+    api('orders').then(function (d) { orders = d; renderOrders(); }).catch(function () {});
+  }
+  function renderOrders() {
+    var mount = document.getElementById('sales'), tiles = document.getElementById('salestiles');
+    if (!mount) return;
+    if (!orders) { mount.innerHTML = '<h2>Sales from the Deck Builder</h2><div class="empty">Checking orders…</div>'; return; }
+    if (orders.available === false) {
+      mount.innerHTML = '<h2>Sales from the Deck Builder</h2><div class="empty">The worker’s Shopify token is not allowed to read orders yet, so this section cannot fill in. Everything else works; orders still show their “Deck Builder” label inside Shopify admin.</div>';
       return;
     }
-
-    var conv = s.c ? Math.round((c.c / s.c) * 100) : 0;
-    var html =
-      '<div class="tiles">' +
-        '<div class="tile"><div class="k">Deck searches</div><div class="v">' + s.c.toLocaleString() + '</div><div class="d">' + s.n.toLocaleString() + ' cards looked up</div></div>' +
-        '<div class="tile"><div class="k">Decks added to cart</div><div class="v">' + c.c.toLocaleString() + '</div><div class="d">' + c.n.toLocaleString() + ' copies added</div></div>' +
-        '<div class="tile"><div class="k">Value added to cart</div><div class="v">' + money(c.v) + '</div><div class="d">before checkout</div></div>' +
-        '<div class="tile"><div class="k">Search to cart</div><div class="v">' + conv + '%</div><div class="d">of searches end in an add</div></div>' +
-      '</div>';
-
-    var games = {};
-    Object.keys(total.search || {}).forEach(function (g) { games[g] = 1; });
-    Object.keys(total.cart || {}).forEach(function (g) { games[g] = 1; });
-    var gk = Object.keys(games);
-    if (gk.length) {
-      gk.sort(function (a, b) { return (((total.search || {})[b] || {}).c || 0) - (((total.search || {})[a] || {}).c || 0); });
-      html += '<h2>By game (all time)</h2><div class="scroll"><table><tr><th>Game</th><th class="num">Searches</th><th class="num">Decks carted</th><th class="num">Copies</th><th class="num">Value</th></tr>';
-      gk.forEach(function (g) {
-        var sg = (total.search || {})[g] || { c: 0, n: 0 };
-        var cg = (total.cart || {})[g] || { c: 0, n: 0, v: 0 };
-        html += '<tr><td>' + esc(LABELS[g] || g) + '</td><td class="num">' + sg.c.toLocaleString() + '</td><td class="num">' + cg.c.toLocaleString() +
-                '</td><td class="num">' + cg.n.toLocaleString() + '</td><td class="num">' + money(cg.v) + '</td></tr>';
-      });
-      html += '</table></div>';
+    if (tiles) {
+      tiles.innerHTML = '<div class="tiles">' +
+        '<div class="tile"><div class="k">Orders via Deck Builder</div><div class="v">' + (orders.count || 0) + '</div><div class="d">since ' + esc(tstr(orders.startAt || Date.now())) + '</div></div>' +
+        '<div class="tile"><div class="k">Revenue via Deck Builder</div><div class="v okx">' + money(orders.cents) + '</div><div class="d">paid orders included</div></div>' +
+        '</div>';
     }
-
-    var days = data.days || [];
-    if (days.length) {
-      var max = 1;
-      days.forEach(function (d) { max = Math.max(max, sum(d.search).c); });
-      html += '<h2>Day by day (last 31 days)</h2><div class="scroll"><table><tr><th>Day</th><th class="num">Searches</th><th class="num">Carts</th><th class="num">Value</th><th class="barcell"></th></tr>';
-      days.forEach(function (d) {
-        var ds = sum(d.search), dc = sum(d.cart);
-        html += '<tr><td>' + esc(niceDay(d.day)) + '</td><td class="num">' + ds.c.toLocaleString() + '</td><td class="num">' + dc.c.toLocaleString() +
-                '</td><td class="num">' + money(dc.v) + '</td><td class="barcell">' +
-                '<div class="bar" style="width:' + Math.max(2, Math.round((ds.c / max) * 100)) + '%"></div>' +
-                (dc.c ? '<div class="bar bar--cart" style="width:' + Math.max(2, Math.round((dc.c / max) * 100)) + '%"></div>' : '') +
-                '</td></tr>';
+    var h = '<h2>Sales from the Deck Builder</h2>';
+    if (!orders.list || !orders.list.length) {
+      h += '<div class="empty">No completed orders carry the Deck Builder label yet. The moment a tagged cart checks out, the order lands here with its cards.</div>';
+    } else {
+      h += '<div class="scroll"><table><tr><th>Order</th><th>When</th><th>Status</th><th class="num">Total</th><th>Deck</th><th>Cards</th></tr>';
+      orders.list.forEach(function (o) {
+        h += '<tr><td class="nw">' + esc(o.name) + '</td><td class="nw">' + esc(tstr(Date.parse(o.at))) + '</td>' +
+          '<td class="nw">' + esc(o.status || '') + '</td><td class="num">' + money(o.cents) + '</td>' +
+          '<td>' + esc(o.tag || '') + '</td><td>' +
+          (o.items || []).map(function (it) { return '<span class="chip">' + it.q + 'x ' + esc(it.t) + '</span>'; }).join('') +
+          '</td></tr>';
       });
-      html += '</table></div>';
+      h += '</table></div>';
     }
-
-    app.innerHTML = html;
+    mount.innerHTML = h;
   }
 
-  function load() {
-    fetch('/deckstats.json', { cache: 'no-store' })
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(render)
-      .catch(function (e) {
-        document.getElementById('stamp').innerHTML = '<span class="err">Could not load the numbers (' + esc(e.message) + '). Refresh to retry.</span>';
-      });
+  function refresh() {
+    api('').then(function (d) {
+      overview = d;
+      var feedRows = [];
+      var feed = document.getElementById('feed');
+      if (feed) feedRows = Array.prototype.slice.call(feed.children);
+      renderAll();
+      var nf = document.getElementById('feed');
+      if (nf && feedRows.length && feedRows[0].className !== 'muted') {
+        nf.innerHTML = '';
+        feedRows.forEach(function (r) { nf.appendChild(r); });
+      }
+    }).catch(function (e) {
+      if (e.message === 'pin') showLogin('Your PIN stopped working. Enter it again.');
+    });
   }
-  load();
-  setInterval(load, 60000);
+
+  if (K) {
+    api('').then(function (d) { overview = d; renderAll(); startLive(); loadOrders(); })
+      .catch(function () { showLogin(); });
+  } else {
+    showLogin();
+  }
+  setInterval(function () { if (K && overview) refresh(); }, 45000);
 })();
 </script>
 </body>

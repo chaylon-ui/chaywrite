@@ -778,19 +778,33 @@ export async function serveDeck(request, env, ctx) {
     }
   }
 
-  // Tally the search for /deckstats.json — after the gate (so scrapers
-  // without proof-of-work never count) and before the edge cache (so a
-  // cached answer still counts as a use). notrack=1 keeps the deploy
-  // smoke probes out of the owner's numbers.
-  if (url.searchParams.get("notrack") !== "1") {
+  // Log the search for the PIN-gated /deckstats page — after the gate (so
+  // scrapers without proof-of-work never count), and from the RESULTS so
+  // the log carries found/missed cards for the most-wanted list. Runs on
+  // cache hits too: a cached answer is still a use. notrack=1 keeps the
+  // deploy smoke probes out of the owner's numbers.
+  const track = (o) => {
+    if (url.searchParams.get("notrack") === "1") return;
+    const payload = {
+      ev: "search",
+      ip: request.headers.get("cf-connecting-ip") || "",
+      sid: String(url.searchParams.get("sid") || "").slice(0, 8),
+      game, n: o.count, found: o.found,
+      miss: (o.results || []).filter((r) => r && !r.found).map((r) => r.q).slice(0, 25),
+    };
     ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
-      .fetch(new Request(url.origin + "/deck-track?ev=search&game=" + encodeURIComponent(game) + "&n=" + names.length)).catch(() => {}));
-  }
+      .fetch(new Request(url.origin + "/deck-event", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+      })).catch(() => {}));
+  };
 
   const cache = caches.default;
   const cacheKey = new Request(new URL("/deck.json?g=" + encodeURIComponent(game) + "&n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
-  if (hit) return hit;
+  if (hit) {
+    try { track(await hit.clone().json()); } catch {}
+    return hit;
+  }
   const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
   // Charlottetown stock always wins; a miss here falls through to the five
   // sister Exor stores (separate Shopify stores — link-out only, their
@@ -810,6 +824,7 @@ export async function serveDeck(request, env, ctx) {
   out.results = results;
   out.count = results.length;
   out.found = results.reduce((a, r) => a + (r.found ? 1 : 0), 0);
+  track(out);
   const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${DECK_TTL_S}` } });
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
