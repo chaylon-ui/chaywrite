@@ -1,5 +1,6 @@
 import { BinderRoom } from "./room.js";
 import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
+import { serveReviews } from "./reviews.js";
 
 export { BinderRoom };
 
@@ -183,6 +184,12 @@ export default {
 
     if (url.pathname === "/buyprice.json") {
       return serveBuyPrice(request, env, ctx);
+    }
+
+    // Homepage reviews band: Google reviews proxied + curated server-side
+    // (5-star only, text sentiment-screened) so the key stays private.
+    if (url.pathname === "/reviews.json") {
+      return serveReviews(request, env, ctx);
     }
 
     // The card-page reveal script on exorgames.com reads this file with a

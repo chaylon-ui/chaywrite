@@ -137,6 +137,10 @@ jobs:
           echo "=== /buyprice.json (BinderPOS only; available:false until BINDERPOS_API_KEY — storefront then uses daily buy-rules estimates) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Sol%20Ring&type=MTG%20Single" | head -c 600 || true
           printf '\n'
+          echo "=== /reviews.json (Google reviews; ok:false + empty until GOOGLE_PLACES_KEY is set in the dashboard) ==="
+          curl -sS -D /tmp/rev-h --max-time 30 "https://exor-binder.nevski.workers.dev/reviews.json" | head -c 400 || true
+          printf '\n'
+          echo "reviews CORS header: $(grep -ci 'access-control-allow-origin' /tmp/rev-h || true)"
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Mimikyu&type=Pokemon%20Single" | head -c 600 || true
           printf '\n'
           curl -sS -o /dev/null -w 'buyprice-reveal.js: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buyprice-reveal.js" || true
