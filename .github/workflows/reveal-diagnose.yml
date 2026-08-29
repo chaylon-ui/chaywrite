@@ -10,14 +10,15 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Screenshot the /deckstats owner page
+      - name: Shopper flow with event beacons + admin login capture
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
           const fs = require('fs');
           const crypto = require('crypto');
 
-          const PAGE = 'https://exor-binder.nevski.workers.dev/deckstats';
+          const PAGE = 'https://exorgames.com/pages/deck-builder';
+          const ADMIN = 'https://exor-binder.nevski.workers.dev/deckstats';
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -25,25 +26,81 @@ jobs:
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
             const page = await browser.newPage();
-            await page.setViewport({ width: 1100, height: 900, deviceScaleFactor: 1.5 });
+            await page.setViewport({ width: 1380, height: 980 });
+            const beacons = [];
+            const errors = [];
+            page.on('response', (r) => { if (r.url().indexOf('/deck-track') > -1) beacons.push(r.status()); });
+            page.on('pageerror', (e) => errors.push(String(e && e.message).slice(0, 160)));
+
             await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
+            await new Promise((r) => setTimeout(r, 1200));
+            await page.evaluate(() => {
+              const input = document.getElementById('xg-deck-input');
+              input.value = '1 Sol Ring\n1 Counterspell';
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              document.getElementById('xg-deck-go').click();
+            });
             const t0 = Date.now();
             for (;;) {
-              const ready = await page.evaluate(() => !!document.querySelector('#app .tiles, #app .empty, .err'));
-              if (ready || Date.now() - t0 > 20000) break;
-              await new Promise((r) => setTimeout(r, 400));
+              const ready = await page.evaluate(() => {
+                const b = document.getElementById('xg-deck-add');
+                return !!(b && !b.disabled);
+              });
+              if (ready || Date.now() - t0 > 60000) break;
+              await new Promise((r) => setTimeout(r, 700));
             }
-            await new Promise((r) => setTimeout(r, 800));
-            const state = await page.evaluate(() => ({
-              title: document.title,
-              tiles: document.querySelectorAll('#app .tile').length,
-              tables: document.querySelectorAll('#app table').length,
-              err: !!document.querySelector('.err'),
-              text: (document.getElementById('app') || {}).textContent ? document.getElementById('app').textContent.replace(/\s+/g, ' ').slice(0, 260) : '',
-            }));
-            console.log('STATE:', JSON.stringify(state));
 
-            await page.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 78, fullPage: true });
+            // exercise the instrumented controls: untick + retick a line,
+            // swap a version, flip the next-cheapest toggle twice
+            const controls = await page.evaluate(() => {
+              const out = { err: null };
+              try {
+                const box = document.querySelector('.xg-deck__pickbox');
+                box.click();
+                out.afterUntick = document.getElementById('xg-deck-add').textContent.replace(/\s+/g, ' ').trim();
+                document.querySelector('.xg-deck__pickbox').click();
+                out.afterRetick = document.getElementById('xg-deck-add').textContent.replace(/\s+/g, ' ').trim();
+                const ver = document.querySelector('select.xg-deck__ver');
+                if (ver && ver.options.length > 1) {
+                  ver.selectedIndex = 1;
+                  ver.dispatchEvent(new Event('change', { bubbles: true }));
+                  out.swapped = ver.options[1].text.slice(0, 60);
+                  ver.selectedIndex = 0;
+                  ver.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                const nc = document.getElementById('xg-deck-nextcheap');
+                nc.click(); nc.click();
+                out.summary = (document.querySelector('.xg-deck__summary') || {}).textContent.replace(/\s+/g, ' ').slice(0, 140);
+              } catch (e) { out.err = String(e.message).slice(0, 140); }
+              return out;
+            });
+            console.log('CONTROLS:', JSON.stringify(controls));
+            await new Promise((r) => setTimeout(r, 1200));
+
+            const nav = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null);
+            await page.evaluate(() => document.getElementById('xg-deck-add').click());
+            await nav;
+            const landed = page.url();
+            await new Promise((r) => setTimeout(r, 1500));
+            const cart = await page.evaluate(() => fetch('/cart.js', { headers: { Accept: 'application/json' } }).then((r) => r.json()));
+            console.log('LANDED:', landed);
+            console.log('CART_ATTRS:', JSON.stringify(cart.attributes || {}));
+            console.log('BEACONS:', JSON.stringify(beacons));
+            console.log('PAGEERRORS:', JSON.stringify(errors.slice(0, 5)));
+
+            // capture the PIN login the owner will see on /deckstats
+            const admin = await browser.newPage();
+            await admin.setViewport({ width: 1100, height: 760, deviceScaleFactor: 1.5 });
+            await admin.goto(ADMIN, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await admin.waitForSelector('#pin', { timeout: 15000 }).catch(() => null);
+            await new Promise((r) => setTimeout(r, 600));
+            const login = await admin.evaluate(() => ({
+              pin: !!document.getElementById('pin'),
+              text: document.body.textContent.replace(/\s+/g, ' ').slice(0, 160),
+            }));
+            console.log('LOGIN:', JSON.stringify(login));
+            await admin.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 78 });
             await browser.close();
 
             const buf = fs.readFileSync('shot.jpg');
@@ -53,8 +110,12 @@ jobs:
             for (let i = 0; i < b64.length; i += 6000) console.log('B64:' + b64.slice(i, i + 6000));
             console.log('SHOT_END');
 
-            const ok = state.tiles === 4 && state.tables >= 2 && !state.err;
-            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL') + ' - ' + state.tiles + ' tiles, ' + state.tables + ' tables, err ' + state.err);
+            const tag = (cart.attributes || {})['Deck Builder'] || '';
+            const ok = !controls.err && /\(1\)/.test(controls.afterUntick || '') && /\(2\)/.test(controls.afterRetick || '') &&
+              /Magic: The Gathering, \d+ cards?, \$\d/.test(tag) && landed.indexOf('/cart') > -1 &&
+              beacons.length >= 2 && beacons.every((s) => s === 204) && login.pin && errors.length === 0;
+            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL') + ' - tag "' + tag + '", beacons ' + beacons.length +
+              ' all-204 ' + beacons.every((s) => s === 204) + ', untick "' + controls.afterUntick + '", pageerrors ' + errors.length + ', login ' + login.pin);
             if (!ok) process.exitCode = 1;
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
