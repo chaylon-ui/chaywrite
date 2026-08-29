@@ -10,71 +10,51 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Deck Builder tracking end to end (search tally, cart tag, stats)
+      - name: Screenshot the /deckstats owner page
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
+          const crypto = require('crypto');
 
-          const PAGE = 'https://exorgames.com/pages/deck-builder';
-          const W = 'https://exor-binder.nevski.workers.dev';
+          const PAGE = 'https://exor-binder.nevski.workers.dev/deckstats';
 
           (async () => {
-            const before = await (await fetch(W + '/deckstats.json')).json();
-            console.log('STATS_BEFORE:', JSON.stringify(before.total || {}));
-
             const browser = await puppeteer.launch({
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
             const page = await browser.newPage();
-            await page.setViewport({ width: 1380, height: 980 });
+            await page.setViewport({ width: 1100, height: 900, deviceScaleFactor: 1.5 });
             await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await new Promise((r) => setTimeout(r, 1200));
-
-            // DOM-level clicks throughout: the Pop Convert popup overlays the
-            // page on its own timer and would eat coordinate clicks.
-            await page.evaluate(() => {
-              const input = document.getElementById('xg-deck-input');
-              input.value = '1 Sol Ring\n1 Counterspell';
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-              document.getElementById('xg-deck-go').click();
-            });
             const t0 = Date.now();
             for (;;) {
-              const ready = await page.evaluate(() => {
-                const b = document.getElementById('xg-deck-add');
-                return !!(b && !b.disabled);
-              });
-              if (ready || Date.now() - t0 > 60000) break;
-              await new Promise((r) => setTimeout(r, 700));
+              const ready = await page.evaluate(() => !!document.querySelector('#app .tiles, #app .empty, .err'));
+              if (ready || Date.now() - t0 > 20000) break;
+              await new Promise((r) => setTimeout(r, 400));
             }
-            const sum = await page.evaluate(() => (document.querySelector('.xg-deck__summary') || {}).textContent || '');
-            console.log('SUMMARY:', sum.replace(/\s+/g, ' ').slice(0, 200));
+            await new Promise((r) => setTimeout(r, 800));
+            const state = await page.evaluate(() => ({
+              title: document.title,
+              tiles: document.querySelectorAll('#app .tile').length,
+              tables: document.querySelectorAll('#app table').length,
+              err: !!document.querySelector('.err'),
+              text: (document.getElementById('app') || {}).textContent ? document.getElementById('app').textContent.replace(/\s+/g, ' ').slice(0, 260) : '',
+            }));
+            console.log('STATE:', JSON.stringify(state));
 
-            const nav = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null);
-            await page.evaluate(() => document.getElementById('xg-deck-add').click());
-            await nav;
-            const landed = page.url();
-            console.log('LANDED:', landed);
-            await new Promise((r) => setTimeout(r, 1500));
-            const cart = await page.evaluate(() => fetch('/cart.js', { headers: { Accept: 'application/json' } }).then((r) => r.json()));
-            console.log('CART_ATTRS:', JSON.stringify(cart.attributes || {}));
-            console.log('CART_ITEMS:', (cart.items || []).map((i) => i.quantity + 'x ' + i.title).join(' | ').slice(0, 220));
+            await page.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 78, fullPage: true });
             await browser.close();
 
-            await new Promise((r) => setTimeout(r, 3000));
-            const after = await (await fetch(W + '/deckstats.json')).json();
-            console.log('STATS_AFTER:', JSON.stringify(after.total || {}));
+            const buf = fs.readFileSync('shot.jpg');
+            console.log('SHOT_SIZE:', buf.length, 'SHOT_MD5:', crypto.createHash('md5').update(buf).digest('hex'));
+            const b64 = buf.toString('base64');
+            console.log('SHOT_BEGIN');
+            for (let i = 0; i < b64.length; i += 6000) console.log('B64:' + b64.slice(i, i + 6000));
+            console.log('SHOT_END');
 
-            const tag = (cart.attributes || {})['Deck Builder'] || '';
-            const sB = (((before.total || {}).search || {}).mtg || { c: 0 }).c;
-            const cB = (((before.total || {}).cart || {}).mtg || { c: 0 }).c;
-            const s = ((after.total || {}).search || {}).mtg || { c: 0 };
-            const c = ((after.total || {}).cart || {}).mtg || { c: 0, v: 0 };
-            const ok = /Magic: The Gathering, \d+ cards?, \$\d/.test(tag) &&
-              landed.indexOf('/cart') > -1 && s.c > sB && c.c > cB && c.v > 0;
-            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL') + ' - tag "' + tag + '"; search mtg ' + sB + '->' + s.c + ', cart mtg ' + cB + '->' + c.c + ' (' + c.v + ' cents)');
+            const ok = state.tiles === 4 && state.tables >= 2 && !state.err;
+            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL') + ' - ' + state.tiles + ' tiles, ' + state.tables + ' tables, err ' + state.err);
             if (!ok) process.exitCode = 1;
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
