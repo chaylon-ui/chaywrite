@@ -10,136 +10,6 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Substitutes overlay round 2 (crisp images, zoom, ranked buttons)
-        run: |
-          node <<'EOF'
-          const puppeteer = require('puppeteer-core');
-          const PAGE = 'https://exorgames.com/pages/deck-builder';
-
-          (async () => {
-            const browser = await puppeteer.launch({
-              executablePath: '/usr/bin/google-chrome',
-              args: ['--no-sandbox', '--disable-dev-shm-usage'],
-            });
-            const ctx = await browser.createBrowserContext();
-            const page = await ctx.newPage();
-            await page.setViewport({ width: 1380, height: 980 });
-
-            const errs = [];
-            const tolerated = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
-            page.on('pageerror', (e) => {
-              const s = (e && (e.stack || e.message)) || String(e);
-              if (tolerated.test(s)) return;
-              errs.push(s.split('\n').slice(0, 2).join(' | '));
-            });
-            await page.setRequestInterception(true);
-            page.on('request', (req) => {
-              const u = req.url();
-              if (u.includes('/deck.json?')) req.continue({ url: u + '&notrack=1' });
-              else req.continue();
-            });
-
-            await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await page.type('#xg-deck-input', '1 Sol Ring\n1 Chain Lightning');
-            await page.click('#xg-deck-go');
-            await page.waitForSelector('#xg-deck-results .xg-deck__row', { timeout: 45000 });
-            let simbtn = null;
-            for (let i = 0; i < 30 && !simbtn; i++) {
-              simbtn = await page.$('.xg-deck__simbtn');
-              if (!simbtn) await new Promise((r) => setTimeout(r, 1000));
-            }
-            if (!simbtn) { console.log('VERDICT: FAIL - no similar-effects button'); process.exit(1); }
-            await page.click('.xg-deck__simbtn');
-            await page.waitForSelector('.xg-deck-subs .xg-deck-subs__add', { timeout: 20000 });
-            let fails = [];
-
-            // 1. crisp sources + zoom attributes
-            const imgs = await page.evaluate(() => {
-              const cardImgs = [...document.querySelectorAll('.xg-deck-subs__card img')];
-              const orig = document.querySelector('.xg-deck-subs__orig img');
-              return {
-                cards: cardImgs.map((i) => ({ src: i.getAttribute('src'), zoom: i.getAttribute('data-zoom'), cursor: getComputedStyle(i).cursor })),
-                orig: orig ? { zoom: orig.getAttribute('data-zoom'), cursor: getComputedStyle(orig).cursor } : null,
-              };
-            });
-            console.log('IMGS:', JSON.stringify({ n: imgs.cards.length, first: imgs.cards[0], orig: imgs.orig }));
-            if (!imgs.cards.length) fails.push('no overlay card images');
-            imgs.cards.forEach((c, i) => {
-              if (!/width=480/.test(c.src || '')) fails.push('card ' + i + ' not 480px src');
-              if (!/width=640/.test(c.zoom || '')) fails.push('card ' + i + ' missing 640 zoom');
-              if (c.cursor !== 'zoom-in') fails.push('card ' + i + ' cursor ' + c.cursor);
-            });
-            if (!imgs.orig || !/version=large/.test(imgs.orig.zoom || '')) fails.push('orig missing large zoom');
-
-            // 2. buttons ranked per grid row
-            const ranks = await page.evaluate(() => {
-              const cards = [...document.querySelectorAll('.xg-deck-subs__card')];
-              const rows = {};
-              cards.forEach((c) => {
-                const btn = c.querySelector('.xg-deck-subs__add');
-                if (!btn) return;
-                const key = Math.round(c.getBoundingClientRect().top);
-                (rows[key] = rows[key] || []).push(Math.round(btn.getBoundingClientRect().top));
-              });
-              return Object.values(rows).map((tops) => tops);
-            });
-            console.log('BUTTON ROWS:', JSON.stringify(ranks));
-            ranks.forEach((tops) => {
-              if (Math.max(...tops) - Math.min(...tops) > 1) fails.push('buttons unranked: ' + tops.join(','));
-            });
-
-            // 3. click a card image -> zoom layer above the overlay
-            await page.click('.xg-deck-subs__card img');
-            await new Promise((r) => setTimeout(r, 700));
-            const zoomed = await page.evaluate(() => {
-              const z = document.querySelector('.xg-deck-zoom');
-              const overlayStill = !!document.querySelector('.xg-deck-subs');
-              if (!z) return { z: false, overlayStill };
-              const img = z.querySelector('img');
-              const r = img.getBoundingClientRect();
-              const probe = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
-              return { z: true, overlayStill, src: img.getAttribute('src'), w: Math.round(r.width), onTop: !!(probe && z.contains(probe)) };
-            });
-            console.log('ZOOMED:', JSON.stringify(zoomed));
-            if (!zoomed.z) fails.push('zoom did not open');
-            else {
-              if (!zoomed.overlayStill) fails.push('overlay closed when zooming');
-              if (!/width=640/.test(zoomed.src || '')) fails.push('zoom shows wrong src');
-              if (!zoomed.onTop) fails.push('zoom underneath overlay');
-              if (zoomed.w < 200) fails.push('zoom image tiny: ' + zoomed.w);
-            }
-
-            // 4. click the zoomed image -> closes zoom, overlay survives
-            if (zoomed.z) {
-              await page.click('.xg-deck-zoom img');
-              await new Promise((r) => setTimeout(r, 500));
-              const after = await page.evaluate(() => ({
-                zoomGone: !document.querySelector('.xg-deck-zoom'),
-                overlayStill: !!document.querySelector('.xg-deck-subs'),
-              }));
-              console.log('AFTER CLOSE:', JSON.stringify(after));
-              if (!after.zoomGone) fails.push('click did not close zoom');
-              if (!after.overlayStill) fails.push('overlay died with the zoom');
-            }
-
-            // 5. picking still works after all that
-            await page.click('.xg-deck-subs__add');
-            await new Promise((r) => setTimeout(r, 800));
-            const picked = await page.evaluate(() => ({
-              overlayGone: !document.querySelector('.xg-deck-subs'),
-              subRow: !!document.querySelector('.xg-deck__row--sub'),
-            }));
-            console.log('PICKED:', JSON.stringify(picked));
-            if (!picked.overlayGone || !picked.subRow) fails.push('pick flow broken');
-
-            console.log('hard errors:', errs.length, errs.slice(0, 2));
-            await browser.close();
-            if (fails.length || errs.length) { console.log('VERDICT: FAIL -', JSON.stringify(fails)); process.exit(1); }
-            console.log('VERDICT: PASS - overlay round 2');
-          })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
-          EOF
-
       - name: Slideshow section renders with the text-style option on the preview
         run: |
           node <<'EOF'
@@ -185,13 +55,13 @@ jobs:
               stub.innerHTML = '<div class="main-title">CHECK</div>';
               document.body.appendChild(stub);
               const sh = getComputedStyle(stub.querySelector('.main-title')).textShadow;
-              return { shadow: sh.slice(0, 120), layers: sh.split('), ').length, hasColor: /18, 170, 52|#12aa34/.test(sh) };
+              return { shadow: sh.slice(0, 120), layers: (sh.match(/rgba?\(/g) || []).length, hasColor: /18, 170, 52|#12aa34/.test(sh) };
             });
             console.log('PAINTED:', JSON.stringify(painted));
 
             await browser.close();
             const ok = sec.status === 200 && sec.hasFx && !sec.liquidError
-              && painted.shadow && painted.shadow !== 'none' && painted.layers >= 8 && painted.hasColor;
+              && painted.shadow && painted.shadow !== 'none' && painted.layers >= 9 && painted.hasColor;
             if (!ok) { console.log('VERDICT: FAIL - slideshow option'); process.exit(1); }
             console.log('VERDICT: PASS - slideshow text-style option live on preview');
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
