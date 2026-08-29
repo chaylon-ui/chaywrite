@@ -261,10 +261,17 @@
     state.lines.forEach(function (ln, li) {
       var r = effR(ln, li);
       if (!(r && r.found)) return;
-      allocate(ln, r, state.sel[li], nextCheapOn()).chunks.forEach(function (c) {
+      var a = allocate(ln, r, state.sel[li], nextCheapOn());
+      a.chunks.forEach(function (c) {
         if (state.checked[chunkKey(li, c)] === false) return;
         items.push({ id: c.o.variantId, quantity: c.take, stock: c.stock });
       });
+      var ps = state.subs[li];
+      if (ps && ps.partial && a.remaining > 0 && state.checked['sub:' + li] !== false) {
+        var sq = (ps.r.offers && ps.r.offers[0] && typeof ps.r.offers[0].qty === 'number') ? ps.r.offers[0].qty : 99;
+        var vid = (ps.r.offers && ps.r.offers[0] && ps.r.offers[0].variantId) || ps.r.variantId;
+        if (vid) items.push({ id: vid, quantity: Math.min(a.remaining, Math.max(1, sq)), stock: sq });
+      }
     });
     return items;
   }
@@ -282,19 +289,22 @@
      synthetic found-result so ticks, version pickers, totals and the cart
      all treat it like any stocked card, with green Substituted markings. */
   function effR(ln, li) {
-    var r = state.map[ln.name.toLowerCase()];
-    if (r && r.found) return r;
     var sub = state.subs[li];
-    return sub ? sub.r : r;
+    if (sub && !sub.partial) return sub.r;
+    return state.map[ln.name.toLowerCase()];
   }
 
   function maybeFetchSims() {
     if (!state || state.game !== 'mtg') return;
     var mine = state;
     var missing = [];
-    state.lines.forEach(function (ln) {
+    state.lines.forEach(function (ln, li) {
       var r = mine.map[ln.name.toLowerCase()];
-      if (r && r.found) return;
+      if (r && r.found) {
+        // found-but-short lines also earn similar-effect options: the
+        // shopper fills just the copies the shelf is missing.
+        if (allocate(ln, r, mine.sel[li], nextCheapOn()).remaining <= 0) return;
+      }
       var k = ln.name.toLowerCase();
       if (!(k in mine.sims) && missing.length < 6) { mine.sims[k] = null; missing.push(ln.name); }
     });
@@ -323,10 +333,14 @@
     if (!state || state.missSent) return;
     state.missSent = true;
     var missing = [];
-    state.lines.forEach(function (ln) {
+    state.lines.forEach(function (ln, li) {
       var r = state.map[ln.name.toLowerCase()];
-      if (r && r.found) return;
       if (missing.length >= 25) return;
+      if (r && r.found) {
+        var srem = allocate(ln, r, state.sel[li], nextCheapOn()).remaining;
+        if (srem > 0) missing.push(srem + 'x ' + ln.name);
+        return;
+      }
       var tail = '';
       if (r && r.sister) tail = ' @ ' + (r.sister.store || 'sister store') + ' $' + (parseFloat(r.sister.price) || 0).toFixed(2);
       missing.push(ln.qty + 'x ' + ln.name + tail);
@@ -346,6 +360,8 @@
     var ln = state.lines[li];
     var cards = state.sims[ln.name.toLowerCase()] || [];
     if (!cards.length) return;
+    var base = state.map[ln.name.toLowerCase()];
+    var srem = (base && base.found) ? allocate(ln, base, state.sel[li], nextCheapOn()).remaining : 0;
     closeSubs();
     var d = document.createElement('div');
     d.className = 'xg-deck-subs';
@@ -353,10 +369,10 @@
       '<div class="xg-deck-subs__panel" role="dialog" aria-label="In-stock cards with similar effects">' +
         '<button type="button" class="xg-deck-subs__close" aria-label="Close">&times;</button>' +
         '<div class="xg-deck-subs__orig">' +
-          '<span class="xg-deck-subs__missp">Not in stock</span>' +
+          '<span class="xg-deck-subs__missp">' + (srem > 0 ? 'Short ' + srem + ' of ' + ln.qty : 'Not in stock') + '</span>' +
           '<img src="https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(ln.name) + '&format=image&version=normal" data-zoom="https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(ln.name) + '&format=image&version=large" alt="' + esc(ln.name) + '" onerror="this.style.display=\'none\'">' +
           '<strong>' + esc(ln.name) + '</strong>' +
-          '<span class="xg-deck-subs__dim">The card your list asked for. Pick a stand-in from the right.</span>' +
+          '<span class="xg-deck-subs__dim">' + (srem > 0 ? 'You have ' + (ln.qty - srem) + ' in the list above. Pick a stand-in for the missing ' + srem + '.' : 'The card your list asked for. Pick a stand-in from the right.') + '</span>' +
         '</div>' +
         '<div class="xg-deck-subs__side">' +
           '<h4>In-stock cards with similar effects</h4>' +
@@ -393,11 +409,19 @@
   }
   function pickSub(li, card) {
     var ln = state.lines[li];
+    var base = state.map[ln.name.toLowerCase()];
     var r = {};
     for (var k in card) r[k] = card[k];
-    r.found = true; r.__sub = true; r.__for = ln.name;
-    state.subs[li] = { r: r };
-    beacon('sub', ln.name + ' > ' + card.name);
+    r.__sub = true; r.__for = ln.name;
+    if (base && base.found && allocate(ln, base, state.sel[li], nextCheapOn()).filledQ > 0) {
+      // partial: the real rows above stay; this card fills the shortfall
+      state.subs[li] = { r: r, partial: true };
+      beacon('sub', ln.name + ' > ' + card.name + ' (fills shortfall)');
+    } else {
+      r.found = true;
+      state.subs[li] = { r: r };
+      beacon('sub', ln.name + ' > ' + card.name);
+    }
     closeSubs();
     paint();
   }
@@ -500,6 +524,42 @@
             '</div>';
           }).join('');
           if (remaining > 0) {
+            var skey = ln.name.toLowerCase();
+            var psub = state.subs[li];
+            if (psub && psub.partial) {
+              // The picked stand-in fills just the shortfall; the real
+              // copies above stay exactly as they were.
+              var sc = psub.r;
+              var sq = (sc.offers && sc.offers[0] && typeof sc.offers[0].qty === 'number') ? sc.offers[0].qty : 99;
+              var sTake = Math.min(remaining, Math.max(1, sq));
+              var sUnit = parseFloat(sc.price) || 0;
+              var sKey = 'sub:' + li;
+              var sOn = state.checked[sKey] !== false;
+              fillable++; if (sOn) ticked++;
+              if (sOn) { subtotal += sUnit * sTake; addQty += sTake; }
+              filledCards += sTake;
+              shortQ -= sTake;
+              var sMeta = [sc.set, sc.foil ? 'Foil' : '', sc.condition].filter(Boolean).join(' · ');
+              html += '<div class="xg-deck__row xg-deck__row--grp xg-deck__row--gend xg-deck__row--sub" role="row">' +
+                '<span class="xg-deck__pick" role="cell"><input type="checkbox" class="xg-deck__pickbox" data-k="' + sKey + '"' + (sOn ? ' checked' : '') + ' aria-label="Include ' + sTake + ' ' + esc(sc.name) + '"></span>' +
+                '<span class="xg-deck__qty" role="cell">' + sTake + '&times;</span>' +
+                '<span class="xg-deck__card" role="cell">' +
+                  '<a class="xg-deck__cardlink" href="' + esc(sc.url) + '" target="_blank" rel="noopener">' +
+                    (sc.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(sc.image)) + '" data-zoom="' + esc(zoomSrc(sc.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
+                    '<span class="xg-deck__subtag">Substituted</span>' +
+                    '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(sc.name) + '</span>' +
+                    '<span class="xg-deck__subnote">substitute for ' + remaining + ' missing ' + esc(ln.name) + '</span>' +
+                    (sMeta ? '<span class="xg-deck__meta">' + esc(sMeta) + '</span>' : '') + '</span>' +
+                  '</a>' +
+                '</span>' +
+                '<span class="xg-deck__unit" role="cell">' + money(sUnit) + '</span>' +
+                '<span class="xg-deck__line" role="cell">' + money(sUnit * sTake) + '</span>' +
+                '<span class="xg-deck__stat xg-deck__stat--sub" role="cell"><span class="xg-deck__statmiss">' + remaining + ' not in stock</span> <span class="xg-deck__substat">Substituted</span><button type="button" class="xg-deck__subundo" data-li="' + li + '">undo</button></span>' +
+              '</div>';
+              return html;
+            }
+            var simBtn = (state.game === 'mtg' && state.sims[skey] && state.sims[skey].length)
+              ? ' <button type="button" class="xg-deck__simbtn" data-li="' + li + '">Not in Stock &middot; In-Stock Cards with Similar Effects &rsaquo;</button>' : '';
             // Information strip, not a product row (owner feedback): it only
             // annotates the rows above — the copies we DO have are up there
             // and ride along with Add to cart. When a sister store holds the
@@ -523,7 +583,7 @@
               tail = remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now';
             }
             html += '<div class="xg-deck__row xg-deck__row--short xg-deck__row--grp xg-deck__row--gend" role="row">' +
-              '<span class="xg-deck__shortinfo" role="cell">' + esc(chunks[0].o.name || r.name || ln.name) + ': ' + filledQ + ' of your ' + ln.qty + ' are in stock above &mdash; ' + tail + '</span>' +
+              '<span class="xg-deck__shortinfo" role="cell">' + esc(chunks[0].o.name || r.name || ln.name) + ': ' + filledQ + ' of your ' + ln.qty + ' are in stock above &mdash; ' + tail + simBtn + '</span>' +
               '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">' + filledQ + ' of ' + ln.qty + ' available</span></span>' +
             '</div>';
           }
@@ -592,10 +652,16 @@
       state.lines.forEach(function (ln, li) {
         var r = effR(ln, li);
         if (!(r && r.found)) return;
-        allocate(ln, r, state.sel[li], nextCheap).chunks.forEach(function (c) {
+        var a = allocate(ln, r, state.sel[li], nextCheap);
+        a.chunks.forEach(function (c) {
           if (state.checked[chunkKey(li, c)] === false) return;
           if (picks.length < 40) picks.push(c.take + 'x ' + (r.__sub ? r.name + ' (sub for ' + ln.name + ')' : ln.name));
         });
+        var ps = state.subs[li];
+        if (ps && ps.partial && a.remaining > 0 && state.checked['sub:' + li] !== false && picks.length < 40) {
+          var psq = (ps.r.offers && ps.r.offers[0] && typeof ps.r.offers[0].qty === 'number') ? ps.r.offers[0].qty : 99;
+          picks.push(Math.min(a.remaining, Math.max(1, psq)) + 'x ' + ps.r.name + ' (sub for ' + ln.name + ')');
+        }
       });
       lastPick = { game: state.game || 'mtg', label: gm ? gm.label : (state.game || 'mtg'), qty: addQty, subtotal: subtotal, picks: picks };
     })();
@@ -718,6 +784,7 @@
       var vo = t.options && t.options[t.selectedIndex] ? t.options[t.selectedIndex].text : '';
       beacon('ver', (vl ? vl.name : '') + ' > ' + vo);
       paint();
+      maybeFetchSims();
     }
     else if (t.id === 'xg-deck-checkall') {
       var v = t.checked;
@@ -727,6 +794,7 @@
         allocate(ln, r, state.sel[i], nextCheapOn()).chunks.forEach(function (c) {
           state.checked[chunkKey(i, c)] = v;
         });
+        if (state.subs[i] && state.subs[i].partial) state.checked['sub:' + i] = v;
       });
       beacon('all', v ? 'on' : 'off');
       paint();
@@ -734,7 +802,7 @@
   });
   (function () {
     var nc = document.getElementById('xg-deck-nextcheap');
-    if (nc) nc.addEventListener('change', function () { beacon('ncheap', nc.checked ? 'on' : 'off'); if (state) paint(); });
+    if (nc) nc.addEventListener('change', function () { beacon('ncheap', nc.checked ? 'on' : 'off'); if (state) { paint(); maybeFetchSims(); } });
   })();
 
   function postCart(body) {
