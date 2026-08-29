@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-      - name: Hero fit-text after the content-height fix
+      - name: New Today quick-add end to end
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -20,69 +20,63 @@ jobs:
             const page = await ctx.newPage();
             await page.setViewport({ width: 1366, height: 900 });
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
+            const errs = [];
+            page.on('pageerror', (e) => { errs.push(String((e && e.stack) || e).slice(0, 200)); });
             await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await new Promise((r) => setTimeout(r, 5000));
+            await page.waitForSelector('#xg-newtoday .xg-nt__card', { timeout: 20000 });
+            await page.evaluate(() => { document.getElementById('xg-newtoday').scrollIntoView({ block: 'center' }); });
+            await new Promise((r) => setTimeout(r, 800));
 
-            // The titled (hidden) slide must NOT be floored at load anymore.
-            const load = await page.evaluate(() => {
-              const main = document.querySelector('.xg-hero__main');
-              if (!main) return null;
-              const titled = Array.from(main.querySelectorAll('.xg-hero__content'))
-                .find((c) => c.querySelector('.xg-hero__title'));
-              const t = titled && titled.querySelector('.xg-hero__title');
+            const shape = await page.evaluate(() => {
+              const cards = document.querySelectorAll('#xg-newtoday .xg-nt__card');
+              const btns = document.querySelectorAll('#xg-newtoday .xg-nt__add');
+              const b = btns[0];
+              const price = document.querySelector('#xg-newtoday .xg-nt__price');
+              const cs = b ? getComputedStyle(b) : null;
               return {
-                fit: main.getAttribute('data-xg-fit'),
-                titledFs: t ? parseFloat(getComputedStyle(t).fontSize) : null,
+                cards: cards.length,
+                btns: btns.length,
+                vid: b ? +b.getAttribute('data-vid') : 0,
+                inThumb: b ? !!b.closest('.xg-nt__thumb') : false,
+                round: cs ? cs.borderRadius : '',
+                bg: cs ? cs.backgroundColor : '',
+                priceColor: price ? getComputedStyle(price).color : '',
               };
             });
+            console.log('SHAPE:', JSON.stringify(shape));
 
-            // Typing sim on the ACTIVE slide: short headline keeps full size,
-            // monster headline shrinks, panel height never moves.
-            const short = await page.evaluate(() => {
-              const main = document.querySelector('.xg-hero__main');
-              const content = main.querySelector('.xg-hero__slide.is-active .xg-hero__content') || main.querySelector('.xg-hero__content');
-              if (!content) return { noContent: true };
-              let title = content.querySelector('.xg-hero__title');
-              let injected = false;
-              if (!title) {
-                title = document.createElement('h2');
-                title.className = 'xg-hero__title';
-                content.insertBefore(title, content.firstChild);
-                injected = true;
-              }
-              content.setAttribute('data-xgprobe', '1');
-              title.textContent = 'GRAND OPENING WEEKEND';
-              window.dispatchEvent(new Event('resize'));
-              return { injected };
-            });
-            await new Promise((r) => setTimeout(r, 700));
-            const s = await page.evaluate(() => {
-              const main = document.querySelector('.xg-hero__main');
-              const title = main.querySelector('[data-xgprobe] .xg-hero__title');
-              return { h: Math.round(main.getBoundingClientRect().height), fs: parseFloat(getComputedStyle(title).fontSize) };
-            });
-            await page.evaluate(() => {
-              const title = document.querySelector('[data-xgprobe] .xg-hero__title');
-              title.textContent = 'THIS IS A DELIBERATELY VERY LONG HEADLINE TYPED TO CHECK THAT THE HERO PANEL STAYS LOCKED AT ITS HEIGHT WHILE THE TEXT SHRINKS DOWN TO FIT INSTEAD OF GROWING THE WHOLE SECTION TALLER AND TALLER AND TALLER';
-              window.dispatchEvent(new Event('resize'));
-            });
-            await new Promise((r) => setTimeout(r, 700));
-            const l = await page.evaluate(() => {
-              const main = document.querySelector('.xg-hero__main');
-              const content = main.querySelector('[data-xgprobe]');
-              const title = content.querySelector('.xg-hero__title');
-              const box = content.closest('.xg-hero__slide') || main;
+            const count0 = await page.evaluate(async () => (await (await fetch('/cart.js')).json()).item_count);
+            await page.hover('#xg-newtoday .xg-nt__add');
+            await new Promise((r) => setTimeout(r, 300));
+            await page.click('#xg-newtoday .xg-nt__add');
+            // Catch the transient check state, then let the sync settle.
+            let sawAdded = false;
+            for (let i = 0; i < 8; i++) {
+              await new Promise((r) => setTimeout(r, 300));
+              if (await page.evaluate(() => !!document.querySelector('#xg-newtoday .xg-nt__add.is-added'))) { sawAdded = true; break; }
+            }
+            await new Promise((r) => setTimeout(r, 1500));
+            const after = await page.evaluate(async () => {
+              const cart = await (await fetch('/cart.js')).json();
+              const badges = Array.from(document.querySelectorAll('.cart-qty')).map((b) => b.textContent.trim());
+              const b = document.querySelector('#xg-newtoday .xg-nt__add');
               return {
-                h: Math.round(main.getBoundingClientRect().height),
-                fs: parseFloat(getComputedStyle(title).fontSize),
-                overflow: content.offsetHeight - box.clientHeight,
+                count: cart.item_count,
+                firstItemVid: cart.items && cart.items[0] ? cart.items[0].variant_id : 0,
+                badges,
+                stillHome: location.pathname === '/',
+                btnReset: b ? (!b.classList.contains('is-added') && !b.getAttribute('data-busy')) : false,
               };
             });
-            console.log('HERO4:', JSON.stringify({ load, short, s, l }));
-            const ok = load && load.fit === '1' &&
-              (load.titledFs === null || load.titledFs > 16) &&
-              s.fs > 30 && l.h === s.h && l.fs < s.fs && l.overflow <= 2;
-            console.log('VERDICT-HERO4: ' + (ok ? 'PASS' : 'FAIL'));
+            console.log('AFTER:', JSON.stringify({ count0, sawAdded, after }));
+            await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
+            const errsBad = errs.filter((e) => !/shopifycloud|shop_events_listener|\/cdn\/wpm\/|web-pixels/.test(e));
+            console.log('PAGEERRORS:', JSON.stringify(errsBad));
             await browser.close();
-          })().catch((e) => { console.log('VERDICT-HERO4: FAIL error ' + e.message); });
+            const ok = shape.cards > 0 && shape.btns > 0 && shape.vid > 0 && shape.inThumb &&
+              /50%/.test(shape.round) && shape.bg === 'rgb(214, 44, 40)' && shape.priceColor === 'rgb(214, 44, 40)' &&
+              count0 === 0 && sawAdded && after.count === 1 && after.firstItemVid === shape.vid &&
+              after.badges.indexOf('1') > -1 && after.stillHome && errsBad.length === 0;
+            console.log('VERDICT-QUICKADD: ' + (ok ? 'PASS' : 'FAIL'));
+          })().catch((e) => { console.log('VERDICT-QUICKADD: FAIL error ' + e.message); });
           EOF
