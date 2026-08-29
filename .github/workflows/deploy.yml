@@ -123,6 +123,8 @@ jobs:
           echo "next-cheapest toggle served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-nextcheap' || true)"
           echo "ticks + version picker served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-checkall' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck__ver' || true)"
           echo "thumb zoom served (js/css): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-zoom' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.css' | grep -c 'xg-deck-zoom' || true)"
+          curl -sS -o /dev/null -w '/deckstats owner page: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deckstats" || true
+          echo "owner page markers served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deckstats' | grep -c 'Deck Builder Stats' || true)"
           echo "=== /deckstats.json (Deck Builder usage tallies; smoke probes above carry notrack=1 so they never count) ==="
           curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/deckstats.json" | head -c 900 || true
           printf '\n'

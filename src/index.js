@@ -79,9 +79,13 @@ export default {
       return serveDeckGate(request, env);
     }
 
-    // Deck Builder usage report — aggregate search/add-to-cart tallies the
-    // owner can open in a browser. No shopper data, list contents or cart
-    // details, so it can stay public.
+    // Deck Builder usage report. /deckstats is the owner-friendly page
+    // (tiles, per-game table, daily bars); /deckstats.json is the raw feed
+    // the page reads. Aggregate tallies only — no shopper data, list
+    // contents or cart details, so both can stay public.
+    if (url.pathname === "/deckstats") {
+      return serveAsset(env, "/deckstats.html", request);
+    }
     if (url.pathname === "/deckstats.json") {
       const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-stats"));
       const h = new Headers(res.headers);

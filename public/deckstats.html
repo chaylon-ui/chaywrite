@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deck Builder Stats - Exor Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+<style>
+  :root { --red: #d62c28; --amber: #ff7a2f; --teal: #34b2c2; --ink: #eef3f5; --dim: #8fa0a8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: linear-gradient(160deg, #12181a, #0c1013 60%); color: var(--ink);
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 18px 60px; }
+  h1 { font-size: 26px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .06em; }
+  h1::after { content: ""; display: block; width: 72px; height: 3px; margin-top: 8px; border-radius: 3px;
+              background: linear-gradient(90deg, var(--red), var(--amber)); }
+  .sub { color: var(--dim); margin: 10px 0 22px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 26px; }
+  .tile { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 14px 16px; }
+  .tile .k { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .tile .v { font-size: 30px; font-weight: 700; margin-top: 2px; }
+  .tile .d { color: var(--dim); font-size: 12.5px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 26px 0 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.07); white-space: nowrap; }
+  th { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { height: 7px; border-radius: 4px; background: linear-gradient(90deg, var(--red), var(--amber)); min-width: 2px; }
+  .bar--cart { background: var(--teal); margin-top: 3px; }
+  .barcell { width: 34%; min-width: 120px; }
+  .empty { background: rgba(255,255,255,.045); border: 1px dashed rgba(255,255,255,.16); border-radius: 12px;
+           padding: 26px; text-align: center; color: var(--dim); }
+  .note { color: var(--dim); font-size: 13px; margin-top: 28px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; }
+  .err { color: #ff9b8f; }
+  .scroll { overflow-x: auto; }
+  @media (max-width: 560px) { .tile .v { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Deck Builder Stats</h1>
+  <p class="sub" id="stamp">Loading live numbers…</p>
+  <div id="app"></div>
+  <p class="note">Searches count every “Find my deck” click. Carts count every “Add selected to cart” click,
+  with the copies and dollar value that were selected. Orders placed through the Deck Builder are also labeled
+  on the order itself in Shopify admin, under the order’s Additional details, as
+  “Deck Builder: game, cards, subtotal”. No decklists or customer details are stored here, only counts.
+  Days roll over on UTC time.</p>
+</div>
+<script>
+(function () {
+  var LABELS = { mtg: 'Magic: The Gathering', pokemon: 'Pokémon', yugioh: 'Yu-Gi-Oh!',
+                 starwars: 'Star Wars: Unlimited', onepiece: 'One Piece', riftbound: 'Riftbound', other: 'Other' };
+  function money(cents) { return '$' + (cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function sum(group) {
+    var t = { c: 0, n: 0, v: 0 };
+    Object.keys(group || {}).forEach(function (g) { t.c += group[g].c || 0; t.n += group[g].n || 0; t.v += group[g].v || 0; });
+    return t;
+  }
+  function niceDay(iso) {
+    var d = new Date(iso + 'T12:00:00Z');
+    return isNaN(d) ? iso : d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+  }
+
+  function render(data) {
+    var total = data.total || {};
+    var s = sum(total.search), c = sum(total.cart);
+    var app = document.getElementById('app');
+    document.getElementById('stamp').textContent = 'Live from the store. Updated ' + new Date().toLocaleTimeString('en-CA') + '.';
+
+    if (!s.c && !c.c) {
+      app.innerHTML = '<div class="empty">No Deck Builder uses recorded yet. This page fills in on its own once customers start searching.</div>';
+      return;
+    }
+
+    var conv = s.c ? Math.round((c.c / s.c) * 100) : 0;
+    var html =
+      '<div class="tiles">' +
+        '<div class="tile"><div class="k">Deck searches</div><div class="v">' + s.c.toLocaleString() + '</div><div class="d">' + s.n.toLocaleString() + ' cards looked up</div></div>' +
+        '<div class="tile"><div class="k">Decks added to cart</div><div class="v">' + c.c.toLocaleString() + '</div><div class="d">' + c.n.toLocaleString() + ' copies added</div></div>' +
+        '<div class="tile"><div class="k">Value added to cart</div><div class="v">' + money(c.v) + '</div><div class="d">before checkout</div></div>' +
+        '<div class="tile"><div class="k">Search to cart</div><div class="v">' + conv + '%</div><div class="d">of searches end in an add</div></div>' +
+      '</div>';
+
+    var games = {};
+    Object.keys(total.search || {}).forEach(function (g) { games[g] = 1; });
+    Object.keys(total.cart || {}).forEach(function (g) { games[g] = 1; });
+    var gk = Object.keys(games);
+    if (gk.length) {
+      gk.sort(function (a, b) { return (((total.search || {})[b] || {}).c || 0) - (((total.search || {})[a] || {}).c || 0); });
+      html += '<h2>By game (all time)</h2><div class="scroll"><table><tr><th>Game</th><th class="num">Searches</th><th class="num">Decks carted</th><th class="num">Copies</th><th class="num">Value</th></tr>';
+      gk.forEach(function (g) {
+        var sg = (total.search || {})[g] || { c: 0, n: 0 };
+        var cg = (total.cart || {})[g] || { c: 0, n: 0, v: 0 };
+        html += '<tr><td>' + esc(LABELS[g] || g) + '</td><td class="num">' + sg.c.toLocaleString() + '</td><td class="num">' + cg.c.toLocaleString() +
+                '</td><td class="num">' + cg.n.toLocaleString() + '</td><td class="num">' + money(cg.v) + '</td></tr>';
+      });
+      html += '</table></div>';
+    }
+
+    var days = data.days || [];
+    if (days.length) {
+      var max = 1;
+      days.forEach(function (d) { max = Math.max(max, sum(d.search).c); });
+      html += '<h2>Day by day (last 31 days)</h2><div class="scroll"><table><tr><th>Day</th><th class="num">Searches</th><th class="num">Carts</th><th class="num">Value</th><th class="barcell"></th></tr>';
+      days.forEach(function (d) {
+        var ds = sum(d.search), dc = sum(d.cart);
+        html += '<tr><td>' + esc(niceDay(d.day)) + '</td><td class="num">' + ds.c.toLocaleString() + '</td><td class="num">' + dc.c.toLocaleString() +
+                '</td><td class="num">' + money(dc.v) + '</td><td class="barcell">' +
+                '<div class="bar" style="width:' + Math.max(2, Math.round((ds.c / max) * 100)) + '%"></div>' +
+                (dc.c ? '<div class="bar bar--cart" style="width:' + Math.max(2, Math.round((dc.c / max) * 100)) + '%"></div>' : '') +
+                '</td></tr>';
+      });
+      html += '</table></div>';
+    }
+
+    app.innerHTML = html;
+  }
+
+  function load() {
+    fetch('/deckstats.json', { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(render)
+      .catch(function (e) {
+        document.getElementById('stamp').innerHTML = '<span class="err">Could not load the numbers (' + esc(e.message) + '). Refresh to retry.</span>';
+      });
+  }
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>
