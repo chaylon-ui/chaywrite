@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-      - name: Capture calendar feed request headers and one event shape
+      - name: Front page callout handoff + events strip
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -18,36 +18,108 @@ jobs:
             });
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
-            const reqs = [];
+            await page.setViewport({ width: 1366, height: 900 });
+
+            let phase = 'load';
+            const errs = [];
+            const TOL = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
+            page.on('pageerror', (e) => {
+              const s = (e && e.stack) || String(e);
+              if (!TOL.test(s)) errs.push({ phase, msg: String((e && e.message) || e).slice(0, 200) });
+            });
+
+            await page.setRequestInterception(true);
             page.on('request', (r) => {
-              if (/portal\.binderpos\.com\/api\/events/i.test(r.url())) {
-                reqs.push({ url: r.url().slice(0, 200), method: r.method(), headers: r.headers() });
-              }
+              const u = r.url();
+              if (u.includes('/deck.json?')) { r.continue({ url: u + '&notrack=1' }); return; }
+              r.continue();
             });
-            let fullEvent = null;
-            let count = 0;
-            page.on('response', async (r) => {
-              if (/portal\.binderpos\.com\/api\/events\/forStore/.test(r.url()) && r.request().method() === 'GET' && !fullEvent) {
-                try {
-                  const arr = JSON.parse(await r.text());
-                  if (Array.isArray(arr) && arr.length) {
-                    count = arr.length;
-                    fullEvent = arr[arr.length - 1];
-                  }
-                } catch (e) {}
-              }
-            });
+
+            await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
             await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await new Promise((r) => setTimeout(r, 9000));
-            console.log('REQS:', JSON.stringify(reqs, null, 1));
-            if (fullEvent) {
-              console.log('EVENT_COUNT:', count);
-              console.log('EVENT_KEYS:', JSON.stringify(Object.keys(fullEvent)));
-              if (typeof fullEvent.description === 'string') fullEvent.description = fullEvent.description.slice(0, 60) + '...';
-              console.log('EVENT_SAMPLE:', JSON.stringify(fullEvent).slice(0, 2200));
+
+            await page.waitForSelector('#xg-dbc-form', { timeout: 20000 });
+            const dbc = await page.evaluate(() => {
+              const f = document.getElementById('xg-dbc-form');
+              const card = f && f.closest('.xg-dbc__card');
+              const r = card ? card.getBoundingClientRect() : null;
+              const sel = document.getElementById('xg-dbc-game');
+              return {
+                present: !!f,
+                box: r ? [Math.round(r.x), Math.round(r.y + window.scrollY), Math.round(r.width), Math.round(r.height)] : null,
+                games: sel ? sel.options.length : 0,
+                target: f.getAttribute('data-target'),
+              };
+            });
+            console.log('DBC:', JSON.stringify(dbc));
+
+            phase = 'events';
+            let evs = null;
+            for (let i = 0; i < 24; i++) {
+              evs = await page.evaluate(() => {
+                const root = document.getElementById('xg-evs');
+                if (!root) return { present: false };
+                const cards = [...root.querySelectorAll('.xg-evs__card')].map((a) => ({
+                  chip: ((a.querySelector('.xg-evs__chip') || {}).textContent || '').trim(),
+                  name: ((a.querySelector('.xg-evs__name') || {}).textContent || '').trim(),
+                  meta: ((a.querySelector('.xg-evs__meta') || {}).textContent || '').trim(),
+                  price: ((a.querySelector('.xg-evs__price') || {}).textContent || '').trim(),
+                  href: a.getAttribute('href'),
+                  today: a.className.indexOf('is-today') !== -1,
+                }));
+                return { present: true, hidden: root.hidden, cards };
+              });
+              if (evs.present && !evs.hidden && evs.cards.length) break;
+              await new Promise((r) => setTimeout(r, 500));
             }
+            console.log('EVS:', JSON.stringify(evs, null, 1));
+            let evsProbe = null;
+            if (!evs || !evs.present || evs.hidden || !evs.cards.length) {
+              evsProbe = await page.evaluate(async () => {
+                try {
+                  const p = (n) => (n < 10 ? '0' : '') + n;
+                  const d = new Date();
+                  const a = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+                  const e2 = new Date(d.getTime() + 14 * 864e5);
+                  const b = e2.getFullYear() + '-' + p(e2.getMonth() + 1) + '-' + p(e2.getDate());
+                  const r = await fetch('https://portal.binderpos.com/api/events/forStore?startDate=' + a + '&endDate=' + b, { headers: { 'content-type': 'application/json' } });
+                  const j = await r.json();
+                  return { status: r.status, count: Array.isArray(j) ? j.length : -1 };
+                } catch (err) { return { error: String(err).slice(0, 150) }; }
+              });
+              console.log('EVS_PROBE:', JSON.stringify(evsProbe));
+            }
+
+            phase = 'handoff';
+            await page.type('#xg-dbc-list', '1 Sol Ring\n1 Chain Lightning');
+            phase = 'nav';
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }),
+              page.click('.xg-dbc__btn'),
+            ]);
+            phase = 'builder';
+            const landed = page.url();
+            console.log('LANDED:', landed);
+            await page.waitForSelector('#xg-deck-results .xg-deck__row', { timeout: 60000 });
+            const hb = await page.evaluate(() => ({
+              inputHasList: /Sol Ring/.test((document.getElementById('xg-deck-input') || {}).value || ''),
+              game: (document.getElementById('xg-deck-game') || {}).value,
+              rows: document.querySelectorAll('#xg-deck-results .xg-deck__row').length,
+              handCleared: sessionStorage.getItem('xgDeckHand') === null,
+            }));
+            console.log('HANDOFF:', JSON.stringify(hb));
+
             await browser.close();
-            console.log('VERDICT: ' + (reqs.length && fullEvent ? 'PASS' : 'FAIL - missing ' + (reqs.length ? 'event body' : 'forStore request')));
-            if (!reqs.length || !fullEvent) process.exit(1);
+
+            const hardErrs = errs.filter((e) => e.phase !== 'nav');
+            console.log('ERRS:', JSON.stringify(errs));
+            const evsOk = !!(evs && evs.present && (
+              (!evs.hidden && evs.cards.length > 0 && evs.cards.every((c) => c.chip && c.name)) ||
+              (evs.hidden && evsProbe && evsProbe.count === 0)
+            ));
+            const ok = dbc.present && dbc.games === 6 && /\/pages\/deck-builder/.test(landed)
+              && hb.inputHasList && hb.rows > 0 && hb.handCleared && evsOk && hardErrs.length === 0;
+            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL - ' + JSON.stringify({ evsOk, hardErrs: hardErrs.length })));
+            if (!ok) process.exit(1);
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
