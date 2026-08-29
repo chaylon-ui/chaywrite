@@ -7,10 +7,152 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
+      - name: Worker asset markers and admin gates
+        run: |
+          set -e
+          W='https://exor-binder.nevski.workers.dev'
+          fail=0
+          js=$(curl -sS "$W/deck-builder.js")
+          for m in 'xg-deck-subs' 'Add Substitute' 'xg-deck__simbtn' 'reportMisses'; do
+            if echo "$js" | grep -qF "$m"; then echo "JS marker OK: $m"; else echo "JS marker MISSING: $m"; fail=1; fi
+          done
+          css=$(curl -sS "$W/deck-builder.css")
+          for m in 'xg-deck__subtag' 'xg-deck-subs__add'; do
+            if echo "$css" | grep -qF "$m"; then echo "CSS marker OK: $m"; else echo "CSS marker MISSING: $m"; fail=1; fi
+          done
+          c1=$(curl -s -o /dev/null -w '%{http_code}' "$W/deckstats.json?op=misslog")
+          c2=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$W/deck-admin" --data 'op=wl_add&ip=1.2.3.4')
+          c3=$(curl -s -o /dev/null -w '%{http_code}' "$W/deckstats.json?op=overview&k=WRONGPIN")
+          echo "gates: misslog-nokey=$c1 wl_add-nokey=$c2 overview-badkey=$c3 (want 403 403 403)"
+          [ "$c1" = 403 ] && [ "$c2" = 403 ] && [ "$c3" = 403 ] || fail=1
+          if [ "$fail" = 1 ]; then echo 'VERDICT: FAIL - worker smoke'; exit 1; fi
+          echo 'VERDICT: PASS - worker smoke'
+
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Recon footer dupe, calendar popup stacking, search icon
+      - name: Substitutes E2E on the live Deck Builder
+        run: |
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const PAGE = 'https://exorgames.com/pages/deck-builder';
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              executablePath: '/usr/bin/google-chrome',
+              args: ['--no-sandbox', '--disable-dev-shm-usage'],
+            });
+            const ctx = await browser.createBrowserContext();
+            const page = await ctx.newPage();
+            await page.setViewport({ width: 1380, height: 980 });
+
+            const errs = [];
+            const tolerated = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
+            page.on('pageerror', (e) => {
+              const s = (e && (e.stack || e.message)) || String(e);
+              if (tolerated.test(s)) { console.log('tolerated noise:', s.split('\n')[0]); return; }
+              errs.push(s.split('\n').slice(0, 3).join(' | '));
+            });
+            const beacons = [];
+            page.on('response', (r) => {
+              if (r.url().includes('/deck-track')) beacons.push(r.status());
+            });
+            // keep this verification run out of the owner's usage stats
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+              const u = req.url();
+              if (u.includes('/deck.json?')) req.continue({ url: u + '&notrack=1' });
+              else req.continue();
+            });
+
+            await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
+            await page.type('#xg-deck-input', '1 Sol Ring\n1 Chain Lightning');
+            await page.click('#xg-deck-go');
+            await page.waitForSelector('#xg-deck-results .xg-deck__row', { timeout: 45000 });
+
+            // sims arrive async (similar.json -> instock.json); poll for the button
+            let simbtn = null;
+            for (let i = 0; i < 30 && !simbtn; i++) {
+              simbtn = await page.$('.xg-deck__simbtn');
+              if (!simbtn) await new Promise((r) => setTimeout(r, 1000));
+            }
+            const preState = await page.evaluate(() => {
+              const rows = [...document.querySelectorAll('#xg-deck-results .xg-deck__row')];
+              const addBtn = document.getElementById('xg-deck-add');
+              return {
+                rows: rows.map((r) => (r.textContent || '').replace(/\s+/g, ' ').slice(0, 110)),
+                solRingOk: rows.some((r) => /Sol Ring/.test(r.textContent) && r.querySelector('.xg-deck__pill')),
+                simbtns: document.querySelectorAll('.xg-deck__simbtn').length,
+                addLabel: addBtn ? addBtn.textContent.replace(/\s+/g, ' ').trim() : null,
+              };
+            });
+            console.log('PRE:', JSON.stringify(preState));
+            if (!simbtn) { console.log('VERDICT: FAIL - no similar-effects button appeared'); process.exit(1); }
+            if (!preState.solRingOk) { console.log('VERDICT: FAIL - Sol Ring not in stock in results'); process.exit(1); }
+
+            await page.click('.xg-deck__simbtn');
+            await page.waitForSelector('.xg-deck-subs .xg-deck-subs__add', { timeout: 20000 });
+            const overlay = await page.evaluate(() => {
+              const d = document.querySelector('.xg-deck-subs');
+              const orig = d.querySelector('.xg-deck-subs__orig');
+              return {
+                origText: (orig.textContent || '').replace(/\s+/g, ' ').slice(0, 140),
+                origHasMissPill: !!orig.querySelector('.xg-deck-subs__missp'),
+                cards: [...d.querySelectorAll('.xg-deck-subs__card')].map((c) => (c.textContent || '').replace(/\s+/g, ' ').slice(0, 80)),
+                addBtns: d.querySelectorAll('.xg-deck-subs__add').length,
+              };
+            });
+            console.log('OVERLAY:', JSON.stringify(overlay));
+            const overlayOk = /Chain Lightning/.test(overlay.origText) && overlay.origHasMissPill && overlay.addBtns > 0;
+            if (!overlayOk) { console.log('VERDICT: FAIL - overlay wrong'); process.exit(1); }
+
+            await page.click('.xg-deck-subs__add');
+            await new Promise((r) => setTimeout(r, 800));
+            const picked = await page.evaluate(() => {
+              const overlayGone = !document.querySelector('.xg-deck-subs');
+              const row = document.querySelector('.xg-deck__row--sub');
+              const addBtn = document.getElementById('xg-deck-add');
+              return {
+                overlayGone,
+                hasSubRow: !!row,
+                tag: row ? (row.querySelector('.xg-deck__subtag') || {}).textContent : null,
+                note: row ? ((row.querySelector('.xg-deck__subnote') || {}).textContent || '') : null,
+                statMiss: row ? ((row.querySelector('.xg-deck__statmiss') || {}).textContent || '') : null,
+                substat: row ? ((row.querySelector('.xg-deck__substat') || {}).textContent || '') : null,
+                hasUndo: row ? !!row.querySelector('.xg-deck__subundo') : false,
+                addLabel: addBtn ? addBtn.textContent.replace(/\s+/g, ' ').trim() : null,
+              };
+            });
+            console.log('PICKED:', JSON.stringify(picked));
+            const pickedOk = picked.overlayGone && picked.hasSubRow && picked.tag === 'Substituted'
+              && /substitute for Chain Lightning/i.test(picked.note || '')
+              && /Not in stock/.test(picked.statMiss || '') && picked.substat === 'Substituted'
+              && picked.hasUndo && /\(2\)/.test(picked.addLabel || '');
+            if (!pickedOk) { console.log('VERDICT: FAIL - substituted row wrong'); process.exit(1); }
+
+            await page.click('.xg-deck__subundo');
+            await new Promise((r) => setTimeout(r, 600));
+            const undone = await page.evaluate(() => ({
+              subRows: document.querySelectorAll('.xg-deck__row--sub').length,
+              simbtns: document.querySelectorAll('.xg-deck__simbtn').length,
+              addLabel: (document.getElementById('xg-deck-add') || {}).textContent || '',
+            }));
+            console.log('UNDONE:', JSON.stringify(undone));
+            const undoneOk = undone.subRows === 0 && undone.simbtns > 0 && /\(1\)/.test(undone.addLabel.replace(/\s+/g, ' '));
+
+            await new Promise((r) => setTimeout(r, 1500));
+            console.log('BEACONS:', JSON.stringify(beacons));
+            const beaconOk = beacons.length >= 3 && beacons.every((s) => s === 204);
+            console.log('hard errors:', errs.length, errs.slice(0, 3));
+
+            await browser.close();
+            if (undoneOk && beaconOk && errs.length === 0) console.log('VERDICT: PASS - substitutes E2E');
+            else { console.log('VERDICT: FAIL - undo/beacons/errors', JSON.stringify({ undoneOk, beaconOk, errs: errs.length })); process.exit(1); }
+          })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
+          EOF
+
+      - name: Preview theme checks (footer, search, calendar, locations)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -25,81 +167,136 @@ jobs:
             const page = await ctx.newPage();
             await page.setViewport({ width: 1366, height: 950 });
             await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await new Promise((r) => setTimeout(r, 4000));
+            await new Promise((r) => setTimeout(r, 4500));
             const theme = await page.evaluate(() => window.Shopify && Shopify.theme && Shopify.theme.id);
             console.log('THEME:', theme);
+            let fails = [];
 
-            // 1. footer: how many newsletter forms/inputs are visible, where
+            // 1. footer: exactly one visible email input, and typing works
             const footer = await page.evaluate(() => {
               const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden'; };
-              const mn = document.getElementById('_mobile_newsletter');
-              const dn = document.getElementById('_desktop_newsletter');
-              const forms = [...document.querySelectorAll('.site-footer form[action*="contact"], .site-footer .newsletter form, .site-footer input[type="email"]')];
-              const inputs = [...document.querySelectorAll('.site-footer input[type="email"]')];
-              const rect = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
-              return {
-                mn: mn ? { display: getComputedStyle(mn).display, newsletters: mn.querySelectorAll('.newsletter').length, emailInputs: mn.querySelectorAll('input[type="email"]').length } : null,
-                dn: dn ? { display: getComputedStyle(dn).display, newsletters: dn.querySelectorAll('.newsletter').length, emailInputs: dn.querySelectorAll('input[type="email"]').length } : null,
-                visibleEmailInputs: inputs.filter(vis).map((i) => ({ r: rect(i), inMn: !!i.closest('#_mobile_newsletter'), inDn: !!i.closest('#_desktop_newsletter'), value: (i.value || '').slice(0, 30) })),
-              };
+              const inputs = [...document.querySelectorAll('.site-footer input[type="email"]')].filter(vis);
+              return { visible: inputs.length, values: inputs.map((i) => i.value || '') };
             });
             console.log('FOOTER:', JSON.stringify(footer));
+            if (footer.visible !== 1) fails.push('footer visible inputs ' + footer.visible);
+            else {
+              await page.evaluate(() => {
+                const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden'; };
+                const i = [...document.querySelectorAll('.site-footer input[type="email"]')].filter(vis)[0];
+                i.scrollIntoView({ block: 'center' });
+                i.focus();
+              });
+              await page.keyboard.type('check@exorgames.test');
+              const typed = await page.evaluate(() => {
+                const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden'; };
+                return [...document.querySelectorAll('.site-footer input[type="email"]')].filter(vis)[0].value;
+              });
+              console.log('FOOTER TYPED:', typed);
+              if (typed !== 'check@exorgames.test') fails.push('footer typing garbled: ' + typed);
+            }
 
-            // 2. search bar geometry + styles
+            // 2. search submit centered in the input
             const search = await page.evaluate(() => {
               const input = document.querySelector('.search-header__input');
               const btn = document.querySelector('.search-header__submit');
-              const logo = document.querySelector('.search-logo');
-              const info = (el) => {
-                if (!el) return null;
-                const r = el.getBoundingClientRect();
-                const cs = getComputedStyle(el);
-                return { r: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
-                  pos: cs.position, top: cs.top, right: cs.right, left: cs.left, bottom: cs.bottom,
-                  transform: cs.transform, bg: cs.backgroundColor, radius: cs.borderRadius, display: cs.display };
-              };
-              const form = document.querySelector('form.search-header');
-              return { form: info(form), input: info(input), btn: info(btn), logo: info(logo) };
+              if (!input || !btn) return null;
+              const ri = input.getBoundingClientRect(); const rb = btn.getBoundingClientRect();
+              return { inputCy: ri.top + ri.height / 2, btnCy: rb.top + rb.height / 2, btnTop: rb.top, inputTop: ri.top, inputBottom: ri.bottom, btnBottom: rb.bottom };
             });
             console.log('SEARCH:', JSON.stringify(search));
+            if (!search) fails.push('search elements missing');
+            else if (Math.abs(search.btnCy - search.inputCy) > 4) fails.push('search button off-center by ' + Math.round(search.btnCy - search.inputCy) + 'px');
 
-            // 3. calendar: click an event icon, identify the popup + what
-            // paints over it
-            const calReady = await page.evaluate(() => !!document.querySelector('#binderpos-calendar td .calendar-icon'));
-            if (!calReady) {
-              await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
-              await new Promise((r) => setTimeout(r, 3000));
-            }
-            const cal = await page.evaluate(async () => {
-              const icon = document.querySelector('#binderpos-calendar td .calendar-icon');
-              if (!icon) return { err: 'no icon' };
-              const before = new Set([...document.querySelectorAll('#binderpos-calendar *')]);
-              icon.click();
+            // 3. calendar popup above hovered cells
+            await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView({ block: 'center' }); });
+            await new Promise((r) => setTimeout(r, 2500));
+            const hasIcon = await page.$('#binderpos-calendar td .calendar-icon');
+            if (!hasIcon) console.log('CAL: SKIP - no event icons rendered');
+            else {
+              await page.evaluate(() => document.querySelector('#binderpos-calendar td .calendar-icon').click());
               await new Promise((r) => setTimeout(r, 900));
-              const added = [...document.querySelectorAll('#binderpos-calendar *')].filter((el) => !before.has(el));
-              // also look for any element that appeared anywhere with MORE INFO
-              const more = [...document.querySelectorAll('body *')].filter((el) => el.children.length === 0 && /more info/i.test(el.textContent || ''));
-              const popRoot = more.length ? more[0].closest('div[class]') : (added.find((el) => el.offsetHeight > 80) || added[0]);
-              const chain = [];
-              for (let n = popRoot; n && chain.length < 6 && n !== document.body; n = n.parentElement) {
-                const cs = getComputedStyle(n);
-                chain.push({ tag: n.tagName, cls: String(n.className).slice(0, 70), pos: cs.position, z: cs.zIndex });
+              const popBox = await page.evaluate(() => {
+                const p = document.querySelector('#binderpos-calendar .calendar-icon-info');
+                if (!p) return null;
+                const r = p.getBoundingClientRect();
+                return { x: r.left, y: r.top, w: r.width, h: r.height };
+              });
+              console.log('CAL POPUP:', JSON.stringify(popBox));
+              if (!popBox || popBox.w < 40) fails.push('calendar popup did not open');
+              else {
+                // hover a different day cell that overlaps the popup area
+                const hovered = await page.evaluate(() => {
+                  const pop = document.querySelector('#binderpos-calendar .calendar-icon-info');
+                  const pr = pop.getBoundingClientRect();
+                  const cells = [...document.querySelectorAll('#binderpos-calendar td.calendar-data-block')];
+                  const other = cells.find((td) => {
+                    if (td.contains(pop)) return false;
+                    const r = td.getBoundingClientRect();
+                    return !(r.right < pr.left || r.left > pr.right || r.bottom < pr.top || r.top > pr.bottom);
+                  });
+                  if (!other) return null;
+                  const r = other.getBoundingClientRect();
+                  return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+                });
+                if (hovered) await page.mouse.move(hovered.cx, hovered.cy);
+                await new Promise((r) => setTimeout(r, 500));
+                const probe = await page.evaluate(() => {
+                  const pop = document.querySelector('#binderpos-calendar .calendar-icon-info');
+                  if (!pop) return { gone: true };
+                  const r = pop.getBoundingClientRect();
+                  const pts = [[r.left + r.width / 2, r.top + Math.min(40, r.height / 3)], [r.left + r.width / 2, r.top + r.height / 2]];
+                  return pts.map(([x, y]) => {
+                    const el = document.elementFromPoint(Math.round(x), Math.round(y));
+                    return { inside: !!(el && pop.contains(el)), hit: el ? el.tagName + '.' + String(el.className).slice(0, 40) : null };
+                  });
+                });
+                console.log('CAL PROBE (hovered other cell:', !!hovered, '):', JSON.stringify(probe));
+                if (probe.gone) console.log('CAL: popup closed on hover - acceptable (no paint-over possible)');
+                else if (!probe.every((p) => p.inside)) fails.push('calendar popup covered while hovering');
               }
-              let coveredBy = null;
-              if (popRoot) {
-                const r = popRoot.getBoundingClientRect();
-                const probe = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + Math.min(60, r.height / 2)));
-                if (probe && !popRoot.contains(probe)) {
-                  const cs = getComputedStyle(probe);
-                  coveredBy = { tag: probe.tagName, cls: String(probe.className).slice(0, 70), pos: cs.position, z: cs.zIndex, transform: cs.transform };
-                }
-              }
-              return { addedCount: added.length, chain, coveredBy,
-                iconCs: (() => { const cs = getComputedStyle(icon); return { pos: cs.position, z: cs.zIndex, transform: cs.transform }; })() };
+            }
+
+            // 4. locations strip bullets + chips per store
+            const locs = await page.evaluate(() => {
+              const out = {};
+              [...document.querySelectorAll('.xg-loc__item')].forEach((li) => {
+                const name = (li.querySelector('.xg-loc__name') || {}).textContent || '?';
+                out[name.trim()] = {
+                  feats: [...li.querySelectorAll('.xg-loc__feat')].map((f) => f.textContent.replace(/\s+/g, ' ').trim()),
+                  progs: [...li.querySelectorAll('.xg-loc__prog')].map((p) => p.textContent.trim()),
+                };
+              });
+              return out;
             });
-            console.log('CALENDAR:', JSON.stringify(cal));
+            console.log('LOCATIONS:', JSON.stringify(locs));
+            const want = (store, feat, prog) => {
+              const s = locs[store];
+              if (!s) { fails.push('store card missing: ' + store); return; }
+              feat.forEach((f) => { if (!s.feats.some((x) => x.includes(f))) fails.push(store + ' missing bullet ' + f); });
+              (prog || []).forEach((p) => { if (!s.progs.some((x) => x.includes(p))) fails.push(store + ' missing chip ' + p); });
+            };
+            want('Charlottetown', ['Buy/Selling Cards', '100+ Player Play Space'], ['WPN Premium', 'Riftbound League Store', 'Upper Deck Diamond']);
+            want('Truro', ['Buy/Selling Cards', '40+ Player Play Space'], ['FAB Armory']);
+            want('New Glasgow', ['Buy/Selling Cards', '30+ Player Play Space'], []);
+            ['Summerside', 'Bridgewater', 'Dartmouth'].forEach((st) => {
+              want(st, ['Buy/Selling Cards'], []);
+              const s = locs[st];
+              if (s && (s.feats.length !== 1 || s.progs.length !== 0)) fails.push(st + ' has extra rows: ' + JSON.stringify(s));
+            });
+
+            // 5. footer dedupe at tablet width too
+            await page.setViewport({ width: 768, height: 950 });
+            await new Promise((r) => setTimeout(r, 1200));
+            const f768 = await page.evaluate(() => {
+              const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden'; };
+              return [...document.querySelectorAll('.site-footer input[type="email"]')].filter(vis).length;
+            });
+            console.log('FOOTER@768 visible inputs:', f768);
+            if (f768 !== 1) fails.push('footer@768 visible inputs ' + f768);
 
             await browser.close();
-            console.log('VERDICT: PASS - recon only');
-          })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
+            if (fails.length) { console.log('VERDICT: FAIL -', JSON.stringify(fails)); process.exit(1); }
+            console.log('VERDICT: PASS - preview theme checks');
+          })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
