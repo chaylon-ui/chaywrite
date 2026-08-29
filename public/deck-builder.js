@@ -44,6 +44,10 @@
   var DEFAULT_GAME = attr('data-game', 'mtg');
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  // "Same card?" comparison: crossover printings carry flavor titles
+  // (FINAL FANTASY sells Lightning Bolt as "Thrum of the Vestige -
+  // Lightning Bolt"), which shoppers don't recognize as their card.
+  function normName(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
   function money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); }
   function imgSrc(u) { return u ? (u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=96') : ''; }
   function zoomSrc(u) { return u ? (u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=640') : ''; }
@@ -484,6 +488,7 @@
                   (subFor ? '<span class="xg-deck__subtag">Substituted</span>' : '') +
                   '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(o.name || r.name) + '</span>' +
                   (subFor ? '<span class="xg-deck__subnote">substitute for ' + esc(subFor) + '</span>' : '') +
+                  ((!subFor && normName(o.name || r.name) !== normName(ln.name)) ? '<span class="xg-deck__matchnote">this is the &ldquo;' + esc(ln.name) + '&rdquo; from your list</span>' : '') +
                   ((meta && !picker) ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
                 '</a>' + picker +
               '</span>' +
