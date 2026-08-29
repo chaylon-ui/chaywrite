@@ -5,11 +5,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-      - name: Events slider fills from days ahead, kicker copy
+      - name: Recon ticket-page widget DOM and calendar popover
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
+          const TICKET = 'https://exorgames.com/products/saturday-night-yu-gi-oh-ticket-15?ticket=saturday-night-yu-gi-oh-ticket-15&preview_theme_id=157462692013';
+          const HOME = 'https://exorgames.com/?preview_theme_id=157462692013';
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -19,87 +20,58 @@ jobs:
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
             await page.setViewport({ width: 1366, height: 900 });
-
-            const errs = [];
-            const TOL = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
-            page.on('pageerror', (e) => {
-              const s = (e && e.stack) || String(e);
-              if (!TOL.test(s)) errs.push(String((e && e.message) || e).slice(0, 200));
-            });
-
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
-            await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.waitForSelector('#xg-evs', { timeout: 20000 });
 
-            let st = null;
-            for (let i = 0; i < 24; i++) {
-              st = await page.evaluate(() => {
-                const root = document.getElementById('xg-evs');
-                const grid = document.getElementById('xg-evs-grid');
-                if (!root || !grid) return { present: false };
-                const cards = [...grid.querySelectorAll('.xg-evs__card')];
-                return {
-                  present: true,
-                  hidden: root.hidden,
-                  ahead: root.getAttribute('data-ahead'),
-                  kicker: (document.querySelector('.xg-evs__kicker') || {}).textContent || '',
-                  titles: cards.map((a) => ((a.querySelector('.xg-evs__name') || {}).textContent || '').trim()),
-                  chips: cards.map((a) => ((a.querySelector('.xg-evs__chip') || {}).textContent || '').trim()),
-                  todayCount: cards.filter((a) => a.className.indexOf('is-today') !== -1).length,
-                  scrollW: grid.scrollWidth, clientW: grid.clientWidth,
-                  prevHidden: (document.getElementById('xg-evs-prev') || {}).hidden,
-                  nextHidden: (document.getElementById('xg-evs-next') || {}).hidden,
-                };
-              });
-              if (st.present && !st.hidden && st.titles.length) break;
-              await new Promise((r) => setTimeout(r, 500));
-            }
-            console.log('STRIP:', JSON.stringify(st, null, 1));
-
-            // Recompute the expected window straight from the feed with the
-            // section's own rules, and compare title-for-title.
-            const expect = await page.evaluate(async () => {
-              const pad = (n) => (n < 10 ? '0' : '') + n;
-              const iso = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-              const now = new Date();
-              const todayIso = iso(now);
-              const aheadIso = iso(new Date(now.getTime() + 3 * 864e5));
-              const endIso = iso(new Date(now.getTime() + 14 * 864e5));
-              const dayOf = (e) => String(e.date).slice(0, 10);
-              const r = await fetch('https://portal.binderpos.com/api/events/forStore?startDate=' + todayIso + '&endDate=' + endIso, { headers: { 'content-type': 'application/json' } });
-              const arr = await r.json();
-              let evs = (Array.isArray(arr) ? arr : []).filter((e) => e && e.title && e.date && !e.isDisabled && !e.disabled && dayOf(e) >= todayIso);
-              evs.sort((a, b) => {
-                const ka = dayOf(a) + ' ' + String(a.time || '99');
-                const kb = dayOf(b) + ' ' + String(b.time || '99');
-                return ka < kb ? -1 : ka > kb ? 1 : 0;
-              });
-              const win = evs.filter((e) => dayOf(e) <= aheadIso);
-              const pick = (win.length ? win : evs.slice(0, 6)).slice(0, 14);
-              return { winCount: win.length, titles: pick.map((e) => String(e.title).trim()), days: pick.map(dayOf) };
+            await page.goto(TICKET, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await new Promise((r) => setTimeout(r, 10000));
+            const tk = await page.evaluate(() => {
+              const seen = {};
+              const rows = [];
+              const walk = (el, depth) => {
+                if (!el || depth > 9 || rows.length > 220) return;
+                const cls = (el.className && typeof el.className === 'string') ? el.className.trim() : '';
+                if (cls && !seen[cls]) {
+                  seen[cls] = 1;
+                  const r = el.getBoundingClientRect();
+                  const txt = (el.children.length === 0 ? (el.textContent || '').trim().slice(0, 42) : '');
+                  if (r.width > 0 || r.height > 0) {
+                    rows.push(el.tagName.toLowerCase() + '.' + cls.replace(/\s+/g, '.') + ' [' + Math.round(r.width) + 'x' + Math.round(r.height) + ']' + (txt ? ' "' + txt + '"' : ''));
+                  }
+                }
+                [...el.children].forEach((c) => walk(c, depth + 1));
+              };
+              walk(document.querySelector('main') || document.body, 0);
+              const imgs = [...document.querySelectorAll('main img')].slice(0, 10).map((i) => (i.currentSrc || i.src || '').slice(0, 130));
+              const btns = [...document.querySelectorAll('main button, main a.btn, main [class*=buy]')].slice(0, 12).map((b) => ({ t: (b.textContent || '').trim().slice(0, 40), c: String(b.className).slice(0, 90) }));
+              const stage = document.querySelector('.event-stage');
+              return { title: document.title.slice(0, 90), rows, imgs, btns, stageH: stage ? Math.round(stage.getBoundingClientRect().height) : -1, bodyBg: getComputedStyle(document.body).backgroundColor };
             });
-            console.log('EXPECT:', JSON.stringify(expect, null, 1));
+            console.log('TICKET_DOM:', JSON.stringify(tk, null, 1));
 
-            // Arrow interaction only when the row actually overflows.
-            let scrolled = null;
-            const over = st.scrollW > st.clientW + 4;
-            if (over && st.nextHidden === false) {
-              await page.click('#xg-evs-next');
-              await new Promise((r) => setTimeout(r, 800));
-              scrolled = await page.evaluate(() => document.getElementById('xg-evs-grid').scrollLeft);
-              console.log('SCROLLED_TO:', scrolled);
-            }
-
+            await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
+            await new Promise((r) => setTimeout(r, 6000));
+            const cal = await page.evaluate(() => {
+              const icon = document.querySelector('#binderpos-calendar .calendar-icon-container');
+              if (!icon) return { icon: false };
+              icon.click();
+              return { icon: true };
+            });
+            await new Promise((r) => setTimeout(r, 1200));
+            const pop = await page.evaluate(() => {
+              const p = document.querySelector('#binderpos-calendar .calendar-icon-info');
+              const td = document.querySelector('#binderpos-calendar td.calendar-data-block');
+              return {
+                open: !!p,
+                html: p ? p.outerHTML.slice(0, 1600) : '',
+                pos: p ? getComputedStyle(p).position : '',
+                caret: td ? getComputedStyle(td).caretColor : '',
+              };
+            });
+            console.log('CAL_ICON:', JSON.stringify(cal));
+            console.log('POPOVER:', JSON.stringify(pop, null, 1));
             await browser.close();
-            console.log('ERRS:', JSON.stringify(errs));
-
-            const kickerOk = st.kicker.trim() === 'In store events';
-            const titlesOk = st.titles.length > 0 && st.titles.join('||') === expect.titles.join('||');
-            const arrowsConsistent = over ? (st.prevHidden === false && st.nextHidden === false) : (st.prevHidden === true && st.nextHidden === true);
-            const scrollOk = !over || (typeof scrolled === 'number' && scrolled > 100);
-            const ok = st.present && !st.hidden && kickerOk && titlesOk && st.ahead === '3'
-              && arrowsConsistent && scrollOk && errs.length === 0;
-            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL - ' + JSON.stringify({ kickerOk, titlesOk, arrowsConsistent, scrollOk, over })));
-            if (!ok) process.exit(1);
+            console.log('VERDICT: ' + (tk.rows.length ? 'PASS - recon' : 'FAIL - empty ticket DOM'));
+            if (!tk.rows.length) process.exit(1);
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
