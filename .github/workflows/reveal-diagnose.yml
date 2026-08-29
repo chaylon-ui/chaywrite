@@ -42,14 +42,36 @@ jobs:
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
             const page = await browser.newPage();
             await page.setViewport({ width: 1440, height: 950 });
+            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
             page.on('pageerror', e => { const s = String((e && e.stack) || e); if (!TOL.test(s)) console.log('PAGEERR', s.slice(0, 400)); });
 
+            // Shopify occasionally serves a bot-challenge interstitial instead of
+            // the theme (run 69 attempt 1); gate every navigation on the theme's
+            // own header and retry, and never trust /cart.js to be JSON.
+            const gotoTheme = async (path) => {
+              for (let i = 0; i < 4; i++) {
+                try { await page.goto(u(path), { waitUntil: 'networkidle2', timeout: 90000 }); } catch (e) { console.log('NAV-ERR', String(e).slice(0, 140)); }
+                const ok = await page.evaluate(() => !!document.querySelector('#header .site-header'));
+                if (ok) return true;
+                const d = await page.evaluate(() => ({ title: document.title, len: document.documentElement.outerHTML.length }));
+                console.log('NAV-RETRY', path, JSON.stringify(d));
+                await sleep(9000);
+              }
+              return false;
+            };
+            const cartCount = () => page.evaluate(async () => {
+              for (let i = 0; i < 5; i++) {
+                try { const r = await fetch('/cart.js', { headers: { Accept: 'application/json' } }); const t = await r.text(); return JSON.parse(t).item_count; }
+                catch (e) { await new Promise(r2 => setTimeout(r2, 2500)); }
+              }
+              return -1;
+            });
+            const clearCart = () => page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }).catch(() => null));
+
             // ---------- A. LIGHT homepage: quick-add + peek + camera ----------
-            await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 });
-            await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }).catch(() => null));
-            await sleep(1000);
-            await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 });
+            v('nav-home', await gotoTheme('/'), 'theme header present');
+            await clearCart();
             await sleep(5000);
 
             const shape = await page.evaluate(() => {
@@ -85,7 +107,7 @@ jobs:
             v('cam-mobile-clone', shape.camMob, String(shape.camMob));
             v('cam-input-padding', shape.pad === '84px', shape.pad);
 
-            const before = await page.evaluate(() => fetch('/cart.js').then(r => r.json()).then(c => c.item_count));
+            const before = await cartCount();
             await page.evaluate(() => { const b = document.querySelector('.xg-qa'); b.scrollIntoView({ block: 'center' }); b.click(); });
             await sleep(2600);
             const addRes = await page.evaluate(() => ({
@@ -96,7 +118,7 @@ jobs:
               legacyAlert: !!document.querySelector('.alert[data-notify="container"]'),
               badge: (document.querySelector('.cart-qty') || {}).textContent || ''
             }));
-            const after = await page.evaluate(() => fetch('/cart.js').then(r => r.json()).then(c => c.item_count));
+            const after = await cartCount();
             console.log('ADD', JSON.stringify({ before, after, addRes }));
             v('qa-add-cart', after === before + 1, before + '->' + after);
             v('qa-add-peek', addRes.peekOpen && addRes.peekHead.indexOf('Added') > -1, JSON.stringify({ open: addRes.peekOpen, head: addRes.peekHead, title: addRes.peekTitle.slice(0, 50), meta: addRes.peekMeta }));
@@ -118,11 +140,11 @@ jobs:
             console.log('QVADD', JSON.stringify(qvRes));
             v('productAddToCart-peek', qvRes.peekOpen, JSON.stringify(qvRes));
             v('productAddToCart-no-banner', !qvRes.legacyAlert, String(qvRes.legacyAlert));
-            await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
+            await clearCart();
 
             // ---------- B. DARK: homepage ----------
             await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
-            await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 });
+            v('nav-home-dark', await gotoTheme('/'), 'dark reload');
             await sleep(4000);
             const dark = await page.evaluate(() => {
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
@@ -159,7 +181,7 @@ jobs:
             // ---------- C. DARK: product page ----------
             const prod = await page.evaluate(() => fetch('/products.json?limit=1').then(r => r.json()).then(j => j.products[0] ? { handle: j.products[0].handle, vid: (j.products[0].variants[0] || {}).id } : null));
             if (prod) {
-              await page.goto(u('/products/' + prod.handle), { waitUntil: 'networkidle2', timeout: 90000 });
+              v('nav-product', await gotoTheme('/products/' + prod.handle), prod.handle);
               await sleep(2500);
               const pd = await page.evaluate(() => {
                 const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
@@ -181,7 +203,7 @@ jobs:
             // ---------- D. DARK: cart page (add real item first) ----------
             if (shape.vid) {
               await page.evaluate((vid) => fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [{ id: +vid, quantity: 1 }] }) }), shape.vid);
-              await page.goto(u('/cart'), { waitUntil: 'networkidle2', timeout: 90000 });
+              v('nav-cart', await gotoTheme('/cart'), 'cart');
               await sleep(2000);
               const cart = await page.evaluate(() => {
                 const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
@@ -196,11 +218,11 @@ jobs:
               v('dark-cart-calc', cart.calcBg === 'rgb(22, 27, 30)', cart.calcBg);
               v('dark-cart-inner', cart.innerBg === 'rgb(24, 29, 32)', cart.innerBg);
               v('dark-cart-note', cart.note === 'rgb(223, 229, 232)', cart.note);
-              await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
+              await clearCart();
             }
 
             // ---------- E. DARK: search page + SCANNER upload path ----------
-            await page.goto(u('/search?type=product&options%5Bprefix%5D=last&q=sol+ring'), { waitUntil: 'networkidle2', timeout: 90000 });
+            v('nav-search', await gotoTheme('/search?type=product&options%5Bprefix%5D=last&q=sol+ring'), 'search page');
             await sleep(5000);
             const sp = await page.evaluate(() => {
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
@@ -259,12 +281,12 @@ jobs:
                 if (!b) return { clicked: false };
                 b.click();
                 await new Promise(r => setTimeout(r, 2600));
-                const cartN = await fetch('/cart.js').then(r => r.json()).then(c => c.item_count);
+                const cartN = await fetch('/cart.js').then(r => r.text()).then(t => { try { return JSON.parse(t).item_count; } catch (e) { return -1; } });
                 return { clicked: true, cartN, peekInDom: !!document.getElementById('xg-peek') };
               });
               console.log('SCAN-ADD', JSON.stringify(scAdd));
               if (scAdd.clicked) v('scan-add-to-cart', scAdd.cartN >= 1, 'cart=' + scAdd.cartN);
-              await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
+              await clearCart();
             } else {
               const foot = await page.evaluate(() => !!document.querySelector('#xg-scan .xg-scan__foot a'));
               v('scan-fallback-link', foot, 'no stock rows; store-search link=' + foot);
