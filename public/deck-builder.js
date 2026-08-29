@@ -61,6 +61,11 @@
         '<span>' + esc(HEADING) + '</span>' +
       '</h1>' +
       '<p class="xg-deck__intro">' + esc(INTRO) + '</p>' +
+      '<div class="xg-deck__perks">' +
+        '<span class="xg-deck__perk"><i class="xg-deck__dot xg-deck__dot--red"></i>Cheapest in-stock printing</span>' +
+        '<span class="xg-deck__perk"><i class="xg-deck__dot xg-deck__dot--yellow"></i>Real photos &amp; live prices</span>' +
+        '<span class="xg-deck__perk"><i class="xg-deck__dot xg-deck__dot--red"></i>Six stores, one search</span>' +
+      '</div>' +
     '</div>' +
     '<form class="xg-deck__form" id="xg-deck-form">' +
       '<div class="xg-deck__gamerow">' +
