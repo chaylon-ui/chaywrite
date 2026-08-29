@@ -116,10 +116,13 @@ jobs:
             console.log('SHOT_END');
 
             const tag = (cart.attributes || {})['Deck Builder'] || '';
-            // nav-phase "Failed to fetch" is the navigation killing other
-            // scripts' in-flight requests, not our code - gate on errors
-            // raised while the instrumented controls were being driven.
-            const hardErrors = errors.filter((e) => e.phase !== 'nav' || e.m.indexOf('Failed to fetch') === -1);
+            // Shopify's own analytics wrappers (shop_events_listener, the
+            // web pixels manager) leak unhandled Failed-to-fetch rejections
+            // through their monkeypatched window.fetch - run 45 caught both
+            // stacks. Tolerate exactly that; gate on everything else.
+            const thirdParty = (e) => e.m.indexOf('Failed to fetch') > -1 &&
+              /shopifycloud|shop_events_listener|\/cdn\/wpm\//.test(e.s || '');
+            const hardErrors = errors.filter((e) => !thirdParty(e));
             const ok = !controls.err && /\(1\)/.test(controls.afterUntick || '') && /\(2\)/.test(controls.afterRetick || '') &&
               /Magic: The Gathering, \d+ cards?, \$\d/.test(tag) && landed.indexOf('/cart') > -1 &&
               beacons.length >= 2 && beacons.every((s) => s === 204) && login.pin && hardErrors.length === 0;
