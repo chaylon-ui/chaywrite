@@ -5,12 +5,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-      - name: Recon ticket-page widget DOM and calendar popover
+      - name: Neon strip, calendar caret+X, deck hero, dark ticket page
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const TICKET = 'https://exorgames.com/products/saturday-night-yu-gi-oh-ticket-15?ticket=saturday-night-yu-gi-oh-ticket-15&preview_theme_id=157462692013';
-          const HOME = 'https://exorgames.com/?preview_theme_id=157462692013';
+          const PV = 'preview_theme_id=157462692013';
+          const HOME = 'https://exorgames.com/?' + PV;
+          const DECK = 'https://exorgames.com/pages/deck-builder?' + PV;
+          const TICKET = 'https://exorgames.com/products/saturday-night-yu-gi-oh-ticket-15?ticket=saturday-night-yu-gi-oh-ticket-15&' + PV;
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -20,58 +22,129 @@ jobs:
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
             await page.setViewport({ width: 1366, height: 900 });
+            const errs = [];
+            const TOL = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
+            let phase = 'home';
+            page.on('pageerror', (e) => {
+              const s = (e && e.stack) || String(e);
+              if (!TOL.test(s)) errs.push({ phase, msg: String((e && e.message) || e).slice(0, 160) });
+            });
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
 
+            // --- A: homepage - neon strip + calendar caret/X
+            await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForSelector('#xg-evs', { timeout: 20000 });
+            let strip = null;
+            for (let i = 0; i < 20; i++) {
+              strip = await page.evaluate(() => {
+                const root = document.getElementById('xg-evs');
+                if (!root || root.hidden) return null;
+                const cs = getComputedStyle(root);
+                const k = document.querySelector('.xg-evs__kicker');
+                const t = document.querySelector('.xg-evs__title');
+                const c = document.querySelector('.xg-evs__card');
+                return {
+                  bandBgHasGlow: cs.backgroundImage.indexOf('radial-gradient') !== -1,
+                  kicker: k ? { text: k.textContent.trim(), color: getComputedStyle(k).color } : null,
+                  titleColor: t ? getComputedStyle(t).color : '',
+                  cardBg: c ? getComputedStyle(c).backgroundImage : '',
+                  cards: document.querySelectorAll('.xg-evs__card').length,
+                };
+              });
+              if (strip && strip.cards) break;
+              await new Promise((r) => setTimeout(r, 500));
+            }
+            console.log('STRIP:', JSON.stringify(strip));
+
+            await page.evaluate(() => { document.getElementById('binderpos-calendar').scrollIntoView({ block: 'center' }); });
+            await new Promise((r) => setTimeout(r, 5000));
+            const caret = await page.evaluate(() => {
+              const td = document.querySelector('#binderpos-calendar td.calendar-data-block');
+              return td ? getComputedStyle(td).caretColor : 'no-td';
+            });
+            console.log('CARET:', caret);
+
+            async function popState() {
+              return page.evaluate(() => {
+                const p = document.querySelector('#binderpos-calendar .calendar-icon-info');
+                return { open: !!p, hasX: !!(p && p.querySelector('.xg-cal-close')) };
+              });
+            }
+            async function openPreview() {
+              await page.hover('#binderpos-calendar .calendar-icon-container');
+              await new Promise((r) => setTimeout(r, 1000));
+              let st = await popState();
+              if (st.open) return 'hover';
+              await page.click('#binderpos-calendar .calendar-icon-container');
+              await new Promise((r) => setTimeout(r, 1000));
+              st = await popState();
+              return st.open ? 'click' : 'none';
+            }
+            const mode1 = await openPreview();
+            const st1 = await popState();
+            let closed = false, reopened = false;
+            if (st1.open && st1.hasX) {
+              await page.click('#binderpos-calendar .xg-cal-close');
+              await new Promise((r) => setTimeout(r, 500));
+              closed = !(await popState()).open;
+              await page.mouse.move(5, 5);
+              await new Promise((r) => setTimeout(r, 600));
+              const mode2 = await openPreview();
+              reopened = (await popState()).open;
+              console.log('POPOVER:', JSON.stringify({ mode1, st1, closed, mode2, reopened }));
+            } else {
+              console.log('POPOVER:', JSON.stringify({ mode1, st1, closed, reopened }));
+            }
+
+            // --- B: deck builder hero
+            phase = 'deck';
+            await page.goto(DECK, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForSelector('#xg-deck-form', { timeout: 30000 });
+            const deck = await page.evaluate(() => {
+              const head = document.querySelector('.xg-deck__head');
+              const title = document.querySelector('.xg-deck__title');
+              const form = document.getElementById('xg-deck-form');
+              const fcs = form ? getComputedStyle(form) : null;
+              return {
+                heroGlow: head ? getComputedStyle(head).backgroundImage.indexOf('radial-gradient') !== -1 : false,
+                perks: document.querySelectorAll('.xg-deck__perk').length,
+                titleColor: title ? getComputedStyle(title).color : '',
+                formSpine: fcs ? fcs.borderLeftWidth + ' ' + fcs.borderLeftColor : '',
+                ids: ['xg-deck-form', 'xg-deck-game', 'xg-deck-input', 'xg-deck-go'].every((i) => !!document.getElementById(i)),
+              };
+            });
+            console.log('DECK:', JSON.stringify(deck));
+
+            // --- C: ticket page dark skin
+            phase = 'ticket';
             await page.goto(TICKET, { waitUntil: 'domcontentloaded', timeout: 60000 });
             await new Promise((r) => setTimeout(r, 10000));
             const tk = await page.evaluate(() => {
-              const seen = {};
-              const rows = [];
-              const walk = (el, depth) => {
-                if (!el || depth > 9 || rows.length > 220) return;
-                const cls = (el.className && typeof el.className === 'string') ? el.className.trim() : '';
-                if (cls && !seen[cls]) {
-                  seen[cls] = 1;
-                  const r = el.getBoundingClientRect();
-                  const txt = (el.children.length === 0 ? (el.textContent || '').trim().slice(0, 42) : '');
-                  if (r.width > 0 || r.height > 0) {
-                    rows.push(el.tagName.toLowerCase() + '.' + cls.replace(/\s+/g, '.') + ' [' + Math.round(r.width) + 'x' + Math.round(r.height) + ']' + (txt ? ' "' + txt + '"' : ''));
-                  }
-                }
-                [...el.children].forEach((c) => walk(c, depth + 1));
-              };
-              walk(document.querySelector('main') || document.body, 0);
-              const imgs = [...document.querySelectorAll('main img')].slice(0, 10).map((i) => (i.currentSrc || i.src || '').slice(0, 130));
-              const btns = [...document.querySelectorAll('main button, main a.btn, main [class*=buy]')].slice(0, 12).map((b) => ({ t: (b.textContent || '').trim().slice(0, 40), c: String(b.className).slice(0, 90) }));
-              const stage = document.querySelector('.event-stage');
-              return { title: document.title.slice(0, 90), rows, imgs, btns, stageH: stage ? Math.round(stage.getBoundingClientRect().height) : -1, bodyBg: getComputedStyle(document.body).backgroundColor };
-            });
-            console.log('TICKET_DOM:', JSON.stringify(tk, null, 1));
-
-            await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
-            await new Promise((r) => setTimeout(r, 6000));
-            const cal = await page.evaluate(() => {
-              const icon = document.querySelector('#binderpos-calendar .calendar-icon-container');
-              if (!icon) return { icon: false };
-              icon.click();
-              return { icon: true };
-            });
-            await new Promise((r) => setTimeout(r, 1200));
-            const pop = await page.evaluate(() => {
-              const p = document.querySelector('#binderpos-calendar .calendar-icon-info');
-              const td = document.querySelector('#binderpos-calendar td.calendar-data-block');
+              const stage = document.querySelector('main .collectionTemplate');
+              const name = document.querySelector('.calendar-event-details__name');
+              const back = document.querySelector('.single-event__back');
+              const rsvp = document.querySelector('.single-event .rsvp-button');
               return {
-                open: !!p,
-                html: p ? p.outerHTML.slice(0, 1600) : '',
-                pos: p ? getComputedStyle(p).position : '',
-                caret: td ? getComputedStyle(td).caretColor : '',
+                cls: document.documentElement.className.indexOf('xg-eventpage') !== -1,
+                stageGlow: stage ? getComputedStyle(stage).backgroundImage.indexOf('radial-gradient') !== -1 : false,
+                single: !!document.querySelector('.single-event'),
+                nameColor: name ? getComputedStyle(name).color : '',
+                backRadius: back ? getComputedStyle(back).borderRadius : '',
+                rsvp: rsvp ? { bg: getComputedStyle(rsvp).backgroundImage.slice(0, 60), radius: getComputedStyle(rsvp).borderRadius } : null,
               };
             });
-            console.log('CAL_ICON:', JSON.stringify(cal));
-            console.log('POPOVER:', JSON.stringify(pop, null, 1));
+            console.log('TICKET:', JSON.stringify(tk));
+
             await browser.close();
-            console.log('VERDICT: ' + (tk.rows.length ? 'PASS - recon' : 'FAIL - empty ticket DOM'));
-            if (!tk.rows.length) process.exit(1);
+            const hardErrs = errs.filter((e) => e.phase !== 'ticket');
+            console.log('ERRS:', JSON.stringify(errs));
+            const stripOk = !!(strip && strip.bandBgHasGlow && strip.kicker && strip.kicker.color === 'rgb(255, 216, 77)' && strip.titleColor === 'rgb(255, 255, 255)' && strip.cards > 0);
+            const caretOk = caret === 'rgba(0, 0, 0, 0)' || caret === 'transparent';
+            const popOk = st1.open && st1.hasX && closed && reopened;
+            const deckOk = deck.heroGlow && deck.perks === 3 && deck.titleColor === 'rgb(255, 255, 255)' && /4px/.test(deck.formSpine) && deck.ids;
+            const tkOk = tk.cls && tk.stageGlow && tk.single && tk.nameColor === 'rgb(255, 255, 255)' && /999/.test(tk.backRadius);
+            const ok = stripOk && caretOk && popOk && deckOk && tkOk && hardErrs.length === 0;
+            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL - ' + JSON.stringify({ stripOk, caretOk, popOk, deckOk, tkOk, hardErrs: hardErrs.length })));
+            if (!ok) process.exit(1);
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
