@@ -1,0 +1,359 @@
+<div class="slider">
+  <div class="slideshow-block">
+    {% if section.blocks.size > 0 %}
+    <div class="slideshow-carousel-{{ section.id }} owl-carousel owl-theme logo-bar{% if section.settings.title_enable %} logo-bar--large{% endif %}" id="slideshow-carousel" aria-label="slideshow carousel">
+      {% for block in section.blocks %}
+      <div class="slideshow__item{% if section.settings.title_enable %} logo-bar__item--large{% endif %}" {{ block.shopify_attributes }} aria-label="slideshow item">
+        <a href="{% if block.settings.link != blank %}{{ block.settings.link }}{% else %}/{% endif %}" class="slideshow__link" aria-label="Slideshow link">
+          {% if block.settings.image != blank %}
+          {{ block.settings.image | img_url: '2048x' | img_tag: block.settings.image.alt, 'logo-bar__image' }}
+          {% else %}
+          {{ "lifestyle-1" | placeholder_svg_tag: 'placeholder-svg' }}
+          {% endif %}
+          {% if block.settings.subtitle != blank or block.settings.maintitle != blank or block.settings.desc
+          != blank %}
+          <div class="page-width">
+            {%- assign fx = block.settings.text_effect | default: 'none' -%}
+            <div class="slider-content col-md-8 col-sm-8 col-xs-8 slider-content-{{block.settings.text_position}} slide-fx-{{ fx }}" style="text-align:{{ block.settings.textalignment }}; --slide-outline: {{ block.settings.text_effect_color | default: '#000000' }}">
+              {% if block.settings.subtitle != blank %}
+              <div class="sub-title" aria-label="slide subtitle" style="color:{{ block.settings.subtitlecolor }}">
+                {{ block.settings.subtitle }}
+              </div>
+              {% endif %}
+              {% if block.settings.maintitle != blank %}
+              <div class="main-title" aria-label="slide title" style="color:{{ block.settings.maintitlecolor }}">
+                {{ block.settings.maintitle }}
+              </div>
+              {% endif %}
+              {% if block.settings.desc != blank %}
+              <div class="desc" aria-label="slide description" style="color:{{ block.settings.desccolor }}">{{ block.settings.desc }}
+              </div>
+              {% endif %}
+              {% if block.settings.button_label != blank %}
+              <div class="slider-btn btn" tabindex="0" aria-label="slide link" title="{{ block.settings.button_label | escape }}" role="link">{{ block.settings.button_label | escape }}</div>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
+        </a>
+      </div>
+      {% endfor %}
+    </div>    
+    <button id="toggle-autoplay" aria-label="Autoplay Toggle" class="toggle-autoplay-btn">Autoplay</button>
+    {% endif %}
+    {% if section.blocks.size == 0 %}
+    {% include 'no-blocks' %}
+    {% endif %}
+  </div>
+</div>
+
+<style type="text/css">
+  .toggle-autoplay-btn {
+    position: absolute;
+    z-index: 10;
+    background: white;
+    border: 1px solid #000;
+    padding: 10px 20px;
+    right: 20px;
+    top: 20px;
+    opacity: 0.3;
+    transition: opacity 0.3s ease-in-out;
+  }
+
+  .toggle-autoplay-btn:hover {
+    opacity: 1;
+    transition: opacity 0.5s ease-in-out;
+  }
+
+  .slider-content.slider-content-right {
+    float: right;
+  }
+
+  .slider-content.slider-content-left {
+    float: left;
+  }
+
+  .slider-content.slider-content-center {
+    margin: 0 auto;
+    float: unset;
+  }
+
+  /* Text style over image (per-slide setting). Em-based offsets keep the
+     outline proportional to each line's font size; the button is skipped
+     because it carries its own background. */
+  .slider-content.slide-fx-shadow .sub-title,
+  .slider-content.slide-fx-shadow .main-title,
+  .slider-content.slide-fx-shadow .desc {
+    text-shadow: 0 0.06em 0.25em rgba(0, 0, 0, 0.65), 0 0 0.09em rgba(0, 0, 0, 0.45);
+  }
+  .slider-content.slide-fx-outline .sub-title,
+  .slider-content.slide-fx-outline .main-title,
+  .slider-content.slide-fx-outline .desc {
+    text-shadow:
+      -0.05em -0.05em 0 var(--slide-outline, #000), 0.05em -0.05em 0 var(--slide-outline, #000),
+      -0.05em 0.05em 0 var(--slide-outline, #000), 0.05em 0.05em 0 var(--slide-outline, #000),
+      -0.07em 0 0 var(--slide-outline, #000), 0.07em 0 0 var(--slide-outline, #000),
+      0 -0.07em 0 var(--slide-outline, #000), 0 0.07em 0 var(--slide-outline, #000);
+  }
+  .slider-content.slide-fx-both .sub-title,
+  .slider-content.slide-fx-both .main-title,
+  .slider-content.slide-fx-both .desc {
+    text-shadow:
+      -0.05em -0.05em 0 var(--slide-outline, #000), 0.05em -0.05em 0 var(--slide-outline, #000),
+      -0.05em 0.05em 0 var(--slide-outline, #000), 0.05em 0.05em 0 var(--slide-outline, #000),
+      -0.07em 0 0 var(--slide-outline, #000), 0.07em 0 0 var(--slide-outline, #000),
+      0 -0.07em 0 var(--slide-outline, #000), 0 0.07em 0 var(--slide-outline, #000),
+      0 0.14em 0.3em rgba(0, 0, 0, 0.55);
+  }
+</style>
+
+<script>
+  var slideSpeed = {{ section.settings.slide_speed }} * 1000;
+  var slideDuration = {{ section.settings.slide_duration }} * 1000;    
+  var autoplay = {{ section.settings.slide_autoplay }};
+
+  function initializeSlideshow () {
+    $('.slideshow-carousel-{{ section.id }}').owlCarousel({
+      nav: true,
+      loop: {{ section.settings.slide_loop }},
+      autoplay: {{ section.settings.slide_autoplay }},
+      autoplayTimeout: slideDuration,
+      autoplaySpeed: slideSpeed,
+      navText: [
+        '<i class=\'material-icons\'></i>',
+        '<i class=\'material-icons\'></i>'
+      ],
+      items: 1,
+      itemsDesktop: false,
+      itemsDesktopSmall: false,
+      itemsTablet: false,
+      itemsMobile: false,
+      onInitialized: function() {
+        updateTabIndexes();
+      },
+      onTranslated: function() {
+        updateTabIndexes();
+      }
+    });
+
+    $(document).on('keydown', function(event) {
+      if (event.key === 'ArrowLeft') {
+        $('.slideshow-carousel-{{ section.id }}').trigger('prev.owl.carousel');
+      } else if (event.key === 'ArrowRight') {
+        $('.slideshow-carousel-{{ section.id }}').trigger('next.owl.carousel');
+      }
+    });
+    
+    if (autoplay) {
+      $('#toggle-autoplay').text('Stop Autoplay');
+    } else {
+      $('#toggle-autoplay').text('Start Autoplay');
+    }
+    $('#toggle-autoplay').click(function() {
+      if (autoplay) {
+        $('.slideshow-carousel-{{ section.id }}').trigger('stop.owl.autoplay');
+        autoplay = false;
+        $(this).text('Start Autoplay');
+      } else {
+        $('.slideshow-carousel-{{ section.id }}').trigger('play.owl.autoplay', [slideDuration]);
+        autoplay = true;
+        $(this).text('Stop Autoplay');
+      }
+    });
+  }
+
+  jQuery(document).ready(initializeSlideshow);  
+  document.addEventListener("shopify:section:load", initializeSlideshow);
+
+</script>
+
+{% schema %}
+{
+  "name":"Hero Slideshow",
+  "class":"hero-slider-section",
+  "max_blocks":8,
+  "settings":[
+     {
+        "type":"checkbox",
+        "id":"slide_autoplay",
+        "label":"Autoplay",
+        "default":false
+     },
+     {
+        "type":"checkbox",
+        "id":"slide_loop",
+        "label":"Loop",
+        "default":true
+     },
+     {
+        "type":"range",
+        "id":"slide_duration",
+        "label":"Slide Duration (Seconds)",
+        "min":1,
+        "max":10,
+        "step":1,
+        "default":5
+     },
+     {
+        "type":"range",
+        "id":"slide_speed",
+        "label":"Slide Speed (Seconds)",
+        "min":0.1,
+        "max":2.0,
+        "step":0.1,
+        "default":0.5
+     }
+  ],
+  "blocks":[
+     {
+        "type":"slide_image",
+        "name":"Slide",
+        "settings":[
+           {
+              "type":"image_picker",
+              "id":"image",
+              "label":"Image",
+              "info":"Size: 1920px X 700px"
+           },
+           {
+              "type":"select",
+              "id":"text_position",
+              "label":"Text Position",
+              "default":"center",
+              "options":[
+                 {
+                    "value":"left",
+                    "label":"Left"
+                 },
+                 {
+                    "value":"center",
+                    "label":"Center"
+                 },
+                 {
+                    "value":"right",
+                    "label":"Right"
+                 }
+              ]
+           },
+           {
+              "type":"select",
+              "id":"textalignment",
+              "label":"Text Alignment",
+              "default":"center",
+              "options":[
+                 {
+                    "value":"left",
+                    "label":"Left"
+                 },
+                 {
+                    "value":"center",
+                    "label":"Center"
+                 },
+                 {
+                    "value":"right",
+                    "label":"Right"
+                 }
+              ]
+           },
+           {
+              "type":"text",
+              "id":"subtitle",
+              "label":"Subtitle",
+              "default":"Welcome to our new website"
+           },
+           {
+              "type":"color",
+              "id":"subtitlecolor",
+              "label":"Subtitle Color",
+              "default":"#FFD800"
+           },
+           {
+              "type":"text",
+              "id":"maintitle",
+              "label":"Title",
+              "default":"Launching Soon"
+           },
+           {
+              "type":"color",
+              "id":"maintitlecolor",
+              "label":"Title Color",
+              "default":"#ffffff"
+           },
+           {
+              "type":"html",
+              "id":"desc",
+              "label":"Description",
+              "default":"<p>Check out our singles collections today</p>"
+           },
+           {
+              "type":"color",
+              "id":"desccolor",
+              "label":"Description Color",
+              "default":"#ffffff"
+           },
+           {
+              "type":"select",
+              "id":"text_effect",
+              "label":"Text style over image",
+              "info":"Outline and shadow keep the text readable on busy images.",
+              "default":"none",
+              "options":[
+                 {
+                    "value":"none",
+                    "label":"As is"
+                 },
+                 {
+                    "value":"shadow",
+                    "label":"Soft shadow"
+                 },
+                 {
+                    "value":"outline",
+                    "label":"Outline"
+                 },
+                 {
+                    "value":"both",
+                    "label":"Outline + shadow"
+                 }
+              ]
+           },
+           {
+              "type":"color",
+              "id":"text_effect_color",
+              "label":"Outline color",
+              "info":"Used by the outline options.",
+              "default":"#000000"
+           },
+           {
+              "type":"text",
+              "id":"button_label",
+              "label":"Button Label",
+              "default":"SHOP NOW"
+           },
+           {
+              "type":"url",
+              "id":"link",
+              "label":"Link",
+              "info":"Optional"
+           }
+        ]
+     }
+  ],
+  "presets":[
+     {
+        "name":"Hero Slideshow",
+        "category":"Standard Theme",
+        "blocks":[
+           {
+              "type":"slide_image"
+           },
+           {
+              "type":"slide_image"
+           }
+        ]
+     }
+  ],
+  "templates":[
+     "index"
+  ]
+}
+{% endschema %}

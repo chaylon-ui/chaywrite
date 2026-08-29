@@ -47,6 +47,8 @@
   function money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); }
   function imgSrc(u) { return u ? (u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=96') : ''; }
   function zoomSrc(u) { return u ? (u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=640') : ''; }
+  // overlay cards render ~200px wide on retina; 96px thumbs look mushy there
+  function midSrc(u) { return u ? (u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=480') : ''; }
 
   root.innerHTML =
     '<div class="xg-deck__head">' +
@@ -329,7 +331,7 @@
   }
 
   var subsEl = null;
-  function subsKey(e) { if (e.key === 'Escape') closeSubs(); }
+  function subsKey(e) { if (e.key === 'Escape' && !zoomEl) closeSubs(); }
   function closeSubs() {
     if (!subsEl) return;
     subsEl.parentNode && subsEl.parentNode.removeChild(subsEl);
@@ -348,7 +350,7 @@
         '<button type="button" class="xg-deck-subs__close" aria-label="Close">&times;</button>' +
         '<div class="xg-deck-subs__orig">' +
           '<span class="xg-deck-subs__missp">Not in stock</span>' +
-          '<img src="https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(ln.name) + '&format=image&version=normal" alt="' + esc(ln.name) + '" onerror="this.style.display=\'none\'">' +
+          '<img src="https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(ln.name) + '&format=image&version=normal" data-zoom="https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(ln.name) + '&format=image&version=large" alt="' + esc(ln.name) + '" onerror="this.style.display=\'none\'">' +
           '<strong>' + esc(ln.name) + '</strong>' +
           '<span class="xg-deck-subs__dim">The card your list asked for. Pick a stand-in from the right.</span>' +
         '</div>' +
@@ -359,7 +361,7 @@
               var meta = [c.set, c.foil ? 'Foil' : '', c.condition].filter(Boolean).join(' · ');
               var q = (c.offers && c.offers[0] && typeof c.offers[0].qty === 'number' && c.offers[0].qty < 99) ? c.offers[0].qty : null;
               return '<div class="xg-deck-subs__card">' +
-                (c.image ? '<img src="' + esc(imgSrc(c.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck-subs__noimg"></span>') +
+                (c.image ? '<img src="' + esc(midSrc(c.image)) + '" data-zoom="' + esc(zoomSrc(c.image)) + '" alt="' + esc(c.name) + '" loading="lazy">' : '<span class="xg-deck-subs__noimg"></span>') +
                 '<strong>' + esc(c.name) + '</strong>' +
                 (meta ? '<span class="xg-deck-subs__dim">' + esc(meta) + '</span>' : '') +
                 '<span class="xg-deck-subs__price">' + money(parseFloat(c.price) || 0) + (q ? ' · ' + q + ' in stock' : '') + '</span>' +
@@ -373,6 +375,10 @@
     subsEl = d;
     document.addEventListener('keydown', subsKey);
     d.addEventListener('click', function (e) {
+      if (e.target && e.target.tagName === 'IMG' && e.target.getAttribute('data-zoom')) {
+        openZoom(e.target.getAttribute('data-zoom'));
+        return;
+      }
       if (e.target === d || (e.target.classList && e.target.classList.contains('xg-deck-subs__close'))) { closeSubs(); return; }
       var b = e.target.closest ? e.target.closest('.xg-deck-subs__add') : null;
       if (b) {
