@@ -1,82 +1,284 @@
-name: Diagnose storefront reveal
-on: workflow_dispatch
+name: reveal-diagnose
+on:
+  workflow_dispatch: {}
+
 jobs:
-  diagnose:
+  probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 18
     steps:
-      - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-      - name: New Today quick-add end to end
+      - name: Worker endpoints (game param + regression)
         run: |
-          node <<'EOF'
+          set -x
+          curl -s 'https://exor-binder.nevski.workers.dev/instock.json?names=Sol%20Ring&max=3&game=mtg' | head -c 500; echo
+          curl -s 'https://exor-binder.nevski.workers.dev/instock.json?names=Sol%20Ring&max=3&game=mtg' | python3 -c "import json,sys; j=json.load(sys.stdin); print('WORKER mtg ok=%s cards=%d' % (j.get('ok'), len(j.get('cards',[]))))"
+          curl -s 'https://exor-binder.nevski.workers.dev/instock.json?names=Pikachu&max=3&game=pokemon' | python3 -c "import json,sys; j=json.load(sys.stdin); print('WORKER pokemon ok=%s cards=%d' % (j.get('ok'), len(j.get('cards',[]))))"
+          curl -s 'https://exor-binder.nevski.workers.dev/cards.json?nt=1' | python3 -c "import json,sys; j=json.load(sys.stdin); c=j.get('cards',[]); print('WORKER nt cards=%d withVid=%d' % (len(c), sum(1 for x in c if x.get('variantId'))))"
+
+      - name: Fetch a card image for the OCR upload path
+        run: |
+          curl -sL -o solring.jpg 'https://api.scryfall.com/cards/named?exact=Sol+Ring&format=image&version=large'
+          ls -la solring.jpg
+          file solring.jpg || true
+
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22
+
+      - name: Probe preview theme (light + dark + scanner)
+        run: |
+          cat > probe.js <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const HOME = 'https://exorgames.com/?preview_theme_id=157462692013';
+          const T = '157462692013';
+          const H = 'https://exorgames.com';
+          const u = (p) => H + p + (p.includes('?') ? '&' : '?') + 'preview_theme_id=' + T;
+          const TOL = /shopifycloud|shop_events_listener|\/cdn\/wpm\/|web-pixels|sezzle|hotjar|googletagmanager|snize|searchanise|wishy|cloudsearch/i;
+          const fails = [];
+          const v = (name, ok, detail) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + name + ' :: ' + detail); if (!ok) fails.push(name); };
+          const lum = (s) => { const m = String(s).match(/\d+/g); if (!m) return 0; const [r, g, b] = m.slice(0, 3).map(Number).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return .2126 * r + .7152 * g + .0722 * b; };
+          const cr = (a, b) => { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05); };
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
           (async () => {
-            const browser = await puppeteer.launch({
-              executablePath: '/usr/bin/google-chrome',
-              args: ['--no-sandbox', '--disable-dev-shm-usage'],
-            });
-            const ctx = await browser.createBrowserContext();
-            const page = await ctx.newPage();
-            await page.setViewport({ width: 1366, height: 900 });
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1440, height: 950 });
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
-            const errs = [];
-            page.on('pageerror', (e) => { errs.push(String((e && e.stack) || e).slice(0, 200)); });
-            await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.waitForSelector('#xg-newtoday .xg-nt__card', { timeout: 20000 });
-            await page.evaluate(() => { document.getElementById('xg-newtoday').scrollIntoView({ block: 'center' }); });
-            await new Promise((r) => setTimeout(r, 800));
+            page.on('pageerror', e => { const s = String((e && e.stack) || e); if (!TOL.test(s)) console.log('PAGEERR', s.slice(0, 400)); });
+
+            // ---------- A. LIGHT homepage: quick-add + peek + camera ----------
+            await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 });
+            await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }).catch(() => null));
+            await sleep(1000);
+            await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 });
+            await sleep(5000);
 
             const shape = await page.evaluate(() => {
-              const cards = document.querySelectorAll('#xg-newtoday .xg-nt__card');
-              const btns = document.querySelectorAll('#xg-newtoday .xg-nt__add');
-              const b = btns[0];
-              const price = document.querySelector('#xg-newtoday .xg-nt__price');
-              const cs = b ? getComputedStyle(b) : null;
+              const qa = Array.from(document.querySelectorAll('.xg-qa'));
+              const perSection = {};
+              qa.forEach(b => { const s = b.closest('.shopify-section'); const id = s ? s.id.replace('shopify-section-', '') : '?'; perSection[id] = (perSection[id] || 0) + 1; });
+              const card0 = qa[0] ? qa[0].closest('.grid-view-item') : null;
+              let vid = '';
+              if (card0) {
+                const dd = card0.querySelector('select[data-dropdown-id="productSelect-dropdown"]');
+                const inp2 = card0.querySelector('.nm-cartmain input[name="prduct-variant"]');
+                vid = (dd && !dd.disabled && dd.value) || (inp2 && inp2.value) || '';
+              }
+              const inp = document.querySelector('#_desktop_search .search-header__input');
               return {
-                cards: cards.length,
-                btns: btns.length,
-                vid: b ? +b.getAttribute('data-vid') : 0,
-                inThumb: b ? !!b.closest('.xg-nt__thumb') : false,
-                round: cs ? cs.borderRadius : '',
-                bg: cs ? cs.backgroundColor : '',
-                priceColor: price ? getComputedStyle(price).color : '',
+                qaTotal: qa.length,
+                perSection,
+                qaOutside: qa.filter(b => !b.closest('.grid-view-item')).length,
+                nt: document.querySelectorAll('#xg-newtoday .xg-nt__add').length,
+                camDesk: !!document.querySelector('#_desktop_search form.search-header .xg-scan-btn'),
+                camMob: !!document.querySelector('#_mobile_search .xg-scan-btn'),
+                pad: inp ? getComputedStyle(inp).paddingRight : 'no-input',
+                vid,
+                bodyBg: getComputedStyle(document.body).backgroundColor
               };
             });
-            console.log('SHAPE:', JSON.stringify(shape));
+            console.log('SHAPE', JSON.stringify(shape));
+            v('light-body-unchanged', shape.bodyBg === 'rgb(245, 246, 247)', shape.bodyBg);
+            v('qa-buttons-present', shape.qaTotal >= 6, 'total=' + shape.qaTotal + ' perSection=' + JSON.stringify(shape.perSection));
+            v('qa-only-in-cards', shape.qaOutside === 0, 'outside=' + shape.qaOutside);
+            v('nt-regression', shape.nt >= 8, 'nt buttons=' + shape.nt);
+            v('cam-desktop', shape.camDesk, String(shape.camDesk));
+            v('cam-mobile-clone', shape.camMob, String(shape.camMob));
+            v('cam-input-padding', shape.pad === '84px', shape.pad);
 
-            const count0 = await page.evaluate(async () => (await (await fetch('/cart.js')).json()).item_count);
-            await page.hover('#xg-newtoday .xg-nt__add');
-            await new Promise((r) => setTimeout(r, 300));
-            await page.click('#xg-newtoday .xg-nt__add');
-            // Catch the transient check state, then let the sync settle.
-            let sawAdded = false;
-            for (let i = 0; i < 8; i++) {
-              await new Promise((r) => setTimeout(r, 300));
-              if (await page.evaluate(() => !!document.querySelector('#xg-newtoday .xg-nt__add.is-added'))) { sawAdded = true; break; }
-            }
-            await new Promise((r) => setTimeout(r, 1500));
-            const after = await page.evaluate(async () => {
-              const cart = await (await fetch('/cart.js')).json();
-              const badges = Array.from(document.querySelectorAll('.cart-qty')).map((b) => b.textContent.trim());
-              const b = document.querySelector('#xg-newtoday .xg-nt__add');
+            const before = await page.evaluate(() => fetch('/cart.js').then(r => r.json()).then(c => c.item_count));
+            await page.evaluate(() => { const b = document.querySelector('.xg-qa'); b.scrollIntoView({ block: 'center' }); b.click(); });
+            await sleep(2600);
+            const addRes = await page.evaluate(() => ({
+              peekOpen: (function () { const p = document.getElementById('xg-peek'); return !!(p && p.classList.contains('is-open') && p.offsetWidth); })(),
+              peekHead: (document.querySelector('#xg-peek .xg-peek__head') || {}).textContent || '',
+              peekTitle: (document.querySelector('#xg-peek .xg-peek__title') || {}).textContent || '',
+              peekMeta: (document.querySelector('#xg-peek .xg-peek__meta') || {}).textContent || '',
+              legacyAlert: !!document.querySelector('.alert[data-notify="container"]'),
+              badge: (document.querySelector('.cart-qty') || {}).textContent || ''
+            }));
+            const after = await page.evaluate(() => fetch('/cart.js').then(r => r.json()).then(c => c.item_count));
+            console.log('ADD', JSON.stringify({ before, after, addRes }));
+            v('qa-add-cart', after === before + 1, before + '->' + after);
+            v('qa-add-peek', addRes.peekOpen && addRes.peekHead.indexOf('Added') > -1, JSON.stringify({ open: addRes.peekOpen, head: addRes.peekHead, title: addRes.peekTitle.slice(0, 50), meta: addRes.peekMeta }));
+            v('qa-no-legacy-banner', !addRes.legacyAlert, String(addRes.legacyAlert));
+            v('qa-badge-synced', addRes.badge.trim() === String(after), 'badge=' + addRes.badge.trim() + ' cart=' + after);
+
+            // productAddToCart (quickview.js success path) hands off to the peek
+            const qvRes = await page.evaluate(async (vid) => {
+              const p = document.getElementById('xg-peek');
+              p.classList.remove('is-open');
+              window.productAddToCart(vid, 1);
+              await new Promise(r => setTimeout(r, 2600));
               return {
-                count: cart.item_count,
-                firstItemVid: cart.items && cart.items[0] ? cart.items[0].variant_id : 0,
-                badges,
-                stillHome: location.pathname === '/',
-                btnReset: b ? (!b.classList.contains('is-added') && !b.getAttribute('data-busy')) : false,
+                peekOpen: !!(p.classList.contains('is-open') && p.offsetWidth),
+                meta: (document.querySelector('#xg-peek .xg-peek__meta') || {}).textContent || '',
+                legacyAlert: !!document.querySelector('.alert[data-notify="container"]')
+              };
+            }, shape.vid);
+            console.log('QVADD', JSON.stringify(qvRes));
+            v('productAddToCart-peek', qvRes.peekOpen, JSON.stringify(qvRes));
+            v('productAddToCart-no-banner', !qvRes.legacyAlert, String(qvRes.legacyAlert));
+            await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
+
+            // ---------- B. DARK: homepage ----------
+            await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+            await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 });
+            await sleep(4000);
+            const dark = await page.evaluate(() => {
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              const card = document.querySelector('.products-display .grid-view-item');
+              return {
+                bodyBg: cs(document.body, 'backgroundColor'),
+                bodyColor: cs(document.body, 'color'),
+                headerBg: cs(document.querySelector('#header .site-header'), 'backgroundColor'),
+                searchBg: cs(document.querySelector('#header #_desktop_search .search-info .search__input'), 'backgroundColor'),
+                searchColor: cs(document.querySelector('#header #_desktop_search .search-info .search__input'), 'color'),
+                cardBg: cs(card, 'backgroundColor'),
+                cardTitle: cs(card && card.querySelector('.grid-view-item__title'), 'color'),
+                logoPlate: cs(document.querySelector('#header .header__logo img'), 'backgroundColor'),
+                ntPrice: cs(document.querySelector('#xg-newtoday .xg-nt__price'), 'color'),
+                colorScheme: getComputedStyle(document.documentElement).colorScheme
               };
             });
-            console.log('AFTER:', JSON.stringify({ count0, sawAdded, after }));
-            await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
-            const errsBad = errs.filter((e) => !/shopifycloud|shop_events_listener|\/cdn\/wpm\/|web-pixels/.test(e));
-            console.log('PAGEERRORS:', JSON.stringify(errsBad));
+            console.log('DARK', JSON.stringify(dark));
+            v('dark-body', dark.bodyBg === 'rgb(16, 20, 22)', dark.bodyBg);
+            v('dark-header', dark.headerBg === 'rgb(22, 27, 30)', dark.headerBg);
+            v('dark-search-input', dark.searchBg === 'rgb(29, 35, 39)', dark.searchBg + ' / ' + dark.searchColor);
+            v('dark-card-surface', dark.cardBg === 'rgb(24, 29, 32)', dark.cardBg);
+            v('dark-logo-plate', dark.logoPlate === 'rgb(255, 255, 255)', dark.logoPlate);
+            v('dark-color-scheme', /dark/.test(dark.colorScheme), dark.colorScheme);
+            if (dark.ntPrice) v('dark-nt-price', dark.ntPrice === 'rgb(255, 106, 94)', dark.ntPrice);
+            const cBody = cr(dark.bodyColor, dark.bodyBg);
+            const cTitle = cr(dark.cardTitle || 'rgb(238,242,244)', dark.cardBg || 'rgb(24,29,32)');
+            const cSearch = cr(dark.searchColor || 'rgb(230,235,238)', dark.searchBg || 'rgb(29,35,39)');
+            console.log('CONTRAST', JSON.stringify({ body: cBody.toFixed(2), cardTitle: cTitle.toFixed(2), search: cSearch.toFixed(2) }));
+            v('dark-contrast-body', cBody >= 7, cBody.toFixed(2));
+            v('dark-contrast-card-title', cTitle >= 7, cTitle.toFixed(2));
+            v('dark-contrast-search', cSearch >= 7, cSearch.toFixed(2));
+
+            // ---------- C. DARK: product page ----------
+            const prod = await page.evaluate(() => fetch('/products.json?limit=1').then(r => r.json()).then(j => j.products[0] ? { handle: j.products[0].handle, vid: (j.products[0].variants[0] || {}).id } : null));
+            if (prod) {
+              await page.goto(u('/products/' + prod.handle), { waitUntil: 'networkidle2', timeout: 90000 });
+              await sleep(2500);
+              const pd = await page.evaluate(() => {
+                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+                return {
+                  leftBg: cs(document.querySelector('.product-single .product-single-left'), 'backgroundColor'),
+                  price: cs(document.querySelector('.product-single [id^="ProductPrice-"]'), 'color'),
+                  tabBg: cs(document.querySelector('.product-tab'), 'backgroundColor'),
+                  title: cs(document.querySelector('.product-single .product-single__title'), 'color'),
+                  swatchBg: cs(document.querySelector('.custom-swatch'), 'backgroundColor')
+                };
+              });
+              console.log('PRODUCT-DARK', JSON.stringify(pd));
+              v('dark-product-panel', pd.leftBg === 'rgb(24, 29, 32)', pd.leftBg);
+              if (pd.price) v('dark-product-price', pd.price === 'rgb(255, 106, 94)', pd.price);
+              if (pd.tabBg) v('dark-product-tabs', pd.tabBg === 'rgb(24, 29, 32)', pd.tabBg);
+              if (pd.swatchBg) v('dark-swatch', pd.swatchBg === 'rgb(29, 35, 39)', pd.swatchBg);
+            }
+
+            // ---------- D. DARK: cart page (add real item first) ----------
+            if (shape.vid) {
+              await page.evaluate((vid) => fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [{ id: +vid, quantity: 1 }] }) }), shape.vid);
+              await page.goto(u('/cart'), { waitUntil: 'networkidle2', timeout: 90000 });
+              await sleep(2000);
+              const cart = await page.evaluate(() => {
+                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+                return {
+                  calcBg: cs(document.querySelector('.cart_calculator'), 'backgroundColor'),
+                  innerBg: cs(document.querySelector('.cart_content_inner'), 'backgroundColor'),
+                  note: cs(document.querySelector('.xg-delivery-note'), 'color'),
+                  rowTitle: cs(document.querySelector('.cart .cart__meta .list-view-item__title > a'), 'color')
+                };
+              });
+              console.log('CART-DARK', JSON.stringify(cart));
+              v('dark-cart-calc', cart.calcBg === 'rgb(22, 27, 30)', cart.calcBg);
+              v('dark-cart-inner', cart.innerBg === 'rgb(24, 29, 32)', cart.innerBg);
+              v('dark-cart-note', cart.note === 'rgb(223, 229, 232)', cart.note);
+              await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
+            }
+
+            // ---------- E. DARK: search page + SCANNER upload path ----------
+            await page.goto(u('/search?type=product&options%5Bprefix%5D=last&q=sol+ring'), { waitUntil: 'networkidle2', timeout: 90000 });
+            await sleep(5000);
+            const sp = await page.evaluate(() => {
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              const inp = document.querySelector('.search-page-form .input-group input');
+              return {
+                pageBg: cs(document.querySelector('.template-search .search_page'), 'backgroundColor'),
+                camPage: !!document.querySelector('.search-page-form .input-group .xg-scan-btn'),
+                inpPad: inp ? getComputedStyle(inp).paddingRight : 'no-input',
+                listQa: document.querySelectorAll('.xg-qa').length
+              };
+            });
+            console.log('SEARCH-DARK', JSON.stringify(sp));
+            v('dark-search-page', sp.pageBg === 'rgb(22, 27, 30)', sp.pageBg);
+            v('cam-search-page', sp.camPage, String(sp.camPage) + ' pad=' + sp.inpPad);
+            console.log('SEARCH-QA-COUNT', sp.listQa);
+
+            // open scanner via delegated click on the header camera
+            await page.evaluate(() => document.querySelector('.xg-scan-btn').click());
+            await sleep(1500);
+            const sc1 = await page.evaluate(() => {
+              const o = document.getElementById('xg-scan');
+              return {
+                open: !!(o && o.classList.contains('is-open') && o.offsetWidth),
+                chips: o ? o.querySelectorAll('.xg-scan__game').length : 0,
+                beta: o ? (o.querySelector('.xg-scan__beta') || {}).textContent : '',
+                status: o ? (o.querySelector('.xg-scan__status') || {}).textContent : ''
+              };
+            });
+            console.log('SCAN-OPEN', JSON.stringify(sc1));
+            v('scan-opens', sc1.open, JSON.stringify(sc1));
+            v('scan-chips', sc1.chips === 5, 'chips=' + sc1.chips);
+            v('scan-beta', sc1.beta === 'BETA', sc1.beta);
+
+            // force mtg chip, then feed the Sol Ring photo through the upload path
+            await page.evaluate(() => { const c = document.querySelector('.xg-scan__game[data-g="mtg"]'); if (c) c.click(); });
+            const fi = await page.$('#xg-scan input[type=file]');
+            await fi.uploadFile('solring.jpg');
+            let read = '', rows = -1, waited = 0;
+            while (waited < 120000) {
+              await sleep(3000); waited += 3000;
+              const st = await page.evaluate(() => ({
+                read: (document.querySelector('#xg-scan .xg-scan__read') || {}).textContent || '',
+                rows: document.querySelectorAll('#xg-scan .xg-scan__row').length,
+                status: (document.querySelector('#xg-scan .xg-scan__status') || {}).textContent || '',
+                hasResults: document.getElementById('xg-scan').classList.contains('has-results'),
+                tess: !!window.Tesseract
+              }));
+              if (st.hasResults) { read = st.read; rows = st.rows; console.log('SCAN-STATE', JSON.stringify(st)); break; }
+              if (waited % 15000 === 0) console.log('SCAN-WAIT', JSON.stringify(st));
+            }
+            v('scan-ocr-read', /sol/i.test(read), 'read=' + read.slice(0, 80) + ' after ' + waited + 'ms');
+            console.log('SCAN-ROWS', rows);
+            if (rows > 0) {
+              const scAdd = await page.evaluate(async () => {
+                const b = document.querySelector('#xg-scan .xg-scan__addbtn');
+                if (!b) return { clicked: false };
+                b.click();
+                await new Promise(r => setTimeout(r, 2600));
+                const cartN = await fetch('/cart.js').then(r => r.json()).then(c => c.item_count);
+                return { clicked: true, cartN, peekInDom: !!document.getElementById('xg-peek') };
+              });
+              console.log('SCAN-ADD', JSON.stringify(scAdd));
+              if (scAdd.clicked) v('scan-add-to-cart', scAdd.cartN >= 1, 'cart=' + scAdd.cartN);
+              await page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }));
+            } else {
+              const foot = await page.evaluate(() => !!document.querySelector('#xg-scan .xg-scan__foot a'));
+              v('scan-fallback-link', foot, 'no stock rows; store-search link=' + foot);
+            }
+            // game chip persistence
+            await page.evaluate(() => { const c = document.querySelector('.xg-scan__game[data-g="pokemon"]'); if (c) c.click(); });
+            await sleep(1200);
+            const chip = await page.evaluate(() => ({ ls: localStorage.getItem('xgScanGame'), on: (document.querySelector('.xg-scan__game.is-on') || {}).getAttribute ? document.querySelector('.xg-scan__game.is-on').getAttribute('data-g') : '' }));
+            console.log('SCAN-CHIP', JSON.stringify(chip));
+            v('scan-chip-switch', chip.ls === 'pokemon' && chip.on === 'pokemon', JSON.stringify(chip));
+
             await browser.close();
-            const ok = shape.cards > 0 && shape.btns > 0 && shape.vid > 0 && shape.inThumb &&
-              /50%/.test(shape.round) && shape.bg === 'rgb(214, 44, 40)' && shape.priceColor === 'rgb(214, 44, 40)' &&
-              count0 === 0 && sawAdded && after.count === 1 && after.firstItemVid === shape.vid &&
-              after.badges.indexOf('1') > -1 && after.stillHome && errsBad.length === 0;
-            console.log('VERDICT-QUICKADD: ' + (ok ? 'PASS' : 'FAIL'));
-          })().catch((e) => { console.log('VERDICT-QUICKADD: FAIL error ' + e.message); });
+            console.log('SUMMARY fails=' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
+            process.exit(fails.length ? 1 : 0);
+          })().catch(e => { console.log('FATAL', String((e && e.stack) || e)); process.exit(1); });
           EOF
+          node probe.js
