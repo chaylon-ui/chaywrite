@@ -58,7 +58,7 @@
   margin: 0 0 24px;
   background: var(--xg-surface, #fff);
   border: 1px solid var(--xg-border, #e3e6e8);
-  border-left: 4px solid var(--xg-accent, #d62c28);
+  border-left: 4px solid var(--xg-red, #d62c28);
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
   padding: 20px 24px 22px;
@@ -74,7 +74,7 @@
   border: 1px solid var(--xg-border, #d7dbdf); border-radius: var(--xg-radius, 10px);
   padding: 11px 14px; cursor: pointer;
 }
-#xg-deck .xg-deck__select:focus { outline: none; border-color: var(--xg-accent, #d62c28); box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.12); }
+#xg-deck .xg-deck__select:focus { outline: none; border-color: var(--xg-red, #d62c28); box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.12); }
 #xg-deck .xg-deck__label { display: block; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--xg-text, #3d454b); margin: 0 0 8px; }
 #xg-deck .xg-deck__input {
   width: 100%; box-sizing: border-box; min-height: 200px; resize: vertical;
@@ -83,7 +83,7 @@
   background: #f7f8fa; border: 1px solid var(--xg-border, #d7dbdf);
   border-radius: var(--xg-radius, 10px); padding: 14px 16px;
 }
-#xg-deck .xg-deck__input:focus { outline: none; border-color: var(--xg-accent, #d62c28); box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.12); background: #fff; }
+#xg-deck .xg-deck__input:focus { outline: none; border-color: var(--xg-red, #d62c28); box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.12); background: #fff; }
 #xg-deck .xg-deck__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
 #xg-deck .xg-deck__btn {
   font-family: inherit; font-weight: 700; font-size: 15px;
@@ -91,15 +91,15 @@
   transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, opacity 120ms ease;
 }
 #xg-deck .xg-deck__btn:disabled { opacity: 0.6; cursor: default; }
-#xg-deck .xg-deck__btn--go, #xg-deck .xg-deck__btn--add { background: var(--xg-accent, #d62c28); color: #fff; }
+#xg-deck .xg-deck__btn--go, #xg-deck .xg-deck__btn--add { background: var(--xg-red, #d62c28); color: #fff; }
 #xg-deck .xg-deck__btn--go:hover:not(:disabled), #xg-deck .xg-deck__btn--add:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(214, 44, 40, 0.28); }
 #xg-deck .xg-deck__btn--add { font-size: 16px; padding: 14px 26px; }
 #xg-deck .xg-deck__btn--ghost { background: transparent; color: var(--xg-text, #3d454b); border: 1px solid var(--xg-border, #d7dbdf); }
 #xg-deck .xg-deck__hint { font-size: 12.5px; color: #8a9299; }
 #xg-deck .xg-deck__toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--xg-text, #3d454b); cursor: pointer; user-select: none; }
-#xg-deck .xg-deck__toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--xg-accent, #d62c28); cursor: pointer; }
+#xg-deck .xg-deck__toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--xg-red, #d62c28); cursor: pointer; }
 #xg-deck .xg-deck__loading, #xg-deck .xg-deck__none { color: var(--xg-text, #3d454b); font-size: 15px; padding: 18px 2px; margin: 0; }
-#xg-deck .xg-deck__loading::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 9px; vertical-align: -2px; border: 2px solid #c9ced3; border-top-color: var(--xg-accent, #d62c28); border-radius: 50%; animation: xgspin 0.7s linear infinite; }
+#xg-deck .xg-deck__loading::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 9px; vertical-align: -2px; border: 2px solid #c9ced3; border-top-color: var(--xg-red, #d62c28); border-radius: 50%; animation: xgspin 0.7s linear infinite; }
 @keyframes xgspin { to { transform: rotate(360deg); } }
 
 #xg-deck .xg-deck__summary { background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #e3e6e8); border-radius: var(--xg-radius, 12px); padding: 16px 18px; margin: 6px 0 16px; }
@@ -133,7 +133,7 @@
 
 /* Shared column widths (rows + header) */
 #xg-deck .xg-deck__pick, #xg-deck .xg-deck__h--pick { flex: 0 0 22px; }
-#xg-deck .xg-deck__pick input, #xg-deck .xg-deck__h--pick input { display: block; width: 16px; height: 16px; margin: 0; accent-color: var(--xg-accent, #d62c28); cursor: pointer; }
+#xg-deck .xg-deck__pick input, #xg-deck .xg-deck__h--pick input { display: block; width: 16px; height: 16px; margin: 0; accent-color: var(--xg-red, #d62c28); cursor: pointer; }
 #xg-deck .xg-deck__qty,  #xg-deck .xg-deck__h--qty  { flex: 0 0 42px; }
 #xg-deck .xg-deck__card, #xg-deck .xg-deck__h--card { flex: 1 1 auto; min-width: 0; }
 #xg-deck .xg-deck__unit, #xg-deck .xg-deck__h--unit { flex: 0 0 74px; text-align: right; }
@@ -146,12 +146,12 @@
 #xg-deck img.xg-deck__thumb[data-zoom] { cursor: zoom-in; }
 #xg-deck .xg-deck__names { display: flex; flex-direction: column; min-width: 0; }
 #xg-deck .xg-deck__name { font-size: 15px; line-height: 1.35; color: var(--xg-ink, #171b1d); font-weight: 600; }
-#xg-deck .xg-deck__cardlink:hover .xg-deck__name { color: var(--xg-accent, #d62c28); text-decoration: underline; }
+#xg-deck .xg-deck__cardlink:hover .xg-deck__name { color: var(--xg-red, #d62c28); text-decoration: underline; }
 #xg-deck .xg-deck__meta { font-size: 12.5px; line-height: 1.35; color: #8a9299; margin-top: 2px; }
 /* Per-line version picker: cheapest pre-selected, pricier printings below.
    Sits under the card name, outside the product link. */
 #xg-deck .xg-deck__ver { display: block; margin: 5px 0 2px 52px; max-width: 360px; font-family: inherit; font-size: 12.5px; color: var(--xg-text, #3d454b); background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #d7dbdf); border-radius: 7px; padding: 5px 8px; cursor: pointer; }
-#xg-deck .xg-deck__ver:focus { outline: none; border-color: var(--xg-accent, #d62c28); }
+#xg-deck .xg-deck__ver:focus { outline: none; border-color: var(--xg-red, #d62c28); }
 /* An unticked line stays visible but clearly out of the cart batch. */
 #xg-deck .xg-deck__row--off > :not(.xg-deck__pick) { opacity: 0.45; }
 #xg-deck .xg-deck__unit { font-size: 14.5px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--xg-text, #3d454b); }
@@ -160,7 +160,7 @@
 #xg-deck .xg-deck__pill { display: inline-block; padding: 4px 11px; border-radius: 999px; font-weight: 700; }
 #xg-deck .xg-deck__stat--ok .xg-deck__pill { background: #e6f6ec; color: #158549; }
 #xg-deck .xg-deck__stat--no a { color: #a6adb4; font-weight: 600; }
-#xg-deck .xg-deck__stat--no a:hover { color: var(--xg-accent, #d62c28); text-decoration: underline; }
+#xg-deck .xg-deck__stat--no a:hover { color: var(--xg-red, #d62c28); text-decoration: underline; }
 #xg-deck .xg-deck__row--miss .xg-deck__name { color: #98a0a6; font-weight: 500; }
 /* Partial-fill INFO STRIP: annotates the stock rows above ("2 of 4
    available"), so it must not read as another product line — tinted band,
@@ -176,7 +176,7 @@
 #xg-deck .xg-deck__missing summary { cursor: pointer; color: var(--xg-text, #3d454b); font-weight: 600; }
 #xg-deck .xg-deck__misslist { columns: 2; margin: 10px 0 0; padding-left: 18px; }
 #xg-deck .xg-deck__misslist a { color: var(--xg-text, #3d454b); }
-#xg-deck .xg-deck__misslist a:hover { color: var(--xg-accent, #d62c28); text-decoration: underline; }
+#xg-deck .xg-deck__misslist a:hover { color: var(--xg-red, #d62c28); text-decoration: underline; }
 
 /* Sister-store rows: in stock at another Exor Games location. Amber, not
    green — visually distinct from local stock, and the row links out to that
