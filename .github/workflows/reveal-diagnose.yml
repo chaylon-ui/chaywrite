@@ -1,16 +1,11 @@
 name: Diagnose storefront reveal
-
-on:
-  workflow_dispatch:
-
+on: workflow_dispatch
 jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Install puppeteer-core
-        run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-
-      - name: Recon the BinderPOS calendar event feed
+      - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
+      - name: Capture calendar feed request headers and one event shape
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -23,31 +18,36 @@ jobs:
             });
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
-            const hits = [];
+            const reqs = [];
+            page.on('request', (r) => {
+              if (/portal\.binderpos\.com\/api\/events/i.test(r.url())) {
+                reqs.push({ url: r.url().slice(0, 200), method: r.method(), headers: r.headers() });
+              }
+            });
+            let fullEvent = null;
+            let count = 0;
             page.on('response', async (r) => {
-              const u = r.url();
-              if (/binderpos|calendar|event/i.test(u) && !/\.js$|\.css$|\.png$|\.woff|web\.app\/static/.test(u)) {
-                let body = '';
+              if (/portal\.binderpos\.com\/api\/events\/forStore/.test(r.url()) && r.request().method() === 'GET' && !fullEvent) {
                 try {
-                  const ct = r.headers()['content-type'] || '';
-                  if (/json|text/.test(ct)) body = (await r.text()).slice(0, 900);
-                } catch (e) { body = '(unreadable: ' + e.message + ')'; }
-                hits.push({ url: u.slice(0, 220), status: r.status(), method: r.request().method(), body });
+                  const arr = JSON.parse(await r.text());
+                  if (Array.isArray(arr) && arr.length) {
+                    count = arr.length;
+                    fullEvent = arr[arr.length - 1];
+                  }
+                } catch (e) {}
               }
             });
             await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
             await new Promise((r) => setTimeout(r, 9000));
-            console.log('HITS:', JSON.stringify(hits, null, 1));
-
-            // does /pages/events exist, and where does the site's Events menu point?
-            const extra = await page.evaluate(async () => {
-              const res = await fetch('/pages/events', { method: 'HEAD' });
-              const links = [...document.querySelectorAll('a[href*="event"]')].slice(0, 6).map((a) => a.getAttribute('href'));
-              return { eventsPageStatus: res.status, eventLinks: links };
-            });
-            console.log('EXTRA:', JSON.stringify(extra));
+            console.log('REQS:', JSON.stringify(reqs, null, 1));
+            if (fullEvent) {
+              console.log('EVENT_COUNT:', count);
+              console.log('EVENT_KEYS:', JSON.stringify(Object.keys(fullEvent)));
+              if (typeof fullEvent.description === 'string') fullEvent.description = fullEvent.description.slice(0, 60) + '...';
+              console.log('EVENT_SAMPLE:', JSON.stringify(fullEvent).slice(0, 2200));
+            }
             await browser.close();
-            console.log('VERDICT: PASS - recon only');
+            console.log('VERDICT: ' + (reqs.length && fullEvent ? 'PASS' : 'FAIL - missing ' + (reqs.length ? 'event body' : 'forStore request')));
+            if (!reqs.length || !fullEvent) process.exit(1);
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
