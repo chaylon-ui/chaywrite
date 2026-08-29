@@ -253,7 +253,7 @@
     var items = [];
     if (!state) return items;
     state.lines.forEach(function (ln, li) {
-      var r = state.map[ln.name.toLowerCase()];
+      var r = effR(ln, li);
       if (!(r && r.found)) return;
       allocate(ln, r, state.sel[li], nextCheapOn()).chunks.forEach(function (c) {
         if (state.checked[chunkKey(li, c)] === false) return;
@@ -264,7 +264,131 @@
   }
 
   function render(lines, map) {
-    state = { lines: lines, map: map, sel: {}, checked: {}, sisterExtra: {}, sisterPending: {}, game: (gameSel && gameSel.value) || 'mtg' };
+    state = { lines: lines, map: map, sel: {}, checked: {}, sisterExtra: {}, sisterPending: {}, subs: {}, sims: {}, game: (gameSel && gameSel.value) || 'mtg' };
+    paint();
+    maybeFetchSims();
+    reportMisses();
+  }
+
+  /* A line whose card we don't stock can be filled by a SUBSTITUTE the
+     shopper picks from in-stock cards with similar effects (EDHREC's
+     similar list mapped onto live stock — Magic only). The pick becomes a
+     synthetic found-result so ticks, version pickers, totals and the cart
+     all treat it like any stocked card, with green Substituted markings. */
+  function effR(ln, li) {
+    var r = state.map[ln.name.toLowerCase()];
+    if (r && r.found) return r;
+    var sub = state.subs[li];
+    return sub ? sub.r : r;
+  }
+
+  function maybeFetchSims() {
+    if (!state || state.game !== 'mtg') return;
+    var mine = state;
+    var missing = [];
+    state.lines.forEach(function (ln) {
+      var r = mine.map[ln.name.toLowerCase()];
+      if (r && r.found) return;
+      var k = ln.name.toLowerCase();
+      if (!(k in mine.sims) && missing.length < 6) { mine.sims[k] = null; missing.push(ln.name); }
+    });
+    missing.forEach(function (name) {
+      var k = name.toLowerCase();
+      fetch(W + '/similar.json?name=' + encodeURIComponent(name))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          var names = ((j && j.names) || []).filter(function (n) { return n.toLowerCase() !== k; }).slice(0, 12);
+          if (!names.length) return null;
+          return fetch(W + '/instock.json?names=' + encodeURIComponent(names.join('|')) + '&max=6')
+            .then(function (r) { return r.ok ? r.json() : null; });
+        })
+        .then(function (j) {
+          mine.sims[k] = ((j && j.cards) || []).filter(function (c) { return c && c.variantId && c.name.toLowerCase() !== k; });
+          if (state === mine && mine.sims[k].length) paint();
+        })
+        .catch(function () { mine.sims[k] = []; });
+    });
+  }
+
+  /* One beacon per search listing the cards we could not fill, with the
+     quantities asked for and any sister-store price — feeds the owner's
+     missed-cards export. */
+  function reportMisses() {
+    if (!state || state.missSent) return;
+    state.missSent = true;
+    var missing = [];
+    state.lines.forEach(function (ln) {
+      var r = state.map[ln.name.toLowerCase()];
+      if (r && r.found) return;
+      if (missing.length >= 25) return;
+      var tail = '';
+      if (r && r.sister) tail = ' @ ' + (r.sister.store || 'sister store') + ' $' + (parseFloat(r.sister.price) || 0).toFixed(2);
+      missing.push(ln.qty + 'x ' + ln.name + tail);
+    });
+    if (missing.length) beacon('miss', '', '&n=' + missing.length, { names: missing });
+  }
+
+  var subsEl = null;
+  function subsKey(e) { if (e.key === 'Escape') closeSubs(); }
+  function closeSubs() {
+    if (!subsEl) return;
+    subsEl.parentNode && subsEl.parentNode.removeChild(subsEl);
+    subsEl = null;
+    document.removeEventListener('keydown', subsKey);
+  }
+  function openSubs(li) {
+    var ln = state.lines[li];
+    var cards = state.sims[ln.name.toLowerCase()] || [];
+    if (!cards.length) return;
+    closeSubs();
+    var d = document.createElement('div');
+    d.className = 'xg-deck-subs';
+    d.innerHTML =
+      '<div class="xg-deck-subs__panel" role="dialog" aria-label="In-stock cards with similar effects">' +
+        '<button type="button" class="xg-deck-subs__close" aria-label="Close">&times;</button>' +
+        '<div class="xg-deck-subs__orig">' +
+          '<span class="xg-deck-subs__missp">Not in stock</span>' +
+          '<img src="https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(ln.name) + '&format=image&version=normal" alt="' + esc(ln.name) + '" onerror="this.style.display=\'none\'">' +
+          '<strong>' + esc(ln.name) + '</strong>' +
+          '<span class="xg-deck-subs__dim">The card your list asked for. Pick a stand-in from the right.</span>' +
+        '</div>' +
+        '<div class="xg-deck-subs__side">' +
+          '<h4>In-stock cards with similar effects</h4>' +
+          '<div class="xg-deck-subs__cards">' +
+            cards.map(function (c, i) {
+              var meta = [c.set, c.foil ? 'Foil' : '', c.condition].filter(Boolean).join(' · ');
+              var q = (c.offers && c.offers[0] && typeof c.offers[0].qty === 'number' && c.offers[0].qty < 99) ? c.offers[0].qty : null;
+              return '<div class="xg-deck-subs__card">' +
+                (c.image ? '<img src="' + esc(imgSrc(c.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck-subs__noimg"></span>') +
+                '<strong>' + esc(c.name) + '</strong>' +
+                (meta ? '<span class="xg-deck-subs__dim">' + esc(meta) + '</span>' : '') +
+                '<span class="xg-deck-subs__price">' + money(parseFloat(c.price) || 0) + (q ? ' · ' + q + ' in stock' : '') + '</span>' +
+                '<button type="button" class="xg-deck-subs__add" data-i="' + i + '">Add Substitute</button>' +
+              '</div>';
+            }).join('') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(d);
+    subsEl = d;
+    document.addEventListener('keydown', subsKey);
+    d.addEventListener('click', function (e) {
+      if (e.target === d || (e.target.classList && e.target.classList.contains('xg-deck-subs__close'))) { closeSubs(); return; }
+      var b = e.target.closest ? e.target.closest('.xg-deck-subs__add') : null;
+      if (b) {
+        var c = cards[+b.getAttribute('data-i')];
+        if (c) pickSub(li, c);
+      }
+    });
+  }
+  function pickSub(li, card) {
+    var ln = state.lines[li];
+    var r = {};
+    for (var k in card) r[k] = card[k];
+    r.found = true; r.__sub = true; r.__for = ln.name;
+    state.subs[li] = { r: r };
+    beacon('sub', ln.name + ' > ' + card.name);
+    closeSubs();
     paint();
   }
 
@@ -293,7 +417,8 @@
     var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addQty = 0, fillable = 0, ticked = 0, missNames = [], shorts = [];
     var rows = lines.map(function (ln, li) {
       totalCards += ln.qty;
-      var r = map[ln.name.toLowerCase()];
+      var r = effR(ln, li);
+      var subFor = (r && r.__sub) ? r.__for : null;
       if (r && r.found) {
         // Fill the requested quantity across the card's in-stock variants
         // (worker sends per-condition/printing stock counts). 3 NM + 1 LP
@@ -344,19 +469,23 @@
             var grpClass = grouped
               ? ' xg-deck__row--grp' + ((ci === chunks.length - 1 && remaining === 0) ? ' xg-deck__row--gend' : '')
               : '';
-            return '<div class="xg-deck__row' + offClass + grpClass + '" role="row">' +
+            return '<div class="xg-deck__row' + offClass + grpClass + (subFor ? ' xg-deck__row--sub' : '') + '" role="row">' +
               lead +
               '<span class="xg-deck__qty" role="cell">' + c.take + '&times;</span>' +
               '<span class="xg-deck__card" role="cell">' +
                 '<a class="xg-deck__cardlink" href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
                   (o.image ? '<img class="xg-deck__thumb" src="' + esc(imgSrc(o.image)) + '" data-zoom="' + esc(zoomSrc(o.image)) + '" alt="" loading="lazy">' : '<span class="xg-deck__thumb xg-deck__thumb--none"></span>') +
+                  (subFor ? '<span class="xg-deck__subtag">Substituted</span>' : '') +
                   '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(o.name || r.name) + '</span>' +
+                  (subFor ? '<span class="xg-deck__subnote">substitute for ' + esc(subFor) + '</span>' : '') +
                   ((meta && !picker) ? '<span class="xg-deck__meta">' + esc(meta) + '</span>' : '') + '</span>' +
                 '</a>' + picker +
               '</span>' +
               '<span class="xg-deck__unit" role="cell">' + money(unit) + '</span>' +
               '<span class="xg-deck__line" role="cell">' + money(lineTotal) + '</span>' +
-              '<span class="xg-deck__stat xg-deck__stat--ok" role="cell"><span class="xg-deck__pill">In stock</span></span>' +
+              (subFor
+                ? '<span class="xg-deck__stat xg-deck__stat--sub" role="cell"><span class="xg-deck__statmiss">Not in stock</span> <span class="xg-deck__substat">Substituted</span><button type="button" class="xg-deck__subundo" data-li="' + li + '">undo</button></span>'
+                : '<span class="xg-deck__stat xg-deck__stat--ok" role="cell"><span class="xg-deck__pill">In stock</span></span>') +
             '</div>';
           }).join('');
           if (remaining > 0) {
@@ -407,6 +536,8 @@
               '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(s.name) + '</span>' +
               (smeta ? '<span class="xg-deck__meta">' + esc(smeta) + '</span>' : '') + '</span>' +
             '</a>' +
+            ((state.game === 'mtg' && state.sims[ln.name.toLowerCase()] && state.sims[ln.name.toLowerCase()].length)
+              ? '<button type="button" class="xg-deck__simbtn" data-li="' + li + '">Not in Stock &middot; In-Stock Cards with Similar Effects &rsaquo;</button>' : '') +
           '</span>' +
           '<span class="xg-deck__unit" role="cell">' + money(parseFloat(s.price) || 0) + '</span>' +
           '<span class="xg-deck__line" role="cell">&mdash;</span>' +
@@ -427,7 +558,10 @@
       return '<div class="xg-deck__row xg-deck__row--miss" role="row">' +
         '<span class="xg-deck__pick" role="cell"></span>' +
         '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
-        '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(ln.name) + '</span></span></span>' +
+        '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(ln.name) + '</span></span>' +
+          ((state.game === 'mtg' && state.sims[ln.name.toLowerCase()] && state.sims[ln.name.toLowerCase()].length)
+            ? '<button type="button" class="xg-deck__simbtn" data-li="' + li + '">Not in Stock &middot; In-Stock Cards with Similar Effects &rsaquo;</button>' : '') +
+        '</span>' +
         '<span class="xg-deck__unit" role="cell">&mdash;</span>' +
         '<span class="xg-deck__line" role="cell">&mdash;</span>' +
         '<span class="xg-deck__stat xg-deck__stat--no" role="cell"><a href="/search?q=' + encodeURIComponent(ln.name) + '" target="_blank" rel="noopener">Not in stock ›</a></span>' +
@@ -445,11 +579,11 @@
       for (var gi = 0; gi < GAMES.length; gi++) if (GAMES[gi].key === state.game) gm = GAMES[gi];
       var picks = [];
       state.lines.forEach(function (ln, li) {
-        var r = state.map[ln.name.toLowerCase()];
+        var r = effR(ln, li);
         if (!(r && r.found)) return;
         allocate(ln, r, state.sel[li], nextCheap).chunks.forEach(function (c) {
           if (state.checked[chunkKey(li, c)] === false) return;
-          if (picks.length < 40) picks.push(c.take + 'x ' + ln.name);
+          if (picks.length < 40) picks.push(c.take + 'x ' + (r.__sub ? r.name + ' (sub for ' + ln.name + ')' : ln.name));
         });
       });
       lastPick = { game: state.game || 'mtg', label: gm ? gm.label : (state.game || 'mtg'), qty: addQty, subtotal: subtotal, picks: picks };
@@ -536,6 +670,21 @@
       e.preventDefault();
       e.stopPropagation();
       openZoom(t.getAttribute('data-zoom'));
+      return;
+    }
+    if (t && t.classList && t.classList.contains('xg-deck__simbtn')) {
+      e.preventDefault();
+      openSubs(+t.getAttribute('data-li'));
+      return;
+    }
+    if (t && t.classList && t.classList.contains('xg-deck__subundo')) {
+      e.preventDefault();
+      var li = +t.getAttribute('data-li');
+      if (state && state.subs[li]) {
+        beacon('sub', '- ' + state.subs[li].r.name + ' (was for ' + state.lines[li].name + ')');
+        delete state.subs[li];
+        paint();
+      }
     }
   });
 
@@ -562,7 +711,7 @@
     else if (t.id === 'xg-deck-checkall') {
       var v = t.checked;
       state.lines.forEach(function (ln, i) {
-        var r = state.map[ln.name.toLowerCase()];
+        var r = effR(ln, i);
         if (!(r && r.found)) return;
         allocate(ln, r, state.sel[i], nextCheapOn()).chunks.forEach(function (c) {
           state.checked[chunkKey(i, c)] = v;

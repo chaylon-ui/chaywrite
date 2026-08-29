@@ -123,8 +123,10 @@ export default {
       if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
         return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
       }
-      const op = url.searchParams.get("op") === "orders" ? "orders" : "overview";
-      const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-admin?op=" + op));
+      const opIn = url.searchParams.get("op") || "overview";
+      const op = ["orders", "misslog", "overview"].indexOf(opIn) > -1 ? opIn : "overview";
+      const me = encodeURIComponent(request.headers.get("cf-connecting-ip") || "");
+      const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-admin?op=" + op + "&me=" + me));
       return new Response(res.body, { status: res.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
     }
     if (url.pathname === "/deck-admin" && request.method === "POST") {
@@ -132,9 +134,18 @@ export default {
         return Response.json({ error: "staff key required" }, { status: 403 });
       }
       const op = url.searchParams.get("op");
-      if (op !== "ban" && op !== "unban") return Response.json({ error: "bad op" }, { status: 400 });
-      deckBans = { at: 0, ips: null }; // this isolate re-reads the list next request
-      const qs = new URLSearchParams({ op, ip: url.searchParams.get("ip") || "", note: url.searchParams.get("note") || "" });
+      if (["ban", "unban", "wl_add", "wl_del", "hot_add", "hot_del"].indexOf(op) === -1) {
+        return Response.json({ error: "bad op" }, { status: 400 });
+      }
+      deckBans = { at: 0, ips: null }; // this isolate re-reads the ban list next request
+      const qs = new URLSearchParams({
+        op,
+        ip: url.searchParams.get("ip") || "",
+        note: url.searchParams.get("note") || "",
+        name: url.searchParams.get("name") || "",
+        game: url.searchParams.get("game") || "",
+        me: request.headers.get("cf-connecting-ip") || "",
+      });
       const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-admin?" + qs));
       return new Response(res.body, { status: res.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
     }

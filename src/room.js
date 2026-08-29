@@ -597,7 +597,7 @@ export class BinderRoom {
       const entry = { t: nowMs, ev, ip, sid, game };
       if (ev === "search") { entry.n = n; entry.found = found; if (miss.length) entry.miss = miss; }
       if (ev === "cart") { entry.n = n; entry.v = v; if (names.length) entry.names = names; }
-      if (ev === "act") { entry.a = act; entry.d = detail; }
+      if (ev === "act") { entry.a = act; entry.d = detail; if (act === "miss" && names.length) entry.names = names; }
       {
         const lk = "dlog:" + day;
         const log = (await this.state.storage.get(lk)) || [];
@@ -635,6 +635,54 @@ export class BinderRoom {
     // already validated the staff PIN before anything reaches here.
     if (url.pathname.endsWith("/deck-admin")) {
       const op = url.searchParams.get("op") || "overview";
+
+      // Owner-managed admin IP allow-list. Empty list = every IP may use
+      // the (still PIN-gated) admin; once populated, only listed IPs pass.
+      // The router stamps `me` from cf-connecting-ip, so it can't be faked
+      // by the caller.
+      const me = String(url.searchParams.get("me") || "").slice(0, 45);
+      const wl = (await this.state.storage.get("dwl")) || {};
+      if (Object.keys(wl).length && !wl[me]) {
+        return Response.json({ error: "ip not allowed", me }, { status: 403 });
+      }
+
+      if (op === "wl_add" || op === "wl_del") {
+        const ip = String(url.searchParams.get("ip") || "").slice(0, 45);
+        if (!/^[0-9a-fA-F.:]{3,45}$/.test(ip)) return Response.json({ ok: false, error: "bad ip" });
+        if (op === "wl_add") wl[ip] = { at: Date.now() };
+        else delete wl[ip];
+        await this.state.storage.put("dwl", wl);
+        return Response.json({ ok: true, wl, me });
+      }
+
+      if (op === "hot_add" || op === "hot_del") {
+        const name = String(url.searchParams.get("name") || "").slice(0, 90);
+        const game = String(url.searchParams.get("game") || "other").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12) || "other";
+        if (name.length < 2) return Response.json({ ok: false, error: "bad name" });
+        const hot = (await this.state.storage.get("dhot")) || {};
+        const key = game + "|" + name.toLowerCase();
+        if (op === "hot_add") hot[key] = { name, game, at: Date.now() };
+        else delete hot[key];
+        await this.state.storage.put("dhot", hot);
+        return Response.json({ ok: true, hot });
+      }
+
+      if (op === "misslog") {
+        // Every missed-card record in the 14-day log, for the CSV export:
+        // search entries carry names only, the storefront's per-search miss
+        // beacon carries quantities and any sister-store price.
+        const rows = [];
+        for (let i = 0; i < 14 && rows.length < 1500; i++) {
+          const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+          const log = (await this.state.storage.get("dlog:" + d)) || [];
+          for (const e of log) {
+            if (e.ev === "search" && e.miss && e.miss.length) rows.push({ t: e.t, game: e.game, kind: "search", list: e.miss });
+            else if (e.ev === "act" && e.a === "miss" && e.names && e.names.length) rows.push({ t: e.t, game: e.game, kind: "qty", list: e.names });
+            if (rows.length >= 1500) break;
+          }
+        }
+        return Response.json({ rows }, { headers: { "cache-control": "no-store" } });
+      }
 
       if (op === "ban" || op === "unban") {
         const ip = String(url.searchParams.get("ip") || "").slice(0, 45);
@@ -729,8 +777,9 @@ export class BinderRoom {
       }
 
       const bans = (await this.state.storage.get("dban")) || {};
+      const hot = (await this.state.storage.get("dhot")) || {};
       return Response.json(
-        { note: "c = times, n = cards, v = cents", total, days, log, ips, miss, bans },
+        { note: "c = times, n = cards, v = cents", total, days, log, ips, miss, bans, hot, wl, me },
         { headers: { "cache-control": "no-store" } }
       );
     }

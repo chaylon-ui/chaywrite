@@ -99,6 +99,12 @@
     var d = e.d || '';
     if (e.a === 'tick') return (d.charAt(0) === '-' ? 'unticked ' : 'ticked ') + d.slice(1);
     if (e.a === 'ver') return 'swapped version: ' + d;
+    if (e.a === 'sub') return d.charAt(0) === '-' ? 'removed substitute ' + d.slice(2) : 'picked substitute: ' + d;
+    if (e.a === 'miss') {
+      var mm = 'wanted but not stocked';
+      if (e.names && e.names.length) mm += ': ' + e.names.slice(0, 6).join(', ') + (e.names.length > 6 ? '…' : '');
+      return mm;
+    }
     if (e.a === 'all') return d === 'on' ? 'selected all cards' : 'cleared all cards';
     if (e.a === 'ncheap') return 'next-cheapest fill ' + d;
     return (e.a || 'action') + (d ? ' ' + d : '');
@@ -215,20 +221,62 @@
     return h + '</table></div>';
   }
 
-  function missHtml(miss) {
+  function missHtml(miss, hot) {
     var gk = Object.keys(miss || {});
-    var h = '<h2>Most wanted cards you did not have (last 30 days)</h2>';
+    var h = '<h2>Most wanted cards you did not have (last 30 days) ' +
+      '<button class="btn-dim" id="misscsv">Download missed-cards CSV</button></h2>';
     var any = false;
     gk.forEach(function (g) {
       if (!miss[g] || !miss[g].length) return;
       any = true;
-      h += '<div class="scroll"><table><tr><th>' + esc(gl(g)) + '</th><th class="num">Times searched and missed</th></tr>';
+      h += '<div class="scroll"><table><tr><th>' + esc(gl(g)) + '</th><th class="num">Times searched and missed</th><th></th></tr>';
       miss[g].forEach(function (row) {
-        h += '<tr><td>' + esc(row.name) + '</td><td class="num">' + row.c + '</td></tr>';
+        var key = g + '|' + row.name.toLowerCase();
+        var inHot = hot && hot[key];
+        h += '<tr><td>' + esc(row.name) + '</td><td class="num">' + row.c + '</td>' +
+          '<td class="nw">' + (inHot ? '<span class="okx">on hot list</span>'
+            : '<button class="btn-dim" data-hotadd="' + esc(g) + '|' + esc(row.name) + '">+ Hot list</button>') + '</td></tr>';
       });
       h += '</table></div>';
     });
     if (!any) h += '<div class="empty">Nothing yet. When shoppers search cards you do not stock, the tally shows up here as a restock list.</div>';
+    return h;
+  }
+
+  function hotHtml(hot) {
+    var keys = Object.keys(hot || {});
+    var h = '<h2>Hot list (cards you want to buy) ' +
+      '<button class="btn-dim" id="hotcsv">Download hot-list CSV</button></h2>';
+    if (!keys.length) return h + '<div class="empty">Empty. Use the + Hot list button beside any most-wanted card, and export the list as a CSV for your BinderPOS buylist work.</div>';
+    h += '<div class="scroll"><table><tr><th>Card</th><th>Game</th><th>Added</th><th></th></tr>';
+    keys.sort(function (a, b) { return (hot[b].at || 0) - (hot[a].at || 0); });
+    keys.forEach(function (k) {
+      var e2 = hot[k];
+      h += '<tr><td>' + esc(e2.name) + '</td><td>' + esc(gl(e2.game)) + '</td><td class="nw">' + esc(tstr(e2.at)) + '</td>' +
+        '<td class="nw"><button class="btn-dim" data-hotdel="' + esc(e2.game) + '|' + esc(e2.name) + '">Remove</button></td></tr>';
+    });
+    return h + '</table></div>';
+  }
+
+  function wlHtml(wl, me) {
+    var ips = Object.keys(wl || {});
+    var h = '<h2>Admin IP allow-list</h2>' +
+      '<p class="sub" style="margin-top:-4px">Locks this admin (and its data) to specific internet addresses on top of the PIN. Your address right now: <span class="ip">' + esc(me || 'unknown') + '</span>.' +
+      ' Careful: home internet addresses change from time to time. If yours changes while a list is set, this page will refuse you and you will need me to clear the list. Leave empty to allow any address (PIN still required).</p>';
+    if (ips.length) {
+      h += '<div class="scroll"><table><tr><th>Allowed IP</th><th>Added</th><th></th></tr>';
+      ips.forEach(function (ip) {
+        h += '<tr><td class="nw"><span class="ip">' + esc(ip) + '</span>' + (ip === me ? ' <span class="okx">(you)</span>' : '') + '</td>' +
+          '<td class="nw">' + esc(wl[ip] && wl[ip].at ? tstr(wl[ip].at) : '') + '</td>' +
+          '<td class="nw"><button class="btn-dim" data-wldel="' + esc(ip) + '">Remove</button></td></tr>';
+      });
+      h += '</table></div>';
+    } else {
+      h += '<div class="empty">No allow-list set: any address with the PIN can open this page.</div>';
+    }
+    h += '<p style="margin-top:10px"><button class="btn-dim" id="wlme">Only allow my IP (' + esc(me || '?') + ')</button> ' +
+      '<input id="wlip" placeholder="or type an IP" style="font:inherit;padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.3);color:var(--ink)"> ' +
+      '<button class="btn-dim" id="wladd">Add IP</button></p>';
     return h;
   }
 
@@ -272,13 +320,27 @@
       tilesHtml(d.total || {}) +
       '<h2><span id="livedot" class="live-dot"></span>Live right now</h2><div id="feed"><div class="muted">Waiting for activity… leave this page open and events appear the moment they happen.</div></div>' +
       '<div id="sales"></div>' +
-      missHtml(d.miss) +
+      missHtml(d.miss, d.hot) +
+      hotHtml(d.hot) +
       activityHtml(d.log || [], d.ips || {}, d.bans || {}) +
       bansHtml(d.bans || {}) +
+      wlHtml(d.wl, d.me) +
       gameTableHtml(d.total || {}) +
       daysHtml(d.days || []) +
-      '<p class="note">Searches, ticks, version swaps and cart adds are logged with the shopper’s IP so bots and competitors can be spotted and banned; the activity log keeps 14 days and only tallies are kept long-term. Banned IPs get a plain “unavailable” error from the Deck Builder. Everything on this page needs the staff PIN, and wrong guesses lock out for 10 minutes after 20 tries. No customer names or emails are collected here.</p>';
+      '<p class="note">Searches, ticks, version swaps, substitute picks and cart adds are logged with the shopper’s IP so bots and competitors can be spotted and banned; the activity log keeps 14 days and only tallies are kept long-term. Banned IPs get a plain “unavailable” error from the Deck Builder. Everything on this page needs the staff PIN, and wrong guesses lock out for 10 minutes after 20 tries. No customer names or emails are collected here.</p>';
     document.getElementById('refresh').addEventListener('click', function () { refresh(); loadOrders(); });
+    document.getElementById('misscsv').addEventListener('click', downloadMissCsv);
+    document.getElementById('hotcsv').addEventListener('click', function () { downloadHotCsv(d.hot || {}); });
+    var wlme = document.getElementById('wlme');
+    if (wlme) wlme.addEventListener('click', function () {
+      if (!d.me) return alert('Your IP could not be detected.');
+      if (confirm('Lock this admin to your current IP ' + d.me + '?\nIf your home IP changes later, you will need Claude to clear the list.')) adminPost('wl_add', { ip: d.me });
+    });
+    var wladdB = document.getElementById('wladd');
+    if (wladdB) wladdB.addEventListener('click', function () {
+      var v = (document.getElementById('wlip').value || '').trim();
+      if (v) adminPost('wl_add', { ip: v });
+    });
     document.getElementById('logout').addEventListener('click', function () {
       try { localStorage.removeItem('xgdk'); } catch (e) {}
       K = ''; showLogin();
@@ -289,21 +351,70 @@
 
   function onTableClick(e) {
     var t = e.target;
-    if (t.getAttribute && t.getAttribute('data-ban')) {
+    if (!t.getAttribute) return;
+    if (t.getAttribute('data-ban')) {
       var ip = t.getAttribute('data-ban');
       var note = prompt('Ban ' + ip + '?\nOptional note (e.g. "competitor scraping"):');
       if (note === null) return;
-      adminPost('ban', ip, note);
-    } else if (t.getAttribute && t.getAttribute('data-unban')) {
-      adminPost('unban', t.getAttribute('data-unban'), '');
+      adminPost('ban', { ip: ip, note: note });
+    } else if (t.getAttribute('data-unban')) {
+      adminPost('unban', { ip: t.getAttribute('data-unban') });
+    } else if (t.getAttribute('data-hotadd')) {
+      var pa = t.getAttribute('data-hotadd').split('|');
+      adminPost('hot_add', { game: pa[0], name: pa.slice(1).join('|') });
+    } else if (t.getAttribute('data-hotdel')) {
+      var pd = t.getAttribute('data-hotdel').split('|');
+      adminPost('hot_del', { game: pd[0], name: pd.slice(1).join('|') });
+    } else if (t.getAttribute('data-wldel')) {
+      adminPost('wl_del', { ip: t.getAttribute('data-wldel') });
     }
   }
 
-  function adminPost(op, ip, note) {
-    fetch('/deck-admin?op=' + op + '&ip=' + encodeURIComponent(ip) + '&note=' + encodeURIComponent(note || '') + '&k=' + encodeURIComponent(K), { method: 'POST' })
+  function adminPost(op, params) {
+    var qs = '';
+    Object.keys(params || {}).forEach(function (k2) { qs += '&' + k2 + '=' + encodeURIComponent(params[k2]); });
+    fetch('/deck-admin?op=' + op + qs + '&k=' + encodeURIComponent(K), { method: 'POST' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function () { refresh(); })
       .catch(function () { alert('That did not go through. Refresh and try again.'); });
+  }
+
+  /* ---------------- CSV exports ---------------- */
+  function csvCell(s) { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  function downloadCsv(name, rows) {
+    var text = rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function downloadMissCsv() {
+    api('misslog').then(function (d) {
+      var rows = [['Date', 'Time', 'Game', 'Card', 'Qty asked', 'Seen elsewhere', 'Elsewhere price']];
+      (d.rows || []).forEach(function (r) {
+        var dt = new Date(r.t);
+        var date = dt.toLocaleDateString('en-CA');
+        var time = dt.toLocaleTimeString('en-CA');
+        (r.list || []).forEach(function (item) {
+          if (r.kind === 'qty') {
+            var m = /^(\d+)x\s+(.*?)(?:\s+@\s+(.*?)\s+\$([\d.]+))?$/.exec(item);
+            if (m) rows.push([date, time, gl(r.game), m[2], m[1], m[3] || '', m[4] ? '$' + m[4] : '']);
+            else rows.push([date, time, gl(r.game), item, '', '', '']);
+          } else {
+            rows.push([date, time, gl(r.game), item, '', '', '']);
+          }
+        });
+      });
+      downloadCsv('deck-builder-missed-cards.csv', rows);
+    }).catch(function () { alert('Could not load the miss log.'); });
+  }
+  function downloadHotCsv(hot) {
+    var rows = [['Card Name', 'Game', 'Added', 'Buy premium (fill in)', 'Notes']];
+    Object.keys(hot).forEach(function (k2) {
+      var e2 = hot[k2];
+      rows.push([e2.name, gl(e2.game), new Date(e2.at).toLocaleDateString('en-CA'), '', '']);
+    });
+    downloadCsv('deck-builder-hot-list.csv', rows);
   }
 
   function loadOrders() {
