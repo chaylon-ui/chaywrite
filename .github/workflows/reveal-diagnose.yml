@@ -10,11 +10,11 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Slideshow section renders with the text-style option on the preview
+      - name: Flavor-titled rows carry the decklist name (owner's bolt repro)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
+          const PAGE = 'https://exorgames.com/pages/deck-builder';
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -23,46 +23,47 @@ jobs:
             });
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
-            await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await new Promise((r) => setTimeout(r, 2000));
-            console.log('THEME:', await page.evaluate(() => window.Shopify && Shopify.theme && Shopify.theme.id));
-
-            // Section Rendering API: does the edited section parse and carry
-            // the new CSS? (No blocks in this render, so only the style ships.)
-            const sec = await page.evaluate(async () => {
-              const res = await fetch('/?section_id=slideshow', { credentials: 'same-origin' });
-              const txt = await res.text();
-              return {
-                status: res.status,
-                hasFx: txt.indexOf('slide-fx-outline') > -1 && txt.indexOf('slide-fx-both') > -1,
-                liquidError: /Liquid error/i.test(txt),
-                len: txt.length,
-              };
+            await page.setViewport({ width: 1380, height: 980 });
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+              const u = req.url();
+              if (u.includes('/deck.json?')) req.continue({ url: u + '&notrack=1' });
+              else req.continue();
             });
-            console.log('SECTION RENDER:', JSON.stringify(sec));
+            await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
+            await page.type('#xg-deck-input', '1 Island\n1 Lightning bolt');
+            await page.click('#xg-deck-go');
+            await page.waitForSelector('#xg-deck-results .xg-deck__row', { timeout: 45000 });
+            await new Promise((r) => setTimeout(r, 1200));
 
-            // Prove the effect CSS actually paints: mount a slide-content
-            // stub with the section's own style present on the page.
-            const painted = await page.evaluate(async () => {
-              const res = await fetch('/?section_id=slideshow', { credentials: 'same-origin' });
-              const txt = await res.text();
-              const host = document.createElement('div');
-              host.innerHTML = txt;
-              document.body.appendChild(host);
-              const stub = document.createElement('div');
-              stub.className = 'slider-content slide-fx-both';
-              stub.style.setProperty('--slide-outline', '#12aa34');
-              stub.innerHTML = '<div class="main-title">CHECK</div>';
-              document.body.appendChild(stub);
-              const sh = getComputedStyle(stub.querySelector('.main-title')).textShadow;
-              return { shadow: sh.slice(0, 120), layers: (sh.match(/rgba?\(/g) || []).length, hasColor: /18, 170, 52|#12aa34/.test(sh) };
+            const rows = await page.evaluate(() => {
+              const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+              return [...document.querySelectorAll('#xg-deck-results .xg-deck__row')].map((row) => ({
+                name: (row.querySelector('.xg-deck__name') || {}).textContent || '',
+                note: (row.querySelector('.xg-deck__matchnote') || {}).textContent || null,
+                sub: !!row.querySelector('.xg-deck__subnote'),
+                normName: norm((row.querySelector('.xg-deck__name') || {}).textContent),
+              }));
             });
-            console.log('PAINTED:', JSON.stringify(painted));
-
+            console.log('ROWS:', JSON.stringify(rows, null, 1));
+            let fails = [];
+            const island = rows.find((r) => /island/i.test(r.name));
+            if (!island) fails.push('no Island row');
+            else if (island.note) fails.push('Island got a spurious note: ' + island.note);
+            const bolt = rows.find((r) => /lightning bolt/i.test(r.name));
+            if (!bolt) fails.push('no row matching Lightning Bolt at all');
+            else if (bolt.normName === 'lightningbolt') {
+              // a plain-titled printing is cheapest today: no note expected
+              if (bolt.note) fails.push('plain-titled bolt got a note: ' + bolt.note);
+              else console.log('NOTE CHECK: plain title matched, correctly unannotated');
+            } else {
+              if (!bolt.note) fails.push('flavor-titled bolt (' + bolt.name + ') missing the note');
+              else if (!/Lightning bolt/.test(bolt.note)) fails.push('note lacks the typed name: ' + bolt.note);
+              else console.log('NOTE CHECK: "' + bolt.name + '" carries: ' + bolt.note);
+            }
             await browser.close();
-            const ok = sec.status === 200 && sec.hasFx && !sec.liquidError
-              && painted.shadow && painted.shadow !== 'none' && painted.layers >= 9 && painted.hasColor;
-            if (!ok) { console.log('VERDICT: FAIL - slideshow option'); process.exit(1); }
-            console.log('VERDICT: PASS - slideshow text-style option live on preview');
+            if (fails.length) { console.log('VERDICT: FAIL -', JSON.stringify(fails)); process.exit(1); }
+            console.log('VERDICT: PASS - decklist-name note');
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
