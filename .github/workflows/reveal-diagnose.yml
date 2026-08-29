@@ -10,11 +10,11 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Similar-effects button reads as an action everywhere
+      - name: Recon the BinderPOS calendar event feed
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const PAGE = 'https://exorgames.com/pages/deck-builder';
+          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -23,61 +23,31 @@ jobs:
             });
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
-            await page.setViewport({ width: 1380, height: 980 });
-            const errs = [];
-            const tolerated = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
-            page.on('pageerror', (e) => {
-              const s = (e && (e.stack || e.message)) || String(e);
-              if (!tolerated.test(s)) errs.push(s.split('\n').slice(0, 2).join(' | '));
+            const hits = [];
+            page.on('response', async (r) => {
+              const u = r.url();
+              if (/binderpos|calendar|event/i.test(u) && !/\.js$|\.css$|\.png$|\.woff|web\.app\/static/.test(u)) {
+                let body = '';
+                try {
+                  const ct = r.headers()['content-type'] || '';
+                  if (/json|text/.test(ct)) body = (await r.text()).slice(0, 900);
+                } catch (e) { body = '(unreadable: ' + e.message + ')'; }
+                hits.push({ url: u.slice(0, 220), status: r.status(), method: r.request().method(), body });
+              }
             });
-            await page.setRequestInterception(true);
-            page.on('request', (req) => {
-              const u = req.url();
-              if (u.includes('/deck.json?')) req.continue({ url: u + '&notrack=1' });
-              else req.continue();
+            await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
+            await new Promise((r) => setTimeout(r, 9000));
+            console.log('HITS:', JSON.stringify(hits, null, 1));
+
+            // does /pages/events exist, and where does the site's Events menu point?
+            const extra = await page.evaluate(async () => {
+              const res = await fetch('/pages/events', { method: 'HEAD' });
+              const links = [...document.querySelectorAll('a[href*="event"]')].slice(0, 6).map((a) => a.getAttribute('href'));
+              return { eventsPageStatus: res.status, eventLinks: links };
             });
-            await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await page.type('#xg-deck-input', '4 Polluted Delta\n1 Chain Lightning');
-            await page.click('#xg-deck-go');
-            await page.waitForSelector('#xg-deck-results .xg-deck__row', { timeout: 45000 });
-            let any = null;
-            for (let i = 0; i < 30 && !any; i++) {
-              any = await page.$('.xg-deck__simbtn');
-              if (!any) await new Promise((r) => setTimeout(r, 1000));
-            }
-            let fails = [];
-            if (!any) fails.push('no similar-effects buttons appeared at all');
-            const btns = await page.evaluate(() => {
-              return [...document.querySelectorAll('.xg-deck__simbtn')].map((b) => {
-                const cs = getComputedStyle(b);
-                return {
-                  text: (b.textContent || '').trim(),
-                  inStrip: !!b.closest('.xg-deck__row--short'),
-                  cursor: cs.cursor,
-                  color: cs.color,
-                  bgImage: cs.backgroundImage.slice(0, 40),
-                  title: b.getAttribute('title') || '',
-                };
-              });
-            });
-            console.log('BUTTONS:', JSON.stringify(btns, null, 1));
-            btns.forEach((b, i) => {
-              if (!/^See \d+ similar cards? we have in stock/.test(b.text)) fails.push('btn ' + i + ' text: ' + b.text);
-              if (b.cursor !== 'pointer') fails.push('btn ' + i + ' cursor ' + b.cursor);
-              if (b.color !== 'rgb(255, 255, 255)') fails.push('btn ' + i + ' not white text: ' + b.color);
-              if (!/linear-gradient/.test(b.bgImage)) fails.push('btn ' + i + ' no gradient bg');
-              if (!b.title) fails.push('btn ' + i + ' missing tooltip');
-            });
-            if (btns.length && !fails.length) {
-              await page.click('.xg-deck__simbtn');
-              const opened = await page.waitForSelector('.xg-deck-subs .xg-deck-subs__add', { timeout: 20000 }).then(() => true).catch(() => false);
-              console.log('CLICK OPENS OVERLAY:', opened);
-              if (!opened) fails.push('click did not open the overlay');
-            }
-            console.log('hard errors:', errs.length, errs.slice(0, 2));
+            console.log('EXTRA:', JSON.stringify(extra));
             await browser.close();
-            if (fails.length || errs.length) { console.log('VERDICT: FAIL -', JSON.stringify(fails)); process.exit(1); }
-            console.log('VERDICT: PASS - action button everywhere');
+            console.log('VERDICT: PASS - recon only');
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
