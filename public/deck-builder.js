@@ -349,6 +349,15 @@
   }
 
   var subsEl = null;
+  function simBtnHtml(li, key) {
+    if (state.game !== 'mtg') return '';
+    var sims = state.sims[key];
+    if (!sims || !sims.length) return '';
+    var n = sims.length;
+    return ' <button type="button" class="xg-deck__simbtn" data-li="' + li + '" title="Cards with a similar effect, in stock now &mdash; pick one to fill this spot">' +
+      'See ' + n + ' similar card' + (n === 1 ? '' : 's') + ' we have in stock &rsaquo;</button>';
+  }
+
   function subsKey(e) { if (e.key === 'Escape' && !zoomEl) closeSubs(); }
   function closeSubs() {
     if (!subsEl) return;
@@ -558,8 +567,7 @@
               '</div>';
               return html;
             }
-            var simBtn = (state.game === 'mtg' && state.sims[skey] && state.sims[skey].length)
-              ? ' <button type="button" class="xg-deck__simbtn" data-li="' + li + '">Not in Stock &middot; In-Stock Cards with Similar Effects &rsaquo;</button>' : '';
+            var simBtn = simBtnHtml(li, skey);
             // Information strip, not a product row (owner feedback): it only
             // annotates the rows above — the copies we DO have are up there
             // and ride along with Add to cart. When a sister store holds the
@@ -607,8 +615,7 @@
               '<span class="xg-deck__names"><span class="xg-deck__name">' + esc(s.name) + '</span>' +
               (smeta ? '<span class="xg-deck__meta">' + esc(smeta) + '</span>' : '') + '</span>' +
             '</a>' +
-            ((state.game === 'mtg' && state.sims[ln.name.toLowerCase()] && state.sims[ln.name.toLowerCase()].length)
-              ? '<button type="button" class="xg-deck__simbtn" data-li="' + li + '">Not in Stock &middot; In-Stock Cards with Similar Effects &rsaquo;</button>' : '') +
+            simBtnHtml(li, ln.name.toLowerCase()) +
           '</span>' +
           '<span class="xg-deck__unit" role="cell">' + money(parseFloat(s.price) || 0) + '</span>' +
           '<span class="xg-deck__line" role="cell">&mdash;</span>' +
@@ -630,8 +637,7 @@
         '<span class="xg-deck__pick" role="cell"></span>' +
         '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
         '<span class="xg-deck__card" role="cell"><span class="xg-deck__names"><span class="xg-deck__name">' + esc(ln.name) + '</span></span>' +
-          ((state.game === 'mtg' && state.sims[ln.name.toLowerCase()] && state.sims[ln.name.toLowerCase()].length)
-            ? '<button type="button" class="xg-deck__simbtn" data-li="' + li + '">Not in Stock &middot; In-Stock Cards with Similar Effects &rsaquo;</button>' : '') +
+          simBtnHtml(li, ln.name.toLowerCase()) +
         '</span>' +
         '<span class="xg-deck__unit" role="cell">&mdash;</span>' +
         '<span class="xg-deck__line" role="cell">&mdash;</span>' +

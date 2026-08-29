@@ -179,11 +179,20 @@
 
 /* ---- Substitutes: similar-effects upsell for out-of-stock lines ---- */
 #xg-deck .xg-deck__simbtn {
-  display: inline-block; margin-top: 4px; padding: 3px 10px;
-  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
-  color: #1a7f4b; background: #eafaf1; border: 1px solid #bfe8d2; border-radius: 999px;
+  /* Reads as an ACTION, not a status: solid green, action verb + count,
+     hover lift (owner: shoppers could not tell the old pill was tappable). */
+  display: inline-block; margin-top: 6px; padding: 6px 13px;
+  font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  color: #fff; background: linear-gradient(180deg, #2fae6d, #1a7f4b);
+  border: 1px solid #14663c; border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 2px rgba(20, 102, 60, 0.25);
+  transition: filter 120ms ease, transform 120ms ease, box-shadow 120ms ease;
 }
-#xg-deck .xg-deck__simbtn:hover { background: #d9f4e5; }
+#xg-deck .xg-deck__simbtn:hover {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 8px rgba(20, 102, 60, 0.3);
+}
 #xg-deck .xg-deck__row--sub { background: #f4fbf7; }
 #xg-deck .xg-deck__row--sub .xg-deck__cardlink { position: relative; }
 #xg-deck .xg-deck__subtag {
