@@ -42,6 +42,8 @@
       body: JSON.stringify({ items: [{ id: vid, quantity: 1 }] })
     }).then(function (r) {
       if (!r.ok) throw new Error('add ' + r.status);
+      return r.json().catch(function () { return null; });
+    }).then(function (j) {
       // The theme's own sync (exported on purpose in shop.js) refreshes both
       // header badges AND the mini-cart dropdown from a fresh /cart.js read.
       try {
@@ -52,6 +54,13 @@
           var q = document.querySelectorAll('.cart-qty');
           for (var i = 0; i < q.length; i++) q[i].textContent = cart.item_count;
         });
+      } catch (err) {}
+      // Site-wide cart peek (theme's xg-cart-peek.js), when it's loaded.
+      try {
+        var it = j && j.items && j.items[0];
+        if (it && window.xgCartPeek) {
+          window.xgCartPeek({ title: it.title, image: it.image, url: it.url, qty: it.quantity, cents: it.discounted_price });
+        }
       } catch (err) {}
       btn.classList.add('is-added');
       btn.innerHTML = IC_CHECK;

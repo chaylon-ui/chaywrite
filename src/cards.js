@@ -670,16 +670,19 @@ export async function serveInstock(request, env, ctx) {
   const names = String(url.searchParams.get("names") || "")
     .split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2).slice(0, 16);
   const max = Math.min(8, Math.max(1, parseInt(url.searchParams.get("max"), 10) || 4));
+  // Optional game scope (card scanner sends it); anything unknown falls back
+  // to mtg inside findInStock, matching the endpoint's original behavior.
+  const game = String(url.searchParams.get("game") || "mtg").toLowerCase().slice(0, 12);
   const out = { count: 0, cards: [] };
   if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/instock.json?m=" + max + "&n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
+  const cacheKey = new Request(new URL("/instock.json?m=" + max + "&g=" + encodeURIComponent(game) + "&n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
   // Every name at once (two small same-store fetches each) — Promise.all
   // keeps the ranked order, then the first `max` in-stock hits win.
-  const found = await Promise.all(names.map((n) => findInStock(n, headers, env)));
+  const found = await Promise.all(names.map((n) => findInStock(n, headers, env, game)));
   out.cards = found.filter(Boolean).slice(0, max);
   out.count = out.cards.length;
   const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${BETTER_TTL_S}` } });
