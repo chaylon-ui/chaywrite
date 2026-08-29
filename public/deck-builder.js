@@ -909,4 +909,20 @@
   clearBtn.addEventListener('click', function () {
     input.value = ''; out.innerHTML = ''; clearBtn.hidden = true; input.focus();
   });
+
+  // Homepage handoff: the front-page callout stores the pasted list under
+  // xgDeckHand (real decklists don't fit in a URL) and navigates here.
+  // One-shot — the key is removed before the search runs.
+  try {
+    var hand = sessionStorage.getItem('xgDeckHand');
+    if (hand) {
+      sessionStorage.removeItem('xgDeckHand');
+      var h = JSON.parse(hand);
+      if (h && h.list) {
+        if (h.game && gameSel && GAMES.some(function (g) { return g.key === h.game; })) gameSel.value = h.game;
+        input.value = String(h.list).slice(0, 12000);
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      }
+    }
+  } catch (err) {}
 })();
