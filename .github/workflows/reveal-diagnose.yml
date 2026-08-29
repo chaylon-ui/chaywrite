@@ -10,7 +10,7 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Flavor-titled rows carry the decklist name (owner's bolt repro)
+      - name: Short lines offer and fill partial substitutes (owner's 3-of-4 Delta)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -24,6 +24,14 @@ jobs:
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
             await page.setViewport({ width: 1380, height: 980 });
+            const errs = [];
+            const tolerated = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
+            page.on('pageerror', (e) => {
+              const s = (e && (e.stack || e.message)) || String(e);
+              if (!tolerated.test(s)) errs.push(s.split('\n').slice(0, 2).join(' | '));
+            });
+            const beacons = [];
+            page.on('response', (r) => { if (r.url().includes('/deck-track')) beacons.push(r.status()); });
             await page.setRequestInterception(true);
             page.on('request', (req) => {
               const u = req.url();
@@ -32,38 +40,88 @@ jobs:
             });
             await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
             await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await page.type('#xg-deck-input', '1 Island\n1 Lightning bolt');
+            await page.type('#xg-deck-input', '4 Polluted Delta\n1 Chain Lightning');
             await page.click('#xg-deck-go');
             await page.waitForSelector('#xg-deck-results .xg-deck__row', { timeout: 45000 });
-            await new Promise((r) => setTimeout(r, 1200));
-
-            const rows = await page.evaluate(() => {
-              const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-              return [...document.querySelectorAll('#xg-deck-results .xg-deck__row')].map((row) => ({
-                name: (row.querySelector('.xg-deck__name') || {}).textContent || '',
-                note: (row.querySelector('.xg-deck__matchnote') || {}).textContent || null,
-                sub: !!row.querySelector('.xg-deck__subnote'),
-                normName: norm((row.querySelector('.xg-deck__name') || {}).textContent),
-              }));
-            });
-            console.log('ROWS:', JSON.stringify(rows, null, 1));
             let fails = [];
-            const island = rows.find((r) => /island/i.test(r.name));
-            if (!island) fails.push('no Island row');
-            else if (island.note) fails.push('Island got a spurious note: ' + island.note);
-            const bolt = rows.find((r) => /lightning bolt/i.test(r.name));
-            if (!bolt) fails.push('no row matching Lightning Bolt at all');
-            else if (bolt.normName === 'lightningbolt') {
-              // a plain-titled printing is cheapest today: no note expected
-              if (bolt.note) fails.push('plain-titled bolt got a note: ' + bolt.note);
-              else console.log('NOTE CHECK: plain title matched, correctly unannotated');
-            } else {
-              if (!bolt.note) fails.push('flavor-titled bolt (' + bolt.name + ') missing the note');
-              else if (!/Lightning bolt/.test(bolt.note)) fails.push('note lacks the typed name: ' + bolt.note);
-              else console.log('NOTE CHECK: "' + bolt.name + '" carries: ' + bolt.note);
+
+            const addCount = () => page.evaluate(() => {
+              const m = ((document.getElementById('xg-deck-add') || {}).textContent || '').match(/\((\d+)\)/);
+              return m ? +m[1] : -1;
+            });
+
+            // regression: the full-miss line still grows its button
+            let missBtn = null;
+            for (let i = 0; i < 30 && !missBtn; i++) {
+              missBtn = await page.evaluate(() => {
+                const btns = [...document.querySelectorAll('.xg-deck__simbtn')];
+                return btns.some((b) => !b.closest('.xg-deck__row--short')) || null;
+              });
+              if (!missBtn) await new Promise((r) => setTimeout(r, 1000));
             }
+            if (!missBtn) fails.push('full-miss line never got its similar-effects button');
+
+            // the short strip: present only if live stock is actually short
+            const strip = await page.$('.xg-deck__row--short');
+            if (!strip) {
+              console.log('SHORT: SKIP - live stock covers 4 Polluted Delta right now, no strip to test');
+            } else {
+              let stripBtn = null;
+              for (let i = 0; i < 30 && !stripBtn; i++) {
+                stripBtn = await page.$('.xg-deck__row--short .xg-deck__simbtn');
+                if (!stripBtn) await new Promise((r) => setTimeout(r, 1000));
+              }
+              if (!stripBtn) {
+                console.log('SHORTSUB: SKIP - no in-stock similar cards resolved for the short line');
+              } else {
+                const before = await addCount();
+                await page.click('.xg-deck__row--short .xg-deck__simbtn');
+                await page.waitForSelector('.xg-deck-subs .xg-deck-subs__add', { timeout: 20000 });
+                const pill = await page.evaluate(() => (document.querySelector('.xg-deck-subs__missp') || {}).textContent || '');
+                console.log('OVERLAY PILL:', pill);
+                if (!/^Short \d+ of \d+/.test(pill)) fails.push('overlay pill not short-aware: ' + pill);
+                await page.click('.xg-deck-subs__add');
+                await new Promise((r) => setTimeout(r, 900));
+                const picked = await page.evaluate(() => {
+                  const row = document.querySelector('.xg-deck__row--sub');
+                  const strip = document.querySelector('.xg-deck__row--short');
+                  return {
+                    stripGone: !strip,
+                    hasRow: !!row,
+                    qty: row ? ((row.querySelector('.xg-deck__qty') || {}).textContent || '').trim() : null,
+                    note: row ? ((row.querySelector('.xg-deck__subnote') || {}).textContent || '') : null,
+                    statmiss: row ? ((row.querySelector('.xg-deck__statmiss') || {}).textContent || '') : null,
+                    hasUndo: row ? !!row.querySelector('.xg-deck__subundo') : false,
+                    ticked: row ? !!(row.querySelector('.xg-deck__pickbox') || {}).checked : false,
+                  };
+                });
+                const after = await addCount();
+                console.log('PICKED:', JSON.stringify(picked), 'addCount', before, '->', after);
+                const take = parseInt(picked.qty, 10) || 0;
+                if (!picked.stripGone) fails.push('strip still visible after pick');
+                if (!picked.hasRow) fails.push('no substituted row rendered');
+                if (!/substitute for \d+ missing Polluted Delta/i.test(picked.note || '')) fails.push('bad note: ' + picked.note);
+                if (!/\d+ not in stock/.test(picked.statmiss || '')) fails.push('bad statmiss: ' + picked.statmiss);
+                if (!picked.hasUndo || !picked.ticked) fails.push('undo/tick missing');
+                if (take < 1 || after !== before + take) fails.push('add count wrong: ' + before + '+' + take + ' != ' + after);
+                await page.click('.xg-deck__row--sub .xg-deck__subundo');
+                await new Promise((r) => setTimeout(r, 700));
+                const undone = await page.evaluate(() => ({
+                  stripBack: !!document.querySelector('.xg-deck__row--short'),
+                  subGone: !document.querySelector('.xg-deck__row--sub'),
+                }));
+                const restored = await addCount();
+                console.log('UNDONE:', JSON.stringify(undone), 'addCount', restored);
+                if (!undone.stripBack || !undone.subGone) fails.push('undo did not restore the strip');
+                if (restored !== before) fails.push('undo did not restore count: ' + restored + ' != ' + before);
+              }
+            }
+
+            await new Promise((r) => setTimeout(r, 1200));
+            console.log('BEACONS:', JSON.stringify(beacons), 'hard errors:', errs.length, errs.slice(0, 2));
             await browser.close();
-            if (fails.length) { console.log('VERDICT: FAIL -', JSON.stringify(fails)); process.exit(1); }
-            console.log('VERDICT: PASS - decklist-name note');
+            const beaconOk = beacons.every((s) => s === 204);
+            if (fails.length || errs.length || !beaconOk) { console.log('VERDICT: FAIL -', JSON.stringify(fails)); process.exit(1); }
+            console.log('VERDICT: PASS - partial substitutes');
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
