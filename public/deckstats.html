@@ -67,7 +67,7 @@
     var total = data.total || {};
     var s = sum(total.search), c = sum(total.cart);
     var app = document.getElementById('app');
-    document.getElementById('stamp').textContent = 'Live from the store. Updated ' + new Date().toLocaleTimeString('en-CA') + '.';
+    document.getElementById('stamp').textContent = 'Live from the store. Updated ' + new Date().toLocaleTimeString('en-CA');
 
     if (!s.c && !c.c) {
       app.innerHTML = '<div class="empty">No Deck Builder uses recorded yet. This page fills in on its own once customers start searching.</div>';
