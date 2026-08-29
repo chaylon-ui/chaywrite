@@ -10,124 +10,96 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Shopper flow with event beacons + admin login capture
+      - name: Recon footer dupe, calendar popup stacking, search icon
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const fs = require('fs');
-          const crypto = require('crypto');
-
-          const PAGE = 'https://exorgames.com/pages/deck-builder';
-          const ADMIN = 'https://exor-binder.nevski.workers.dev/deckstats';
+          const PREVIEW = 'https://exorgames.com/?preview_theme_id=157462692013';
 
           (async () => {
             const browser = await puppeteer.launch({
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
-            const page = await browser.newPage();
-            await page.setViewport({ width: 1380, height: 980 });
-            const beacons = [];
-            const errors = [];
-            let phase = 'load';
-            page.on('response', (r) => { if (r.url().indexOf('/deck-track') > -1) beacons.push(r.status()); });
-            page.on('pageerror', (e) => errors.push({
-              phase,
-              m: String(e && e.message).slice(0, 120),
-              s: String((e && e.stack) || '').split('\n').slice(1, 3).join(' | ').slice(0, 200),
-            }));
+            const ctx = await browser.createBrowserContext();
+            const page = await ctx.newPage();
+            await page.setViewport({ width: 1366, height: 950 });
+            await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await new Promise((r) => setTimeout(r, 4000));
+            const theme = await page.evaluate(() => window.Shopify && Shopify.theme && Shopify.theme.id);
+            console.log('THEME:', theme);
 
-            await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
-            await new Promise((r) => setTimeout(r, 1200));
-            await page.evaluate(() => {
-              const input = document.getElementById('xg-deck-input');
-              input.value = '1 Sol Ring\n1 Counterspell';
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-              document.getElementById('xg-deck-go').click();
+            // 1. footer: how many newsletter forms/inputs are visible, where
+            const footer = await page.evaluate(() => {
+              const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden'; };
+              const mn = document.getElementById('_mobile_newsletter');
+              const dn = document.getElementById('_desktop_newsletter');
+              const forms = [...document.querySelectorAll('.site-footer form[action*="contact"], .site-footer .newsletter form, .site-footer input[type="email"]')];
+              const inputs = [...document.querySelectorAll('.site-footer input[type="email"]')];
+              const rect = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
+              return {
+                mn: mn ? { display: getComputedStyle(mn).display, newsletters: mn.querySelectorAll('.newsletter').length, emailInputs: mn.querySelectorAll('input[type="email"]').length } : null,
+                dn: dn ? { display: getComputedStyle(dn).display, newsletters: dn.querySelectorAll('.newsletter').length, emailInputs: dn.querySelectorAll('input[type="email"]').length } : null,
+                visibleEmailInputs: inputs.filter(vis).map((i) => ({ r: rect(i), inMn: !!i.closest('#_mobile_newsletter'), inDn: !!i.closest('#_desktop_newsletter'), value: (i.value || '').slice(0, 30) })),
+              };
             });
-            const t0 = Date.now();
-            for (;;) {
-              const ready = await page.evaluate(() => {
-                const b = document.getElementById('xg-deck-add');
-                return !!(b && !b.disabled);
-              });
-              if (ready || Date.now() - t0 > 60000) break;
-              await new Promise((r) => setTimeout(r, 700));
+            console.log('FOOTER:', JSON.stringify(footer));
+
+            // 2. search bar geometry + styles
+            const search = await page.evaluate(() => {
+              const input = document.querySelector('.search-header__input');
+              const btn = document.querySelector('.search-header__submit');
+              const logo = document.querySelector('.search-logo');
+              const info = (el) => {
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                const cs = getComputedStyle(el);
+                return { r: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+                  pos: cs.position, top: cs.top, right: cs.right, left: cs.left, bottom: cs.bottom,
+                  transform: cs.transform, bg: cs.backgroundColor, radius: cs.borderRadius, display: cs.display };
+              };
+              const form = document.querySelector('form.search-header');
+              return { form: info(form), input: info(input), btn: info(btn), logo: info(logo) };
+            });
+            console.log('SEARCH:', JSON.stringify(search));
+
+            // 3. calendar: click an event icon, identify the popup + what
+            // paints over it
+            const calReady = await page.evaluate(() => !!document.querySelector('#binderpos-calendar td .calendar-icon'));
+            if (!calReady) {
+              await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
+              await new Promise((r) => setTimeout(r, 3000));
             }
-
-            phase = 'controls';
-            // exercise the instrumented controls: untick + retick a line,
-            // swap a version, flip the next-cheapest toggle twice
-            const controls = await page.evaluate(() => {
-              const out = { err: null };
-              try {
-                const box = document.querySelector('.xg-deck__pickbox');
-                box.click();
-                out.afterUntick = document.getElementById('xg-deck-add').textContent.replace(/\s+/g, ' ').trim();
-                document.querySelector('.xg-deck__pickbox').click();
-                out.afterRetick = document.getElementById('xg-deck-add').textContent.replace(/\s+/g, ' ').trim();
-                const ver = document.querySelector('select.xg-deck__ver');
-                if (ver && ver.options.length > 1) {
-                  ver.selectedIndex = 1;
-                  ver.dispatchEvent(new Event('change', { bubbles: true }));
-                  out.swapped = ver.options[1].text.slice(0, 60);
+            const cal = await page.evaluate(async () => {
+              const icon = document.querySelector('#binderpos-calendar td .calendar-icon');
+              if (!icon) return { err: 'no icon' };
+              const before = new Set([...document.querySelectorAll('#binderpos-calendar *')]);
+              icon.click();
+              await new Promise((r) => setTimeout(r, 900));
+              const added = [...document.querySelectorAll('#binderpos-calendar *')].filter((el) => !before.has(el));
+              // also look for any element that appeared anywhere with MORE INFO
+              const more = [...document.querySelectorAll('body *')].filter((el) => el.children.length === 0 && /more info/i.test(el.textContent || ''));
+              const popRoot = more.length ? more[0].closest('div[class]') : (added.find((el) => el.offsetHeight > 80) || added[0]);
+              const chain = [];
+              for (let n = popRoot; n && chain.length < 6 && n !== document.body; n = n.parentElement) {
+                const cs = getComputedStyle(n);
+                chain.push({ tag: n.tagName, cls: String(n.className).slice(0, 70), pos: cs.position, z: cs.zIndex });
+              }
+              let coveredBy = null;
+              if (popRoot) {
+                const r = popRoot.getBoundingClientRect();
+                const probe = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + Math.min(60, r.height / 2)));
+                if (probe && !popRoot.contains(probe)) {
+                  const cs = getComputedStyle(probe);
+                  coveredBy = { tag: probe.tagName, cls: String(probe.className).slice(0, 70), pos: cs.position, z: cs.zIndex, transform: cs.transform };
                 }
-                const nc = document.getElementById('xg-deck-nextcheap');
-                nc.click(); nc.click();
-                out.summary = (document.querySelector('.xg-deck__summary') || {}).textContent.replace(/\s+/g, ' ').slice(0, 140);
-              } catch (e) { out.err = String(e.message).slice(0, 140); }
-              return out;
+              }
+              return { addedCount: added.length, chain, coveredBy,
+                iconCs: (() => { const cs = getComputedStyle(icon); return { pos: cs.position, z: cs.zIndex, transform: cs.transform }; })() };
             });
-            console.log('CONTROLS:', JSON.stringify(controls));
-            await new Promise((r) => setTimeout(r, 1200));
+            console.log('CALENDAR:', JSON.stringify(cal));
 
-            phase = 'nav';
-            const nav = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null);
-            await page.evaluate(() => document.getElementById('xg-deck-add').click());
-            await nav;
-            const landed = page.url();
-            await new Promise((r) => setTimeout(r, 1500));
-            const cart = await page.evaluate(() => fetch('/cart.js', { headers: { Accept: 'application/json' } }).then((r) => r.json()));
-            console.log('LANDED:', landed);
-            console.log('CART_ATTRS:', JSON.stringify(cart.attributes || {}));
-            console.log('BEACONS:', JSON.stringify(beacons));
-            console.log('PAGEERRORS:', JSON.stringify(errors.slice(0, 6)));
-
-            // capture the PIN login the owner will see on /deckstats
-            const admin = await browser.newPage();
-            await admin.setViewport({ width: 1100, height: 760, deviceScaleFactor: 1.5 });
-            await admin.goto(ADMIN, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await admin.waitForSelector('#pin', { timeout: 15000 }).catch(() => null);
-            await new Promise((r) => setTimeout(r, 600));
-            const login = await admin.evaluate(() => ({
-              pin: !!document.getElementById('pin'),
-              text: document.body.textContent.replace(/\s+/g, ' ').slice(0, 160),
-            }));
-            console.log('LOGIN:', JSON.stringify(login));
-            await admin.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 78 });
             await browser.close();
-
-            const buf = fs.readFileSync('shot.jpg');
-            console.log('SHOT_SIZE:', buf.length, 'SHOT_MD5:', crypto.createHash('md5').update(buf).digest('hex'));
-            const b64 = buf.toString('base64');
-            console.log('SHOT_BEGIN');
-            for (let i = 0; i < b64.length; i += 6000) console.log('B64:' + b64.slice(i, i + 6000));
-            console.log('SHOT_END');
-
-            const tag = (cart.attributes || {})['Deck Builder'] || '';
-            // Shopify's own analytics wrappers (shop_events_listener, the
-            // web pixels manager) leak unhandled Failed-to-fetch rejections
-            // through their monkeypatched window.fetch - run 45 caught both
-            // stacks. Tolerate exactly that; gate on everything else.
-            const thirdParty = (e) => e.m.indexOf('Failed to fetch') > -1 &&
-              /shopifycloud|shop_events_listener|\/cdn\/wpm\//.test(e.s || '');
-            const hardErrors = errors.filter((e) => !thirdParty(e));
-            const ok = !controls.err && /\(1\)/.test(controls.afterUntick || '') && /\(2\)/.test(controls.afterRetick || '') &&
-              /Magic: The Gathering, \d+ cards?, \$\d/.test(tag) && landed.indexOf('/cart') > -1 &&
-              beacons.length >= 2 && beacons.every((s) => s === 204) && login.pin && hardErrors.length === 0;
-            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL') + ' - tag "' + tag + '", beacons ' + beacons.length +
-              ' all-204 ' + beacons.every((s) => s === 204) + ', untick "' + controls.afterUntick + '", hard errors ' + hardErrors.length + ' (nav noise ' + (errors.length - hardErrors.length) + '), login ' + login.pin);
-            if (!ok) process.exitCode = 1;
+            console.log('VERDICT: PASS - recon only');
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
