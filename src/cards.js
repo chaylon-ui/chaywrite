@@ -778,6 +778,15 @@ export async function serveDeck(request, env, ctx) {
     }
   }
 
+  // Tally the search for /deckstats.json — after the gate (so scrapers
+  // without proof-of-work never count) and before the edge cache (so a
+  // cached answer still counts as a use). notrack=1 keeps the deploy
+  // smoke probes out of the owner's numbers.
+  if (url.searchParams.get("notrack") !== "1") {
+    ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
+      .fetch(new Request(url.origin + "/deck-track?ev=search&game=" + encodeURIComponent(game) + "&n=" + names.length)).catch(() => {}));
+  }
+
   const cache = caches.default;
   const cacheKey = new Request(new URL("/deck.json?g=" + encodeURIComponent(game) + "&n=" + encodeURIComponent(names.join("|").toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);

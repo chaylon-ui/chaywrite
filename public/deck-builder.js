@@ -203,6 +203,7 @@
   // Results state: which lines are ticked for the cart and which version
   // leads each line's fill. Fresh per search; every control repaints from it.
   var state = null;
+  var lastPick = null;   // game + ticked copies/dollars at last paint, for cart tracking
 
   function nextCheapOn() {
     var ncEl = document.getElementById('xg-deck-nextcheap');
@@ -419,6 +420,15 @@
     // Card-count basis (real copies, not lines): the fill knows exactly how
     // many copies the shelf covers, so the headline says that number.
     var pct = totalCards ? Math.round((filledCards / totalCards) * 100) : 0;
+
+    // Snapshot for cart tracking: which game and how many copies/dollars are
+    // ticked right now. addToCartSend reads this as the shopper leaves.
+    (function () {
+      var gm = null;
+      for (var gi = 0; gi < GAMES.length; gi++) if (GAMES[gi].key === state.game) gm = GAMES[gi];
+      lastPick = { game: state.game || 'mtg', label: gm ? gm.label : (state.game || 'mtg'), qty: addQty, subtotal: subtotal };
+    })();
+
     var summary =
       '<div class="xg-deck__summary">' +
         '<div class="xg-deck__sumhead"><strong>' + filledCards + '</strong> of ' + totalCards + ' cards in stock <span class="xg-deck__dim">(' + pct + '%)</span></div>' +
@@ -536,6 +546,29 @@
     });
   }
 
+  /* Runs as the shopper leaves for /cart, so both calls must survive the
+     navigation: the cart attribute rides a keepalive fetch, the tally a
+     sendBeacon. The attribute ("Deck Builder: Magic: The Gathering, 7
+     cards, $35.35") persists through checkout onto the order's Additional
+     details in Shopify admin — that's how a sale traces back here. The
+     beacon carries aggregate numbers only, never the list itself. */
+  function trackCart() {
+    try {
+      var p = lastPick || {};
+      var tag = (p.label ? p.label + ', ' : '') + (p.qty || 0) + (p.qty === 1 ? ' card, ' : ' cards, ') + money(p.subtotal || 0);
+      fetch('/cart/update.js', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ attributes: { 'Deck Builder': tag } })
+      }).catch(function () {});
+      var q = W + '/deck-track?ev=cart&game=' + encodeURIComponent(p.game || 'mtg') +
+        '&n=' + (p.qty || 0) + '&v=' + Math.round((p.subtotal || 0) * 100);
+      if (navigator.sendBeacon) navigator.sendBeacon(q);
+      else fetch(q, { method: 'POST', keepalive: true }).catch(function () {});
+    } catch (e) {}
+  }
+
   function addToCart(items) {
     if (!items || !items.length) return;
     var buttons = [document.getElementById('xg-deck-add'), document.getElementById('xg-deck-add2')].filter(Boolean);
@@ -562,14 +595,14 @@
 
   function addToCartSend(items, buttons) {
     postCart({ items: items }).then(function (r) {
-      if (r.ok) { window.location.href = '/cart'; return null; }
+      if (r.ok) { trackCart(); window.location.href = '/cart'; return null; }
       /* One item sold out since lookup -> Shopify rejects the whole batch.
          Add each on its own so the rest still land. */
       var added = 0;
       return runLimited(items, 3, function (it) {
         return postCart({ id: it.id, quantity: it.quantity }).then(function (rr) { if (rr.ok) added++; });
       }).then(function () {
-        if (added > 0) { window.location.href = '/cart'; }
+        if (added > 0) { trackCart(); window.location.href = '/cart'; }
         else {
           buttons.forEach(function (b) { b.disabled = false; b.textContent = ADDALL; });
           var note = document.createElement('p');

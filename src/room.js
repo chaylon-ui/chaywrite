@@ -548,6 +548,42 @@ export class BinderRoom {
       }
       return Response.json({ ok: true });
     }
+
+    // ---- Deck Builder usage tallies (DEFAULT room only, via in-worker
+    // stubs). serveDeck relays every proof-of-work-verified search and the
+    // storefront beacons add-to-carts; aggregates only — counts, card
+    // quantities and cent totals per game per UTC day, never list contents
+    // or shopper data. One storage object per day plus a running total.
+    if (url.pathname.endsWith("/deck-track")) {
+      const ev = url.searchParams.get("ev") === "cart" ? "cart" : "search";
+      const game = String(url.searchParams.get("game") || "other").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12) || "other";
+      const n = Math.min(500, Math.max(0, parseInt(url.searchParams.get("n") || "0", 10) || 0));
+      const v = Math.min(5e6, Math.max(0, parseInt(url.searchParams.get("v") || "0", 10) || 0));
+      const day = new Date().toISOString().slice(0, 10);
+      for (const key of ["dstat:" + day, "dstat:total"]) {
+        const s = (await this.state.storage.get(key)) || {};
+        const g = (s[ev] = s[ev] || {});
+        const row = (g[game] = g[game] || { c: 0, n: 0, v: 0 });
+        row.c += 1; row.n += n; row.v += v;
+        await this.state.storage.put(key, s);
+      }
+      if (Math.random() < 0.02) { // occasional prune; day keys start "dstat:2" so the total is never swept
+        const cut = "dstat:" + new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
+        const all = await this.state.storage.list({ prefix: "dstat:2" });
+        for (const k of all.keys()) if (k < cut) await this.state.storage.delete(k);
+      }
+      return Response.json({ ok: true });
+    }
+    if (url.pathname.endsWith("/deck-stats")) {
+      const total = (await this.state.storage.get("dstat:total")) || {};
+      const all = await this.state.storage.list({ prefix: "dstat:2", reverse: true, limit: 31 });
+      const days = [];
+      for (const [k, s] of all) days.push({ day: k.slice(6), ...s });
+      return Response.json(
+        { note: "searches and add-to-carts from the Deck Builder; c = times, n = cards, v = cents", total, days },
+        { headers: { "cache-control": "no-store" } }
+      );
+    }
     // ---- "New Today" restock hints (DEFAULT room only; /hook/inv relays
     // Shopify's inventory webhook here). The hint names an inventory item;
     // we resolve it to its product and LIVE total with our own Admin token,

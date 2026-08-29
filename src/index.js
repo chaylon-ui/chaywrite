@@ -79,6 +79,27 @@ export default {
       return serveDeckGate(request, env);
     }
 
+    // Deck Builder usage report — aggregate search/add-to-cart tallies the
+    // owner can open in a browser. No shopper data, list contents or cart
+    // details, so it can stay public.
+    if (url.pathname === "/deckstats.json") {
+      const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-stats"));
+      const h = new Headers(res.headers);
+      h.set("access-control-allow-origin", "*");
+      return new Response(res.body, { status: res.status, headers: h });
+    }
+
+    // The storefront's add-to-cart beacon. Searches are tallied worker-side
+    // inside serveDeck (behind the proof-of-work), so the public surface
+    // accepts only ev=cart and drops anything else on the floor.
+    if (url.pathname === "/deck-track") {
+      if (url.searchParams.get("ev") === "cart") {
+        ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
+          .fetch(new Request(url.origin + "/deck-track?" + url.searchParams.toString())).catch(() => {}));
+      }
+      return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*" } });
+    }
+
     if (url.pathname === "/buyprice.json") {
       return serveBuyPrice(request, env, ctx);
     }

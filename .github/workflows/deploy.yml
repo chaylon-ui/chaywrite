@@ -102,7 +102,7 @@ jobs:
             const prefix = g.seed + ':' + names.toLowerCase() + ':';
             let n = 0;
             for (;;) { const h = crypto.createHash('sha256').update(prefix + n).digest(); if (lead(h, g.bits)) break; n++; }
-            const r = await fetch(W + '/deck.json?game=' + game + '&names=' + encodeURIComponent(names) + '&pb=' + g.bucket + '&pn=' + n);
+            const r = await fetch(W + '/deck.json?game=' + game + '&names=' + encodeURIComponent(names) + '&pb=' + g.bucket + '&pn=' + n + '&notrack=1');
             console.log('--- ' + game + ' :: ' + names.slice(0, 70) + ' -> HTTP ' + r.status + ' (nonce ' + n + ')');
             console.log((await r.text()).slice(0, 2400));
           }
@@ -123,6 +123,11 @@ jobs:
           echo "next-cheapest toggle served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-nextcheap' || true)"
           echo "ticks + version picker served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-checkall' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck__ver' || true)"
           echo "thumb zoom served (js/css): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'xg-deck-zoom' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.css' | grep -c 'xg-deck-zoom' || true)"
+          echo "=== /deckstats.json (Deck Builder usage tallies; smoke probes above carry notrack=1 so they never count) ==="
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/deckstats.json" | head -c 900 || true
+          printf '\n'
+          curl -sS -o /dev/null -w 'deck-track route (public surface ignores ev=search): HTTP %{http_code}\n' --max-time 20 -X POST "https://exor-binder.nevski.workers.dev/deck-track?ev=search&game=probe" || true
+          echo "cart tag + beacon served in deck-builder.js: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'cart/update.js' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'deck-track' || true)"
           curl -sS -o /dev/null -w 'new-today.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/new-today.js" || true
           echo "cards.json nt=1 CORS + count: $(curl -sS --max-time 120 'https://exor-binder.nevski.workers.dev/cards.json?collection=new-arrivals&nt=1' -D /tmp/nt-h -o /tmp/nt-b && grep -ci 'access-control-allow-origin' /tmp/nt-h || true) / $(python3 -c 'import json;print(json.load(open("/tmp/nt-b")).get("count"))' 2>/dev/null || echo parse-fail)"
           curl -sS -o /dev/null -w 'deck-builder.css: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deck-builder.css" || true
