@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-      - name: Front page callout handoff + events strip
+      - name: Events slider fills from days ahead, kicker copy
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -20,106 +20,86 @@ jobs:
             const page = await ctx.newPage();
             await page.setViewport({ width: 1366, height: 900 });
 
-            let phase = 'load';
             const errs = [];
             const TOL = /shopifycloud|shop_events_listener|\/cdn\/wpm\//;
             page.on('pageerror', (e) => {
               const s = (e && e.stack) || String(e);
-              if (!TOL.test(s)) errs.push({ phase, msg: String((e && e.message) || e).slice(0, 200) });
-            });
-
-            await page.setRequestInterception(true);
-            page.on('request', (r) => {
-              const u = r.url();
-              if (u.includes('/deck.json?')) { r.continue({ url: u + '&notrack=1' }); return; }
-              r.continue();
+              if (!TOL.test(s)) errs.push(String((e && e.message) || e).slice(0, 200));
             });
 
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
             await page.goto(PREVIEW, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForSelector('#xg-evs', { timeout: 20000 });
 
-            await page.waitForSelector('#xg-dbc-form', { timeout: 20000 });
-            const dbc = await page.evaluate(() => {
-              const f = document.getElementById('xg-dbc-form');
-              const card = f && f.closest('.xg-dbc__card');
-              const r = card ? card.getBoundingClientRect() : null;
-              const sel = document.getElementById('xg-dbc-game');
-              return {
-                present: !!f,
-                box: r ? [Math.round(r.x), Math.round(r.y + window.scrollY), Math.round(r.width), Math.round(r.height)] : null,
-                games: sel ? sel.options.length : 0,
-                target: f.getAttribute('data-target'),
-              };
-            });
-            console.log('DBC:', JSON.stringify(dbc));
-
-            phase = 'events';
-            let evs = null;
+            let st = null;
             for (let i = 0; i < 24; i++) {
-              evs = await page.evaluate(() => {
+              st = await page.evaluate(() => {
                 const root = document.getElementById('xg-evs');
-                if (!root) return { present: false };
-                const cards = [...root.querySelectorAll('.xg-evs__card')].map((a) => ({
-                  chip: ((a.querySelector('.xg-evs__chip') || {}).textContent || '').trim(),
-                  name: ((a.querySelector('.xg-evs__name') || {}).textContent || '').trim(),
-                  meta: ((a.querySelector('.xg-evs__meta') || {}).textContent || '').trim(),
-                  price: ((a.querySelector('.xg-evs__price') || {}).textContent || '').trim(),
-                  href: a.getAttribute('href'),
-                  today: a.className.indexOf('is-today') !== -1,
-                }));
-                return { present: true, hidden: root.hidden, cards };
+                const grid = document.getElementById('xg-evs-grid');
+                if (!root || !grid) return { present: false };
+                const cards = [...grid.querySelectorAll('.xg-evs__card')];
+                return {
+                  present: true,
+                  hidden: root.hidden,
+                  ahead: root.getAttribute('data-ahead'),
+                  kicker: (document.querySelector('.xg-evs__kicker') || {}).textContent || '',
+                  titles: cards.map((a) => ((a.querySelector('.xg-evs__name') || {}).textContent || '').trim()),
+                  chips: cards.map((a) => ((a.querySelector('.xg-evs__chip') || {}).textContent || '').trim()),
+                  todayCount: cards.filter((a) => a.className.indexOf('is-today') !== -1).length,
+                  scrollW: grid.scrollWidth, clientW: grid.clientWidth,
+                  prevHidden: (document.getElementById('xg-evs-prev') || {}).hidden,
+                  nextHidden: (document.getElementById('xg-evs-next') || {}).hidden,
+                };
               });
-              if (evs.present && !evs.hidden && evs.cards.length) break;
+              if (st.present && !st.hidden && st.titles.length) break;
               await new Promise((r) => setTimeout(r, 500));
             }
-            console.log('EVS:', JSON.stringify(evs, null, 1));
-            let evsProbe = null;
-            if (!evs || !evs.present || evs.hidden || !evs.cards.length) {
-              evsProbe = await page.evaluate(async () => {
-                try {
-                  const p = (n) => (n < 10 ? '0' : '') + n;
-                  const d = new Date();
-                  const a = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-                  const e2 = new Date(d.getTime() + 14 * 864e5);
-                  const b = e2.getFullYear() + '-' + p(e2.getMonth() + 1) + '-' + p(e2.getDate());
-                  const r = await fetch('https://portal.binderpos.com/api/events/forStore?startDate=' + a + '&endDate=' + b, { headers: { 'content-type': 'application/json' } });
-                  const j = await r.json();
-                  return { status: r.status, count: Array.isArray(j) ? j.length : -1 };
-                } catch (err) { return { error: String(err).slice(0, 150) }; }
+            console.log('STRIP:', JSON.stringify(st, null, 1));
+
+            // Recompute the expected window straight from the feed with the
+            // section's own rules, and compare title-for-title.
+            const expect = await page.evaluate(async () => {
+              const pad = (n) => (n < 10 ? '0' : '') + n;
+              const iso = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+              const now = new Date();
+              const todayIso = iso(now);
+              const aheadIso = iso(new Date(now.getTime() + 3 * 864e5));
+              const endIso = iso(new Date(now.getTime() + 14 * 864e5));
+              const dayOf = (e) => String(e.date).slice(0, 10);
+              const r = await fetch('https://portal.binderpos.com/api/events/forStore?startDate=' + todayIso + '&endDate=' + endIso, { headers: { 'content-type': 'application/json' } });
+              const arr = await r.json();
+              let evs = (Array.isArray(arr) ? arr : []).filter((e) => e && e.title && e.date && !e.isDisabled && !e.disabled && dayOf(e) >= todayIso);
+              evs.sort((a, b) => {
+                const ka = dayOf(a) + ' ' + String(a.time || '99');
+                const kb = dayOf(b) + ' ' + String(b.time || '99');
+                return ka < kb ? -1 : ka > kb ? 1 : 0;
               });
-              console.log('EVS_PROBE:', JSON.stringify(evsProbe));
+              const win = evs.filter((e) => dayOf(e) <= aheadIso);
+              const pick = (win.length ? win : evs.slice(0, 6)).slice(0, 14);
+              return { winCount: win.length, titles: pick.map((e) => String(e.title).trim()), days: pick.map(dayOf) };
+            });
+            console.log('EXPECT:', JSON.stringify(expect, null, 1));
+
+            // Arrow interaction only when the row actually overflows.
+            let scrolled = null;
+            const over = st.scrollW > st.clientW + 4;
+            if (over && st.nextHidden === false) {
+              await page.click('#xg-evs-next');
+              await new Promise((r) => setTimeout(r, 800));
+              scrolled = await page.evaluate(() => document.getElementById('xg-evs-grid').scrollLeft);
+              console.log('SCROLLED_TO:', scrolled);
             }
 
-            phase = 'handoff';
-            await page.type('#xg-dbc-list', '1 Sol Ring\n1 Chain Lightning');
-            phase = 'nav';
-            await Promise.all([
-              page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }),
-              page.click('.xg-dbc__btn'),
-            ]);
-            phase = 'builder';
-            const landed = page.url();
-            console.log('LANDED:', landed);
-            await page.waitForSelector('#xg-deck-results .xg-deck__row', { timeout: 60000 });
-            const hb = await page.evaluate(() => ({
-              inputHasList: /Sol Ring/.test((document.getElementById('xg-deck-input') || {}).value || ''),
-              game: (document.getElementById('xg-deck-game') || {}).value,
-              rows: document.querySelectorAll('#xg-deck-results .xg-deck__row').length,
-              handCleared: sessionStorage.getItem('xgDeckHand') === null,
-            }));
-            console.log('HANDOFF:', JSON.stringify(hb));
-
             await browser.close();
-
-            const hardErrs = errs.filter((e) => e.phase !== 'nav');
             console.log('ERRS:', JSON.stringify(errs));
-            const evsOk = !!(evs && evs.present && (
-              (!evs.hidden && evs.cards.length > 0 && evs.cards.every((c) => c.chip && c.name)) ||
-              (evs.hidden && evsProbe && evsProbe.count === 0)
-            ));
-            const ok = dbc.present && dbc.games === 6 && /\/pages\/deck-builder/.test(landed)
-              && hb.inputHasList && hb.rows > 0 && hb.handCleared && evsOk && hardErrs.length === 0;
-            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL - ' + JSON.stringify({ evsOk, hardErrs: hardErrs.length })));
+
+            const kickerOk = st.kicker.trim() === 'In store events';
+            const titlesOk = st.titles.length > 0 && st.titles.join('||') === expect.titles.join('||');
+            const arrowsConsistent = over ? (st.prevHidden === false && st.nextHidden === false) : (st.prevHidden === true && st.nextHidden === true);
+            const scrollOk = !over || (typeof scrolled === 'number' && scrolled > 100);
+            const ok = st.present && !st.hidden && kickerOk && titlesOk && st.ahead === '3'
+              && arrowsConsistent && scrollOk && errs.length === 0;
+            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL - ' + JSON.stringify({ kickerOk, titlesOk, arrowsConsistent, scrollOk, over })));
             if (!ok) process.exit(1);
           })().catch((e) => { console.log('diagnose error:', e.message); process.exit(1); });
           EOF
