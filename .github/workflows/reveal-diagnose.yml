@@ -5,96 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
-      - name: Calendar second cell isolated - virgin vs after-native-close vs after-X
-        run: |
-          node <<'EOF'
-          const puppeteer = require('puppeteer-core');
-          const HOME = 'https://exorgames.com/?preview_theme_id=157462692013';
-
-          (async () => {
-            const browser = await puppeteer.launch({
-              executablePath: '/usr/bin/google-chrome',
-              args: ['--no-sandbox', '--disable-dev-shm-usage'],
-            });
-            const ctx = await browser.createBrowserContext();
-            const page = await ctx.newPage();
-            await page.setViewport({ width: 1366, height: 900 });
-            await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
-            await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.evaluate(() => { document.getElementById('binderpos-calendar').scrollIntoView({ block: 'center' }); });
-            await new Promise((r) => setTimeout(r, 6000));
-
-            const cellinfo = await page.evaluate(() => {
-              const tds = Array.from(document.querySelectorAll('#binderpos-calendar td.calendar-data-block:not(.calendar-inactive-block)'))
-                .filter((td) => td.querySelector('.calendar-icon-container'));
-              tds.slice(0, 2).forEach((td, i) => td.setAttribute('data-xgtest', String(i)));
-              return tds.slice(0, 2).map((td) => ({
-                day: (td.querySelector(':scope > span') || {}).textContent || '?',
-                icons: td.querySelectorAll('.calendar-icon-container').length,
-              }));
-            });
-            console.log('CELLS:', JSON.stringify(cellinfo));
-
-            async function openCount() {
-              return page.evaluate(() =>
-                Array.from(document.querySelectorAll('#binderpos-calendar .calendar-icon-info'))
-                  .filter((p) => p.offsetWidth || p.offsetHeight).length);
-            }
-            async function nodeCount() {
-              return page.evaluate(() => document.querySelectorAll('#binderpos-calendar .calendar-icon-info').length);
-            }
-            async function clickVisibleX() {
-              return page.evaluate(() => {
-                const p = Array.from(document.querySelectorAll('#binderpos-calendar .calendar-icon-info'))
-                  .find((x) => x.offsetWidth || x.offsetHeight);
-                const b = p && p.querySelector('.xg-cal-close');
-                if (b) b.click();
-                return !!b;
-              });
-            }
-            const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-            // Phase A: cell 1 FIRST, on a virgin page - does it open at all?
-            await page.click('[data-xgtest="1"] .calendar-icon-container');
-            await wait(4000);
-            const virginB = { open: await openCount(), nodes: await nodeCount() };
-            if (virginB.open) { await page.click('[data-xgtest="1"] .calendar-icon-container'); await wait(900); }
-
-            // Phase B: open cell 0, close it NATIVELY (same icon), then cell 1.
-            await page.click('[data-xgtest="0"] .calendar-icon-container');
-            await wait(1500);
-            const b1 = { open: await openCount() };
-            await page.click('[data-xgtest="0"] .calendar-icon-container'); // native toggle close
-            await wait(900);
-            const b2 = { open: await openCount() };
-            await page.click('[data-xgtest="1"] .calendar-icon-container');
-            await wait(4000);
-            const afterNativeB = { open: await openCount(), nodes: await nodeCount() };
-            if (afterNativeB.open) { await page.keyboard.press('Escape'); await wait(900); }
-
-            // Phase C: open cell 0, close via OUR X, then cell 1.
-            await page.click('[data-xgtest="0"] .calendar-icon-container');
-            await wait(1500);
-            const c1 = { open: await openCount() };
-            await clickVisibleX();
-            await wait(900);
-            const c2 = { open: await openCount() };
-            await page.click('[data-xgtest="1"] .calendar-icon-container');
-            await wait(4000);
-            const afterXB = { open: await openCount(), nodes: await nodeCount() };
-
-            console.log('ISOLATE:', JSON.stringify({ virginB, b1, b2, afterNativeB, c1, c2, afterXB }));
-            await browser.close();
-            // The gate: our X must not make cell 1 behave any worse than the
-            // widget does natively. If cell 1 never opens even virgin, that is
-            // the widget's own behavior for that event, not the X's doing.
-            const xNoWorse = afterXB.open === afterNativeB.open && afterNativeB.open === virginB.open;
-            const xCycleOk = c1.open === 1 && c2.open === 0;
-            console.log('VERDICT-ISO: ' + (xNoWorse && xCycleOk ? 'PASS' : 'FAIL') +
-              ' virginB=' + virginB.open + ' afterNativeB=' + afterNativeB.open + ' afterXB=' + afterXB.open);
-          })().catch((e) => { console.log('VERDICT-ISO: FAIL error ' + e.message); });
-          EOF
-      - name: Hero fit-text typing simulation on the ACTIVE slide
+      - name: Hero fit-text after the content-height fix
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -112,12 +23,23 @@ jobs:
             await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
             await new Promise((r) => setTimeout(r, 5000));
 
-            // Type a SHORT headline into the ACTIVE slide (injecting the h2 if
-            // that slide has none), let the fitter settle, measure; then the
-            // monster headline, refit, measure again.
-            const short = await page.evaluate(() => {
+            // The titled (hidden) slide must NOT be floored at load anymore.
+            const load = await page.evaluate(() => {
               const main = document.querySelector('.xg-hero__main');
               if (!main) return null;
+              const titled = Array.from(main.querySelectorAll('.xg-hero__content'))
+                .find((c) => c.querySelector('.xg-hero__title'));
+              const t = titled && titled.querySelector('.xg-hero__title');
+              return {
+                fit: main.getAttribute('data-xg-fit'),
+                titledFs: t ? parseFloat(getComputedStyle(t).fontSize) : null,
+              };
+            });
+
+            // Typing sim on the ACTIVE slide: short headline keeps full size,
+            // monster headline shrinks, panel height never moves.
+            const short = await page.evaluate(() => {
+              const main = document.querySelector('.xg-hero__main');
               const content = main.querySelector('.xg-hero__slide.is-active .xg-hero__content') || main.querySelector('.xg-hero__content');
               if (!content) return { noContent: true };
               let title = content.querySelector('.xg-hero__title');
@@ -131,7 +53,7 @@ jobs:
               content.setAttribute('data-xgprobe', '1');
               title.textContent = 'GRAND OPENING WEEKEND';
               window.dispatchEvent(new Event('resize'));
-              return { injected, fit: main.getAttribute('data-xg-fit') };
+              return { injected };
             });
             await new Promise((r) => setTimeout(r, 700));
             const s = await page.evaluate(() => {
@@ -153,13 +75,14 @@ jobs:
               return {
                 h: Math.round(main.getBoundingClientRect().height),
                 fs: parseFloat(getComputedStyle(title).fontSize),
-                overflow: box.scrollHeight - box.clientHeight,
+                overflow: content.offsetHeight - box.clientHeight,
               };
             });
-            console.log('HERO3:', JSON.stringify({ short, s, l }));
-            const ok = short && !short.noContent && short.fit === '1' &&
-              l.h === s.h && l.fs < s.fs && l.overflow <= 4;
-            console.log('VERDICT-HERO3: ' + (ok ? 'PASS' : 'FAIL'));
+            console.log('HERO4:', JSON.stringify({ load, short, s, l }));
+            const ok = load && load.fit === '1' &&
+              (load.titledFs === null || load.titledFs > 16) &&
+              s.fs > 30 && l.h === s.h && l.fs < s.fs && l.overflow <= 2;
+            console.log('VERDICT-HERO4: ' + (ok ? 'PASS' : 'FAIL'));
             await browser.close();
-          })().catch((e) => { console.log('VERDICT-HERO3: FAIL error ' + e.message); });
+          })().catch((e) => { console.log('VERDICT-HERO4: FAIL error ' + e.message); });
           EOF
