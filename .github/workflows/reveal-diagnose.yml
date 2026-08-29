@@ -116,22 +116,28 @@ jobs:
             // endpoints, which exercise all of OUR code deterministically.
             let mock = false, mockCount = 0;
             const MOCK_ITEM = { id: 999, key: '999:probe', title: 'Probe Card - Near Mint', product_title: 'Probe Card', variant_title: 'Near Mint', quantity: 1, discounted_price: 499, final_price: 499, price: 499, line_price: 499, url: '/products/probe', image: '', handle: 'probe' };
+            // puppeteer 22: continue()/respond() reject ASYNC when interception
+            // is off, so a plain try/catch cannot contain them (run 71 crash).
+            const safe = (fn) => { try { const r = fn(); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
             page.on('request', req => {
-              if (!mock) { try { req.continue(); } catch (e) {} return; }
+              if (!mock) return; // interception disabled: requests flow on their own
               const url = req.url();
               if (/\/cart\/add\.js/.test(url)) {
                 mockCount++;
                 const isJson = String(req.postData() || '').trim().startsWith('{');
-                try { req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(isJson ? { items: [MOCK_ITEM] } : MOCK_ITEM) }); } catch (e) {}
+                safe(() => req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(isJson ? { items: [MOCK_ITEM] } : MOCK_ITEM) }));
                 return;
               }
               if (/\/cart\.js(\?|$)/.test(url)) {
-                try { req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ item_count: mockCount, items: [], total_price: 499 * mockCount, currency: 'CAD' }) }); } catch (e) {}
+                safe(() => req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ item_count: mockCount, items: [], total_price: 499 * mockCount, currency: 'CAD' }) }));
                 return;
               }
-              try { req.continue(); } catch (e) {}
+              safe(() => req.continue());
             });
-            const setMock = async (on) => { await page.setRequestInterception(on); mock = on; if (on) mockCount = 0; };
+            const setMock = async (on) => {
+              if (on) { mockCount = 0; await page.setRequestInterception(true); mock = true; }
+              else { mock = false; await page.setRequestInterception(false); }
+            };
 
             const before = await cartCount();
             await page.evaluate(() => { const b = document.querySelector('.xg-qa'); b.scrollIntoView({ block: 'center' }); b.click(); });
