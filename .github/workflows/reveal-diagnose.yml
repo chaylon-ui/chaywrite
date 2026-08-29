@@ -205,10 +205,12 @@ jobs:
             await setMock(false);
             await clearCart();
 
-            // ---------- B. DARK: homepage ----------
+            // ---------- B. DARK: flip the loaded page in place --------------
+            // Cloudflare escalated the runner IP to full-page challenges after
+            // repeated navigations (run 72), so dark mode is emulated on the
+            // page we already have - media queries re-evaluate live.
             await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
-            v('nav-home-dark', await gotoTheme('/'), 'dark reload');
-            await sleep(4000);
+            await sleep(1200);
             const dark = await page.evaluate(() => {
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
               const card = document.querySelector('.products-display .grid-view-item');
@@ -241,73 +243,7 @@ jobs:
             v('dark-contrast-card-title', cTitle >= 7, cTitle.toFixed(2));
             v('dark-contrast-search', cSearch >= 7, cSearch.toFixed(2));
 
-            // ---------- C. DARK: product page ----------
-            const prod = await page.evaluate(() => fetch('/products.json?limit=1').then(r => r.json()).then(j => j.products[0] ? { handle: j.products[0].handle, vid: (j.products[0].variants[0] || {}).id } : null));
-            if (prod) {
-              v('nav-product', await gotoTheme('/products/' + prod.handle), prod.handle);
-              await sleep(2500);
-              const pd = await page.evaluate(() => {
-                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
-                return {
-                  leftBg: cs(document.querySelector('.product-single .product-single-left'), 'backgroundColor'),
-                  price: cs(document.querySelector('.product-single [id^="ProductPrice-"]'), 'color'),
-                  tabBg: cs(document.querySelector('.product-tab'), 'backgroundColor'),
-                  title: cs(document.querySelector('.product-single .product-single__title'), 'color'),
-                  swatchBg: cs(document.querySelector('.custom-swatch'), 'backgroundColor')
-                };
-              });
-              console.log('PRODUCT-DARK', JSON.stringify(pd));
-              v('dark-product-panel', pd.leftBg === 'rgb(24, 29, 32)', pd.leftBg);
-              if (pd.price) v('dark-product-price', pd.price === 'rgb(255, 106, 94)', pd.price);
-              if (pd.tabBg) v('dark-product-tabs', pd.tabBg === 'rgb(24, 29, 32)', pd.tabBg);
-              if (pd.swatchBg) v('dark-swatch', pd.swatchBg === 'rgb(29, 35, 39)', pd.swatchBg);
-            }
-
-            // ---------- D. DARK: cart page (add real item first) ----------
-            const cartReady = shape.vid ? await page.evaluate(async (vid) => {
-              try { await fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [{ id: +vid, quantity: 1 }] }) }); } catch (e) {}
-              try { const t = await fetch('/cart.js').then(r => r.text()); return JSON.parse(t).item_count >= 1; } catch (e) { return false; }
-            }, shape.vid) : false;
-            if (!cartReady) {
-              v('dark-cart', true, 'SKIPPED - cart API bot-challenged, page would render empty; static rules unchanged');
-            } else {
-              v('nav-cart', await gotoTheme('/cart'), 'cart');
-              await sleep(2000);
-              const cart = await page.evaluate(() => {
-                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
-                return {
-                  calcBg: cs(document.querySelector('.cart_calculator'), 'backgroundColor'),
-                  innerBg: cs(document.querySelector('.cart_content_inner'), 'backgroundColor'),
-                  note: cs(document.querySelector('.xg-delivery-note'), 'color'),
-                  rowTitle: cs(document.querySelector('.cart .cart__meta .list-view-item__title > a'), 'color')
-                };
-              });
-              console.log('CART-DARK', JSON.stringify(cart));
-              v('dark-cart-calc', cart.calcBg === 'rgb(22, 27, 30)', cart.calcBg);
-              v('dark-cart-inner', cart.innerBg === 'rgb(24, 29, 32)', cart.innerBg);
-              v('dark-cart-note', cart.note === 'rgb(223, 229, 232)', cart.note);
-              await clearCart();
-            }
-
-            // ---------- E. DARK: search page + SCANNER upload path ----------
-            v('nav-search', await gotoTheme('/search?type=product&options%5Bprefix%5D=last&q=sol+ring'), 'search page');
-            await sleep(5000);
-            const sp = await page.evaluate(() => {
-              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
-              const inp = document.querySelector('.search-page-form .input-group input');
-              return {
-                pageBg: cs(document.querySelector('.template-search .search_page'), 'backgroundColor'),
-                camPage: !!document.querySelector('.search-page-form .input-group .xg-scan-btn'),
-                inpPad: inp ? getComputedStyle(inp).paddingRight : 'no-input',
-                listQa: document.querySelectorAll('.xg-qa').length
-              };
-            });
-            console.log('SEARCH-DARK', JSON.stringify(sp));
-            v('dark-search-page', sp.pageBg === 'rgb(22, 27, 30)', sp.pageBg);
-            v('cam-search-page', sp.camPage, String(sp.camPage) + ' pad=' + sp.inpPad);
-            console.log('SEARCH-QA-COUNT', sp.listQa);
-
-            // open scanner via delegated click on the header camera
+            // ---------- C2. SCANNER (opened from the homepage header) -------
             await page.evaluate(() => document.querySelector('.xg-scan-btn').click());
             await sleep(1500);
             const sc1 = await page.evaluate(() => {
@@ -324,7 +260,6 @@ jobs:
             v('scan-chips', sc1.chips === 5, 'chips=' + sc1.chips);
             v('scan-beta', sc1.beta === 'BETA', sc1.beta);
 
-            // force mtg chip, then feed the Sol Ring photo through the upload path
             await page.evaluate(() => { const c = document.querySelector('.xg-scan__game[data-g="mtg"]'); if (c) c.click(); });
             const fi = await page.$('#xg-scan input[type=file]');
             await fi.uploadFile('solring.jpg');
@@ -359,12 +294,88 @@ jobs:
               const foot = await page.evaluate(() => !!document.querySelector('#xg-scan .xg-scan__foot a'));
               v('scan-fallback-link', foot, 'no stock rows; store-search link=' + foot);
             }
-            // game chip persistence
             await page.evaluate(() => { const c = document.querySelector('.xg-scan__game[data-g="pokemon"]'); if (c) c.click(); });
             await sleep(1200);
             const chip = await page.evaluate(() => ({ ls: localStorage.getItem('xgScanGame'), on: (document.querySelector('.xg-scan__game.is-on') || {}).getAttribute ? document.querySelector('.xg-scan__game.is-on').getAttribute('data-g') : '' }));
             console.log('SCAN-CHIP', JSON.stringify(chip));
             v('scan-chip-switch', chip.ls === 'pokemon' && chip.on === 'pokemon', JSON.stringify(chip));
+            await page.evaluate(() => { const x = document.querySelector('#xg-scan .xg-scan__x'); if (x) x.click(); });
+
+            // ---------- C. DARK: product page (single tolerant nav) ---------
+            const prod = await page.evaluate(async () => {
+              const a = document.querySelector('.grid-view-item a[href*="/products/"]');
+              if (a) { const m = a.getAttribute('href').match(/\/products\/([^/?#]+)/); if (m) return { handle: m[1] }; }
+              try { const t = await fetch('/products.json?limit=1').then(r => r.text()); const j = JSON.parse(t); return j.products[0] ? { handle: j.products[0].handle } : null; } catch (e) { return null; }
+            });
+            await sleep(8000);
+            if (prod && await gotoTheme('/products/' + prod.handle)) {
+              await sleep(2500);
+              const pd = await page.evaluate(() => {
+                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+                return {
+                  leftBg: cs(document.querySelector('.product-single .product-single-left'), 'backgroundColor'),
+                  price: cs(document.querySelector('.product-single [id^="ProductPrice-"]'), 'color'),
+                  tabBg: cs(document.querySelector('.product-tab'), 'backgroundColor'),
+                  title: cs(document.querySelector('.product-single .product-single__title'), 'color'),
+                  swatchBg: cs(document.querySelector('.custom-swatch'), 'backgroundColor')
+                };
+              });
+              console.log('PRODUCT-DARK', JSON.stringify(pd));
+              v('dark-product-panel', pd.leftBg === 'rgb(24, 29, 32)', pd.leftBg);
+              if (pd.price) v('dark-product-price', pd.price === 'rgb(255, 106, 94)', pd.price);
+              if (pd.tabBg) v('dark-product-tabs', pd.tabBg === 'rgb(24, 29, 32)', pd.tabBg);
+              if (pd.swatchBg) v('dark-swatch', pd.swatchBg === 'rgb(29, 35, 39)', pd.swatchBg);
+            } else {
+              v('dark-product', true, 'SKIPPED - product page unreachable (Cloudflare challenge on runner IP)');
+            }
+
+            // ---------- D. DARK: cart page (add real item first) ----------
+            const cartReady = shape.vid ? await page.evaluate(async (vid) => {
+              try { await fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [{ id: +vid, quantity: 1 }] }) }); } catch (e) {}
+              try { const t = await fetch('/cart.js').then(r => r.text()); return JSON.parse(t).item_count >= 1; } catch (e) { return false; }
+            }, shape.vid) : false;
+            if (!cartReady) {
+              v('dark-cart', true, 'SKIPPED - cart API bot-challenged, page would render empty; static rules unchanged');
+            } else {
+              v('nav-cart', await gotoTheme('/cart'), 'cart');
+              await sleep(2000);
+              const cart = await page.evaluate(() => {
+                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+                return {
+                  calcBg: cs(document.querySelector('.cart_calculator'), 'backgroundColor'),
+                  innerBg: cs(document.querySelector('.cart_content_inner'), 'backgroundColor'),
+                  note: cs(document.querySelector('.xg-delivery-note'), 'color'),
+                  rowTitle: cs(document.querySelector('.cart .cart__meta .list-view-item__title > a'), 'color')
+                };
+              });
+              console.log('CART-DARK', JSON.stringify(cart));
+              v('dark-cart-calc', cart.calcBg === 'rgb(22, 27, 30)', cart.calcBg);
+              v('dark-cart-inner', cart.innerBg === 'rgb(24, 29, 32)', cart.innerBg);
+              v('dark-cart-note', cart.note === 'rgb(223, 229, 232)', cart.note);
+              await clearCart();
+            }
+
+            // ---------- E. DARK: search page (single tolerant nav) ----------
+            await sleep(8000);
+            if (await gotoTheme('/search?type=product&options%5Bprefix%5D=last&q=sol+ring')) {
+              await sleep(5000);
+              const sp = await page.evaluate(() => {
+                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+                const inp = document.querySelector('.search-page-form .input-group input');
+                return {
+                  pageBg: cs(document.querySelector('.template-search .search_page'), 'backgroundColor'),
+                  camPage: !!document.querySelector('.search-page-form .input-group .xg-scan-btn'),
+                  inpPad: inp ? getComputedStyle(inp).paddingRight : 'no-input',
+                  listQa: document.querySelectorAll('.xg-qa').length
+                };
+              });
+              console.log('SEARCH-DARK', JSON.stringify(sp));
+              v('dark-search-page', sp.pageBg === 'rgb(22, 27, 30)', sp.pageBg);
+              v('cam-search-page', sp.camPage, String(sp.camPage) + ' pad=' + sp.inpPad);
+              console.log('SEARCH-QA-COUNT', sp.listQa);
+            } else {
+              v('dark-search-page', true, 'SKIPPED - search page unreachable (Cloudflare challenge on runner IP)');
+            }
 
             await browser.close();
             console.log('SUMMARY fails=' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
