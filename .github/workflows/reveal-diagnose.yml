@@ -10,171 +10,71 @@ jobs:
       - name: Install puppeteer-core
         run: npm init -y >/dev/null 2>&1 && npm i puppeteer-core@22 >/dev/null 2>&1
 
-      - name: Screenshot the live Deck Builder with a filled list
+      - name: Deck Builder tracking end to end (search tally, cart tag, stats)
         run: |
           node <<'EOF'
           const puppeteer = require('puppeteer-core');
-          const fs = require('fs');
-          const crypto = require('crypto');
 
           const URL = 'https://exorgames.com/pages/deck-builder';
-          const LIST = [
-            '1 Sol Ring',
-            '1 Command Tower',
-            '1 Arcane Signet',
-            '1 Counterspell',
-            '1 Lightning Bolt',
-            '1 Cultivate',
-            '1 Swords to Plowshares',
-          ].join('\n');
+          const W = 'https://exor-binder.nevski.workers.dev';
 
           (async () => {
+            const before = await (await fetch(W + '/deckstats.json')).json();
+            console.log('STATS_BEFORE:', JSON.stringify(before.total || {}));
+
             const browser = await puppeteer.launch({
               executablePath: '/usr/bin/google-chrome',
               args: ['--no-sandbox', '--disable-dev-shm-usage'],
             });
             const page = await browser.newPage();
-            await page.setViewport({ width: 1380, height: 980, deviceScaleFactor: 1.5 });
-            // the theme's newsletter modal skips itself when this cookie is set
-            await page.setCookie({ name: 'customer_posted', value: 'true', domain: 'exorgames.com', path: '/' });
+            await page.setViewport({ width: 1380, height: 980 });
             await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
             await page.waitForSelector('#xg-deck-input', { timeout: 30000 });
+            await new Promise((r) => setTimeout(r, 1200));
 
-            // the newsletter popup opens on its own timer and ignored the
-            // cookie, so just keep deleting any overlay DOM for the whole
-            // session (nothing overlay-like lives inside #xg-deck)
+            // DOM-level clicks throughout: the Pop Convert popup overlays the
+            // page on its own timer and would eat coordinate clicks.
             await page.evaluate(() => {
-              const purge = () => {
-                document.querySelectorAll('.modal, .modal-backdrop, [id*="popup" i], [id*="newsletter" i], [class*="popup" i]').forEach((el) => {
-                  if (!el.closest('#xg-deck')) el.remove();
-                });
-                document.body.classList.remove('modal-open');
-                document.body.style.overflow = '';
-              };
-              purge();
-              window.__xgPurge = purge;
-              setInterval(purge, 250);
-            });
-            await new Promise((r) => setTimeout(r, 1500));
-
-            await page.evaluate((list) => {
-              // clear floating widgets (chat bubbles etc) so the crop stays clean
-              document.querySelectorAll('iframe, [id*="chat" i], [class*="chat-" i], [id*="gorgias" i], [id*="tidio" i]').forEach((el) => {
-                if (!el.closest('#xg-deck')) el.style.display = 'none';
-              });
               const input = document.getElementById('xg-deck-input');
-              input.value = list;
+              input.value = '1 Sol Ring\n1 Counterspell';
               input.dispatchEvent(new Event('input', { bubbles: true }));
-            }, LIST);
-            await page.click('#xg-deck-go');
-
+              document.getElementById('xg-deck-go').click();
+            });
             const t0 = Date.now();
             for (;;) {
               const ready = await page.evaluate(() => {
-                const out = document.getElementById('xg-deck-results');
-                if (!out) return false;
-                const imgs = out.querySelectorAll('img');
-                return out.textContent.indexOf('$') > -1 && imgs.length >= 5 &&
-                  Array.prototype.every.call(imgs, (i) => i.complete);
+                const b = document.getElementById('xg-deck-add');
+                return !!(b && !b.disabled);
               });
-              if (ready || Date.now() - t0 > 75000) break;
-              await new Promise((r) => setTimeout(r, 800));
+              if (ready || Date.now() - t0 > 60000) break;
+              await new Promise((r) => setTimeout(r, 700));
             }
-            await new Promise((r) => setTimeout(r, 2500));
+            const sum = await page.evaluate(() => (document.querySelector('.xg-deck__summary') || {}).textContent || '');
+            console.log('SUMMARY:', sum.replace(/\s+/g, ' ').slice(0, 200));
 
-            // hide everything floating over the page (sticky nav, the
-            // newsletter popup + its backdrop) so the crop is clean
-            const sweep = () => page.evaluate(() => {
-              const deck = document.getElementById('xg-deck');
-              document.querySelectorAll('body *').forEach((el) => {
-                if (deck.contains(el)) return;
-                const cs = getComputedStyle(el);
-                if (cs.position === 'fixed' || cs.position === 'sticky') el.style.display = 'none';
-              });
-              const input = document.getElementById('xg-deck-input');
-              if (input) input.scrollTop = 0;
-              if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-            });
-            await sweep();
-            await new Promise((r) => setTimeout(r, 1200));
-            await sweep();
-
-            const info = await page.evaluate(() => {
-              const out = document.getElementById('xg-deck-results');
-              const rect = document.getElementById('xg-deck').getBoundingClientRect();
-              return {
-                resultChars: out ? out.textContent.replace(/\s+/g, ' ').trim().length : 0,
-                sample: out ? out.textContent.replace(/\s+/g, ' ').trim().slice(0, 300) : null,
-                imgs: out ? out.querySelectorAll('img').length : 0,
-                h: Math.round(rect.height),
-              };
-            });
-            console.log('STATE:', JSON.stringify(info));
-
-            // the popup survived cookie + selector purges, so it is not the
-            // theme modal: log whatever paints over the builder, then strip
-            // the page to the builder's own ancestor chain and drop any
-            // positioned element still overlapping its box
-            const diag = await page.evaluate(() => {
-              const deck = document.getElementById('xg-deck');
-              const dr = deck.getBoundingClientRect();
-              const cx = Math.floor(dr.left + dr.width / 2);
-              const cy = Math.floor(Math.max(0, dr.top) + Math.min(window.innerHeight, dr.height) / 2);
-              const chain = (el) => {
-                const parts = [];
-                for (let n = el; n && n !== document.documentElement && parts.length < 8; n = n.parentElement) {
-                  let cls = '';
-                  if (typeof n.className === 'string' && n.className.trim()) {
-                    cls = '.' + n.className.trim().split(/\s+/).slice(0, 3).join('.');
-                  }
-                  parts.push(n.tagName + (n.id ? '#' + n.id : '') + cls);
-                }
-                return parts.join(' < ');
-              };
-              const before = document.elementFromPoint(cx, cy);
-              const beforeChain = before ? chain(before) : 'none';
-              const beforeInDeck = !!(before && deck.contains(before));
-
-              const keep = new Set();
-              for (let n = deck; n; n = n.parentElement) keep.add(n);
-              let removed = 0;
-              Array.from(document.querySelectorAll('body > *')).forEach((el) => {
-                if (!keep.has(el)) { el.remove(); removed++; }
-              });
-              document.querySelectorAll('body *').forEach((el) => {
-                if (deck.contains(el) || el.contains(deck)) return;
-                const cs = getComputedStyle(el);
-                if (cs.position === 'static') return;
-                const r = el.getBoundingClientRect();
-                const d2 = deck.getBoundingClientRect();
-                const overlap = r.width > 0 && r.height > 0 &&
-                  !(r.right <= d2.left || r.left >= d2.right || r.bottom <= d2.top || r.top >= d2.bottom);
-                if (overlap) { el.remove(); removed++; }
-              });
-              if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-              const after = document.elementFromPoint(cx, cy);
-              return {
-                beforeChain, beforeInDeck, removed,
-                afterInDeck: !!(after && (after === deck || deck.contains(after))),
-                afterChain: after ? chain(after) : 'none',
-              };
-            });
-            console.log('OVERLAY:', JSON.stringify(diag));
-
-            const el = await page.$('#xg-deck');
-            await el.screenshot({ path: 'shot.jpg', type: 'jpeg', quality: 74 });
+            const nav = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null);
+            await page.evaluate(() => document.getElementById('xg-deck-add').click());
+            await nav;
+            const landed = page.url();
+            console.log('LANDED:', landed);
+            await new Promise((r) => setTimeout(r, 1500));
+            const cart = await page.evaluate(() => fetch('/cart.js', { headers: { Accept: 'application/json' } }).then((r) => r.json()));
+            console.log('CART_ATTRS:', JSON.stringify(cart.attributes || {}));
+            console.log('CART_ITEMS:', (cart.items || []).map((i) => i.quantity + 'x ' + i.title).join(' | ').slice(0, 220));
             await browser.close();
 
-            const buf = fs.readFileSync('shot.jpg');
-            console.log('SHOT_SIZE:', buf.length, 'SHOT_MD5:', crypto.createHash('md5').update(buf).digest('hex'));
-            const b64 = buf.toString('base64');
-            console.log('SHOT_BEGIN');
-            for (let i = 0; i < b64.length; i += 6000) {
-              console.log('B64:' + b64.slice(i, i + 6000));
-            }
-            console.log('SHOT_END');
-            const clean = diag.afterInDeck && info.imgs >= 5;
-            console.log('VERDICT: ' + (clean ? 'PASS' : 'FAIL') + ' - center resolves ' + (diag.afterInDeck ? 'inside' : 'OUTSIDE') + ' the builder after strip; removed ' + diag.removed + ' nodes; ' + info.imgs + ' card images, results ' + info.resultChars + ' chars');
-            if (!clean) process.exitCode = 1;
+            await new Promise((r) => setTimeout(r, 3000));
+            const after = await (await fetch(W + '/deckstats.json')).json();
+            console.log('STATS_AFTER:', JSON.stringify(after.total || {}));
+
+            const tag = (cart.attributes || {})['Deck Builder'] || '';
+            const sB = (((before.total || {}).search || {}).mtg || { c: 0 }).c;
+            const cB = (((before.total || {}).cart || {}).mtg || { c: 0 }).c;
+            const s = ((after.total || {}).search || {}).mtg || { c: 0 };
+            const c = ((after.total || {}).cart || {}).mtg || { c: 0, v: 0 };
+            const ok = /Magic: The Gathering, \d+ cards?, \$\d/.test(tag) &&
+              landed.indexOf('/cart') > -1 && s.c > sB && c.c > cB && c.v > 0;
+            console.log('VERDICT: ' + (ok ? 'PASS' : 'FAIL') + ' - tag "' + tag + '"; search mtg ' + sB + '->' + s.c + ', cart mtg ' + cB + '->' + c.c + ' (' + c.v + ' cents)');
+            if (!ok) process.exitCode = 1;
           })().catch((e) => { console.log('diagnose error:', e.message); process.exitCode = 1; });
           EOF
