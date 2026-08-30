@@ -109,18 +109,22 @@ jobs:
               const heads = document.querySelectorAll('.xg-sp .xg-sp__head');
               const k = document.querySelector('.xg-sp .xg-sp__kicker');
               const t = document.querySelector('.xg-sp .xg-sp__title');
-              const ml = document.querySelector('.xg-sp .multilevel-item');
               const wrap = document.querySelector('.xg-sp .grid-view-item .grid-view-item__image-wrapper');
               const desc = document.querySelector('.xg-sp .grid-view-item .product-description');
               const blurb = document.querySelector('.xg-sp .grid-view-item .product-desc');
               const nav = document.querySelector('.xg-sp .owl-nav .owl-next');
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              // the live sports_row uses max_products_rows=1, so there are no
+              // .multilevel-item pair wrappers - the side-by-side 2-up comes
+              // from owl itself (992px: items 2). Count VISIBLE tiles.
+              const active = Array.from(document.querySelectorAll('.xg-sp .owl-item.active .grid-view-item')).filter(el => el.offsetWidth > 0);
               return {
                 heads: heads.length,
                 oldRedBox: document.querySelectorAll('.xg-sp .title-left').length,
                 kColor: cs(k, 'color'), kUpper: cs(k, 'textTransform'),
                 tSize: parseFloat(cs(t, 'fontSize') || '0'), tUpper: cs(t, 'textTransform'),
-                mlDisplay: cs(ml, 'display'), mlCols: (cs(ml, 'gridTemplateColumns') || '').split(' ').length,
+                visTiles: active.length,
+                mlCount: document.querySelectorAll('.xg-sp .multilevel-item').length,
                 wrapH: wrap ? wrap.offsetHeight : -1, wrapFloat: cs(wrap, 'float'), wrapDisplay: cs(wrap, 'display'),
                 descDisplay: cs(desc, 'display'), descFloat: cs(desc, 'float'),
                 blurbGone: blurb ? cs(blurb, 'display') === 'none' : true,
@@ -132,7 +136,7 @@ jobs:
             v('sp-old-redbox-gone', sp.oldRedBox === 0, 'title-left count=' + sp.oldRedBox);
             v('sp-kicker', sp.kColor === 'rgb(214, 44, 40)' && sp.kUpper === 'uppercase', sp.kColor + ' / ' + sp.kUpper);
             v('sp-title', sp.tSize >= 22 && sp.tSize <= 30 && sp.tUpper === 'uppercase', sp.tSize + 'px / ' + sp.tUpper);
-            v('sp-two-up', sp.mlDisplay === 'grid' && sp.mlCols === 2, sp.mlDisplay + ' cols=' + sp.mlCols);
+            v('sp-two-up', sp.visTiles >= 2, 'visible tiles=' + sp.visTiles + ' (multilevel pairs=' + sp.mlCount + ', max_rows=1 -> owl 2-up)');
             v('sp-tile-vertical', sp.wrapFloat === 'none' && sp.wrapDisplay === 'block' && sp.descFloat === 'none' && sp.descDisplay === 'flex', 'wrap=' + sp.wrapFloat + '/' + sp.wrapDisplay + ' desc=' + sp.descFloat + '/' + sp.descDisplay);
             v('sp-tile-height', sp.wrapH === 205, 'wrapH=' + sp.wrapH);
             v('sp-blurb-hidden', sp.blurbGone, String(sp.blurbGone));
