@@ -26,19 +26,28 @@ jobs:
           # (runner image no longer ships ImageMagick, so compose with Pillow)
           python3 -m pip install --quiet pillow || sudo apt-get -yq install python3-pil
           python3 - <<'PY'
-          from PIL import Image
+          from PIL import Image, ImageDraw
           card = Image.open('solring.jpg').convert('RGB')
           w, h = card.size
-          card = card.resize((int(w * 0.7), int(h * 0.7)))
+          small = card.resize((int(w * 0.7), int(h * 0.7)))
           bg = Image.new('RGB', (1600, 1200), (122, 106, 85))
-          bg.paste(card, (520, 120))
+          bg.paste(small, (520, 120))
           bg.save('table.jpg', quality=92)
           # the owner also photographs cards lying SIDEWAYS on the table -
           # the rotated variant exercises the scanner's rotation retries
           bg.transpose(Image.ROTATE_90).save('table-rot.jpg', quality=92)
-          print('table.jpg composed', bg.size, 'card', card.size)
+          print('table.jpg composed', bg.size, 'card', small.size)
+          # v3.5 collector-line rescue: the TITLE band blacked out, the
+          # bottom collector line ("263 U" / "C21 * EN") left intact - the
+          # scanner must identify the card from set+number alone
+          bg2 = Image.new('RGB', (800, 1150), (96, 88, 76))
+          bg2.paste(card, (64, 80))
+          d = ImageDraw.Draw(bg2)
+          d.rectangle([94, 112, 704, 188], fill=(8, 8, 8))
+          bg2.save('noname.jpg', quality=92)
+          print('noname.jpg composed', bg2.size, 'title blacked')
           PY
-          ls -la table.jpg table-rot.jpg; file table.jpg table-rot.jpg
+          ls -la table.jpg table-rot.jpg noname.jpg; file table.jpg table-rot.jpg noname.jpg
 
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22
@@ -571,6 +580,57 @@ jobs:
             }
             v('scan-rotated-read', /sol/i.test(rread), 'read=' + (rread || rlast).slice(0, 90) + ' after ' + rwaited + 'ms (90deg-rotated photo)');
             console.log('SCAN-ROT-ROWS', rrows);
+
+            // round 10: the read line now carries the collector-line chip.
+            // Run 86 proved the rotated cycle OCRs "C21 EN ..." alongside the
+            // title, so the chip must name the set here.
+            const rotRead = await page.evaluate(() => (document.querySelector('#xg-scan .xg-scan__read') || {}).textContent || '');
+            console.log('SCAN-ROT-CHIP', JSON.stringify(rotRead.slice(0, 120)));
+            v('scan-clue-chip', /C21/i.test(rotRead), rotRead.slice(0, 90));
+
+            // round 10: per-game collector-line parsing (pure fixture checks
+            // against the same parser the scan flow uses)
+            const cl = await page.evaluate(() => ({
+              ygo: window.__xgScanClues('BLUE-EYES WHITE DRAGON\nDUPO-EN048 1st Edition', 'yugioh'),
+              op: window.__xgScanClues('Roronoa Zoro\nOP01-025 L 2022', 'onepiece'),
+              pk: window.__xgScanClues('Charizard 120 HP\n14/181 Illus. Mitsuhiro Arita', 'pokemon'),
+              mtg: window.__xgScanClues('263 U\nC21 EN Mike Bierek', 'mtg'),
+              mtg2: window.__xgScanClues('0263/0344 M\nZNR EN', 'mtg'),
+              junk: window.__xgScanClues('random flavor 1/2 text THE EN nonsense', 'mtg')
+            }));
+            console.log('CLUE-PARSE', JSON.stringify(cl));
+            v('clue-parse', cl.ygo.code === 'DUPO-EN048' && cl.op.code === 'OP01-025' && cl.pk.num === '14' && cl.pk.den === '181'
+              && cl.mtg.set === 'c21' && cl.mtg.num === '263' && cl.mtg2.set === 'znr' && cl.mtg2.num === '263' && cl.mtg2.den === '344'
+              && !cl.junk.set && !cl.junk.num, JSON.stringify(cl));
+
+            // round 10: TITLE BLACKED OUT - only the collector line can name
+            // the card. All title passes must fail the shelf gate, then the
+            // clue lookup (Scryfall c21/263 -> Sol Ring -> stock) renders with
+            // the "collector line" basis in the read line.
+            await page.evaluate(() => { const b = document.querySelector('#xg-scan .xg-scan__res [data-act=again]'); if (b) b.click(); });
+            await sleep(500);
+            await page.evaluate(() => {
+              const r = document.querySelector('#xg-scan .xg-scan__res');
+              if (r) r.innerHTML = '';
+              document.getElementById('xg-scan').classList.remove('has-results');
+            });
+            const fi3 = await page.$('#xg-scan input[type=file]');
+            await fi3.uploadFile('noname.jpg');
+            let nread = '', nwaited = 0, nlast = '';
+            while (nwaited < 150000) {
+              await sleep(3000); nwaited += 3000;
+              const st = await page.evaluate(() => ({
+                read: (document.querySelector('#xg-scan .xg-scan__read') || {}).textContent || '',
+                status: (document.querySelector('#xg-scan .xg-scan__status') || {}).textContent || '',
+                hasResults: document.getElementById('xg-scan').classList.contains('has-results')
+              }));
+              nlast = st.status;
+              if (st.hasResults) { nread = st.read; console.log('SCAN-NONAME-STATE', JSON.stringify(st)); break; }
+              if (/Couldn/.test(st.status)) { console.log('SCAN-NONAME-DEAD', JSON.stringify(st)); break; }
+              if (nwaited % 15000 === 0) console.log('SCAN-NONAME-WAIT', JSON.stringify(st));
+            }
+            v('scan-collector-rescue', /sol/i.test(nread) && /collector line/i.test(nread) && /C21/i.test(nread),
+              'read=' + (nread || nlast).slice(0, 110) + ' after ' + nwaited + 'ms (title blacked out)');
             await page.evaluate(() => { const x = document.querySelector('#xg-scan .xg-scan__x'); if (x) x.click(); });
 
             // ---------- D. Stored dark survives a fresh load (boot script) ----------
