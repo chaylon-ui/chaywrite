@@ -93,6 +93,27 @@
   var gameSel = document.getElementById('xg-deck-game');
   input.setAttribute('placeholder', PLACEHOLDER);
 
+  // The example list follows the chosen game (a Pokémon player should see
+  // how a Pokémon list is typed, not a Magic one). A shell that sets its
+  // own data-placeholder opts out — that attribute stays as given.
+  var PH_SAMPLES = {
+    mtg: '4 Lightning Bolt\n4 Counterspell\n2 Wrath of God\n1 Sol Ring\n9 Island',
+    pokemon: '4 Charizard ex\n4 Rare Candy\n3 Boss’s Orders\n10 Fire Energy',
+    yugioh: '3 Blue-Eyes White Dragon\n3 Ash Blossom & Joyous Spring\n2 Called by the Grave',
+    starwars: '3 Darth Vader, Dark Lord of the Sith\n3 Force Choke\n2 TIE Advanced',
+    onepiece: '4 Monkey.D.Luffy\n4 Roronoa Zoro\n2 Trafalgar Law',
+    riftbound: '3 Jinx\n3 Yasuo\n2 Ahri'
+  };
+  var PH_TAIL = '\n...paste your whole list — quantities and set tags are fine';
+  if (root.getAttribute('data-placeholder') == null || root.getAttribute('data-placeholder') === '') {
+    var paintPlaceholder = function () {
+      var g = (gameSel && gameSel.value) || 'mtg';
+      input.setAttribute('placeholder', PH_SAMPLES[g] ? PH_SAMPLES[g] + PH_TAIL : PLACEHOLDER);
+    };
+    if (gameSel) gameSel.addEventListener('change', paintPlaceholder);
+    paintPlaceholder();
+  }
+
   var SKIP = /^(deck|sideboard|side board|commander|companion|maybeboard|maybe board|tokens?|lands?|creatures?|spells?|artifacts?|enchantments?|planeswalkers?|instants?|sorceries)\s*:?\s*(\(\d+\))?\s*$/i;
 
   function parseDeck(text) {
