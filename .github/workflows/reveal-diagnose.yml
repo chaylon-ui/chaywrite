@@ -197,7 +197,11 @@ jobs:
             const MOCK_ITEM = { id: 999, key: '999:probe', title: 'Probe Card - Near Mint', product_title: 'Probe Card', variant_title: 'Near Mint', quantity: 1, discounted_price: 499, final_price: 499, price: 499, line_price: 499, url: '/products/probe', image: '', handle: 'probe' };
             const safe = (fn) => { try { const r = fn(); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
             page.on('request', req => {
-              if (!mock) return;
+              if (!mock) {
+                // surface the scanner's batched candidate list
+                if (/\/instock\.json/.test(req.url())) console.log('INSTOCK-REQ', decodeURIComponent(req.url()).slice(0, 420));
+                return;
+              }
               const url = req.url();
               if (/\/cart\/add\.js/.test(url)) {
                 mockCount++;
