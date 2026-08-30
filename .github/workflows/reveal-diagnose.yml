@@ -98,8 +98,13 @@ jobs:
                 togPressed: (document.querySelector('#header .header-user-selection .xg-theme-toggle') || { getAttribute: () => '' }).getAttribute('aria-pressed')
               };
             });
+            const drawerLight = await page.evaluate(() => {
+              const w = document.getElementById('mobile_top_menu_wrapper');
+              return w ? getComputedStyle(w).backgroundColor : 'missing';
+            });
             console.log('SHAPE', JSON.stringify(shape));
             v('light-body', shape.bodyBg === 'rgb(245, 246, 247)', shape.bodyBg);
+            v('drawer-light-white', drawerLight === 'rgb(255, 255, 255)', drawerLight);
             v('qa-regression', shape.qaTotal >= 6, 'qa=' + shape.qaTotal);
             v('nt-regression', shape.nt >= 8, 'nt=' + shape.nt);
             v('cam-regression', shape.camDesk, String(shape.camDesk));
@@ -305,6 +310,31 @@ jobs:
             if (dark.ntPrice) v('dark-nt-price', dark.ntPrice === 'rgb(255, 106, 94)', dark.ntPrice);
             v('cta-selfdark-stable', dark.ctaSelBg === 'rgb(255, 255, 255)' && dark.ctaTitle === 'rgb(255, 255, 255)', dark.ctaSelBg + ' / ' + dark.ctaTitle);
 
+            // round 7: hamburger drawer paints dark (computed styles resolve on
+            // display:none nodes) and the card-corner clip rule applies (checked
+            // on a synthetic card-float fragment; product pages are
+            // Cloudflare-flaky from runner IPs and the rule is static CSS).
+            const r7 = await page.evaluate(() => {
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              const w = document.getElementById('mobile_top_menu_wrapper');
+              const t = w ? w.querySelector('.mobile-menu-category__title .title') : null;
+              const x = w ? w.querySelector('#top_menu_closer i') : null;
+              const ch = w ? w.querySelector('.mobile-menu-category__dropdown i') : null;
+              const frag = document.createElement('div');
+              frag.className = 'card-float';
+              frag.innerHTML = '<div class="product-single__photo"><img></div>';
+              document.body.appendChild(frag);
+              const rad = getComputedStyle(frag.querySelector('img')).borderRadius;
+              frag.remove();
+              return { has: !!w, bg: cs(w, 'backgroundColor'), title: cs(t, 'color'), closer: cs(x, 'color'), chev: cs(ch, 'color'), rad };
+            });
+            console.log('ROUND7-DARK', JSON.stringify(r7));
+            v('drawer-dark-panel', r7.has && r7.bg === 'rgb(22, 27, 30)', r7.bg + ' (has=' + r7.has + ')');
+            v('drawer-dark-title', r7.title === 'rgb(238, 242, 244)', r7.title);
+            v('drawer-dark-closer', r7.closer === 'rgb(238, 242, 244)', r7.closer);
+            if (r7.chev) v('drawer-dark-chevron', r7.chev === 'rgb(183, 194, 201)', r7.chev);
+            v('card-corner-clip', /5%/.test(r7.rad) && /3\.6%/.test(r7.rad), r7.rad);
+
             // ---------- C. SCANNER v3: portrait chrome + sparse photo read ----------
             await page.evaluate(() => document.querySelector('.xg-scan-btn').click());
             await sleep(1500);
@@ -388,7 +418,8 @@ jobs:
                   leftBg: cs(document.querySelector('.product-single .product-single-left'), 'backgroundColor'),
                   price: cs(document.querySelector('.product-single [id^="ProductPrice-"]'), 'color'),
                   tabBg: cs(document.querySelector('.product-tab'), 'backgroundColor'),
-                  swatchBg: cs(document.querySelector('.custom-swatch'), 'backgroundColor')
+                  swatchBg: cs(document.querySelector('.custom-swatch'), 'backgroundColor'),
+                  imgRadius: cs(document.querySelector('.card-float .product-single__photo img'), 'borderRadius')
                 };
               });
               console.log('PRODUCT-DARK', JSON.stringify(pd));
@@ -397,6 +428,7 @@ jobs:
               if (pd.price) v('dark-product-price', pd.price === 'rgb(255, 106, 94)', pd.price);
               if (pd.tabBg) v('dark-product-tabs', pd.tabBg === 'rgb(24, 29, 32)', pd.tabBg);
               if (pd.swatchBg) v('dark-swatch', pd.swatchBg === 'rgb(29, 35, 39)', pd.swatchBg);
+              if (pd.imgRadius) v('card-corner-clip-live', /5%/.test(pd.imgRadius), pd.imgRadius + ' (singles card-float img)');
             } else {
               v('boot-persists-dark', true, 'SKIPPED - product page unreachable (Cloudflare challenge on runner IP)');
             }
