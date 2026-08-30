@@ -178,6 +178,69 @@ jobs:
             v('cta-fields-light', cta.selBg === 'rgb(255, 255, 255)' && cta.inpBg === 'rgb(245, 246, 248)', cta.selBg + ' / ' + cta.inpBg);
             v('cta-btn', cta.btnGrad && cta.btnRadius === '999px', 'grad=' + cta.btnGrad + ' r=' + cta.btnRadius);
 
+            // round 9: the CTA's example list follows the chosen game
+            const ph = await page.evaluate(() => {
+              const sel = document.getElementById('xg-dbc-game');
+              const ta = document.getElementById('xg-dbc-list');
+              if (!sel || !ta) return null;
+              const grab = () => ta.getAttribute('placeholder') || '';
+              const out = { start: grab() };
+              sel.value = 'pokemon';
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+              out.poke = grab();
+              sel.value = 'mtg';
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+              out.back = grab();
+              return out;
+            });
+            console.log('CTA-PH', JSON.stringify(ph));
+            v('cta-ph-per-game', !!ph && /Charizard/.test(ph.poke) && /Sol Ring/.test(ph.back) && /Sol Ring/.test(ph.start), ph ? JSON.stringify({ poke: ph.poke.slice(0, 26), back: ph.back.slice(0, 22) }) : 'CTA els missing');
+
+            // round 9: Fresh-to-the-shelf ticker (idea #4). Feed-gated so a
+            // genuinely quiet nt day reads as absent-by-design, not a FAIL.
+            const tick = await page.evaluate(async () => {
+              let feed = -1;
+              try {
+                const r = await fetch('https://exor-binder.nevski.workers.dev/cards.json?nt=1');
+                const j = await r.json();
+                feed = ((j && j.cards) || []).filter(c => c && c.name && c.price).length;
+              } catch (e) {}
+              window.scrollTo(0, 0);
+              const t = document.getElementById('xg-ticker');
+              if (!t) return { feed, has: false };
+              const track = t.querySelector('.xg-tick__track');
+              const cs = getComputedStyle(track);
+              return {
+                feed, has: true,
+                inMain: !!t.closest('#MainContent'),
+                top: t.getBoundingClientRect().top,
+                items: t.querySelectorAll('.xg-tick__item').length,
+                halves: t.querySelectorAll('.xg-tick__half').length,
+                adds: t.querySelectorAll('.xg-tick__add').length,
+                anim: cs.animationName, state: cs.animationPlayState, dur: parseFloat(cs.animationDuration),
+                label: (t.querySelector('.xg-tick__label') || {}).textContent || '',
+                price: t.querySelector('.xg-tick__price') ? getComputedStyle(t.querySelector('.xg-tick__price')).color : ''
+              };
+            });
+            console.log('TICKER', JSON.stringify(tick));
+            if (tick.feed >= 4) {
+              v('ticker-mounts', tick.has && tick.halves === 2 && tick.items >= 8 && tick.adds >= 2, 'has=' + tick.has + ' items=' + (tick.items || 0) + ' adds=' + (tick.adds || 0) + ' feed=' + tick.feed);
+              if (tick.has) {
+                v('ticker-top-of-page', tick.inMain && tick.top < 500, 'inMain=' + tick.inMain + ' top=' + Math.round(tick.top));
+                v('ticker-marquee', tick.anim === 'xgTickMove' && tick.state === 'running' && tick.dur >= 30, tick.anim + '/' + tick.state + '/' + tick.dur + 's');
+                v('ticker-label', /Fresh to the shelf/i.test(tick.label), tick.label.slice(0, 40));
+                v('ticker-light-price', tick.price === 'rgb(214, 44, 40)', tick.price);
+                await page.hover('#xg-ticker .xg-tick__label');
+                await sleep(400);
+                const paused = await page.evaluate(() => getComputedStyle(document.querySelector('#xg-ticker .xg-tick__track')).animationPlayState);
+                v('ticker-hover-pause', paused === 'paused', paused);
+                await page.mouse.move(700, 620);
+                await sleep(300);
+              }
+            } else {
+              v('ticker-mounts', !tick.has, 'SKIPPED - nt feed=' + tick.feed + (tick.feed < 0 ? ' (fetch failed in page)' : ' (<4 cards -> ticker absent by design)') + ' has=' + tick.has);
+            }
+
             // ---- locations strip: renamed programs stay inside their pill ----
             const loc = await page.evaluate(() => {
               const wanted = ['Lorcana: Organized Play Store', 'Riftbound: Organized Play Store', 'Upper Deck Diamond Dealer'];
@@ -248,6 +311,19 @@ jobs:
               return { open: !!(p && p.classList.contains('is-open')), meta: p ? ((p.querySelector('.xg-peek__meta') || {}).textContent || '') : '' };
             });
             v('peek-money', direct.open && direct.meta.indexOf('2') > -1 && direct.meta.indexOf('12.34') > -1, JSON.stringify(direct));
+
+            // round 9: ticker one-tap add rides the same mocked cart plumbing
+            if (tick.feed >= 4 && tick.has) {
+              const tAdd = await page.evaluate(async () => {
+                const b = document.querySelector('#xg-ticker .xg-tick__add');
+                if (!b) return { clicked: false };
+                b.click();
+                await new Promise(r => setTimeout(r, 1200));
+                return { clicked: true, added: b.classList.contains('is-added'), txt: b.textContent };
+              });
+              console.log('TICKER-ADD', JSON.stringify(tAdd));
+              v('ticker-add-mock', tAdd.clicked && tAdd.added && tAdd.txt === '✓', JSON.stringify(tAdd));
+            }
             await setMock(false);
 
             // ---------- B. DARK TOGGLE: click, persist, system-follow ----------
@@ -298,6 +374,7 @@ jobs:
                 cardBg: cs(card, 'backgroundColor'),
                 logoPlate: cs(document.querySelector('#header .header__logo img'), 'backgroundColor'),
                 ntPrice: cs(document.querySelector('#xg-newtoday .xg-nt__price'), 'color'),
+                tickPrice: cs(document.querySelector('#xg-ticker .xg-tick__price'), 'color'),
                 ctaSelBg: cs(document.querySelector('.xg-dbc__select'), 'backgroundColor'),
                 ctaTitle: cs(document.querySelector('.xg-dbc__title'), 'color'),
                 colorScheme: getComputedStyle(document.documentElement).colorScheme
@@ -311,6 +388,7 @@ jobs:
             v('dark-logo-plate', dark.logoPlate === 'rgb(255, 255, 255)', dark.logoPlate);
             v('dark-color-scheme', /dark/.test(dark.colorScheme), dark.colorScheme);
             if (dark.ntPrice) v('dark-nt-price', dark.ntPrice === 'rgb(255, 106, 94)', dark.ntPrice);
+            if (dark.tickPrice) v('ticker-dark-price', dark.tickPrice === 'rgb(255, 106, 94)', dark.tickPrice);
             v('cta-selfdark-stable', dark.ctaSelBg === 'rgb(255, 255, 255)' && dark.ctaTitle === 'rgb(255, 255, 255)', dark.ctaSelBg + ' / ' + dark.ctaTitle);
 
             // round 7: hamburger drawer paints dark + card-corner clip applies.
@@ -350,6 +428,50 @@ jobs:
             v('drawer-dark-chevron', r7.chev === 'rgb(183, 194, 201)', r7.chev);
             v('drawer-dark-closer', r7.closer === 'rgb(238, 242, 244)', r7.closer);
             v('card-corner-clip', /5%/.test(r7.rad) && /3\.6%/.test(r7.rad), r7.rad);
+
+            // round 9: the dark logo plate must not move layout. The old
+            // padding plate grew the img's box and wrapped the mobile header's
+            // logo onto its own line (owner screenshot) - the box-shadow plate
+            // paints the same white pad with zero geometry delta. Flip the
+            // attribute in place at phone width and diff the visible logo box.
+            const measureLogo = () => page.evaluate(() => {
+              window.scrollTo(0, 0);
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              const meas = () => {
+                const img = Array.from(document.querySelectorAll('#header .header__logo img')).find(i => i.offsetWidth > 0);
+                if (!img) return null;
+                const r = img.getBoundingClientRect();
+                const head = img.closest('.site-header-mobile') || img.closest('.site-header') || document.getElementById('header');
+                return { w: r.width, h: r.height, top: r.top, headH: head ? head.getBoundingClientRect().height : -1, pad: cs(img, 'paddingLeft'), shadow: String(cs(img, 'boxShadow')) };
+              };
+              document.documentElement.setAttribute('data-xg-theme', 'dark');
+              const d = meas();
+              document.documentElement.removeAttribute('data-xg-theme');
+              const l = meas();
+              document.documentElement.setAttribute('data-xg-theme', 'dark');
+              return { d, l };
+            });
+            await page.setViewport({ width: 390, height: 844 });
+            await sleep(1500);
+            let logo = await measureLogo(), logoCtx = '@390px';
+            if (!logo.d || !logo.l) {
+              await page.setViewport({ width: 1440, height: 950 });
+              await sleep(1500);
+              logo = await measureLogo();
+              logoCtx = '@1440px (no visible logo at 390)';
+            }
+            console.log('LOGO-GEOM', logoCtx, JSON.stringify(logo));
+            if (logo.d && logo.l) {
+              const near = (a, b) => Math.abs(a - b) < 0.6;
+              const rnd = (n) => Math.round(n * 10) / 10;
+              v('logo-no-layout-shift', near(logo.d.w, logo.l.w) && near(logo.d.h, logo.l.h) && near(logo.d.top, logo.l.top) && near(logo.d.headH, logo.l.headH),
+                'dark ' + [logo.d.w, logo.d.h, logo.d.top, logo.d.headH].map(rnd).join('/') + ' vs light ' + [logo.l.w, logo.l.h, logo.l.top, logo.l.headH].map(rnd).join('/') + ' ' + logoCtx);
+              v('logo-plate-shadow', logo.d.pad === '0px' && logo.d.shadow !== 'none' && logo.d.shadow.indexOf('6px') > -1, 'pad=' + logo.d.pad + ' shadow=' + logo.d.shadow.slice(0, 70));
+            } else {
+              v('logo-no-layout-shift', false, 'no visible logo img found');
+            }
+            await page.setViewport({ width: 1440, height: 950 });
+            await sleep(1500);
 
             // ---------- C. SCANNER v3: portrait chrome + sparse photo read ----------
             await page.evaluate(() => document.querySelector('.xg-scan-btn').click());
@@ -501,6 +623,34 @@ jobs:
               v('cam-search-page', spg.camPage, String(spg.camPage) + ' pad=' + spg.inpPad);
             } else {
               v('dark-search-page', true, 'SKIPPED - search page unreachable (Cloudflare challenge on runner IP)');
+            }
+
+            // ---------- F. Full Deck Builder: example list follows the game ----------
+            await sleep(8000);
+            if (await gotoTheme('/pages/deck-builder')) {
+              await sleep(6000);
+              const dbph = await page.evaluate(() => {
+                const sel = document.getElementById('xg-deck-game');
+                const inp = document.getElementById('xg-deck-input');
+                if (!sel || !inp) return null;
+                const grab = () => inp.getAttribute('placeholder') || '';
+                const out = { start: grab() };
+                sel.value = 'pokemon';
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                out.poke = grab();
+                sel.value = 'yugioh';
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                out.ygo = grab();
+                sel.value = 'mtg';
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                out.back = grab();
+                return out;
+              });
+              console.log('DECK-PH', JSON.stringify(dbph));
+              v('deck-ph-per-game', !!dbph && /Charizard/.test(dbph.poke) && /Blue-Eyes/.test(dbph.ygo) && /Lightning Bolt/.test(dbph.back), dbph ? JSON.stringify({ poke: dbph.poke.slice(0, 26), ygo: dbph.ygo.slice(0, 26), back: dbph.back.slice(0, 26) }) : 'builder els missing');
+              v('deck-ph-tail', !!dbph && /paste your whole list/.test(dbph.poke), dbph ? 'shared tail present' : 'n/a');
+            } else {
+              v('deck-ph-per-game', true, 'SKIPPED - deck page unreachable (Cloudflare challenge on runner IP)');
             }
 
             await browser.close();
