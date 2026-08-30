@@ -16,7 +16,10 @@ jobs:
 
       - name: Compose a card-on-table photo (v3 sparse OCR path)
         run: |
-          curl -sL -o solring.jpg 'https://api.scryfall.com/cards/named?exact=Sol+Ring&format=image&version=large'
+          # pin the Commander 2021 printing: the DEFAULT printing is now a
+          # Marvel one whose art nameplate says TONY STARK in big block
+          # letters, and run 77's sparse OCR (correctly) read that instead
+          curl -sL -o solring.jpg 'https://api.scryfall.com/cards/named?exact=Sol+Ring&set=c21&format=image&version=large'
           ls -la solring.jpg; file solring.jpg || true
           # the owner's failing photos have the card sitting somewhere inside a
           # larger frame - build exactly that instead of a full-frame card scan
