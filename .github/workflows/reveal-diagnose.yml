@@ -20,7 +20,18 @@ jobs:
           ls -la solring.jpg; file solring.jpg || true
           # the owner's failing photos have the card sitting somewhere inside a
           # larger frame - build exactly that instead of a full-frame card scan
-          convert -size 1600x1200 xc:'#7a6a55' \( solring.jpg -resize 70% \) -geometry +520+120 -composite -quality 92 table.jpg
+          # (runner image no longer ships ImageMagick, so compose with Pillow)
+          python3 -m pip install --quiet pillow || sudo apt-get -yq install python3-pil
+          python3 - <<'PY'
+          from PIL import Image
+          card = Image.open('solring.jpg').convert('RGB')
+          w, h = card.size
+          card = card.resize((int(w * 0.7), int(h * 0.7)))
+          bg = Image.new('RGB', (1600, 1200), (122, 106, 85))
+          bg.paste(card, (520, 120))
+          bg.save('table.jpg', quality=92)
+          print('table.jpg composed', bg.size, 'card', card.size)
+          PY
           ls -la table.jpg; file table.jpg
 
       - name: Install puppeteer-core
