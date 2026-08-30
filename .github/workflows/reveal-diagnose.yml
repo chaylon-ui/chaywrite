@@ -310,29 +310,42 @@ jobs:
             if (dark.ntPrice) v('dark-nt-price', dark.ntPrice === 'rgb(255, 106, 94)', dark.ntPrice);
             v('cta-selfdark-stable', dark.ctaSelBg === 'rgb(255, 255, 255)' && dark.ctaTitle === 'rgb(255, 255, 255)', dark.ctaSelBg + ' / ' + dark.ctaTitle);
 
-            // round 7: hamburger drawer paints dark (computed styles resolve on
-            // display:none nodes) and the card-corner clip rule applies (checked
-            // on a synthetic card-float fragment; product pages are
-            // Cloudflare-flaky from runner IPs and the rule is static CSS).
+            // round 7: hamburger drawer paints dark + card-corner clip applies.
+            // At desktop width the theme's JS empties the category list from the
+            // wrapper (run 81: title/chev selectors null while the closer
+            // resolved), and the items DO render server-side and on phones — so
+            // prove the text rules against an in-situ fragment appended inside
+            // the wrapper, where the id-scoped selectors match. Same synthetic
+            // technique for the card-float clip (product pages Cloudflare-flaky).
             const r7 = await page.evaluate(() => {
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
               const w = document.getElementById('mobile_top_menu_wrapper');
-              const t = w ? w.querySelector('.mobile-menu-category__title .title') : null;
               const x = w ? w.querySelector('#top_menu_closer i') : null;
-              const ch = w ? w.querySelector('.mobile-menu-category__dropdown i') : null;
+              let title = '', chev = '', sub = '';
+              if (w) {
+                const li = document.createElement('li');
+                li.className = 'mobile-menu-category';
+                li.innerHTML = '<div class="mobile-menu-category__wrapper"><div class="mobile-menu-category__title"><a href="#"><div class="title">T</div></a></div><div class="mobile-menu-category__dropdown"><i class="material-icons">i</i></div></div><ul class="mobile-menu-category__submenu"><li><a class="dropdown-item" href="#">s</a></li></ul>';
+                (w.querySelector('#mobile-top-menu') || w).appendChild(li);
+                title = cs(li.querySelector('.title'), 'color');
+                chev = cs(li.querySelector('.mobile-menu-category__dropdown i'), 'color');
+                sub = cs(li.querySelector('.mobile-menu-category__submenu a'), 'color');
+                li.remove();
+              }
               const frag = document.createElement('div');
               frag.className = 'card-float';
               frag.innerHTML = '<div class="product-single__photo"><img></div>';
               document.body.appendChild(frag);
               const rad = getComputedStyle(frag.querySelector('img')).borderRadius;
               frag.remove();
-              return { has: !!w, bg: cs(w, 'backgroundColor'), title: cs(t, 'color'), closer: cs(x, 'color'), chev: cs(ch, 'color'), rad };
+              return { has: !!w, bg: cs(w, 'backgroundColor'), title, chev, sub, closer: cs(x, 'color'), rad };
             });
             console.log('ROUND7-DARK', JSON.stringify(r7));
             v('drawer-dark-panel', r7.has && r7.bg === 'rgb(22, 27, 30)', r7.bg + ' (has=' + r7.has + ')');
-            v('drawer-dark-title', r7.title === 'rgb(238, 242, 244)', r7.title);
+            v('drawer-dark-title', r7.title === 'rgb(238, 242, 244)', r7.title + ' (in-situ fragment)');
+            v('drawer-dark-submenu', r7.sub === 'rgb(195, 204, 209)', r7.sub);
+            v('drawer-dark-chevron', r7.chev === 'rgb(183, 194, 201)', r7.chev);
             v('drawer-dark-closer', r7.closer === 'rgb(238, 242, 244)', r7.closer);
-            if (r7.chev) v('drawer-dark-chevron', r7.chev === 'rgb(183, 194, 201)', r7.chev);
             v('card-corner-clip', /5%/.test(r7.rad) && /3\.6%/.test(r7.rad), r7.rad);
 
             // ---------- C. SCANNER v3: portrait chrome + sparse photo read ----------
