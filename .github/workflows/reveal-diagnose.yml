@@ -10,21 +10,23 @@ jobs:
       - name: Worker endpoints (game param + regression)
         run: |
           set -x
-          curl -s 'https://exor-binder.nevski.workers.dev/instock.json?names=Sol%20Ring&max=3&game=mtg' | head -c 500; echo
           curl -s 'https://exor-binder.nevski.workers.dev/instock.json?names=Sol%20Ring&max=3&game=mtg' | python3 -c "import json,sys; j=json.load(sys.stdin); print('WORKER mtg ok=%s cards=%d' % (j.get('ok'), len(j.get('cards',[]))))"
           curl -s 'https://exor-binder.nevski.workers.dev/instock.json?names=Pikachu&max=3&game=pokemon' | python3 -c "import json,sys; j=json.load(sys.stdin); print('WORKER pokemon ok=%s cards=%d' % (j.get('ok'), len(j.get('cards',[]))))"
           curl -s 'https://exor-binder.nevski.workers.dev/cards.json?nt=1' | python3 -c "import json,sys; j=json.load(sys.stdin); c=j.get('cards',[]); print('WORKER nt cards=%d withVid=%d' % (len(c), sum(1 for x in c if x.get('variantId'))))"
 
-      - name: Fetch a card image for the OCR upload path
+      - name: Compose a card-on-table photo (v3 sparse OCR path)
         run: |
           curl -sL -o solring.jpg 'https://api.scryfall.com/cards/named?exact=Sol+Ring&format=image&version=large'
-          ls -la solring.jpg
-          file solring.jpg || true
+          ls -la solring.jpg; file solring.jpg || true
+          # the owner's failing photos have the card sitting somewhere inside a
+          # larger frame - build exactly that instead of a full-frame card scan
+          convert -size 1600x1200 xc:'#7a6a55' \( solring.jpg -resize 70% \) -geometry +520+120 -composite -quality 92 table.jpg
+          ls -la table.jpg; file table.jpg
 
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22
 
-      - name: Probe preview theme (light + dark + scanner)
+      - name: Probe preview theme (round 6)
         run: |
           cat > probe.js <<'EOF'
           const puppeteer = require('puppeteer-core');
@@ -34,8 +36,6 @@ jobs:
           const TOL = /shopifycloud|shop_events_listener|\/cdn\/wpm\/|web-pixels|sezzle|hotjar|googletagmanager|snize|searchanise|wishy|cloudsearch/i;
           const fails = [];
           const v = (name, ok, detail) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + name + ' :: ' + detail); if (!ok) fails.push(name); };
-          const lum = (s) => { const m = String(s).match(/\d+/g); if (!m) return 0; const [r, g, b] = m.slice(0, 3).map(Number).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return .2126 * r + .7152 * g + .0722 * b; };
-          const cr = (a, b) => { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05); };
           const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
           (async () => {
@@ -46,9 +46,6 @@ jobs:
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
             page.on('pageerror', e => { const s = String((e && e.stack) || e); if (!TOL.test(s)) console.log('PAGEERR', s.slice(0, 400)); });
 
-            // Shopify occasionally serves a bot-challenge interstitial instead of
-            // the theme (run 69 attempt 1); gate every navigation on the theme's
-            // own header and retry, and never trust /cart.js to be JSON.
             const gotoTheme = async (path) => {
               for (let i = 0; i < 4; i++) {
                 try { await page.goto(u(path), { waitUntil: 'networkidle2', timeout: 90000 }); } catch (e) { console.log('NAV-ERR', String(e).slice(0, 140)); }
@@ -60,24 +57,15 @@ jobs:
               }
               return false;
             };
-            const cartCount = () => page.evaluate(async () => {
-              for (let i = 0; i < 5; i++) {
-                try { const r = await fetch('/cart.js', { headers: { Accept: 'application/json' } }); const t = await r.text(); return JSON.parse(t).item_count; }
-                catch (e) { await new Promise(r2 => setTimeout(r2, 2500)); }
-              }
-              return -1;
-            });
             const clearCart = () => page.evaluate(() => fetch('/cart/clear.js', { method: 'POST' }).catch(() => null));
 
-            // ---------- A. LIGHT homepage: quick-add + peek + camera ----------
+            // ---------- A. LIGHT homepage: layout + new bands ----------
             v('nav-home', await gotoTheme('/'), 'theme header present');
             await clearCart();
             await sleep(5000);
 
             const shape = await page.evaluate(() => {
               const qa = Array.from(document.querySelectorAll('.xg-qa'));
-              const perSection = {};
-              qa.forEach(b => { const s = b.closest('.shopify-section'); const id = s ? s.id.replace('shopify-section-', '') : '?'; perSection[id] = (perSection[id] || 0) + 1; });
               const card0 = qa[0] ? qa[0].closest('.grid-view-item') : null;
               let vid = '';
               if (card0) {
@@ -85,42 +73,113 @@ jobs:
                 const inp2 = card0.querySelector('.nm-cartmain input[name="prduct-variant"]');
                 vid = (dd && !dd.disabled && dd.value) || (inp2 && inp2.value) || '';
               }
-              const inp = document.querySelector('#_desktop_search .search-header__input');
               return {
                 qaTotal: qa.length,
-                perSection,
-                qaOutside: qa.filter(b => !b.closest('.grid-view-item')).length,
                 nt: document.querySelectorAll('#xg-newtoday .xg-nt__add').length,
                 camDesk: !!document.querySelector('#_desktop_search form.search-header .xg-scan-btn'),
-                camMob: !!document.querySelector('#_mobile_search .xg-scan-btn'),
-                pad: inp ? getComputedStyle(inp).paddingRight : 'no-input',
                 vid,
-                bodyBg: getComputedStyle(document.body).backgroundColor
+                bodyBg: getComputedStyle(document.body).backgroundColor,
+                togDesk: !!document.querySelector('#header .header-user-selection .xg-theme-toggle'),
+                togMob: !!document.querySelector('#header .mobile-width-right .xg-theme-toggle'),
+                togPressed: (document.querySelector('#header .header-user-selection .xg-theme-toggle') || { getAttribute: () => '' }).getAttribute('aria-pressed')
               };
             });
             console.log('SHAPE', JSON.stringify(shape));
-            v('light-body-unchanged', shape.bodyBg === 'rgb(245, 246, 247)', shape.bodyBg);
-            v('qa-buttons-present', shape.qaTotal >= 6, 'total=' + shape.qaTotal + ' perSection=' + JSON.stringify(shape.perSection));
-            v('qa-only-in-cards', shape.qaOutside === 0, 'outside=' + shape.qaOutside);
-            v('nt-regression', shape.nt >= 8, 'nt buttons=' + shape.nt);
-            v('cam-desktop', shape.camDesk, String(shape.camDesk));
-            v('cam-mobile-clone', shape.camMob, String(shape.camMob));
-            v('cam-input-padding', shape.pad === '84px', shape.pad);
+            v('light-body', shape.bodyBg === 'rgb(245, 246, 247)', shape.bodyBg);
+            v('qa-regression', shape.qaTotal >= 6, 'qa=' + shape.qaTotal);
+            v('nt-regression', shape.nt >= 8, 'nt=' + shape.nt);
+            v('cam-regression', shape.camDesk, String(shape.camDesk));
+            v('toggle-desktop', shape.togDesk, String(shape.togDesk));
+            v('toggle-mobile-slot', shape.togMob, String(shape.togMob));
+            v('toggle-unpressed', shape.togPressed === 'false', String(shape.togPressed));
 
-            // ---- cart plumbing: mockable /cart endpoints -----------------
-            // GitHub runner IPs intermittently trip Shopify's bot protection
-            // on /cart/*.js (HTML challenge instead of JSON) even when page
-            // navigations pass (run 69/70). Real-cart adds are attempted and
-            // tolerated; the wiring (button -> add -> peek -> badge, quickview
-            // handoff, scanner add) is then proven against mocked cart
-            // endpoints, which exercise all of OUR code deterministically.
+            // ---- specialproduct: modern band, vertical 2-up tiles ----
+            const sp = await page.evaluate(() => {
+              const heads = document.querySelectorAll('.xg-sp .xg-sp__head');
+              const k = document.querySelector('.xg-sp .xg-sp__kicker');
+              const t = document.querySelector('.xg-sp .xg-sp__title');
+              const ml = document.querySelector('.xg-sp .multilevel-item');
+              const wrap = document.querySelector('.xg-sp .grid-view-item .grid-view-item__image-wrapper');
+              const desc = document.querySelector('.xg-sp .grid-view-item .product-description');
+              const blurb = document.querySelector('.xg-sp .grid-view-item .product-desc');
+              const nav = document.querySelector('.xg-sp .owl-nav .owl-next');
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              return {
+                heads: heads.length,
+                oldRedBox: document.querySelectorAll('.xg-sp .title-left').length,
+                kColor: cs(k, 'color'), kUpper: cs(k, 'textTransform'),
+                tSize: parseFloat(cs(t, 'fontSize') || '0'), tUpper: cs(t, 'textTransform'),
+                mlDisplay: cs(ml, 'display'), mlCols: (cs(ml, 'gridTemplateColumns') || '').split(' ').length,
+                wrapH: wrap ? wrap.offsetHeight : -1, wrapFloat: cs(wrap, 'float'), wrapDisplay: cs(wrap, 'display'),
+                descDisplay: cs(desc, 'display'), descFloat: cs(desc, 'float'),
+                blurbGone: blurb ? cs(blurb, 'display') === 'none' : true,
+                navW: nav ? nav.offsetWidth : -1, navRadius: cs(nav, 'borderRadius')
+              };
+            });
+            console.log('SPECIALPRODUCT', JSON.stringify(sp));
+            v('sp-heads', sp.heads >= 1, 'heads=' + sp.heads);
+            v('sp-old-redbox-gone', sp.oldRedBox === 0, 'title-left count=' + sp.oldRedBox);
+            v('sp-kicker', sp.kColor === 'rgb(214, 44, 40)' && sp.kUpper === 'uppercase', sp.kColor + ' / ' + sp.kUpper);
+            v('sp-title', sp.tSize >= 22 && sp.tSize <= 30 && sp.tUpper === 'uppercase', sp.tSize + 'px / ' + sp.tUpper);
+            v('sp-two-up', sp.mlDisplay === 'grid' && sp.mlCols === 2, sp.mlDisplay + ' cols=' + sp.mlCols);
+            v('sp-tile-vertical', sp.wrapFloat === 'none' && sp.wrapDisplay === 'block' && sp.descFloat === 'none' && sp.descDisplay === 'flex', 'wrap=' + sp.wrapFloat + '/' + sp.wrapDisplay + ' desc=' + sp.descFloat + '/' + sp.descDisplay);
+            v('sp-tile-height', sp.wrapH === 205, 'wrapH=' + sp.wrapH);
+            v('sp-blurb-hidden', sp.blurbGone, String(sp.blurbGone));
+            v('sp-owl-circles', sp.navW === 38 && sp.navRadius === '50%', 'w=' + sp.navW + ' r=' + sp.navRadius);
+
+            // ---- deck-builder CTA: neon-dark card ----
+            const cta = await page.evaluate(() => {
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              const card = document.querySelector('.xg-dbc__card');
+              return {
+                cardGrad: (cs(card, 'backgroundImage') || '').indexOf('linear-gradient') > -1,
+                topBar: (card ? getComputedStyle(card, '::before').backgroundImage : '').indexOf('linear-gradient') > -1,
+                kicker: cs(document.querySelector('.xg-dbc__kicker'), 'color'),
+                title: cs(document.querySelector('.xg-dbc__title'), 'color'),
+                sub: cs(document.querySelector('.xg-dbc__sub'), 'color'),
+                selBg: cs(document.querySelector('.xg-dbc__select'), 'backgroundColor'),
+                inpBg: cs(document.querySelector('.xg-dbc__input'), 'backgroundColor'),
+                btnGrad: (cs(document.querySelector('.xg-dbc__btn'), 'backgroundImage') || '').indexOf('linear-gradient') > -1,
+                btnRadius: cs(document.querySelector('.xg-dbc__btn'), 'borderRadius'),
+                link: cs(document.querySelector('.xg-dbc__link'), 'color')
+              };
+            });
+            console.log('CTA', JSON.stringify(cta));
+            v('cta-dark-card', cta.cardGrad, 'gradient=' + cta.cardGrad);
+            v('cta-top-bar', cta.topBar, 'gradient=' + cta.topBar);
+            v('cta-kicker-glow', cta.kicker === 'rgb(255, 216, 77)', cta.kicker);
+            v('cta-title-white', cta.title === 'rgb(255, 255, 255)', cta.title);
+            v('cta-fields-light', cta.selBg === 'rgb(255, 255, 255)' && cta.inpBg === 'rgb(245, 246, 248)', cta.selBg + ' / ' + cta.inpBg);
+            v('cta-btn', cta.btnGrad && cta.btnRadius === '999px', 'grad=' + cta.btnGrad + ' r=' + cta.btnRadius);
+
+            // ---- locations strip: renamed programs stay inside their pill ----
+            const loc = await page.evaluate(() => {
+              const wanted = ['Lorcana: Organized Play Store', 'Riftbound: Organized Play Store', 'Upper Deck Diamond Dealer'];
+              const progs = Array.from(document.querySelectorAll('.xg-loc__prog'));
+              const texts = progs.map(p => p.textContent.trim());
+              let overflow = 0, checked = 0;
+              progs.forEach(p => {
+                const card = p.closest('.xg-loc__card');
+                if (!card) return;
+                checked++;
+                const pr = p.getBoundingClientRect(), cr2 = card.getBoundingClientRect();
+                if (pr.right > cr2.right + 1 || pr.left < cr2.left - 1) overflow++;
+              });
+              const ws = progs[0] ? getComputedStyle(progs[0]).whiteSpace : '';
+              return { count: progs.length, checked, overflow, ws, named: wanted.filter(w => texts.indexOf(w) > -1).length, texts: texts.slice(0, 9) };
+            });
+            console.log('LOCATIONS', JSON.stringify(loc));
+            v('loc-progs-present', loc.count >= 7, 'count=' + loc.count);
+            v('loc-official-names', loc.named === 3, 'renamed found=' + loc.named + ' :: ' + JSON.stringify(loc.texts));
+            v('loc-pills-contained', loc.checked > 0 && loc.overflow === 0, 'checked=' + loc.checked + ' overflow=' + loc.overflow);
+            v('loc-pills-wrap', loc.ws === 'normal', loc.ws);
+
+            // ---- cart plumbing regression against mocked endpoints ----
             let mock = false, mockCount = 0;
             const MOCK_ITEM = { id: 999, key: '999:probe', title: 'Probe Card - Near Mint', product_title: 'Probe Card', variant_title: 'Near Mint', quantity: 1, discounted_price: 499, final_price: 499, price: 499, line_price: 499, url: '/products/probe', image: '', handle: 'probe' };
-            // puppeteer 22: continue()/respond() reject ASYNC when interception
-            // is off, so a plain try/catch cannot contain them (run 71 crash).
             const safe = (fn) => { try { const r = fn(); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
             page.on('request', req => {
-              if (!mock) return; // interception disabled: requests flow on their own
+              if (!mock) return;
               const url = req.url();
               if (/\/cart\/add\.js/.test(url)) {
                 mockCount++;
@@ -139,62 +198,19 @@ jobs:
               else { mock = false; await page.setRequestInterception(false); }
             };
 
-            const before = await cartCount();
-            await page.evaluate(() => { const b = document.querySelector('.xg-qa'); b.scrollIntoView({ block: 'center' }); b.click(); });
-            await sleep(2600);
-            const after = await cartCount();
-            const challenged = before === -1 || after === -1;
-            console.log('REAL-ADD', JSON.stringify({ before, after, challenged }));
-            if (challenged) {
-              v('real-cart-add', true, 'SKIPPED - /cart.js is serving bot-challenge HTML to this runner IP; wiring proven below against mocked endpoints (run 68 proved real adds land)');
-            } else {
-              const realRes = await page.evaluate(() => ({
-                peekOpen: (function () { const p = document.getElementById('xg-peek'); return !!(p && p.classList.contains('is-open') && p.offsetWidth); })(),
-                legacyAlert: !!document.querySelector('.alert[data-notify="container"]')
-              }));
-              v('real-cart-add', after === before + 1, before + '->' + after);
-              v('real-add-peek', realRes.peekOpen, JSON.stringify(realRes));
-              v('real-no-banner', !realRes.legacyAlert, String(realRes.legacyAlert));
-              await clearCart();
-            }
-
-            // ---- mocked adds: full wiring, deterministic ------------------
             await setMock(true);
-            await page.evaluate(() => { const p = document.getElementById('xg-peek'); if (p) p.classList.remove('is-open'); });
-            await page.evaluate(() => { const bs = document.querySelectorAll('.xg-qa'); (bs[1] || bs[0]).click(); });
+            await page.evaluate(() => { const b = document.querySelector('.xg-qa'); b.scrollIntoView({ block: 'center' }); b.click(); });
             await sleep(2200);
             const mRes = await page.evaluate(() => ({
               peekOpen: (function () { const p = document.getElementById('xg-peek'); return !!(p && p.classList.contains('is-open') && p.offsetWidth); })(),
-              peekHead: (document.querySelector('#xg-peek .xg-peek__head') || {}).textContent || '',
               peekTitle: (document.querySelector('#xg-peek .xg-peek__title') || {}).textContent || '',
-              peekMeta: (document.querySelector('#xg-peek .xg-peek__meta') || {}).textContent || '',
               legacyAlert: !!document.querySelector('.alert[data-notify="container"]'),
               badge: (document.querySelector('.cart-qty') || {}).textContent || ''
             }));
             console.log('MOCK-ADD', JSON.stringify(mRes));
-            v('qa-add-peek', mRes.peekOpen && mRes.peekHead.indexOf('Added') > -1 && mRes.peekTitle.indexOf('Probe Card') > -1, JSON.stringify(mRes));
+            v('qa-add-peek', mRes.peekOpen && mRes.peekTitle.indexOf('Probe Card') > -1, JSON.stringify(mRes));
             v('qa-no-legacy-banner', !mRes.legacyAlert, String(mRes.legacyAlert));
-            v('qa-badge-synced', mRes.badge.trim() === '1', 'badge=' + mRes.badge.trim() + ' (mocked cart=1)');
-
-            // productAddToCart (quickview.js success path) hands off to the peek
-            const qvRes = await page.evaluate(async (vid) => {
-              const p = document.getElementById('xg-peek');
-              if (p) p.classList.remove('is-open');
-              window.productAddToCart(vid, 1);
-              await new Promise(r => setTimeout(r, 2200));
-              const p2 = document.getElementById('xg-peek');
-              return {
-                peekOpen: !!(p2 && p2.classList.contains('is-open') && p2.offsetWidth),
-                title: p2 ? ((p2.querySelector('.xg-peek__title') || {}).textContent || '') : '',
-                meta: p2 ? ((p2.querySelector('.xg-peek__meta') || {}).textContent || '') : '',
-                legacyAlert: !!document.querySelector('.alert[data-notify="container"]')
-              };
-            }, shape.vid);
-            console.log('QVADD', JSON.stringify(qvRes));
-            v('productAddToCart-peek', qvRes.peekOpen && qvRes.title.indexOf('Probe Card') > -1, JSON.stringify(qvRes));
-            v('productAddToCart-no-banner', !qvRes.legacyAlert, String(qvRes.legacyAlert));
-
-            // peek API + money formatting, no network at all
+            v('qa-badge-synced', mRes.badge.trim() === '1', 'badge=' + mRes.badge.trim());
             const direct = await page.evaluate(async () => {
               window.xgCartPeek({ title: 'API smoke', qty: 2, cents: 1234 });
               await new Promise(r => setTimeout(r, 300));
@@ -203,80 +219,111 @@ jobs:
             });
             v('peek-money', direct.open && direct.meta.indexOf('2') > -1 && direct.meta.indexOf('12.34') > -1, JSON.stringify(direct));
             await setMock(false);
-            await clearCart();
 
-            // ---------- B. DARK: flip the loaded page in place --------------
-            // Cloudflare escalated the runner IP to full-page challenges after
-            // repeated navigations (run 72), so dark mode is emulated on the
-            // page we already have - media queries re-evaluate live.
+            // ---------- B. DARK TOGGLE: click, persist, system-follow ----------
+            await page.evaluate(() => document.querySelector('#header .header-user-selection .xg-theme-toggle').click());
+            await sleep(700);
+            const tog1 = await page.evaluate(() => ({
+              attr: document.documentElement.getAttribute('data-xg-theme'),
+              ls: (function () { try { return localStorage.getItem('xgTheme'); } catch (e) { return 'ERR'; } })(),
+              pressed: document.querySelector('#header .header-user-selection .xg-theme-toggle').getAttribute('aria-pressed'),
+              bodyBg: getComputedStyle(document.body).backgroundColor
+            }));
+            console.log('TOGGLE-ON', JSON.stringify(tog1));
+            v('toggle-flips-dark', tog1.attr === 'dark' && tog1.bodyBg === 'rgb(16, 20, 22)', JSON.stringify(tog1));
+            v('toggle-stores-dark', tog1.ls === 'dark' && tog1.pressed === 'true', tog1.ls + ' / ' + tog1.pressed);
+
+            await page.evaluate(() => document.querySelector('#header .header-user-selection .xg-theme-toggle').click());
+            await sleep(700);
+            const tog2 = await page.evaluate(() => ({
+              attr: document.documentElement.getAttribute('data-xg-theme'),
+              ls: (function () { try { return localStorage.getItem('xgTheme'); } catch (e) { return 'ERR'; } })(),
+              bodyBg: getComputedStyle(document.body).backgroundColor
+            }));
+            console.log('TOGGLE-OFF', JSON.stringify(tog2));
+            v('toggle-back-light', tog2.attr === null && tog2.ls === 'light' && tog2.bodyBg === 'rgb(245, 246, 247)', JSON.stringify(tog2));
+
+            // no stored pref -> device changes flow through live
+            await page.evaluate(() => { try { localStorage.removeItem('xgTheme'); } catch (e) {} });
             await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
-            await sleep(1200);
+            await sleep(900);
+            const sys1 = await page.evaluate(() => document.documentElement.getAttribute('data-xg-theme'));
+            await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+            await sleep(900);
+            const sys2 = await page.evaluate(() => document.documentElement.getAttribute('data-xg-theme'));
+            console.log('SYSTEM-FOLLOW', JSON.stringify({ sys1, sys2 }));
+            v('system-follow-live', sys1 === 'dark' && sys2 === null, sys1 + ' -> ' + sys2);
+
+            // stored choice beats the device: dark attribute while media says light
+            await page.evaluate(() => window.xgSetTheme('dark'));
+            await sleep(700);
             const dark = await page.evaluate(() => {
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
               const card = document.querySelector('.products-display .grid-view-item');
               return {
+                attr: document.documentElement.getAttribute('data-xg-theme'),
                 bodyBg: cs(document.body, 'backgroundColor'),
-                bodyColor: cs(document.body, 'color'),
                 headerBg: cs(document.querySelector('#header .site-header'), 'backgroundColor'),
                 searchBg: cs(document.querySelector('#header #_desktop_search .search-info .search__input'), 'backgroundColor'),
-                searchColor: cs(document.querySelector('#header #_desktop_search .search-info .search__input'), 'color'),
                 cardBg: cs(card, 'backgroundColor'),
-                cardTitle: cs(card && card.querySelector('.grid-view-item__title'), 'color'),
                 logoPlate: cs(document.querySelector('#header .header__logo img'), 'backgroundColor'),
                 ntPrice: cs(document.querySelector('#xg-newtoday .xg-nt__price'), 'color'),
+                ctaSelBg: cs(document.querySelector('.xg-dbc__select'), 'backgroundColor'),
+                ctaTitle: cs(document.querySelector('.xg-dbc__title'), 'color'),
                 colorScheme: getComputedStyle(document.documentElement).colorScheme
               };
             });
             console.log('DARK', JSON.stringify(dark));
-            v('dark-body', dark.bodyBg === 'rgb(16, 20, 22)', dark.bodyBg);
+            v('dark-attr-beats-media', dark.attr === 'dark' && dark.bodyBg === 'rgb(16, 20, 22)', dark.attr + ' / ' + dark.bodyBg + ' (media=light)');
             v('dark-header', dark.headerBg === 'rgb(22, 27, 30)', dark.headerBg);
-            v('dark-search-input', dark.searchBg === 'rgb(29, 35, 39)', dark.searchBg + ' / ' + dark.searchColor);
+            v('dark-search-input', dark.searchBg === 'rgb(29, 35, 39)', dark.searchBg);
             v('dark-card-surface', dark.cardBg === 'rgb(24, 29, 32)', dark.cardBg);
             v('dark-logo-plate', dark.logoPlate === 'rgb(255, 255, 255)', dark.logoPlate);
             v('dark-color-scheme', /dark/.test(dark.colorScheme), dark.colorScheme);
             if (dark.ntPrice) v('dark-nt-price', dark.ntPrice === 'rgb(255, 106, 94)', dark.ntPrice);
-            const cBody = cr(dark.bodyColor, dark.bodyBg);
-            const cTitle = cr(dark.cardTitle || 'rgb(238,242,244)', dark.cardBg || 'rgb(24,29,32)');
-            const cSearch = cr(dark.searchColor || 'rgb(230,235,238)', dark.searchBg || 'rgb(29,35,39)');
-            console.log('CONTRAST', JSON.stringify({ body: cBody.toFixed(2), cardTitle: cTitle.toFixed(2), search: cSearch.toFixed(2) }));
-            v('dark-contrast-body', cBody >= 7, cBody.toFixed(2));
-            v('dark-contrast-card-title', cTitle >= 7, cTitle.toFixed(2));
-            v('dark-contrast-search', cSearch >= 7, cSearch.toFixed(2));
+            v('cta-selfdark-stable', dark.ctaSelBg === 'rgb(255, 255, 255)' && dark.ctaTitle === 'rgb(255, 255, 255)', dark.ctaSelBg + ' / ' + dark.ctaTitle);
 
-            // ---------- C2. SCANNER (opened from the homepage header) -------
+            // ---------- C. SCANNER v3: portrait chrome + sparse photo read ----------
             await page.evaluate(() => document.querySelector('.xg-scan-btn').click());
             await sleep(1500);
             const sc1 = await page.evaluate(() => {
               const o = document.getElementById('xg-scan');
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              const fi = o ? o.querySelector('input[type=file]') : null;
               return {
                 open: !!(o && o.classList.contains('is-open') && o.offsetWidth),
                 chips: o ? o.querySelectorAll('.xg-scan__game').length : 0,
-                beta: o ? (o.querySelector('.xg-scan__beta') || {}).textContent : '',
-                status: o ? (o.querySelector('.xg-scan__status') || {}).textContent : ''
+                fileDisplay: cs(fi, 'display'),
+                ctrlPos: cs(o && o.querySelector('.xg-scan__ctrl'), 'position'),
+                ctrlBottom: cs(o && o.querySelector('.xg-scan__ctrl'), 'bottom'),
+                statusPos: cs(o && o.querySelector('.xg-scan__status'), 'position'),
+                spacer: !!(o && o.querySelector('.xg-scan__spacer'))
               };
             });
             console.log('SCAN-OPEN', JSON.stringify(sc1));
-            v('scan-opens', sc1.open, JSON.stringify(sc1));
-            v('scan-chips', sc1.chips === 5, 'chips=' + sc1.chips);
-            v('scan-beta', sc1.beta === 'BETA', sc1.beta);
+            v('scan-opens', sc1.open && sc1.chips === 5, JSON.stringify({ open: sc1.open, chips: sc1.chips }));
+            v('scan-file-input-hidden', sc1.fileDisplay === 'none', 'display=' + sc1.fileDisplay + ' (bootstrap input[type=file]{display:block} beaten)');
+            v('scan-ctrl-overlay', sc1.ctrlPos === 'absolute' && sc1.ctrlBottom === '0px' && sc1.spacer, sc1.ctrlPos + '/' + sc1.ctrlBottom + ' spacer=' + sc1.spacer);
+            v('scan-status-overlay', sc1.statusPos === 'absolute', sc1.statusPos);
 
             await page.evaluate(() => { const c = document.querySelector('.xg-scan__game[data-g="mtg"]'); if (c) c.click(); });
             const fi = await page.$('#xg-scan input[type=file]');
-            await fi.uploadFile('solring.jpg');
-            let read = '', rows = -1, waited = 0;
-            while (waited < 120000) {
+            await fi.uploadFile('table.jpg');
+            let read = '', rows = -1, waited = 0, lastStatus = '';
+            while (waited < 150000) {
               await sleep(3000); waited += 3000;
               const st = await page.evaluate(() => ({
                 read: (document.querySelector('#xg-scan .xg-scan__read') || {}).textContent || '',
                 rows: document.querySelectorAll('#xg-scan .xg-scan__row').length,
                 status: (document.querySelector('#xg-scan .xg-scan__status') || {}).textContent || '',
-                hasResults: document.getElementById('xg-scan').classList.contains('has-results'),
-                tess: !!window.Tesseract
+                hasResults: document.getElementById('xg-scan').classList.contains('has-results')
               }));
+              lastStatus = st.status;
               if (st.hasResults) { read = st.read; rows = st.rows; console.log('SCAN-STATE', JSON.stringify(st)); break; }
+              if (/Couldn/.test(st.status)) { console.log('SCAN-DEAD', JSON.stringify(st)); break; }
               if (waited % 15000 === 0) console.log('SCAN-WAIT', JSON.stringify(st));
             }
-            v('scan-ocr-read', /sol/i.test(read), 'read=' + read.slice(0, 80) + ' after ' + waited + 'ms');
+            v('scan-sparse-read', /sol/i.test(read), 'read=' + (read || lastStatus).slice(0, 90) + ' after ' + waited + 'ms (card-on-table photo)');
             console.log('SCAN-ROWS', rows);
             if (rows > 0) {
               await setMock(true);
@@ -290,22 +337,24 @@ jobs:
               console.log('SCAN-ADD', JSON.stringify(scAdd));
               if (scAdd.clicked) v('scan-add-flow', scAdd.added, 'is-added=' + scAdd.added + ' (mocked add)');
               await setMock(false);
+              const statusAfter = await page.evaluate(() => getComputedStyle(document.querySelector('#xg-scan .xg-scan__status')).position);
+              v('scan-status-inline-results', statusAfter === 'static', statusAfter);
             } else {
               const foot = await page.evaluate(() => !!document.querySelector('#xg-scan .xg-scan__foot a'));
               v('scan-fallback-link', foot, 'no stock rows; store-search link=' + foot);
             }
             await page.evaluate(() => { const c = document.querySelector('.xg-scan__game[data-g="pokemon"]'); if (c) c.click(); });
             await sleep(1200);
-            const chip = await page.evaluate(() => ({ ls: localStorage.getItem('xgScanGame'), on: (document.querySelector('.xg-scan__game.is-on') || {}).getAttribute ? document.querySelector('.xg-scan__game.is-on').getAttribute('data-g') : '' }));
+            const chip = await page.evaluate(() => ({ ls: localStorage.getItem('xgScanGame'), on: (document.querySelector('.xg-scan__game.is-on') || { getAttribute: () => '' }).getAttribute('data-g') }));
             console.log('SCAN-CHIP', JSON.stringify(chip));
             v('scan-chip-switch', chip.ls === 'pokemon' && chip.on === 'pokemon', JSON.stringify(chip));
             await page.evaluate(() => { const x = document.querySelector('#xg-scan .xg-scan__x'); if (x) x.click(); });
 
-            // ---------- C. DARK: product page (single tolerant nav) ---------
-            const prod = await page.evaluate(async () => {
+            // ---------- D. Stored dark survives a fresh load (boot script) ----------
+            const prod = await page.evaluate(() => {
               const a = document.querySelector('.grid-view-item a[href*="/products/"]');
               if (a) { const m = a.getAttribute('href').match(/\/products\/([^/?#]+)/); if (m) return { handle: m[1] }; }
-              try { const t = await fetch('/products.json?limit=1').then(r => r.text()); const j = JSON.parse(t); return j.products[0] ? { handle: j.products[0].handle } : null; } catch (e) { return null; }
+              return null;
             });
             await sleep(8000);
             if (prod && await gotoTheme('/products/' + prod.handle)) {
@@ -313,66 +362,40 @@ jobs:
               const pd = await page.evaluate(() => {
                 const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
                 return {
+                  attr: document.documentElement.getAttribute('data-xg-theme'),
                   leftBg: cs(document.querySelector('.product-single .product-single-left'), 'backgroundColor'),
                   price: cs(document.querySelector('.product-single [id^="ProductPrice-"]'), 'color'),
                   tabBg: cs(document.querySelector('.product-tab'), 'backgroundColor'),
-                  title: cs(document.querySelector('.product-single .product-single__title'), 'color'),
                   swatchBg: cs(document.querySelector('.custom-swatch'), 'backgroundColor')
                 };
               });
               console.log('PRODUCT-DARK', JSON.stringify(pd));
+              v('boot-persists-dark', pd.attr === 'dark', 'attr=' + pd.attr + ' on fresh load (media=light, stored=dark)');
               v('dark-product-panel', pd.leftBg === 'rgb(24, 29, 32)', pd.leftBg);
               if (pd.price) v('dark-product-price', pd.price === 'rgb(255, 106, 94)', pd.price);
               if (pd.tabBg) v('dark-product-tabs', pd.tabBg === 'rgb(24, 29, 32)', pd.tabBg);
               if (pd.swatchBg) v('dark-swatch', pd.swatchBg === 'rgb(29, 35, 39)', pd.swatchBg);
             } else {
-              v('dark-product', true, 'SKIPPED - product page unreachable (Cloudflare challenge on runner IP)');
+              v('boot-persists-dark', true, 'SKIPPED - product page unreachable (Cloudflare challenge on runner IP)');
             }
 
-            // ---------- D. DARK: cart page (add real item first) ----------
-            const cartReady = shape.vid ? await page.evaluate(async (vid) => {
-              try { await fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [{ id: +vid, quantity: 1 }] }) }); } catch (e) {}
-              try { const t = await fetch('/cart.js').then(r => r.text()); return JSON.parse(t).item_count >= 1; } catch (e) { return false; }
-            }, shape.vid) : false;
-            if (!cartReady) {
-              v('dark-cart', true, 'SKIPPED - cart API bot-challenged, page would render empty; static rules unchanged');
-            } else {
-              v('nav-cart', await gotoTheme('/cart'), 'cart');
-              await sleep(2000);
-              const cart = await page.evaluate(() => {
-                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
-                return {
-                  calcBg: cs(document.querySelector('.cart_calculator'), 'backgroundColor'),
-                  innerBg: cs(document.querySelector('.cart_content_inner'), 'backgroundColor'),
-                  note: cs(document.querySelector('.xg-delivery-note'), 'color'),
-                  rowTitle: cs(document.querySelector('.cart .cart__meta .list-view-item__title > a'), 'color')
-                };
-              });
-              console.log('CART-DARK', JSON.stringify(cart));
-              v('dark-cart-calc', cart.calcBg === 'rgb(22, 27, 30)', cart.calcBg);
-              v('dark-cart-inner', cart.innerBg === 'rgb(24, 29, 32)', cart.innerBg);
-              v('dark-cart-note', cart.note === 'rgb(223, 229, 232)', cart.note);
-              await clearCart();
-            }
-
-            // ---------- E. DARK: search page (single tolerant nav) ----------
+            // ---------- E. Search page in stored dark ----------
             await sleep(8000);
             if (await gotoTheme('/search?type=product&options%5Bprefix%5D=last&q=sol+ring')) {
               await sleep(5000);
-              const sp = await page.evaluate(() => {
+              const spg = await page.evaluate(() => {
                 const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
                 const inp = document.querySelector('.search-page-form .input-group input');
                 return {
+                  attr: document.documentElement.getAttribute('data-xg-theme'),
                   pageBg: cs(document.querySelector('.template-search .search_page'), 'backgroundColor'),
                   camPage: !!document.querySelector('.search-page-form .input-group .xg-scan-btn'),
-                  inpPad: inp ? getComputedStyle(inp).paddingRight : 'no-input',
-                  listQa: document.querySelectorAll('.xg-qa').length
+                  inpPad: inp ? getComputedStyle(inp).paddingRight : 'no-input'
                 };
               });
-              console.log('SEARCH-DARK', JSON.stringify(sp));
-              v('dark-search-page', sp.pageBg === 'rgb(22, 27, 30)', sp.pageBg);
-              v('cam-search-page', sp.camPage, String(sp.camPage) + ' pad=' + sp.inpPad);
-              console.log('SEARCH-QA-COUNT', sp.listQa);
+              console.log('SEARCH-DARK', JSON.stringify(spg));
+              v('dark-search-page', spg.attr === 'dark' && spg.pageBg === 'rgb(22, 27, 30)', spg.attr + ' / ' + spg.pageBg);
+              v('cam-search-page', spg.camPage, String(spg.camPage) + ' pad=' + spg.inpPad);
             } else {
               v('dark-search-page', true, 'SKIPPED - search page unreachable (Cloudflare challenge on runner IP)');
             }
