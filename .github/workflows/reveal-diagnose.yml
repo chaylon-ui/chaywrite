@@ -910,7 +910,11 @@ jobs:
                 wishText: cs('xgp-wishtxt', 'color'),
                 grade: cs('xgp-grade', 'color'),
                 tdColor: cs('xgp-td', 'color'),
-                tdBorder: cs('xgp-td', 'borderTopColor')
+                tdBorder: cs('xgp-td', 'borderTopColor'),
+                tableBg: (function () {
+                  const t = host.querySelector('.product-tab table');
+                  return t ? getComputedStyle(t).backgroundColor : 'missing';
+                })()
               };
               host.remove();
               return out;
@@ -927,8 +931,38 @@ jobs:
               'title=' + frag.rTitle + ' desc=' + frag.rDesc + ' border=' + frag.rBorder + ' (theme.css pins #000/#666)');
             v('prod-wishlist-ink', light(frag.wishLink) && light(frag.wishText) && light(frag.grade),
               'link=' + frag.wishLink + ' label=' + frag.wishText + ' grading=' + frag.grade);
-            v('prod-desc-table', !light(frag.tdBorder),
-              'td border=' + frag.tdBorder + ' ink=' + frag.tdColor + ' (theme.css pins #f4f4f4 borders)');
+            /* This asked the WRONG QUESTION first time round: it checked the
+               cell BORDER and passed, while the owner was looking at a white
+               grid that is the table's own ground - theme.css carries a bare
+               `table { background-color:#fff }`. Check the ground too. */
+            v('prod-desc-table', !light(frag.tdBorder) && !light(frag.tableBg),
+              'table bg=' + frag.tableBg + ' td border=' + frag.tdBorder + ' ink=' + frag.tdColor);
+
+            /* Owner: "the account and shopping cart logos in dark mode
+               disappear". Unlike the product page, this is the homepage
+               header at desktop width - reachable, so it gets a real check
+               rather than a source-derived guess. */
+            const glyphs = await page.evaluate(() => {
+              const f = (sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return 'missing';
+                const cs = getComputedStyle(el);
+                return cs.fill && cs.fill !== 'none' ? cs.fill : cs.color;
+              };
+              return {
+                cart: f('#_desktop_cart .cart-display .cart-title .cart-logo svg'),
+                cartSpan: f('#_desktop_cart .cart-display .cart-title .cart-logo'),
+                acct: f('#_desktop_user_info .userinfo-title .userinfo-toggle svg')
+              };
+            });
+            console.log('DESK-GLYPHS', JSON.stringify(glyphs));
+            const inked = (c) => {
+              const m = (c || '').match(/\d+/g);
+              return !!m && m.length >= 3 && (+m[0] + +m[1] + +m[2]) >= 330;
+            };
+            v('dark-header-glyphs', inked(glyphs.cart) && inked(glyphs.acct),
+              'cart=' + glyphs.cart + ' (span ' + glyphs.cartSpan + ') account=' + glyphs.acct
+                + ' — theme.css pins the account svg fill:#000; the cart is a <use> with no fill at all');
 
             console.log('DESK-MENU-PAINTER', JSON.stringify(deskChrome.menuPainter));
             console.log('DESK-MENU-CHAIN', JSON.stringify(deskChrome.menuChain));
