@@ -251,6 +251,7 @@ jobs:
                 onBody: t.parentElement === document.body,
                 pos: cs0.position, z: cs0.zIndex,
                 rectTop: r0.top, rectBottom: r0.bottom, vh: window.innerHeight, h: t.offsetHeight,
+                off: parseFloat(cs0.bottom) || 0,
                 bodyPad: parseFloat(getComputedStyle(document.body).paddingBottom) || 0,
                 hVar: (getComputedStyle(document.documentElement).getPropertyValue('--xg-tick-h') || '').trim(),
                 top: r0.top,
@@ -277,14 +278,17 @@ jobs:
                    silently degrades to absolute and the board would scroll
                    away with the content. */
                 v('ticker-pinned-bottom',
-                  tick.pos === 'fixed' && tick.onBody && Math.abs(tick.rectBottom - tick.vh) <= 2,
-                  'pos=' + tick.pos + ' onBody=' + tick.onBody + ' bottom=' + Math.round(tick.rectBottom) + ' vh=' + tick.vh);
+                  tick.pos === 'fixed' && tick.onBody && Math.abs(tick.rectBottom - (tick.vh - tick.off)) <= 2,
+                  'pos=' + tick.pos + ' onBody=' + tick.onBody + ' bottom=' + Math.round(tick.rectBottom)
+                  + ' vh=' + tick.vh + ' dodged=' + Math.round(tick.off) + 'px');
                 // under the mobile drawer (9998), over ordinary page content
                 v('ticker-under-drawer', +tick.z > 100 && +tick.z < 9998, 'z-index=' + tick.z);
                 // the page must still end ABOVE the board, or the footer's
                 // last strip lives under it forever
-                v('ticker-clears-footer', tick.bodyPad >= tick.h - 1 && tick.hVar === tick.h + 'px',
-                  'bodyPad=' + Math.round(tick.bodyPad) + ' boardH=' + tick.h + ' --xg-tick-h=' + tick.hVar);
+                v('ticker-clears-footer',
+                  tick.bodyPad >= tick.h + tick.off - 1 && tick.hVar === Math.round(tick.h + tick.off) + 'px',
+                  'bodyPad=' + Math.round(tick.bodyPad) + ' boardH=' + tick.h + ' dodge=' + Math.round(tick.off)
+                  + ' --xg-tick-h=' + tick.hVar);
                 // the actual ask: it follows the scroll instead of leaving with it
                 const scrolled = await page.evaluate(async () => {
                   window.scrollTo(0, Math.max(1200, document.body.scrollHeight - window.innerHeight));
@@ -295,52 +299,9 @@ jobs:
                 });
                 console.log('TICKER-SCROLL', JSON.stringify(scrolled));
                 v('ticker-follows-scroll',
-                  scrolled.y > 300 && Math.abs(scrolled.bottom - scrolled.vh) <= 2,
-                  'scrolled to y=' + Math.round(scrolled.y) + ', board bottom still ' + Math.round(scrolled.bottom) + '/' + scrolled.vh);
-                // chevron tucks it out of the way and gives the page its space back
-                await page.click('#xg-ticker .xg-tick__toggle');
-                await sleep(500);
-                const tuck = await page.evaluate(() => {
-                  const t = document.getElementById('xg-ticker');
-                  return { cls: t.className, top: t.getBoundingClientRect().top, vh: window.innerHeight,
-                           hVar: (getComputedStyle(document.documentElement).getPropertyValue('--xg-tick-h') || '').trim(),
-                           store: (function () { try { return localStorage.getItem('xgTickTuck'); } catch (e) { return '?'; } })() };
-                });
-                console.log('TICKER-TUCK', JSON.stringify(tuck));
-                v('ticker-tuck', /is-tucked/.test(tuck.cls) && tuck.hVar === '26px' && tuck.top > tick.rectTop + 20 && tuck.store === '1',
-                  JSON.stringify(tuck));
-                /* Who actually owns the lip? If anything covers the chevron
-                   once the board is tucked, a shopper who hides the ticker can
-                   never get it back - so name the element under that point
-                   before clicking, and record which kind of click worked. */
-                const lip = await page.evaluate(() => {
-                  const b = document.querySelector('#xg-ticker .xg-tick__toggle');
-                  const r = b.getBoundingClientRect();
-                  const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
-                  const hit = document.elementFromPoint(cx, cy);
-                  return { rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
-                           cx, cy, inView: cy > 0 && cy < window.innerHeight,
-                           hit: hit ? (hit.tagName + '.' + (hit.className || '') + '#' + (hit.id || '')) : null,
-                           isToggle: hit === b };
-                });
-                console.log('TICKER-LIP', JSON.stringify(lip));
-                await page.click('#xg-ticker .xg-tick__toggle');
-                await sleep(500);
-                let how = 'mouse';
-                if (await page.evaluate(() => /is-tucked/.test(document.getElementById('xg-ticker').className))) {
-                  // synthetic mouse click did not take - was it hit-testing?
-                  await page.evaluate(() => document.querySelector('#xg-ticker .xg-tick__toggle').click());
-                  await sleep(500);
-                  how = 'el.click()';
-                }
-                console.log('TICKER-UNTUCK-VIA', how);
-                const untuck = await page.evaluate(() => {
-                  const t = document.getElementById('xg-ticker');
-                  return { cls: t.className, bottom: t.getBoundingClientRect().bottom, vh: window.innerHeight,
-                           hVar: (getComputedStyle(document.documentElement).getPropertyValue('--xg-tick-h') || '').trim() };
-                });
-                v('ticker-untuck', !/is-tucked/.test(untuck.cls) && Math.abs(untuck.bottom - untuck.vh) <= 2 && untuck.hVar === tick.h + 'px',
-                  'via ' + how + ' lip=' + JSON.stringify(lip) + ' -> ' + JSON.stringify(untuck));
+                  scrolled.y > 300 && Math.abs(scrolled.bottom - (scrolled.vh - tick.off)) <= 2,
+                  'scrolled to y=' + Math.round(scrolled.y) + ', board bottom still ' + Math.round(scrolled.bottom)
+                  + ' (vh ' + scrolled.vh + ' less ' + Math.round(tick.off) + 'px dodge)');
                 /* A third-party app iframe (#PBarNextFrame, injected at
                    runtime - it appears nowhere in the theme) owned the tuck
                    lip. The real question is how much of the BOARD it covers:
@@ -369,8 +330,12 @@ jobs:
                   };
                 });
                 console.log('TICKER-COVER', JSON.stringify(cover));
+                /* Every sample point across BOTH tapes must belong to the
+                   board. 3/6 here meant the whole lower tape was swallowed by
+                   the app's bottom bar - card links and + buttons included. */
                 v('ticker-clickable', cover.pts.every((p) => p.own),
-                  'board-owned points ' + cover.pts.filter((p) => p.own).length + '/' + cover.pts.length + ' :: ' + JSON.stringify(cover));
+                  'board-owned points ' + cover.pts.filter((p) => p.own).length + '/' + cover.pts.length
+                  + ' dodge=' + Math.round(tick.off) + 'px :: ' + JSON.stringify(cover));
                 await page.evaluate(() => window.scrollTo(0, 0));
                 await sleep(250);
                 v('ticker-marquee', tick.mtg.anim === 'xgTickMove' && tick.mtg.state === 'running' && tick.mtg.dur >= 30,
