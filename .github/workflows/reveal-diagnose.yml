@@ -737,6 +737,17 @@ jobs:
               }
               console.log('R14-MENU-HOVERED', hovered || 'no root item of the first 9 revealed new tmenu elements');
               console.log('R14-MENU-PANELS2', JSON.stringify(hits));
+              /* The panel is the biggest absolutely-positioned thing the
+                 hover revealed. Asserting on THAT rather than on "no light
+                 element remains" - an empty list would also be what a panel
+                 that never opened looks like, and this check exists because
+                 exactly that went unnoticed for two rounds. */
+              const darkish = (c) => { const m = (c || '').match(/\d+/g); return !!m && m.length >= 3 && (+m[0] + +m[1] + +m[2]) < 300; };
+              const panel = hits.filter((h) => h.pos === 'absolute')
+                .sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3])[0];
+              v('dark-menu-panel', !!panel && darkish(panel.bg),
+                panel ? panel.el + ' bg=' + panel.bg + ' ink=' + panel.ink + ' box=' + JSON.stringify(panel.box)
+                      : 'no absolutely-positioned tmenu panel opened on any of the first 9 root items');
               return page.evaluate(() => {
                 const box = (el) => {
                   if (!el) return null;
@@ -838,32 +849,63 @@ jobs:
                Homepage only — product and search pages are unreachable from
                this runner, so those stay manual. */
             const contrast = await page.evaluate(() => {
-              const lum = (c) => {
+              /* Alpha is real. Run 108 scored four homepage rows at 1.0-3.0:1
+                 that are not defects at all: the calendar cells, the events
+                 chips and the locations pills all paint
+                 rgba(255,255,255,.02-.08), and reading that as OPAQUE white
+                 scores light ink against white when the surface actually
+                 composites to within a few points of the dark ground. Every
+                 layer is composited now - the ink over its backdrop, and each
+                 translucent background over the one beneath it - down to the
+                 first opaque surface, or the body's own ground when there is
+                 none above it.
+
+                 A background-IMAGE is invisible to backgroundColor, so a
+                 gradient chip - the ticker's gold FOIL badge - scored against
+                 the card behind it and read 2.7:1 when the chip is gold on
+                 gold. Those rows are excluded AND COUNTED, so the exclusion
+                 shows up in the log rather than quietly shrinking the list. */
+              const parse = (c) => {
                 const m = (c || '').match(/[\d.]+/g);
                 if (!m || m.length < 3) return null;
-                if (m.length > 3 && +m[3] === 0) return null;
-                const f = [+m[0], +m[1], +m[2]].map((v) => {
+                return { r: +m[0], g: +m[1], b: +m[2], a: m.length > 3 ? +m[3] : 1 };
+              };
+              const over = (fg, bg) => ({
+                r: fg.r * fg.a + bg.r * (1 - fg.a),
+                g: fg.g * fg.a + bg.g * (1 - fg.a),
+                b: fg.b * fg.a + bg.b * (1 - fg.a),
+                a: 1
+              });
+              const lum = (c) => {
+                const f = [c.r, c.g, c.b].map((v) => {
                   v /= 255;
                   return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
                 });
                 return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
               };
-              /* Report the background COLOUR, not just its luminance. Run
-                 105 scored three homepage rows at 1.0-1.4:1 and there was no
-                 way to tell whether the ink went wrong or the surface under
-                 it never went dark - which is the whole question. */
-              const bgOf = (el) => {
-                for (let n = el; n; n = n.parentElement) {
-                  const css = getComputedStyle(n).backgroundColor;
-                  const L = lum(css);
-                  if (L !== null) return { L: L, css: css, from: n };
-                }
-                return { L: 0, css: 'body ground', from: null };
-              };
               const sel = (el) => el.tagName.toLowerCase()
                 + (el.id ? '#' + el.id : '')
                 + (el.className ? '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.') : '');
+              const bodyBg = parse(getComputedStyle(document.body).backgroundColor);
+              const ground = (bodyBg && bodyBg.a === 1) ? bodyBg : { r: 255, g: 255, b: 255, a: 1 };
+              const bgOf = (el) => {
+                const layers = [];
+                let from = null, grad = '';
+                for (let n = el; n; n = n.parentElement) {
+                  const cs = getComputedStyle(n);
+                  if (!grad && cs.backgroundImage && cs.backgroundImage !== 'none') grad = sel(n);
+                  const c = parse(cs.backgroundColor);
+                  if (!c || c.a === 0) continue;
+                  if (!from) from = n;
+                  layers.push(c);
+                  if (c.a === 1) break;
+                }
+                let base = (layers.length && layers[layers.length - 1].a === 1) ? layers.pop() : ground;
+                for (let i = layers.length - 1; i >= 0; i--) base = over(layers[i], base);
+                return { col: base, css: from ? getComputedStyle(from).backgroundColor : 'body ground', from: from, grad: grad };
+              };
               const bad = [];
+              let grads = 0;
               Array.from(document.querySelectorAll('body *')).forEach((el) => {
                 if (bad.length >= 400) return;
                 const txt = Array.from(el.childNodes)
@@ -874,20 +916,23 @@ jobs:
                 if (r.width < 8 || r.height < 6) return;
                 const cs = getComputedStyle(el);
                 if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) return;
-                const fg = lum(cs.color);
-                if (fg === null) return;
+                const inkRaw = parse(cs.color);
+                if (!inkRaw) return;
                 const bgi = bgOf(el);
-                const bg = bgi.L;
+                const fg = lum(over(inkRaw, bgi.col));
+                const bg = lum(bgi.col);
                 const ratio = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
                 const px = parseFloat(cs.fontSize) || 16;
                 const large = px >= 24 || (px >= 18.66 && +cs.fontWeight >= 700);
                 if (ratio >= (large ? 3 : 4.5)) return;
+                if (bgi.grad) { grads++; return; }
                 bad.push({
                   s: sel(el).slice(0, 54),
-                  t: txt.slice(0, 28),
+                  t: txt.slice(0, 26),
                   ink: cs.color,
                   bg: bgi.css,
-                  bgOn: bgi.from ? sel(bgi.from).slice(0, 38) : '',
+                  onto: 'rgb(' + [bgi.col.r, bgi.col.g, bgi.col.b].map(Math.round).join(',') + ')',
+                  bgOn: bgi.from ? sel(bgi.from).slice(0, 34) : '',
                   px: Math.round(px),
                   r: Math.round(ratio * 10) / 10
                 });
@@ -896,9 +941,30 @@ jobs:
               // one row per selector — a repeated card class would flood this
               const seen = {}, uniq = [];
               bad.forEach((b) => { if (!seen[b.s]) { seen[b.s] = 1; uniq.push(b); } });
-              return { total: bad.length, worst: uniq.slice(0, 18) };
+              return { total: bad.length, grads: grads, worst: uniq.slice(0, 18) };
             });
-            console.log('DARK-CONTRAST total=' + contrast.total, JSON.stringify(contrast.worst));
+            console.log('DARK-CONTRAST total=' + contrast.total
+              + ' gradient-backed-excluded=' + contrast.grads, JSON.stringify(contrast.worst));
+
+            /* Round 14 acceptance: the grid card price, and the photo row the
+               owner asked to be centred. Both were shipped on a reading of
+               the source and neither had ever been measured. */
+            const priceInk = await page.evaluate(() => {
+              const el = document.querySelector('.grid-view-item__meta .is-bold');
+              return el ? getComputedStyle(el).color : '(no grid price on the page)';
+            });
+            v('dark-grid-price-ink', priceInk === 'rgb(255, 106, 94)',
+              priceInk + ' — theme.css paints this var(--brand-secondary) through a SEVEN-class selector, so the dark rule needs weight, not a longer selector');
+            const strip = r14.strip;
+            if (strip && strip.holderBox && strip.imgs && strip.imgs.length) {
+              const gapL = strip.imgs[0][0] - strip.holderBox[0];
+              const lastImg = strip.imgs[strip.imgs.length - 1];
+              const gapR = (strip.holderBox[0] + strip.holderBox[2]) - (lastImg[0] + lastImg[1]);
+              v('photo-strip-centered', Math.abs(gapL - gapR) <= 3,
+                'left gap ' + gapL + 'px vs right ' + gapR + 'px across ' + strip.n + ' photos (justify=' + strip.holderJustify + ')');
+            } else {
+              v('photo-strip-centered', false, 'the reviews-band photo row was not found: ' + JSON.stringify(strip));
+            }
 
             /* PRODUCT-PAGE RULES, PROVEN WITHOUT THE PRODUCT PAGE.
                Cloudflare challenges this runner on /products/*, so three dark
