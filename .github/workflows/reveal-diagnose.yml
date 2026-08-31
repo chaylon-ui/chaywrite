@@ -211,16 +211,19 @@ jobs:
             // is the Pokemon one), so each is feed-gated SEPARATELY: a quiet
             // day on one game reads as absent-by-design, not a FAIL.
             const tick = await page.evaluate(async () => {
-              const feedOf = async (u) => {
+              const feedOf = async (u, g) => {
                 try {
                   const r = await fetch('https://exor-binder.nevski.workers.dev' + u);
                   const j = await r.json();
-                  return ((j && j.cards) || []).filter(c => c && c.name && c.price).length;
-                } catch (e) { return -1; }
+                  const cs = ((j && j.cards) || []).filter(c => c && c.name && c.price);
+                  // `mine` is the whole point: counting CARDS passed a run where
+                  // both tapes were served the same MTG feed (46 apiece).
+                  return { n: cs.length, mine: cs.filter(c => c.game === g).length, top: (j && j.game) || '' };
+                } catch (e) { return { n: -1, mine: -1, top: '' }; }
               };
               const feed = {
-                mtg: await feedOf('/cards.json?nt=1'),
-                pokemon: await feedOf('/cards.json?c=pokemon-singles-new-arrivals&nt=1')
+                mtg: await feedOf('/cards.json?collection=new-arrivals&nt=1', 'mtg'),
+                pokemon: await feedOf('/cards.json?collection=pokemon-singles-new-arrivals&nt=1', 'pokemon')
               };
               window.scrollTo(0, 0);
               const t = document.getElementById('xg-ticker');
@@ -238,6 +241,7 @@ jobs:
                   adds: row.querySelectorAll('.xg-tick__add').length,
                   anim: cs.animationName, state: cs.animationPlayState, dur: parseFloat(cs.animationDuration),
                   label: ((row.querySelector('.xg-tick__label') || {}).textContent || '').trim(),
+                  first: ((row.querySelector('.xg-tick__name') || {}).textContent || '').trim(),
                   labelBg: getComputedStyle(row.querySelector('.xg-tick__label')).backgroundImage.slice(0, 46)
                 };
               };
@@ -251,9 +255,17 @@ jobs:
               };
             });
             console.log('TICKER', JSON.stringify(tick));
-            if (tick.feed.mtg >= 4) {
+            /* The bug these exist for: `c=` is not the worker's collection
+               param (that is `collection=`), so BOTH tapes were served the
+               same MTG feed - and the old check still passed, because it only
+               counted cards and got 46 either way. Identity, not volume. */
+            v('ticker-feeds-per-game',
+              tick.feed.mtg.top === 'mtg' && tick.feed.pokemon.top === 'pokemon'
+              && tick.feed.mtg.mine >= 4 && tick.feed.pokemon.mine >= 4,
+              'mtg=' + JSON.stringify(tick.feed.mtg) + ' pokemon=' + JSON.stringify(tick.feed.pokemon));
+            if (tick.feed.mtg.mine >= 4) {
               v('ticker-mounts', tick.has && tick.mtg.shown && tick.mtg.halves === 2 && tick.mtg.items >= 8 && tick.mtg.adds >= 2,
-                'has=' + tick.has + ' mtg items=' + (tick.mtg.items || 0) + ' adds=' + (tick.mtg.adds || 0) + ' feed=' + tick.feed.mtg);
+                'has=' + tick.has + ' mtg items=' + (tick.mtg.items || 0) + ' adds=' + (tick.mtg.adds || 0) + ' feed=' + JSON.stringify(tick.feed.mtg));
               if (tick.has && tick.mtg.shown) {
                 v('ticker-top-of-page', tick.inMain && tick.top < 500, 'inMain=' + tick.inMain + ' top=' + Math.round(tick.top));
                 v('ticker-marquee', tick.mtg.anim === 'xgTickMove' && tick.mtg.state === 'running' && tick.mtg.dur >= 30,
@@ -274,26 +286,29 @@ jobs:
                 await sleep(300);
               }
             } else {
-              v('ticker-mounts', !tick.has || !tick.mtg.shown, 'SKIPPED - mtg nt feed=' + tick.feed.mtg
-                + (tick.feed.mtg < 0 ? ' (fetch failed in page)' : ' (<4 cards -> tape absent by design)') + ' shown=' + tick.mtg.shown);
+              v('ticker-mounts', !tick.has || !tick.mtg.shown, 'SKIPPED - mtg nt feed=' + JSON.stringify(tick.feed.mtg)
+                + (tick.feed.mtg.n < 0 ? ' (fetch failed in page)' : ' (<4 mtg cards -> tape absent by design)') + ' shown=' + tick.mtg.shown);
             }
             // the Pokemon tape: present, BELOW the MTG one, and genuinely slower
-            if (tick.has && tick.feed.pokemon >= 4) {
+            if (tick.has && tick.feed.pokemon.mine >= 4) {
               v('ticker-pokemon-tape', tick.pokemon.shown && tick.pokemon.halves === 2 && tick.pokemon.items >= 8 && /^Pok/i.test(tick.pokemon.label),
-                'shown=' + tick.pokemon.shown + ' items=' + (tick.pokemon.items || 0) + ' label=' + JSON.stringify(tick.pokemon.label) + ' feed=' + tick.feed.pokemon);
+                'shown=' + tick.pokemon.shown + ' items=' + (tick.pokemon.items || 0) + ' label=' + JSON.stringify(tick.pokemon.label) + ' feed=' + JSON.stringify(tick.feed.pokemon));
               if (tick.pokemon.shown && tick.mtg.shown) {
                 v('ticker-order-mtg-first', tick.order === 'mtg,pokemon' && tick.pokemon.top > tick.mtg.top,
                   'order=' + tick.order + ' mtgTop=' + Math.round(tick.mtg.top) + ' pkTop=' + Math.round(tick.pokemon.top));
                 // compare the PER-CARD rate, so unequal feed sizes can neither
                 // fake nor hide the speed difference
                 const rM = tick.mtg.dur / tick.mtg.items, rP = tick.pokemon.dur / tick.pokemon.items;
+                v('ticker-tapes-distinct',
+                  !!tick.mtg.first && !!tick.pokemon.first && tick.mtg.first !== tick.pokemon.first,
+                  'mtg=' + JSON.stringify(tick.mtg.first) + ' pokemon=' + JSON.stringify(tick.pokemon.first));
                 v('ticker-pokemon-slower', rP > rM * 1.5,
                   'mtg ' + tick.mtg.dur + 's/' + tick.mtg.items + ', pokemon ' + tick.pokemon.dur + 's/' + tick.pokemon.items
                   + ' -> ' + (rP / rM).toFixed(2) + 'x per card');
               }
             } else if (tick.has) {
-              v('ticker-pokemon-tape', !tick.pokemon.shown, 'SKIPPED - pokemon nt feed=' + tick.feed.pokemon
-                + (tick.feed.pokemon < 0 ? ' (fetch failed in page)' : ' (<4 cards -> tape absent by design)') + ' shown=' + tick.pokemon.shown);
+              v('ticker-pokemon-tape', !tick.pokemon.shown, 'SKIPPED - pokemon nt feed=' + JSON.stringify(tick.feed.pokemon)
+                + (tick.feed.pokemon.n < 0 ? ' (fetch failed in page)' : ' (<4 pokemon cards -> tape absent by design)') + ' shown=' + tick.pokemon.shown);
             }
 
             // ---- locations strip: renamed programs stay inside their pill ----
