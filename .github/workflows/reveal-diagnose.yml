@@ -298,6 +298,14 @@ jobs:
                   return { y: window.scrollY, top: r2.top, bottom: r2.bottom, vh: window.innerHeight };
                 });
                 console.log('TICKER-SCROLL', JSON.stringify(scrolled));
+                /* Owner: "the ticker loads there until first scroll and then
+                   it snaps to bottom." The placement measured at load must
+                   equal the one after scrolling - a difference IS the snap. */
+                await sleep(400);
+                const settled = await page.evaluate(() =>
+                  Math.round(parseFloat(getComputedStyle(document.getElementById('xg-ticker')).bottom) || 0));
+                v('ticker-no-snap', Math.abs(settled - tick.off) <= 2,
+                  'placed at ' + Math.round(tick.off) + 'px on load, ' + settled + 'px after scrolling');
                 v('ticker-follows-scroll',
                   scrolled.y > 300 && Math.abs(scrolled.bottom - (scrolled.vh - tick.off)) <= 2,
                   'scrolled to y=' + Math.round(scrolled.y) + ', board bottom still ' + Math.round(scrolled.bottom)
@@ -601,6 +609,39 @@ jobs:
               logoCtx = '@1440px (no visible logo at 390)';
             }
             console.log('LOGO-GEOM', logoCtx, JSON.stringify(logo));
+            /* The owner still sees a blank band beside the logo on a phone.
+               Dump the header's real boxes at 390px so the fix is measured
+               rather than guessed - the logo block is col-sm-12 (a full-width
+               row) while the hamburger/search live in a separate
+               .site-header-mobile block underneath. */
+            if (logoCtx === '@390px') {
+              const hdr = await page.evaluate(() => {
+                const h = document.getElementById('header');
+                if (!h) return null;
+                const box = (el) => {
+                  if (!el) return null;
+                  const r = el.getBoundingClientRect();
+                  return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+                };
+                const kids = Array.from(h.children).map((c) => ({
+                  cls: (c.className || '').toString().slice(0, 46),
+                  disp: getComputedStyle(c).display,
+                  box: box(c)
+                })).filter((c) => c.disp !== 'none');
+                const img = Array.from(h.querySelectorAll('.header__logo img')).find((i) => i.offsetWidth > 0);
+                return {
+                  header: box(h),
+                  kids,
+                  logoWrap: box(h.querySelector('.header-logo-section-img, .header-logo-section')),
+                  logoImg: box(img),
+                  navMenu: box(h.querySelector('.nav-menu')),
+                  mobileBar: box(h.querySelector('.site-header-mobile')),
+                  mobLeft: box(h.querySelector('.mobile-width-left')),
+                  mobRight: box(h.querySelector('.mobile-width-right'))
+                };
+              });
+              console.log('HEADER-GEOM @390px', JSON.stringify(hdr));
+            }
             if (logo.d && logo.l) {
               const near = (a, b) => Math.abs(a - b) < 0.6;
               const rnd = (n) => Math.round(n * 10) / 10;
