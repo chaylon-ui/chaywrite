@@ -677,8 +677,53 @@ jobs:
                the deck-builder field inks. All three live on the homepage at
                desktop width, so measure them here. */
             const r14 = await (async () => {
-              const root = await page.$('.tmenu_item--root');
-              if (root) { await root.hover(); await sleep(900); }
+              /* Run 104 returned []: it hovered the FIRST root item, and
+                 "All Pre Orders" carries no chevron, so nothing opened. Walk
+                 the root items until a panel actually appears, and look for
+                 it anywhere in the document — app mega-menus are commonly
+                 appended outside the nav they belong to. */
+              const roots = await page.$$('.tmenu_item--root');
+              const lightPanel = () => page.evaluate(() => {
+                const out = [];
+                Array.from(document.querySelectorAll('div,ul,nav,section')).forEach((n) => {
+                  if (out.length >= 4) return;
+                  const r = n.getBoundingClientRect();
+                  if (r.width < 250 || r.height < 140 || r.top < 90 || r.top > 800) return;
+                  const cs = getComputedStyle(n);
+                  if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) return;
+                  const m = (cs.backgroundColor || '').match(/\d+/g);
+                  if (!m || m.length < 3) return;
+                  if (+m[0] + +m[1] + +m[2] < 500) return;             // light only
+                  if (m.length > 3 && +m[3] === 0) return;             // transparent
+                  const chain = [];
+                  for (let a = n; a && chain.length < 4; a = a.parentElement) {
+                    chain.push(a.tagName + (a.className ? '.' + (a.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.') : ''));
+                  }
+                  out.push({
+                    el: n.tagName + (n.className ? '.' + (n.className || '').toString().trim().split(/\s+/).slice(0, 3).join('.') : ''),
+                    bg: cs.backgroundColor,
+                    box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+                    up: chain.join(' < ').slice(0, 130)
+                  });
+                });
+                return out;
+              });
+              let hits = [], hovered = '';
+              for (let i = 0; i < roots.length && i < 7; i++) {
+                try { await roots[i].hover(); } catch (e) { continue; }
+                await sleep(800);
+                const got = await lightPanel();
+                if (got.length) {
+                  hits = got;
+                  hovered = await page.evaluate((n) => {
+                    const el = document.querySelectorAll('.tmenu_item--root')[n];
+                    return el ? (el.textContent || '').trim().slice(0, 24) : '';
+                  }, i);
+                  break;
+                }
+              }
+              console.log('R14-MENU-HOVERED', hovered || 'none of the first 7 root items opened a light panel');
+              console.log('R14-MENU-PANELS2', JSON.stringify(hits));
               return page.evaluate(() => {
                 const box = (el) => {
                   if (!el) return null;
@@ -746,6 +791,70 @@ jobs:
             console.log('R14-MENU-PANELS', JSON.stringify(r14.panels));
             console.log('R14-PHOTO-STRIP', JSON.stringify(r14.strip));
             console.log('R14-DECK-FIELDS', JSON.stringify(r14.deck));
+
+            /* Owner: "because of dark mode there are several parts of the site
+               that need to adjust font colors like this". Chasing those one
+               screenshot at a time has cost two rounds, so sweep instead:
+               every visible text node on this page in DARK, its computed ink
+               against the first opaque background above it, scored by the
+               WCAG contrast formula. Anything under 4.5:1 (3:1 for large
+               text) is reported worst-first with a selector to fix it by.
+               Homepage only — product and search pages are unreachable from
+               this runner, so those stay manual. */
+            const contrast = await page.evaluate(() => {
+              const lum = (c) => {
+                const m = (c || '').match(/[\d.]+/g);
+                if (!m || m.length < 3) return null;
+                if (m.length > 3 && +m[3] === 0) return null;
+                const f = [+m[0], +m[1], +m[2]].map((v) => {
+                  v /= 255;
+                  return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                });
+                return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+              };
+              const bgOf = (el) => {
+                for (let n = el; n; n = n.parentElement) {
+                  const L = lum(getComputedStyle(n).backgroundColor);
+                  if (L !== null) return L;
+                }
+                return 0;                                   // body ground
+              };
+              const sel = (el) => el.tagName.toLowerCase()
+                + (el.id ? '#' + el.id : '')
+                + (el.className ? '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.') : '');
+              const bad = [];
+              Array.from(document.querySelectorAll('body *')).forEach((el) => {
+                if (bad.length >= 400) return;
+                const txt = Array.from(el.childNodes)
+                  .filter((n) => n.nodeType === 3 && n.textContent.trim().length > 1)
+                  .map((n) => n.textContent.trim()).join(' ');
+                if (!txt) return;
+                const r = el.getBoundingClientRect();
+                if (r.width < 8 || r.height < 6) return;
+                const cs = getComputedStyle(el);
+                if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) return;
+                const fg = lum(cs.color);
+                if (fg === null) return;
+                const bg = bgOf(el);
+                const ratio = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+                const px = parseFloat(cs.fontSize) || 16;
+                const large = px >= 24 || (px >= 18.66 && +cs.fontWeight >= 700);
+                if (ratio >= (large ? 3 : 4.5)) return;
+                bad.push({
+                  s: sel(el).slice(0, 54),
+                  t: txt.slice(0, 34),
+                  ink: cs.color,
+                  px: Math.round(px),
+                  r: Math.round(ratio * 10) / 10
+                });
+              });
+              bad.sort((a, b) => a.r - b.r);
+              // one row per selector — a repeated card class would flood this
+              const seen = {}, uniq = [];
+              bad.forEach((b) => { if (!seen[b.s]) { seen[b.s] = 1; uniq.push(b); } });
+              return { total: bad.length, worst: uniq.slice(0, 18) };
+            });
+            console.log('DARK-CONTRAST total=' + contrast.total, JSON.stringify(contrast.worst));
 
             console.log('DESK-MENU-PAINTER', JSON.stringify(deskChrome.menuPainter));
             console.log('DESK-MENU-CHAIN', JSON.stringify(deskChrome.menuChain));
