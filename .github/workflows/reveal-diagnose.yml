@@ -341,6 +341,36 @@ jobs:
                 });
                 v('ticker-untuck', !/is-tucked/.test(untuck.cls) && Math.abs(untuck.bottom - untuck.vh) <= 2 && untuck.hVar === tick.h + 'px',
                   'via ' + how + ' lip=' + JSON.stringify(lip) + ' -> ' + JSON.stringify(untuck));
+                /* A third-party app iframe (#PBarNextFrame, injected at
+                   runtime - it appears nowhere in the theme) owned the tuck
+                   lip. The real question is how much of the BOARD it covers:
+                   anything it sits on top of cannot be clicked, so if it
+                   reaches the tapes then card links and + buttons are dead
+                   too, and that is the shopper's problem, not just a test's. */
+                const cover = await page.evaluate(() => {
+                  const t = document.getElementById('xg-ticker');
+                  const r = t.getBoundingClientRect();
+                  const f = document.getElementById('PBarNextFrame');
+                  const fr = f ? f.getBoundingClientRect() : null;
+                  const fcs = f ? getComputedStyle(f) : null;
+                  const pts = [];
+                  [0.06, 0.5, 0.94].forEach((fx) => {
+                    [0.25, 0.75].forEach((fy) => {
+                      const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height * fy);
+                      const el = document.elementFromPoint(x, y);
+                      pts.push({ x, y, own: !!(el && t.contains(el)), el: el ? (el.tagName + (el.id ? '#' + el.id : '')) : null });
+                    });
+                  });
+                  return {
+                    board: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+                    iframe: fr ? [Math.round(fr.left), Math.round(fr.top), Math.round(fr.width), Math.round(fr.height)] : null,
+                    iframeCss: fcs ? { pos: fcs.position, z: fcs.zIndex, pe: fcs.pointerEvents, vis: fcs.visibility, disp: fcs.display } : null,
+                    pts
+                  };
+                });
+                console.log('TICKER-COVER', JSON.stringify(cover));
+                v('ticker-clickable', cover.pts.every((p) => p.own),
+                  'board-owned points ' + cover.pts.filter((p) => p.own).length + '/' + cover.pts.length + ' :: ' + JSON.stringify(cover));
                 await page.evaluate(() => window.scrollTo(0, 0));
                 await sleep(250);
                 v('ticker-marquee', tick.mtg.anim === 'xgTickMove' && tick.mtg.state === 'running' && tick.mtg.dur >= 30,
