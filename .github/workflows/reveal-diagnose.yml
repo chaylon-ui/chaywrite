@@ -546,6 +546,11 @@ jobs:
                 searchBg: cs(document.querySelector('#header #_desktop_search .search-info .search__input'), 'backgroundColor'),
                 cardBg: cs(card, 'backgroundColor'),
                 logoPlate: cs(document.querySelector('#header .header__logo img'), 'backgroundColor'),
+                /* The desktop menu row is the qikify app's NAV.tmenu_navbar,
+                   not the theme's #top-menu (which does not exist here). It
+                   painted white while the whole header around it went dark. */
+                tmenuBg: cs(document.querySelector('nav.tmenu_navbar'), 'backgroundColor'),
+                tmenuFound: !!document.querySelector('nav.tmenu_navbar'),
                 ntPrice: cs(document.querySelector('#xg-newtoday .xg-nt__price'), 'color'),
                 tickPrice: cs(document.querySelector('#xg-ticker .xg-tick__price'), 'color'),
                 ctaSelBg: cs(document.querySelector('.xg-dbc__select'), 'backgroundColor'),
@@ -559,6 +564,8 @@ jobs:
             v('dark-search-input', dark.searchBg === 'rgb(29, 35, 39)', dark.searchBg);
             v('dark-card-surface', dark.cardBg === 'rgb(24, 29, 32)', dark.cardBg);
             v('dark-logo-plate', dark.logoPlate === 'rgb(255, 255, 255)', dark.logoPlate);
+            v('dark-app-menu-bar', dark.tmenuFound && dark.tmenuBg === 'rgb(22, 27, 30)',
+              'tmenu_navbar bg=' + dark.tmenuBg + ' found=' + dark.tmenuFound + ' (was rgb(255, 255, 255))');
             v('dark-color-scheme', /dark/.test(dark.colorScheme), dark.colorScheme);
             if (dark.ntPrice) v('dark-nt-price', dark.ntPrice === 'rgb(255, 106, 94)', dark.ntPrice);
             if (dark.tickPrice) v('ticker-dark-price', dark.tickPrice === 'rgb(255, 106, 94)', dark.tickPrice);
@@ -827,7 +834,11 @@ jobs:
               const rnd = (n) => Math.round(n * 10) / 10;
               v('logo-no-layout-shift', near(logo.d.w, logo.l.w) && near(logo.d.h, logo.l.h) && near(logo.d.top, logo.l.top) && near(logo.d.headH, logo.l.headH),
                 'dark ' + [logo.d.w, logo.d.h, logo.d.top, logo.d.headH].map(rnd).join('/') + ' vs light ' + [logo.l.w, logo.l.h, logo.l.top, logo.l.headH].map(rnd).join('/') + ' ' + logoCtx);
-              v('logo-plate-shadow', logo.d.pad === '0px' && logo.d.shadow !== 'none' && logo.d.shadow.indexOf('6px') > -1, 'pad=' + logo.d.pad + ' shadow=' + logo.d.shadow.slice(0, 70));
+              /* Spread went 6px -> 10px: the owner read the logo as "cut off",
+                 and a 6px ring around art that fills its own asset leaves
+                 almost no white margin. Still a shadow, so still zero layout
+                 cost - that is the round-9 constraint and it still holds. */
+              v('logo-plate-shadow', logo.d.pad === '0px' && logo.d.shadow !== 'none' && logo.d.shadow.indexOf('10px') > -1, 'pad=' + logo.d.pad + ' shadow=' + logo.d.shadow.slice(0, 70));
             } else {
               v('logo-no-layout-shift', false, 'no visible logo img found');
             }
