@@ -205,49 +205,95 @@ jobs:
             console.log('CTA-PH', JSON.stringify(ph));
             v('cta-ph-per-game', !!ph && /Charizard/.test(ph.poke) && /Sol Ring/.test(ph.back) && /Sol Ring/.test(ph.start), ph ? JSON.stringify({ poke: ph.poke.slice(0, 26), back: ph.back.slice(0, 22) }) : 'CTA els missing');
 
-            // round 9: Fresh-to-the-shelf ticker (idea #4). Feed-gated so a
-            // genuinely quiet nt day reads as absent-by-design, not a FAIL.
+            // round 11: TWO ticker tapes - MTG on top, Pokemon below it at
+            // 1.8x the travel time. Each tape has its OWN new-today feed
+            // (new-arrivals is MTG Singles only; pokemon-singles-new-arrivals
+            // is the Pokemon one), so each is feed-gated SEPARATELY: a quiet
+            // day on one game reads as absent-by-design, not a FAIL.
             const tick = await page.evaluate(async () => {
-              let feed = -1;
-              try {
-                const r = await fetch('https://exor-binder.nevski.workers.dev/cards.json?nt=1');
-                const j = await r.json();
-                feed = ((j && j.cards) || []).filter(c => c && c.name && c.price).length;
-              } catch (e) {}
+              const feedOf = async (u) => {
+                try {
+                  const r = await fetch('https://exor-binder.nevski.workers.dev' + u);
+                  const j = await r.json();
+                  return ((j && j.cards) || []).filter(c => c && c.name && c.price).length;
+                } catch (e) { return -1; }
+              };
+              const feed = {
+                mtg: await feedOf('/cards.json?nt=1'),
+                pokemon: await feedOf('/cards.json?c=pokemon-singles-new-arrivals&nt=1')
+              };
               window.scrollTo(0, 0);
               const t = document.getElementById('xg-ticker');
-              if (!t) return { feed, has: false };
-              const track = t.querySelector('.xg-tick__track');
-              const cs = getComputedStyle(track);
+              if (!t) return { feed, has: false, mtg: { shown: false }, pokemon: { shown: false } };
+              const rowOf = (g) => {
+                const row = t.querySelector('.xg-tick__row[data-game="' + g + '"]');
+                if (!row || row.hidden) return { shown: false };
+                const track = row.querySelector('.xg-tick__track');
+                const cs = getComputedStyle(track);
+                return {
+                  shown: true,
+                  top: row.getBoundingClientRect().top,
+                  items: row.querySelectorAll('.xg-tick__item').length,
+                  halves: row.querySelectorAll('.xg-tick__half').length,
+                  adds: row.querySelectorAll('.xg-tick__add').length,
+                  anim: cs.animationName, state: cs.animationPlayState, dur: parseFloat(cs.animationDuration),
+                  label: ((row.querySelector('.xg-tick__label') || {}).textContent || '').trim(),
+                  labelBg: getComputedStyle(row.querySelector('.xg-tick__label')).backgroundImage.slice(0, 46)
+                };
+              };
               return {
                 feed, has: true,
                 inMain: !!t.closest('#MainContent'),
                 top: t.getBoundingClientRect().top,
-                items: t.querySelectorAll('.xg-tick__item').length,
-                halves: t.querySelectorAll('.xg-tick__half').length,
-                adds: t.querySelectorAll('.xg-tick__add').length,
-                anim: cs.animationName, state: cs.animationPlayState, dur: parseFloat(cs.animationDuration),
-                label: (t.querySelector('.xg-tick__label') || {}).textContent || '',
-                price: t.querySelector('.xg-tick__price') ? getComputedStyle(t.querySelector('.xg-tick__price')).color : ''
+                order: [...t.querySelectorAll('.xg-tick__row')].map(r => r.getAttribute('data-game')).join(','),
+                price: t.querySelector('.xg-tick__price') ? getComputedStyle(t.querySelector('.xg-tick__price')).color : '',
+                mtg: rowOf('mtg'), pokemon: rowOf('pokemon')
               };
             });
             console.log('TICKER', JSON.stringify(tick));
-            if (tick.feed >= 4) {
-              v('ticker-mounts', tick.has && tick.halves === 2 && tick.items >= 8 && tick.adds >= 2, 'has=' + tick.has + ' items=' + (tick.items || 0) + ' adds=' + (tick.adds || 0) + ' feed=' + tick.feed);
-              if (tick.has) {
+            if (tick.feed.mtg >= 4) {
+              v('ticker-mounts', tick.has && tick.mtg.shown && tick.mtg.halves === 2 && tick.mtg.items >= 8 && tick.mtg.adds >= 2,
+                'has=' + tick.has + ' mtg items=' + (tick.mtg.items || 0) + ' adds=' + (tick.mtg.adds || 0) + ' feed=' + tick.feed.mtg);
+              if (tick.has && tick.mtg.shown) {
                 v('ticker-top-of-page', tick.inMain && tick.top < 500, 'inMain=' + tick.inMain + ' top=' + Math.round(tick.top));
-                v('ticker-marquee', tick.anim === 'xgTickMove' && tick.state === 'running' && tick.dur >= 30, tick.anim + '/' + tick.state + '/' + tick.dur + 's');
-                v('ticker-label', /Fresh to the shelf/i.test(tick.label), tick.label.slice(0, 40));
+                v('ticker-marquee', tick.mtg.anim === 'xgTickMove' && tick.mtg.state === 'running' && tick.mtg.dur >= 30,
+                  tick.mtg.anim + '/' + tick.mtg.state + '/' + tick.mtg.dur + 's');
+                v('ticker-label-mtg', /^MTG$/i.test(tick.mtg.label), JSON.stringify(tick.mtg.label));
                 v('ticker-light-price', tick.price === 'rgb(214, 44, 40)', tick.price);
-                await page.hover('#xg-ticker .xg-tick__label');
+                // hovering ONE tape must pause that tape
+                await page.hover('#xg-ticker .xg-tick__row[data-game="mtg"] .xg-tick__label');
                 await sleep(400);
-                const paused = await page.evaluate(() => getComputedStyle(document.querySelector('#xg-ticker .xg-tick__track')).animationPlayState);
-                v('ticker-hover-pause', paused === 'paused', paused);
+                const hov = await page.evaluate(() => {
+                  const g = (s) => { const el = document.querySelector(s); return el ? getComputedStyle(el).animationPlayState : ''; };
+                  return { mtg: g('#xg-ticker .xg-tick__row[data-game="mtg"] .xg-tick__track'),
+                           pokemon: g('#xg-ticker .xg-tick__row[data-game="pokemon"] .xg-tick__track') };
+                });
+                console.log('TICKER-HOVER', JSON.stringify(hov));
+                v('ticker-hover-pause', hov.mtg === 'paused', JSON.stringify(hov));
                 await page.mouse.move(700, 620);
                 await sleep(300);
               }
             } else {
-              v('ticker-mounts', !tick.has, 'SKIPPED - nt feed=' + tick.feed + (tick.feed < 0 ? ' (fetch failed in page)' : ' (<4 cards -> ticker absent by design)') + ' has=' + tick.has);
+              v('ticker-mounts', !tick.has || !tick.mtg.shown, 'SKIPPED - mtg nt feed=' + tick.feed.mtg
+                + (tick.feed.mtg < 0 ? ' (fetch failed in page)' : ' (<4 cards -> tape absent by design)') + ' shown=' + tick.mtg.shown);
+            }
+            // the Pokemon tape: present, BELOW the MTG one, and genuinely slower
+            if (tick.has && tick.feed.pokemon >= 4) {
+              v('ticker-pokemon-tape', tick.pokemon.shown && tick.pokemon.halves === 2 && tick.pokemon.items >= 8 && /^Pok/i.test(tick.pokemon.label),
+                'shown=' + tick.pokemon.shown + ' items=' + (tick.pokemon.items || 0) + ' label=' + JSON.stringify(tick.pokemon.label) + ' feed=' + tick.feed.pokemon);
+              if (tick.pokemon.shown && tick.mtg.shown) {
+                v('ticker-order-mtg-first', tick.order === 'mtg,pokemon' && tick.pokemon.top > tick.mtg.top,
+                  'order=' + tick.order + ' mtgTop=' + Math.round(tick.mtg.top) + ' pkTop=' + Math.round(tick.pokemon.top));
+                // compare the PER-CARD rate, so unequal feed sizes can neither
+                // fake nor hide the speed difference
+                const rM = tick.mtg.dur / tick.mtg.items, rP = tick.pokemon.dur / tick.pokemon.items;
+                v('ticker-pokemon-slower', rP > rM * 1.5,
+                  'mtg ' + tick.mtg.dur + 's/' + tick.mtg.items + ', pokemon ' + tick.pokemon.dur + 's/' + tick.pokemon.items
+                  + ' -> ' + (rP / rM).toFixed(2) + 'x per card');
+              }
+            } else if (tick.has) {
+              v('ticker-pokemon-tape', !tick.pokemon.shown, 'SKIPPED - pokemon nt feed=' + tick.feed.pokemon
+                + (tick.feed.pokemon < 0 ? ' (fetch failed in page)' : ' (<4 cards -> tape absent by design)') + ' shown=' + tick.pokemon.shown);
             }
 
             // ---- locations strip: renamed programs stay inside their pill ----
