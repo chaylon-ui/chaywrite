@@ -116,7 +116,16 @@ jobs:
               return {
                 qaTotal: qa.length,
                 nt: document.querySelectorAll('#xg-newtoday .xg-nt__add').length,
-                camDesk: !!document.querySelector('#_desktop_search form.search-header .xg-scan-btn'),
+                /* Owner, round 12: "the camera icon should only show on
+                   mobile". The button is still INJECTED on desktop (the theme
+                   clones header markup to the mobile bar, so not injecting it
+                   here would remove it there too) - it is hidden by width.
+                   Presence is no longer the question; visibility is. */
+                camDeskEl: !!document.querySelector('#_desktop_search form.search-header .xg-scan-btn'),
+                camDeskShown: (function () {
+                  var b = document.querySelector('#_desktop_search form.search-header .xg-scan-btn');
+                  return !!(b && b.offsetWidth && getComputedStyle(b).display !== 'none');
+                })(),
                 vid,
                 bodyBg: getComputedStyle(document.body).backgroundColor,
                 togDesk: !!document.querySelector('#header .header-user-selection .xg-theme-toggle'),
@@ -134,7 +143,8 @@ jobs:
             v('qa-regression', shape.qaTotal >= 6, 'qa=' + shape.qaTotal);
             console.log('FEED-LOG', JSON.stringify(feedLog));
             v('nt-regression', shape.nt >= 8, 'nt=' + shape.nt + ' cards.json calls=' + JSON.stringify(feedLog));
-            v('cam-regression', shape.camDesk, String(shape.camDesk));
+            v('cam-regression', shape.camDeskEl && !shape.camDeskShown,
+              'injected=' + shape.camDeskEl + ' shownOnDesktop=' + shape.camDeskShown + ' (mobile-only by owner request)');
             v('toggle-desktop', shape.togDesk, String(shape.togDesk));
             v('toggle-mobile-slot', shape.togMob, String(shape.togMob));
             v('toggle-unpressed', shape.togPressed === 'false', String(shape.togPressed));
@@ -597,6 +607,68 @@ jobs:
             // logo onto its own line (owner screenshot) - the box-shadow plate
             // paints the same white pad with zero geometry delta. Flip the
             // attribute in place at phone width and diff the visible logo box.
+            /* Owner, round 12, viewing DESKTOP in dark: "the menu is white on
+               desktop, it should be black... also the logo is cut off and a
+               little small". Neither is guessable from the theme source - the
+               nav links render mixed-case while modern-skin forces #top-menu
+               uppercase, so the visible bar is most likely the qikify APP
+               menu, whose markup is not in this repo. Name the element that
+               actually paints white, and name whatever clips the logo. */
+            const deskChrome = await page.evaluate(() => {
+              const box = (el) => {
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+              };
+              const id = (el) => el.tagName
+                + (el.id ? '#' + el.id : '')
+                + (el.className ? '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 3).join('.') : '');
+              const opaque = (c) => !!c && c !== 'transparent' && c.indexOf('rgba(0, 0, 0, 0)') === -1;
+
+              const wanted = /^(all pre orders|trading cards|sports cards|board games)$/i;
+              const link = Array.from(document.querySelectorAll('a,button,div,span'))
+                .find((e) => wanted.test((e.textContent || '').trim()) && e.getBoundingClientRect().width > 0);
+              const chain = [];
+              if (link) {
+                for (let n = link; n && n !== document.documentElement; n = n.parentElement) {
+                  const cs = getComputedStyle(n);
+                  chain.push({ el: id(n).slice(0, 70), bg: cs.backgroundColor, color: cs.color, box: box(n) });
+                  if (chain.length >= 9) break;
+                }
+              }
+              const painter = chain.filter((c) => opaque(c.bg))[0] || null;
+
+              const img = Array.from(document.querySelectorAll('#header .header__logo img, #header .header-logo-section-img img'))
+                .filter((i) => i.offsetWidth > 0)[0];
+              let clipper = null, logo = null;
+              if (img) {
+                const cs = getComputedStyle(img);
+                logo = {
+                  natural: [img.naturalWidth, img.naturalHeight],
+                  box: box(img),
+                  w: cs.width, h: cs.height, maxW: cs.maxWidth, maxH: cs.maxHeight,
+                  fit: cs.objectFit, shadow: (cs.boxShadow || '').slice(0, 46)
+                };
+                const ib = img.getBoundingClientRect();
+                for (let n = img.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+                  const cs2 = getComputedStyle(n);
+                  const nb = n.getBoundingClientRect();
+                  const clips = /hidden|clip|scroll|auto/.test(cs2.overflow + cs2.overflowX + cs2.overflowY);
+                  const cuts = nb.bottom < ib.bottom - 1 || nb.right < ib.right - 1
+                    || nb.top > ib.top + 1 || nb.left > ib.left + 1;
+                  if (clips || cuts) {
+                    clipper = { el: id(n).slice(0, 70), overflow: cs2.overflow, box: box(n), cuts: cuts, clips: clips };
+                    break;
+                  }
+                }
+              }
+              return { menuChain: chain, menuPainter: painter, hasTopMenu: !!document.getElementById('top-menu'), logo: logo, clipper: clipper };
+            });
+            console.log('DESK-MENU-PAINTER', JSON.stringify(deskChrome.menuPainter));
+            console.log('DESK-MENU-CHAIN', JSON.stringify(deskChrome.menuChain));
+            console.log('DESK-LOGO', JSON.stringify(deskChrome.logo), 'hasTopMenu=' + deskChrome.hasTopMenu);
+            console.log('DESK-LOGO-CLIPPER', JSON.stringify(deskChrome.clipper));
+
             const measureLogo = () => page.evaluate(() => {
               window.scrollTo(0, 0);
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
