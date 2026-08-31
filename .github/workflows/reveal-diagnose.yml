@@ -609,38 +609,68 @@ jobs:
               logoCtx = '@1440px (no visible logo at 390)';
             }
             console.log('LOGO-GEOM', logoCtx, JSON.stringify(logo));
-            /* The owner still sees a blank band beside the logo on a phone.
-               Dump the header's real boxes at 390px so the fix is measured
-               rather than guessed - the logo block is col-sm-12 (a full-width
-               row) while the hamburger/search live in a separate
-               .site-header-mobile block underneath. */
-            if (logoCtx === '@390px') {
-              const hdr = await page.evaluate(() => {
-                const h = document.getElementById('header');
-                if (!h) return null;
-                const box = (el) => {
-                  if (!el) return null;
-                  const r = el.getBoundingClientRect();
-                  return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
-                };
-                const kids = Array.from(h.children).map((c) => ({
-                  cls: (c.className || '').toString().slice(0, 46),
-                  disp: getComputedStyle(c).display,
-                  box: box(c)
-                })).filter((c) => c.disp !== 'none');
-                const img = Array.from(h.querySelectorAll('.header__logo img')).find((i) => i.offsetWidth > 0);
-                return {
-                  header: box(h),
-                  kids,
-                  logoWrap: box(h.querySelector('.header-logo-section-img, .header-logo-section')),
-                  logoImg: box(img),
-                  navMenu: box(h.querySelector('.nav-menu')),
-                  mobileBar: box(h.querySelector('.site-header-mobile')),
-                  mobLeft: box(h.querySelector('.mobile-width-left')),
-                  mobRight: box(h.querySelector('.mobile-width-right'))
-                };
-              });
-              console.log('HEADER-GEOM @390px', JSON.stringify(hdr));
+            /* The owner's "weird blank spot" beside the phone logo. Run 98
+               measured the header as THREE stacked rows at 390px:
+                 navMenu  [35, 77,355, 76]  a 52px logo and 303px of blank
+                 mobLeft  [35,153, 50, 50]  the hamburger, on a row of its own
+                 mobRight [35,203,355,100]  search/account/cart, another row
+                 header   [ 0,  0,390,305]
+               xg-features.css now flexes the mobile bar onto one line and grids
+               the logo block beside it. Measure at 390 unconditionally - this is
+               about the header's ROWS, not about the logo <img> the probe above
+               may or may not have found. */
+            await page.setViewport({ width: 390, height: 844 });
+            await sleep(1200);
+            const hdr = await page.evaluate(() => {
+              const h = document.getElementById('header');
+              if (!h) return null;
+              const box = (el) => {
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+              };
+              const kids = Array.from(h.children).map((c) => ({
+                cls: (c.className || '').toString().slice(0, 46),
+                disp: getComputedStyle(c).display,
+                box: box(c)
+              })).filter((c) => c.disp !== 'none');
+              const img = Array.from(h.querySelectorAll('.header__logo img')).find((i) => i.offsetWidth > 0);
+              return {
+                header: box(h),
+                kids,
+                logoWrap: box(h.querySelector('.header-logo-section-img, .header-logo-section')),
+                logoImg: box(img),
+                navMenu: box(h.querySelector('.nav-menu')),
+                mobileBar: box(h.querySelector('.site-header-mobile')),
+                mobLeft: box(h.querySelector('.mobile-width-left')),
+                mobRight: box(h.querySelector('.mobile-width-right'))
+              };
+            });
+            console.log('HEADER-GEOM @390px', JSON.stringify(hdr));
+            /* Vertical overlap of two boxes, in px. Two things on the SAME row
+               overlap; two stacked rows touch at an edge and score 0. */
+            const rowOvl = (a, b) => (a && b)
+              ? Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1])
+              : -1;
+            if (hdr && hdr.header && hdr.mobLeft && hdr.mobRight && hdr.mobileBar && hdr.logoWrap) {
+              const anchor = hdr.logoImg || hdr.logoWrap;
+              v('header-mobile-icons-one-line', rowOvl(hdr.mobLeft, hdr.mobRight) >= 20,
+                'hamburger [' + hdr.mobLeft + '] vs icons [' + hdr.mobRight + '] share '
+                  + rowOvl(hdr.mobLeft, hdr.mobRight) + 'px of row (run 98: 0, stacked)');
+              v('header-logo-bar-same-row', rowOvl(hdr.logoWrap, hdr.mobileBar) >= 20,
+                'logo [' + hdr.logoWrap + '] vs bar [' + hdr.mobileBar + '] share '
+                  + rowOvl(hdr.logoWrap, hdr.mobileBar) + 'px of row (run 98: 0, bar under logo)');
+              v('header-no-blank-beside-logo', hdr.mobLeft[0] >= anchor[0] + anchor[2],
+                'bar content starts at x=' + hdr.mobLeft[0] + ', logo ends at x='
+                  + (anchor[0] + anchor[2]) + ' (run 98: 35 vs 87 - the bar was below, not beside)');
+              v('header-height-shrinks', hdr.header[3] < 260,
+                'header h=' + hdr.header[3] + 'px (run 98: 305px of three stacked rows)');
+            } else {
+              const why = 'header boxes unavailable: ' + JSON.stringify(hdr).slice(0, 160);
+              v('header-mobile-icons-one-line', false, why);
+              v('header-logo-bar-same-row', false, why);
+              v('header-no-blank-beside-logo', false, why);
+              v('header-height-shrinks', false, why);
             }
             if (logo.d && logo.l) {
               const near = (a, b) => Math.abs(a - b) < 0.6;
