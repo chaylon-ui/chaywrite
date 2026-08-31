@@ -671,6 +671,82 @@ jobs:
               }
               return { menuChain: chain, menuPainter: painter, hasTopMenu: !!document.getElementById('top-menu'), logo: logo, clipper: clipper };
             });
+            /* Round 14. Three things the owner reported that the source
+               cannot answer: the app menu's DROPDOWN panels (still white),
+               which homepage section owns the left-hugging photo strip, and
+               the deck-builder field inks. All three live on the homepage at
+               desktop width, so measure them here. */
+            const r14 = await (async () => {
+              const root = await page.$('.tmenu_item--root');
+              if (root) { await root.hover(); await sleep(900); }
+              return page.evaluate(() => {
+                const box = (el) => {
+                  if (!el) return null;
+                  const r = el.getBoundingClientRect();
+                  return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+                };
+                const id = (el) => el.tagName
+                  + (el.id ? '#' + el.id : '')
+                  + (el.className ? '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 3).join('.') : '');
+                const opaque = (c) => !!c && c !== 'transparent' && c.indexOf('rgba(0, 0, 0, 0)') === -1;
+
+                // Every visible descendant of the menu that paints a light bg
+                const panels = [];
+                const nav = document.querySelector('nav.tmenu_navbar');
+                if (nav) {
+                  Array.from(nav.querySelectorAll('*')).forEach((n) => {
+                    if (panels.length >= 6) return;
+                    const r = n.getBoundingClientRect();
+                    if (r.width < 150 || r.height < 80) return;
+                    const bg = getComputedStyle(n).backgroundColor;
+                    if (!opaque(bg)) return;
+                    const m = bg.match(/\d+/g);
+                    if (!m || (+m[0] + +m[1] + +m[2]) < 360) return;   // light only
+                    panels.push({ el: id(n).slice(0, 64), bg: bg, box: box(n) });
+                  });
+                }
+
+                // The photo strip: find the heading, then its section + the
+                // row that holds the images, and compare their boxes.
+                let strip = null;
+                const h = Array.from(document.querySelectorAll('h1,h2,h3,h4,div,span'))
+                  .filter((e) => /A PLACE TO PLAY/i.test((e.textContent || '').trim()) && e.getBoundingClientRect().width > 0)
+                  .pop();
+                if (h) {
+                  const sec = h.closest('.shopify-section') || h.closest('section') || h.parentElement;
+                  const imgs = sec ? Array.from(sec.querySelectorAll('img')).filter((i) => i.offsetWidth > 20) : [];
+                  const holder = imgs.length ? imgs[0].closest('ul,.row,[class*=row],[class*=track],[class*=grid]') : null;
+                  strip = {
+                    section: sec ? id(sec).slice(0, 64) : '',
+                    secBox: box(sec),
+                    holder: holder ? id(holder).slice(0, 64) : '',
+                    holderBox: box(holder),
+                    holderDisp: holder ? getComputedStyle(holder).display : '',
+                    holderJustify: holder ? getComputedStyle(holder).justifyContent : '',
+                    n: imgs.length,
+                    first: box(imgs[0]),
+                    last: box(imgs[imgs.length - 1])
+                  };
+                }
+
+                // Deck-builder CTA fields
+                const ta = document.getElementById('xg-deck-input');
+                const sel = document.getElementById('xg-deck-game');
+                const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+                return {
+                  panels: panels,
+                  strip: strip,
+                  deck: {
+                    taBg: cs(ta, 'backgroundColor'), taColor: cs(ta, 'color'),
+                    selBg: cs(sel, 'backgroundColor'), selColor: cs(sel, 'color')
+                  }
+                };
+              });
+            })();
+            console.log('R14-MENU-PANELS', JSON.stringify(r14.panels));
+            console.log('R14-PHOTO-STRIP', JSON.stringify(r14.strip));
+            console.log('R14-DECK-FIELDS', JSON.stringify(r14.deck));
+
             console.log('DESK-MENU-PAINTER', JSON.stringify(deskChrome.menuPainter));
             console.log('DESK-MENU-CHAIN', JSON.stringify(deskChrome.menuChain));
             console.log('DESK-LOGO', JSON.stringify(deskChrome.logo), 'hasTopMenu=' + deskChrome.hasTopMenu);
