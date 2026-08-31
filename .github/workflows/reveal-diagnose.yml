@@ -629,6 +629,8 @@ jobs:
               if (/Couldn/.test(st.status)) { console.log('SCAN-NONAME-DEAD', JSON.stringify(st)); break; }
               if (nwaited % 15000 === 0) console.log('SCAN-NONAME-WAIT', JSON.stringify(st));
             }
+            const nbuf = await page.evaluate(() => (window.__xgScanBuf ? window.__xgScanBuf() : '').replace(/\s+/g, ' ').slice(0, 500));
+            console.log('SCAN-NONAME-BUF', JSON.stringify(nbuf));
             v('scan-collector-rescue', /sol/i.test(nread) && /collector line/i.test(nread) && /C21/i.test(nread),
               'read=' + (nread || nlast).slice(0, 110) + ' after ' + nwaited + 'ms (title blacked out)');
             await page.evaluate(() => { const x = document.querySelector('#xg-scan .xg-scan__x'); if (x) x.click(); });
