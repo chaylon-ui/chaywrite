@@ -666,10 +666,49 @@ jobs:
                   box: box(c)
                 };
               }).filter((c) => c.disp !== 'none') : [];
+              /* Run 100: the bar is a DESCENDANT of .header-top, not a
+                 sibling - header-top.liquid has a commented-out </div>, so
+                 the block that looks closed never is. Walk both elements up
+                 to #header and name their real common ancestor; that is the
+                 only element that can put them on one row. */
+              const chain = (el) => {
+                const out = [];
+                for (let n = el; n && n !== h.parentNode; n = n.parentElement) {
+                  out.push({
+                    t: n.tagName,
+                    cls: (n.className || '').toString().slice(0, 34),
+                    disp: getComputedStyle(n).display,
+                    box: box(n)
+                  });
+                }
+                return out;
+              };
+              const barEl = h.querySelector('.site-header-mobile');
+              const logoEl = h.querySelector('.header-logo-section-img, .header-logo-section');
+              const barChain = barEl ? chain(barEl) : [];
+              const logoChain = logoEl ? chain(logoEl) : [];
+              /* Common ancestor = the first node of the bar's chain that also
+                 appears in the logo's, compared by element identity via a
+                 second walk (classes repeat, nodes do not). */
+              let common = '';
+              if (barEl && logoEl) {
+                const seen = [];
+                for (let n = logoEl; n && n !== h.parentNode; n = n.parentElement) seen.push(n);
+                for (let n = barEl; n && n !== h.parentNode; n = n.parentElement) {
+                  if (seen.indexOf(n) > -1) {
+                    common = n.tagName + '.' + (n.className || '').toString().slice(0, 34)
+                      + ' ' + JSON.stringify(box(n));
+                    break;
+                  }
+                }
+              }
               return {
                 header: box(h),
                 kids,
                 items,
+                barChain,
+                logoChain,
+                common,
                 shFlow: sh ? getComputedStyle(sh).gridAutoFlow : '',
                 shCols: sh ? getComputedStyle(sh).gridTemplateColumns : '',
                 logoWrap: box(h.querySelector('.header-logo-section-img, .header-logo-section')),
@@ -681,6 +720,11 @@ jobs:
               };
             });
             console.log('HEADER-GEOM @390px', JSON.stringify(hdr));
+            if (hdr) {
+              console.log('HEADER-COMMON', hdr.common || 'none found');
+              console.log('HEADER-BAR-CHAIN', JSON.stringify(hdr.barChain));
+              console.log('HEADER-LOGO-CHAIN', JSON.stringify(hdr.logoChain));
+            }
             /* Vertical overlap of two boxes, in px. Two things on the SAME row
                overlap; two stacked rows touch at an edge and score 0. */
             const rowOvl = (a, b) => (a && b)
