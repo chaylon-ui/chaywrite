@@ -309,15 +309,38 @@ jobs:
                 console.log('TICKER-TUCK', JSON.stringify(tuck));
                 v('ticker-tuck', /is-tucked/.test(tuck.cls) && tuck.hVar === '26px' && tuck.top > tick.rectTop + 20 && tuck.store === '1',
                   JSON.stringify(tuck));
+                /* Who actually owns the lip? If anything covers the chevron
+                   once the board is tucked, a shopper who hides the ticker can
+                   never get it back - so name the element under that point
+                   before clicking, and record which kind of click worked. */
+                const lip = await page.evaluate(() => {
+                  const b = document.querySelector('#xg-ticker .xg-tick__toggle');
+                  const r = b.getBoundingClientRect();
+                  const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+                  const hit = document.elementFromPoint(cx, cy);
+                  return { rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+                           cx, cy, inView: cy > 0 && cy < window.innerHeight,
+                           hit: hit ? (hit.tagName + '.' + (hit.className || '') + '#' + (hit.id || '')) : null,
+                           isToggle: hit === b };
+                });
+                console.log('TICKER-LIP', JSON.stringify(lip));
                 await page.click('#xg-ticker .xg-tick__toggle');
                 await sleep(500);
+                let how = 'mouse';
+                if (await page.evaluate(() => /is-tucked/.test(document.getElementById('xg-ticker').className))) {
+                  // synthetic mouse click did not take - was it hit-testing?
+                  await page.evaluate(() => document.querySelector('#xg-ticker .xg-tick__toggle').click());
+                  await sleep(500);
+                  how = 'el.click()';
+                }
+                console.log('TICKER-UNTUCK-VIA', how);
                 const untuck = await page.evaluate(() => {
                   const t = document.getElementById('xg-ticker');
                   return { cls: t.className, bottom: t.getBoundingClientRect().bottom, vh: window.innerHeight,
                            hVar: (getComputedStyle(document.documentElement).getPropertyValue('--xg-tick-h') || '').trim() };
                 });
                 v('ticker-untuck', !/is-tucked/.test(untuck.cls) && Math.abs(untuck.bottom - untuck.vh) <= 2 && untuck.hVar === tick.h + 'px',
-                  JSON.stringify(untuck));
+                  'via ' + how + ' lip=' + JSON.stringify(lip) + ' -> ' + JSON.stringify(untuck));
                 await page.evaluate(() => window.scrollTo(0, 0));
                 await sleep(250);
                 v('ticker-marquee', tick.mtg.anim === 'xgTickMove' && tick.mtg.state === 'running' && tick.mtg.dur >= 30,
