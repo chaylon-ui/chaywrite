@@ -677,44 +677,57 @@ jobs:
                the deck-builder field inks. All three live on the homepage at
                desktop width, so measure them here. */
             const r14 = await (async () => {
-              /* Run 104 returned []: it hovered the FIRST root item, and
-                 "All Pre Orders" carries no chevron, so nothing opened. Walk
-                 the root items until a panel actually appears, and look for
-                 it anywhere in the document — app mega-menus are commonly
-                 appended outside the nav they belong to. */
+              /* Run 105 hovered "All Pre Orders" and reported four
+                 DIV.image-inner tiles as the panel - those are homepage
+                 product cards sitting behind the fixed header, not menu
+                 markup, so the walk stopped on a false positive and the
+                 panel was never found. Identify it by CHANGE instead of by
+                 appearance: stamp every tmenu element, snapshot which are
+                 visible at rest, and after each hover report only the ones
+                 that became visible. A product card cannot enter that set,
+                 and a panel the app injects on hover arrives as a fresh
+                 stamp rather than being missed. */
               const roots = await page.$$('.tmenu_item--root');
-              const lightPanel = () => page.evaluate(() => {
-                const out = [];
-                Array.from(document.querySelectorAll('div,ul,nav,section')).forEach((n) => {
-                  if (out.length >= 4) return;
+              const stamp = () => page.evaluate(() => {
+                window.__xgi = window.__xgi || 0;
+                const on = [];
+                Array.from(document.querySelectorAll('[class*="tmenu"]')).forEach((n) => {
+                  if (!n.hasAttribute('data-xgi')) n.setAttribute('data-xgi', String(++window.__xgi));
                   const r = n.getBoundingClientRect();
-                  if (r.width < 250 || r.height < 140 || r.top < 90 || r.top > 800) return;
+                  if (r.width < 40 || r.height < 18) return;
                   const cs = getComputedStyle(n);
-                  if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) return;
-                  const m = (cs.backgroundColor || '').match(/\d+/g);
-                  if (!m || m.length < 3) return;
-                  if (+m[0] + +m[1] + +m[2] < 500) return;             // light only
-                  if (m.length > 3 && +m[3] === 0) return;             // transparent
-                  const chain = [];
-                  for (let a = n; a && chain.length < 4; a = a.parentElement) {
-                    chain.push(a.tagName + (a.className ? '.' + (a.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.') : ''));
-                  }
-                  out.push({
-                    el: n.tagName + (n.className ? '.' + (n.className || '').toString().trim().split(/\s+/).slice(0, 3).join('.') : ''),
-                    bg: cs.backgroundColor,
-                    box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
-                    up: chain.join(' < ').slice(0, 130)
-                  });
+                  if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity < 0.05) return;
+                  on.push(n.getAttribute('data-xgi'));
                 });
-                return out;
+                return on;
               });
+              const describe = (ids) => page.evaluate((list) => {
+                const cn = (n) => n.tagName + (n.className ? '.' + String(n.className).trim().split(/\s+/).slice(0, 3).join('.') : '');
+                return list.slice(0, 12).map((k) => {
+                  const n = document.querySelector('[data-xgi="' + k + '"]');
+                  if (!n) return null;
+                  const r = n.getBoundingClientRect(), cs = getComputedStyle(n);
+                  const up = [];
+                  for (let a = n.parentElement; a && up.length < 3; a = a.parentElement) up.push(cn(a));
+                  return {
+                    el: cn(n).slice(0, 60),
+                    bg: cs.backgroundColor,
+                    ink: cs.color,
+                    pos: cs.position,
+                    box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+                    up: up.join(' < ').slice(0, 90)
+                  };
+                }).filter(Boolean);
+              }, ids);
               let hits = [], hovered = '';
-              for (let i = 0; i < roots.length && i < 7; i++) {
+              const atRest = await stamp();
+              for (let i = 0; i < roots.length && i < 9; i++) {
                 try { await roots[i].hover(); } catch (e) { continue; }
-                await sleep(800);
-                const got = await lightPanel();
-                if (got.length) {
-                  hits = got;
+                await sleep(700);
+                const now = await stamp();
+                const fresh = now.filter((k) => atRest.indexOf(k) === -1);
+                if (fresh.length >= 3) {
+                  hits = await describe(fresh);
                   hovered = await page.evaluate((n) => {
                     const el = document.querySelectorAll('.tmenu_item--root')[n];
                     return el ? (el.textContent || '').trim().slice(0, 24) : '';
@@ -722,7 +735,7 @@ jobs:
                   break;
                 }
               }
-              console.log('R14-MENU-HOVERED', hovered || 'none of the first 7 root items opened a light panel');
+              console.log('R14-MENU-HOVERED', hovered || 'no root item of the first 9 revealed new tmenu elements');
               console.log('R14-MENU-PANELS2', JSON.stringify(hits));
               return page.evaluate(() => {
                 const box = (el) => {
@@ -760,17 +773,40 @@ jobs:
                 if (h) {
                   const sec = h.closest('.shopify-section') || h.closest('section') || h.parentElement;
                   const imgs = sec ? Array.from(sec.querySelectorAll('img')).filter((i) => i.offsetWidth > 20) : [];
-                  const holder = imgs.length ? imgs[0].closest('ul,.row,[class*=row],[class*=track],[class*=grid]') : null;
+                  /* Run 105's class-name guess for the holder returned
+                     null, so display/justify-content were both blank and
+                     nothing about the layout could be read. Derive it from
+                     the images instead: the nearest ancestor containing at
+                     least half of them IS the row, whatever it is called. */
+                  let holder = null;
+                  if (imgs.length) {
+                    const need = Math.max(2, Math.ceil(imgs.length / 2));
+                    for (let a = imgs[0].parentElement; a && a !== document.body; a = a.parentElement) {
+                      if (imgs.filter((im) => a.contains(im)).length >= need) { holder = a; break; }
+                    }
+                  }
+                  const par = holder ? holder.parentElement : null;
+                  const cst = (el, p) => el ? getComputedStyle(el)[p] : '';
                   strip = {
                     section: sec ? id(sec).slice(0, 64) : '',
                     secBox: box(sec),
                     holder: holder ? id(holder).slice(0, 64) : '',
                     holderBox: box(holder),
-                    holderDisp: holder ? getComputedStyle(holder).display : '',
-                    holderJustify: holder ? getComputedStyle(holder).justifyContent : '',
+                    holderDisp: cst(holder, 'display'),
+                    holderJustify: cst(holder, 'justifyContent'),
+                    holderWrap: cst(holder, 'flexWrap'),
+                    holderGap: cst(holder, 'gap'),
+                    holderPad: cst(holder, 'padding'),
+                    holderAlign: cst(holder, 'textAlign'),
+                    holderOverflow: cst(holder, 'overflowX'),
+                    parent: par ? id(par).slice(0, 48) : '',
+                    parentBox: box(par),
+                    parentDisp: cst(par, 'display'),
                     n: imgs.length,
-                    first: box(imgs[0]),
-                    last: box(imgs[imgs.length - 1])
+                    imgs: imgs.slice(0, 8).map((im) => {
+                      const b = im.getBoundingClientRect();
+                      return [Math.round(b.left), Math.round(b.width)];
+                    })
                   };
                 }
 
@@ -812,12 +848,17 @@ jobs:
                 });
                 return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
               };
+              /* Report the background COLOUR, not just its luminance. Run
+                 105 scored three homepage rows at 1.0-1.4:1 and there was no
+                 way to tell whether the ink went wrong or the surface under
+                 it never went dark - which is the whole question. */
               const bgOf = (el) => {
                 for (let n = el; n; n = n.parentElement) {
-                  const L = lum(getComputedStyle(n).backgroundColor);
-                  if (L !== null) return L;
+                  const css = getComputedStyle(n).backgroundColor;
+                  const L = lum(css);
+                  if (L !== null) return { L: L, css: css, from: n };
                 }
-                return 0;                                   // body ground
+                return { L: 0, css: 'body ground', from: null };
               };
               const sel = (el) => el.tagName.toLowerCase()
                 + (el.id ? '#' + el.id : '')
@@ -835,15 +876,18 @@ jobs:
                 if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) return;
                 const fg = lum(cs.color);
                 if (fg === null) return;
-                const bg = bgOf(el);
+                const bgi = bgOf(el);
+                const bg = bgi.L;
                 const ratio = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
                 const px = parseFloat(cs.fontSize) || 16;
                 const large = px >= 24 || (px >= 18.66 && +cs.fontWeight >= 700);
                 if (ratio >= (large ? 3 : 4.5)) return;
                 bad.push({
                   s: sel(el).slice(0, 54),
-                  t: txt.slice(0, 34),
+                  t: txt.slice(0, 28),
                   ink: cs.color,
+                  bg: bgi.css,
+                  bgOn: bgi.from ? sel(bgi.from).slice(0, 38) : '',
                   px: Math.round(px),
                   r: Math.round(ratio * 10) / 10
                 });
