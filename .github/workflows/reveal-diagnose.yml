@@ -71,6 +71,20 @@ jobs:
             await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
             page.on('pageerror', e => { const s = String((e && e.stack) || e); if (!TOL.test(s)) console.log('PAGEERR', s.slice(0, 400)); });
+            /* Run 99 had nt=0 (the New Today row rendered nothing) one run
+               after it passed. That row is drawn by new-today.js served FROM
+               the worker, so the theme cannot explain it either way - record
+               what every cards.json call actually asked for and got back, so
+               an empty day is distinguishable from a broken row. */
+            const feedLog = [];
+            page.on('response', async (res) => {
+              try {
+                const url = res.url();
+                if (!/exor-binder[^/]*\/cards\.json/.test(url)) return;
+                const j = await res.json();
+                feedLog.push({ q: (url.split('/cards.json')[1] || '').slice(0, 90), n: ((j && j.cards) || []).length });
+              } catch (e) { /* non-JSON, redirected, or body already gone */ }
+            });
 
             const gotoTheme = async (path) => {
               for (let i = 0; i < 4; i++) {
@@ -118,7 +132,8 @@ jobs:
             v('light-body', shape.bodyBg === 'rgb(245, 246, 247)', shape.bodyBg);
             v('drawer-light-white', drawerLight === 'rgb(255, 255, 255)', drawerLight);
             v('qa-regression', shape.qaTotal >= 6, 'qa=' + shape.qaTotal);
-            v('nt-regression', shape.nt >= 8, 'nt=' + shape.nt);
+            console.log('FEED-LOG', JSON.stringify(feedLog));
+            v('nt-regression', shape.nt >= 8, 'nt=' + shape.nt + ' cards.json calls=' + JSON.stringify(feedLog));
             v('cam-regression', shape.camDesk, String(shape.camDesk));
             v('toggle-desktop', shape.togDesk, String(shape.togDesk));
             v('toggle-mobile-slot', shape.togMob, String(shape.togMob));
@@ -635,9 +650,28 @@ jobs:
                 box: box(c)
               })).filter((c) => c.disp !== 'none');
               const img = Array.from(h.querySelectorAll('.header__logo img')).find((i) => i.offsetWidth > 0);
+              /* Run 99: #header has ONE child (.site-header, display:grid), so
+                 the real grid items are ITS children - dump them with the
+                 placement they actually resolved to. .header-top and
+                 .site-header-mobile landing in different rows is the whole
+                 failure, and only this says which sibling pushed them apart. */
+              const sh = h.querySelector('.site-header');
+              const items = sh ? Array.from(sh.children).map((c) => {
+                const cs = getComputedStyle(c);
+                return {
+                  cls: (c.className || '').toString().slice(0, 40),
+                  disp: cs.display,
+                  col: cs.gridColumnStart + '/' + cs.gridColumnEnd,
+                  row: cs.gridRowStart + '/' + cs.gridRowEnd,
+                  box: box(c)
+                };
+              }).filter((c) => c.disp !== 'none') : [];
               return {
                 header: box(h),
                 kids,
+                items,
+                shFlow: sh ? getComputedStyle(sh).gridAutoFlow : '',
+                shCols: sh ? getComputedStyle(sh).gridTemplateColumns : '',
                 logoWrap: box(h.querySelector('.header-logo-section-img, .header-logo-section')),
                 logoImg: box(img),
                 navMenu: box(h.querySelector('.nav-menu')),
