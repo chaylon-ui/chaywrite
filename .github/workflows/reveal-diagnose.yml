@@ -856,6 +856,80 @@ jobs:
             });
             console.log('DARK-CONTRAST total=' + contrast.total, JSON.stringify(contrast.worst));
 
+            /* PRODUCT-PAGE RULES, PROVEN WITHOUT THE PRODUCT PAGE.
+               Cloudflare challenges this runner on /products/*, so three dark
+               fixes the owner reported shipped with no verification and the
+               owner still reports them dark. Same trick the drawer check uses
+               (run 82): build the REAL markup as an in-situ fragment on a page
+               we can load, with the REAL deployed stylesheets, and read the
+               computed values. That answers the only question that matters -
+               does xg-dark.css actually win here - without needing the page.
+               Markup copied from snippets/reassurance.liquid,
+               snippets/wishlist-product.liquid and
+               sections/product-tab-panel.liquid. */
+            const frag = await page.evaluate(() => {
+              const host = document.createElement('div');
+              host.innerHTML =
+                '<div class="product-single"><div class="product-single-right">' +
+                  '<div class="product-single__meta">' +
+                    '<div class="wishlist-chart">' +
+                      '<div class="add-to-wishlist"><div class="show">' +
+                        '<div class="default-wishbutton-x loading">' +
+                          '<a class="add-in-wishlist-js btn" id="xgp-wish">' +
+                            '<i class="fa fa-heart-o"></i>' +
+                            '<span class="tooltip-label" id="xgp-wishtxt">Add To Wishlist</span>' +
+                          '</a>' +
+                        '</div>' +
+                      '</div></div>' +
+                      '<button class="btn btn-primary btn-lg size-chart" id="xgp-grade">Grading Guide</button>' +
+                    '</div>' +
+                  '</div>' +
+                '</div></div>' +
+                '<div class="reassurance-block"><div class="reassurance-content row">' +
+                  '<div class="reassurance"><div class="reassurance-text">' +
+                    '<div class="reassurance-title" id="xgp-rtitle">TCG SINGLES SHIP PROTECTED</div>' +
+                    '<div class="reassurance-desc" id="xgp-rdesc">Every singles order ships…</div>' +
+                  '</div></div>' +
+                '</div></div>' +
+                '<div class="page-width product-tab"><div class="tab-content"><div id="desc">' +
+                  '<table><tbody><tr><td id="xgp-td">Set:</td><td>World Championship Decks 1997</td></tr></tbody></table>' +
+                '</div></div></div>';
+              document.body.appendChild(host);
+              const cs = (id, p) => {
+                const el = document.getElementById(id);
+                return el ? getComputedStyle(el)[p] : 'missing';
+              };
+              const out = {
+                rTitle: cs('xgp-rtitle', 'color'),
+                rDesc: cs('xgp-rdesc', 'color'),
+                rBorder: (function () {
+                  const b = host.querySelector('.reassurance-block');
+                  return b ? getComputedStyle(b).borderTopColor : 'missing';
+                })(),
+                wishLink: cs('xgp-wish', 'color'),
+                wishText: cs('xgp-wishtxt', 'color'),
+                grade: cs('xgp-grade', 'color'),
+                tdColor: cs('xgp-td', 'color'),
+                tdBorder: cs('xgp-td', 'borderTopColor')
+              };
+              host.remove();
+              return out;
+            });
+            console.log('PROD-FRAGMENT', JSON.stringify(frag));
+            /* Dark inks this file sets: title #eef2f4, desc #a9b4ba,
+               links/table #c3ccd1, borders #2a3236. Anything still reading
+               near-black means the rule lost, and the value names the winner. */
+            const light = (c) => {
+              const m = (c || '').match(/\d+/g);
+              return m && m.length >= 3 && (+m[0] + +m[1] + +m[2]) >= 330;
+            };
+            v('prod-reassurance-ink', light(frag.rTitle) && light(frag.rDesc),
+              'title=' + frag.rTitle + ' desc=' + frag.rDesc + ' border=' + frag.rBorder + ' (theme.css pins #000/#666)');
+            v('prod-wishlist-ink', light(frag.wishLink) && light(frag.wishText) && light(frag.grade),
+              'link=' + frag.wishLink + ' label=' + frag.wishText + ' grading=' + frag.grade);
+            v('prod-desc-table', !light(frag.tdBorder),
+              'td border=' + frag.tdBorder + ' ink=' + frag.tdColor + ' (theme.css pins #f4f4f4 borders)');
+
             console.log('DESK-MENU-PAINTER', JSON.stringify(deskChrome.menuPainter));
             console.log('DESK-MENU-CHAIN', JSON.stringify(deskChrome.menuChain));
             console.log('DESK-LOGO', JSON.stringify(deskChrome.logo), 'hasTopMenu=' + deskChrome.hasTopMenu);
