@@ -34,6 +34,22 @@ const NEGATIVE_RE = new RegExp(
 
 const GHEADERS = { accept: "application/json", "user-agent": "ExorReviews/1.0 (+workers.dev)" };
 
+/* ONE source of truth for the publish filter. The debug view below reports
+   why each review was dropped, and a second copy of these rules would be
+   free to drift from the ones that actually run - a diagnostic that
+   measures something adjacent to the thing it claims to measure. Returns
+   null when the review is publishable, else a human-readable reason. */
+function rejectReason(rv) {
+  if (!rv) return "empty";
+  if (rv.rating !== 5) return "rating " + rv.rating;
+  const text = String(rv.text || "").trim();
+  if (text.length < 40) return "too short (" + text.length + " chars)";
+  if (rv.language && !/^en/i.test(rv.language)) return "language " + rv.language;
+  const m = NEGATIVE_RE.exec(text);
+  if (m) return 'negative word "' + m[0] + '"';
+  return null;
+}
+
 /* Google runs two Places APIs with disjoint endpoints: "Places API (New)"
    (places.googleapis.com, header key + field mask) and the legacy web
    service (maps.googleapis.com, query-string key) that Google stopped
@@ -135,10 +151,171 @@ async function discoverPlaceIds(key) {
   return ids.length ? ids : discoverLegacy(key);
 }
 
+/* ---- GET /reviews.json?debug=1 ---------------------------------------
+   The public response cannot tell "no key set" apart from "key set but
+   Google refused it": both return the same empty ok:false body, which
+   makes the owner-side setup undebuggable from outside. This view names
+   the cause - whether the secret is present, the HTTP + Google status of
+   every call in BOTH API flavors, the discovered place IDs (what
+   GOOGLE_PLACE_IDS wants), and the per-review filter verdicts.
+
+   It never emits the key: the payload is scrubbed of it on the way out,
+   and only its length is reported (a Google key is 39 chars, so a short
+   one means a truncated paste). Bypasses the edge cache entirely. */
+
+function scrubKey(obj, key) {
+  const s = JSON.stringify(obj);
+  return JSON.parse(key ? s.split(key).join("<redacted>") : s);
+}
+
+async function probe(label, run) {
+  try {
+    const r = await run();
+    let j = null;
+    try { j = JSON.parse(await r.text()); } catch (e) {}
+    return {
+      call: label,
+      http: r.status,
+      status: (j && (j.status || (j.error && j.error.status))) || (r.ok ? "OK" : "(none)"),
+      error: (j && (j.error_message || (j.error && j.error.message))) || "",
+      json: j,
+    };
+  } catch (e) {
+    return { call: label, http: 0, status: "FETCH_FAILED", error: String((e && e.message) || e), json: null };
+  }
+}
+
+async function serveReviewsDebug(env) {
+  const cors = { "access-control-allow-origin": "*", "cache-control": "no-store" };
+  const raw = String((env && env.GOOGLE_PLACES_KEY) || "");
+  const key = raw.trim();
+  const d = {
+    keyPresent: !!key,
+    keyLength: key.length,
+    keyHadSurroundingWhitespace: raw !== key,
+    placeIdsConfigured: String((env && env.GOOGLE_PLACE_IDS) || "")
+      .split(",").map((s) => s.trim()).filter(Boolean),
+    calls: [],
+    placeIdsUsed: [],
+    places: [],
+    next: "",
+  };
+
+  if (!key) {
+    d.next =
+      "GOOGLE_PLACES_KEY is not set on this worker. Cloudflare dashboard > Workers & Pages > " +
+      "exor-binder > Settings > Variables and Secrets > Add > type Secret > name GOOGLE_PLACES_KEY " +
+      "> paste the key > Save and deploy. The Save and deploy button is required: adding the row " +
+      "alone changes nothing.";
+    return Response.json(d, { headers: cors });
+  }
+
+  let ids = d.placeIdsConfigured.slice();
+  if (!ids.length) {
+    const nw = await probe("searchText (Places API New)", () =>
+      fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          ...GHEADERS,
+          "content-type": "application/json",
+          "x-goog-api-key": key,
+          "x-goog-fieldmask": "places.id,places.displayName",
+        },
+        body: JSON.stringify({ textQuery: DISCOVER_QUERY }),
+        signal: AbortSignal.timeout(8000),
+      }));
+    nw.found = (((nw.json || {}).places) || [])
+      .map((p) => ({ name: (p.displayName && p.displayName.text) || "", id: p.id }));
+    delete nw.json;
+    d.calls.push(nw);
+    ids = nw.found.filter((p) => /exor/i.test(p.name)).map((p) => p.id).filter(Boolean);
+
+    if (!ids.length) {
+      const lg = await probe("textsearch (Places API legacy)", () =>
+        fetch("https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
+          encodeURIComponent(DISCOVER_QUERY) + "&key=" + encodeURIComponent(key),
+          { headers: GHEADERS, signal: AbortSignal.timeout(8000) }));
+      lg.found = (((lg.json || {}).results) || [])
+        .map((p) => ({ name: p.name || "", id: p.place_id }));
+      delete lg.json;
+      d.calls.push(lg);
+      ids = lg.found.filter((p) => /exor/i.test(p.name)).map((p) => p.id).filter(Boolean);
+    }
+  }
+  d.placeIdsUsed = ids.slice(0, 3);
+
+  for (const id of d.placeIdsUsed) {
+    let p = null;
+    const nw = await probe("details New " + id, () =>
+      fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(id), {
+        headers: {
+          ...GHEADERS,
+          "x-goog-api-key": key,
+          "x-goog-fieldmask": "displayName,rating,userRatingCount,reviews",
+        },
+        signal: AbortSignal.timeout(8000),
+      }));
+    if (nw.http === 200) p = normNewPlace(nw.json);
+    delete nw.json;
+    d.calls.push(nw);
+
+    if (!p) {
+      const lg = await probe("details legacy " + id, () =>
+        fetch("https://maps.googleapis.com/maps/api/place/details/json?place_id=" +
+          encodeURIComponent(id) + "&fields=name,rating,user_ratings_total,reviews&key=" +
+          encodeURIComponent(key), { headers: GHEADERS, signal: AbortSignal.timeout(8000) }));
+      if (lg.status === "OK" && lg.json && lg.json.result) p = lg.json.result;
+      delete lg.json;
+      d.calls.push(lg);
+    }
+
+    if (!p) { d.places.push({ id, resolved: false }); continue; }
+    const verdicts = (p.reviews || []).map((rv) => ({
+      author: String(rv.author_name || "").slice(0, 40),
+      rating: rv.rating,
+      chars: String(rv.text || "").trim().length,
+      verdict: rejectReason(rv) || "KEPT",
+    }));
+    d.places.push({
+      id,
+      resolved: true,
+      name: p.name,
+      rating: p.rating,
+      ratingsTotal: p.user_ratings_total,
+      reviewsReturned: verdicts.length,
+      kept: verdicts.filter((v) => v.verdict === "KEPT").length,
+      verdicts,
+    });
+  }
+
+  const kept = d.places.reduce((n, p) => n + (p.kept || 0), 0);
+  if (!d.placeIdsUsed.length) {
+    d.next =
+      "No place IDs resolved. Read calls[] above. A 403 / REQUEST_DENIED / PERMISSION_DENIED means " +
+      "the key cannot call that API - check the key's API restriction in Google Cloud and that " +
+      "billing is enabled on the project. If a call succeeded but matched nothing named Exor, set " +
+      "GOOGLE_PLACE_IDS explicitly to the store place IDs.";
+  } else if (!d.places.some((p) => p.resolved)) {
+    d.next = "Place IDs known but no details call succeeded - read the status and error on the details calls above.";
+  } else if (!kept) {
+    d.next =
+      "Google returned reviews but the filter dropped every one; each verdict above names the rule " +
+      "that dropped it. Note Google returns at most 5 reviews per place.";
+  } else {
+    d.next =
+      kept + " review(s) would publish. If /reviews.json still reads empty, its 6h per-edge cache " +
+      "is holding an older answer - bump the ?v=1 cache key in src/reviews.js and redeploy to clear it.";
+  }
+  return Response.json(scrubKey(d, key), { headers: cors });
+}
+
 export async function serveReviews(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
+  if (new URL(request.url).searchParams.get("debug") === "1") return serveReviewsDebug(env);
   const out = { ok: false, rating: 0, total: 0, count: 0, reviews: [] };
-  const key = env && env.GOOGLE_PLACES_KEY;
+  // Trimmed: a dashboard paste can carry a trailing newline or space, which
+  // Google rejects with a status the public response could never show.
+  const key = String((env && env.GOOGLE_PLACES_KEY) || "").trim();
   if (!key) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
 
   const cache = caches.default;
@@ -162,11 +339,8 @@ export async function serveReviews(request, env, ctx) {
         out.total += p.user_ratings_total;
       }
       for (const rv of p.reviews || []) {
-        if (!rv || rv.rating !== 5) continue;
+        if (rejectReason(rv)) continue;
         const text = String(rv.text || "").trim();
-        if (text.length < 40) continue; // too short to quote
-        if (rv.language && !/^en/i.test(rv.language)) continue; // lexicon is English-only
-        if (NEGATIVE_RE.test(text)) continue;
         out.reviews.push({
           author: String(rv.author_name || "A customer").slice(0, 60),
           rating: 5,
