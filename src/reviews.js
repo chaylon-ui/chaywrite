@@ -107,43 +107,54 @@ async function fetchPlace(id, key) {
   return p || fetchPlaceLegacy(id, key);
 }
 
-const DISCOVER_QUERY = "Exor Games Prince Edward Island";
+/* Six stores across TWO provinces. One PEI-worded query returns the PEI
+   stores and misses Nova Scotia entirely - four of the six - so the band
+   was quoting a fraction of the chain off a fraction of its reviews. Ask
+   per province and merge, deduped by place id. GOOGLE_PLACE_IDS still
+   overrides discovery outright when the owner wants specific stores. */
+const DISCOVER_QUERIES = ["Exor Games Prince Edward Island", "Exor Games Nova Scotia"];
+const MAX_PLACES = 6; // one per store; each costs one Place Details call per edge per 6h
 
 async function discoverNew(key) {
-  const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      ...GHEADERS,
-      "content-type": "application/json",
-      "x-goog-api-key": key,
-      "x-goog-fieldmask": "places.id,places.displayName",
-    },
-    body: JSON.stringify({ textQuery: DISCOVER_QUERY }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!r.ok) return [];
-  const j = await r.json();
-  return (Array.isArray(j && j.places) ? j.places : [])
-    .filter((p) => /exor/i.test((p.displayName && p.displayName.text) || ""))
-    .slice(0, 3)
-    .map((p) => p.id)
-    .filter(Boolean);
+  const ids = [];
+  for (const q of DISCOVER_QUERIES) {
+    const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        ...GHEADERS,
+        "content-type": "application/json",
+        "x-goog-api-key": key,
+        "x-goog-fieldmask": "places.id,places.displayName",
+      },
+      body: JSON.stringify({ textQuery: q }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => null);
+    if (!r || !r.ok) continue;
+    const j = await r.json().catch(() => null);
+    for (const p of Array.isArray(j && j.places) ? j.places : []) {
+      const nm = (p && p.displayName && p.displayName.text) || "";
+      if (p && p.id && /exor/i.test(nm) && !ids.includes(p.id)) ids.push(p.id);
+    }
+  }
+  return ids.slice(0, MAX_PLACES);
 }
 
 async function discoverLegacy(key) {
-  const u =
-    "https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
-    encodeURIComponent(DISCOVER_QUERY) +
-    "&key=" + encodeURIComponent(key);
-  const r = await fetch(u, { headers: GHEADERS, signal: AbortSignal.timeout(8000) });
-  if (!r.ok) return [];
-  const j = await r.json();
-  if (!j || j.status !== "OK" || !Array.isArray(j.results)) return [];
-  return j.results
-    .filter((p) => /exor/i.test(p.name || ""))
-    .slice(0, 3)
-    .map((p) => p.place_id)
-    .filter(Boolean);
+  const ids = [];
+  for (const q of DISCOVER_QUERIES) {
+    const r = await fetch(
+      "https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
+        encodeURIComponent(q) + "&key=" + encodeURIComponent(key),
+      { headers: GHEADERS, signal: AbortSignal.timeout(8000) }
+    ).catch(() => null);
+    if (!r || !r.ok) continue;
+    const j = await r.json().catch(() => null);
+    if (!j || j.status !== "OK" || !Array.isArray(j.results)) continue;
+    for (const p of j.results) {
+      if (p && p.place_id && /exor/i.test(p.name || "") && !ids.includes(p.place_id)) ids.push(p.place_id);
+    }
+  }
+  return ids.slice(0, MAX_PLACES);
 }
 
 async function discoverPlaceIds(key) {
@@ -212,37 +223,45 @@ async function serveReviewsDebug(env) {
 
   let ids = d.placeIdsConfigured.slice();
   if (!ids.length) {
-    const nw = await probe("searchText (Places API New)", () =>
-      fetch("https://places.googleapis.com/v1/places:searchText", {
-        method: "POST",
-        headers: {
-          ...GHEADERS,
-          "content-type": "application/json",
-          "x-goog-api-key": key,
-          "x-goog-fieldmask": "places.id,places.displayName",
-        },
-        body: JSON.stringify({ textQuery: DISCOVER_QUERY }),
-        signal: AbortSignal.timeout(8000),
-      }));
-    nw.found = (((nw.json || {}).places) || [])
-      .map((p) => ({ name: (p.displayName && p.displayName.text) || "", id: p.id }));
-    delete nw.json;
-    d.calls.push(nw);
-    ids = nw.found.filter((p) => /exor/i.test(p.name)).map((p) => p.id).filter(Boolean);
+    for (const q of DISCOVER_QUERIES) {
+      const nw = await probe("searchText New: " + q, () =>
+        fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            ...GHEADERS,
+            "content-type": "application/json",
+            "x-goog-api-key": key,
+            "x-goog-fieldmask": "places.id,places.displayName",
+          },
+          body: JSON.stringify({ textQuery: q }),
+          signal: AbortSignal.timeout(8000),
+        }));
+      nw.found = (((nw.json || {}).places) || [])
+        .map((p) => ({ name: (p.displayName && p.displayName.text) || "", id: p.id }));
+      delete nw.json;
+      d.calls.push(nw);
+      for (const p of nw.found) {
+        if (p.id && /exor/i.test(p.name) && !ids.includes(p.id)) ids.push(p.id);
+      }
+    }
 
     if (!ids.length) {
-      const lg = await probe("textsearch (Places API legacy)", () =>
-        fetch("https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
-          encodeURIComponent(DISCOVER_QUERY) + "&key=" + encodeURIComponent(key),
-          { headers: GHEADERS, signal: AbortSignal.timeout(8000) }));
-      lg.found = (((lg.json || {}).results) || [])
-        .map((p) => ({ name: p.name || "", id: p.place_id }));
-      delete lg.json;
-      d.calls.push(lg);
-      ids = lg.found.filter((p) => /exor/i.test(p.name)).map((p) => p.id).filter(Boolean);
+      for (const q of DISCOVER_QUERIES) {
+        const lg = await probe("textsearch legacy: " + q, () =>
+          fetch("https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
+            encodeURIComponent(q) + "&key=" + encodeURIComponent(key),
+            { headers: GHEADERS, signal: AbortSignal.timeout(8000) }));
+        lg.found = (((lg.json || {}).results) || [])
+          .map((p) => ({ name: p.name || "", id: p.place_id }));
+        delete lg.json;
+        d.calls.push(lg);
+        for (const p of lg.found) {
+          if (p.id && /exor/i.test(p.name) && !ids.includes(p.id)) ids.push(p.id);
+        }
+      }
     }
   }
-  d.placeIdsUsed = ids.slice(0, 3);
+  d.placeIdsUsed = ids.slice(0, MAX_PLACES);
 
   for (const id of d.placeIdsUsed) {
     let p = null;
@@ -330,7 +349,7 @@ export async function serveReviews(request, env, ctx) {
       .filter(Boolean);
     if (!ids.length) ids = await discoverPlaceIds(key);
     const places = (
-      await Promise.all(ids.slice(0, 3).map((id) => fetchPlace(id, key).catch(() => null)))
+      await Promise.all(ids.slice(0, MAX_PLACES).map((id) => fetchPlace(id, key).catch(() => null)))
     ).filter(Boolean);
     let ratingSum = 0;
     for (const p of places) {
