@@ -16,6 +16,13 @@
 
 const REVIEWS_TTL_S = 21600; // 6h per edge; Google reviews move slowly
 
+/* The edge cache survives worker deploys, and its key is fixed - a caller
+   cannot bust it with a query string - so a logic change stays invisible
+   for up to REVIEWS_TTL_S unless this is bumped. BUMP IT whenever the set
+   of places, the filter, or the payload shape changes.
+   v2: six stores across both provinces (was three, PEI-only). */
+const REVIEWS_CACHE_V = "2";
+
 // Words/phrases that mark a review as not-showcase material even at five
 // stars. Deliberately trigger-happy: a false positive only hides one quote,
 // while a miss puts a complaint on the homepage under five gold stars.
@@ -338,7 +345,7 @@ export async function serveReviews(request, env, ctx) {
   if (!key) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
 
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/reviews.json?v=1", request.url).toString());
+  const cacheKey = new Request(new URL("/reviews.json?v=" + REVIEWS_CACHE_V, request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
