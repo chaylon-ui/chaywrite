@@ -5,10 +5,14 @@
    makes the homepage. Fails open to an empty list (no key, quota, outage)
    so the theme section simply stays quiet.
 
-   Setup: set the GOOGLE_PLACES_KEY secret in the Cloudflare dashboard
-   (Places API enabled on the key). Optionally set GOOGLE_PLACE_IDS to a
-   comma-separated list of place IDs; without it the stores are discovered
-   by name via Text Search and only businesses named Exor are accepted. */
+   Setup: set the GOOGLE_PLACES_KEY secret in the Cloudflare dashboard.
+   Either Google API flavor works on the key — "Places API (New)" (the
+   only one a Google account created after March 2025 can enable) or the
+   legacy "Places API"; every fetch tries New first and falls back to
+   legacy. Optionally set GOOGLE_PLACE_IDS to a comma-separated list of
+   place IDs (identical in both API flavors); without it the stores are
+   discovered by name via Text Search and only businesses named Exor are
+   accepted. */
 
 const REVIEWS_TTL_S = 21600; // 6h per edge; Google reviews move slowly
 
@@ -30,7 +34,47 @@ const NEGATIVE_RE = new RegExp(
 
 const GHEADERS = { accept: "application/json", "user-agent": "ExorReviews/1.0 (+workers.dev)" };
 
-async function fetchPlace(id, key) {
+/* Google runs two Places APIs with disjoint endpoints: "Places API (New)"
+   (places.googleapis.com, header key + field mask) and the legacy web
+   service (maps.googleapis.com, query-string key) that Google stopped
+   offering to Google accounts created after March 2025. Which one a given
+   key can call depends on what the console let the owner enable, so each
+   fetch tries New first and falls back to legacy, and New responses are
+   normalized here to the legacy field names the rest of this file reads.
+   A key with the wrong flavor fails fast (non-200 / status!=OK), so the
+   fallback costs nothing when the first try is right. */
+
+function normNewPlace(p) {
+  if (!p || !(p.displayName || p.reviews)) return null;
+  return {
+    name: (p.displayName && p.displayName.text) || "",
+    rating: p.rating,
+    user_ratings_total: p.userRatingCount || 0,
+    reviews: (Array.isArray(p.reviews) ? p.reviews : []).map((rv) => ({
+      rating: rv.rating,
+      text: (rv.text && rv.text.text) || "",
+      language: (rv.text && rv.text.languageCode) || "",
+      author_name: (rv.authorAttribution && rv.authorAttribution.displayName) || "",
+      relative_time_description: rv.relativePublishTimeDescription || "",
+      time: rv.publishTime ? Math.floor(Date.parse(rv.publishTime) / 1000) || 0 : 0,
+    })),
+  };
+}
+
+async function fetchPlaceNew(id, key) {
+  const r = await fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(id), {
+    headers: {
+      ...GHEADERS,
+      "x-goog-api-key": key,
+      "x-goog-fieldmask": "displayName,rating,userRatingCount,reviews",
+    },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) return null;
+  return normNewPlace(await r.json());
+}
+
+async function fetchPlaceLegacy(id, key) {
   const u =
     "https://maps.googleapis.com/maps/api/place/details/json?place_id=" +
     encodeURIComponent(id) +
@@ -42,10 +86,38 @@ async function fetchPlace(id, key) {
   return j && j.status === "OK" && j.result ? j.result : null;
 }
 
-async function discoverPlaceIds(key) {
+async function fetchPlace(id, key) {
+  const p = await fetchPlaceNew(id, key).catch(() => null);
+  return p || fetchPlaceLegacy(id, key);
+}
+
+const DISCOVER_QUERY = "Exor Games Prince Edward Island";
+
+async function discoverNew(key) {
+  const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      ...GHEADERS,
+      "content-type": "application/json",
+      "x-goog-api-key": key,
+      "x-goog-fieldmask": "places.id,places.displayName",
+    },
+    body: JSON.stringify({ textQuery: DISCOVER_QUERY }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) return [];
+  const j = await r.json();
+  return (Array.isArray(j && j.places) ? j.places : [])
+    .filter((p) => /exor/i.test((p.displayName && p.displayName.text) || ""))
+    .slice(0, 3)
+    .map((p) => p.id)
+    .filter(Boolean);
+}
+
+async function discoverLegacy(key) {
   const u =
     "https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
-    encodeURIComponent("Exor Games Prince Edward Island") +
+    encodeURIComponent(DISCOVER_QUERY) +
     "&key=" + encodeURIComponent(key);
   const r = await fetch(u, { headers: GHEADERS, signal: AbortSignal.timeout(8000) });
   if (!r.ok) return [];
@@ -56,6 +128,11 @@ async function discoverPlaceIds(key) {
     .slice(0, 3)
     .map((p) => p.place_id)
     .filter(Boolean);
+}
+
+async function discoverPlaceIds(key) {
+  const ids = await discoverNew(key).catch(() => []);
+  return ids.length ? ids : discoverLegacy(key);
 }
 
 export async function serveReviews(request, env, ctx) {
