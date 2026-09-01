@@ -229,7 +229,13 @@ jobs:
               const head = sec.querySelector('.xg-sp__head');
               const right = sec.querySelector('.product-right');
               const wrap = sec.closest('.shopify-section');
-              const tiles = Array.from(sec.querySelectorAll('.grid-view-item'))
+              /* ACTIVE items only. Run 111 measured every .grid-view-item in
+                 the section and reported 485% coverage, because owl parks the
+                 rest of the 20 tiles in a stage that runs far past the
+                 container - a number that can exceed 100% cannot fail, and
+                 would have passed on the broken layout too. Only the tiles
+                 owl currently shows are on screen. */
+              const tiles = Array.from(sec.querySelectorAll('.owl-item.active .grid-view-item'))
                 .filter((el) => el.offsetWidth > 0)
                 .map((el) => el.getBoundingClientRect());
               const box = (el) => {
@@ -256,8 +262,19 @@ jobs:
                     : 'no .specialproducts.xg-sp on the page');
             v('sp-head-centered', !!spFit && spFit.headAlign === 'center',
               spFit ? 'text-align=' + spFit.headAlign : 'n/a');
-            v('sp-row-fills', !!spFit && spFit.coverage >= 70,
-              spFit ? 'tiles span ' + spFit.coverage + '% of the row across ' + spFit.tiles + ' tiles' : 'n/a');
+            v('sp-row-fills', !!spFit && spFit.coverage >= 85 && spFit.coverage <= 105,
+              spFit ? 'visible tiles span ' + spFit.coverage + '% of the row across ' + spFit.tiles + ' active tiles' : 'n/a');
+            /* Stacked AND aligned is what "beside" versus "above" actually
+               means: same left edge, same width, header sitting above the row
+               rather than next to it. The flex layout gave the header a
+               shrink-to-fit box on the far left and the carousel a different
+               width entirely, so comparing the two boxes is the direct test. */
+            v('sp-row-aligned',
+              !!spFit && !!spFit.headBox && !!spFit.rightBox
+                && Math.abs(spFit.headBox[0] - spFit.rightBox[0]) <= 2
+                && Math.abs(spFit.headBox[2] - spFit.rightBox[2]) <= 2
+                && (spFit.headBox[1] + spFit.headBox[3]) <= spFit.rightBox[1] + 2,
+              spFit ? 'head=' + JSON.stringify(spFit.headBox) + ' row=' + JSON.stringify(spFit.rightBox) : 'n/a');
             v('sp-band-surface', !!spFit && (spFit.secImg || (!!spFit.secBg && spFit.secBg !== 'rgba(0, 0, 0, 0)')),
               spFit ? 'bg=' + spFit.secBg + ' art=' + spFit.secImg : 'n/a');
 
