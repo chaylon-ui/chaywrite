@@ -278,6 +278,147 @@ jobs:
             v('sp-band-surface', !!spFit && (spFit.secImg || (!!spFit.secBg && spFit.secBg !== 'rgba(0, 0, 0, 0)')),
               spFit ? 'bg=' + spFit.secBg + ' art=' + spFit.secImg : 'n/a');
 
+            /* ---- Round 17 measurements. Five owner requests, none of which
+               should be designed against a screenshot. ---- */
+
+            /* 1. IS THE LOGO ACTUALLY LEGIBLE WITHOUT ITS WHITE PLATE?
+               The owner wants the plate gone in dark. CLAUDE.md says the
+               asset "is only legible on white", which is why round 9 added
+               it - but nobody has measured the file. Two very different
+               answers: if the PNG has an OPAQUE WHITE background baked in,
+               removing the CSS plate changes nothing visible and the real
+               fix is a second asset; if it is transparent, what matters is
+               how much of the ink is dark enough to vanish on #161b1e
+               (L=0.0106). Sample the pixels and say which. */
+            const logoAsset = await page.evaluate(() => new Promise((resolve) => {
+              const el = document.querySelector('#header .header__logo img');
+              if (!el || !(el.currentSrc || el.src)) return resolve({ error: 'no logo img in #header' });
+              const im = new Image();
+              im.crossOrigin = 'anonymous';
+              im.onerror = () => resolve({ error: 'image load or CORS failed', src: (el.currentSrc || el.src).slice(-70) });
+              im.onload = () => {
+                try {
+                  const c = document.createElement('canvas');
+                  c.width = im.naturalWidth; c.height = im.naturalHeight;
+                  const cx = c.getContext('2d');
+                  cx.drawImage(im, 0, 0);
+                  const d = cx.getImageData(0, 0, c.width, c.height).data;
+                  const lum = (r, g, b) => {
+                    const f = [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+                    return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+                  };
+                  let clear = 0, solid = 0, dark = 0, sum = 0;
+                  for (let i = 0; i < d.length; i += 4) {
+                    if (d[i + 3] < 250) { clear++; continue; }
+                    solid++;
+                    const L = lum(d[i], d[i + 1], d[i + 2]);
+                    sum += L;
+                    if (L < 0.25) dark++;      // would sit near-invisible on #161b1e
+                  }
+                  const px = (x, y) => { const i = (y * c.width + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+                  resolve({
+                    natural: [c.width, c.height],
+                    transparentPct: Math.round((clear / (clear + solid)) * 100),
+                    darkPctOfOpaque: solid ? Math.round((dark / solid) * 100) : -1,
+                    meanLum: solid ? Math.round((sum / solid) * 1000) / 1000 : -1,
+                    corner: px(0, 0),
+                    centre: px(c.width >> 1, c.height >> 1),
+                    src: (el.currentSrc || el.src).slice(-70)
+                  });
+                } catch (e) { resolve({ error: 'canvas: ' + String((e && e.message) || e) }); }
+              };
+              im.src = el.currentSrc || el.src;
+            }));
+            console.log('LOGO-ASSET', JSON.stringify(logoAsset));
+
+            /* 2. WHERE THE LOGO SITS RELATIVE TO THE SEARCH. The owner wants
+               it beside the search rather than above-left of it, and 33%
+               bigger. Report both boxes, their first COMMON ancestor by
+               element identity (the header round already proved class names
+               lie about nesting here) and that ancestor's display. */
+            const hdrDesk = await page.evaluate(() => {
+              const box = (el) => {
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+              };
+              const cn = (n) => n ? n.tagName + (n.className ? '.' + String(n.className).trim().split(/\s+/).slice(0, 3).join('.') : '') : '';
+              const logo = document.querySelector('#header .header__logo img');
+              const wrap = logo && logo.closest('.header-logo-section-img, .header-logo-section');
+              const search = document.querySelector('#_desktop_search');
+              let common = null;
+              if (wrap && search) for (let a = wrap; a; a = a.parentElement) { if (a.contains(search)) { common = a; break; } }
+              const chain = [];
+              for (let a = wrap; a && chain.length < 5; a = a.parentElement) {
+                chain.push({ el: cn(a), disp: getComputedStyle(a).display, box: box(a) });
+              }
+              return {
+                logo: box(logo), wrap: box(wrap), search: box(search),
+                logoMaxH: logo ? getComputedStyle(logo).maxHeight : '',
+                logoMaxW: logo ? getComputedStyle(logo).maxWidth : '',
+                common: cn(common), commonBox: box(common),
+                commonDisplay: common ? getComputedStyle(common).display : '',
+                chain: chain
+              };
+            });
+            console.log('HEADER-DESK', JSON.stringify(hdrDesk));
+
+            /* 3. THE LOCATIONS GRID. Owner: "irregular style, I would like
+               each store in its own pill, standard sized, only one row".
+               Report the resolved columns and EVERY card's height, which is
+               what makes them look irregular - Charlottetown carries seven
+               programme chips and the others carry none. */
+            const locGeom = await page.evaluate(() => {
+              const grid = document.querySelector('.xg-loc__grid');
+              if (!grid) return null;
+              const cs = getComputedStyle(grid);
+              return {
+                display: cs.display, cols: cs.gridTemplateColumns, gap: cs.gap,
+                gridBox: (() => { const r = grid.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; })(),
+                items: Array.from(grid.querySelectorAll('.xg-loc__item')).map((li) => {
+                  const r = li.getBoundingClientRect();
+                  return {
+                    name: ((li.querySelector('.xg-loc__name') || {}).textContent || '').trim().slice(0, 18),
+                    box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+                    feats: li.querySelectorAll('.xg-loc__feat').length,
+                    progs: li.querySelectorAll('.xg-loc__prog').length
+                  };
+                })
+              };
+            });
+            console.log('LOC-GEOM', JSON.stringify(locGeom));
+
+            /* 4. WHAT THE "NEW TODAY LINE" ACTUALLY IS. The owner wants the
+               sports rows to look like it. new-today.js is served by the
+               worker and is not reachable from this runner, so measure the
+               rendered result instead: the track's display/gap/overflow and
+               one card's real box, which is what a restyle has to match. */
+            const ntRow = await page.evaluate(() => {
+              const root = document.querySelector('#xg-newtoday');
+              if (!root) return null;
+              const box = (el) => {
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+              };
+              const cn = (n) => n ? n.tagName + (n.className ? '.' + String(n.className).trim().split(/\s+/).slice(0, 3).join('.') : '') : '';
+              const cards = Array.from(root.querySelectorAll('a,li,article')).filter((e) => e.offsetWidth > 40);
+              const track = cards.length ? cards[0].parentElement : null;
+              const img = root.querySelector('img');
+              const g = (el, p) => el ? getComputedStyle(el)[p] : '';
+              return {
+                rootBox: box(root),
+                track: cn(track), trackBox: box(track),
+                trackDisplay: g(track, 'display'), trackGap: g(track, 'gap'), trackOverflow: g(track, 'overflowX'),
+                cards: cards.length, card: cn(cards[0]), cardBox: box(cards[0]),
+                cardBg: g(cards[0], 'backgroundColor'), cardRadius: g(cards[0], 'borderRadius'),
+                imgBox: box(img), imgFit: g(img, 'objectFit'),
+                titleSize: g(root.querySelector('[class*="title"], [class*="name"]'), 'fontSize'),
+                priceSize: g(root.querySelector('.xg-nt__price'), 'fontSize')
+              };
+            });
+            console.log('NT-ROW', JSON.stringify(ntRow));
+
             // ---- deck-builder CTA: neon-dark card ----
             const cta = await page.evaluate(() => {
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
