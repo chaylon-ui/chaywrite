@@ -212,6 +212,55 @@ jobs:
             v('sp-sealed-row-gone', !spRows.some((r) => r.title.toUpperCase().indexOf('SPORTS CARD') > -1),
               JSON.stringify(spRows.map((r) => r.title)));
 
+            /* The owner's complaint, encoded: "the sports section does not
+               fit the current look of the new additions of the site". At
+               desktop width the header sat pinned to the left and the
+               carousel took the remaining width, leaving a dead gap straight
+               across the middle - theme.css lays .specialproducts out as
+               display:flex and only blocks it back under 1199px.
+
+               COVERAGE is the check that matters. Counting tiles or reading
+               the head's alignment would both have passed while the row
+               still looked wrong; what a shopper sees is whether the product
+               row SPANS the band or clusters at one end of it. */
+            const spFit = await page.evaluate(() => {
+              const sec = document.querySelector('.specialproducts.xg-sp');
+              if (!sec) return null;
+              const head = sec.querySelector('.xg-sp__head');
+              const right = sec.querySelector('.product-right');
+              const wrap = sec.closest('.shopify-section');
+              const tiles = Array.from(sec.querySelectorAll('.grid-view-item'))
+                .filter((el) => el.offsetWidth > 0)
+                .map((el) => el.getBoundingClientRect());
+              const box = (el) => {
+                const r = el.getBoundingClientRect();
+                return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+              };
+              const rb = right ? right.getBoundingClientRect() : null;
+              const left = tiles.length ? Math.min.apply(null, tiles.map((r) => r.left)) : 0;
+              const rightEdge = tiles.length ? Math.max.apply(null, tiles.map((r) => r.right)) : 0;
+              return {
+                display: getComputedStyle(sec).display,
+                headBox: head ? box(head) : null,
+                headAlign: head ? getComputedStyle(head).textAlign : '',
+                rightBox: right ? box(right) : null,
+                tiles: tiles.length,
+                coverage: (rb && rb.width) ? Math.round(((rightEdge - left) / rb.width) * 100) : -1,
+                secBg: wrap ? getComputedStyle(wrap).backgroundColor : '',
+                secImg: wrap ? getComputedStyle(wrap).backgroundImage !== 'none' : false
+              };
+            });
+            console.log('SP-FIT', JSON.stringify(spFit));
+            v('sp-stacked', !!spFit && spFit.display === 'block',
+              spFit ? 'display=' + spFit.display + ' (theme.css sets flex above 1199px; head was pinned left beside the carousel)'
+                    : 'no .specialproducts.xg-sp on the page');
+            v('sp-head-centered', !!spFit && spFit.headAlign === 'center',
+              spFit ? 'text-align=' + spFit.headAlign : 'n/a');
+            v('sp-row-fills', !!spFit && spFit.coverage >= 70,
+              spFit ? 'tiles span ' + spFit.coverage + '% of the row across ' + spFit.tiles + ' tiles' : 'n/a');
+            v('sp-band-surface', !!spFit && (spFit.secImg || (!!spFit.secBg && spFit.secBg !== 'rgba(0, 0, 0, 0)')),
+              spFit ? 'bg=' + spFit.secBg + ' art=' + spFit.secImg : 'n/a');
+
             // ---- deck-builder CTA: neon-dark card ----
             const cta = await page.evaluate(() => {
               const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
