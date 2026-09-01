@@ -186,6 +186,31 @@ jobs:
             v('sp-tile-height', sp.wrapH === 205, 'wrapH=' + sp.wrapH);
             v('sp-blurb-hidden', sp.blurbGone, String(sp.blurbGone));
             v('sp-owl-circles', sp.navW === 38 && sp.navRadius === '50%', 'w=' + sp.navW + ' r=' + sp.navRadius);
+            /* The sports SEALED row is gone, replaced by two singles rows.
+               The owner asked for hockey and basketball singles; the old row
+               pointed at `sports-cards`, whose rules are six *Sealed Product*
+               types, so "sports card sealed" was exactly what it was.
+
+               Assert both new rows are PRESENT, TITLED and actually holding
+               product. An empty or mistyped collection handle still renders
+               the heading and the band - it just draws nothing underneath -
+               so a heading-only check would pass on a broken row. */
+            const spRows = await page.evaluate(() => Array.from(document.querySelectorAll('.xg-sp')).map((r) => {
+              const t = r.querySelector('.xg-sp__title');
+              const tiles = Array.from(r.querySelectorAll('.grid-view-item')).filter((el) => el.offsetWidth > 0);
+              return { title: ((t && t.textContent) || '').trim(), tiles: tiles.length };
+            }));
+            console.log('SP-ROWS', JSON.stringify(spRows));
+            const spRow = (want) => spRows.filter((r) => r.title.toUpperCase().indexOf(want) > -1)[0];
+            const hkRow = spRow('HOCKEY'), bkRow = spRow('BASKETBALL');
+            v('sp-hockey-row', !!hkRow && hkRow.tiles > 0,
+              hkRow ? '"' + hkRow.title + '" with ' + hkRow.tiles + ' visible tiles (all-hockey-card-singles)'
+                    : 'no HOCKEY row on the homepage :: ' + JSON.stringify(spRows.map((r) => r.title)));
+            v('sp-basketball-row', !!bkRow && bkRow.tiles > 0,
+              bkRow ? '"' + bkRow.title + '" with ' + bkRow.tiles + ' visible tiles (all-basketball-singles)'
+                    : 'no BASKETBALL row on the homepage :: ' + JSON.stringify(spRows.map((r) => r.title)));
+            v('sp-sealed-row-gone', !spRows.some((r) => r.title.toUpperCase().indexOf('SPORTS CARD') > -1),
+              JSON.stringify(spRows.map((r) => r.title)));
 
             // ---- deck-builder CTA: neon-dark card ----
             const cta = await page.evaluate(() => {
