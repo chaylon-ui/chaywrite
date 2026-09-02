@@ -56,7 +56,7 @@ const CORS = {
   "access-control-allow-methods": "POST, OPTIONS",
   "access-control-allow-headers": "content-type",
   "access-control-max-age": "86400",
-  "access-control-expose-headers": "x-xg-cache",
+  "access-control-expose-headers": "x-xg-cache, x-xg-age",
 };
 
 const msg = (e) => String((e && e.message) || e || "error").slice(0, 200);
@@ -242,17 +242,18 @@ export async function serveBinderSearch(request, env, ctx) {
   try { rec = await doGet(env, key, false); }
   catch (e) { console.log("binder-search: cache get failed: " + msg(e)); }
   if (rec) {
+    const ageH = { "x-xg-age": String(Math.round(rec.age / 1000)) }; // seconds since BinderPOS answered
     if (rec.state === "fresh") {
       const tag = rec.warm ? "warm" : "hit";
       ctx.waitUntil(edgePut(cache, edgeKey, rec.text, tag));
-      return reply(rec.text, 200, tag);
+      return reply(rec.text, 200, tag, ageH);
     }
     if (rec.refresh) {
       ctx.waitUntil(fetchAndStore(env, null, key, raw, false).then((r) => {
         if (!r.ok) console.log("binder-search: background refresh failed: " + JSON.stringify(r));
       }).catch((e) => console.log("binder-search: background refresh threw: " + msg(e))));
     }
-    return reply(rec.text, 200, "stale");
+    return reply(rec.text, 200, "stale", ageH);
   }
 
   // 3) miss: BinderPOS synchronously (the store is best-effort; a broken
@@ -266,11 +267,13 @@ export async function serveBinderSearch(request, env, ctx) {
 /* ---- cron pre-warm ----------------------------------------------------------- */
 
 // supportedGames -> the identifiers the widget passes as ?game= (e.g.
-// "pokemon", "mtg"). The list's exact shape is only visible from outside
-// the sandbox (the deploy smoke prints it), so accept strings or objects,
-// take the first id-looking string field, and skip display names.
+// "pokemon", "mtg"). Seen in the deploy smoke (run 33648060842):
+//   [{"gameId":"fleshAndBlood","gameName":"Flesh and Blood Singles","printings":[...]}, ...]
+// so gameId is the identifier and gameName a display name. Strings and
+// the other plausible keys stay accepted; display names (spaces,
+// punctuation) never pass ID_RE.
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{1,31}$/;
-const ID_KEYS = ["game", "gameCode", "code", "key", "slug", "value", "gameName", "name", "id", "gameId", "title", "label"];
+const ID_KEYS = ["gameId", "game", "gameCode", "code", "key", "slug", "value", "id", "gameName", "name", "title", "label"];
 export function gameIds(data) {
   let list = data;
   if (list && !Array.isArray(list) && typeof list === "object") {
