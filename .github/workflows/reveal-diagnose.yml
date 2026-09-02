@@ -149,43 +149,84 @@ jobs:
             v('toggle-mobile-slot', shape.togMob, String(shape.togMob));
             v('toggle-unpressed', shape.togPressed === 'false', String(shape.togPressed));
 
-            // ---- specialproduct: modern band, vertical 2-up tiles ----
+            // ---- specialproduct: modern band, horizontal scroll strip ----
+            /* Round 21: the owl carousel is gone. Each sports row is a New
+               Today style strip - display:flex, overflow-x:auto, 148px tiles
+               with a 148x207 cover image and chevrons that scroll the strip -
+               so every owl / 205px expectation that used to live here was
+               rewritten to measure the strip. Measured PER ROW: a green
+               hockey row must not hide a broken basketball row. */
             const sp = await page.evaluate(() => {
-              const heads = document.querySelectorAll('.xg-sp .xg-sp__head');
-              const k = document.querySelector('.xg-sp .xg-sp__kicker');
-              const t = document.querySelector('.xg-sp .xg-sp__title');
+              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
+              const alpha = (c) => { const m = (c || '').match(/[\d.]+/g); return !m || m.length < 3 ? -1 : (m.length > 3 ? +m[3] : 1); };
+              const rows = Array.from(document.querySelectorAll('.xg-sp')).map((sec) => {
+                const t = sec.querySelector('.xg-sp__title');
+                const k = sec.querySelector('.xg-sp__kicker');
+                const strip = sec.querySelector('.xg-sp__strip');
+                const wrapEl = sec.closest('.shopify-section');
+                const tiles = Array.from(sec.querySelectorAll('.grid-view-item')).filter((el) => el.offsetWidth > 0);
+                const widths = tiles.map((el) => el.offsetWidth);
+                const img = sec.querySelector('.grid-view-item .grid-view-item__image-wrapper');
+                const imgEl = sec.querySelector('.grid-view-item .grid-view-item__image-wrapper img');
+                const price = sec.querySelector('.grid-view-item .product-price__price');
+                const btn = sec.querySelector('.xg-sp__nav .xg-sp__btn');
+                const next = sec.querySelector('.xg-sp__nav .xg-sp__btn[data-d="1"]');
+                return {
+                  title: ((t && t.textContent) || '').trim(),
+                  kColor: cs(k, 'color'), kUpper: cs(k, 'textTransform'),
+                  tSize: parseFloat(cs(t, 'fontSize') || '0'), tUpper: cs(t, 'textTransform'),
+                  bandArt: wrapEl ? cs(wrapEl, 'backgroundImage') !== 'none' : false,
+                  stripFound: !!strip,
+                  stripDisplay: cs(strip, 'display'), stripOverflowX: cs(strip, 'overflowX'),
+                  owl: sec.querySelectorAll('[class^="owl-"], [class*=" owl-"]').length,
+                  tiles: tiles.length,
+                  tileMin: widths.length ? Math.min.apply(null, widths) : -1,
+                  tileMax: widths.length ? Math.max.apply(null, widths) : -1,
+                  tileBg: cs(tiles[0], 'backgroundColor'), tileBgA: alpha(cs(tiles[0], 'backgroundColor')),
+                  imgW: img ? img.offsetWidth : -1, imgH: img ? img.offsetHeight : -1,
+                  imgFit: cs(imgEl, 'objectFit'), imgElW: imgEl ? imgEl.offsetWidth : -1, imgElH: imgEl ? imgEl.offsetHeight : -1,
+                  priceBg: cs(price, 'backgroundColor'), priceBgA: alpha(cs(price, 'backgroundColor')),
+                  navW: btn ? btn.offsetWidth : -1, navRadius: cs(btn, 'borderRadius'), hasNext: !!next
+                };
+              });
               const wrap = document.querySelector('.xg-sp .grid-view-item .grid-view-item__image-wrapper');
               const desc = document.querySelector('.xg-sp .grid-view-item .product-description');
               const blurb = document.querySelector('.xg-sp .grid-view-item .product-desc');
-              const nav = document.querySelector('.xg-sp .owl-nav .owl-next');
-              const cs = (el, p) => el ? getComputedStyle(el)[p] : '';
-              // the live sports_row uses max_products_rows=1, so there are no
-              // .multilevel-item pair wrappers - the side-by-side 2-up comes
-              // from owl itself (992px: items 2). Count VISIBLE tiles.
-              const active = Array.from(document.querySelectorAll('.xg-sp .owl-item.active .grid-view-item')).filter(el => el.offsetWidth > 0);
               return {
-                heads: heads.length,
+                rows,
+                heads: document.querySelectorAll('.xg-sp .xg-sp__head').length,
                 oldRedBox: document.querySelectorAll('.xg-sp .title-left').length,
-                kColor: cs(k, 'color'), kUpper: cs(k, 'textTransform'),
-                tSize: parseFloat(cs(t, 'fontSize') || '0'), tUpper: cs(t, 'textTransform'),
-                visTiles: active.length,
-                mlCount: document.querySelectorAll('.xg-sp .multilevel-item').length,
-                wrapH: wrap ? wrap.offsetHeight : -1, wrapFloat: cs(wrap, 'float'), wrapDisplay: cs(wrap, 'display'),
+                wrapFloat: cs(wrap, 'float'), wrapDisplay: cs(wrap, 'display'),
                 descDisplay: cs(desc, 'display'), descFloat: cs(desc, 'float'),
-                blurbGone: blurb ? cs(blurb, 'display') === 'none' : true,
-                navW: nav ? nav.offsetWidth : -1, navRadius: cs(nav, 'borderRadius')
+                blurbGone: blurb ? cs(blurb, 'display') === 'none' : true
               };
             });
             console.log('SPECIALPRODUCT', JSON.stringify(sp));
+            const spAll = (fn) => sp.rows.length > 0 && sp.rows.every(fn);
+            const spSay = (fn) => sp.rows.map((r) => '"' + r.title.slice(0, 18) + '": ' + fn(r)).join(' | ') || 'no .xg-sp rows';
             v('sp-heads', sp.heads >= 1, 'heads=' + sp.heads);
             v('sp-old-redbox-gone', sp.oldRedBox === 0, 'title-left count=' + sp.oldRedBox);
-            v('sp-kicker', sp.kColor === 'rgb(214, 44, 40)' && sp.kUpper === 'uppercase', sp.kColor + ' / ' + sp.kUpper);
-            v('sp-title', sp.tSize >= 22 && sp.tSize <= 30 && sp.tUpper === 'uppercase', sp.tSize + 'px / ' + sp.tUpper);
-            v('sp-two-up', sp.visTiles >= 2, 'visible tiles=' + sp.visTiles + ' (multilevel pairs=' + sp.mlCount + ', max_rows=1 -> owl 2-up)');
+            /* Kicker: brand red on a flat row, accent yellow #ffd800 on a
+               band-art row (round 19: red measured 1:1 on the artwork). */
+            v('sp-kicker', spAll((r) => r.kUpper === 'uppercase' && (r.bandArt ? r.kColor === 'rgb(255, 216, 0)' : r.kColor === 'rgb(214, 44, 40)')),
+              spSay((r) => r.kColor + ' / ' + r.kUpper + (r.bandArt ? ' (band art: expect accent)' : ' (flat: expect red)')));
+            v('sp-title', spAll((r) => r.tSize >= 22 && r.tSize <= 30 && r.tUpper === 'uppercase'), spSay((r) => r.tSize + 'px / ' + r.tUpper));
+            v('sp-strip-flex', spAll((r) => r.stripFound && r.stripDisplay === 'flex' && r.stripOverflowX === 'auto'),
+              spSay((r) => (r.stripFound ? '.xg-sp__strip display=' + r.stripDisplay + ' overflow-x=' + r.stripOverflowX : 'no .xg-sp__strip')));
+            v('sp-no-owl', spAll((r) => r.owl === 0), spSay((r) => 'elements with an owl-* class=' + r.owl));
+            v('sp-tile-count', spAll((r) => r.tiles >= 8), spSay((r) => r.tiles + ' .grid-view-item tiles with width'));
+            v('sp-tile-width', spAll((r) => r.tiles > 0 && r.tileMin >= 144 && r.tileMax <= 152), spSay((r) => '.grid-view-item widths ' + r.tileMin + '-' + r.tileMax + 'px'));
             v('sp-tile-vertical', sp.wrapFloat === 'none' && sp.wrapDisplay === 'block' && sp.descFloat === 'none' && sp.descDisplay === 'flex', 'wrap=' + sp.wrapFloat + '/' + sp.wrapDisplay + ' desc=' + sp.descFloat + '/' + sp.descDisplay);
-            v('sp-tile-height', sp.wrapH === 205, 'wrapH=' + sp.wrapH);
+            v('sp-tile-height', spAll((r) => r.imgH >= 200 && r.imgH <= 214 && r.imgW >= 144 && r.imgW <= 152 && r.imgFit === 'cover' && r.imgElH >= 200 && r.imgElH <= 214 && r.imgElW >= 144 && r.imgElW <= 152),
+              spSay((r) => 'image box ' + r.imgW + 'x' + r.imgH + ', img ' + r.imgElW + 'x' + r.imgElH + ' object-fit=' + r.imgFit));
+            v('sp-tile-transparent', spAll((r) => r.tileBgA === 0), spSay((r) => 'first .grid-view-item bg=' + r.tileBg));
             v('sp-blurb-hidden', sp.blurbGone, String(sp.blurbGone));
-            v('sp-owl-circles', sp.navW === 38 && sp.navRadius === '50%', 'w=' + sp.navW + ' r=' + sp.navRadius);
+            v('sp-nav-circles', spAll((r) => r.navW === 36 && r.navRadius === '50%'), spSay((r) => '.xg-sp__btn w=' + r.navW + ' r=' + r.navRadius));
+            {
+              const art = sp.rows.filter((r) => r.bandArt);
+              if (art.length) v('sp-price-pill', art.every((r) => r.priceBgA > 0.5), art.map((r) => '"' + r.title.slice(0, 18) + '": .product-price__price bg=' + r.priceBg + ' (alpha ' + r.priceBgA + ')').join(' | '));
+              else v('sp-price-pill', true, 'SKIPPED - no sports row carries band art on this render :: ' + spSay((r) => 'bandArt=' + r.bandArt));
+            }
             /* The sports SEALED row is gone, replaced by two singles rows.
                The owner asked for hockey and basketball singles; the old row
                pointed at `sports-cards`, whose rules are six *Sealed Product*
@@ -229,27 +270,32 @@ jobs:
               const head = sec.querySelector('.xg-sp__head');
               const right = sec.querySelector('.product-right');
               const wrap = sec.closest('.shopify-section');
-              /* ACTIVE items only. Run 111 measured every .grid-view-item in
-                 the section and reported 485% coverage, because owl parks the
-                 rest of the 20 tiles in a stage that runs far past the
-                 container - a number that can exceed 100% cannot fail, and
-                 would have passed on the broken layout too. Only the tiles
-                 owl currently shows are on screen. */
-              const tiles = Array.from(sec.querySelectorAll('.owl-item.active .grid-view-item'))
+              /* Tiles INSIDE the strip's box only. Run 111 measured every
+                 .grid-view-item and reported 485%: owl parked the rest of the
+                 20 tiles in a stage that ran far past the container. The
+                 strip is overflow-x:auto, so its tile rects run past its box
+                 the same way - clip the span to the strip's own bounding box
+                 (the partial tile at the right edge is clipped IN, so a full
+                 strip reads ~97%; whole tiles only would be ~90%). */
+              const strip = sec.querySelector('.xg-sp__strip');
+              const sb = strip ? strip.getBoundingClientRect() : null;
+              const tiles = Array.from(sec.querySelectorAll('.xg-sp__strip .grid__item'))
                 .filter((el) => el.offsetWidth > 0)
-                .map((el) => el.getBoundingClientRect());
+                .map((el) => el.getBoundingClientRect())
+                .filter((r) => sb && r.right > sb.left && r.left < sb.right);
               const box = (el) => {
                 const r = el.getBoundingClientRect();
                 return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
               };
               const rb = right ? right.getBoundingClientRect() : null;
-              const left = tiles.length ? Math.min.apply(null, tiles.map((r) => r.left)) : 0;
-              const rightEdge = tiles.length ? Math.max.apply(null, tiles.map((r) => r.right)) : 0;
+              const left = tiles.length ? Math.max(Math.min.apply(null, tiles.map((r) => r.left)), sb.left) : 0;
+              const rightEdge = tiles.length ? Math.min(Math.max.apply(null, tiles.map((r) => r.right)), sb.right) : 0;
               return {
                 display: getComputedStyle(sec).display,
                 headBox: head ? box(head) : null,
                 headAlign: head ? getComputedStyle(head).textAlign : '',
                 rightBox: right ? box(right) : null,
+                stripBox: strip ? box(strip) : null,
                 tiles: tiles.length,
                 coverage: (rb && rb.width) ? Math.round(((rightEdge - left) / rb.width) * 100) : -1,
                 secBg: wrap ? getComputedStyle(wrap).backgroundColor : '',
@@ -263,7 +309,7 @@ jobs:
             v('sp-head-centered', !!spFit && spFit.headAlign === 'center',
               spFit ? 'text-align=' + spFit.headAlign : 'n/a');
             v('sp-row-fills', !!spFit && spFit.coverage >= 85 && spFit.coverage <= 105,
-              spFit ? 'visible tiles span ' + spFit.coverage + '% of the row across ' + spFit.tiles + ' active tiles' : 'n/a');
+              spFit ? 'tiles inside the strip box span ' + spFit.coverage + '% of the row (.product-right ' + JSON.stringify(spFit.rightBox) + ') across ' + spFit.tiles + ' tiles, strip ' + JSON.stringify(spFit.stripBox) : 'n/a');
             /* Stacked AND aligned is what "beside" versus "above" actually
                means: same left edge, same width, header sitting above the row
                rather than next to it. The flex layout gave the header a
@@ -277,6 +323,29 @@ jobs:
               spFit ? 'head=' + JSON.stringify(spFit.headBox) + ' row=' + JSON.stringify(spFit.rightBox) : 'n/a');
             v('sp-band-surface', !!spFit && (spFit.secImg || (!!spFit.secBg && spFit.secBg !== 'rgba(0, 0, 0, 0)')),
               spFit ? 'bg=' + spFit.secBg + ' art=' + spFit.secImg : 'n/a');
+            /* Round 21: the chevrons must exist AND move the strip. Read
+               scrollLeft, click the next control, wait out the smooth
+               scroll, read again - then put the strip back so nothing
+               downstream measures a scrolled row. */
+            const chev = await page.evaluate(() => {
+              const sec = document.querySelector('.xg-sp');
+              const strip = sec && sec.querySelector('.xg-sp__strip');
+              const next = sec && sec.querySelector('.xg-sp__nav .xg-sp__btn[data-d="1"]');
+              if (!strip || !next) return { has: !!next, strip: !!strip, before: -1, max: -1 };
+              const before = strip.scrollLeft;
+              next.click();
+              return { has: true, strip: true, before, max: strip.scrollWidth - strip.clientWidth };
+            });
+            await sleep(1200);
+            const chevAfter = await page.evaluate(() => {
+              const strip = document.querySelector('.xg-sp .xg-sp__strip');
+              const after = strip ? strip.scrollLeft : -1;
+              if (strip) strip.scrollLeft = 0;
+              return after;
+            });
+            console.log('SP-CHEVRONS', JSON.stringify(Object.assign({ after: chevAfter }, chev)));
+            v('sp-strip-chevrons', chev.has && chev.strip && chevAfter > chev.before,
+              'next control=' + chev.has + ' strip=' + chev.strip + ' scrollLeft ' + chev.before + ' -> ' + chevAfter + ' after click (scrollable max ' + chev.max + ')');
 
             /* ---- Round 17 measurements. Five owner requests, none of which
                should be designed against a screenshot. ---- */
@@ -290,7 +359,7 @@ jobs:
                fix is a second asset; if it is transparent, what matters is
                how much of the ink is dark enough to vanish on #161b1e
                (L=0.0106). Sample the pixels and say which. */
-            const logoAsset = await page.evaluate(() => new Promise((resolve) => {
+            const sampleLogo = () => page.evaluate(() => new Promise((resolve) => {
               const el = document.querySelector('#header .header__logo img');
               if (!el || !(el.currentSrc || el.src)) return resolve({ error: 'no logo img in #header' });
               const im = new Image();
@@ -329,6 +398,7 @@ jobs:
               };
               im.src = el.currentSrc || el.src;
             }));
+            const logoAsset = await sampleLogo();
             console.log('LOGO-ASSET', JSON.stringify(logoAsset));
 
             /* 2. WHERE THE LOGO SITS RELATIVE TO THE SEARCH. The owner wants
@@ -346,6 +416,10 @@ jobs:
               const logo = document.querySelector('#header .header__logo img');
               const wrap = logo && logo.closest('.header-logo-section-img, .header-logo-section');
               const search = document.querySelector('#_desktop_search');
+              const icons = document.querySelector('#header .header-top .header-user-selection');
+              const pw = document.querySelector('#header .header-top.site-header-inner > .page-width');
+              const pwr = pw ? pw.getBoundingClientRect() : null;
+              const pwPad = pw ? (parseFloat(getComputedStyle(pw).paddingRight) || 0) : 0;
               let common = null;
               if (wrap && search) for (let a = wrap; a; a = a.parentElement) { if (a.contains(search)) { common = a; break; } }
               const chain = [];
@@ -354,6 +428,7 @@ jobs:
               }
               return {
                 logo: box(logo), wrap: box(wrap), search: box(search),
+                icons: box(icons), pw: box(pw), pwPadR: pwPad, pwRight: pwr ? Math.round(pwr.right - pwPad) : -1,
                 logoMaxH: logo ? getComputedStyle(logo).maxHeight : '',
                 logoMaxW: logo ? getComputedStyle(logo).maxWidth : '',
                 common: cn(common), commonBox: box(common),
@@ -362,6 +437,20 @@ jobs:
               };
             });
             console.log('HEADER-DESK', JSON.stringify(hdrDesk));
+            /* Round 21 verdicts on the desktop header (owner: logo beside the
+               search, 33% larger). Run 113 measured the logo [55,68,52,52]
+               ABOVE the search [55,120,500,40] with 636px blank to its right.
+               Boxes are [left, top, width, height]. */
+            {
+              const L = hdrDesk.logo, S = hdrDesk.search, I = hdrDesk.icons;
+              const ovl = (L && S) ? Math.min(L[1] + L[3], S[1] + S[3]) - Math.max(L[1], S[1]) : -1;
+              v('hdr-logo-beside-search', !!L && !!S && ovl >= 20 && S[0] > L[0] + L[2],
+                'logo=' + JSON.stringify(L) + ' search=' + JSON.stringify(S) + ' share ' + ovl + 'px of row; search.left ' + (S ? S[0] : '?') + ' vs logo.right ' + (L ? L[0] + L[2] : '?') + ' (run 113: search 52px under the logo)');
+              v('hdr-logo-size', !!L && L[3] >= 68 && L[3] <= 70, 'logo img h=' + (L ? L[3] : '?') + 'px w=' + (L ? L[2] : '?') + 'px (was 52; 52 x 1.33 = 69)');
+              v('hdr-search-width', !!S && S[2] >= 500 && S[2] <= 640, '#_desktop_search w=' + (S ? S[2] : '?') + 'px');
+              v('hdr-icons-right', !!I && hdrDesk.pwRight > 0 && Math.abs((I[0] + I[2]) - hdrDesk.pwRight) <= 40,
+                '.header-user-selection right=' + (I ? I[0] + I[2] : '?') + ' vs outer .page-width content right=' + hdrDesk.pwRight + ' (box ' + JSON.stringify(hdrDesk.pw) + ' pad-r ' + hdrDesk.pwPadR + 'px)');
+            }
 
             /* 3. THE LOCATIONS GRID. Owner: "irregular style, I would like
                each store in its own pill, standard sized, only one row".
@@ -418,6 +507,53 @@ jobs:
               };
             });
             console.log('NT-ROW', JSON.stringify(ntRow));
+            /* Round 21: hover peek. Move the mouse onto the first New Today
+               card image for real (the script keys on mouseover plus a 180ms
+               settle, then loads a 640px rendition), expect the .xg-peek
+               panel on with an <img> at least 200px wide; Escape must take
+               it away. The image is scrolled into view FIRST and the scroll
+               allowed to settle: the peek hides itself on any window scroll,
+               and page.hover() would otherwise scroll and hover in one beat. */
+            const peekTarget = await page.evaluate(() => {
+              const img = document.querySelector('.xg-nt__card img');
+              if (!img) return null;
+              img.scrollIntoView({ block: 'center', inline: 'nearest' });
+              return { hoverCapable: window.matchMedia('(hover: hover) and (pointer: fine)').matches, script: !!window.xgCardPeek, thumbW: img.offsetWidth };
+            });
+            if (!peekTarget) {
+              v('peek-shows', true, 'SKIPPED - no .xg-nt__card img on this render (New Today feed empty)');
+            } else {
+              await sleep(900);
+              const readPeek = () => page.evaluate(() => {
+                const p = document.querySelector('.xg-peek');
+                const im = p ? p.querySelector('img') : null;
+                const cs = p ? getComputedStyle(p) : null;
+                const ir = im ? im.getBoundingClientRect() : null;
+                return {
+                  found: !!p,
+                  on: !!p && p.classList.contains('is-on') && parseFloat(cs.opacity) > 0.5 && p.offsetWidth > 0,
+                  opacity: cs ? cs.opacity : '',
+                  imgW: ir ? Math.round(ir.width) : -1, imgH: ir ? Math.round(ir.height) : -1,
+                  src: im ? (im.currentSrc || im.src || '').slice(-60) : ''
+                };
+              });
+              try { await page.hover('.xg-nt__card img'); } catch (e) { console.log('PEEK-HOVER-ERR', String(e).slice(0, 140)); }
+              await sleep(700);
+              let peekWait = 700;
+              let peek = await readPeek();
+              const peekAt700 = peek.on && peek.imgW >= 200;
+              while (!(peek.on && peek.imgW >= 200) && peekWait < 3000) { await sleep(300); peekWait += 300; peek = await readPeek(); }
+              await page.keyboard.press('Escape');
+              await sleep(300);
+              const peekAfter = await readPeek();
+              await page.mouse.move(5, 5);
+              console.log('PEEK', JSON.stringify(Object.assign({ target: peekTarget, waitedMs: peekWait, at700: peekAt700, afterEscape: peekAfter }, peek)));
+              v('peek-shows', peek.on && peek.imgW >= 200 && !peekAfter.on,
+                (peek.on ? '.xg-peek on after ' + peekWait + 'ms' + (peekAt700 ? '' : ' (not yet at 700ms)') : '.xg-peek never showed in ' + peekWait + 'ms (found=' + peek.found + ')')
+                  + ' img ' + peek.imgW + 'x' + peek.imgH + ' opacity=' + peek.opacity + ' src=...' + peek.src
+                  + ' ; after Escape on=' + peekAfter.on + ' opacity=' + peekAfter.opacity
+                  + ' (hover-capable=' + peekTarget.hoverCapable + ' script=' + peekTarget.script + ' thumb w=' + peekTarget.thumbW + ')');
+            }
 
             // ---- deck-builder CTA: neon-dark card ----
             const cta = await page.evaluate(() => {
@@ -667,6 +803,45 @@ jobs:
             v('loc-official-names', loc.named === 3, 'renamed found=' + loc.named + ' :: ' + JSON.stringify(loc.texts));
             v('loc-pills-contained', loc.checked > 0 && loc.overflow === 0, 'checked=' + loc.checked + ' overflow=' + loc.overflow);
             v('loc-pills-wrap', loc.ws === 'normal', loc.ws);
+            /* Round 21: live hours pill per store, painted by the section's
+               own script from the worker's /stores.json (7s abort). Only the
+               stores Google lists under "Exor" (or pinned via
+               GOOGLE_PLACE_IDS) can carry hours, so 1..6 pills is the pass
+               window. The feed is fetched from the runner as well: an
+               ok:false day SKIPS with the reason instead of failing the
+               theme for the worker's upstream. */
+            let storesFeed = null;
+            try {
+              const sr = await fetch('https://exor-binder.nevski.workers.dev/stores.json');
+              storesFeed = await sr.json();
+            } catch (e) { storesFeed = { ok: false, error: String(e).slice(0, 120) }; }
+            const feedStores = (storesFeed && Array.isArray(storesFeed.stores)) ? storesFeed.stores : [];
+            const feedWithHours = feedStores.filter((s) => s && s.hours).length;
+            let hoursWait = 0;
+            while (hoursWait < 8000) {
+              if (await page.evaluate(() => document.querySelectorAll('.xg-loc__hours').length > 0)) break;
+              await sleep(500); hoursWait += 500;
+            }
+            const locHours = await page.evaluate(() => Array.from(document.querySelectorAll('.xg-loc__item')).map((li) => {
+              const pill = li.querySelector('.xg-loc__hours');
+              return {
+                name: ((li.querySelector('.xg-loc__name') || {}).textContent || '').trim().slice(0, 18),
+                pill: pill ? pill.textContent.replace(/\s+/g, ' ').trim() : null,
+                state: pill ? (pill.classList.contains('is-open') ? 'is-open' : (pill.classList.contains('is-closed') ? 'is-closed' : 'no-state-class')) : ''
+              };
+            }));
+            console.log('LOC-HOURS', JSON.stringify({ feedOk: storesFeed ? storesFeed.ok : null, feedError: storesFeed && storesFeed.error ? storesFeed.error : undefined, feedStores: feedStores.length, feedWithHours, waitedMs: hoursWait, cards: locHours }));
+            {
+              const pills = locHours.filter((c) => c.pill !== null);
+              const bad = pills.filter((c) => !/open|closed/i.test(c.pill));
+              const say = locHours.map((c) => c.name + '=' + (c.pill === null ? '(no pill)' : '"' + c.pill + '"')).join(', ');
+              if (!storesFeed || storesFeed.ok !== true) {
+                v('loc-hours', true, 'SKIPPED - /stores.json answered ok=' + (storesFeed ? storesFeed.ok : 'unreachable') + (storesFeed && storesFeed.error ? ' (' + storesFeed.error + ')' : '') + ' :: ' + say);
+              } else {
+                v('loc-hours', pills.length >= 1 && pills.length <= 6 && bad.length === 0,
+                  pills.length + ' pills on ' + locHours.length + ' cards, ' + bad.length + ' without open/closed text (feed ok, ' + feedStores.length + ' stores, ' + feedWithHours + ' with hours; first pill after ' + hoursWait + 'ms) :: ' + say);
+              }
+            }
 
             // ---- cart plumbing regression against mocked endpoints ----
             let mock = false, mockCount = 0;
@@ -778,6 +953,7 @@ jobs:
                 searchBg: cs(document.querySelector('#header #_desktop_search .search-info .search__input'), 'backgroundColor'),
                 cardBg: cs(card, 'backgroundColor'),
                 logoPlate: cs(document.querySelector('#header .header__logo img'), 'backgroundColor'),
+                logoShadow: cs(document.querySelector('#header .header__logo img'), 'boxShadow'),
                 /* The desktop menu row is the qikify app's NAV.tmenu_navbar,
                    not the theme's #top-menu (which does not exist here). It
                    painted white while the whole header around it went dark. */
@@ -795,13 +971,39 @@ jobs:
             v('dark-header', dark.headerBg === 'rgb(22, 27, 30)', dark.headerBg);
             v('dark-search-input', dark.searchBg === 'rgb(29, 35, 39)', dark.searchBg);
             v('dark-card-surface', dark.cardBg === 'rgb(24, 29, 32)', dark.cardBg);
-            v('dark-logo-plate', dark.logoPlate === 'rgb(255, 255, 255)', dark.logoPlate);
+            v('dark-logo-plate', dark.logoPlate === 'rgba(0, 0, 0, 0)', 'bg=' + dark.logoPlate + ' shadow=' + String(dark.logoShadow).slice(0, 40) + ' (round 21: plate removed by design; was rgb(255, 255, 255))');
             v('dark-app-menu-bar', dark.tmenuFound && dark.tmenuBg === 'rgb(22, 27, 30)',
               'tmenu_navbar bg=' + dark.tmenuBg + ' found=' + dark.tmenuFound + ' (was rgb(255, 255, 255))');
             v('dark-color-scheme', /dark/.test(dark.colorScheme), dark.colorScheme);
             if (dark.ntPrice) v('dark-nt-price', dark.ntPrice === 'rgb(255, 106, 94)', dark.ntPrice);
             if (dark.tickPrice) v('ticker-dark-price', dark.tickPrice === 'rgb(255, 106, 94)', dark.tickPrice);
             v('cta-selfdark-stable', dark.ctaSelBg === 'rgb(255, 255, 255)' && dark.ctaTitle === 'rgb(255, 255, 255)', dark.ctaSelBg + ' / ' + dark.ctaTitle);
+            /* Round 21: in dark mode xg-logo-knockout.js redraws the logo
+               with its baked-in white ground flood-filled to transparent and
+               swaps the <img> src to a data url (the served PNG measured 0%
+               transparent - LOGO-ASSET above). Set the attribute again (the
+               toggle already did), wait for the swap, then run the SAME pixel
+               sampler on the rendered src. */
+            await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'dark'));
+            let koWait = 0, koSrc = '';
+            while (koWait < 4000) {
+              koSrc = await page.evaluate(() => { const i = document.querySelector('#header .header__logo img'); return i ? (i.getAttribute('src') || '') : ''; });
+              if (/^data:/i.test(koSrc)) break;
+              await sleep(250); koWait += 250;
+            }
+            const koState = await page.evaluate(() => {
+              const i = document.querySelector('#header .header__logo img');
+              return { hasScript: !!window.xgLogoKnockout, origSrc: i ? (i.getAttribute('data-xg-logo-src') || '').slice(-60) : '', attr: document.documentElement.getAttribute('data-xg-theme'), natural: i ? [i.naturalWidth, i.naturalHeight] : null };
+            });
+            if (/^data:/i.test(koSrc)) {
+              const ko = await sampleLogo();
+              console.log('LOGO-KNOCKOUT', JSON.stringify(Object.assign({ waitedMs: koWait }, koState, ko, { src: 'data:...' + koSrc.slice(-24) })));
+              v('logo-transparent', !ko.error && ko.transparentPct > 20 && !!ko.corner && ko.corner[3] === 0,
+                ko.error ? ko.error : 'rendered data: src after ' + koWait + 'ms: transparent=' + ko.transparentPct + '% corner rgba=' + JSON.stringify(ko.corner) + ' centre=' + JSON.stringify(ko.centre) + ' natural=' + JSON.stringify(ko.natural) + ' darkPctOfOpaque=' + ko.darkPctOfOpaque + ' (served PNG: ' + logoAsset.transparentPct + '% transparent)');
+            } else {
+              console.log('LOGO-KNOCKOUT', JSON.stringify(Object.assign({ waitedMs: koWait, src: koSrc.slice(-70) }, koState)));
+              v('logo-transparent', false, 'logo src never became data: within 4s (src=...' + koSrc.slice(-60) + ', window.xgLogoKnockout=' + koState.hasScript + ', data-xg-logo-src=' + (koState.origSrc ? 'set' : 'unset') + ', attr=' + koState.attr + ')');
+            }
 
             // round 7: hamburger drawer paints dark + card-corner clip applies.
             // At desktop width the theme's JS empties the category list from the
@@ -1469,11 +1671,12 @@ jobs:
               const rnd = (n) => Math.round(n * 10) / 10;
               v('logo-no-layout-shift', near(logo.d.w, logo.l.w) && near(logo.d.h, logo.l.h) && near(logo.d.top, logo.l.top) && near(logo.d.headH, logo.l.headH),
                 'dark ' + [logo.d.w, logo.d.h, logo.d.top, logo.d.headH].map(rnd).join('/') + ' vs light ' + [logo.l.w, logo.l.h, logo.l.top, logo.l.headH].map(rnd).join('/') + ' ' + logoCtx);
-              /* Spread went 6px -> 10px: the owner read the logo as "cut off",
-                 and a 6px ring around art that fills its own asset leaves
-                 almost no white margin. Still a shadow, so still zero layout
-                 cost - that is the round-9 constraint and it still holds. */
-              v('logo-plate-shadow', logo.d.pad === '0px' && logo.d.shadow !== 'none' && logo.d.shadow.indexOf('10px') > -1, 'pad=' + logo.d.pad + ' shadow=' + logo.d.shadow.slice(0, 70));
+              /* Round 21: the plate is gone by design (owner: "in dark mode it
+                 should lose its white background"); xg-logo-knockout.js makes
+                 the PNG's own ground transparent instead. No shadow and no
+                 padding - still zero layout cost, which logo-no-layout-shift
+                 above guards. Rounds 9-13 expected a 10px spread here. */
+              v('logo-plate-shadow', logo.d.pad === '0px' && logo.d.shadow === 'none', 'pad=' + logo.d.pad + ' shadow=' + logo.d.shadow.slice(0, 70) + ' (round 21: expect none; was 0 0 0 10px #fff)');
             } else {
               v('logo-no-layout-shift', false, 'no visible logo img found');
             }
