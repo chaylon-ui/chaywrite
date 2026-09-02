@@ -84,16 +84,19 @@ jobs:
             const v = (name, ok, detail) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + name + ' :: ' + detail); if (!ok) fails.push(name); };
             const judge = (label, rows, wantDark) => {
               const panel = rows.find(r => /^UL\.tmenu_submenu_type_mega/.test(r.el));
-              const links = rows.filter(r => /^A\.tmenu_item_link/.test(r.el) && r.box[0] >= 200);
-              const custom = rows.filter(r => /^(P|A|H4)$/.test(r.el) && r.style && /color/i.test(r.style));
-              const addr = rows.find(r => /^P\.tmenu_maps_address/.test(r.el));
-              const bgOk = panel && (wantDark ? sum(panel.bg) < 300 : sum(panel.bg) > 700);
+              const ground = panel ? sum(panel.bg) : -1;
+              /* "readable" = the ink sits at least 300 RGB-sum points away from
+                 the panel ground it is drawn on - light-on-white and
+                 dark-on-dark both fail, whichever mode we are in. */
+              const apart = (ink) => ground >= 0 && Math.abs(sum(ink) - ground) >= 300;
+              const bgOk = panel && (wantDark ? ground < 300 : ground > 700);
               v(label + '-panel-ground', !!bgOk, panel ? panel.el.slice(0, 40) + ' bg=' + panel.bg : 'no mega panel found');
-              const inkOk = links.length >= 7 && links.every(r => wantDark ? sum(r.ink) > 600 : sum(r.ink) < 500);
-              v(label + '-column-links-readable', inkOk, links.length + ' links, inks: ' + [...new Set(links.map(r => r.ink))].join(' | '));
-              const custOk = custom.length >= 5 && custom.every(r => wantDark ? sum(r.ink) > 400 : sum(r.ink) < 500);
-              v(label + '-our-store-block-readable', custOk, custom.length + ' inline-coloured nodes, inks: ' + [...new Set(custom.map(r => r.el + '=' + r.ink))].join(' | '));
-              v(label + '-map-caption-readable', !!addr && (wantDark ? sum(addr.ink) > 400 : sum(addr.ink) < 500), addr ? 'ink=' + addr.ink : 'no caption');
+              const links = rows.filter(r => /^A\.tmenu_item_link/.test(r.el) && r.box[0] >= 200);
+              v(label + '-column-links-readable', links.length >= 7 && links.every(r => apart(r.ink)), links.length + ' links, inks: ' + [...new Set(links.map(r => r.ink))].join(' | ') + ' on ' + (panel ? panel.bg : '?'));
+              const custom = rows.filter(r => /^(P|A|H4)$/.test(r.el) && r.style && /color/i.test(r.style));
+              v(label + '-our-store-block-readable', custom.length >= 5 && custom.every(r => apart(r.ink)), custom.length + ' inline-coloured nodes, inks: ' + [...new Set(custom.map(r => r.el + '=' + r.ink))].join(' | ') + ' on ' + (panel ? panel.bg : '?'));
+              const addr = rows.find(r => /^P\.tmenu_maps_address/.test(r.el));
+              v(label + '-map-caption-readable', !!addr && apart(addr.ink), addr ? 'ink=' + addr.ink + ' on ' + (panel ? panel.bg : '?') : 'no caption');
             };
 
             const lightRows = await dump('LIGHT');
