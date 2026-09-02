@@ -3,6 +3,8 @@ import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveB
 import { serveReviews } from "./reviews.js";
 import { serveStores } from "./stores.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
+import { serveIcs } from "./ics.js";
+import { servePriceHistory } from "./price-history.js";
 
 export { BinderRoom };
 
@@ -52,6 +54,16 @@ export default {
     }
     if (url.pathname === "/binder/search/status") {
       return serveBinderSearchStatus(env);
+    }
+
+    // Round 27: one-link add-to-calendar (.ics) for store events, and the
+    // nightly price history behind the card-page sparkline. Modules in
+    // src/ics.js and src/price-history.js.
+    if (url.pathname === "/ics") {
+      return serveIcs(request, env, ctx);
+    }
+    if (url.pathname === "/price-history.json" || url.pathname.startsWith("/price-history/")) {
+      return servePriceHistory(request, env, ctx);
     }
 
     // The default room's DO doubles as the screen registry: remember every
