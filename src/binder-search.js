@@ -180,6 +180,8 @@ function upstream(key, raw) {
 // Fetch BinderPOS and store the answer. -> { ok: true, text, upstream } or
 // { ok: false, upstream, error }. With `ctx` the store runs in waitUntil;
 // without it (cron, background refresh) it is awaited. Errors never store.
+// A failed store is best-effort for shoppers (they have their answer) but
+// an error for the cron, whose only job is the store.
 async function fetchAndStore(env, ctx, key, raw, warm) {
   let up;
   try { up = await upstream(key, raw); }
@@ -187,8 +189,16 @@ async function fetchAndStore(env, ctx, key, raw, warm) {
   if (up.status < 200 || up.status >= 300) return { ok: false, upstream: up.status };
   try { JSON.parse(up.text); }
   catch { return { ok: false, upstream: up.status, error: "upstream body is not JSON" }; }
-  const put = doPut(env, key, up.text, warm).catch((e) => console.log("binder-search: store failed: " + msg(e)));
-  if (ctx) ctx.waitUntil(put); else await put;
+  const put = doPut(env, key, up.text, warm);
+  if (ctx) {
+    ctx.waitUntil(put.catch((e) => console.log("binder-search: store failed: " + msg(e))));
+  } else {
+    try { await put; }
+    catch (e) {
+      console.log("binder-search: store failed: " + msg(e));
+      if (warm) return { ok: false, upstream: up.status, error: "store failed: " + msg(e) };
+    }
+  }
   return { ok: true, text: up.text, upstream: up.status };
 }
 
