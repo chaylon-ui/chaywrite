@@ -54,7 +54,11 @@ const MAX_LIMIT = 50;
 const MAX_BODY = 16 * 1024;
 const MAX_GZ = 120 * 1024;        // DO storage values cap at 128 KiB
 const MAX_GAMES = 12;
-const WARM_LOCK_MS = 12 * 60e3;   // one warm run at a time, globally
+// One warm run at a time, globally. The lock is a heartbeat: every per-body
+// note refreshes it, so a run that dies mid-way (a deploy restarts the DO
+// and kills an in-flight alarm - seen 15:59 on 2026-09-02) frees it within
+// LOCK_MS instead of holding the next slots hostage.
+const WARM_LOCK_MS = 3 * 60e3;
 export const WARM_EVERY_MS = 5 * 60e3; // the DO alarm's cadence (mirrors the cron)
 
 const CORS = {
@@ -318,7 +322,9 @@ export function gameIds(data) {
    DO's alarm (direct storage; BinderRoom.cacheStore in room.js):
      meta(key)            -> { age, warm } | null
      put(key, text, warm) -> stores (throws on failure)
-     lock(ttlMs)          -> { ok, age }   unlock()   note(summaryObj)      */
+     lock(ttlMs)          -> { ok, age }   unlock()   note(summaryObj, done)
+   note() also refreshes the lock (heartbeat); done=true marks the summary
+   as the last COMPLETED run, kept apart from the in-progress one.        */
 function stubStore(env) {
   return {
     meta: (key) => doGet(env, key, true),
@@ -329,7 +335,7 @@ function stubStore(env) {
       return { ok: r.status !== 409, age: j.age || 0 };
     },
     unlock: () => doCall(env, "/_cache/unlock", { method: "POST" }),
-    note: (obj) => doCall(env, "/_cache/note", { method: "POST", body: JSON.stringify(obj) }),
+    note: (obj, done) => doCall(env, "/_cache/note" + (done ? "?done=1" : ""), { method: "POST", body: JSON.stringify(obj) }),
   };
 }
 
@@ -377,7 +383,7 @@ export async function warmWithStore(store, via) {
   const summary = { via, at: t0, games: [], jobs: [], total: 0, ms: 0 };
   // Written after every body, not just at the end: an invocation the
   // platform cuts short (CPU or wall-clock limit) still leaves its trace.
-  const note = () => Promise.resolve().then(() => store.note({ ...summary, ms: Date.now() - t0 }))
+  const note = (done) => Promise.resolve().then(() => store.note({ ...summary, ms: Date.now() - t0 }, !!done))
     .catch((e) => console.log("binder-warm: note failed: " + msg(e)));
   try {
     await warmAll(store, summary, note);
@@ -387,7 +393,7 @@ export async function warmWithStore(store, via) {
   } finally {
     summary.done = Date.now();
     summary.ms = summary.done - t0;
-    await note();
+    await note(true);
     try { await store.unlock(); } catch {}
   }
   return summary;
@@ -436,9 +442,11 @@ async function warmAll(store, summary, note) {
 
 /* ---- GET /binder/search/status ------------------------------------------- */
 
-// Read-only, public: the last cron run (per-game status + ms) and the age of
-// the four landing entries, so a deploy smoke or a browser can tell whether
-// the pre-warm is doing its job without wrangler tail. No secrets, no bodies.
+// Read-only, public: the last COMPLETED warm run (cron: per-body status +
+// ms), the run in progress if any (current + running), the next alarm and
+// the age of the four landing entries, so a deploy smoke or a browser can
+// tell whether the pre-warm is doing its job without wrangler tail. No
+// secrets, no bodies.
 export async function serveBinderSearchStatus(env) {
   const want = [["pokemon", 0], ["mtg", 0], ["pokemon", PAGE], ["mtg", PAGE]];
   const keys = await Promise.all(want.map(([g, o]) => keyOf(defaultBody(g, o))));
@@ -451,12 +459,15 @@ export async function serveBinderSearchStatus(env) {
     const e = st.entries && st.entries[keys[i]];
     entries[g + "/" + o] = e ? { ageS: Math.round(e.age / 1000), warm: e.warm, bytes: e.bytes, state: e.age < FRESH_MS ? "fresh" : e.age < STALE_MS ? "stale" : "expired" } : null;
   });
-  const last = st.last && typeof st.last === "object" ? st.last : null;
+  const obj = (x) => (x && typeof x === "object" ? x : null);
+  const done = obj(st.done), last = obj(st.last);
+  const alive = st.lockAge != null && st.lockAge < WARM_LOCK_MS;
   return reply(JSON.stringify({
     ok: true,
     now,
-    cron: last ? { ...last, agoS: Math.round((now - (last.done || last.at)) / 1000) } : null,
-    running: st.lockAge != null ? { forS: Math.round(st.lockAge / 1000) } : null,
+    cron: done ? { ...done, agoS: Math.round((now - (done.done || done.at)) / 1000) } : null,
+    current: alive && last && !last.done ? last : null,
+    running: alive ? { forS: Math.round((now - ((last && last.at) || (now - st.lockAge))) / 1000), heartbeatS: Math.round(st.lockAge / 1000) } : null,
     alarmInS: st.alarmIn != null ? Math.round(st.alarmIn / 1000) : null,
     entries,
     freshS: FRESH_MS / 1000,

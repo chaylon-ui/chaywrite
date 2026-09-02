@@ -509,14 +509,16 @@ export class BinderRoom {
       return Response.json({ ok: true });
     }
     if (url.pathname === "/_cache/note" && request.method === "POST") {
-      await this.state.storage.put("bsw:last", (await request.text()).slice(0, 16384));
+      await this.cacheNote((await request.text()).slice(0, 16384), !!url.searchParams.get("done"));
       return Response.json({ ok: true });
     }
     if (url.pathname === "/_cache/status") {
       const lastTxt = await this.state.storage.get("bsw:last");
+      const doneTxt = await this.state.storage.get("bsw:done");
       const lock = await this.state.storage.get("bsw:lock");
-      let last = null;
+      let last = null, done = null;
       try { last = lastTxt ? JSON.parse(lastTxt) : null; } catch {}
+      try { done = doneTxt ? JSON.parse(doneTxt) : null; } catch {}
       const entries = {};
       const ks = String(url.searchParams.get("ks") || "").split(",").filter((x) => KEY_RE.test(x)).slice(0, 20);
       for (const kk of ks) {
@@ -525,9 +527,17 @@ export class BinderRoom {
       }
       let alarmIn = null;
       try { const a = await this.state.storage.getAlarm(); alarmIn = a ? a - now : null; } catch {}
-      return Response.json({ last, lockAge: lock ? now - lock : null, alarmIn, entries }, { headers: { "cache-control": "no-store" } });
+      return Response.json({ last, done, lockAge: lock ? now - lock : null, alarmIn, entries }, { headers: { "cache-control": "no-store" } });
     }
     return new Response(null, { status: 404 });
+  }
+
+  // A warm run's progress note. Every note refreshes the run lock
+  // (heartbeat); a finished run is kept apart as the last completed one.
+  async cacheNote(txt, done) {
+    const puts = { "bsw:last": txt, "bsw:lock": Date.now() };
+    if (done) puts["bsw:done"] = txt;
+    await this.state.storage.put(puts);
   }
 
   // Store one gz'd answer (+ its index row); sweep dead rows hourly.
@@ -567,7 +577,7 @@ export class BinderRoom {
         return { ok: true, age: 0 };
       },
       unlock: () => st.delete("bsw:lock"),
-      note: (obj) => st.put("bsw:last", JSON.stringify(obj).slice(0, 16384)),
+      note: (obj, done) => this.cacheNote(JSON.stringify(obj).slice(0, 16384), !!done),
     };
   }
 
