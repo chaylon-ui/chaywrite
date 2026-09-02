@@ -264,7 +264,7 @@ jobs:
           curl -sS -D /tmp/ph-h --max-time 30 "$W/price-history.json?handle=$H" | head -c 1600 || true
           printf '\n'
           echo "price-history CORS: $(grep -ci '^access-control-allow-origin' /tmp/ph-h || true) | cache-control: $(grep -i '^cache-control' /tmp/ph-h | tr -d '\r' || true) | x-xg-cache: $(grep -i '^x-xg-cache' /tmp/ph-h | tr -d '\r' | cut -d' ' -f2- || true)"
-          PID=$(curl -sS --max-time 20 -H 'Accept: application/json' "https://most-wanted-ca.myshopify.com/products/$H.js" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
+          PID=$(curl -sS --max-time 30 "$W/price-history.json?handle=$H" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id") or "")' 2>/dev/null)
           echo "=== GET /price-history.json?id=$PID (the same product by numeric id) ==="
           curl -sS --max-time 30 "$W/price-history.json?id=$PID" | head -c 1600 || true
           printf '\n'

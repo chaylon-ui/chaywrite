@@ -152,8 +152,9 @@ console.log("expandSeries / changeOver / buildPayload");
   const none = buildPayload("7", undefined, at(D0));
   check("payload for an unknown id: ok:true, since null, empty points", none.ok === true && none.id === "7" && none.since === null && none.points.length === 0 && none.days === 0 && none.current === null && none.change7d === null, none);
   check("nextRunAt: before 08:00 -> today 08:00; after -> tomorrow", nextRunAt(at(D0, 7)) === at(D0, 8) && nextRunAt(at(D0, 8)) === at(D0 + 1, 8) && nextRunAt(at(D0, 9)) === at(D0 + 1, 8));
-  check("throttleWait: enough in the bucket -> 0", throttleWait({ actualQueryCost: 602, throttleStatus: { currentlyAvailable: 1000, restoreRate: 100 } }) === 0);
-  check("throttleWait: short by 500 at 100/s -> 5.1s", throttleWait({ actualQueryCost: 602, throttleStatus: { currentlyAvailable: 102, restoreRate: 100 } }) === 5100);
+  check("throttleWait: two pages in the bucket -> 0", throttleWait({ actualQueryCost: 602, throttleStatus: { currentlyAvailable: 1204, restoreRate: 100 } }) === 0);
+  check("throttleWait: one page in the bucket -> wait for the second (57-point page, 100/s: 0.62s)", throttleWait({ actualQueryCost: 57, throttleStatus: { currentlyAvailable: 57, restoreRate: 100 } }) === 620);
+  check("throttleWait: 102 in the bucket, want 1204 at 100/s -> 11.07s", throttleWait({ actualQueryCost: 602, throttleStatus: { currentlyAvailable: 102, restoreRate: 100 } }) === 11070);
   check("throttleWait: no status -> 0", throttleWait(null) === 0);
   const pg = parsePage({ products: { nodes: [
     { id: "gid://shopify/Product/1", handle: "a", priceRangeV2: { minVariantPrice: { amount: "0.1" } }, variants: { nodes: [{ price: "0.25" }] } },
@@ -266,7 +267,7 @@ console.log("throttling");
   cx = makeCx(st, shop.fetchFn, clock);
   await priceDoAlarm(cx);
   const run = await st.get("phs:run");
-  check("throttled page: run open at page 1, alarm 8.1s out, no error streak", run && !run.done && run.pages === 1 && run.errStreak === 0 && run.lastError === "throttled" && st.alarm === clock.t + 8100, [run, st.alarm - clock.t]);
+  check("throttled page: run open at page 1, counted as throttled not error, alarm (1804-102)/100 s out", run && !run.done && run.pages === 1 && run.errStreak === 0 && run.errors === 0 && run.throttled === 1 && !run.lastError && st.alarm === clock.t + 17070, [run, st.alarm - clock.t]);
   clock.t = st.alarm;
   await priceDoAlarm(cx);
   check("resumes and finishes after the wait", (await st.get("phs:last")).day === D0 + 4);
@@ -276,7 +277,7 @@ console.log("throttling");
   cx = makeCx(st, shop.fetchFn, clock);
   await priceDoAlarm(cx);
   const run2 = await st.get("phs:run");
-  check("bucket short after page 1: next page armed for (602-200)/100 s", run2.pages === 1 && st.alarm === clock.t + 4120, [run2.pages, st.alarm - clock.t]);
+  check("bucket short after page 1: next page armed for (1204-200)/100 s", run2.pages === 1 && st.alarm === clock.t + 10090, [run2.pages, st.alarm - clock.t]);
 }
 
 console.log("no token");

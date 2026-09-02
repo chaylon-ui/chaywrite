@@ -225,16 +225,20 @@ export async function adminGql(cx, query, variables) {
 }
 
 // ms to wait before the next page can be paid for, read off the response's
-// own throttleStatus (the bucket AFTER this query was charged). 0 when the
-// bucket already holds a page's worth.
+// own throttleStatus (the bucket AFTER this query was charged). Waits until
+// the bucket holds TWO pages' worth: the first live run (2026-09-02) drained
+// a 2000-point bucket at ~2 pages/s (57 points a page, 100/s restore) and
+// then bounced off THROTTLED every few pages; a one-page headroom paces the
+// loop at the restore rate instead. 0 when the bucket is already there.
 export function throttleWait(cost, fallbackCost) {
   const ts = cost && cost.throttleStatus;
   if (!ts) return 0;
   const need = Number(cost.actualQueryCost || cost.requestedQueryCost || fallbackCost || 0);
   const avail = Number(ts.currentlyAvailable || 0);
   const rate = Number(ts.restoreRate || 0);
-  if (avail >= need || rate <= 0) return 0;
-  return Math.ceil(((need - avail) / rate) * 1000) + 100;
+  const want = need * 2;
+  if (avail >= want || rate <= 0) return 0;
+  return Math.ceil(((want - avail) / rate) * 1000) + 50;
 }
 
 const toCents = (s) => { const n = Number(s); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null; };
@@ -289,7 +293,7 @@ export async function storePage(storage, items, day) {
   return { changed, writes };
 }
 
-const newRun = (day, now) => ({ day, started: now, cursor: null, pages: 0, seen: 0, changed: 0, writes: 0, skipped: 0, errors: 0, errStreak: 0, ticks: 0, tickAt: now, done: false });
+const newRun = (day, now) => ({ day, started: now, cursor: null, pages: 0, seen: 0, changed: 0, writes: 0, skipped: 0, errors: 0, errStreak: 0, throttled: 0, ticks: 0, tickAt: now, done: false });
 
 // Arm the DO alarm for `at`. Every tick ends here, so the clock never stops.
 async function arm(cx, at, why) {
@@ -344,13 +348,16 @@ export async function priceTick(cx) {
       page = parsePage(r.data);
       page.cost = r.cost;
     } catch (e) {
-      run.errors = (run.errors || 0) + 1;
-      run.lastError = msg(e);
       run.tickAt = cx.now();
       if (e && e.throttled) {
+        // Pacing, not a failure: Shopify said the bucket is empty. Counted
+        // apart from errors so the status page reads honestly.
+        run.throttled = (run.throttled || 0) + 1;
         await st.put("phs:run", run);
         return arm(cx, cx.now() + Math.max(2000, throttleWait(e.cost, run.pageCost || 1000)), "throttled");
       }
+      run.errors = (run.errors || 0) + 1;
+      run.lastError = msg(e);
       run.errStreak = (run.errStreak || 0) + 1;
       if (run.errStreak >= MAX_ERROR_STREAK) return finish(cx, run, "gave up after " + run.errStreak + " consecutive errors; last: " + run.lastError);
       await st.put("phs:run", run);
