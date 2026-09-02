@@ -230,11 +230,15 @@ jobs:
                to clientWidth - the twenty tiles wrapped into three rows and
                the chevrons had nothing to move, while sp-row-fills read 88%
                (seven whole tiles on the first of three rows) and passed.
-               Nothing in the repo sets flex-wrap on this element, so name
-               the sheet: walk every stylesheet for a flex-wrap / flex-flow
-               rule whose selector matches the strip (cross-origin sheets are
-               listed as unreadable), and report the computed value, the
-               direct children and the first tiles' tops. */
+               A grep of the repo for the rule had missed it - it only
+               matched selector and property on one line, and base.css is
+               not minified - so the page itself is asked: walk every
+               stylesheet for a flex-wrap / flex-flow rule whose selector
+               matches the strip (cross-origin sheets are listed as
+               unreadable) and report the computed value, the direct
+               children and the first tiles' tops. Run 115 named it:
+               base.css `.grid { flex-wrap: wrap }`, which the strip's own
+               rule now overrides. */
             const stripCss = await page.evaluate(() => {
               const strip = document.querySelector('.xg-sp .xg-sp__strip');
               if (!strip) return null;
