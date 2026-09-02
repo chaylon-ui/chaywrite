@@ -1,0 +1,76 @@
+name: binder-timing
+# Times every BinderPOS call the advanced-search widget makes, from a
+# GitHub runner, so "the page is slow" can be split into: script init chain
+# vs facet calls vs the product search itself. Log-only; never fails.
+on:
+  workflow_dispatch:
+    inputs:
+      store:
+        description: Shopify permanent domain
+        default: most-wanted-ca.myshopify.com
+jobs:
+  timing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Time BinderPOS endpoints (pokemon vs mtg)
+        env:
+          STORE: ${{ github.event.inputs.store || 'most-wanted-ca.myshopify.com' }}
+        run: |
+          set +e
+          # helper scripts, written dedented (the heredocs are indented to stay inside this block)
+          cat <<'PY' | sed 's/^          //' > /tmp/count.py
+          import json, sys
+          try:
+              d = json.load(open('/tmp/resp'))
+              if isinstance(d, list):
+                  print('items=' + str(len(d)))
+              elif isinstance(d, dict):
+                  ks = [k for k in ('count', 'total', 'totalCount', 'products', 'items', 'results', 'data') if k in d]
+                  print(' '.join(k + '=' + (str(len(d[k])) if isinstance(d[k], (list, dict)) else str(d[k])) for k in ks) or ('keys=' + ','.join(list(d.keys())[:6])))
+              else:
+                  print('type=' + type(d).__name__)
+          except Exception as e:
+              print('nonjson')
+          PY
+          cat <<'PY' | sed 's/^          //' > /tmp/body.py
+          import json, sys, os
+          game, instock, st, asc, off = sys.argv[1:6]
+          b = {"storeUrl": os.environ["STORE"], "game": game, "strict": None,
+               "sortTypes": ([{"type": st, "asc": asc == "1", "order": 1}] if st != "none" else []),
+               "variants": None, "title": "", "priceGreaterThan": 0, "priceLessThan": None,
+               "instockOnly": instock == "1", "limit": 18, "offset": int(off),
+               "setNames": [], "rarities": [], "types": []}
+          print(json.dumps(b))
+          PY
+          t() { # label url [method] [body]
+            local label="$1" url="$2" method="${3:-GET}" body="${4:-}" out
+            if [ "$method" = POST ]; then
+              out=$(curl -sS --max-time 60 -o /tmp/resp -w '%{http_code} %{time_total}s %{size_download}B' -H 'Content-Type: application/json' -H 'Accept: application/json' -X POST --data "$body" "$url")
+            else
+              out=$(curl -sS --max-time 60 -o /tmp/resp -w '%{http_code} %{time_total}s %{size_download}B' -H 'Accept: application/json' "$url")
+            fi
+            printf '%-44s %-28s %s\n' "$label" "$out" "$(python3 /tmp/count.py 2>/dev/null)"
+          }
+          echo "=== config calls (api.binderpos.com) ==="
+          t supportedGames "https://api.binderpos.com/external/shopify/supportedGames?storeUrl=$STORE"
+          t conditions     "https://api.binderpos.com/external/shopify/conditions?storeUrl=$STORE"
+          for game in pokemon mtg; do
+            echo "=== facet calls for $game (portal.binderpos.com/api/cards/$game/*) ==="
+            for f in sets colors monsterTypes rarities types; do
+              t "$game/$f" "https://portal.binderpos.com/api/cards/$game/$f"
+            done
+          done
+          API=https://portal.binderpos.com/external/shopify/products/forStore
+          echo "=== product search POST (the widget's forStore call), 3 runs each ==="
+          for spec in "pokemon 1 price 0 0" "pokemon 1 price 0 18" "pokemon 1 none 0 0" "pokemon 0 price 0 0" "mtg 1 price 0 0" "mtg 1 none 0 0"; do
+            set -- $spec
+            B=$(python3 /tmp/body.py "$1" "$2" "$3" "$4" "$5")
+            for i in 1 2 3; do
+              t "forStore $1 instock=$2 sort=$3 off=$5 #$i" "$API" POST "$B"
+            done
+          done
+          echo "=== what the browser downloads before any of the above can start ==="
+          t advancedSearch.js "https://exorgames.com/cdn/shop/t/64/assets/advancedSearch.js"
+          t select2.css "https://cdn.jsdelivr.net/npm/select2@4.1.0-beta.1/dist/css/select2.min.css"
+          t select2.js  "https://cdn.jsdelivr.net/npm/select2@4.1.0-beta.1/dist/js/select2.min.js"
+          exit 0
