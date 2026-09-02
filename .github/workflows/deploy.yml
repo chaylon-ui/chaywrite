@@ -141,6 +141,11 @@ jobs:
           curl -sS -D /tmp/rev-h --max-time 30 "https://exor-binder.nevski.workers.dev/reviews.json" | head -c 400 || true
           printf '\n'
           echo "reviews CORS header: $(grep -ci 'access-control-allow-origin' /tmp/rev-h || true)"
+          echo "=== /stores.json (Google Places opening hours per store; ok:false + empty until GOOGLE_PLACES_KEY is set) ==="
+          curl -sS -D /tmp/stores-h --max-time 30 "https://exor-binder.nevski.workers.dev/stores.json" | head -c 600 || true
+          printf '\n'
+          echo "stores CORS header: $(grep -ci 'access-control-allow-origin' /tmp/stores-h || true)"
+          echo "stores resolved (count + names + hours flag): $(curl -sS --max-time 30 'https://exor-binder.nevski.workers.dev/stores.json' | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("count"),[(s.get("name"),bool(s.get("hours"))) for s in d.get("stores",[])])' 2>/dev/null || echo parse-fail)"
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Mimikyu&type=Pokemon%20Single" | head -c 600 || true
           printf '\n'
           curl -sS -o /dev/null -w 'buyprice-reveal.js: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buyprice-reveal.js" || true

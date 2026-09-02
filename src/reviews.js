@@ -120,7 +120,7 @@ async function fetchPlace(id, key) {
    per province and merge, deduped by place id. GOOGLE_PLACE_IDS still
    overrides discovery outright when the owner wants specific stores. */
 const DISCOVER_QUERIES = ["Exor Games Prince Edward Island", "Exor Games Nova Scotia"];
-const MAX_PLACES = 6; // one per store; each costs one Place Details call per edge per 6h
+export const MAX_PLACES = 6; // one per store; each costs one Place Details call per edge per 6h
 
 async function discoverNew(key) {
   const ids = [];
@@ -164,7 +164,8 @@ async function discoverLegacy(key) {
   return ids.slice(0, MAX_PLACES);
 }
 
-async function discoverPlaceIds(key) {
+// Shared with /stores.json (stores.js): one discovery routine, one set of stores.
+export async function discoverPlaceIds(key) {
   const ids = await discoverNew(key).catch(() => []);
   return ids.length ? ids : discoverLegacy(key);
 }
@@ -181,12 +182,12 @@ async function discoverPlaceIds(key) {
    and only its length is reported (a Google key is 39 chars, so a short
    one means a truncated paste). Bypasses the edge cache entirely. */
 
-function scrubKey(obj, key) {
+export function scrubKey(obj, key) {
   const s = JSON.stringify(obj);
   return JSON.parse(key ? s.split(key).join("<redacted>") : s);
 }
 
-async function probe(label, run) {
+export async function probe(label, run) {
   try {
     const r = await run();
     let j = null;

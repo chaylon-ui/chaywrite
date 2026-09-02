@@ -1,6 +1,7 @@
 import { BinderRoom } from "./room.js";
 import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 import { serveReviews } from "./reviews.js";
+import { serveStores } from "./stores.js";
 
 export { BinderRoom };
 
@@ -190,6 +191,12 @@ export default {
     // (5-star only, text sentiment-screened) so the key stays private.
     if (url.pathname === "/reviews.json") {
       return serveReviews(request, env, ctx);
+    }
+
+    // Store-hours band: every Exor store's live opening hours from its
+    // Google Business Profile, proxied the same way so the key stays private.
+    if (url.pathname === "/stores.json") {
+      return serveStores(request, env, ctx);
     }
 
     // The card-page reveal script on exorgames.com reads this file with a
