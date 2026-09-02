@@ -24,9 +24,13 @@
      on a cold BinderPOS call for a known body); older/absent is fetched
      synchronously ("miss"), stored, returned.
    - A 60s caches.default layer in front absorbs bursts within a colo.
-   - The cron (wrangler.toml [triggers], every 5 min; scheduled() in
-     index.js) re-warms the page-default body for every supported game
-     plus page 2 for pokemon and mtg through the same fetch+store path.
+   - The pre-warm re-fetches the page-default body for every supported
+     game plus page 2 for pokemon and mtg every 5 min, through the same
+     upstream call, key and store. It runs from TWO clocks that share one
+     lock: the worker cron (wrangler.toml [triggers], scheduled() in
+     index.js) and the cache DO's own alarm (room.js) - the deploy logs of
+     2026-09-02 showed the registered cron never invoked the handler, and
+     a DO alarm is delivered by the runtime itself.
    - Any cache trouble falls through to a direct BinderPOS call: the cache
      must never be the reason a shopper gets nothing. Errors are never
      cached. */
@@ -50,7 +54,8 @@ const MAX_LIMIT = 50;
 const MAX_BODY = 16 * 1024;
 const MAX_GZ = 120 * 1024;        // DO storage values cap at 128 KiB
 const MAX_GAMES = 12;
-const WARM_LOCK_MS = 12 * 60e3;   // one cron run at a time, globally
+const WARM_LOCK_MS = 12 * 60e3;   // one warm run at a time, globally
+export const WARM_EVERY_MS = 5 * 60e3; // the DO alarm's cadence (mirrors the cron)
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -113,10 +118,11 @@ function validate(body) {
 
 /* ---- gzip helpers ----------------------------------------------------- */
 
-async function gzip(text) {
+export async function gzipText(text) {
   const s = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
   return new Response(s).arrayBuffer();
 }
+const gzip = gzipText;
 
 async function gunzip(buf) {
   const s = new Response(buf).body.pipeThrough(new DecompressionStream("gzip"));
@@ -177,29 +183,28 @@ function upstream(key, raw) {
   return p;
 }
 
-// Fetch BinderPOS and store the answer. -> { ok: true, text, upstream } or
-// { ok: false, upstream, error }. With `ctx` the store runs in waitUntil;
-// without it (cron, background refresh) it is awaited. Errors never store.
-// A failed store is best-effort for shoppers (they have their answer) but
-// an error for the cron, whose only job is the store.
-async function fetchAndStore(env, ctx, key, raw, warm) {
+// One BinderPOS round trip, checked: { ok: true, text, status } or
+// { ok: false, upstream, error }. Never throws.
+async function ask(key, raw) {
   let up;
   try { up = await upstream(key, raw); }
   catch (e) { return { ok: false, upstream: 0, error: /abort|timeout/i.test(msg(e)) ? "upstream timeout" : msg(e) }; }
   if (up.status < 200 || up.status >= 300) return { ok: false, upstream: up.status };
   try { JSON.parse(up.text); }
   catch { return { ok: false, upstream: up.status, error: "upstream body is not JSON" }; }
-  const put = doPut(env, key, up.text, warm);
-  if (ctx) {
-    ctx.waitUntil(put.catch((e) => console.log("binder-search: store failed: " + msg(e))));
-  } else {
-    try { await put; }
-    catch (e) {
-      console.log("binder-search: store failed: " + msg(e));
-      if (warm) return { ok: false, upstream: up.status, error: "store failed: " + msg(e) };
-    }
-  }
-  return { ok: true, text: up.text, upstream: up.status };
+  return { ok: true, text: up.text, status: up.status };
+}
+
+// Shopper path: fetch BinderPOS and store the answer best-effort (the
+// shopper has their answer either way). -> { ok: true, text, upstream } or
+// { ok: false, upstream, error }. With `ctx` the store runs in waitUntil;
+// without it (background refresh) it is awaited. Errors never store.
+async function fetchAndStore(env, ctx, key, raw) {
+  const a = await ask(key, raw);
+  if (!a.ok) return a;
+  const put = doPut(env, key, a.text, false).catch((e) => console.log("binder-search: store failed: " + msg(e)));
+  if (ctx) ctx.waitUntil(put); else await put;
+  return { ok: true, text: a.text, upstream: a.status };
 }
 
 /* ---- responses ----------------------------------------------------------- */
@@ -261,7 +266,7 @@ export async function serveBinderSearch(request, env, ctx) {
       return reply(rec.text, 200, tag, ageH);
     }
     if (rec.refresh) {
-      ctx.waitUntil(fetchAndStore(env, null, key, raw, false).then((r) => {
+      ctx.waitUntil(fetchAndStore(env, null, key, raw).then((r) => {
         if (!r.ok) console.log("binder-search: background refresh failed: " + JSON.stringify(r));
       }).catch((e) => console.log("binder-search: background refresh threw: " + msg(e))));
     }
@@ -270,7 +275,7 @@ export async function serveBinderSearch(request, env, ctx) {
 
   // 3) miss: BinderPOS synchronously (the store is best-effort; a broken
   //    cache still leaves the shopper with a direct answer)
-  const r = await fetchAndStore(env, ctx, key, raw, false);
+  const r = await fetchAndStore(env, ctx, key, raw);
   if (!r.ok) return upstreamErr(r);
   ctx.waitUntil(edgePut(cache, edgeKey, r.text, "miss"));
   return reply(r.text, 200, "miss");
@@ -308,52 +313,78 @@ export function gameIds(data) {
   return out;
 }
 
-async function warmOne(env, game, offset) {
+/* The warm loop reaches the cache through a small adapter so the SAME loop
+   runs from the worker cron (DO stubs, below) and from inside the cache
+   DO's alarm (direct storage; BinderRoom.cacheStore in room.js):
+     meta(key)            -> { age, warm } | null
+     put(key, text, warm) -> stores (throws on failure)
+     lock(ttlMs)          -> { ok, age }   unlock()   note(summaryObj)      */
+function stubStore(env) {
+  return {
+    meta: (key) => doGet(env, key, true),
+    put: (key, text, warm) => doPut(env, key, text, warm),
+    lock: async (ttl) => {
+      const r = await doCall(env, "/_cache/lock?ttl=" + ttl, { method: "POST" });
+      const j = await r.json().catch(() => ({}));
+      return { ok: r.status !== 409, age: j.age || 0 };
+    },
+    unlock: () => doCall(env, "/_cache/unlock", { method: "POST" }),
+    note: (obj) => doCall(env, "/_cache/note", { method: "POST", body: JSON.stringify(obj) }),
+  };
+}
+
+async function warmOne(store, game, offset) {
   const body = defaultBody(game, offset);
   const key = await keyOf(body);
   try {
-    const rec = await doGet(env, key, true);
-    if (rec && rec.state === "fresh" && rec.age < WARM_SKIP_MS) return { status: "skip", age: rec.age };
+    const m = await store.meta(key);
+    if (m && m.age < WARM_SKIP_MS) return { status: "skip", age: m.age };
   } catch (e) { console.log("binder-warm: cache probe failed: " + msg(e)); }
-  const r = await fetchAndStore(env, null, key, JSON.stringify(body), true);
-  return r.ok ? { status: "warm", upstream: r.upstream, bytes: r.text.length } : { status: "error", upstream: r.upstream, error: r.error };
+  const a = await ask(key, JSON.stringify(body));
+  if (!a.ok) return { status: "error", upstream: a.upstream, error: a.error };
+  try { await store.put(key, a.text, true); }
+  catch (e) { return { status: "error", upstream: a.status, error: "store failed: " + msg(e) }; }
+  return { status: "warm", upstream: a.status, bytes: a.text.length };
 }
 
-// Sequential on purpose: BinderPOS's cold queries run 25-60s and the cron
-// has wall-clock to spare; parallel calls would only pile onto their box.
+// Worker cron entry point (scheduled() in index.js).
+export const warmBinderSearch = (env) => warmWithStore(stubStore(env), "cron");
+
+// Sequential on purpose: BinderPOS's cold queries run 25-60s and the clock
+// has wall-time to spare; parallel calls would only pile onto their box.
 // One run at a time, globally: a slow BinderPOS can push a run past the
-// next 5-min slot, and overlapping runs would double the load. The run's
-// summary is kept in the DO for GET /binder/search/status.
-export async function warmBinderSearch(env) {
+// next 5-min slot, and overlapping runs (or the cron and the alarm
+// together) would double the load. The run's summary is kept in the DO
+// for GET /binder/search/status.
+export async function warmWithStore(store, via) {
   const t0 = Date.now();
   try {
-    const l = await doCall(env, "/_cache/lock?ttl=" + WARM_LOCK_MS, { method: "POST" });
-    if (l.status === 409) {
-      const j = await l.json().catch(() => ({}));
-      console.log("binder-warm: previous run still going (" + Math.round((j.age || 0) / 1000) + "s), skipping this slot");
-      return { skipped: true, lockAge: j.age || 0 };
+    const l = await store.lock(WARM_LOCK_MS);
+    if (!l.ok) {
+      console.log("binder-warm(" + via + "): previous run still going (" + Math.round((l.age || 0) / 1000) + "s), skipping this slot");
+      return { skipped: true, lockAge: l.age || 0 };
     }
-  } catch (e) { console.log("binder-warm: lock failed, running anyway: " + msg(e)); }
-  const summary = { at: t0, games: [], jobs: [], total: 0, ms: 0 };
+  } catch (e) { console.log("binder-warm(" + via + "): lock failed, running anyway: " + msg(e)); }
+  const summary = { via, at: t0, games: [], jobs: [], total: 0, ms: 0 };
   // Written after every body, not just at the end: an invocation the
   // platform cuts short (CPU or wall-clock limit) still leaves its trace.
-  const note = () => doCall(env, "/_cache/note", { method: "POST", body: JSON.stringify({ ...summary, ms: Date.now() - t0 }) })
+  const note = () => Promise.resolve().then(() => store.note({ ...summary, ms: Date.now() - t0 }))
     .catch((e) => console.log("binder-warm: note failed: " + msg(e)));
   try {
-    await warmAll(env, summary, note);
+    await warmAll(store, summary, note);
   } catch (e) {
     summary.error = msg(e);
-    console.log("binder-warm: run failed: " + summary.error);
+    console.log("binder-warm(" + via + "): run failed: " + summary.error);
   } finally {
     summary.done = Date.now();
     summary.ms = summary.done - t0;
     await note();
-    try { await doCall(env, "/_cache/unlock", { method: "POST" }); } catch {}
+    try { await store.unlock(); } catch {}
   }
   return summary;
 }
 
-async function warmAll(env, summary, note) {
+async function warmAll(store, summary, note) {
   const t0 = summary.at;
   let games = [];
   try {
@@ -379,12 +410,12 @@ async function warmAll(env, summary, note) {
   for (const j of jobs) {
     const t = Date.now();
     let res;
-    try { res = await warmOne(env, j.game, j.offset); } catch (e) { res = { status: "error", error: msg(e) }; }
+    try { res = await warmOne(store, j.game, j.offset); } catch (e) { res = { status: "error", error: msg(e) }; }
     res.ms = Date.now() - t;
     out.push({ ...j, ...res });
     summary.jobs = out;
     await note();
-    console.log("binder-warm: " + j.game + " offset=" + j.offset + " -> " + res.status
+    console.log("binder-warm(" + summary.via + "): " + j.game + " offset=" + j.offset + " -> " + res.status
       + (res.upstream ? " upstream=" + res.upstream : "") + (res.error ? " " + res.error : "")
       + (res.bytes ? " " + res.bytes + "B" : "") + " " + res.ms + "ms");
   }
@@ -415,6 +446,7 @@ export async function serveBinderSearchStatus(env) {
     now,
     cron: last ? { ...last, agoS: Math.round((now - (last.done || last.at)) / 1000) } : null,
     running: st.lockAge != null ? { forS: Math.round(st.lockAge / 1000) } : null,
+    alarmInS: st.alarmIn != null ? Math.round(st.alarmIn / 1000) : null,
     entries,
     freshS: FRESH_MS / 1000,
     staleS: STALE_MS / 1000,

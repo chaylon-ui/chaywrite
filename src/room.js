@@ -1,4 +1,5 @@
 import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TAB_ICON, BOARD_TAB_ICON, WH_TAB_ICON } from "./config.js";
+import { CACHE_DO, WARM_EVERY_MS, gzipText, warmWithStore } from "./binder-search.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -31,6 +32,11 @@ export class BinderRoom {
     this.gseeded = false;
     this.isDefault = false;
     try { this.isDefault = !!env.ROOM?.idFromName("default")?.equals?.(state.id); } catch {}
+    // The /binder/search cache lives in the DO named CACHE_DO (same class,
+    // never a screen): only that instance answers /_cache/* and runs the
+    // pre-warm alarm below.
+    this.isCacheDo = false;
+    try { this.isCacheDo = !!env.ROOM?.idFromName(CACHE_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -461,6 +467,7 @@ export class BinderRoom {
   // last run's summary (POST /_cache/note, GET /_cache/status) and per-key
   // metadata (/_cache/status?ks=a,b) for the public status page.
   async cacheOp(request, url) {
+    await this.armWarmAlarm();
     const now = Date.now();
     const num = (name, dflt) => { const v = parseInt(url.searchParams.get(name), 10); return v > 0 ? v : dflt; };
     const KEY_RE = /^[a-f0-9]{16,64}$/;
@@ -487,17 +494,7 @@ export class BinderRoom {
     if (url.pathname === "/_cache/put" && request.method === "POST") {
       const gz = await request.arrayBuffer();
       if (!gz.byteLength || gz.byteLength > 126 * 1024) return Response.json({ error: "bad size" }, { status: 413 });
-      const w = url.searchParams.get("w") === "1" ? 1 : 0;
-      await this.state.storage.put({ ["bsc:" + k]: { ts: now, w, gz }, ["bsct:" + k]: now });
-      if (now - (this.bscSweepAt || 0) > 36e5) {
-        this.bscSweepAt = now;
-        try {
-          const idx = await this.state.storage.list({ prefix: "bsct:", limit: 1000 });
-          const dead = [];
-          for (const [ik, ts] of idx) if (now - (ts || 0) > 18e5) dead.push(ik, "bsc:" + ik.slice(5));
-          for (let i = 0; i < dead.length; i += 128) await this.state.storage.delete(dead.slice(i, i + 128));
-        } catch (e) { console.log("cache sweep failed: " + ((e && e.message) || e)); }
-      }
+      await this.cachePut(k, gz, url.searchParams.get("w") === "1");
       return Response.json({ ok: true });
     }
     if (url.pathname === "/_cache/lock" && request.method === "POST") {
@@ -526,9 +523,73 @@ export class BinderRoom {
         const rec = await this.state.storage.get("bsc:" + kk);
         entries[kk] = rec && rec.gz ? { age: Math.max(0, now - (rec.ts || 0)), warm: !!rec.w, bytes: rec.gz.byteLength } : null;
       }
-      return Response.json({ last, lockAge: lock ? now - lock : null, entries }, { headers: { "cache-control": "no-store" } });
+      let alarmIn = null;
+      try { const a = await this.state.storage.getAlarm(); alarmIn = a ? a - now : null; } catch {}
+      return Response.json({ last, lockAge: lock ? now - lock : null, alarmIn, entries }, { headers: { "cache-control": "no-store" } });
     }
     return new Response(null, { status: 404 });
+  }
+
+  // Store one gz'd answer (+ its index row); sweep dead rows hourly.
+  async cachePut(k, gz, warm) {
+    const now = Date.now();
+    await this.state.storage.put({ ["bsc:" + k]: { ts: now, w: warm ? 1 : 0, gz }, ["bsct:" + k]: now });
+    if (now - (this.bscSweepAt || 0) > 36e5) {
+      this.bscSweepAt = now;
+      try {
+        const idx = await this.state.storage.list({ prefix: "bsct:", limit: 1000 });
+        const dead = [];
+        for (const [ik, ts] of idx) if (now - (ts || 0) > 18e5) dead.push(ik, "bsc:" + ik.slice(5));
+        for (let i = 0; i < dead.length; i += 128) await this.state.storage.delete(dead.slice(i, i + 128));
+      } catch (e) { console.log("cache sweep failed: " + ((e && e.message) || e)); }
+    }
+  }
+
+  // The warm loop's store adapter over this DO's own storage (same keys
+  // the /_cache/* paths use, so the cron and the alarm see one state).
+  cacheStore() {
+    const st = this.state.storage;
+    return {
+      meta: async (key) => {
+        const rec = await st.get("bsc:" + key);
+        if (!rec || !rec.gz) return null;
+        return { age: Math.max(0, Date.now() - (rec.ts || 0)), warm: !!rec.w };
+      },
+      put: async (key, text, warm) => {
+        const gz = await gzipText(text);
+        if (gz.byteLength > 126 * 1024) throw new Error("gz too large: " + gz.byteLength);
+        await this.cachePut(key, gz, warm);
+      },
+      lock: async (ttl) => {
+        const cur = await st.get("bsw:lock");
+        if (cur && Date.now() - cur < ttl) return { ok: false, age: Date.now() - cur };
+        await st.put("bsw:lock", Date.now());
+        return { ok: true, age: 0 };
+      },
+      unlock: () => st.delete("bsw:lock"),
+      note: (obj) => st.put("bsw:last", JSON.stringify(obj).slice(0, 16384)),
+    };
+  }
+
+  // Pre-warm clock #2: a Durable Object alarm every WARM_EVERY_MS, armed by
+  // the first /_cache/* request after a deploy and re-armed at the start of
+  // every run (so a run that dies never stops the clock). Delivered by the
+  // runtime itself - the worker cron registered by wrangler on 2026-09-02
+  // was never seen to invoke scheduled(). Only the cache DO ever sets an
+  // alarm, so alarm() is a no-op for every screen's room.
+  async armWarmAlarm() {
+    if (!this.isCacheDo || this.warmAlarmArmed) return;
+    this.warmAlarmArmed = true;
+    try {
+      if ((await this.state.storage.getAlarm()) == null) await this.state.storage.setAlarm(Date.now() + 30e3);
+    } catch (e) { console.log("binder-warm(alarm): arm failed: " + ((e && e.message) || e)); }
+  }
+
+  async alarm() {
+    if (!this.isCacheDo) return;
+    try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
+    try { await warmWithStore(this.cacheStore(), "alarm"); }
+    catch (e) { console.log("binder-warm(alarm): " + ((e && e.message) || e)); }
   }
 
   async fetch(request) {

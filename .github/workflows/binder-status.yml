@@ -1,0 +1,24 @@
+name: binder-status
+# Log-only, on demand: prints /binder/search/status (last pre-warm run per
+# game, landing-entry ages, next alarm) and times the Pokemon landing POST
+# twice, so the pre-warm can be checked from a runner without wrangler
+# tail. Never fails.
+on:
+  workflow_dispatch:
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe /binder/search
+        run: |
+          set +e
+          W=https://exor-binder.nevski.workers.dev
+          B='{"storeUrl":"most-wanted-ca.myshopify.com","game":"pokemon","strict":null,"sortTypes":[{"type":"price","asc":false,"order":1}],"variants":null,"title":"","priceGreaterThan":0,"priceLessThan":null,"instockOnly":true,"limit":18,"offset":0,"setNames":[],"rarities":[],"types":[]}'
+          echo "=== /binder/search/status ==="
+          curl -sS --max-time 20 "$W/binder/search/status" | python3 -m json.tool || true
+          echo "=== POST /binder/search pokemon landing body, twice ==="
+          for i in 1 2; do
+            curl -sS --max-time 70 -D /tmp/bs-h -o /tmp/bs-b -w "binder/search #$i: HTTP %{http_code} time_total %{time_total}s size %{size_download}B\n" -H 'Content-Type: application/json' -H 'Accept: application/json' -X POST --data "$B" "$W/binder/search" || true
+            echo "  x-xg-cache: $(grep -i '^x-xg-cache' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | x-xg-age: $(grep -i '^x-xg-age' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | count: $(python3 -c 'import json;d=json.load(open("/tmp/bs-b"));print(d.get("count"), "products", len(d.get("products") or []))' 2>/dev/null || echo parse-fail)"
+          done
+          exit 0
