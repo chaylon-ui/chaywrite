@@ -193,10 +193,13 @@ jobs:
           echo "=== POST /binder/search pokemon default body, twice (expect miss or warm, then hit) ==="
           for i in 1 2; do
             curl -sS --max-time 70 -D /tmp/bs-h -o /tmp/bs-b -w "binder/search #$i: HTTP %{http_code} time_total %{time_total}s size %{size_download}B\n" -H 'Content-Type: application/json' -H 'Accept: application/json' -X POST --data "$B" "$W/binder/search" || true
-            echo "  x-xg-cache: $(grep -i '^x-xg-cache' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | content-type: $(grep -i '^content-type' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | cors: $(grep -ci '^access-control-allow-origin' /tmp/bs-h || true) | count: $(python3 -c 'import json;d=json.load(open("/tmp/bs-b"));print(d.get("count"), "products", len(d.get("products") or []))' 2>/dev/null || echo parse-fail)"
+            echo "  x-xg-cache: $(grep -i '^x-xg-cache' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | x-xg-age: $(grep -i '^x-xg-age' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | content-type: $(grep -i '^content-type' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | cors: $(grep -ci '^access-control-allow-origin' /tmp/bs-h || true) | count: $(python3 -c 'import json;d=json.load(open("/tmp/bs-b"));print(d.get("count"), "products", len(d.get("products") or []))' 2>/dev/null || echo parse-fail)"
           done
           echo "=== GET /binder/search (expect 405), OPTIONS preflight (expect 204 + CORS), wrong storeUrl (expect 400) ==="
           curl -sS -o /dev/null -w 'GET /binder/search: HTTP %{http_code}\n' --max-time 20 "$W/binder/search" || true
           curl -sS -o /dev/null -D /tmp/bs-o -w 'OPTIONS /binder/search: HTTP %{http_code}\n' --max-time 20 -X OPTIONS -H 'Origin: https://exorgames.com' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type' "$W/binder/search" || true
           grep -i '^access-control' /tmp/bs-o | tr -d '\r' | sed 's/^/  /' || true
           curl -sS -w '\nwrong storeUrl: HTTP %{http_code}\n' --max-time 20 -H 'Content-Type: application/json' -X POST --data '{"storeUrl":"other.myshopify.com","game":"pokemon","limit":18}' "$W/binder/search" || true
+          echo "=== /binder/search/status (last cron run per game + landing-entry ages; cron:null means the 5-min pre-warm has never completed) ==="
+          curl -sS --max-time 20 "$W/binder/search/status" | head -c 2500 || true
+          printf '\n'

@@ -2,7 +2,7 @@ import { BinderRoom } from "./room.js";
 import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 import { serveReviews } from "./reviews.js";
 import { serveStores } from "./stores.js";
-import { serveBinderSearch, warmBinderSearch, CACHE_DO } from "./binder-search.js";
+import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 
 export { BinderRoom };
 
@@ -49,6 +49,9 @@ export default {
     // storefront. Same body in, same JSON out, plus x-xg-cache.
     if (url.pathname === "/binder/search") {
       return serveBinderSearch(request, env, ctx);
+    }
+    if (url.pathname === "/binder/search/status") {
+      return serveBinderSearchStatus(env);
     }
 
     // The default room's DO doubles as the screen registry: remember every

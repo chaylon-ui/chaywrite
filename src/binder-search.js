@@ -50,6 +50,7 @@ const MAX_LIMIT = 50;
 const MAX_BODY = 16 * 1024;
 const MAX_GZ = 120 * 1024;        // DO storage values cap at 128 KiB
 const MAX_GAMES = 12;
+const WARM_LOCK_MS = 12 * 60e3;   // one cron run at a time, globally
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -125,6 +126,7 @@ async function gunzip(buf) {
 /* ---- the global store (BinderRoom DO, /_cache/* paths in room.js) ------ */
 
 const cacheStub = (env) => env.ROOM.get(env.ROOM.idFromName(CACHE_DO));
+const doCall = (env, path, init) => cacheStub(env).fetch(new Request(DO_ORIGIN + path, init));
 
 // null when absent or past STALE_MS; else { text?, age, state, warm, refresh }.
 // `refresh` is true when the DO granted THIS caller the background-refresh
@@ -309,8 +311,34 @@ async function warmOne(env, game, offset) {
 
 // Sequential on purpose: BinderPOS's cold queries run 25-60s and the cron
 // has wall-clock to spare; parallel calls would only pile onto their box.
+// One run at a time, globally: a slow BinderPOS can push a run past the
+// next 5-min slot, and overlapping runs would double the load. The run's
+// summary is kept in the DO for GET /binder/search/status.
 export async function warmBinderSearch(env) {
   const t0 = Date.now();
+  try {
+    const l = await doCall(env, "/_cache/lock?ttl=" + WARM_LOCK_MS, { method: "POST" });
+    if (l.status === 409) {
+      const j = await l.json().catch(() => ({}));
+      console.log("binder-warm: previous run still going (" + Math.round((j.age || 0) / 1000) + "s), skipping this slot");
+      return { skipped: true, lockAge: j.age || 0 };
+    }
+  } catch (e) { console.log("binder-warm: lock failed, running anyway: " + msg(e)); }
+  const summary = { at: t0, games: [], jobs: [], ms: 0 };
+  try {
+    await warmAll(env, summary);
+  } finally {
+    summary.done = Date.now();
+    summary.ms = summary.done - t0;
+    try { await doCall(env, "/_cache/note", { method: "POST", body: JSON.stringify(summary) }); }
+    catch (e) { console.log("binder-warm: note failed: " + msg(e)); }
+    try { await doCall(env, "/_cache/unlock", { method: "POST" }); } catch {}
+  }
+  return summary;
+}
+
+async function warmAll(env, summary) {
+  const t0 = summary.at;
   let games = [];
   try {
     const r = await fetch(GAMES_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(GAMES_TIMEOUT_MS) });
@@ -340,5 +368,36 @@ export async function warmBinderSearch(env) {
       + (res.bytes ? " " + res.bytes + "B" : "") + " " + res.ms + "ms");
   }
   console.log("binder-warm: " + jobs.length + " bodies in " + (Date.now() - t0) + "ms");
+  summary.games = games;
+  summary.jobs = out;
   return out;
+}
+
+/* ---- GET /binder/search/status ------------------------------------------- */
+
+// Read-only, public: the last cron run (per-game status + ms) and the age of
+// the four landing entries, so a deploy smoke or a browser can tell whether
+// the pre-warm is doing its job without wrangler tail. No secrets, no bodies.
+export async function serveBinderSearchStatus(env) {
+  const want = [["pokemon", 0], ["mtg", 0], ["pokemon", PAGE], ["mtg", PAGE]];
+  const keys = await Promise.all(want.map(([g, o]) => keyOf(defaultBody(g, o))));
+  let st;
+  try { st = await (await doCall(env, "/_cache/status?ks=" + keys.join(","))).json(); }
+  catch (e) { return jsonErr(503, { ok: false, error: "cache unavailable: " + msg(e) }); }
+  const now = Date.now();
+  const entries = {};
+  want.forEach(([g, o], i) => {
+    const e = st.entries && st.entries[keys[i]];
+    entries[g + "/" + o] = e ? { ageS: Math.round(e.age / 1000), warm: e.warm, bytes: e.bytes, state: e.age < FRESH_MS ? "fresh" : e.age < STALE_MS ? "stale" : "expired" } : null;
+  });
+  const last = st.last && typeof st.last === "object" ? st.last : null;
+  return reply(JSON.stringify({
+    ok: true,
+    now,
+    cron: last ? { ...last, agoS: Math.round((now - (last.done || last.at)) / 1000) } : null,
+    running: st.lockAge != null ? { forS: Math.round(st.lockAge / 1000) } : null,
+    entries,
+    freshS: FRESH_MS / 1000,
+    staleS: STALE_MS / 1000,
+  }), 200, "");
 }

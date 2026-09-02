@@ -456,12 +456,18 @@ export class BinderRoom {
   //        this caller won the background-refresh lock for `lock` ms.
   //   POST /_cache/put?k=&w=   body = gz bytes
   // A tiny "bsct:<k>" -> ts index lets the hourly sweep drop dead entries
-  // without loading every body.
+  // without loading every body. Cron bookkeeping lives here too: a run
+  // lock (POST /_cache/lock?ttl= -> 409 while held, /_cache/unlock), the
+  // last run's summary (POST /_cache/note, GET /_cache/status) and per-key
+  // metadata (/_cache/status?ks=a,b) for the public status page.
   async cacheOp(request, url) {
-    const k = String(url.searchParams.get("k") || "");
-    if (!/^[a-f0-9]{16,64}$/.test(k)) return Response.json({ error: "bad key" }, { status: 400 });
-    const num = (name, dflt) => { const v = parseInt(url.searchParams.get(name), 10); return v > 0 ? v : dflt; };
     const now = Date.now();
+    const num = (name, dflt) => { const v = parseInt(url.searchParams.get(name), 10); return v > 0 ? v : dflt; };
+    const KEY_RE = /^[a-f0-9]{16,64}$/;
+    const k = String(url.searchParams.get("k") || "");
+    if ((url.pathname === "/_cache/get" || url.pathname === "/_cache/put") && !KEY_RE.test(k)) {
+      return Response.json({ error: "bad key" }, { status: 400 });
+    }
     if (url.pathname === "/_cache/get") {
       const rec = await this.state.storage.get("bsc:" + k);
       if (!rec || !rec.gz) return new Response(null, { status: 404 });
@@ -493,6 +499,34 @@ export class BinderRoom {
         } catch (e) { console.log("cache sweep failed: " + ((e && e.message) || e)); }
       }
       return Response.json({ ok: true });
+    }
+    if (url.pathname === "/_cache/lock" && request.method === "POST") {
+      const ttl = num("ttl", 72e4);
+      const cur = await this.state.storage.get("bsw:lock");
+      if (cur && now - cur < ttl) return Response.json({ ok: false, age: now - cur }, { status: 409 });
+      await this.state.storage.put("bsw:lock", now);
+      return Response.json({ ok: true });
+    }
+    if (url.pathname === "/_cache/unlock" && request.method === "POST") {
+      await this.state.storage.delete("bsw:lock");
+      return Response.json({ ok: true });
+    }
+    if (url.pathname === "/_cache/note" && request.method === "POST") {
+      await this.state.storage.put("bsw:last", (await request.text()).slice(0, 16384));
+      return Response.json({ ok: true });
+    }
+    if (url.pathname === "/_cache/status") {
+      const lastTxt = await this.state.storage.get("bsw:last");
+      const lock = await this.state.storage.get("bsw:lock");
+      let last = null;
+      try { last = lastTxt ? JSON.parse(lastTxt) : null; } catch {}
+      const entries = {};
+      const ks = String(url.searchParams.get("ks") || "").split(",").filter((x) => KEY_RE.test(x)).slice(0, 20);
+      for (const kk of ks) {
+        const rec = await this.state.storage.get("bsc:" + kk);
+        entries[kk] = rec && rec.gz ? { age: Math.max(0, now - (rec.ts || 0)), warm: !!rec.w, bytes: rec.gz.byteLength } : null;
+      }
+      return Response.json({ last, lockAge: lock ? now - lock : null, entries }, { headers: { "cache-control": "no-store" } });
     }
     return new Response(null, { status: 404 });
   }
