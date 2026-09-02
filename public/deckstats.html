@@ -53,6 +53,18 @@
   .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-right: 6px; vertical-align: 1px; }
   .live-dot.on { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
   .chip { display: inline-block; background: rgba(255,255,255,.07); border-radius: 6px; padding: 0 6px; margin: 1px 2px 1px 0; font-size: 12px; }
+  /* Sales table, cards column. Every card used to render as an inline chip
+     inside a cell that a phone squeezes to ~200px, so each chip fell onto
+     its own line and a 50-card order became a 50-line row (owner
+     screenshot). Now: the cell keeps a real minimum width, the chips flow
+     as a wrapping row, and orders with more than three cards fold behind a
+     one-line summary that opens on tap. */
+  td.cards { min-width: 250px; max-width: 460px; }
+  td.deck { min-width: 150px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; }
+  .chips .chip { margin: 0; max-width: 100%; line-height: 1.35; padding: 1px 6px; }
+  details.cards summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 440px; font-size: 12.5px; }
+  details.cards[open] summary { margin-bottom: 5px; }
   .muted { color: var(--dim); }
   details summary { cursor: pointer; color: var(--dim); }
   @media (max-width: 560px) { .tile .v { font-size: 22px; } }
@@ -440,11 +452,17 @@
     } else {
       h += '<div class="scroll"><table><tr><th>Order</th><th>When</th><th>Status</th><th class="num">Total</th><th>Deck</th><th>Cards</th></tr>';
       orders.list.forEach(function (o) {
+        var items = o.items || [];
+        var chips = '<div class="chips">' + items.map(function (it) { return '<span class="chip">' + it.q + 'x ' + esc(it.t) + '</span>'; }).join('') + '</div>';
+        // Three or fewer cards fit on a line; anything bigger folds behind a
+        // count plus the first two names, so a 50-card deck is one row tall
+        // until someone opens it.
+        var cards = items.length <= 3 ? chips :
+          '<details class="cards"><summary>' + items.length + ' cards \u00b7 ' +
+          esc(items.slice(0, 2).map(function (it) { return it.q + 'x ' + it.t; }).join(', ')) + '\u2026</summary>' + chips + '</details>';
         h += '<tr><td class="nw">' + esc(o.name) + '</td><td class="nw">' + esc(tstr(Date.parse(o.at))) + '</td>' +
           '<td class="nw">' + esc(o.status || '') + '</td><td class="num">' + money(o.cents) + '</td>' +
-          '<td>' + esc(o.tag || '') + '</td><td>' +
-          (o.items || []).map(function (it) { return '<span class="chip">' + it.q + 'x ' + esc(it.t) + '</span>'; }).join('') +
-          '</td></tr>';
+          '<td class="deck">' + esc(o.tag || '') + '</td><td class="cards">' + cards + '</td></tr>';
       });
       h += '</table></div>';
     }
