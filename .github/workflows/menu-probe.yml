@@ -1,0 +1,87 @@
+name: menu-probe
+on:
+  workflow_dispatch: {}
+
+# Log-only: opens the qikify "Locations & FAQ" mega panel on the preview
+# theme in dark mode and prints the panel's markup and computed colours,
+# so the dark-mode override can target the element that actually paints
+# the white background. The app's DOM is only visible from a browser.
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22
+
+      - name: Open the Locations & FAQ panel in dark mode and dump it
+        run: |
+          cat > probe.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = '157462692013';
+          const H = 'https://exorgames.com';
+          const u = (p) => H + p + (p.includes('?') ? '&' : '?') + 'preview_theme_id=' + T;
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1440, height: 950 });
+            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
+            let ok = false;
+            for (let i = 0; i < 4 && !ok; i++) {
+              try { await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 }); } catch (e) { console.log('NAV-ERR', String(e).slice(0, 140)); }
+              ok = await page.evaluate(() => !!document.querySelector('#header .site-header'));
+              if (!ok) { console.log('NAV-RETRY', await page.evaluate(() => document.title)); await sleep(4000); }
+            }
+            if (!ok) { console.log('GAVE-UP'); await browser.close(); return; }
+
+            const sheets = await page.evaluate(() => [...document.styleSheets].map(s => s.href || '(inline)').filter(h => /qikify|tmenu|menu/i.test(h)));
+            console.log('SHEETS', JSON.stringify(sheets));
+            const roots = await page.$$('.tmenu_item--root');
+            const labels = await page.evaluate(() => [...document.querySelectorAll('.tmenu_item--root')].map(e => (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)));
+            console.log('ROOTS', JSON.stringify(labels));
+            const idx = labels.findIndex(t => /location/i.test(t));
+            if (idx < 0) { console.log('NO-LOCATIONS-ROOT'); await browser.close(); return; }
+
+            const dump = async (label) => {
+              try { await roots[idx].hover(); } catch (e) { console.log('HOVER-ERR', String(e).slice(0, 120)); }
+              await sleep(1000);
+              const out = await page.evaluate((n) => {
+                const root = document.querySelectorAll('.tmenu_item--root')[n];
+                const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+                const cn = (el) => el.tagName + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 4).join('.') : '');
+                const light = (c) => { const m = (c || '').match(/[\d.]+/g); return !!m && m.length >= 3 && (+m[0] + +m[1] + +m[2]) > 600 && (m.length < 4 || +m[3] > 0.05); };
+                const rows = [];
+                const all = [...root.querySelectorAll('*')].filter(vis);
+                for (const el of all.slice(0, 400)) {
+                  const cs = getComputedStyle(el);
+                  const r = el.getBoundingClientRect();
+                  const rec = { el: cn(el).slice(0, 80), bg: cs.backgroundColor, ink: cs.color, pos: cs.position, box: [Math.round(r.width), Math.round(r.height)] };
+                  const st = el.getAttribute('style'); if (st) rec.style = st.slice(0, 160);
+                  if (light(cs.backgroundColor) || r.width * r.height > 40000 || /^(A|H[1-6]|P|UL|LI)$/.test(el.tagName) && rows.length < 220) rows.push(rec);
+                  if (rows.length >= 220) break;
+                }
+                const panel = [...root.querySelectorAll('[class*="tmenu_submenu"]')].filter(vis).sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return rb.width * rb.height - ra.width * ra.height; })[0];
+                let html = '';
+                if (panel) {
+                  html = panel.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/<iframe[\s\S]*?<\/iframe>/g, '<iframe/>').replace(/\s+/g, ' ');
+                }
+                const chain = []; for (let a = panel ? panel.parentElement : null; a && chain.length < 6; a = a.parentElement) chain.push(cn(a));
+                return { html: html.slice(0, 7000), htmlLen: html.length, chain: chain.join(' < '), rows };
+              }, idx);
+              console.log(label + '-PANEL-CHAIN', out.chain);
+              console.log(label + '-PANEL-HTML(' + out.htmlLen + ')', out.html);
+              for (const r of out.rows) console.log(label + '-ROW', JSON.stringify(r));
+            };
+
+            await dump('LIGHT');
+            await page.mouse.move(5, 500); await sleep(600);
+            await page.evaluate(() => document.querySelector('#header .header-user-selection .xg-theme-toggle').click());
+            await sleep(800);
+            console.log('THEME-ATTR', await page.evaluate(() => document.documentElement.getAttribute('data-xg-theme')));
+            await dump('DARK');
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node probe.js
