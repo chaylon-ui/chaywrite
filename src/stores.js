@@ -28,8 +28,9 @@ const STORES_TTL_S = 21600; // 6h per edge; hours change rarely, holiday edits s
 
 /* Fixed edge-cache key (a caller cannot bust it with a query string), so a
    payload-shape change stays invisible for up to STORES_TTL_S unless this
-   is bumped. BUMP IT whenever the contract above changes. */
-const STORES_CACHE_V = "1";
+   is bumped. BUMP IT whenever the contract above changes.
+   v2: per-city discovery (deploy 197 cached a two-store answer). */
+const STORES_CACHE_V = "2";
 
 const GHEADERS = { accept: "application/json", "user-agent": "ExorStores/1.0 (+workers.dev)" };
 

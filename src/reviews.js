@@ -20,8 +20,9 @@ const REVIEWS_TTL_S = 21600; // 6h per edge; Google reviews move slowly
    cannot bust it with a query string - so a logic change stays invisible
    for up to REVIEWS_TTL_S unless this is bumped. BUMP IT whenever the set
    of places, the filter, or the payload shape changes.
-   v2: six stores across both provinces (was three, PEI-only). */
-const REVIEWS_CACHE_V = "2";
+   v2: six stores across both provinces (was three, PEI-only).
+   v3: per-city discovery (the province queries surfaced two of six). */
+const REVIEWS_CACHE_V = "3";
 
 // Words/phrases that mark a review as not-showcase material even at five
 // stars. Deliberately trigger-happy: a false positive only hides one quote,
@@ -114,12 +115,22 @@ async function fetchPlace(id, key) {
   return p || fetchPlaceLegacy(id, key);
 }
 
-/* Six stores across TWO provinces. One PEI-worded query returns the PEI
-   stores and misses Nova Scotia entirely - four of the six - so the band
-   was quoting a fraction of the chain off a fraction of its reviews. Ask
-   per province and merge, deduped by place id. GOOGLE_PLACE_IDS still
-   overrides discovery outright when the owner wants specific stores. */
-const DISCOVER_QUERIES = ["Exor Games Prince Edward Island", "Exor Games Nova Scotia"];
+/* Six stores across TWO provinces, every one listed on Google as plainly
+   "Exor Games". A province-worded Text Search ranks only its strongest
+   listing or two: "Exor Games Nova Scotia" returned Charlottetown and
+   Truro, and Bridgewater, Dartmouth and New Glasgow never surfaced
+   (deploy 197), so the band was quoting a fraction of the chain off a
+   fraction of its reviews. Ask per city and merge, deduped by place id -
+   six cheap searches per edge per 6h. GOOGLE_PLACE_IDS still overrides
+   discovery outright when the owner wants specific stores. */
+const DISCOVER_QUERIES = [
+  "Exor Games Charlottetown PE",
+  "Exor Games Summerside PE",
+  "Exor Games Bridgewater NS",
+  "Exor Games Dartmouth NS",
+  "Exor Games New Glasgow NS",
+  "Exor Games Truro NS",
+];
 export const MAX_PLACES = 6; // one per store; each costs one Place Details call per edge per 6h
 
 async function discoverNew(key) {
