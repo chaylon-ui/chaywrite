@@ -522,10 +522,22 @@ const jsonErr = (status, obj) => reply(JSON.stringify(obj), status);
 
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,120}$/;
 
-// ?handle= support: the store's public /products/<handle>.js (no token, one
-// small fetch) gives the numeric id; the storefront domain is not used
-// because Cloudflare challenges exorgames.com/products/*.
+const HANDLE_GQL = `query($q:String!){products(first:1,query:$q){nodes{id handle}}}`;
+
+// ?handle= support. With the Admin token: one cheap products query
+// (handle:<handle>), which never redirects and is never challenged. Without
+// it: the store's public /products/<handle>.js - which follows a redirect to
+// the storefront domain and, in the live smokes of 2026-09-02, answered the
+// worker only intermittently (Cloudflare challenges exorgames.com/products/*).
 async function resolveHandle(env, handle) {
+  if (env && env.SHOPIFY_ADMIN_TOKEN) {
+    try {
+      const { data } = await adminGql({ env, fetch: (u, i) => fetch(u, i) }, HANDLE_GQL, { q: "handle:" + handle });
+      const n = data && data.products && Array.isArray(data.products.nodes) ? data.products.nodes[0] : null;
+      if (n && String(n.handle || "").toLowerCase() === handle) return String(n.id || "").replace(/\D/g, "");
+      return "";
+    } catch (e) { console.log("price-history: admin handle lookup failed: " + msg(e)); }
+  }
   const shop = (env && env.SHOPIFY_SHOP) || DEFAULT_SHOP;
   const r = await fetch("https://" + shop + "/products/" + handle + ".js", {
     headers: { accept: "application/json", "user-agent": "ExorPriceHistory/1.0 (+workers.dev)" },
