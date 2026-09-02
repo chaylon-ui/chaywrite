@@ -340,11 +340,20 @@ async function warmOne(store, game, offset) {
     const m = await store.meta(key);
     if (m && m.age < WARM_SKIP_MS) return { status: "skip", age: m.age };
   } catch (e) { console.log("binder-warm: cache probe failed: " + msg(e)); }
-  const a = await ask(key, JSON.stringify(body));
-  if (!a.ok) return { status: "error", upstream: a.upstream, error: a.error };
+  const raw = JSON.stringify(body);
+  let a = await ask(key, raw);
+  let retried = false;
+  if (!a.ok && a.error === "upstream timeout") {
+    // BinderPOS keeps computing after we hang up and caches its answer per
+    // body (measured: 60s timeout, then 34s, then 18s), so one immediate
+    // retry usually lands. Seen live on mtg page 1 (run 33652039890).
+    retried = true;
+    a = await ask(key, raw);
+  }
+  if (!a.ok) return { status: "error", upstream: a.upstream, error: a.error, retried };
   try { await store.put(key, a.text, true); }
-  catch (e) { return { status: "error", upstream: a.status, error: "store failed: " + msg(e) }; }
-  return { status: "warm", upstream: a.status, bytes: a.text.length };
+  catch (e) { return { status: "error", upstream: a.status, error: "store failed: " + msg(e), retried }; }
+  return { status: "warm", upstream: a.status, bytes: a.text.length, retried };
 }
 
 // Worker cron entry point (scheduled() in index.js).
@@ -397,11 +406,13 @@ async function warmAll(store, summary, note) {
       + (games.length ? "" : " (head: " + txt.slice(0, 240) + ")"));
   } catch (e) { console.log("binder-warm: supportedGames failed: " + msg(e)); }
 
-  // pokemon and mtg first (the measured slow ones), then whatever
-  // supportedGames adds; page 2 for those two only.
+  // The four landing bodies first - pokemon and mtg (the measured slow
+  // ones), pages 1 and 2 - then page 1 of whatever else supportedGames
+  // lists, so a run cut short still refreshed what shoppers land on.
   const jobs = [];
-  for (const g of [...new Set(["pokemon", "mtg", ...games])]) jobs.push({ game: g, offset: 0 });
+  for (const g of ["pokemon", "mtg"]) jobs.push({ game: g, offset: 0 });
   for (const g of ["pokemon", "mtg"]) jobs.push({ game: g, offset: PAGE });
+  for (const g of games) if (g !== "pokemon" && g !== "mtg") jobs.push({ game: g, offset: 0 });
   summary.games = games;
   summary.total = jobs.length;
   await note();

@@ -588,8 +588,12 @@ export class BinderRoom {
   async alarm() {
     if (!this.isCacheDo) return;
     try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
-    try { await warmWithStore(this.cacheStore(), "alarm"); }
+    let r = null;
+    try { r = await warmWithStore(this.cacheStore(), "alarm"); }
     catch (e) { console.log("binder-warm(alarm): " + ((e && e.message) || e)); }
+    // A run was still going (a slow BinderPOS can stretch one past the
+    // period): look again in a minute instead of a full period later.
+    if (r && r.skipped) { try { await this.state.storage.setAlarm(Date.now() + 60e3); } catch {} }
   }
 
   async fetch(request) {
