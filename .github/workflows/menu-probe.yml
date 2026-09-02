@@ -73,14 +73,38 @@ jobs:
               console.log(label + '-PANEL-CHAIN', out.chain);
               console.log(label + '-PANEL-HTML(' + out.htmlLen + ')', out.html);
               for (const r of out.rows) console.log(label + '-ROW', JSON.stringify(r));
+              return out.rows;
+            };
+            /* Bounded verdicts on the complaint itself (owner: "cant read well"):
+               the panel ground and every ink inside it, on both sides - a
+               white panel with light links and a dark panel with dark links
+               must both fail. Light mode must stay exactly as the app paints it. */
+            const sum = (c) => { const m = (c || '').match(/[\d.]+/g); return m && m.length >= 3 ? (+m[0] + +m[1] + +m[2]) : -1; };
+            const fails = [];
+            const v = (name, ok, detail) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + name + ' :: ' + detail); if (!ok) fails.push(name); };
+            const judge = (label, rows, wantDark) => {
+              const panel = rows.find(r => /^UL\.tmenu_submenu_type_mega/.test(r.el));
+              const links = rows.filter(r => /^A\.tmenu_item_link/.test(r.el) && r.box[0] >= 200);
+              const custom = rows.filter(r => /^(P|A|H4)$/.test(r.el) && r.style && /color/i.test(r.style));
+              const addr = rows.find(r => /^P\.tmenu_maps_address/.test(r.el));
+              const bgOk = panel && (wantDark ? sum(panel.bg) < 300 : sum(panel.bg) > 700);
+              v(label + '-panel-ground', !!bgOk, panel ? panel.el.slice(0, 40) + ' bg=' + panel.bg : 'no mega panel found');
+              const inkOk = links.length >= 7 && links.every(r => wantDark ? sum(r.ink) > 600 : sum(r.ink) < 500);
+              v(label + '-column-links-readable', inkOk, links.length + ' links, inks: ' + [...new Set(links.map(r => r.ink))].join(' | '));
+              const custOk = custom.length >= 5 && custom.every(r => wantDark ? sum(r.ink) > 400 : sum(r.ink) < 500);
+              v(label + '-our-store-block-readable', custOk, custom.length + ' inline-coloured nodes, inks: ' + [...new Set(custom.map(r => r.el + '=' + r.ink))].join(' | '));
+              v(label + '-map-caption-readable', !!addr && (wantDark ? sum(addr.ink) > 400 : sum(addr.ink) < 500), addr ? 'ink=' + addr.ink : 'no caption');
             };
 
-            await dump('LIGHT');
+            const lightRows = await dump('LIGHT');
+            judge('LIGHT', lightRows, false);
             await page.mouse.move(5, 500); await sleep(600);
             await page.evaluate(() => document.querySelector('#header .header-user-selection .xg-theme-toggle').click());
             await sleep(800);
             console.log('THEME-ATTR', await page.evaluate(() => document.documentElement.getAttribute('data-xg-theme')));
-            await dump('DARK');
+            const darkRows = await dump('DARK');
+            judge('DARK', darkRows, true);
+            console.log('MENU-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
           EOF
