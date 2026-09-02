@@ -324,20 +324,26 @@ export async function warmBinderSearch(env) {
       return { skipped: true, lockAge: j.age || 0 };
     }
   } catch (e) { console.log("binder-warm: lock failed, running anyway: " + msg(e)); }
-  const summary = { at: t0, games: [], jobs: [], ms: 0 };
+  const summary = { at: t0, games: [], jobs: [], total: 0, ms: 0 };
+  // Written after every body, not just at the end: an invocation the
+  // platform cuts short (CPU or wall-clock limit) still leaves its trace.
+  const note = () => doCall(env, "/_cache/note", { method: "POST", body: JSON.stringify({ ...summary, ms: Date.now() - t0 }) })
+    .catch((e) => console.log("binder-warm: note failed: " + msg(e)));
   try {
-    await warmAll(env, summary);
+    await warmAll(env, summary, note);
+  } catch (e) {
+    summary.error = msg(e);
+    console.log("binder-warm: run failed: " + summary.error);
   } finally {
     summary.done = Date.now();
     summary.ms = summary.done - t0;
-    try { await doCall(env, "/_cache/note", { method: "POST", body: JSON.stringify(summary) }); }
-    catch (e) { console.log("binder-warm: note failed: " + msg(e)); }
+    await note();
     try { await doCall(env, "/_cache/unlock", { method: "POST" }); } catch {}
   }
   return summary;
 }
 
-async function warmAll(env, summary) {
+async function warmAll(env, summary, note) {
   const t0 = summary.at;
   let games = [];
   try {
@@ -355,6 +361,9 @@ async function warmAll(env, summary) {
   const jobs = [];
   for (const g of [...new Set(["pokemon", "mtg", ...games])]) jobs.push({ game: g, offset: 0 });
   for (const g of ["pokemon", "mtg"]) jobs.push({ game: g, offset: PAGE });
+  summary.games = games;
+  summary.total = jobs.length;
+  await note();
 
   const out = [];
   for (const j of jobs) {
@@ -363,13 +372,13 @@ async function warmAll(env, summary) {
     try { res = await warmOne(env, j.game, j.offset); } catch (e) { res = { status: "error", error: msg(e) }; }
     res.ms = Date.now() - t;
     out.push({ ...j, ...res });
+    summary.jobs = out;
+    await note();
     console.log("binder-warm: " + j.game + " offset=" + j.offset + " -> " + res.status
       + (res.upstream ? " upstream=" + res.upstream : "") + (res.error ? " " + res.error : "")
       + (res.bytes ? " " + res.bytes + "B" : "") + " " + res.ms + "ms");
   }
   console.log("binder-warm: " + jobs.length + " bodies in " + (Date.now() - t0) + "ms");
-  summary.games = games;
-  summary.jobs = out;
   return out;
 }
 
