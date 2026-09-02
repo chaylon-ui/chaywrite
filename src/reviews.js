@@ -9,20 +9,31 @@
    Either Google API flavor works on the key — "Places API (New)" (the
    only one a Google account created after March 2025 can enable) or the
    legacy "Places API"; every fetch tries New first and falls back to
-   legacy. Optionally set GOOGLE_PLACE_IDS to a comma-separated list of
-   place IDs (identical in both API flavors); without it the stores are
-   discovered by name via Text Search and only businesses named Exor are
-   accepted. */
+   legacy - and a New-flavour refusal (403) parks that flavour for an
+   hour so the fallback is not paid for on every call. Optionally set
+   GOOGLE_PLACE_IDS to a comma-separated list of place IDs (identical in
+   both API flavors); without it the stores are discovered by name via
+   Text Search, only businesses named Exor are accepted, and the resolved
+   list is shared with /stores.json through a 24h edge cache. */
 
-const REVIEWS_TTL_S = 21600; // 6h per edge; Google reviews move slowly
+const REVIEWS_TTL_S = 21600; // 6h at the edge; Google reviews move slowly
+export const BROWSER_TTL_S = 300; // 5 min in the browser: an edge refresh reaches visitors within minutes
+
+/* The Workers Cache API reads s-maxage for the edge TTL and the browser
+   reads max-age, so one header gives the edge its six hours while a
+   visitor re-asks the edge every five minutes - a holiday closure the
+   owner enters on Google lands on the storefront minutes after the edge
+   refreshes instead of up to six hours later. */
+const REVIEWS_CACHE_CONTROL = `public, max-age=${BROWSER_TTL_S}, s-maxage=${REVIEWS_TTL_S}`;
 
 /* The edge cache survives worker deploys, and its key is fixed - a caller
    cannot bust it with a query string - so a logic change stays invisible
    for up to REVIEWS_TTL_S unless this is bumped. BUMP IT whenever the set
    of places, the filter, or the payload shape changes.
    v2: six stores across both provinces (was three, PEI-only).
-   v3: per-city discovery (the province queries surfaced two of six). */
-const REVIEWS_CACHE_V = "3";
+   v3: per-city discovery (the province queries surfaced two of six).
+   v4: browser max-age 5 min (the cached entries carried the 6h header). */
+const REVIEWS_CACHE_V = "4";
 
 // Words/phrases that mark a review as not-showcase material even at five
 // stars. Deliberately trigger-happy: a false positive only hides one quote,
@@ -41,6 +52,43 @@ const NEGATIVE_RE = new RegExp(
 );
 
 const GHEADERS = { accept: "application/json", "user-agent": "ExorReviews/1.0 (+workers.dev)" };
+
+/* ---- "Places API (New)" circuit breaker -------------------------------
+   The owner's Google project has only the LEGACY Places API enabled, so
+   every New-flavour call answers 403 PERMISSION_DENIED before the legacy
+   fallback runs - a guaranteed wasted round trip on every search and
+   every details call, in both feeds. After any such refusal the New
+   flavour is skipped for an hour. Module-level: per isolate, and it
+   resets on its own, so enabling the New API later needs no deploy. */
+const NEW_BLOCK_MS = 3600e3;
+let newFlavourBlockedUntil = 0;
+
+export function newFlavourState() {
+  const blocked = Date.now() < newFlavourBlockedUntil;
+  return { blocked, until: blocked ? new Date(newFlavourBlockedUntil).toISOString() : null };
+}
+
+export function newFlavourBlocked() {
+  return newFlavourState().blocked;
+}
+
+/* Every New-flavour response passes through here (HTTP status plus
+   Google's error.status, which is how "API not enabled" is spelled in
+   the body) so a refusal trips the breaker wherever it is first seen. */
+export function noteNewFlavour(http, status) {
+  if (http === 403 || status === "PERMISSION_DENIED") newFlavourBlockedUntil = Date.now() + NEW_BLOCK_MS;
+}
+
+// Debug-view stand-in for a call the breaker skipped, in probe()'s shape.
+export function newFlavourSkipped(label) {
+  return {
+    call: label,
+    http: 0,
+    status: "SKIPPED",
+    error: "Places API (New) refused with 403 within the last hour; legacy only until " + newFlavourState().until,
+    json: null,
+  };
+}
 
 /* ONE source of truth for the publish filter. The debug view below reports
    why each review was dropped, and a second copy of these rules would be
@@ -86,6 +134,7 @@ function normNewPlace(p) {
 }
 
 async function fetchPlaceNew(id, key) {
+  if (newFlavourBlocked()) return null;
   const r = await fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(id), {
     headers: {
       ...GHEADERS,
@@ -94,8 +143,9 @@ async function fetchPlaceNew(id, key) {
     },
     signal: AbortSignal.timeout(8000),
   });
-  if (!r.ok) return null;
-  return normNewPlace(await r.json());
+  const j = await r.json().catch(() => null);
+  noteNewFlavour(r.status, j && j.error && j.error.status);
+  return r.ok ? normNewPlace(j) : null;
 }
 
 async function fetchPlaceLegacy(id, key) {
@@ -120,9 +170,12 @@ async function fetchPlace(id, key) {
    listing or two: "Exor Games Nova Scotia" returned Charlottetown and
    Truro, and Bridgewater, Dartmouth and New Glasgow never surfaced
    (deploy 197), so the band was quoting a fraction of the chain off a
-   fraction of its reviews. Ask per city and merge, deduped by place id -
-   six cheap searches per edge per 6h. GOOGLE_PLACE_IDS still overrides
-   discovery outright when the owner wants specific stores. */
+   fraction of its reviews. Ask per city - all six in parallel - and merge,
+   deduped by place id. The resolved list is ONE shared answer for both
+   feeds, cached at the edge for a day (PLACE_IDS_TTL_S), so the searches
+   run once per edge per day instead of per feed per 6h. GOOGLE_PLACE_IDS
+   still overrides discovery outright when the owner wants specific
+   stores. */
 const DISCOVER_QUERIES = [
   "Exor Games Charlottetown PE",
   "Exor Games Summerside PE",
@@ -131,54 +184,87 @@ const DISCOVER_QUERIES = [
   "Exor Games New Glasgow NS",
   "Exor Games Truro NS",
 ];
-export const MAX_PLACES = 6; // one per store; each costs one Place Details call per edge per 6h
+export const MAX_PLACES = 6; // one per store; each costs one Place Details call per feed per edge per 6h
 
-async function discoverNew(key) {
+const PLACE_IDS_TTL_S = 86400; // a store's place id never changes; a new store waits at most a day
+const PLACE_IDS_CACHE_V = "1"; // bump when DISCOVER_QUERIES or the accept rule changes
+
+// Query order first, then Google's rank within each query; deduped by id.
+function mergeIds(lists) {
   const ids = [];
-  for (const q of DISCOVER_QUERIES) {
-    const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
-      method: "POST",
-      headers: {
-        ...GHEADERS,
-        "content-type": "application/json",
-        "x-goog-api-key": key,
-        "x-goog-fieldmask": "places.id,places.displayName",
-      },
-      body: JSON.stringify({ textQuery: q }),
-      signal: AbortSignal.timeout(8000),
-    }).catch(() => null);
-    if (!r || !r.ok) continue;
-    const j = await r.json().catch(() => null);
-    for (const p of Array.isArray(j && j.places) ? j.places : []) {
-      const nm = (p && p.displayName && p.displayName.text) || "";
-      if (p && p.id && /exor/i.test(nm) && !ids.includes(p.id)) ids.push(p.id);
-    }
+  for (const list of lists) {
+    for (const id of list) if (id && !ids.includes(id)) ids.push(id);
   }
   return ids.slice(0, MAX_PLACES);
+}
+
+async function searchNew(q, key) {
+  const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      ...GHEADERS,
+      "content-type": "application/json",
+      "x-goog-api-key": key,
+      "x-goog-fieldmask": "places.id,places.displayName",
+    },
+    body: JSON.stringify({ textQuery: q }),
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => null);
+  if (!r) return [];
+  const j = await r.json().catch(() => null);
+  noteNewFlavour(r.status, j && j.error && j.error.status);
+  if (!r.ok) return [];
+  return (Array.isArray(j && j.places) ? j.places : [])
+    .filter((p) => p && p.id && /exor/i.test((p.displayName && p.displayName.text) || ""))
+    .map((p) => p.id);
+}
+
+async function searchLegacy(q, key) {
+  const r = await fetch(
+    "https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
+      encodeURIComponent(q) + "&key=" + encodeURIComponent(key),
+    { headers: GHEADERS, signal: AbortSignal.timeout(8000) }
+  ).catch(() => null);
+  if (!r || !r.ok) return [];
+  const j = await r.json().catch(() => null);
+  if (!j || j.status !== "OK" || !Array.isArray(j.results)) return [];
+  return j.results.filter((p) => p && p.place_id && /exor/i.test(p.name || "")).map((p) => p.place_id);
+}
+
+async function discoverNew(key) {
+  if (newFlavourBlocked()) return [];
+  return mergeIds(await Promise.all(DISCOVER_QUERIES.map((q) => searchNew(q, key))));
 }
 
 async function discoverLegacy(key) {
-  const ids = [];
-  for (const q of DISCOVER_QUERIES) {
-    const r = await fetch(
-      "https://maps.googleapis.com/maps/api/place/textsearch/json?query=" +
-        encodeURIComponent(q) + "&key=" + encodeURIComponent(key),
-      { headers: GHEADERS, signal: AbortSignal.timeout(8000) }
-    ).catch(() => null);
-    if (!r || !r.ok) continue;
-    const j = await r.json().catch(() => null);
-    if (!j || j.status !== "OK" || !Array.isArray(j.results)) continue;
-    for (const p of j.results) {
-      if (p && p.place_id && /exor/i.test(p.name || "") && !ids.includes(p.place_id)) ids.push(p.place_id);
-    }
-  }
-  return ids.slice(0, MAX_PLACES);
+  return mergeIds(await Promise.all(DISCOVER_QUERIES.map((q) => searchLegacy(q, key))));
 }
 
-// Shared with /stores.json (stores.js): one discovery routine, one set of stores.
-export async function discoverPlaceIds(key) {
-  const ids = await discoverNew(key).catch(() => []);
-  return ids.length ? ids : discoverLegacy(key);
+/* Shared with /stores.json (stores.js): one discovery routine, one set of
+   stores, one cached answer. The list lives in caches.default under a
+   fixed key for PLACE_IDS_TTL_S; whichever feed asks first pays for the
+   searches and the other reads the answer. Only a non-empty list is
+   cached - an outage or quota blip must not pin "no stores" on the edge
+   for a day. `request` supplies the origin for the cache key; `ctx`
+   lets the write outlive the response. */
+export async function discoverPlaceIds(key, request, ctx) {
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/place-ids?v=" + PLACE_IDS_CACHE_V, request.url).toString());
+  const hit = await cache.match(cacheKey).catch(() => null);
+  if (hit) {
+    const cached = await hit.json().catch(() => null);
+    const ids = Array.isArray(cached) ? cached.filter((id) => typeof id === "string" && id) : [];
+    if (ids.length) return ids.slice(0, MAX_PLACES);
+  }
+  let ids = await discoverNew(key).catch(() => []);
+  if (!ids.length) ids = await discoverLegacy(key).catch(() => []);
+  if (ids.length) {
+    const put = cache
+      .put(cacheKey, Response.json(ids, { headers: { "cache-control": "public, max-age=" + PLACE_IDS_TTL_S } }))
+      .catch(() => {});
+    if (ctx && ctx.waitUntil) ctx.waitUntil(put); else await put;
+  }
+  return ids;
 }
 
 /* ---- GET /reviews.json?debug=1 ---------------------------------------
@@ -225,6 +311,7 @@ async function serveReviewsDebug(env) {
     keyHadSurroundingWhitespace: raw !== key,
     placeIdsConfigured: String((env && env.GOOGLE_PLACE_IDS) || "")
       .split(",").map((s) => s.trim()).filter(Boolean),
+    newFlavour: newFlavourState(),
     calls: [],
     placeIdsUsed: [],
     places: [],
@@ -242,7 +329,8 @@ async function serveReviewsDebug(env) {
 
   let ids = d.placeIdsConfigured.slice();
   if (!ids.length) {
-    for (const q of DISCOVER_QUERIES) {
+    if (newFlavourBlocked()) d.calls.push(newFlavourSkipped("searchText New (every city)"));
+    for (const q of newFlavourBlocked() ? [] : DISCOVER_QUERIES) {
       const nw = await probe("searchText New: " + q, () =>
         fetch("https://places.googleapis.com/v1/places:searchText", {
           method: "POST",
@@ -255,6 +343,7 @@ async function serveReviewsDebug(env) {
           body: JSON.stringify({ textQuery: q }),
           signal: AbortSignal.timeout(8000),
         }));
+      noteNewFlavour(nw.http, nw.status);
       nw.found = (((nw.json || {}).places) || [])
         .map((p) => ({ name: (p.displayName && p.displayName.text) || "", id: p.id }));
       delete nw.json;
@@ -284,18 +373,23 @@ async function serveReviewsDebug(env) {
 
   for (const id of d.placeIdsUsed) {
     let p = null;
-    const nw = await probe("details New " + id, () =>
-      fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(id), {
-        headers: {
-          ...GHEADERS,
-          "x-goog-api-key": key,
-          "x-goog-fieldmask": "displayName,rating,userRatingCount,reviews",
-        },
-        signal: AbortSignal.timeout(8000),
-      }));
-    if (nw.http === 200) p = normNewPlace(nw.json);
-    delete nw.json;
-    d.calls.push(nw);
+    if (newFlavourBlocked()) {
+      d.calls.push(newFlavourSkipped("details New " + id));
+    } else {
+      const nw = await probe("details New " + id, () =>
+        fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(id), {
+          headers: {
+            ...GHEADERS,
+            "x-goog-api-key": key,
+            "x-goog-fieldmask": "displayName,rating,userRatingCount,reviews",
+          },
+          signal: AbortSignal.timeout(8000),
+        }));
+      noteNewFlavour(nw.http, nw.status);
+      if (nw.http === 200) p = normNewPlace(nw.json);
+      delete nw.json;
+      d.calls.push(nw);
+    }
 
     if (!p) {
       const lg = await probe("details legacy " + id, () =>
@@ -342,7 +436,7 @@ async function serveReviewsDebug(env) {
   } else {
     d.next =
       kept + " review(s) would publish. If /reviews.json still reads empty, its 6h per-edge cache " +
-      "is holding an older answer - bump the ?v=1 cache key in src/reviews.js and redeploy to clear it.";
+      "is holding an older answer - bump REVIEWS_CACHE_V in src/reviews.js and redeploy to clear it.";
   }
   return Response.json(scrubKey(d, key), { headers: cors });
 }
@@ -366,7 +460,7 @@ export async function serveReviews(request, env, ctx) {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (!ids.length) ids = await discoverPlaceIds(key);
+    if (!ids.length) ids = await discoverPlaceIds(key, request, ctx);
     const places = (
       await Promise.all(ids.slice(0, MAX_PLACES).map((id) => fetchPlace(id, key).catch(() => null)))
     ).filter(Boolean);
@@ -399,7 +493,7 @@ export async function serveReviews(request, env, ctx) {
   }
 
   const res = Response.json(out, {
-    headers: { ...cors, "cache-control": out.ok ? `public, max-age=${REVIEWS_TTL_S}` : "no-store" },
+    headers: { ...cors, "cache-control": out.ok ? REVIEWS_CACHE_CONTROL : "no-store" },
   });
   if (out.ok) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;

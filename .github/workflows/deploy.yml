@@ -141,10 +141,12 @@ jobs:
           curl -sS -D /tmp/rev-h --max-time 30 "https://exor-binder.nevski.workers.dev/reviews.json" | head -c 400 || true
           printf '\n'
           echo "reviews CORS header: $(grep -ci 'access-control-allow-origin' /tmp/rev-h || true)"
+          echo "reviews cache-control: $(grep -i '^cache-control' /tmp/rev-h | tr -d '\r' || true)"
           echo "=== /stores.json (Google Places opening hours per store; ok:false + empty until GOOGLE_PLACES_KEY is set) ==="
           curl -sS -D /tmp/stores-h --max-time 30 "https://exor-binder.nevski.workers.dev/stores.json" | head -c 600 || true
           printf '\n'
           echo "stores CORS header: $(grep -ci 'access-control-allow-origin' /tmp/stores-h || true)"
+          echo "stores cache-control: $(grep -i '^cache-control' /tmp/stores-h | tr -d '\r' || true)"
           echo "=== stores resolved: one line per store (Google names every location plainly, so the address is the identity) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/stores.json" | python3 -c '
           import json, sys
@@ -155,34 +157,11 @@ jobs:
           print("ok", d.get("ok"), "count", d.get("count"))
           for s in d.get("stores", []):
               h = s.get("hours") or {}
-              print(" -", s.get("id"), "|", s.get("name"), "|", s.get("address"), "|", s.get("phone"), "| utc", s.get("utcOffsetMin"), "| periods", len(h.get("periods", [])), "| text", len(h.get("weekdayText", [])))
+              print(" -", s.get("id"), "|", s.get("name"), "|", s.get("address"), "|", s.get("city"), s.get("province"), "|", s.get("phone"), "| utc", s.get("utcOffsetMin"), "| periods", len(h.get("periods", [])), "| text", len(h.get("weekdayText", [])))
           ' || true
-          echo "=== /stores.json?debug=1 summary (key-scrubbed by the worker; length only) ==="
-          curl -sS --max-time 60 "https://exor-binder.nevski.workers.dev/stores.json?debug=1" | python3 -c '
-          import json, sys
-          try:
-              d = json.load(sys.stdin)
-          except Exception as e:
-              print("not json:", e); raise SystemExit
-          print("keyPresent", d.get("keyPresent"), "keyLength", d.get("keyLength"), "configured", d.get("placeIdsConfigured"), "discovery", d.get("discovery"))
-          for c in d.get("calls", []):
-              print(" call:", c.get("call"), c.get("http"), c.get("status"), c.get("error"))
-          for p in d.get("places", []):
-              print(" place:", p.get("id"), "resolved", p.get("resolved"), p.get("flavor"), "|", p.get("name"), "|", p.get("address"), "| hours", p.get("hasHours"), p.get("periods"))
-          print("next:", d.get("next"))
-          ' || true
-          echo "=== /reviews.json?debug=1 discovery calls only (what each Text Search returned, name + id) ==="
-          curl -sS --max-time 60 "https://exor-binder.nevski.workers.dev/reviews.json?debug=1" | python3 -c '
-          import json, sys
-          try:
-              d = json.load(sys.stdin)
-          except Exception as e:
-              print("not json:", e); raise SystemExit
-          for c in d.get("calls", []):
-              if "found" in c:
-                  print(" call:", c.get("call"), c.get("http"), c.get("status"), c.get("error"), "found", c.get("found"))
-          print("placeIdsUsed:", d.get("placeIdsUsed"))
-          ' || true
+          # No ?debug=1 probes here on purpose: each one bills Google for every
+          # Text Search and details call it reports, on every deploy. Open them
+          # by hand when the feeds need diagnosing.
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Mimikyu&type=Pokemon%20Single" | head -c 600 || true
           printf '\n'
           curl -sS -o /dev/null -w 'buyprice-reveal.js: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buyprice-reveal.js" || true

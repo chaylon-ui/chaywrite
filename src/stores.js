@@ -9,33 +9,46 @@
    the same key handling and store discovery as /reviews.json — and
    normalises BOTH flavours to one contract the theme is built against:
 
-     { ok, count, stores: [ { id, name, address, phone, mapsUrl,
-         utcOffsetMin, hours: { periods: [ { open: { day, time },
+     { ok, count, stores: [ { id, name, address, city, province, phone,
+         mapsUrl, utcOffsetMin, hours: { periods: [ { open: { day, time },
          close: { day, time } | null } ], weekdayText: [ 7 strings ] } } ] }
 
    day 0 = Sunday .. 6 = Saturday (Google's convention); time = "HHMM",
    24-hour. A period with no close is open 24 hours (close: null). Any
    field Google omits is null — hours included, when the business profile
-   carries none. The response is edge-cached for six hours, so it carries
-   NO open_now on purpose: a cached "open" would lie for most of the day.
+   carries none. city / province (additive, v3) come off the address
+   components: the locality's long name and the province's short code
+   ("NS"). The response is edge-cached for six hours, so it carries NO
+   open_now on purpose: a cached "open" would lie for most of the day.
    The storefront decides open/closed at render time from periods plus
    utcOffsetMin. Fails open to an empty list (no key, quota, outage) so
    the theme falls back to its static hours. */
 
-import { discoverPlaceIds, MAX_PLACES, probe, scrubKey } from "./reviews.js";
+import {
+  BROWSER_TTL_S, discoverPlaceIds, MAX_PLACES, newFlavourBlocked, newFlavourSkipped,
+  newFlavourState, noteNewFlavour, probe, scrubKey,
+} from "./reviews.js";
 
-const STORES_TTL_S = 21600; // 6h per edge; hours change rarely, holiday edits still land same day
+const STORES_TTL_S = 21600; // 6h at the edge; hours change rarely, holiday edits still land same day
+
+// Edge keeps it STORES_TTL_S (s-maxage); a browser re-asks the edge every
+// BROWSER_TTL_S, so an edge refresh reaches visitors within minutes.
+const STORES_CACHE_CONTROL = `public, max-age=${BROWSER_TTL_S}, s-maxage=${STORES_TTL_S}`;
 
 /* Fixed edge-cache key (a caller cannot bust it with a query string), so a
    payload-shape change stays invisible for up to STORES_TTL_S unless this
    is bumped. BUMP IT whenever the contract above changes.
-   v2: per-city discovery (deploy 197 cached a two-store answer). */
-const STORES_CACHE_V = "2";
+   v2: per-city discovery (deploy 197 cached a two-store answer).
+   v3: city + province fields; browser max-age 5 min. */
+const STORES_CACHE_V = "3";
 
 const GHEADERS = { accept: "application/json", "user-agent": "ExorStores/1.0 (+workers.dev)" };
 
-const NEW_FIELDS = "id,displayName,formattedAddress,nationalPhoneNumber,regularOpeningHours,utcOffsetMinutes,googleMapsUri";
-const LEGACY_FIELDS = "place_id,name,formatted_address,formatted_phone_number,opening_hours,utc_offset,url";
+/* addressComponents / address_component sit in the cheapest SKU of each
+   flavour, so asking for them adds nothing to a request already paying
+   for phone and hours. */
+const NEW_FIELDS = "id,displayName,formattedAddress,addressComponents,nationalPhoneNumber,regularOpeningHours,utcOffsetMinutes,googleMapsUri";
+const LEGACY_FIELDS = "place_id,name,formatted_address,address_component,formatted_phone_number,opening_hours,utc_offset,url";
 
 /* ---- normalisation ---------------------------------------------------
    Everything below turns "whatever Google sent" into the contract: strings
@@ -109,6 +122,16 @@ function normHours(periods, weekdayText, point) {
   return { periods: normPeriods(periods, point), weekdayText: normWeekdayText(weekdayText) };
 }
 
+/* One address component by type, in either flavour's spelling: New is
+   { types, longText, shortText }, legacy { types, long_name, short_name }.
+   null when the profile carries no such component. */
+function component(comps, type, field) {
+  for (const c of Array.isArray(comps) ? comps : []) {
+    if (c && Array.isArray(c.types) && c.types.includes(type)) return str(c[field]);
+  }
+  return null;
+}
+
 function normNewStore(p, requestedId) {
   if (!p || !p.displayName) return null;
   const h = p.regularOpeningHours;
@@ -116,6 +139,8 @@ function normNewStore(p, requestedId) {
     id: str(p.id) || requestedId,
     name: str(p.displayName && p.displayName.text),
     address: str(p.formattedAddress),
+    city: component(p.addressComponents, "locality", "longText"),
+    province: component(p.addressComponents, "administrative_area_level_1", "shortText"),
     phone: str(p.nationalPhoneNumber),
     mapsUrl: str(p.googleMapsUri),
     utcOffsetMin: int(p.utcOffsetMinutes),
@@ -130,6 +155,8 @@ function normLegacyStore(r, requestedId) {
     id: str(r.place_id) || requestedId,
     name: str(r.name),
     address: str(r.formatted_address),
+    city: component(r.address_components, "locality", "long_name"),
+    province: component(r.address_components, "administrative_area_level_1", "short_name"),
     phone: str(r.formatted_phone_number),
     mapsUrl: str(r.url),
     utcOffsetMin: int(r.utc_offset),
@@ -137,7 +164,10 @@ function normLegacyStore(r, requestedId) {
   };
 }
 
-/* ---- fetchers: New first, legacy fallback (see reviews.js) ---------- */
+/* ---- fetchers: New first, legacy fallback (see reviews.js) ----------
+   The New flavour is skipped outright while its circuit breaker is
+   tripped (a 403 within the hour, reviews.js); every New response is
+   reported to it. */
 
 function newDetailsRequest(id, key) {
   return fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(id), {
@@ -155,9 +185,11 @@ function legacyDetailsRequest(id, key) {
 }
 
 async function fetchStoreNew(id, key) {
+  if (newFlavourBlocked()) return null;
   const r = await newDetailsRequest(id, key);
-  if (!r.ok) return null;
-  return normNewStore(await r.json(), id);
+  const j = await r.json().catch(() => null);
+  noteNewFlavour(r.status, j && j.error && j.error.status);
+  return r.ok ? normNewStore(j, id) : null;
 }
 
 async function fetchStoreLegacy(id, key) {
@@ -184,10 +216,11 @@ function configuredIds(env) {
    key" from "key refused" from "no hours on the profile". This names the
    cause — key presence (length only, never the value), the HTTP + Google
    status of every details call in BOTH flavours, and what each resolved
-   store carries. Store discovery is the shared routine; when it comes up
-   empty the reviews debug view is the one that probes the Text Search
-   calls individually. Bypasses the edge cache. */
-async function serveStoresDebug(env) {
+   store carries. Store discovery is the shared routine (and its shared
+   24h edge cache, so a hit here normally bills no searches); when it
+   comes up empty the reviews debug view is the one that probes the Text
+   Search calls individually. Bypasses the feed's own edge cache. */
+async function serveStoresDebug(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*", "cache-control": "no-store" };
   const raw = String((env && env.GOOGLE_PLACES_KEY) || "");
   const key = raw.trim();
@@ -196,6 +229,7 @@ async function serveStoresDebug(env) {
     keyLength: key.length,
     keyHadSurroundingWhitespace: raw !== key,
     placeIdsConfigured: configuredIds(env),
+    newFlavour: newFlavourState(),
     discovery: null,
     calls: [],
     placeIdsUsed: [],
@@ -217,12 +251,13 @@ async function serveStoresDebug(env) {
     d.discovery = { source: "GOOGLE_PLACE_IDS", found: ids.length, ms: 0, error: "" };
   } else {
     const t0 = Date.now();
+    const source = "discoverPlaceIds (shared with /reviews.json; place-id list edge-cached 24h)";
     try {
-      ids = await discoverPlaceIds(key);
-      d.discovery = { source: "discoverPlaceIds (shared with /reviews.json)", found: ids.length, ms: Date.now() - t0, error: "" };
+      ids = await discoverPlaceIds(key, request, ctx);
+      d.discovery = { source, found: ids.length, ms: Date.now() - t0, error: "" };
     } catch (e) {
       ids = [];
-      d.discovery = { source: "discoverPlaceIds (shared with /reviews.json)", found: 0, ms: Date.now() - t0, error: String((e && e.message) || e) };
+      d.discovery = { source, found: 0, ms: Date.now() - t0, error: String((e && e.message) || e) };
     }
   }
   d.placeIdsUsed = ids.slice(0, MAX_PLACES);
@@ -230,10 +265,15 @@ async function serveStoresDebug(env) {
   for (const id of d.placeIdsUsed) {
     let s = null;
     let flavor = "";
-    const nw = await probe("details New " + id, () => newDetailsRequest(id, key));
-    if (nw.http === 200) { s = normNewStore(nw.json, id); flavor = "new"; }
-    delete nw.json;
-    d.calls.push(nw);
+    if (newFlavourBlocked()) {
+      d.calls.push(newFlavourSkipped("details New " + id));
+    } else {
+      const nw = await probe("details New " + id, () => newDetailsRequest(id, key));
+      noteNewFlavour(nw.http, nw.status);
+      if (nw.http === 200) { s = normNewStore(nw.json, id); flavor = "new"; }
+      delete nw.json;
+      d.calls.push(nw);
+    }
 
     if (!s || !s.name) {
       s = null;
@@ -250,6 +290,8 @@ async function serveStoresDebug(env) {
       flavor,
       name: s.name,
       address: s.address,
+      city: s.city,
+      province: s.province,
       phone: s.phone,
       mapsUrl: s.mapsUrl,
       utcOffsetMin: s.utcOffsetMin,
@@ -286,7 +328,7 @@ async function serveStoresDebug(env) {
 
 export async function serveStores(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
-  if (new URL(request.url).searchParams.get("debug") === "1") return serveStoresDebug(env);
+  if (new URL(request.url).searchParams.get("debug") === "1") return serveStoresDebug(request, env, ctx);
   const out = { ok: false, count: 0, stores: [] };
   // Trimmed: a dashboard paste can carry a trailing newline or space, which
   // Google rejects with a status the public response could never show.
@@ -300,7 +342,7 @@ export async function serveStores(request, env, ctx) {
 
   try {
     let ids = configuredIds(env);
-    if (!ids.length) ids = await discoverPlaceIds(key);
+    if (!ids.length) ids = await discoverPlaceIds(key, request, ctx);
     const stores = (
       await Promise.all(ids.slice(0, MAX_PLACES).map((id) => fetchStore(id, key).catch(() => null)))
     ).filter((s) => s && s.name);
@@ -315,7 +357,7 @@ export async function serveStores(request, env, ctx) {
   }
 
   const res = Response.json(out, {
-    headers: { ...cors, "cache-control": out.ok ? `public, max-age=${STORES_TTL_S}` : "no-store" },
+    headers: { ...cors, "cache-control": out.ok ? STORES_CACHE_CONTROL : "no-store" },
   });
   if (out.ok) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
