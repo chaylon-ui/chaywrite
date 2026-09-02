@@ -1,0 +1,175 @@
+name: events-probe
+on:
+  workflow_dispatch: {}
+
+# Log-only, bounded on both sides: on the preview homepage the events strip
+# must reveal, every card must carry an "Add to calendar" link into the
+# worker's /ics, and the .ics that link serves must describe the same event
+# at the same Atlantic date/time the card prints. A card without the link
+# is tolerated ONLY for an event the BinderPOS feed gave no date (there
+# should be none). Also dumps what the BinderPOS calendar popover exposes -
+# its DOM is only visible from a browser - so the same link can be injected
+# there, and reports whether one is present.
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: BinderPOS widget source around the popover (log-only recon)
+        run: |
+          curl -sS --max-time 20 -o ec.js "https://cdn.binderpos.com/eventCalendar.js" || true
+          echo "eventCalendar.js bytes: $(wc -c < ec.js)"
+          python3 - <<'PY'
+          import re
+          s = open('ec.js', encoding='utf-8', errors='replace').read()
+          hits = list(re.finditer(r'calendar-icon-info', s))
+          print('calendar-icon-info occurrences:', len(hits))
+          for m in hits[:5]:
+              a = max(0, m.start() - 900); b = min(len(s), m.end() + 1200)
+              print('--- ctx @', m.start()); print(s[a:b])
+          PY
+
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22
+
+      - name: Events strip cards, add-to-calendar links, popover (VERDICT lines)
+        run: |
+          cat > probe.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = '157462692013';
+          const H = 'https://exorgames.com';
+          const u = (p) => H + p + (p.includes('?') ? '&' : '?') + 'preview_theme_id=' + T;
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const fails = [];
+          const v = (name, ok, detail) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + name + ' :: ' + detail); if (!ok) fails.push(name); };
+          // Atlantic wall clock of a UTC instant as "YYYY-MM-DDTHH:MM" - the form the card's link carries in s=
+          const halifax = (d) => {
+            const p = {};
+            for (const x of new Intl.DateTimeFormat('en-US', { timeZone: 'America/Halifax', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(d)) p[x.type] = x.value;
+            return p.year + '-' + p.month + '-' + p.day + 'T' + String(+p.hour % 24).padStart(2, '0') + ':' + p.minute;
+          };
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1440, height: 950 });
+            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
+            const feeds = [];
+            page.on('response', async (r) => {
+              try {
+                if (/portal\.binderpos\.com\/api\/events\/forStore/.test(r.url()) && r.status() === 200) { const j = await r.json(); feeds.push({ url: r.url(), events: Array.isArray(j) ? j : [] }); }
+              } catch (e) {}
+            });
+            const errs = [];
+            page.on('pageerror', (e) => errs.push(String(e).slice(0, 160)));
+            let ok = false;
+            for (let i = 0; i < 4 && !ok; i++) {
+              try { await page.goto(u('/'), { waitUntil: 'networkidle2', timeout: 90000 }); } catch (e) { console.log('NAV-ERR', String(e).slice(0, 140)); }
+              ok = await page.evaluate(() => !!document.querySelector('#header .site-header'));
+              if (!ok) { console.log('NAV-RETRY', await page.evaluate(() => document.title)); await sleep(4000); }
+            }
+            if (!ok) { console.log('GAVE-UP'); v('homepage-loaded', false, 'no header after 4 tries'); console.log('EVENTS-FAILS ' + fails.length + ' :: ' + fails.join(', ')); await browser.close(); return; }
+
+            /* ---- the strip ---- */
+            let shown = false;
+            try { await page.waitForSelector('#xg-evs:not([hidden])', { timeout: 20000 }); shown = true; } catch (e) {}
+            v('strip-revealed', shown, shown ? '#xg-evs:not([hidden]) within 20s' : 'no #xg-evs:not([hidden]) after 20s');
+            const cards = await page.evaluate(() => [...document.querySelectorAll('#xg-evs-grid .xg-evs__card')].map((c) => {
+              const a = c.querySelector('a[href*="/ics?"]');
+              const main = c.matches('a[href]') ? c : c.querySelector('a.xg-evs__go, h3 a');
+              const tx = (sel) => ((c.querySelector(sel) || {}).textContent || '').trim();
+              return { tag: c.tagName, chip: tx('.xg-evs__chip'), name: tx('.xg-evs__name'), meta: tx('.xg-evs__meta'), href: main ? main.href : '', ics: a ? a.href : '', icsText: a ? (a.textContent || '').trim() : '', hasSvg: !!(a && a.querySelector('svg')) };
+            }));
+            console.log('CARDS ' + cards.length);
+            cards.forEach((c, i) => console.log('CARD ' + i + ' :: ' + JSON.stringify(c).slice(0, 600)));
+            v('cards-present', cards.length >= 1, cards.length + ' cards in #xg-evs-grid');
+            const withLink = cards.filter(c => c.ics);
+            v('every-card-has-ics-link', cards.length >= 1 && withLink.length === cards.length, withLink.length + ' of ' + cards.length + ' cards carry a[href*="/ics?"]');
+            const labelled = withLink.filter(c => /add to calendar/i.test(c.icsText) && c.hasSvg);
+            v('link-has-glyph-and-words', withLink.length > 0 && labelled.length === withLink.length, withLink.length ? labelled.length + ' of ' + withLink.length + ' links show the calendar glyph + "Add to calendar"' : 'no links');
+            v('cards-keep-their-click-target', cards.length >= 1 && cards.every(c => c.href), cards.filter(c => c.href).length + ' of ' + cards.length + ' cards have a main href');
+            const events = [].concat(...feeds.map(f => f.events));
+            console.log('FEEDS ' + (feeds.map(f => f.url.replace(/^[^?]*\?/, '') + ' -> ' + f.events.length + ' events').join(' | ') || '(none captured)'));
+            const linkless = cards.filter(c => !c.ics);
+            const undated = (title) => { const m = events.filter(e => e && String(e.title || '').trim() === title); return m.length > 0 && m.every(e => !e.date); };
+            v('linkless-cards-have-no-date', linkless.every(c => undated(c.name)), linkless.length ? linkless.length + ' linkless cards: ' + linkless.map(c => c.name + (undated(c.name) ? ' (feed: no date)' : ' (feed HAS a date)')).join(' | ') : '0 linkless cards (the feed dates every event)');
+
+            /* ---- the first link, fetched from the runner ---- */
+            const first = withLink[0];
+            console.log('FIRST-LINK ' + (first ? first.ics : '(none)'));
+            if (!first) {
+              v('ics-fetch-ok', false, 'no link to fetch');
+              v('ics-body-valid', false, 'no link to fetch');
+              v('ics-dtstart-matches-card', false, 'no link to fetch');
+            } else {
+              let status = 0, ctype = '', disp = '', body = '';
+              try { const r = await fetch(first.ics); status = r.status; ctype = r.headers.get('content-type') || ''; disp = r.headers.get('content-disposition') || ''; body = await r.text(); } catch (e) { console.log('ICS-FETCH-ERR', String(e).slice(0, 160)); }
+              console.log('ICS-HEAD ' + status + ' | ' + ctype + ' | ' + disp);
+              console.log(body.split(/\r?\n/).slice(0, 16).map(l => 'ICS ' + l).join('\n'));
+              v('ics-fetch-ok', status === 200 && /^text\/calendar/i.test(ctype), 'HTTP ' + status + ' ' + ctype);
+              const dt = /^DTSTART:(\d{8}T\d{6}Z)\r?$/m.exec(body);
+              const crlf = body.length > 0 && !/[^\r]\n/.test(body);
+              v('ics-body-valid', /^BEGIN:VCALENDAR\r\n/.test(body) && !!dt && /^SUMMARY:.+/m.test(body) && /^END:VCALENDAR\r\n/m.test(body) && crlf, 'BEGIN ' + /^BEGIN:VCALENDAR/.test(body) + ' | DTSTART ' + (dt ? dt[1] : 'missing') + ' | SUMMARY ' + /^SUMMARY:.+/m.test(body) + ' | CRLF ' + crlf);
+              const s = (() => { try { return new URL(first.ics).searchParams.get('s') || ''; } catch (e) { return ''; } })();
+              const local = dt ? halifax(new Date(dt[1].replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, '$1-$2-$3T$4:$5:$6Z'))) : '';
+              // the chip the strip would print for that day, computed the strip's way (Today/Tomorrow are the browser's local date)
+              const expectedChip = await page.evaluate((day) => {
+                const pad = (n) => (n < 10 ? '0' : '') + n;
+                const iso = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+                const now = new Date();
+                if (day === iso(now)) return 'Today';
+                if (day === iso(new Date(now.getTime() + 864e5))) return 'Tomorrow';
+                const p = day.split('-'); const dt = new Date(+p[0], +p[1] - 1, +p[2]);
+                const W = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'], M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+                return W[dt.getDay()] + ' ' + M[dt.getMonth()] + ' ' + dt.getDate();
+              }, s.slice(0, 10));
+              const hh = +s.slice(11, 13), mm = s.slice(14, 16);
+              const timeText = s.length >= 16 ? ((hh % 12 || 12) + ':' + mm + ' ' + (hh >= 12 ? 'PM' : 'AM')) : '';
+              const cardHasTime = /\d{1,2}:\d{2} [AP]M/.test(first.meta);
+              const timeOk = cardHasTime ? first.meta.indexOf(timeText) === 0 : timeText === '6:00 PM';
+              v('ics-dtstart-matches-card', !!dt && local === s && expectedChip === first.chip && timeOk, 'DTSTART ' + (dt ? dt[1] : '?') + ' -> Atlantic ' + local + ' | link s=' + s + ' | card chip "' + first.chip + '" (expected "' + expectedChip + '") meta "' + first.meta + '"' + (cardHasTime ? '' : ' (no time on the card -> link pinned to 18:00)'));
+            }
+
+            /* ---- the BinderPOS calendar popover: what it exposes, and our link if present ---- */
+            let popLink = '', popSeen = false;
+            try {
+              await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
+              await page.waitForSelector('#binderpos-calendar .calendar-icon-container', { timeout: 20000 });
+              await sleep(800);
+              const icons = await page.$$('#binderpos-calendar td.calendar-data-block:not(.calendar-inactive-block) .calendar-icon-container');
+              console.log('CAL-ICONS ' + icons.length);
+              for (let i = 0; i < Math.min(icons.length, 3) && !popSeen; i++) {
+                try { await icons[i].click(); } catch (e) { console.log('CAL-CLICK-ERR', String(e).slice(0, 120)); }
+                await sleep(1500);
+                const out = await page.evaluate(() => {
+                  const vis = (el) => el && el.offsetWidth > 0 && el.offsetHeight > 0;
+                  const p = [...document.querySelectorAll('#binderpos-calendar .calendar-icon-info')].find(vis);
+                  if (!p) return null;
+                  const cell = p.closest('td');
+                  const link = p.querySelector('a[href*="/ics?"]');
+                  const cn = (n) => n.tagName.toLowerCase() + (n.className && typeof n.className === 'string' && n.className.trim() ? '.' + n.className.trim().split(/\s+/).join('.') : '');
+                  return {
+                    html: p.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/\s+/g, ' ').slice(0, 4000),
+                    text: (p.innerText || '').replace(/\s+/g, ' ').slice(0, 400),
+                    cell: cell ? (cell.innerText || '').replace(/\s+/g, ' ').slice(0, 120) : '',
+                    cellClass: cell ? cell.className : '',
+                    link: link ? link.href : '',
+                    nodes: [...p.querySelectorAll('*')].slice(0, 40).map(n => cn(n) + (n.children.length ? '' : ' = ' + (n.textContent || '').trim().slice(0, 70)) + (n.tagName === 'IMG' ? ' src=' + (n.getAttribute('src') || '').slice(0, 80) : '')),
+                  };
+                });
+                if (out) {
+                  popSeen = true; popLink = out.link;
+                  console.log('POPOVER-HTML ' + out.html);
+                  console.log('POPOVER-TEXT ' + out.text);
+                  console.log('POPOVER-CELL ' + out.cellClass + ' :: ' + out.cell);
+                  out.nodes.forEach(n => console.log('POPOVER-NODE ' + n));
+                } else console.log('POPOVER-NONE after icon ' + i);
+              }
+            } catch (e) { console.log('CAL-ERR', String(e).slice(0, 160)); }
+            console.log('POPOVER-SEEN ' + popSeen + ' | POPOVER-LINK ' + (popLink || '(none)'));
+            console.log('ERRS ' + JSON.stringify(errs));
+            console.log('EVENTS-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node probe.js
