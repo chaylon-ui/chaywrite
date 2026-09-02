@@ -70,6 +70,30 @@ jobs:
             await page.setViewport({ width: 1440, height: 950 });
             await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
             await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
+            /* Round 21: xg-card-peek.js refuses to run without a hover-capable
+               fine pointer, and headless Chrome on this runner reports none
+               (run 114: hover-capable=false, script=false) - the right answer
+               on a device with no mouse, and no way to exercise the feature.
+               The probe drives a real mouse through CDP, so answer that one
+               media query the way a desktop would. Only hover/pointer queries
+               are touched; prefers-* keep the native answer (the toggle and
+               dark probes depend on it). The native answer is recorded on
+               window.__xgNativeHoverFine and printed with the PEEK line. */
+            await page.evaluateOnNewDocument(() => {
+              try {
+                const native = window.matchMedia.bind(window);
+                window.__xgNativeHoverFine = native('(hover: hover) and (pointer: fine)').matches;
+                if (window.__xgNativeHoverFine) return;
+                window.matchMedia = function (q) {
+                  const r = native(q);
+                  const s = String(q);
+                  if (/\bhover\b|\bpointer\b/.test(s) && !/\bnone\b|\bcoarse\b/.test(s)) {
+                    return { matches: true, media: r.media, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+                  }
+                  return r;
+                };
+              } catch (e) {}
+            });
             page.on('pageerror', e => { const s = String((e && e.stack) || e); if (!TOL.test(s)) console.log('PAGEERR', s.slice(0, 400)); });
             /* Run 99 had nt=0 (the New Today row rendered nothing) one run
                after it passed. That row is drawn by new-today.js served FROM
@@ -202,6 +226,52 @@ jobs:
               };
             });
             console.log('SPECIALPRODUCT', JSON.stringify(sp));
+            /* Run 114: the strip measured 868px tall with scrollWidth equal
+               to clientWidth - the twenty tiles wrapped into three rows and
+               the chevrons had nothing to move, while sp-row-fills read 88%
+               (seven whole tiles on the first of three rows) and passed.
+               Nothing in the repo sets flex-wrap on this element, so name
+               the sheet: walk every stylesheet for a flex-wrap / flex-flow
+               rule whose selector matches the strip (cross-origin sheets are
+               listed as unreadable), and report the computed value, the
+               direct children and the first tiles' tops. */
+            const stripCss = await page.evaluate(() => {
+              const strip = document.querySelector('.xg-sp .xg-sp__strip');
+              if (!strip) return null;
+              const cs = getComputedStyle(strip);
+              const kids = Array.from(strip.children);
+              const tops = kids.slice(0, 9).map((k) => Math.round(k.getBoundingClientRect().top));
+              const rules = [];
+              Array.from(document.styleSheets).forEach((sh) => {
+                let list = null;
+                const name = (sh.href || ('inline:' + ((sh.ownerNode && sh.ownerNode.id) || (sh.ownerNode && sh.ownerNode.parentElement && sh.ownerNode.parentElement.id) || ''))).slice(-70);
+                try { list = sh.cssRules; } catch (e) { rules.push({ sheet: name, err: 'unreadable (cross-origin)' }); return; }
+                if (!list) return;
+                const walk = (rs, media) => {
+                  Array.from(rs).forEach((r) => {
+                    if (r.type !== 1 && r.cssRules && r.cssRules.length) { walk(r.cssRules, (r.media && r.media.mediaText) || media); return; }
+                    if (r.type !== 1 || !r.selectorText || !r.style) return;
+                    const fw = r.style.getPropertyValue('flex-wrap') || r.style.getPropertyValue('flex-flow');
+                    if (!fw) return;
+                    let hit = false;
+                    try { hit = strip.matches(r.selectorText); } catch (e) {}
+                    if (hit) rules.push({ sheet: name, sel: r.selectorText.slice(0, 90), val: fw, imp: r.style.getPropertyPriority('flex-wrap') || r.style.getPropertyPriority('flex-flow'), media: media || '' });
+                  });
+                };
+                walk(list, '');
+              });
+              return {
+                flexWrap: cs.flexWrap, flexDirection: cs.flexDirection, display: cs.display,
+                inlineStyle: strip.getAttribute('style'),
+                children: kids.length,
+                kidCls: kids.slice(0, 3).map((k) => k.tagName + '.' + String(k.className || '').trim().split(/\s+/).slice(0, 2).join('.')),
+                tops, scrollW: strip.scrollWidth, clientW: strip.clientWidth, h: strip.offsetHeight,
+                rules
+              };
+            });
+            console.log('SP-STRIP-CSS', JSON.stringify(stripCss));
+            v('sp-strip-single-row', !!stripCss && stripCss.flexWrap === 'nowrap' && stripCss.children >= 8 && new Set(stripCss.tops).size === 1 && stripCss.scrollW > stripCss.clientW,
+              stripCss ? 'flex-wrap=' + stripCss.flexWrap + ' children=' + stripCss.children + ' tops=' + JSON.stringify(stripCss.tops) + ' scrollWidth ' + stripCss.scrollW + ' vs clientWidth ' + stripCss.clientW + ' h=' + stripCss.h + ' wrap-rules=' + JSON.stringify(stripCss.rules).slice(0, 300) : 'no strip');
             const spAll = (fn) => sp.rows.length > 0 && sp.rows.every(fn);
             const spSay = (fn) => sp.rows.map((r) => '"' + r.title.slice(0, 18) + '": ' + fn(r)).join(' | ') || 'no .xg-sp rows';
             v('sp-heads', sp.heads >= 1, 'heads=' + sp.heads);
@@ -518,7 +588,7 @@ jobs:
               const img = document.querySelector('.xg-nt__card img');
               if (!img) return null;
               img.scrollIntoView({ block: 'center', inline: 'nearest' });
-              return { hoverCapable: window.matchMedia('(hover: hover) and (pointer: fine)').matches, script: !!window.xgCardPeek, thumbW: img.offsetWidth };
+              return { hoverCapable: window.matchMedia('(hover: hover) and (pointer: fine)').matches, nativeHoverFine: window.__xgNativeHoverFine, script: !!window.xgCardPeek, thumbW: img.offsetWidth };
             });
             if (!peekTarget) {
               v('peek-shows', true, 'SKIPPED - no .xg-nt__card img on this render (New Today feed empty)');
@@ -552,7 +622,7 @@ jobs:
                 (peek.on ? '.xg-peek on after ' + peekWait + 'ms' + (peekAt700 ? '' : ' (not yet at 700ms)') : '.xg-peek never showed in ' + peekWait + 'ms (found=' + peek.found + ')')
                   + ' img ' + peek.imgW + 'x' + peek.imgH + ' opacity=' + peek.opacity + ' src=...' + peek.src
                   + ' ; after Escape on=' + peekAfter.on + ' opacity=' + peekAfter.opacity
-                  + ' (hover-capable=' + peekTarget.hoverCapable + ' script=' + peekTarget.script + ' thumb w=' + peekTarget.thumbW + ')');
+                  + ' (hover-capable=' + peekTarget.hoverCapable + ', native=' + peekTarget.nativeHoverFine + (peekTarget.nativeHoverFine ? '' : ' - matchMedia hover/pointer shimmed on this headless runner') + '; script=' + peekTarget.script + ' thumb w=' + peekTarget.thumbW + ')');
             }
 
             // ---- deck-builder CTA: neon-dark card ----
