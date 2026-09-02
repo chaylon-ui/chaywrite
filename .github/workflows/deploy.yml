@@ -203,3 +203,24 @@ jobs:
           echo "=== /binder/search/status (last cron run per game + landing-entry ages; cron:null means the 5-min pre-warm has never completed) ==="
           curl -sS --max-time 20 "$W/binder/search/status" | head -c 2500 || true
           printf '\n'
+
+      # Log-only probe of GET /ics (round 27 add-to-calendar). A July sample
+      # is ADT (-03:00): 18:30 local must come back DTSTART:20260710T213000Z
+      # with the 3-hour default end DTEND:20260711T003000Z as a text/calendar
+      # attachment; format=google must 302 to calendar.google.com carrying
+      # the same UTC dates; a bad date, a missing title and a 301-char title
+      # must each 400.
+      - name: Smoke-test /ics add-to-calendar (log-only)
+        run: |
+          W=https://exor-binder.nevski.workers.dev
+          Q='t=Friday%20Night%20Magic%20%C2%B7%20Magic&s=2026-07-10T18%3A30&loc=Exor%20Games%20Charlottetown&d=Magic%3A%20The%20Gathering%20%C2%B7%20Ticket%20%2410&u=https%3A%2F%2Fexorgames.com%2Fpages%2Fevents'
+          echo "=== GET /ics sample (expect 200 text/calendar attachment; DTSTART:20260710T213000Z DTEND:20260711T003000Z) ==="
+          curl -sS -D /tmp/ics-h -o /tmp/ics-b --max-time 20 "$W/ics?$Q" || true
+          grep -i '^HTTP/\|^content-type\|^content-disposition\|^cache-control' /tmp/ics-h | tr -d '\r' | sed 's/^/  /' || true
+          head -n 12 /tmp/ics-b | tr -d '\r' || true
+          echo "=== /ics format=google (expect 302 -> calendar.google.com/calendar/render?action=TEMPLATE ... dates=20260710T213000Z/20260711T003000Z) ==="
+          curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' --max-time 20 "$W/ics?$Q&format=google" || true
+          echo "=== /ics guards (expect 400 400 400) ==="
+          curl -sS -o /dev/null -w 'bad date      : HTTP %{http_code}\n' --max-time 20 "$W/ics?t=x&s=2026-13-45T99%3A99" || true
+          curl -sS -o /dev/null -w 'no title      : HTTP %{http_code}\n' --max-time 20 "$W/ics?s=2026-07-10T18%3A30" || true
+          curl -sS -o /dev/null -w '301-char title: HTTP %{http_code}\n' --max-time 20 "$W/ics?t=$(printf 'a%.0s' $(seq 1 301))&s=2026-07-10T18%3A30" || true
