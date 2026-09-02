@@ -132,7 +132,7 @@ jobs:
             }
 
             /* ---- the BinderPOS calendar popover: what it exposes, and our link if present ---- */
-            let popLink = '', popSeen = false;
+            let popLink = '', popSeen = false, popOut = null;
             try {
               // the widget's own source around the popover, from whichever bundle the page really loaded
               const srcs = await page.evaluate(() => [...document.scripts].map(s => s.src).filter(s => /binderpos|web\.app|calendar/i.test(s)));
@@ -181,8 +181,15 @@ jobs:
                   const cell = p.closest('td');
                   const link = p.querySelector('a[href*="/ics?"]');
                   const cn = (n) => n.tagName.toLowerCase() + (n.className && typeof n.className === 'string' && n.className.trim() ? '.' + n.className.trim().split(/\s+/).join('.') : '');
+                  const tx = (sel) => ((p.querySelector(sel) || {}).textContent || '').trim();
+                  const colors = (() => {
+                    if (!link) return null;
+                    const cs = getComputedStyle(link); let ground = null;
+                    for (let el = link.parentElement; el && el !== document.body; el = el.parentElement) { const bg = getComputedStyle(el).backgroundColor; if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { ground = bg; break; } }
+                    return { ink: cs.color, border: cs.borderTopColor, bg: cs.backgroundColor, ground, popBg: getComputedStyle(p).backgroundColor, popInk: getComputedStyle(p).color };
+                  })();
                   return {
-                    hidden, count: all.length,
+                    hidden, count: all.length, title: tx('.calendar-icon-info-title'), date: tx('.calendar-icon-info-date'), time: tx('.calendar-icon-info-time'), colors,
                     html: p.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/\s+/g, ' ').slice(0, 4000),
                     text: (p.innerText || '').replace(/\s+/g, ' ').slice(0, 400),
                     cell: cell ? (cell.innerText || '').replace(/\s+/g, ' ').slice(0, 120) : '',
@@ -192,7 +199,7 @@ jobs:
                   };
                 });
                 if (out) {
-                  popSeen = true; popLink = out.link;
+                  popSeen = true; popLink = out.link; popOut = out;
                   console.log('POPOVER-FOUND nodes=' + out.count + ' hidden=' + out.hidden);
                   console.log('POPOVER-HTML ' + out.html);
                   console.log('POPOVER-TEXT ' + out.text);
@@ -202,6 +209,24 @@ jobs:
               }
             } catch (e) { console.log('CAL-ERR', String(e).slice(0, 160)); }
             console.log('POPOVER-SEEN ' + popSeen + ' | POPOVER-LINK ' + (popLink || '(none)'));
+            if (popOut) console.log('POPOVER-FIELDS title="' + popOut.title + '" date="' + popOut.date + '" time="' + popOut.time + '" colors=' + JSON.stringify(popOut.colors));
+            v('popover-has-ics-link', !!popLink, popLink ? popLink.slice(0, 200) : (popSeen ? 'popover open, no a[href*="/ics?"] inside it' : 'no popover opened'));
+            if (popLink && popOut) {
+              // the runner's Chrome is en-US: the widget prints M/D/YYYY and h:mm:ss AM/PM
+              const dm = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(popOut.date);
+              const tm = /(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP])M/i.exec(popOut.time);
+              let want = '';
+              if (dm && tm) { let h = +tm[1]; if (/p/i.test(tm[3]) && h < 12) h += 12; if (/a/i.test(tm[3]) && h === 12) h = 0; want = dm[3] + '-' + String(dm[1]).padStart(2, '0') + '-' + String(dm[2]).padStart(2, '0') + 'T' + String(h).padStart(2, '0') + ':' + tm[2]; }
+              const ps = new URL(popLink).searchParams;
+              v('popover-link-matches-popover-text', !!want && ps.get('s') === want && ps.get('t') === popOut.title, 'popover prints "' + popOut.date + ' ' + popOut.time + '" -> ' + want + ' | link s=' + ps.get('s') + ' t="' + ps.get('t') + '"');
+              let pd = '';
+              try { const r = await fetch(popLink); const b = await r.text(); const m = /^DTSTART:(\d{8}T\d{6}Z)\r?$/m.exec(b); pd = m ? m[1] : ''; } catch (e) {}
+              const pl = pd ? halifax(new Date(pd.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, '$1-$2-$3T$4:$5:$6Z'))) : '';
+              v('popover-ics-dtstart-matches', !!pd && pl === ps.get('s'), 'DTSTART ' + (pd || '?') + ' -> Atlantic ' + pl + ' vs link s=' + ps.get('s'));
+              const c = popOut.colors;
+              const sum = (x) => { const m = (x || '').match(/[\d.]+/g); return m && m.length >= 3 ? (+m[0] + +m[1] + +m[2]) : -1; };
+              v('popover-link-readable', !!c && !!c.ground && Math.abs(sum(c.ink) - sum(c.ground)) >= 300, c ? 'ink ' + c.ink + ' on ' + c.ground + ' (popover bg ' + c.popBg + ', popover ink ' + c.popInk + ')' : 'no colours');
+            } else { v('popover-link-matches-popover-text', false, 'no link'); v('popover-ics-dtstart-matches', false, 'no link'); v('popover-link-readable', false, 'no link'); }
             console.log('ERRS ' + JSON.stringify(errs));
             console.log('EVENTS-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
             await browser.close();
