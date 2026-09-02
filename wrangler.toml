@@ -23,3 +23,10 @@ class_name = "BinderRoom"
 # [[migrations]]
 # tag = "v1"
 # new_classes = ["BinderRoom"]
+
+# Every 5 minutes: pre-warm the advanced-search landing bodies (one per
+# supported game + page 2 for pokemon/mtg) into the binder-search-cache DO,
+# so /binder/search never answers the default query from a cold BinderPOS.
+# Handler: scheduled() in src/index.js -> warmBinderSearch (src/binder-search.js).
+[triggers]
+crons = ["*/5 * * * *"]

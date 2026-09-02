@@ -444,8 +444,62 @@ export class BinderRoom {
     return null;
   }
 
+  // ---- /binder/search response store. Only the DO named
+  // binder-search-cache (src/binder-search.js) is ever asked this, through
+  // in-worker stubs; the router never forwards /_cache/* from outside.
+  // One global copy of each BinderPOS answer, gzip'd (raw bodies run
+  // 84-134KB; storage values cap at 128KB), under "bsc:<sha256 of the
+  // canonical body>" as { ts, w (cron-written), rf (refresh lock), gz }.
+  //   GET  /_cache/get?k=&fresh=&stale=&lock=[&meta=1]
+  //        404 when absent or older than `stale`; else the gz bytes with
+  //        x-age, x-state fresh|stale, x-warm 0|1 and x-refresh 1 when
+  //        this caller won the background-refresh lock for `lock` ms.
+  //   POST /_cache/put?k=&w=   body = gz bytes
+  // A tiny "bsct:<k>" -> ts index lets the hourly sweep drop dead entries
+  // without loading every body.
+  async cacheOp(request, url) {
+    const k = String(url.searchParams.get("k") || "");
+    if (!/^[a-f0-9]{16,64}$/.test(k)) return Response.json({ error: "bad key" }, { status: 400 });
+    const num = (name, dflt) => { const v = parseInt(url.searchParams.get(name), 10); return v > 0 ? v : dflt; };
+    const now = Date.now();
+    if (url.pathname === "/_cache/get") {
+      const rec = await this.state.storage.get("bsc:" + k);
+      if (!rec || !rec.gz) return new Response(null, { status: 404 });
+      const age = Math.max(0, now - (rec.ts || 0));
+      const fresh = num("fresh", 3e5), stale = num("stale", 12e5), lock = num("lock", 6e4);
+      if (age >= stale) return new Response(null, { status: 404 });
+      let refresh = 0;
+      if (age >= fresh && now - (rec.rf || 0) >= lock) {
+        rec.rf = now; // this caller refreshes; the rest serve stale quietly for `lock` ms
+        await this.state.storage.put("bsc:" + k, rec);
+        refresh = 1;
+      }
+      const h = { "x-age": String(age), "x-state": age < fresh ? "fresh" : "stale", "x-warm": rec.w ? "1" : "0", "x-refresh": String(refresh), "cache-control": "no-store" };
+      if (url.searchParams.get("meta")) return new Response(null, { status: 204, headers: h });
+      return new Response(rec.gz, { headers: { ...h, "content-type": "application/gzip" } });
+    }
+    if (url.pathname === "/_cache/put" && request.method === "POST") {
+      const gz = await request.arrayBuffer();
+      if (!gz.byteLength || gz.byteLength > 126 * 1024) return Response.json({ error: "bad size" }, { status: 413 });
+      const w = url.searchParams.get("w") === "1" ? 1 : 0;
+      await this.state.storage.put({ ["bsc:" + k]: { ts: now, w, gz }, ["bsct:" + k]: now });
+      if (now - (this.bscSweepAt || 0) > 36e5) {
+        this.bscSweepAt = now;
+        try {
+          const idx = await this.state.storage.list({ prefix: "bsct:", limit: 1000 });
+          const dead = [];
+          for (const [ik, ts] of idx) if (now - (ts || 0) > 18e5) dead.push(ik, "bsc:" + ik.slice(5));
+          for (let i = 0; i < dead.length; i += 128) await this.state.storage.delete(dead.slice(i, i + 128));
+        } catch (e) { console.log("cache sweep failed: " + ((e && e.message) || e)); }
+      }
+      return Response.json({ ok: true });
+    }
+    return new Response(null, { status: 404 });
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/_cache/")) return this.cacheOp(request, url);
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });

@@ -179,3 +179,24 @@ jobs:
           echo "=== /sisters.json?q=humility (expect cheapest IN-STOCK prices; New Glasgow Humility = 79.10 not 40.50; 5-min edge cache may lag one run) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/sisters.json?q=humility" | head -c 1500 || true
           printf '\n'
+
+      # Log-only probe of the cached BinderPOS search proxy. The first POST
+      # is a miss (BinderPOS cold: up to ~30s) unless the 5-min cron already
+      # warmed the body ("warm"); the second must come back "hit" instantly.
+      - name: Smoke-test /binder/search (log-only)
+        run: |
+          W=https://exor-binder.nevski.workers.dev
+          B='{"storeUrl":"most-wanted-ca.myshopify.com","game":"pokemon","strict":null,"sortTypes":[{"type":"price","asc":false,"order":1}],"variants":null,"title":"","priceGreaterThan":0,"priceLessThan":null,"instockOnly":true,"limit":18,"offset":0,"setNames":[],"rarities":[],"types":[]}'
+          echo "=== supportedGames raw (the cron's game-list source), first 900 chars ==="
+          curl -sS --max-time 20 -H 'Accept: application/json' "https://api.binderpos.com/external/shopify/supportedGames?storeUrl=most-wanted-ca.myshopify.com" | head -c 900 || true
+          printf '\n'
+          echo "=== POST /binder/search pokemon default body, twice (expect miss or warm, then hit) ==="
+          for i in 1 2; do
+            curl -sS --max-time 70 -D /tmp/bs-h -o /tmp/bs-b -w "binder/search #$i: HTTP %{http_code} time_total %{time_total}s size %{size_download}B\n" -H 'Content-Type: application/json' -H 'Accept: application/json' -X POST --data "$B" "$W/binder/search" || true
+            echo "  x-xg-cache: $(grep -i '^x-xg-cache' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | content-type: $(grep -i '^content-type' /tmp/bs-h | tr -d '\r' | cut -d' ' -f2-) | cors: $(grep -ci '^access-control-allow-origin' /tmp/bs-h || true) | count: $(python3 -c 'import json;d=json.load(open("/tmp/bs-b"));print(d.get("count"), "products", len(d.get("products") or []))' 2>/dev/null || echo parse-fail)"
+          done
+          echo "=== GET /binder/search (expect 405), OPTIONS preflight (expect 204 + CORS), wrong storeUrl (expect 400) ==="
+          curl -sS -o /dev/null -w 'GET /binder/search: HTTP %{http_code}\n' --max-time 20 "$W/binder/search" || true
+          curl -sS -o /dev/null -D /tmp/bs-o -w 'OPTIONS /binder/search: HTTP %{http_code}\n' --max-time 20 -X OPTIONS -H 'Origin: https://exorgames.com' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type' "$W/binder/search" || true
+          grep -i '^access-control' /tmp/bs-o | tr -d '\r' | sed 's/^/  /' || true
+          curl -sS -w '\nwrong storeUrl: HTTP %{http_code}\n' --max-time 20 -H 'Content-Type: application/json' -X POST --data '{"storeUrl":"other.myshopify.com","game":"pokemon","limit":18}' "$W/binder/search" || true

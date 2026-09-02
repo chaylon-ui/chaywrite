@@ -2,6 +2,7 @@ import { BinderRoom } from "./room.js";
 import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 import { serveReviews } from "./reviews.js";
 import { serveStores } from "./stores.js";
+import { serveBinderSearch, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 
 export { BinderRoom };
 
@@ -38,9 +39,17 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const rq = String(url.searchParams.get("room") || "").toLowerCase();
-    const roomName = ROOM_RE.test(rq) ? rq : "default";
+    // The search-cache DO shares the BinderRoom class; its name is not a screen.
+    const roomName = ROOM_RE.test(rq) && rq !== CACHE_DO ? rq : "default";
     const id = env.ROOM.idFromName(roomName);
     const room = env.ROOM.get(id);
+
+    // Cached proxy for the advanced-search widget's BinderPOS product POST
+    // (binder-search.js): global DO store + cron pre-warm, CORS for the
+    // storefront. Same body in, same JSON out, plus x-xg-cache.
+    if (url.pathname === "/binder/search") {
+      return serveBinderSearch(request, env, ctx);
+    }
 
     // The default room's DO doubles as the screen registry: remember every
     // room that shows activity so /admin can offer a picker of known screens.
@@ -307,6 +316,15 @@ export default {
       return serveAsset(env, "/tv.html", request);
     }
     return env.ASSETS.fetch(request);
+  },
+
+  // Cron (wrangler.toml [triggers], every 5 min): re-warm the advanced-search
+  // landing bodies so the storefront's default query never reaches BinderPOS
+  // cold (25s+ Pokémon, 60s MTG). Per-game timings go to console.log, so
+  // `wrangler tail` shows them.
+  async scheduled(event, env, ctx) {
+    try { await warmBinderSearch(env); }
+    catch (e) { console.log("binder-warm: failed: " + ((e && e.message) || e)); }
   },
 };
 
