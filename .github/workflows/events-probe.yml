@@ -19,6 +19,7 @@ jobs:
         run: |
           curl -sS --max-time 20 -o ec.js "https://cdn.binderpos.com/eventCalendar.js" || true
           echo "eventCalendar.js bytes: $(wc -c < ec.js)"
+          echo "--- eventCalendar.js verbatim (tiny: the real widget is the React bundle the page loads) ---"; cat ec.js; echo
           python3 - <<'PY'
           import re
           s = open('ec.js', encoding='utf-8', errors='replace').read()
@@ -133,22 +134,55 @@ jobs:
             /* ---- the BinderPOS calendar popover: what it exposes, and our link if present ---- */
             let popLink = '', popSeen = false;
             try {
+              // the widget's own source around the popover, from whichever bundle the page really loaded
+              const srcs = await page.evaluate(() => [...document.scripts].map(s => s.src).filter(s => /binderpos|web\.app|calendar/i.test(s)));
+              console.log('CAL-SCRIPTS ' + JSON.stringify(srcs));
+              for (const src of srcs.slice(0, 4)) {
+                try {
+                  const js = await (await fetch(src)).text();
+                  const hits = []; let at = -1;
+                  while ((at = js.indexOf('calendar-icon-info', at + 1)) >= 0 && hits.length < 2) hits.push(at);
+                  console.log('BUNDLE ' + src.slice(0, 120) + ' bytes=' + js.length + ' calendar-icon-info hits=' + (hits.length ? hits.length + '+' : 0));
+                  for (const h of hits) console.log('BUNDLE-CTX ' + js.slice(Math.max(0, h - 1200), h + 1400).replace(/\s+/g, ' '));
+                } catch (e) { console.log('BUNDLE-ERR ' + src.slice(0, 100) + ' ' + String(e).slice(0, 100)); }
+              }
               await page.evaluate(() => { const c = document.getElementById('binderpos-calendar'); if (c) c.scrollIntoView(); });
               await page.waitForSelector('#binderpos-calendar .calendar-icon-container', { timeout: 20000 });
               await sleep(800);
-              const icons = await page.$$('#binderpos-calendar td.calendar-data-block:not(.calendar-inactive-block) .calendar-icon-container');
-              console.log('CAL-ICONS ' + icons.length);
-              for (let i = 0; i < Math.min(icons.length, 3) && !popSeen; i++) {
-                try { await icons[i].click(); } catch (e) { console.log('CAL-CLICK-ERR', String(e).slice(0, 120)); }
+              console.log('POPOVER-NODES-BEFORE-CLICK ' + await page.evaluate(() => document.querySelectorAll('#binderpos-calendar .calendar-icon-info').length));
+              // icons from today's cell (.calendar-selected-date) onward, clicked with real mouse events at the image's centre
+              const n = await page.evaluate(() => {
+                const tds = [...document.querySelectorAll('#binderpos-calendar td.calendar-data-block:not(.calendar-inactive-block)')];
+                const start = Math.max(0, tds.findIndex(td => td.classList.contains('calendar-selected-date')));
+                return tds.slice(start).reduce((a, td) => a + td.querySelectorAll('.calendar-icon-container').length, 0);
+              });
+              console.log('CAL-ICONS from today: ' + n);
+              for (let i = 0; i < Math.min(n, 6) && !popSeen; i++) {
+                const pt = await page.evaluate((k) => {
+                  const tds = [...document.querySelectorAll('#binderpos-calendar td.calendar-data-block:not(.calendar-inactive-block)')];
+                  const start = Math.max(0, tds.findIndex(td => td.classList.contains('calendar-selected-date')));
+                  const icons = [].concat(...tds.slice(start).map(td => [...td.querySelectorAll('.calendar-icon-container')]));
+                  const ic = icons[k]; if (!ic) return null;
+                  ic.scrollIntoView({ block: 'center' });
+                  const el = ic.querySelector('img') || ic;
+                  const r = el.getBoundingClientRect();
+                  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, day: ((ic.closest('td').querySelector(':scope > span') || {}).textContent || '').trim(), alt: el.getAttribute('alt') || '' };
+                }, i);
+                if (!pt) break;
+                console.log('CAL-CLICK ' + i + ' day=' + pt.day + ' at ' + Math.round(pt.x) + ',' + Math.round(pt.y) + ' w=' + Math.round(pt.w) + ' alt=' + pt.alt.slice(0, 40));
+                try { await page.mouse.move(pt.x, pt.y); await sleep(150); await page.mouse.click(pt.x, pt.y); } catch (e) { console.log('CAL-CLICK-ERR', String(e).slice(0, 120)); }
                 await sleep(1500);
                 const out = await page.evaluate(() => {
                   const vis = (el) => el && el.offsetWidth > 0 && el.offsetHeight > 0;
-                  const p = [...document.querySelectorAll('#binderpos-calendar .calendar-icon-info')].find(vis);
+                  const all = [...document.querySelectorAll('#binderpos-calendar .calendar-icon-info')];
+                  const p = all.find(vis) || all[0];
                   if (!p) return null;
+                  const hidden = !vis(p);
                   const cell = p.closest('td');
                   const link = p.querySelector('a[href*="/ics?"]');
                   const cn = (n) => n.tagName.toLowerCase() + (n.className && typeof n.className === 'string' && n.className.trim() ? '.' + n.className.trim().split(/\s+/).join('.') : '');
                   return {
+                    hidden, count: all.length,
                     html: p.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/\s+/g, ' ').slice(0, 4000),
                     text: (p.innerText || '').replace(/\s+/g, ' ').slice(0, 400),
                     cell: cell ? (cell.innerText || '').replace(/\s+/g, ' ').slice(0, 120) : '',
@@ -159,6 +193,7 @@ jobs:
                 });
                 if (out) {
                   popSeen = true; popLink = out.link;
+                  console.log('POPOVER-FOUND nodes=' + out.count + ' hidden=' + out.hidden);
                   console.log('POPOVER-HTML ' + out.html);
                   console.log('POPOVER-TEXT ' + out.text);
                   console.log('POPOVER-CELL ' + out.cellClass + ' :: ' + out.cell);
