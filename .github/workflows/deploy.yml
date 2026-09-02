@@ -224,3 +224,61 @@ jobs:
           curl -sS -o /dev/null -w 'bad date      : HTTP %{http_code}\n' --max-time 20 "$W/ics?t=x&s=2026-13-45T99%3A99" || true
           curl -sS -o /dev/null -w 'no title      : HTTP %{http_code}\n' --max-time 20 "$W/ics?s=2026-07-10T18%3A30" || true
           curl -sS -o /dev/null -w '301-char title: HTTP %{http_code}\n' --max-time 20 "$W/ics?t=$(printf 'a%.0s' $(seq 1 301))&s=2026-07-10T18%3A30" || true
+
+      # Log-only probe of the price-history feed (src/price-history.js). Kicks
+      # today's snapshot run (idempotent per UTC day: a second kick answers
+      # "already ran today"), polls the status page every 10s for up to 150s
+      # while the DO alarm pages through the singles catalogue, then reads the
+      # series of one real single found through /search.json (by handle and
+      # by numeric id) plus the first product the run touched. A full run
+      # takes longer than this window (~60k products under Shopify's query
+      # cost limits), so the first deploy of a day shows a run in progress
+      # and a later one shows it finished. Never fails the deploy.
+      - name: Smoke-test /price-history (log-only)
+        run: |
+          set +e
+          W=https://exor-binder.nevski.workers.dev
+          echo "=== POST /price-history/run (kick today's snapshot; a no-op when it already ran) ==="
+          curl -sS --max-time 20 -X POST "$W/price-history/run" | head -c 900 || true
+          printf '\n'
+          echo "=== GET /price-history/status every 10s, up to 150s ==="
+          for i in $(seq 1 15); do
+            sleep 10
+            S=$(curl -sS --max-time 20 "$W/price-history/status")
+            echo "status #$i: $(printf '%s' "$S" | head -c 2200)"
+            if printf '%s' "$S" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          raise SystemExit(0 if d.get("ok") and not d.get("run") else 1)
+          ' 2>/dev/null; then echo "no run in progress (today is complete, or the last run is the answer above)"; break; fi
+          done
+          echo "=== a real single through /search.json?q=charizard (handle from the first card's url) ==="
+          H=$(curl -sS --max-time 40 "$W/search.json?q=charizard" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          c = (d.get("cards") or [{}])[0]
+          print((c.get("url") or "").rstrip("/").rsplit("/", 1)[-1])
+          ' 2>/dev/null)
+          echo "handle: $H"
+          echo "=== GET /price-history.json?handle=$H ==="
+          curl -sS -D /tmp/ph-h --max-time 30 "$W/price-history.json?handle=$H" | head -c 1600 || true
+          printf '\n'
+          echo "price-history CORS: $(grep -ci '^access-control-allow-origin' /tmp/ph-h || true) | cache-control: $(grep -i '^cache-control' /tmp/ph-h | tr -d '\r' || true) | x-xg-cache: $(grep -i '^x-xg-cache' /tmp/ph-h | tr -d '\r' | cut -d' ' -f2- || true)"
+          PID=$(curl -sS --max-time 20 -H 'Accept: application/json' "https://most-wanted-ca.myshopify.com/products/$H.js" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
+          echo "=== GET /price-history.json?id=$PID (the same product by numeric id) ==="
+          curl -sS --max-time 30 "$W/price-history.json?id=$PID" | head -c 1600 || true
+          printf '\n'
+          FID=$(curl -sS --max-time 20 "$W/price-history/status" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          r = d.get("run") or d.get("last") or {}
+          print(r.get("firstId") or "")
+          ' 2>/dev/null)
+          echo "=== GET /price-history.json?id=$FID (the first product this run touched: carries today's point even mid-run) ==="
+          curl -sS --max-time 30 "$W/price-history.json?id=$FID" | head -c 1600 || true
+          printf '\n'
+          echo "=== unknown id -> ok:true with empty points, HTTP 200; a second POST -> no-op that says so ==="
+          curl -sS -w ' [HTTP %{http_code}]' --max-time 20 "$W/price-history.json?id=1" || true
+          printf '\n'
+          curl -sS --max-time 20 -X POST "$W/price-history/run" | head -c 700 || true
+          printf '\n'

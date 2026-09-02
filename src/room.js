@@ -1,5 +1,6 @@
 import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TAB_ICON, BOARD_TAB_ICON, WH_TAB_ICON } from "./config.js";
 import { CACHE_DO, WARM_EVERY_MS, gzipText, warmWithStore } from "./binder-search.js";
+import { PRICE_DO, priceDoFetch, priceDoAlarm } from "./price-history.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -37,6 +38,11 @@ export class BinderRoom {
     // pre-warm alarm below.
     this.isCacheDo = false;
     try { this.isCacheDo = !!env.ROOM?.idFromName(CACHE_DO)?.equals?.(state.id); } catch {}
+    // The nightly price snapshot lives in the DO named PRICE_DO (same
+    // class, never a screen): only that instance answers /_ph/* and runs
+    // the snapshot alarm (src/price-history.js).
+    this.isPriceDo = false;
+    try { this.isPriceDo = !!env.ROOM?.idFromName(PRICE_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -581,6 +587,23 @@ export class BinderRoom {
     };
   }
 
+  // The price-history module's view of this DO: storage, env and clocks
+  // behind one small object, so the same code runs offline in
+  // test/price-history.harness.mjs with fakes. `mem` lives as long as this
+  // DO instance (the once-per-deploy alarm arming is remembered there).
+  priceCx() {
+    if (!this.phMem) this.phMem = {};
+    return {
+      storage: this.state.storage,
+      env: this.env,
+      fetch: (u, i) => fetch(u, i),
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      log: (s) => console.log(s),
+      mem: this.phMem,
+    };
+  }
+
   // Pre-warm clock #2: a Durable Object alarm every WARM_EVERY_MS, armed by
   // the first /_cache/* request after a deploy and re-armed at the start of
   // every run (so a run that dies never stops the clock). Delivered by the
@@ -596,6 +619,8 @@ export class BinderRoom {
   }
 
   async alarm() {
+    // The price DO's alarm is the nightly snapshot clock (price-history.js).
+    if (this.isPriceDo) { await priceDoAlarm(this.priceCx()); return; }
     if (!this.isCacheDo) return;
     try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
     let r = null;
@@ -609,6 +634,13 @@ export class BinderRoom {
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/_cache/")) return this.cacheOp(request, url);
+    // The price DO answers only its own paths, and nothing else answers
+    // them (a ?room=price-history screen must not share its storage).
+    if (this.isPriceDo) {
+      if (url.pathname.startsWith("/_ph/")) return priceDoFetch(this.priceCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
