@@ -9,7 +9,7 @@
 import {
   applySnapshot, expandSeries, changeOver, buildPayload, dayOf, dateOf, nextRunAt,
   throttleWait, parsePage, priceTick, priceDoAlarm, priceDoFetch, kickRun, statusOf,
-  PAGE, MAX_POINTS, SERIES_DAYS,
+  PAGE, MAX_POINTS, SERIES_DAYS, SEEN_REFRESH_DAYS,
 } from "../src/price-history.js";
 
 let fails = 0, passes = 0;
@@ -108,9 +108,12 @@ console.log("applySnapshot / cap / same-day correction");
   let r = applySnapshot(undefined, D0, 25, 10);
   check("first snapshot creates one point", r.changed && r.write && r.rec.p.length === 1 && r.rec.s === D0 && r.rec.d === D0, r.rec);
   r = applySnapshot(r.rec, D0 + 1, 25, 10);
-  check("unchanged price next day: no point, write only for d", !r.changed && r.write && r.rec.p.length === 1 && r.rec.d === D0 + 1, r.rec);
+  check("unchanged price next day: no point, no write (last-seen day refreshes weekly)", !r.changed && !r.write && r.rec.p.length === 1 && r.rec.d === D0, r.rec);
   r = applySnapshot(r.rec, D0 + 1, 25, 10);
   check("same day again, unchanged: nothing to write", !r.changed && !r.write, r);
+  r = applySnapshot(r.rec, D0 + SEEN_REFRESH_DAYS, 25, 10);
+  check("unchanged after " + SEEN_REFRESH_DAYS + " days: rewritten with d bumped, still one point", !r.changed && r.write && r.rec.p.length === 1 && r.rec.d === D0 + SEEN_REFRESH_DAYS, r.rec);
+  r = applySnapshot(r.rec, D0 + 1, 25, 10);
   r = applySnapshot(r.rec, D0 + 2, 30, 10);
   check("price change appends", r.changed && r.rec.p.length === 2 && r.rec.p[1][0] === D0 + 2 && r.rec.p[1][1] === 30, r.rec);
   r = applySnapshot(r.rec, D0 + 2, 35, 12);
@@ -213,11 +216,11 @@ console.log("day 2, same prices: no new points, last-seen day moves");
   cx = makeCx(st, shop.fetchFn, clock);
   await priceDoAlarm(cx);
   const last = await st.get("phs:last");
-  check("day-2 run finished in one tick with changed 0", last.day === D0 + 1 && last.changed === 0 && last.seen === 1200 && last.ticks === 1 && last.writes === 1199, last);
+  check("day-2 run finished in one tick with changed 0 and NO writes (nothing moved)", last.day === D0 + 1 && last.changed === 0 && last.seen === 1200 && last.ticks === 1 && last.writes === 0, last);
   const r = (await st.get("ph:" + cat[1].id));
-  check("record: still one point, d advanced", r.p.length === 1 && r.d === D0 + 1 && r.s === D0, r);
+  check("record: still one point, d untouched until the weekly refresh", r.p.length === 1 && r.d === D0 && r.s === D0, r);
   const pl = buildPayload(String(cat[1].id), r, clock.t);
-  check("payload day 2: days 2, two step entries, change7d null", pl.days === 2 && pl.points.length === 2 && pl.points[1][0] === dateOf(D0 + 1) && pl.change7d === null, pl);
+  check("payload day 2: two step entries through today, change7d null", pl.points.length === 2 && pl.points[1][0] === dateOf(D0 + 1) && pl.change7d === null, pl);
 }
 
 console.log("day 3, one product changes");
@@ -257,7 +260,7 @@ console.log("resumability: a page error, then a hard kill, both resume from the 
   check("resumed run finishes: 5 pages, 1200 seen, errors 1 recorded", last.day === D0 + 3 && !last.error && last.pages === 5 && last.seen === 1200 && last.errors === 1, last);
   check("after the kill, page 2 was asked again after c249 and the chain continued", shop.calls[4].variables.after === "c249" && shop.calls[5].variables.after === "c499" && shop.calls.length === 8, shop.calls.map((c) => c.variables.after));
   const a = await st.get("ph:" + cat[300].id);
-  check("page 2 processed twice the same day: still one point per day", a.p.length === 1 && a.d === D0 + 3, a);
+  check("page 2 processed twice the same day: still one point, no rewrite", a.p.length === 1 && a.d === D0, a);
 }
 
 console.log("throttling");

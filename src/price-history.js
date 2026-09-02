@@ -33,6 +33,11 @@
                      re-snapshot corrects that day's point instead of adding
                      one), capped at MAX_POINTS oldest-first; s survives the
                      cap so "since" stays honest. day = UTC days since epoch.
+                     d (the day the record was last written) is refreshed at
+                     most every SEEN_REFRESH_DAYS for an unchanged price: the
+                     first live run found 228k singles, and rewriting every
+                     record daily would be 228k storage writes a day for no
+                     information. asOf/days on the JSON surface follow d.
      phs:run         the run in progress (cursor, counters, tickAt)
      phs:last        the last run's summary (per UTC day; error when it failed)
 
@@ -65,6 +70,7 @@ export const PAGE = 250;          // products per Admin page (cost-probed: fits 
 export const MAX_POINTS = 400;    // change points kept per product
 export const SERIES_DAYS = 90;    // length of the expanded step series
 export const RUN_HOUR_UTC = 8;    // 08:00 UTC = 04:00 Atlantic standard time
+export const SEEN_REFRESH_DAYS = 7; // unchanged records are rewritten (d bumped) at most this often
 const TICK_BUDGET_MS = 20e3;      // wall time one alarm tick spends on pages
 const SAFETY_ALARM_MS = 90e3;     // set first thing in a tick: a killed tick resumes from here
 const STALL_MS = 3 * 60e3;        // a run with no page for this long and no alarm is stalled
@@ -111,7 +117,9 @@ export function nextRunAt(now) {
 // instead of adding another, so the series has at most one point per day
 // and re-processing a page after a killed tick is harmless. Returns the
 // record plus whether a point changed and whether the record needs
-// writing at all (unchanged price on an already-seen day: no write).
+// writing at all: an unchanged price is rewritten (last-seen day bumped)
+// only once every SEEN_REFRESH_DAYS, so a quiet catalogue costs almost no
+// writes.
 export function applySnapshot(rec, day, cents, minCents) {
   const r = rec && Array.isArray(rec.p) ? rec : { s: day, d: 0, p: [] };
   if (!r.s || r.s > day) r.s = day;
@@ -126,8 +134,8 @@ export function applySnapshot(rec, day, cents, minCents) {
     if (r.p.length > MAX_POINTS) r.p.splice(0, r.p.length - MAX_POINTS);
     changed = true;
   }
-  const write = changed || r.d !== Math.max(r.d || 0, day);
-  r.d = Math.max(r.d || 0, day);
+  const write = changed || day - (r.d || 0) >= SEEN_REFRESH_DAYS;
+  if (write) r.d = Math.max(r.d || 0, day);
   return { rec: r, changed, write };
 }
 
@@ -171,7 +179,9 @@ export function changeOver(rec, today, n) {
   return { abs, pct: old[1] ? Math.round(((cur[1] - old[1]) / old[1]) * 1000) / 10 : null };
 }
 
-// The public JSON for one product (see the header for the contract).
+// The public JSON for one product (see the header for the contract). asOf
+// is the day the record was last written (a week old at most while the
+// price holds still); the step series always runs through today.
 export function buildPayload(id, rec, now) {
   const today = dayOf(now);
   const pts = (rec && rec.p) || [];
