@@ -55,3 +55,9 @@ jobs:
               | grep -inE "api key|apikey|oauth|authenticat|unauthoriz|401|credential|register|sign up|rate limit|throttl|commercial|approval|request access" \
               | cut -c1-260 | head -25
           done
+
+      - name: Ask the worker (Cloudflare egress, not this runner)
+        run: |
+          set +e
+          echo "=== GET /enrich/bgg-check from exor-binder ==="
+          curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/enrich/bgg-check" | python3 -m json.tool || true
