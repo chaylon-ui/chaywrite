@@ -39,11 +39,20 @@ DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 AL_URL = "https://graphql.anilist.co"
 AL_CHUNK = 8          # aliased Media() lookups per GraphQL document
-AL_GAP = 0.8          # AniList allows ~90 requests a minute
+AL_GAP = 2.2          # AniList degraded the public limit to 30 req/min
 
 DEMOS = {"shounen": "Shonen", "shoujo": "Shojo", "seinen": "Seinen", "josei": "Josei"}
 STATUS = {"RELEASING": "Ongoing", "FINISHED": "Completed", "HIATUS": "Hiatus",
           "CANCELLED": "Cancelled", "NOT_YET_RELEASED": "Upcoming"}
+
+
+def _errtext(j):
+    msgs = []
+    for e in (j.get("errors") or [])[:2]:
+        m = (e or {}).get("message")
+        if m:
+            msgs.append(str(m))
+    return "; ".join(msgs) or "(no message)"
 
 
 def post(url, payload, headers, tries=4):
@@ -69,13 +78,29 @@ def post(url, payload, headers, tries=4):
                 j = json.loads(raw.decode("utf-8", "replace"))
             except Exception:
                 j = None
-            if isinstance(j, dict) and ("data" in j or "errors" in j):
+            #
+            # 429 is the one status whose body must NOT be taken at face
+            # value. AniList answers it with {"errors":[{"message":"Too Many
+            # Requests"}]}, which satisfied the "errors" half of the old test
+            # above, so post() returned it as though it were a result and the
+            # backoff below never ran. A full sweep matched 8 of 1380 series
+            # for exactly that reason: one batch got through and the other 172
+            # were rate-limited into silence. Require real data instead.
+            if e.code != 429 and isinstance(j, dict) and j.get("data"):
                 return j
             if e.code in (429, 500, 502, 503, 504) and attempt < tries - 1:
-                wait = 60 if e.code == 429 else 3 * (attempt + 1)
+                if e.code == 429:
+                    try:
+                        wait = int(e.headers.get("Retry-After") or 60) + 1
+                    except (TypeError, ValueError):
+                        wait = 61
+                else:
+                    wait = 3 * (attempt + 1)
                 print("  HTTP %d, waiting %ds" % (e.code, wait))
                 time.sleep(wait)
                 continue
+            if isinstance(j, dict) and j.get("errors"):
+                print("  HTTP %d: %s" % (e.code, _errtext(j)))
             raise
         except Exception:
             if attempt < tries - 1:
@@ -176,6 +201,10 @@ def anilist(names):
         except Exception as e:
             print("  anilist batch %d failed: %s" % (i, e))
             continue
+        if r.get("errors") and not r.get("data"):
+            # A batch that answers with errors and no data returned nothing at
+            # all, and used to look identical to a batch of genuine misses.
+            print("  anilist batch %d returned no data: %s" % (i, _errtext(r)))
         data = r.get("data") or {}
         if DEBUG:
             # Which AniList entry a name actually landed on is the thing worth
