@@ -1,0 +1,103 @@
+name: dropoff-probe
+on:
+  workflow_dispatch: {}
+
+# Log-only: /pages/drop-off-points on the LIVE theme and the PREVIEW theme,
+# light and dark. The design is carried in the page body (its own <style>
+# and <script>), so the first thing to prove is that Shopify's editor kept
+# BOTH - a stripped <script> means no live hours and a stripped <style>
+# means no design. Then: six cards, six maps, and hours actually painted
+# from the worker feed rather than left in their hidden fallback state.
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22
+
+      - name: Does the no-key Google Maps embed still serve
+        run: |
+          curl -sS -o /dev/null -w 'maps embed: HTTP %{http_code} type %{content_type}\n' --max-time 20 \
+            -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' \
+            'https://www.google.com/maps?q=51+Allen+St,+Charlottetown,+PE&output=embed' || true
+          echo "=== worker /stores.json cities + hours present ==="
+          curl -sS --max-time 25 https://exor-binder.nevski.workers.dev/stores.json \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print('ok',d.get('ok'),'count',d.get('count')); [print(' ', s.get('city'), '|', s.get('source'), '| periods', len((s.get('hours') or {}).get('periods') or []), '| weekdayText', len((s.get('hours') or {}).get('weekdayText') or []), '|', s.get('phone')) for s in d.get('stores',[])]" || true
+
+      - name: Measure the drop-off page on both themes
+        run: |
+          cat > drop.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = '157462692013';
+          const P = '/pages/drop-off-points';
+          const H = 'https://exorgames.com';
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const fails = [];
+          const v = (n, ok, d) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + n + ' :: ' + d); if (!ok) fails.push(n); };
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const look = async (label, url, dark) => {
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1366, height: 900 });
+              await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+              await page.evaluateOnNewDocument((d) => { try { if (d) localStorage.setItem('xgTheme', 'dark'); else localStorage.removeItem('xgTheme'); } catch (e) {} }, dark);
+              try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) { console.log(label + ' NAV-ERR ' + String(e).slice(0, 90)); }
+              /* the hours are painted after a fetch to the worker, so give it
+                 a real chance before judging "no hours" */
+              try { await page.waitForFunction(() => { const b = document.querySelector('[data-xgd-hours]'); return b && !b.hidden; }, { timeout: 12000 }); } catch (e) { console.log(label + ' HOURS-WAIT timed out'); }
+              await sleep(600);
+              const r = await page.evaluate(() => {
+                const root = document.querySelector('.xgdrop');
+                const out = { theme: document.documentElement.getAttribute('data-xg-theme'), root: !!root };
+                if (!root) return out;
+                const band = root.querySelector('.xgdrop__band');
+                const cs = band ? getComputedStyle(band) : null;
+                const cards = [...root.querySelectorAll('[data-xgd-city]')];
+                const rects = cards.map(c => c.getBoundingClientRect());
+                const boxes = [...root.querySelectorAll('[data-xgd-hours]')];
+                out.styled = !!cs && /gradient/.test(cs.backgroundImage || '') && cs.borderRadius !== '0px';
+                out.cards = cards.length;
+                out.cities = cards.map(c => c.getAttribute('data-xgd-city')).join(',');
+                out.rows = new Set(rects.map(r => Math.round(r.top))).size;
+                out.maps = root.querySelectorAll('.xgdrop__map iframe[src*="output=embed"]').length;
+                out.mapH = root.querySelector('.xgdrop__map') ? Math.round(root.querySelector('.xgdrop__map').getBoundingClientRect().height) : 0;
+                out.hoursShown = boxes.filter(b => !b.hidden && b.textContent.trim()).length;
+                out.pills = root.querySelectorAll('.xgdrop__pill').length;
+                out.weeks = root.querySelectorAll('.xgdrop__week').length;
+                out.weekRows = root.querySelectorAll('.xgdrop__week .r').length;
+                out.today = root.querySelectorAll('.xgdrop__week .r.is-today').length;
+                out.sample = boxes.map(b => b.textContent.replace(/\s+/g, ' ').trim().slice(0, 46)).filter(Boolean).slice(0, 6);
+                out.phones = root.querySelectorAll('[data-xgd-phone]').length;
+                out.dirs = root.querySelectorAll('a[href*="maps/dir"]').length;
+                const c0 = cards[0];
+                out.cardBg = c0 ? getComputedStyle(c0).backgroundColor : null;
+                out.cityInk = c0 ? getComputedStyle(c0.querySelector('.xgdrop__city')).color : null;
+                const l = root.getBoundingClientRect();
+                out.gapL = Math.round(l.left); out.gapR = Math.round(document.documentElement.clientWidth - l.right); out.w = Math.round(l.width);
+                return out;
+              });
+              console.log(label + ' ' + JSON.stringify(r));
+              await page.close();
+              return r;
+            };
+            const live = await look('LIVE-light', H + P, false);
+            const prev = await look('PREVIEW-light', H + P + '?preview_theme_id=' + T, false);
+            const dark = await look('PREVIEW-dark', H + P + '?preview_theme_id=' + T, true);
+            const lum = (c) => { const m = (c || '').match(/[0-9.]+/g); return m && m.length >= 3 ? (+m[0] + +m[1] + +m[2]) : -1; };
+            for (const [label, r] of [['live', live], ['preview', prev], ['preview-dark', dark]]) {
+              v(label + '-style-block-survived', !!r.root && r.styled, r.root ? 'gradient+radius on the band: ' + r.styled : 'no .xgdrop root at all');
+              v(label + '-six-cards', r.cards === 6 && r.rows <= 3, r.cards + ' cards in ' + r.rows + ' row(s): ' + r.cities);
+              v(label + '-six-maps', r.maps === 6 && r.mapH >= 120, r.maps + ' embedded maps, ' + r.mapH + 'px tall');
+              v(label + '-six-directions-links', r.dirs === 6, r.dirs + ' directions links');
+              v(label + '-script-survived-and-hours-live', r.hoursShown === 6 && r.pills === 6, r.hoursShown + '/6 hour blocks painted, ' + r.pills + ' pills :: ' + JSON.stringify(r.sample));
+              v(label + '-week-lists-with-today', r.weeks === 6 && r.weekRows >= 40 && r.today >= 6, r.weeks + ' week lists, ' + r.weekRows + ' rows, ' + r.today + ' marked today');
+              v(label + '-centred', Math.abs(r.gapL - r.gapR) <= 8, 'left ' + r.gapL + ' vs right ' + r.gapR + ' (width ' + r.w + ')');
+            }
+            v('dark-cards-are-dark', lum(dark.cardBg) < 300 && lum(dark.cityInk) > 500, 'card bg ' + dark.cardBg + ' city ink ' + dark.cityInk);
+            v('light-cards-are-light', lum(prev.cardBg) > 700 && lum(prev.cityInk) < 300, 'card bg ' + prev.cardBg + ' city ink ' + prev.cityInk);
+            console.log('DROP-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node drop.js
