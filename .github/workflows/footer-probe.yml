@@ -86,14 +86,19 @@ jobs:
                  so the answer is not buried in 800 lines of geometry. */
               const g = r.group, inp = r.input, bs = r.btnSpan, b2 = r.btn;
               if (inp && bs) {
+                /* The fix uses flex-grow rather than a width plus a media query,
+                   so the field and button share one row at EVERY width and the
+                   field simply takes less of it on a phone. The thing worth
+                   asserting is therefore not "stacked below 480" - that was
+                   the old design and the expectation outlived it - but that
+                   they are on one row AND the field is still wide enough to
+                   type an email into. 232px at 390 is fine; 90px would not be. */
                 const sameRow = Math.abs(inp.y - bs.y) <= 4;
-                const wantRow = W > 480;
-                const okRow = sameRow === wantRow;
-                const fits = !b2 || (inp.x + inp.w) <= (b2.x + 2);
-                say('VERDICT ' + (okRow ? 'PASS' : 'FAIL') + ' ' + label + '-input-and-button-layout :: ' +
-                  (sameRow ? 'same row' : 'stacked') + ' (expected ' + (wantRow ? 'same row' : 'stacked') + ') ' +
-                  'input y' + inp.y + ' h' + inp.h + ' w' + inp.w + ', button y' + bs.y + ' ' +
-                  (b2 ? 'w' + b2.w + ' r' + b2.radius : 'no button') + (fits ? '' : ' OVERLAP'));
+                const roomy = inp.w >= 160;
+                say('VERDICT ' + (sameRow && roomy ? 'PASS' : 'FAIL') + ' ' + label + '-input-and-button-layout :: ' +
+                  (sameRow ? 'same row' : 'STACKED') + ', field ' + inp.w + 'px ' + (roomy ? '(usable)' : '(TOO NARROW)') +
+                  ' :: input y' + inp.y + ' h' + inp.h + ', button y' + bs.y + ' ' +
+                  (b2 ? 'w' + b2.w + ' r' + b2.radius : 'no button'));
                 say('VERDICT ' + (inp.h >= 36 && inp.h <= 48 ? 'PASS' : 'FAIL') + ' ' + label + '-field-height :: ' + inp.h + 'px, radius ' + inp.radius);
               }
               const lede = (r.subscribeish || []).find(e => /subscribe to our/i.test(e.t || ''));
