@@ -1,0 +1,37 @@
+name: enrich-run
+# Kicks the catalogue enrichment sweep and watches it, instead of waiting for
+# the 06:00 UTC alarm. Log-only: it starts a run and prints status snapshots.
+on:
+  workflow_dispatch:
+    inputs:
+      watch_minutes:
+        description: How long to keep printing status after the kick
+        default: "6"
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kick /enrich/run and watch /enrich/status
+        env:
+          MINUTES: ${{ inputs.watch_minutes }}
+        run: |
+          set +e
+          W="https://exor-binder.nevski.workers.dev"
+          echo "=== before ==="
+          curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true
+          echo "=== POST /enrich/run ==="
+          curl -sS --max-time 25 -X POST "$W/enrich/run" | python3 -m json.tool || true
+          N=$(( ${MINUTES:-6} * 2 ))
+          for i in $(seq 1 "$N"); do
+            sleep 30
+            echo "--- +$(( i * 30 ))s ---"
+            curl -sS --max-time 20 "$W/enrich/status" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+c=d.get("current") or d.get("last") or {}
+print("running=%s phase=%s pages=%s seen=%s written=%s ok=%s ambiguous=%s notfound=%s skipped=%s pending=%s errors=%s ticks=%s%s" % (
+  d.get("running"), c.get("phase"), c.get("pages"), c.get("seen"), c.get("written"), c.get("ok"),
+  c.get("ambiguous"), c.get("notfound"), c.get("skipped"), c.get("pending"), c.get("errors"), c.get("ticks"),
+  ("  ERROR: " + str(c.get("error"))) if c.get("error") else ""))
+' 2>/dev/null || true
+          done
