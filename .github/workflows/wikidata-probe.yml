@@ -1,0 +1,14 @@
+name: wikidata-probe
+# Measure how much of the real board-game shelf Wikidata knows, before any of
+# it is built on. The script lives in tools/ rather than in a heredoc here:
+# python written at column 0 inside a `run: |` block scalar ends the scalar and
+# the workflow stops parsing, which has now bitten this repo twice.
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wikidata coverage against 30 real catalogue titles
+        run: python3 tools/wikidata-probe.py
