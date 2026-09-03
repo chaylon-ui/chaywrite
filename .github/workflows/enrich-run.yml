@@ -1,6 +1,11 @@
 name: enrich-run
 # Kicks the catalogue enrichment sweep and watches it, instead of waiting for
 # the 06:00 UTC alarm. Log-only: it starts a run and prints status snapshots.
+#
+# No inline python here on purpose: a `python3 -c '` heredoc written at
+# column 0 inside a `run: |` block scalar ENDS the scalar, and GitHub then
+# fails to parse the file - the workflow registers with its path as its name
+# and workflow_dispatch never appears. Shell only.
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +22,7 @@ jobs:
         run: |
           set +e
           W="https://exor-binder.nevski.workers.dev"
+          brief() { tr ',{}' '\n\n\n' | grep -E '"(running|tokenConfigured|phase|pages|seen|written|ok|ambiguous|notfound|skipped|pending|errors|ticks|error|nextAlarm|day)"' | tr -d '"' | tr '\n' ' '; echo; }
           echo "=== before ==="
           curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true
           echo "=== POST /enrich/run ==="
@@ -24,14 +30,8 @@ jobs:
           N=$(( ${MINUTES:-6} * 2 ))
           for i in $(seq 1 "$N"); do
             sleep 30
-            echo "--- +$(( i * 30 ))s ---"
-            curl -sS --max-time 20 "$W/enrich/status" | python3 -c '
-import json,sys
-d=json.load(sys.stdin)
-c=d.get("current") or d.get("last") or {}
-print("running=%s phase=%s pages=%s seen=%s written=%s ok=%s ambiguous=%s notfound=%s skipped=%s pending=%s errors=%s ticks=%s%s" % (
-  d.get("running"), c.get("phase"), c.get("pages"), c.get("seen"), c.get("written"), c.get("ok"),
-  c.get("ambiguous"), c.get("notfound"), c.get("skipped"), c.get("pending"), c.get("errors"), c.get("ticks"),
-  ("  ERROR: " + str(c.get("error"))) if c.get("error") else ""))
-' 2>/dev/null || true
+            printf '+%ss  ' "$(( i * 30 ))"
+            curl -sS --max-time 20 "$W/enrich/status" | brief
           done
+          echo "=== final ==="
+          curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true
