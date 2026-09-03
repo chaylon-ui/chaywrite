@@ -1,0 +1,135 @@
+name: site-audit
+on:
+  workflow_dispatch: {}
+
+# Log-only audit of every page of the PREVIEW theme the runner can reach,
+# in light and dark: head metadata, structured data, images, dead links,
+# unlabeled controls, a text-contrast sweep, CLS/LCP, request weight and
+# third-party hosts, console/page errors and failed requests.
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22
+
+      - name: Audit the preview theme (light + dark)
+        run: |
+          cat > audit.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = '157462692013';
+          const H = 'https://exorgames.com';
+          const u = (p) => H + p + (p.includes('?') ? '&' : '?') + 'preview_theme_id=' + T;
+          const TOL = /shopifycloud|shop_events_listener|\/cdn\/wpm\/|web-pixels|sezzle|hotjar|googletagmanager|snize|searchanise|wishy|cloudsearch|omnisend|qikify|binderpos|googleapis|gstatic|facebook|tiktok|doubleclick|klaviyo/i;
+          const PAGES = ['/', '/collections', '/collections/all', '/cart', '/blogs/news', '/policies/shipping-policy', '/account/login', '/products/charizard-4-base-set', '/pages/about', '/no-such-page-xg'];
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const out = { dead: [], low: { light: [], dark: [] }, errs: [] };
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            for (const mode of ['light', 'dark']) {
+              for (const path of PAGES) {
+                const page = await browser.newPage();
+                await page.setViewport({ width: 1366, height: 900 });
+                await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+                await page.setCookie({ name: 'customer_posted', value: 'yes', domain: 'exorgames.com' });
+                const errs = [];
+                page.on('pageerror', e => { const s = String((e && e.message) || e); if (!TOL.test(s)) errs.push(s.slice(0, 120)); });
+                page.on('console', m => { if (m.type() === 'error') { const s = m.text(); if (!TOL.test(s)) errs.push('console: ' + s.slice(0, 120)); } });
+                const reqs = [];
+                page.on('response', r => { try { reqs.push({ url: r.url(), status: r.status(), type: r.request().resourceType() }); } catch (e) {} });
+                await page.evaluateOnNewDocument((m) => {
+                  try { if (m === 'dark') localStorage.setItem('xgTheme', 'dark'); else localStorage.removeItem('xgTheme'); } catch (e) {}
+                  window.__cls = 0; window.__lcp = 0;
+                  try { new PerformanceObserver(l => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: 'layout-shift', buffered: true }); } catch (e) {}
+                  try { new PerformanceObserver(l => { const es = l.getEntries(); if (es.length) window.__lcp = es[es.length - 1].startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); } catch (e) {}
+                }, mode);
+                let status = 0;
+                try { const resp = await page.goto(u(path), { waitUntil: 'networkidle2', timeout: 60000 }); status = resp ? resp.status() : 0; } catch (e) { errs.push('nav: ' + String(e).slice(0, 80)); }
+                await sleep(1500);
+                let a = null;
+                try {
+                  a = await page.evaluate(() => {
+                    const q = (s) => document.querySelector(s);
+                    const challenged = /just a moment|attention required/i.test(document.title) || !q('#header');
+                    const res = { challenged, title: document.title.slice(0, 70), theme: document.documentElement.getAttribute('data-xg-theme') };
+                    if (challenged) return res;
+                    const meta = (n) => { const m = q('meta[name="' + n + '"]') || q('meta[property="' + n + '"]'); return m ? (m.getAttribute('content') || '') : null; };
+                    res.desc = meta('description') ? meta('description').length : 0;
+                    res.canonical = !!q('link[rel="canonical"]');
+                    res.hreflang = document.querySelectorAll('link[rel="alternate"][hreflang]').length;
+                    res.og = !!meta('og:image');
+                    res.themeColor = meta('theme-color');
+                    res.appleIcon = !!q('link[rel="apple-touch-icon"]');
+                    res.jsonld = [...document.querySelectorAll('script[type="application/ld+json"]')].map(s => { try { const j = JSON.parse(s.textContent); return (j['@type'] || (j['@graph'] && j['@graph'].map(g => g['@type']).join('+')) || '?'); } catch (e) { return 'bad'; } }).join(',');
+                    res.h1 = document.querySelectorAll('h1').length;
+                    res.lang = document.documentElement.lang;
+                    const imgs = [...document.images];
+                    res.img = imgs.length;
+                    res.imgNoAlt = imgs.filter(i => !i.hasAttribute('alt')).length;
+                    res.imgBroken = imgs.filter(i => i.complete && i.naturalWidth === 0 && i.getAttribute('src')).length;
+                    res.imgNoDims = imgs.filter(i => !i.getAttribute('width') && !i.getAttribute('height') && !i.style.aspectRatio).length;
+                    const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0; };
+                    const links = [...document.querySelectorAll('a[href]')];
+                    res.links = links.length;
+                    res.dead = links.filter(l => { const h = l.getAttribute('href').trim(); return (h === '#' || h === '' || /^javascript:/i.test(h)) && vis(l) && !l.getAttribute('role') && !l.hasAttribute('data-toggle') && !l.closest('.tmenu_navbar'); }).map(l => (l.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) + ' <' + String(l.className || '').slice(0, 30) + '>').slice(0, 6);
+                    res.btnNoName = [...document.querySelectorAll('button')].filter(b => vis(b) && !(b.textContent || '').trim() && !b.getAttribute('aria-label') && !b.getAttribute('title')).length;
+                    res.inputNoLabel = [...document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio])')].filter(i => vis(i) && !i.getAttribute('aria-label') && !i.getAttribute('placeholder') && !i.closest('label') && !(i.id && q('label[for="' + i.id + '"]'))).length;
+                    const parse = (c) => { const m = (c || '').match(/[\d.]+/g); if (!m || m.length < 3) return null; return { r: +m[0], g: +m[1], b: +m[2], a: m.length > 3 ? +m[3] : 1 }; };
+                    const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+                    const blend = (top, under) => ({ r: top.r + (under.r - top.r) * (1 - top.a), g: top.g + (under.g - top.g) * (1 - top.a), b: top.b + (under.b - top.b) * (1 - top.a), a: 1 });
+                    const bgOf = (el) => {
+                      let acc = null;
+                      for (let n = el; n; n = n.parentElement) {
+                        const cs = getComputedStyle(n);
+                        if (cs.backgroundImage && cs.backgroundImage !== 'none') return null;
+                        const c = parse(cs.backgroundColor);
+                        if (c && c.a > 0) { acc = acc ? { r: acc.r + (c.r - acc.r) * (1 - acc.a), g: acc.g + (c.g - acc.g) * (1 - acc.a), b: acc.b + (c.b - acc.b) * (1 - acc.a), a: acc.a + c.a * (1 - acc.a) } : c; if (acc.a >= 0.99) return acc; }
+                      }
+                      const body = parse(getComputedStyle(document.body).backgroundColor);
+                      const base = body && body.a > 0 ? body : { r: 255, g: 255, b: 255, a: 1 };
+                      return acc ? blend(acc, base) : base;
+                    };
+                    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                    const seen = new Set(); let n, checked = 0, low3 = 0, low45 = 0; const low = [];
+                    while ((n = walker.nextNode()) && checked < 900) {
+                      if (!n.nodeValue.trim()) continue; const el = n.parentElement; if (!el || seen.has(el)) continue; seen.add(el);
+                      if (el.closest('script,style,noscript,svg,[aria-hidden="true"]')) continue; if (!vis(el)) continue;
+                      const r = el.getBoundingClientRect(); if (r.bottom < 0 || r.top > 3200) continue;
+                      const cs = getComputedStyle(el); const fs = parseFloat(cs.fontSize); if (fs < 9) continue;
+                      const fg = parse(cs.color); const bg = bgOf(el); if (!fg || !bg) continue; checked++;
+                      const fgc = fg.a < 1 ? blend(fg, bg) : fg;
+                      const l1 = lum(fgc), l2 = lum(bg); const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+                      const big = fs >= 24 || (fs >= 18.66 && +cs.fontWeight >= 700);
+                      if (ratio < 3) { low3++; if (low.length < 6) low.push(ratio.toFixed(2) + ' ' + el.tagName.toLowerCase() + '.' + String(el.className || '').split(/\s+/).slice(0, 2).join('.') + ' "' + n.nodeValue.trim().slice(0, 28) + '" fg=' + cs.color + ' bg=rgb(' + Math.round(bg.r) + ',' + Math.round(bg.g) + ',' + Math.round(bg.b) + ')'); }
+                      else if (ratio < (big ? 3 : 4.5)) low45++;
+                    }
+                    res.contrast = { checked, below3: low3, below45: low45 };
+                    res.low = low;
+                    res.cls = +(window.__cls || 0).toFixed(3); res.lcp = Math.round(window.__lcp || 0);
+                    const nav = performance.getEntriesByType('navigation')[0]; res.dcl = nav ? Math.round(nav.domContentLoadedEventEnd) : null; res.load = nav ? Math.round(nav.loadEventEnd) : null;
+                    const rs = performance.getEntriesByType('resource'); res.reqs = rs.length; res.kb = Math.round(rs.reduce((s, r) => s + (r.transferSize || 0), 0) / 1024);
+                    const hosts = {}; for (const r of rs) { try { const h = new URL(r.name).host; if (!/exorgames\.com$|cdn\.shopify\.com$/.test(h)) hosts[h] = (hosts[h] || 0) + 1; } catch (e) {} }
+                    res.thirdParty = Object.entries(hosts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([h, c]) => h + ':' + c).join(' ');
+                    res.scripts = document.scripts.length; res.fonts = document.fonts ? document.fonts.size : null;
+                    return res;
+                  });
+                } catch (e) { errs.push('eval: ' + String(e).slice(0, 100)); }
+                const bad = reqs.filter(r => r.status >= 400 && !TOL.test(r.url)).slice(0, 4).map(r => r.status + ' ' + r.type + ' ' + r.url.replace(/^https?:\/\//, '').slice(0, 70));
+                console.log('AUDIT ' + mode + ' ' + path + ' http=' + status + ' ' + JSON.stringify(Object.assign({}, a, { low: undefined, dead: undefined })));
+                if (a && a.dead && a.dead.length) for (const d of a.dead) out.dead.push(path + ' :: ' + d);
+                if (a && a.low && a.low.length) for (const l of a.low) out.low[mode].push(path + ' :: ' + l);
+                for (const e of errs.slice(0, 3)) out.errs.push(mode + ' ' + path + ' :: ' + e);
+                for (const b of bad) out.errs.push(mode + ' ' + path + ' :: HTTP ' + b);
+                await page.close();
+              }
+            }
+            const uniq = (arr) => [...new Set(arr)];
+            for (const d of uniq(out.dead).slice(0, 14)) console.log('DEADLINK ' + d);
+            for (const l of uniq(out.low.light).slice(0, 12)) console.log('LOWCONTRAST light ' + l);
+            for (const l of uniq(out.low.dark).slice(0, 14)) console.log('LOWCONTRAST dark ' + l);
+            for (const e of uniq(out.errs).slice(0, 16)) console.log('ERR ' + e);
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node audit.js
