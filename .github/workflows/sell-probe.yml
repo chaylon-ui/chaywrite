@@ -35,6 +35,36 @@ jobs:
               await sleep(1500);
               const r = await page.evaluate(() => {
                 const out = { title: document.title.slice(0, 60), theme: document.documentElement.getAttribute('data-xg-theme'), hasPolicyCss: false, frame: !!document.querySelector('.xg-page'), imgs: [], table: null };
+                // Round 29b: the page body is now a self-contained design
+                // (.xgsell + its own <style>), so measure THAT: does the
+                // style block survive Shopify, do the cards lay out in a
+                // real grid, is every card image square and sized, and is
+                // every link a live URL rather than a dead anchor.
+                const root = document.querySelector('.xgsell');
+                if (root) {
+                  const band = root.querySelector('.xgsell__band');
+                  const cards = [...root.querySelectorAll('.xgsell__card')];
+                  const cs = band ? getComputedStyle(band) : null;
+                  const rects = cards.map(c => c.getBoundingClientRect());
+                  const cols = new Set(rects.map(r => Math.round(r.top))).size;
+                  out.sell = {
+                    styled: !!cs && cs.borderRadius !== '0px' && /gradient/.test(cs.backgroundImage || ''),
+                    band: band ? Math.round(band.getBoundingClientRect().width) : 0,
+                    cards: cards.length,
+                    rows: cols,
+                    cardW: rects.map(r => Math.round(r.width)).join('/'),
+                    art: [...root.querySelectorAll('.xgsell__card img')].map(i => Math.round(i.getBoundingClientRect().width) + 'x' + Math.round(i.getBoundingClientRect().height)).join(' '),
+                    stats: root.querySelectorAll('.xgsell__stats li').length,
+                    steps: root.querySelectorAll('.xgsell__steps li').length,
+                    fine: root.querySelectorAll('.xgsell__fine li').length,
+                    pills: root.querySelectorAll('.xgsell__pill').length,
+                    dead: [...root.querySelectorAll('a[href]')].filter(a => { const h = a.getAttribute('href').trim(); return h === '#' || h === '' || h.startsWith('#'); }).length,
+                    links: [...root.querySelectorAll('a[href]')].length,
+                    inkOnBand: cs ? getComputedStyle(root.querySelector('.xgsell__band h2')).color : null,
+                    cardBg: cards[0] ? getComputedStyle(cards[0]).backgroundColor : null,
+                    cardInk: cards[0] ? getComputedStyle(cards[0].querySelector('h3')).color : null
+                  };
+                }
                 for (const s of document.styleSheets) { try { if ((s.href || '').includes('xg-policy')) out.hasPolicyCss = true; } catch (e) {} }
                 const t = document.querySelector('.xg-prose table, .rte table, #MainContent table');
                 if (t) { const tr = t.getBoundingClientRect(); const cs = getComputedStyle(t); out.table = { w: Math.round(tr.width), border: cs.borderTopWidth, bg: cs.backgroundColor, attr: t.getAttribute('border'), inline: (t.getAttribute('width') || '') }; }
@@ -57,12 +87,21 @@ jobs:
             // so the landing load is what a shopper on the preview sees.
             const prev = await look('PREVIEW-light', H + P + '?preview_theme_id=' + T, false);
             const prevDark = await look('PREVIEW-dark', H + P + '?preview_theme_id=' + T, true);
-            const small = (r) => r.imgs.filter(i => parseInt(i.shown) < 80).length;
             v('preview-is-the-preview-theme', prev.hasPolicyCss || prev.frame, 'xg-policy.css=' + prev.hasPolicyCss + ' xg-page frame=' + prev.frame);
-            v('live-images-full-size', live.imgs.length > 0 && small(live) === 0, live.imgs.map(i => i.shown + ' in ' + i.cell).join(' | ') || 'no table images found');
-            v('preview-images-full-size', prev.imgs.length > 0 && small(prev) === 0, prev.imgs.map(i => i.shown + ' in ' + i.cell).join(' | ') || 'no table images found');
-            v('preview-dark-images-full-size', prevDark.imgs.length > 0 && small(prevDark) === 0, prevDark.imgs.map(i => i.shown + ' in ' + i.cell).join(' | ') || 'no table images found');
-            v('layout-table-not-gridlined', !!prev.table && (prev.table.border === '0px' || prev.table.attr !== '0'), prev.table ? JSON.stringify(prev.table) : 'no table');
+            // The design must hold on BOTH themes: the live theme has none
+            // of the xg- stylesheets, so the page's own <style> is the only
+            // thing painting it there.
+            for (const [label, r] of [['live', live], ['preview', prev], ['preview-dark', prevDark]]) {
+              const s = r.sell;
+              v(label + '-design-renders', !!s && s.styled, s ? 'band ' + s.band + 'px, gradient+radius applied' : 'no .xgsell root - the style block or markup did not survive');
+              v(label + '-four-cards-in-a-grid', !!s && s.cards === 4 && s.rows < 4, s ? s.cards + ' cards, ' + s.rows + ' row(s), widths ' + s.cardW : 'no cards');
+              v(label + '-card-art-square', !!s && s.art.split(' ').length === 4 && s.art.split(' ').every(a => a === s.art.split(' ')[0] && parseInt(a) >= 60), s ? s.art : 'no art');
+              v(label + '-supporting-blocks', !!s && s.stats === 4 && s.steps === 3 && s.fine === 6 && s.pills === 4, s ? s.stats + ' stats, ' + s.steps + ' steps, ' + s.fine + ' notes, ' + s.pills + ' pills' : 'none');
+              v(label + '-no-dead-links', !!s && s.dead === 0 && s.links >= 10, s ? s.links + ' links, ' + s.dead + ' dead' : 'none');
+            }
+            const lum = (c) => { const m = (c || '').match(/[0-9.]+/g); return m && m.length >= 3 ? (+m[0] + +m[1] + +m[2]) : -1; };
+            v('dark-cards-are-dark', !!prevDark.sell && lum(prevDark.sell.cardBg) < 300 && lum(prevDark.sell.cardInk) > 500, prevDark.sell ? 'card bg ' + prevDark.sell.cardBg + ' ink ' + prevDark.sell.cardInk : 'none');
+            v('light-cards-are-light', !!prev.sell && lum(prev.sell.cardBg) > 700 && lum(prev.sell.cardInk) < 300, prev.sell ? 'card bg ' + prev.sell.cardBg + ' ink ' + prev.sell.cardInk : 'none');
             console.log('SELL-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
