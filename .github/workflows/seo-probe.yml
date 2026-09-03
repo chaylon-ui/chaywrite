@@ -1,0 +1,10 @@
+name: seo-probe
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report what Google actually sees
+        run: python3 tools/seo-probe.py
