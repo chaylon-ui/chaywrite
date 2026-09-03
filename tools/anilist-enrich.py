@@ -49,6 +49,23 @@ def post(url, payload, headers, tries=4):
             with urllib.request.urlopen(req, timeout=40) as r:
                 return json.loads(r.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as e:
+            # AniList answers 404 when EVERY aliased lookup in the document
+            # misses - but the body is still a valid GraphQL response and any
+            # aliases that did match are in it. Raising here threw away whole
+            # batches: the first rehearsal reported 0 of 40 series for exactly
+            # this reason. So parse the body whenever it is usable, whatever
+            # the status, and only retry/raise when it is not.
+            raw = b""
+            try:
+                raw = e.read()
+            except Exception:
+                pass
+            try:
+                j = json.loads(raw.decode("utf-8", "replace"))
+            except Exception:
+                j = None
+            if isinstance(j, dict) and ("data" in j or "errors" in j):
+                return j
             if e.code in (429, 500, 502, 503, 504) and attempt < tries - 1:
                 wait = 60 if e.code == 429 else 3 * (attempt + 1)
                 print("  HTTP %d, waiting %ds" % (e.code, wait))
