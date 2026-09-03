@@ -55,17 +55,35 @@ TITLES = [
     "AVALON BIG BOX", "CARDS AGAINST HUMANITY: SCI-FI PACK",
 ]
 
+# Counts only ever follow a number - "500PC", "1000 PIECE", "10CT". Stripping a
+# bare "piece" turned ONE PIECE PUZZLE into "ONE PUZZLE" in the first run, which
+# is a probe bug that would have been read as a Wikidata gap.
+COUNT = re.compile(r"\b\d+\s*(pc|pcs|ct|pkt|piece|pieces)\b", re.I)
 NOISE = re.compile(
     r"\b(board\s*game|card\s*game|the\s+game|retail\s+edition|collectors?\s+edition|"
-    r"founders?\s+edition|family\s+edition|core\s+game|big\s+box|classic|expansion|"
-    r"starter\s+set|two\s+player|\d+(st|nd|rd|th)\s+edition|edition|set|pack|pc|piece)\b",
+    r"founders?\s+edition|family\s+edition|core\s+game|core\s+set|big\s+box|classic|"
+    r"expansion|starter\s+set|two\s+player|\d+(st|nd|rd|th)\s+edition|edition|deluxe)\b",
     re.I)
 
 def normalise(t):
-    t = re.sub(r"\d+\s*(pc|pcs|ct)\b", " ", t, flags=re.I)
+    t = COUNT.sub(" ", t)
     t = NOISE.sub(" ", t)
     t = re.sub(r"[^A-Za-z0-9' ]+", " ", t)
     return re.sub(r"\s+", " ", t).strip()
+
+def candidates_for(title):
+    """Full normalised name first, then progressively shorter prefixes. A retail
+    title is usually the game's name plus trailing qualifiers ("ROOT THE HOMELAND
+    EXPANSION" -> "ROOT"), so the base game is a prefix of what we hold."""
+    base = normalise(title) or title
+    words = base.split()
+    seen, out = set(), []
+    for n in range(len(words), 0, -1):
+        term = " ".join(words[:n])
+        if len(term) >= 3 and term.lower() not in seen:
+            seen.add(term.lower())
+            out.append(term)
+    return out[:4]
 
 def get(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
@@ -102,16 +120,26 @@ def claims_of(qid):
     return (label, kinds), have
 
 def probe(title):
-    term = normalise(title) or title
-    for qid in search(term):
-        got, have = claims_of(qid)
-        if not got:
-            continue
-        label, kinds = got
-        if any(k in GAME_CLASSES for k in kinds) and have:
-            return {"ok": True, "qid": qid, "label": label, "term": term, "fields": sorted(have)}
-        time.sleep(0.15)
-    return {"ok": False, "term": term}
+    """An entity counts as a game if Wikidata says so via P31, OR if it carries a
+    player count - nothing but a game has a minimum number of players, and
+    relying on P31 alone missed entries whose classification is a subclass we
+    did not enumerate."""
+    tried = []
+    for term in candidates_for(title):
+        tried.append(term)
+        for qid in search(term, limit=7):
+            got, have = claims_of(qid)
+            if not got:
+                continue
+            label, kinds = got
+            is_game = any(k in GAME_CLASSES for k in kinds)
+            has_players = bool({"players_min", "players_max"} & set(have))
+            if (is_game or has_players) and have:
+                return {"ok": True, "qid": qid, "label": label, "term": term,
+                        "fields": sorted(have), "byP31": is_game}
+            time.sleep(0.1)
+        time.sleep(0.1)
+    return {"ok": False, "term": " | ".join(tried)}
 
 def main():
     hits, filterable, rows = 0, 0, []
@@ -127,9 +155,9 @@ def main():
     print("=" * 78)
     for t, r in rows:
         if r["ok"]:
-            print("  HIT   %-46s -> %s (%s) [%s]" % (t[:46], r["label"][:26], r["qid"], ",".join(r["fields"])))
+            print("  HIT   %-42s -> %-24s %-10s [%s]" % (t[:42], r["label"][:24], r["qid"], ",".join(r["fields"])))
         else:
-            print("  miss  %-46s    (searched %r)" % (t[:46], r["term"][:34]))
+            print("  miss  %-42s    tried: %s" % (t[:42], r["term"][:70]))
     print("=" * 78)
     print("WIKIDATA-COVERAGE  matched %d/%d (%.0f%%)  with a player count %d/%d (%.0f%%)"
           % (hits, n, 100.0 * hits / n, filterable, n, 100.0 * filterable / n))
