@@ -605,9 +605,36 @@ export async function kickRun(cx) {
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,OPTIONS", "access-control-allow-headers": "content-type" };
 const doJson = (b, s) => new Response(JSON.stringify(b), { status: s || 200, headers: { "content-type": "application/json" } });
 
+/* Can THIS network reach BoardGameGeek? A GitHub runner cannot (401 on the
+   API, 403 on the plain wiki page - Cloudflare block pages, not auth
+   challenges), but the sweep runs here, on Cloudflare's egress, which is a
+   different network entirely. Guessing either way would be wrong, so this
+   asks from the place that actually matters. Diagnostic only: it fetches one
+   search and reports the status and the first bytes. */
+export async function bggCheck(cx) {
+  const url = "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=Wingspan";
+  const t0 = cx.now();
+  try {
+    const r = await cx.fetch(url, { headers: { accept: "application/xml", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    const text = await r.text();
+    const hits = parseBggSearch(text);
+    return {
+      ok: true, status: r.status, ms: cx.now() - t0,
+      server: r.headers.get("server") || null,
+      reachable: r.ok && hits.length > 0,
+      results: hits.length,
+      first: hits[0] || null,
+      body: text.slice(0, 200),
+    };
+  } catch (e) {
+    return { ok: false, status: null, ms: cx.now() - t0, error: msg(e) };
+  }
+}
+
 export async function enrichDoFetch(cx, request, url) {
   await armEnrichAlarm(cx);
   if (url.pathname === "/_en/status") return doJson(await statusOf(cx));
+  if (url.pathname === "/_en/bgg-check") return doJson(await bggCheck(cx));
   if (url.pathname === "/_en/run" && request.method === "POST") return doJson(await kickRun(cx));
   return doJson({ ok: false, error: "not found" }, 404);
 }
@@ -615,7 +642,9 @@ export async function enrichDoFetch(cx, request, url) {
 export async function serveEnrich(request, env, ctx) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-  const inner = url.pathname === "/enrich/run" ? "/_en/run" : "/_en/status";
+  const inner = url.pathname === "/enrich/run" ? "/_en/run"
+    : url.pathname === "/enrich/bgg-check" ? "/_en/bgg-check"
+    : "/_en/status";
   const stub = env.ROOM.get(env.ROOM.idFromName(ENRICH_DO));
   const r = await stub.fetch(new Request(url.origin + inner, { method: request.method }));
   const body = await r.text();

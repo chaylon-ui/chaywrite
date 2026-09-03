@@ -68,7 +68,7 @@ export default {
     }
     // Round 31: nightly catalogue enrichment so manga and board games have
     // something to filter on (src/enrich.js).
-    if (url.pathname === "/enrich/status" || url.pathname === "/enrich/run") {
+    if (url.pathname === "/enrich/status" || url.pathname === "/enrich/run" || url.pathname === "/enrich/bgg-check") {
       return serveEnrich(request, env, ctx);
     }
 
