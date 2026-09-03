@@ -64,6 +64,20 @@ jobs:
                     cardBg: cards[0] ? getComputedStyle(cards[0]).backgroundColor : null,
                     cardInk: cards[0] ? getComputedStyle(cards[0].querySelector('h3')).color : null
                   };
+                  // Owner: "it isn't centered to the page". Walk the ancestor
+                  // chain and print each box's left/right edge against the
+                  // viewport, so the asymmetry is attributable to a specific
+                  // wrapper rather than guessed at.
+                  out.vw = document.documentElement.clientWidth;
+                  out.geom = [];
+                  let n = root;
+                  for (let i = 0; n && i < 9; n = n.parentElement, i++) {
+                    const rr = n.getBoundingClientRect();
+                    const c2 = getComputedStyle(n);
+                    out.geom.push(n.tagName.toLowerCase() + (n.className ? '.' + String(n.className).trim().split(/\s+/).slice(0, 2).join('.') : '')
+                      + ' L' + Math.round(rr.left) + ' R' + Math.round(out.vw - rr.right) + ' w' + Math.round(rr.width)
+                      + ' m[' + c2.marginLeft + ',' + c2.marginRight + '] p[' + c2.paddingLeft + ',' + c2.paddingRight + '] mw' + c2.maxWidth);
+                  }
                 }
                 for (const s of document.styleSheets) { try { if ((s.href || '').includes('xg-policy')) out.hasPolicyCss = true; } catch (e) {} }
                 const t = document.querySelector('.xg-prose table, .rte table, #MainContent table');
@@ -102,6 +116,14 @@ jobs:
             const lum = (c) => { const m = (c || '').match(/[0-9.]+/g); return m && m.length >= 3 ? (+m[0] + +m[1] + +m[2]) : -1; };
             v('dark-cards-are-dark', !!prevDark.sell && lum(prevDark.sell.cardBg) < 300 && lum(prevDark.sell.cardInk) > 500, prevDark.sell ? 'card bg ' + prevDark.sell.cardBg + ' ink ' + prevDark.sell.cardInk : 'none');
             v('light-cards-are-light', !!prev.sell && lum(prev.sell.cardBg) > 700 && lum(prev.sell.cardInk) < 300, prev.sell ? 'card bg ' + prev.sell.cardBg + ' ink ' + prev.sell.cardInk : 'none');
+            for (const [label, r] of [['live', live], ['preview', prev]]) {
+              const s = r.sell;
+              const first = s && s.geom && s.geom[0] ? s.geom[0] : '';
+              const L = parseInt((first.match(/ L(-?\d+)/) || [])[1], 10);
+              const R = parseInt((first.match(/ R(-?\d+)/) || [])[1], 10);
+              v(label + '-centred-on-the-page', Number.isFinite(L) && Number.isFinite(R) && Math.abs(L - R) <= 8, 'left gap ' + L + 'px vs right gap ' + R + 'px (viewport ' + (s ? s.vw : '?') + ')');
+              if (s && s.geom) for (const g of s.geom) console.log(label.toUpperCase() + '-BOX ' + g);
+            }
             console.log('SELL-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
