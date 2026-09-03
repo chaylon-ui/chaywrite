@@ -93,6 +93,7 @@ jobs:
               v(label + '-script-survived-and-hours-live', r.hoursShown === 6 && r.pills === 6, r.hoursShown + '/6 hour blocks painted, ' + r.pills + ' pills :: ' + JSON.stringify(r.sample));
               v(label + '-week-lists-with-today', r.weeks === 6 && r.weekRows >= 40 && r.today >= 6, r.weeks + ' week lists, ' + r.weekRows + ' rows, ' + r.today + ' marked today');
               v(label + '-centred', Math.abs(r.gapL - r.gapR) <= 8, 'left ' + r.gapL + ' vs right ' + r.gapR + ' (width ' + r.w + ')');
+              v(label + '-wide-column-not-reading-measure', r.w >= 1000, 'width ' + r.w + 'px at a 1366px viewport, ' + r.rows + ' grid row(s)');
             }
             v('dark-cards-are-dark', lum(dark.cardBg) < 300 && lum(dark.cityInk) > 500, 'card bg ' + dark.cardBg + ' city ink ' + dark.cityInk);
             v('light-cards-are-light', lum(prev.cardBg) > 700 && lum(prev.cityInk) < 300, 'card bg ' + prev.cardBg + ' city ink ' + prev.cityInk);
