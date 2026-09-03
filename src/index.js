@@ -5,6 +5,7 @@ import { serveStores } from "./stores.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 import { serveIcs } from "./ics.js";
 import { servePriceHistory } from "./price-history.js";
+import { serveEnrich } from "./enrich.js";
 
 export { BinderRoom };
 
@@ -64,6 +65,11 @@ export default {
     }
     if (url.pathname === "/price-history.json" || url.pathname.startsWith("/price-history/")) {
       return servePriceHistory(request, env, ctx);
+    }
+    // Round 31: nightly catalogue enrichment so manga and board games have
+    // something to filter on (src/enrich.js).
+    if (url.pathname === "/enrich/status" || url.pathname === "/enrich/run") {
+      return serveEnrich(request, env, ctx);
     }
 
     // The default room's DO doubles as the screen registry: remember every

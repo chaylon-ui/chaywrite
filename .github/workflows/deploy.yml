@@ -282,3 +282,20 @@ jobs:
           printf '\n'
           curl -sS --max-time 20 -X POST "$W/price-history/run" | head -c 700 || true
           printf '\n'
+
+      - name: Enrichment unit tests + /enrich smoke (log-only)
+        run: |
+          set +e
+          echo "=== parsers and the tick state machine (pure, no network) ==="
+          node test/enrich-parse.test.mjs 2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
+          node test/enrich-tick.test.mjs  2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
+          W="https://exor-binder.nevski.workers.dev"
+          echo "=== GET /enrich/status (tokenConfigured, next alarm, last run) ==="
+          curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true
+          echo "=== BoardGameGeek XML API2 still answers the two calls the sweep makes ==="
+          curl -sS -o /tmp/bgg-s -w 'bgg search: HTTP %{http_code} %{size_download}B\n' --max-time 25 \
+            "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=Wingspan" || true
+          head -c 300 /tmp/bgg-s; printf '\n'
+          curl -sS -o /tmp/bgg-t -w 'bgg thing:  HTTP %{http_code} %{size_download}B\n' --max-time 25 \
+            "https://boardgamegeek.com/xmlapi2/thing?stats=1&id=266192" || true
+          echo "minplayers/maxplayers/averageweight present: $(grep -coE '<(minplayers|maxplayers|averageweight)' /tmp/bgg-t || true)"

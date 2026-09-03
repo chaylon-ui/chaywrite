@@ -1,6 +1,7 @@
 import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TAB_ICON, BOARD_TAB_ICON, WH_TAB_ICON } from "./config.js";
 import { CACHE_DO, WARM_EVERY_MS, gzipText, warmWithStore } from "./binder-search.js";
 import { PRICE_DO, priceDoFetch, priceDoAlarm } from "./price-history.js";
+import { ENRICH_DO, enrichDoFetch, enrichDoAlarm } from "./enrich.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -43,6 +44,10 @@ export class BinderRoom {
     // the snapshot alarm (src/price-history.js).
     this.isPriceDo = false;
     try { this.isPriceDo = !!env.ROOM?.idFromName(PRICE_DO)?.equals?.(state.id); } catch {}
+    // Same arrangement for the nightly catalogue enrichment (src/enrich.js):
+    // its own DO instance, its own alarm, its own /_en/* paths.
+    this.isEnrichDo = false;
+    try { this.isEnrichDo = !!env.ROOM?.idFromName(ENRICH_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -591,6 +596,19 @@ export class BinderRoom {
   // behind one small object, so the same code runs offline in
   // test/price-history.harness.mjs with fakes. `mem` lives as long as this
   // DO instance (the once-per-deploy alarm arming is remembered there).
+  enrichCx() {
+    if (!this.enMem) this.enMem = {};
+    return {
+      storage: this.state.storage,
+      env: this.env,
+      fetch: (u, i) => fetch(u, i),
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      log: (s) => console.log(s),
+      mem: this.enMem,
+    };
+  }
+
   priceCx() {
     if (!this.phMem) this.phMem = {};
     return {
@@ -621,6 +639,7 @@ export class BinderRoom {
   async alarm() {
     // The price DO's alarm is the nightly snapshot clock (price-history.js).
     if (this.isPriceDo) { await priceDoAlarm(this.priceCx()); return; }
+    if (this.isEnrichDo) { await enrichDoAlarm(this.enrichCx()); return; }
     if (!this.isCacheDo) return;
     try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
     let r = null;
@@ -640,7 +659,11 @@ export class BinderRoom {
       if (url.pathname.startsWith("/_ph/")) return priceDoFetch(this.priceCx(), request, url);
       return new Response(null, { status: 404 });
     }
-    if (url.pathname.startsWith("/_ph/")) return new Response(null, { status: 404 });
+    if (this.isEnrichDo) {
+      if (url.pathname.startsWith("/_en/")) return enrichDoFetch(this.enrichCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
