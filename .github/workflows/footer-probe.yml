@@ -1,0 +1,73 @@
+name: footer-probe
+on:
+  workflow_dispatch: {}
+
+# The footer newsletter block, light and dark, on the preview theme. The owner
+# circled it: a purple heading, an oversized pill input with the button dropped
+# inside it, and dead space underneath. Three separate causes are possible for
+# each, so print the computed colours and the real geometry instead of guessing
+# - the same approach that fixed the mega-menu panel.
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22
+      - name: Measure the newsletter block
+        run: |
+          cat > foot.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = '157462692013';
+          const H = 'https://exorgames.com';
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const look = async (label, dark) => {
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1366, height: 900 });
+              await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+              await page.evaluateOnNewDocument((d) => { try { if (d) localStorage.setItem('xgTheme', 'dark'); else localStorage.removeItem('xgTheme'); } catch (e) {} }, dark);
+              try { await page.goto(H + '/?preview_theme_id=' + T, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) { console.log(label + ' NAV-ERR ' + String(e).slice(0,80)); }
+              const r = await page.evaluate(() => {
+                const box = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); const cs = getComputedStyle(el);
+                  return { w: Math.round(b.width), h: Math.round(b.height), x: Math.round(b.left), y: Math.round(b.top),
+                    display: cs.display, position: cs.position, color: cs.color, bg: cs.backgroundColor,
+                    radius: cs.borderRadius, pad: cs.padding, margin: cs.margin, border: cs.borderWidth + ' ' + cs.borderColor,
+                    font: cs.fontSize + '/' + cs.fontWeight, flex: cs.flexDirection + ' ' + cs.alignItems, w100: cs.width }; };
+                const q = (s) => document.querySelector(s);
+                const root = q('.xg-newsletter');
+                const out = {
+                  theme: document.documentElement.getAttribute('data-xg-theme'),
+                  root: box(root),
+                  inner: box(q('.xg-newsletter .block_newsletter')),
+                  heading: box(q('.xg-newsletter .footer-heading')),
+                  label: box(q('.xg-newsletter .block-newsletter-label')),
+                  wrap: box(q('.xg-newsletter .site-footer__newsletter')),
+                  group: box(q('.xg-newsletter .input-group')),
+                  input: box(q('.xg-newsletter .newsletter__input')),
+                  btnSpan: box(q('.xg-newsletter .input-group__btn')),
+                  btn: box(q('.xg-newsletter .newsletter__submit')),
+                };
+                if (root) {
+                  out.headingText = (q('.xg-newsletter .footer-heading') || {}).textContent;
+                  out.childHeights = [...root.querySelectorAll(':scope > * , :scope > * > *')]
+                    .map(e => e.className.toString().slice(0, 34) + '=' + Math.round(e.getBoundingClientRect().height)).slice(0, 10);
+                  // what is actually painting the heading colour
+                  const h = q('.xg-newsletter .footer-heading');
+                  if (h) { out.headingTag = h.tagName; out.headingInline = h.getAttribute('style') || ''; out.headingParentColor = getComputedStyle(h.parentElement).color; }
+                }
+                const others = [...document.querySelectorAll('.footer-heading')].slice(0, 5)
+                  .map(e => (e.textContent || '').trim().slice(0, 22) + ' -> ' + getComputedStyle(e).color);
+                out.allFooterHeadings = others;
+                return out;
+              });
+              console.log('\n===== ' + label + ' =====');
+              console.log(JSON.stringify(r, null, 1));
+              await page.close();
+            };
+            await look('PREVIEW-light', false);
+            await look('PREVIEW-dark', true);
+            await browser.close();
+          })().catch(e => { console.log('PROBE-ERR ' + (e && e.message)); process.exit(0); });
+          EOF
+          node foot.js
