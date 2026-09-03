@@ -39,3 +39,29 @@ jobs:
           curl -sS -D /tmp/bgg-h -o /tmp/bgg-b --max-time 25 "https://boardgamegeek.com/xmlapi2/thing?id=266192"
           grep -iE '^(HTTP|server|cf-|www-authenticate|content-type)' /tmp/bgg-h || true
           cat /tmp/bgg-b | head -c 400; printf '\n'
+
+      - name: What does BGG now require (read their own page)
+        run: |
+          set +e
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+          curl -sS -L -o /tmp/doc.html -w 'using_the_xml_api: HTTP %{http_code}  %{size_download}B\n' --max-time 25 \
+            -H "User-Agent: $UA" "https://boardgamegeek.com/wiki/page/BGG_XML_API2"
+          python3 - <<'PY'
+import re, html, io
+try:
+    raw = io.open('/tmp/doc.html', encoding='utf-8', errors='replace').read()
+except Exception as e:
+    print('could not read:', e); raise SystemExit
+txt = re.sub(r'(?is)<(script|style).*?</\1>', ' ', raw)
+txt = re.sub(r'(?s)<[^>]+>', ' ', txt)
+txt = html.unescape(re.sub(r'[ \t\r\f\v]+', ' ', txt))
+lines = [l.strip() for l in txt.split('\n')]
+keep = [l for l in lines if l and re.search(r'(?i)api key|apikey|token|oauth|authenticat|unauthoriz|401|credential|register|sign ?up|account|rate limit|throttl|terms|commercial|permission|approval|contact', l)]
+seen = set(); out = []
+for l in keep:
+    k = l[:90]
+    if k in seen: continue
+    seen.add(k); out.append(l[:300])
+print('--- lines mentioning access/auth/limits (%d) ---' % len(out))
+for l in out[:40]: print(' *', l)
+PY
