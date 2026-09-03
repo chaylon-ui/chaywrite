@@ -1,0 +1,25 @@
+name: curl-probe
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Space-separated URLs to fetch (status, time, title; body head on 5xx)"
+        required: true
+        type: string
+
+# Log-only: the sandbox has no egress to exorgames.com, so a runner fetches
+# each URL and prints what a browser would get - status, time, <title>, and
+# the first 400 bytes of any 5xx body.
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch each URL
+        run: |
+          for u in ${{ inputs.urls }}; do
+            code=$(curl -sS -L --max-time 45 -o /tmp/b -w '%{http_code} %{time_total}s' -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' -H 'Accept: text/html' "$u" || echo "000 err")
+            title=$(tr -d '\n' < /tmp/b | grep -o '<title>[^<]*' | head -1 | cut -c8-90)
+            echo "PROBE $code $u :: $title"
+            case "$code" in 5*) echo "  BODY: $(tr -d '\n' < /tmp/b | sed 's/<[^>]*>/ /g; s/  */ /g' | cut -c1-400)";; esac
+          done
