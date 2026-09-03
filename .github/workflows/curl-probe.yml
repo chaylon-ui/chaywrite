@@ -7,7 +7,9 @@ on:
         required: true
         type: string
 
-# Log-only: the sandbox has no egress to exorgames.com, so a runner fetches
+# Cookie jar: Shopify answers ?preview_theme_id= with a redirect that
+# drops the parameter and sets a preview cookie; without the jar the
+# followed request renders the LIVE theme. Log-only: the sandbox has no egress to exorgames.com, so a runner fetches
 # each URL and prints what a browser would get - status, time, <title>, and
 # the first 400 bytes of any 5xx body.
 jobs:
@@ -20,7 +22,7 @@ jobs:
           URLS: ${{ inputs.urls }}
         run: |
           for u in $URLS; do
-            code=$(curl -sS -L --max-time 45 -o /tmp/b -w '%{http_code} %{time_total}s' -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' -H 'Accept: text/html' "$u" || echo "000 err")
+            code=$(curl -sS -L -c /tmp/cj -b /tmp/cj --max-time 45 -o /tmp/b -w '%{http_code} %{time_total}s %{url_effective}' -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' -H 'Accept: text/html' "$u" || echo "000 err")
             title=$(tr -d '\n' < /tmp/b | grep -o '<title>[^<]*' | head -1 | cut -c8-90)
             echo "PROBE $code $u :: $title"
             case "$code" in 5*) echo "  BODY: $(tr -d '\n' < /tmp/b | sed 's/<[^>]*>/ /g; s/  */ /g' | cut -c1-400)";; esac
