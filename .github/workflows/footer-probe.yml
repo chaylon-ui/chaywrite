@@ -76,6 +76,22 @@ jobs:
                 out.mobileHasContent = !!(q('#_mobile_newsletter') && q('#_mobile_newsletter').children.length);
                 return out;
               });
+              /* One line per run that says whether the block is actually fixed,
+                 so the answer is not buried in 800 lines of geometry. */
+              const g = r.group, inp = r.input, bs = r.btnSpan, b2 = r.btn;
+              if (inp && bs) {
+                const sameRow = Math.abs(inp.y - bs.y) <= 4;
+                const wantRow = W > 480;
+                const okRow = sameRow === wantRow;
+                const fits = !b2 || (inp.x + inp.w) <= (b2.x + 2);
+                console.log('VERDICT ' + (okRow ? 'PASS' : 'FAIL') + ' ' + label + '-input-and-button-layout :: ' +
+                  (sameRow ? 'same row' : 'stacked') + ' (expected ' + (wantRow ? 'same row' : 'stacked') + ') ' +
+                  'input y' + inp.y + ' h' + inp.h + ' w' + inp.w + ', button y' + bs.y + ' ' +
+                  (b2 ? 'w' + b2.w + ' r' + b2.radius : 'no button') + (fits ? '' : ' OVERLAP'));
+                console.log('VERDICT ' + (inp.h >= 36 && inp.h <= 48 ? 'PASS' : 'FAIL') + ' ' + label + '-field-height :: ' + inp.h + 'px, radius ' + inp.radius);
+              }
+              const lede = (r.subscribeish || []).find(e => /subscribe to our/i.test(e.t || ''));
+              if (lede) console.log('VERDICT INFO ' + label + '-lede-colour :: "' + lede.t + '" -> ' + lede.color);
               console.log('\n===== ' + label + ' =====');
               console.log(JSON.stringify(r, null, 1));
               await page.close();
