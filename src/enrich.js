@@ -53,6 +53,21 @@ export const BGG_TRIES_202 = 4;        // it answers 202 while it builds a respo
    retrying 1500 games against a closed door every hour. */
 export const BGG_GATED = [401, 403];
 export const BGG_UA = "ExorGamesCatalogue/1.0 (+https://exorgames.com)";
+
+/* AniList blocks Cloudflare Workers' shared egress outright (403 "You have
+   been manually blocked", measured from this DO; a GitHub runner gets 200 for
+   the identical query). So the lookup happens on a runner and lands here as a
+   committed file, which this fetches back. chaywrite is a public repo, so no
+   credential is involved in either direction:
+
+     worker  -> GET /enrich/series.json   the distinct series it can see
+     runner  -> AniList, then commits data/anilist-series.json
+     worker  -> reads that file each sweep and applies it
+
+   Neither side needs a secret the other holds. If the file is missing or
+   stale the sweep simply writes no AniList fields, exactly as it does today. */
+export const SERIES_FILE_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/anilist-series.json";
+export const SERIES_FILE_MAX_AGE_DAYS = 30;
 export const MAX_MECHANICS = 12;
 
 /* Bump when a new field is added: the sweep re-enriches anything stamped below
@@ -552,7 +567,42 @@ async function openLibrary(cx, isbns) {
   return out;
 }
 
-async function aniList(cx, names) {
+/* Keyed by seriesKey so punctuation differences in our own titles cannot
+   miss a match. Returns {} on any failure - never throws into the sweep. */
+export function indexSeriesFile(json) {
+  const out = {};
+  const src = (json && json.series) || {};
+  for (const k in src) {
+    const v = src[k];
+    if (!v) continue;
+    out[seriesKey(k)] = {
+      demographic: String(v.demographic || ""),
+      status: String(v.status || ""),
+      volumes: Number.isFinite(Number(v.volumes)) && Number(v.volumes) > 0 ? Number(v.volumes) : null,
+      author: String(v.author || ""),
+    };
+  }
+  return out;
+}
+
+async function seriesFile(cx) {
+  if (cx.mem && cx.mem.seriesFile) return cx.mem.seriesFile;
+  let idx = {};
+  try {
+    const r = await cx.fetch(SERIES_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    if (r.ok) {
+      const j = await r.json();
+      idx = indexSeriesFile(j);
+      cx.log("enrich: series file loaded, " + Object.keys(idx).length + " series, generated " + ((j && j.generated) || "?"));
+    } else {
+      cx.log("enrich: series file HTTP " + r.status + " - AniList fields will be skipped");
+    }
+  } catch (e) { cx.log("enrich: series file fetch failed: " + msg(e)); }
+  if (cx.mem) cx.mem.seriesFile = idx;
+  return idx;
+}
+
+async function aniListDirect(cx, names) {
   const out = {};
   for (let i = 0; i < names.length; i += AL_CHUNK) {
     const chunk = names.slice(i, i + AL_CHUNK);
@@ -582,21 +632,9 @@ async function aniList(cx, names) {
    too - as null - so a series AniList does not have is not re-asked for on
    every page of every nightly run. */
 async function seriesInfo(cx, names) {
-  const want = [], have = {};
-  for (let i = 0; i < names.length; i++) {
-    const key = "ser:" + seriesKey(names[i]);
-    const cached = await cx.storage.get(key);
-    if (cached !== undefined) have[names[i]] = cached;
-    else if (want.indexOf(names[i]) === -1) want.push(names[i]);
-  }
-  if (want.length) {
-    const fresh = await aniList(cx, want);
-    for (let i = 0; i < want.length; i++) {
-      const v = fresh[want[i]] || null;
-      have[want[i]] = v;
-      await cx.storage.put("ser:" + seriesKey(want[i]), v);
-    }
-  }
+  const idx = await seriesFile(cx);
+  const have = {};
+  for (let i = 0; i < names.length; i++) have[names[i]] = idx[seriesKey(names[i])] || null;
   return have;
 }
 
@@ -883,8 +921,56 @@ export async function aniListCheck(cx) {
   }
 }
 
+/* The distinct exor.series values, so the runner that CAN reach AniList knows
+   what to look up without needing a Shopify token of its own. Read-only: it
+   returns series names and nothing else - no ids, no prices, no customer data.
+   Cached in the DO for SERIES_CACHE_MS so repeated calls cost one Admin page
+   sweep a day, not one per call. */
+export const SERIES_CACHE_MS = 6 * 3600 * 1000;
+
+const SERIES_PAGE = `query($q:String!,$after:String){
+  products(first:250, query:$q, sortKey:ID, after:$after){
+    pageInfo{ hasNextPage endCursor }
+    nodes{ series: metafield(namespace:"exor", key:"series"){ value } }
+  }
+}`;
+
+export async function seriesList(cx) {
+  const now = cx.now();
+  const cached = await cx.storage.get("en:series");
+  if (cached && cached.at && now - cached.at < SERIES_CACHE_MS) {
+    return { ok: true, cached: true, generated: new Date(cached.at).toISOString(), count: cached.names.length, series: cached.names };
+  }
+  if (!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) return { ok: false, error: "SHOPIFY_ADMIN_TOKEN not configured" };
+  const seen = {}, names = [];
+  let after = null, pages = 0;
+  try {
+    while (pages < 40) {
+      const r = await adminGql(cx, SERIES_PAGE, { q: BOOKS_QUERY, after: after });
+      const pr = (r.data && r.data.products) || {};
+      const nodes = pr.nodes || [];
+      for (let i = 0; i < nodes.length; i++) {
+        const v = nodes[i] && nodes[i].series ? String(nodes[i].series.value || "").trim() : "";
+        if (v && !seen[v]) { seen[v] = 1; names.push(v); }
+      }
+      pages++;
+      if (!(pr.pageInfo && pr.pageInfo.hasNextPage)) break;
+      after = pr.pageInfo.endCursor;
+      const wait = throttleWait(r.cost, 30);
+      if (wait > 0) await cx.sleep(wait);
+    }
+  } catch (e) {
+    if (!names.length) return { ok: false, error: msg(e) };
+    cx.log("enrich: seriesList partial (" + msg(e) + ")");
+  }
+  names.sort();
+  await cx.storage.put("en:series", { at: now, names: names });
+  return { ok: true, cached: false, generated: new Date(now).toISOString(), pages: pages, count: names.length, series: names };
+}
+
 export async function enrichDoFetch(cx, request, url) {
   await armEnrichAlarm(cx);
+  if (url.pathname === "/_en/series") return doJson(await seriesList(cx));
   if (url.pathname === "/_en/al-check") return doJson(await aniListCheck(cx));
   if (url.pathname === "/_en/status") return doJson(await statusOf(cx));
   if (url.pathname === "/_en/bgg-check") return doJson(await bggCheck(cx));
@@ -898,6 +984,7 @@ export async function serveEnrich(request, env, ctx) {
   const inner = url.pathname === "/enrich/run" ? "/_en/run"
     : url.pathname === "/enrich/bgg-check" ? "/_en/bgg-check"
     : url.pathname === "/enrich/al-check" ? "/_en/al-check"
+    : url.pathname === "/enrich/series.json" ? "/_en/series"
     : "/_en/status";
   const stub = env.ROOM.get(env.ROOM.idFromName(ENRICH_DO));
   const r = await stub.fetch(new Request(url.origin + inner, { method: request.method }));

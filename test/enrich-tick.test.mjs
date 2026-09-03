@@ -69,15 +69,13 @@ function world(opts) {
         }
         return new Response(JSON.stringify(body), { status: 200 });
       }
-      if (u.includes("graphql.anilist.co")) {
+      /* AniList is no longer called from the worker at all - it blocks
+         Cloudflare's egress. The lookup happens on a GitHub runner and lands
+         as a committed file, which the worker fetches back. */
+      if (u.includes("raw.githubusercontent.com")) {
         w.alCalls++;
-        const q = JSON.parse(init.body).query;
-        const data = {};
-        for (const m of q.matchAll(/a(\d+): Media\(search: "([^"]*)"/g)) {
-          const hit = w.al[m[2]];
-          if (hit) data['a' + m[1]] = hit;
-        }
-        return new Response(JSON.stringify({ data }), { status: 200 });
+        if (w.seriesFileStatus && w.seriesFileStatus !== 200) return new Response("not found", { status: w.seriesFileStatus });
+        return new Response(JSON.stringify({ generated: '2026-09-03T22:00:00Z', series: w.al }), { status: 200 });
       }
       w.bggCalls++;
       if (w.bggStatus && w.bggStatus !== 200) {
@@ -93,7 +91,8 @@ function world(opts) {
   };
   w.search = opts.search || {};
   w.ol = opts.ol || {};
-  w.al = opts.al || {};
+  w.al = opts.al || {};              // series name -> { demographic, status, volumes, author }
+  w.seriesFileStatus = opts.seriesFileStatus || 200;
   w.bggStatus = opts.bggStatus || 200;
   w.thing = opts.thing || {};
   return w;
@@ -132,10 +131,8 @@ async function drain(w, maxTicks = 60) {
       '9781421587264': { authors: [{ name: 'Takahiro' }], publishers: [{ name: 'Yen Press, LLC' }] },
     },
     al: {
-      'Attack on Titan': { title: { romaji: 'Shingeki no Kyojin' }, volumes: 34, status: 'FINISHED',
-        tags: [{ name: 'Shounen' }], staff: { edges: [{ role: 'Story & Art', node: { name: { full: 'Hajime Isayama' } } } ] } },
-      'AKAME GA KILL': { title: { romaji: 'Akame ga Kill!' }, volumes: 15, status: 'FINISHED',
-        tags: [{ name: 'Shounen' }], staff: { edges: [{ role: 'Story', node: { name: { full: 'Takahiro' } } } ] } },
+      'Attack on Titan': { demographic: 'Shonen', status: 'Completed', volumes: 34, author: 'Hajime Isayama' },
+      'Akame Ga Kill': { demographic: 'Shonen', status: 'Completed', volumes: 15, author: 'Takahiro' },
     },
   });
   const ticks = await drain(w);
@@ -159,8 +156,8 @@ async function drain(w, maxTicks = 60) {
   ok('current-version product not rewritten', !w.written.some((m) => m.ownerId === 'gid://p/3'));
   ok('v1 product WAS rewritten', w.written.some((m) => m.ownerId === 'gid://p/4'));
   eq('no bgg calls for books', w.bggCalls, 0);
-  ok('open library and anilist were both used', w.olCalls > 0 && w.alCalls > 0, 'ol=' + w.olCalls + ' al=' + w.alCalls);
-  eq('one anilist lookup per series, cached', w.alCalls, 1);
+  ok('open library and the series file were both used', w.olCalls > 0 && w.alCalls > 0, 'ol=' + w.olCalls + ' file=' + w.alCalls);
+  eq('series file fetched once for the whole run, not per page', w.alCalls, 1);
 }
 
 // ---------- 2. games: exact match enriches, ambiguous writes only a flag ----------
@@ -239,6 +236,25 @@ async function drain(w, maxTicks = 60) {
   eq('exactly two BGG calls per game, none repeated', w.bggCalls, 16);
   const ids = w.written.filter((m) => m.key === 'bgg_id').map((m) => m.ownerId);
   eq('no duplicate writes', ids.length, new Set(ids).size);
+}
+
+// ---------- 5b. a missing series file costs the AniList fields, nothing else ----
+// The file is produced by a GitHub runner and committed. If it is absent, or
+// GitHub is down, the books must still get series/volume/isbn/author/publisher.
+{
+  const w = world({
+    books: [{ id: 'gid://p/1', title: 'Attack on Titan 24', barcode: '9781632365354' }],
+    games: [],
+    ol: { '9781632365354': { authors: [{ name: 'Hajime Isayama' }], publishers: [{ name: 'Kodansha Comics' }] } },
+    al: {}, seriesFileStatus: 404,
+  });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('run still succeeds', last.error, undefined);
+  const byKey = (id, k) => (w.written.find((m) => m.ownerId === id && m.key === k) || {}).value;
+  eq('series still written', byKey('gid://p/1', 'series'), 'Attack on Titan');
+  eq('publisher still written', byKey('gid://p/1', 'publisher'), 'Kodansha');
+  ok('no demographic invented', !byKey('gid://p/1', 'demographic'));
 }
 
 // ---------- 6. a gated BoardGameGeek stands down, it does not thrash ----------
