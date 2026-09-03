@@ -120,4 +120,19 @@ eq('open library read', readOpenLibrary({ authors: [{ name: 'A' }, { name: 'B' }
    { author: 'A, B', publisher: 'P' });
 eq('open library missing', readOpenLibrary(null), null);
 
+// --- the dotless volume form the distributor actually uses. Before this,
+// every volume of a long series became a series of its own: the published
+// list carried "Yona of the Dawn V1" through "V38" as 38 separate names.
+eq('V1 is a volume, not part of the name', parseBookTitle('Yona of the Dawn V1'),
+   { series: 'Yona of the Dawn', volume: 1, format: 'Single volume' });
+eq('two-digit V38', parseBookTitle('Yona of the Dawn V38'),
+   { series: 'Yona of the Dawn', volume: 38, format: 'Single volume' });
+eq('a bare series name keeps no volume', parseBookTitle('Yona of the Dawn'),
+   { series: 'Yona of the Dawn', volume: null, format: '' });
+eq('dotless V rides alongside a format tag', parseBookTitle('Berserk Deluxe Edition HC V5'),
+   { series: 'Berserk', volume: 5, format: 'Deluxe' });
+eq('a colon subtitle survives the volume strip', parseBookTitle('Zom 100: Bucket List of the Dead V4').series,
+   'Zom 100: Bucket List of the Dead');
+eq('a trailing v inside a word is not a marker', parseBookTitle('Cov1').series, 'Cov1');
+
 console.log((fail ? 'ENRICH-FAILS ' + fail : 'ENRICH OK') + ' :: ' + pass + '/' + (pass + fail) + ' checks passed');

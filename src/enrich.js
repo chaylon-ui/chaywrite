@@ -135,7 +135,12 @@ export function parseBookTitle(raw) {
   t = t.replace(/\s+/g, " ").trim();
 
   let volume = null;
-  let m = t.match(/\b(?:vol\.?|volume|v\.|#|no\.?|book|part)\s*(\d{1,4})\s*$/i);
+  /* The dot after "v" has to be optional. The distributor writes "V1".."V38"
+     with no dot and no space, which matched neither this branch nor the bare
+     -number branch below, so every single volume of a long series was
+     published as a series of its own - "Yona of the Dawn V1" through "V38"
+     were 38 of the 1380 names we sent to AniList. */
+  let m = t.match(/\b(?:vol\.?|volume|v\.?|#|no\.?|book|part)\s*(\d{1,4})\s*$/i);
   if (m) {
     volume = Number(m[1]);
     t = t.slice(0, m.index);
