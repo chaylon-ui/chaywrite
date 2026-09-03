@@ -1,0 +1,13 @@
+name: manga-sources-probe
+# Measure Open Library and AniList coverage for the manga metafields before
+# filling any of them. Batched: 1 Open Library call, a handful of AniList
+# GraphQL docs - not one HTTP request per item.
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Coverage against real series and ISBNs
+        run: python3 tools/manga-sources-probe.py
