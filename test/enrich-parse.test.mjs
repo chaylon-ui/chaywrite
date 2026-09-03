@@ -1,8 +1,12 @@
-import { parseBookTitle, isbnOf, titleCase, parseBggSearch, parseBggThing, normTitle, chooseBggMatch, bookMetafields } from '../src/enrich.js';
+import { parseBookTitle, isbnOf, titleCase, parseBggSearch, parseBggThing, normTitle, chooseBggMatch, bookMetafields,
+         cleanSeries, seriesKey, normalisePublisher, isLatin, readAniListMedia, readOpenLibrary, ENRICH_VERSION } from '../src/enrich.js';
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
   const g = JSON.stringify(got), w = JSON.stringify(want);
   if (g === w) { pass++; } else { fail++; console.log('FAIL ' + name + '\n  got  ' + g + '\n  want ' + w); }
+};
+const ok = (name, cond, detail) => {
+  if (cond) { pass++; } else { fail++; console.log('FAIL ' + name + (detail ? ' :: ' + detail : '')); }
 };
 
 // --- real titles pulled from the catalogue today ---
@@ -65,9 +69,55 @@ eq('no exact -> notfound', chooseBggMatch([{ id: 3, name: 'Verdant Realms', year
 eq('empty search -> notfound', chooseBggMatch([], 'VERDANT'), { status: 'notfound', candidates: [] });
 
 // --- metafield payloads ---
-const mf = bookMetafields('gid://shopify/Product/1', 'Attack on Titan 24', '9781632365354', '2026-09-03');
-eq('book metafields', mf.map(m => m.key + '=' + m.value),
-   ['series=Attack on Titan', 'volume=24', 'book_format=Single volume', 'isbn=9781632365354', 'enrich_status=ok', 'enriched_at=2026-09-03']);
+const mf = bookMetafields('gid://shopify/Product/1', 'Attack on Titan 24', '9781632365354', '2026-09-03',
+  { author: 'Hajime Isayama', publisher: 'VIZ Media LLC' },
+  { demographic: 'Shonen', status: 'Completed', volumes: 34, author: 'Hajime Isayama' });
+eq('book metafields', mf.map(m => m.key + '=' + m.value), [
+  'series=Attack on Titan', 'series_key=attackontitan', 'volume=24', 'book_format=Single volume',
+  'isbn=9781632365354', 'author=Hajime Isayama', 'publisher=VIZ Media', 'demographic=Shonen',
+  'series_status=Completed', 'volumes_total=34', 'enrich_status=ok', 'enriched_at=2026-09-03',
+  'enrich_version=' + ENRICH_VERSION]);
 eq('all namespaced exor', [...new Set(mf.map(m => m.namespace))], ['exor']);
+
+// A field with no value is never written, so no product carries an empty facet.
+const bare = bookMetafields('gid://p/9', 'Some Book 2', '', '2026-09-03', null, null);
+eq('no empty facets', bare.map(m => m.key),
+   ['series', 'series_key', 'volume', 'book_format', 'enrich_status', 'enriched_at', 'enrich_version']);
+
+// --- series cleaning: measured as the difference between 0% and 35% on AniList
+eq('Gn stripped', cleanSeries('Akame Ga Kill Gn'), 'Akame Ga Kill');
+eq('Sc + Novel kept as words are not format codes', cleanSeries('Accomplishments of Dukes Daughter Novel Sc'), 'Accomplishments of Dukes Daughter Novel');
+eq('nothing to strip', cleanSeries('Attack on Titan'), 'Attack on Titan');
+eq('trailing separator trimmed', cleanSeries('Ancient Magus Bride -'), 'Ancient Magus Bride');
+
+// --- series_key: the whole point is collapsing one series entered two ways
+eq('hyphen and no hyphen collapse', seriesKey('Amazing Spider-man Beyond'), seriesKey('Amazing Spiderman Beyond'));
+eq('apostrophe ignored', seriesKey("Ancient Magus' Bride"), seriesKey('Ancient Magus Bride'));
+eq('ampersand spelled out', seriesKey('Assassin & Cinderella'), 'assassinandcinderella');
+eq('format code ignored in the key', seriesKey('Akame Ga Kill Gn'), 'akamegakill');
+
+// --- publisher normalisation: Open Library returns the same house many ways
+eq('viz variants', [normalisePublisher('Viz Media'), normalisePublisher('VIZ Media LLC')], ['VIZ Media', 'VIZ Media']);
+eq('kodansha america', normalisePublisher('Kodansha America, Incorporated'), 'Kodansha');
+eq('seven seas', normalisePublisher('Seven Seas Entertainment, LLC'), 'Seven Seas');
+eq('unknown house tidied not dropped', normalisePublisher('Some Small Press, LLC'), 'Some Small Press');
+eq('empty stays empty', normalisePublisher(''), '');
+
+// --- author script: Open Library sometimes answers in Japanese
+ok('latin detected', isLatin('Hajime Isayama'));
+ok('japanese detected as non-latin', !isLatin('\u677e\u4e95 \u512a\u5f81'));
+const jp = bookMetafields('gid://p/2', 'Assassination Classroom 1', '', '2026-09-03',
+  { author: '\u677e\u4e95 \u512a\u5f81', publisher: 'VIZ Media LLC' }, { author: 'Yusei Matsui' });
+eq('latin author preferred', (jp.find(m => m.key === 'author') || {}).value, 'Yusei Matsui');
+
+// --- reading the two feeds
+eq('anilist media read', readAniListMedia({ volumes: 34, status: 'RELEASING', tags: [{ name: 'Action' }, { name: 'Shounen' }],
+    staff: { edges: [{ node: { name: { full: 'Hajime Isayama' } } }] } }),
+   { demographic: 'Shonen', status: 'Ongoing', volumes: 34, author: 'Hajime Isayama' });
+eq('anilist null', readAniListMedia(null), null);
+eq('anilist unknown demographic left blank', readAniListMedia({ tags: [{ name: 'Action' }], status: 'FINISHED' }).demographic, '');
+eq('open library read', readOpenLibrary({ authors: [{ name: 'A' }, { name: 'B' }, { name: 'C' }], publishers: [{ name: 'P' }, { name: 'Q' }] }),
+   { author: 'A, B', publisher: 'P' });
+eq('open library missing', readOpenLibrary(null), null);
 
 console.log((fail ? 'ENRICH-FAILS ' + fail : 'ENRICH OK') + ' :: ' + pass + '/' + (pass + fail) + ' checks passed');

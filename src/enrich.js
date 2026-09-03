@@ -55,6 +55,12 @@ export const BGG_GATED = [401, 403];
 export const BGG_UA = "ExorGamesCatalogue/1.0 (+https://exorgames.com)";
 export const MAX_MECHANICS = 12;
 
+/* Bump when a new field is added: the sweep re-enriches anything stamped below
+   this, which is how new metafields backfill onto the products already done.
+   v2 (2026-09-03) added author, publisher, demographic, series_status,
+   volumes_total, series_key, and cleaned the series name itself. */
+export const ENRICH_VERSION = 2;
+
 export const BOOKS_QUERY = "product_type:Books AND status:active";
 export const GAMES_QUERY = "product_type:'Board Games' AND status:active";
 
@@ -132,6 +138,63 @@ export function parseBookTitle(raw) {
     volume: volume,
     format: format || (volume != null ? "Single volume" : ""),
   };
+}
+
+/* The distributor puts trade-format shorthand in titles - "Akame Ga Kill Gn",
+   "... Sc Novel" - which rides along into the series name. Measured
+   2026-09-03: AniList matched 0/23 series names raw and 8/23 cleaned, so this
+   is not cosmetic, it is the difference between the lookup working and not. */
+const FORMAT_TAIL = /\b(gn|sc|hc|tp|tpb|ln)\b/gi;
+
+export function cleanSeries(name) {
+  const out = String(name || "").replace(FORMAT_TAIL, " ").replace(/\s+/g, " ").trim();
+  return out.replace(/[\s\-,:;]+$/, "").trim();
+}
+
+/* Punctuation-insensitive slug. The catalogue holds "Amazing Spider-man Beyond"
+   AND "Amazing Spiderman Beyond" - one series entered two ways. Filtering or
+   linking on the display name splits them; both produce one key. */
+export function seriesKey(name) {
+  return cleanSeries(name).toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "");
+}
+
+/* Open Library returns the same house a dozen ways: "Viz Media", "VIZ Media
+   LLC", "Kodansha America, Incorporated", "Seven Seas Entertainment, LLC".
+   A filter needs one label per publisher, so map to a canonical name and fall
+   back to a tidied version of whatever came back. */
+const PUBLISHERS = [
+  ["VIZ Media", /\bviz\b/i],
+  ["Kodansha", /\bkodansha\b/i],
+  ["Yen Press", /\byen\s*press\b/i],
+  ["Seven Seas", /\bseven\s*seas\b/i],
+  ["Square Enix", /\bsquare\s*enix\b/i],
+  ["Dark Horse", /\bdark\s*horse\b/i],
+  ["Vertical", /\bvertical\b/i],
+  ["J-Novel Club", /\bj-?novel\b/i],
+  ["Tokyopop", /\btokyopop\b/i],
+  ["Udon", /\budon\b/i],
+  ["Marvel", /\bmarvel\b/i],
+  ["DC Comics", /\bdc\s*comics\b/i],
+  ["Image Comics", /\bimage\s*comics\b/i],
+  ["Archie Comics", /\barchie\b/i],
+  ["IDW", /\bidw\b/i],
+  ["Boom! Studios", /\bboom!?\s*studios\b/i],
+  ["Titan", /\btitan\b/i],
+  ["Scholastic", /\bscholastic\b/i],
+];
+
+export function normalisePublisher(raw) {
+  const t = String(raw || "").trim();
+  if (!t) return "";
+  for (let i = 0; i < PUBLISHERS.length; i++) if (PUBLISHERS[i][1].test(t)) return PUBLISHERS[i][0];
+  return t.replace(/,?\s*(llc|inc\.?|incorporated|ltd\.?|publications?|entertainment|america|usa)\b/gi, "")
+          .replace(/[\s,]+$/, "").trim();
+}
+
+/* Open Library sometimes answers with the Japanese name ("松井 優征"). AniList
+   carries a Latin staff name, so prefer that when the other side is not Latin. */
+export function isLatin(s) {
+  return /^[\u0000-\u024F\u2000-\u206F\s'".,\-()&]*$/.test(String(s || ""));
 }
 
 /* 978/979 Bookland prefix = a real ISBN-13. Anything else in the barcode
@@ -251,16 +314,38 @@ export function chooseBggMatch(candidates, ourTitle) {
 
 const MF = (ownerId, key, type, value) => ({ ownerId, namespace: "exor", key, type, value: String(value) });
 
-export function bookMetafields(ownerId, title, barcode, today) {
+/* book = { id, title, barcode }, ol = { author, publisher } | null,
+   al = { demographic, status, volumes, author } | null. Every field is
+   optional: a metafield is only written when there is a real value for it, so
+   a product never carries an empty facet. */
+export function bookMetafields(ownerId, title, barcode, today, ol, al) {
   const p = parseBookTitle(title);
+  const series = cleanSeries(p.series);
   const out = [];
-  if (p.series) out.push(MF(ownerId, "series", "single_line_text_field", p.series));
+  if (series) {
+    out.push(MF(ownerId, "series", "single_line_text_field", series));
+    out.push(MF(ownerId, "series_key", "single_line_text_field", seriesKey(series)));
+  }
   if (p.volume != null) out.push(MF(ownerId, "volume", "number_integer", p.volume));
   if (p.format) out.push(MF(ownerId, "book_format", "single_line_text_field", p.format));
   const isbn = isbnOf(barcode);
   if (isbn) out.push(MF(ownerId, "isbn", "single_line_text_field", isbn));
-  out.push(MF(ownerId, "enrich_status", "single_line_text_field", p.series ? "ok" : "notfound"));
+
+  const olAuthor = (ol && ol.author) || "";
+  const alAuthor = (al && al.author) || "";
+  const author = (!isLatin(olAuthor) && alAuthor) ? alAuthor : (olAuthor || alAuthor);
+  if (author) out.push(MF(ownerId, "author", "single_line_text_field", author));
+
+  const publisher = normalisePublisher(ol && ol.publisher);
+  if (publisher) out.push(MF(ownerId, "publisher", "single_line_text_field", publisher));
+
+  if (al && al.demographic) out.push(MF(ownerId, "demographic", "single_line_text_field", al.demographic));
+  if (al && al.status) out.push(MF(ownerId, "series_status", "single_line_text_field", al.status));
+  if (al && Number.isFinite(al.volumes) && al.volumes > 0) out.push(MF(ownerId, "volumes_total", "number_integer", al.volumes));
+
+  out.push(MF(ownerId, "enrich_status", "single_line_text_field", series ? "ok" : "notfound"));
   out.push(MF(ownerId, "enriched_at", "single_line_text_field", today));
+  out.push(MF(ownerId, "enrich_version", "number_integer", ENRICH_VERSION));
   return out;
 }
 
@@ -279,6 +364,7 @@ export function gameMetafields(ownerId, bggId, thing, today) {
   }
   out.push(MF(ownerId, "enrich_status", "single_line_text_field", thing ? "ok" : "notfound"));
   out.push(MF(ownerId, "enriched_at", "single_line_text_field", today));
+  out.push(MF(ownerId, "enrich_version", "number_integer", ENRICH_VERSION));
   return out;
 }
 
@@ -304,6 +390,7 @@ export function parseProductPage(data) {
       title: String(n.title || ""),
       barcode: v ? String(v.barcode || "") : "",
       enriched: n.enriched ? String(n.enriched.value || "") : "",
+      version: n.ver && n.ver.value ? Number(n.ver.value) : 0,
       bggId: n.bgg && n.bgg.value ? Number(n.bgg.value) : null,
     });
   }
@@ -322,6 +409,7 @@ const PRODUCT_PAGE = `query($q:String!,$n:Int!,$after:String){
     nodes{
       id title
       enriched: metafield(namespace:"exor", key:"enriched_at"){ value }
+      ver: metafield(namespace:"exor", key:"enrich_version"){ value }
       bgg: metafield(namespace:"exor", key:"bgg_id"){ value }
       variants(first:1){ nodes{ barcode } }
     }
@@ -397,6 +485,119 @@ export async function enrichGame(cx, item, dateStr) {
   }
   const thing = parseBggThing(await bggGet(cx, "https://boardgamegeek.com/xmlapi2/thing?stats=1&id=" + id));
   return { status: "ok", metafields: gameMetafields(item.id, id, thing, dateStr) };
+}
+
+/* ---- book sources: Open Library (by ISBN) and AniList (by series) ------------
+   Both are free and unauthenticated, and both are BATCHED on purpose. Measured
+   2026-09-03 over 23 real series: Open Library returns an author for 87% and a
+   publisher for 83%; AniList matches 35% of CLEANED series names and 0% of raw
+   ones. AniList data is per-series, so it is looked up once per series and
+   cached in the DO - a few hundred lookups instead of 1869. */
+
+export const OL_CHUNK = 50;      // ISBNs per Open Library call
+export const AL_CHUNK = 8;       // aliased Media() lookups per AniList document
+export const AL_GAP_MS = 800;    // AniList allows 90 requests a minute
+
+const AL_ALIAS = 'a%I: Media(search: %Q, type: MANGA) { title { romaji } volumes status tags { name } staff(perPage: 2) { edges { role node { name { full } } } } }';
+
+const DEMOS = { shounen: "Shonen", shoujo: "Shojo", seinen: "Seinen", josei: "Josei" };
+const STATUS = { RELEASING: "Ongoing", FINISHED: "Completed", HIATUS: "Hiatus", CANCELLED: "Cancelled", NOT_YET_RELEASED: "Upcoming" };
+
+export function readAniListMedia(m) {
+  if (!m) return null;
+  let demographic = "";
+  const tags = m.tags || [];
+  for (let i = 0; i < tags.length && !demographic; i++) {
+    const d = DEMOS[String((tags[i] && tags[i].name) || "").toLowerCase()];
+    if (d) demographic = d;
+  }
+  let author = "";
+  const edges = (m.staff && m.staff.edges) || [];
+  for (let i = 0; i < edges.length && !author; i++) {
+    const e = edges[i];
+    if (e && e.node && e.node.name && e.node.name.full) author = e.node.name.full;
+  }
+  const vols = Number(m.volumes);
+  return {
+    demographic: demographic,
+    status: STATUS[String(m.status || "")] || "",
+    volumes: Number.isFinite(vols) ? vols : null,
+    author: author,
+  };
+}
+
+export function readOpenLibrary(rec) {
+  if (!rec) return null;
+  const authors = (rec.authors || []).map((a) => String((a && a.name) || "")).filter(Boolean);
+  const pubs = (rec.publishers || []).map((p) => String((p && p.name) || "")).filter(Boolean);
+  return { author: authors.slice(0, 2).join(", "), publisher: pubs[0] || "" };
+}
+
+async function openLibrary(cx, isbns) {
+  const out = {};
+  for (let i = 0; i < isbns.length; i += OL_CHUNK) {
+    const chunk = isbns.slice(i, i + OL_CHUNK);
+    const keys = chunk.map((x) => "ISBN:" + x).join(",");
+    const url = "https://openlibrary.org/api/books?format=json&jscmd=data&bibkeys=" + encodeURIComponent(keys);
+    try {
+      const r = await cx.fetch(url, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(25000) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      for (let k = 0; k < chunk.length; k++) {
+        const rec = readOpenLibrary(j["ISBN:" + chunk[k]]);
+        if (rec) out[chunk[k]] = rec;
+      }
+    } catch (e) { cx.log("enrich: openlibrary batch failed: " + msg(e)); }
+  }
+  return out;
+}
+
+async function aniList(cx, names) {
+  const out = {};
+  for (let i = 0; i < names.length; i += AL_CHUNK) {
+    const chunk = names.slice(i, i + AL_CHUNK);
+    const body = chunk.map((n, k) => AL_ALIAS.replace("%I", String(i + k)).replace("%Q", JSON.stringify(n))).join("\n");
+    try {
+      const last = (cx.mem && cx.mem.lastAl) || 0;
+      const wait = AL_GAP_MS - (cx.now() - last);
+      if (wait > 0) await cx.sleep(wait);
+      if (cx.mem) cx.mem.lastAl = cx.now();
+      const r = await cx.fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", "user-agent": BGG_UA },
+        body: JSON.stringify({ query: "query {\n" + body + "\n}" }),
+        signal: AbortSignal.timeout(25000),
+      });
+      if (r.status === 429) { await cx.sleep(60000); i -= AL_CHUNK; continue; }
+      if (!r.ok) continue;
+      const j = await r.json();
+      const data = (j && j.data) || {};
+      for (let k = 0; k < chunk.length; k++) out[chunk[k]] = readAniListMedia(data["a" + (i + k)]);
+    } catch (e) { cx.log("enrich: anilist batch failed: " + msg(e)); }
+  }
+  return out;
+}
+
+/* One AniList lookup per SERIES, remembered in the DO. A miss is remembered
+   too - as null - so a series AniList does not have is not re-asked for on
+   every page of every nightly run. */
+async function seriesInfo(cx, names) {
+  const want = [], have = {};
+  for (let i = 0; i < names.length; i++) {
+    const key = "ser:" + seriesKey(names[i]);
+    const cached = await cx.storage.get(key);
+    if (cached !== undefined) have[names[i]] = cached;
+    else if (want.indexOf(names[i]) === -1) want.push(names[i]);
+  }
+  if (want.length) {
+    const fresh = await aniList(cx, want);
+    for (let i = 0; i < want.length; i++) {
+      const v = fresh[want[i]] || null;
+      have[want[i]] = v;
+      await cx.storage.put("ser:" + seriesKey(want[i]), v);
+    }
+  }
+  return have;
 }
 
 /* ---- the nightly run --------------------------------------------------------- */
@@ -516,12 +717,31 @@ export async function enrichTick(cx) {
     run.hasNext = page.hasNext;
     run.seen += page.items.length;
 
-    const fresh = page.items.filter((it) => !it.enriched);
+    /* Re-enrich anything stamped below the current schema version: that is how
+       fields added later reach the products already done. */
+    const fresh = page.items.filter((it) => !it.enriched || it.version < ENRICH_VERSION);
     run.skipped += page.items.length - fresh.length;
 
     if (run.phase === "books") {
+      let ol = {}, al = {};
+      if (fresh.length) {
+        const isbns = [];
+        const seriesNames = [];
+        for (let i = 0; i < fresh.length; i++) {
+          const isbn = isbnOf(fresh[i].barcode);
+          if (isbn && isbns.indexOf(isbn) === -1) isbns.push(isbn);
+          const nm = cleanSeries(parseBookTitle(fresh[i].title).series);
+          if (nm && seriesNames.indexOf(nm) === -1) seriesNames.push(nm);
+        }
+        try { ol = await openLibrary(cx, isbns); } catch (e) { cx.log("enrich: openlibrary: " + msg(e)); }
+        try { al = await seriesInfo(cx, seriesNames); } catch (e) { cx.log("enrich: anilist: " + msg(e)); }
+      }
       const mf = [];
-      for (let i = 0; i < fresh.length; i++) mf.push(...bookMetafields(fresh[i].id, fresh[i].title, fresh[i].barcode, dateStr));
+      for (let i = 0; i < fresh.length; i++) {
+        const it = fresh[i];
+        const nm = cleanSeries(parseBookTitle(it.title).series);
+        mf.push(...bookMetafields(it.id, it.title, it.barcode, dateStr, ol[isbnOf(it.barcode)] || null, al[nm] || null));
+      }
       if (mf.length) {
         try {
           run.written += await writeMetafields(cx, mf);

@@ -21,7 +21,8 @@ function storage() {
 function world(opts) {
   const w = {
     books: opts.books || [], games: opts.games || [],
-    written: [], adminCalls: 0, bggCalls: 0, now: Date.UTC(2026, 8, 4, 6, 0, 0),
+    written: [], adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0,
+    now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
   const page = (list, after, n) => {
     const start = after ? Number(after) : 0;
@@ -32,6 +33,7 @@ function world(opts) {
         nodes: slice.map((p) => ({
           id: p.id, title: p.title,
           enriched: p.enriched ? { value: p.enriched } : null,
+          ver: p.version ? { value: String(p.version) } : null,
           bgg: p.bggId ? { value: String(p.bggId) } : null,
           variants: { nodes: [{ barcode: p.barcode || '' }] },
         })),
@@ -58,6 +60,25 @@ function world(opts) {
         }
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
+      if (u.includes("openlibrary.org")) {
+        w.olCalls++;
+        const body = {};
+        for (const k of (u.split('bibkeys=')[1] || '').split('%2C')) {
+          const isbn = decodeURIComponent(k).replace('ISBN:', '');
+          if (w.ol[isbn]) body['ISBN:' + isbn] = w.ol[isbn];
+        }
+        return new Response(JSON.stringify(body), { status: 200 });
+      }
+      if (u.includes("graphql.anilist.co")) {
+        w.alCalls++;
+        const q = JSON.parse(init.body).query;
+        const data = {};
+        for (const m of q.matchAll(/a(\d+): Media\(search: "([^"]*)"/g)) {
+          const hit = w.al[m[2]];
+          if (hit) data['a' + m[1]] = hit;
+        }
+        return new Response(JSON.stringify({ data }), { status: 200 });
+      }
       w.bggCalls++;
       if (w.bggStatus && w.bggStatus !== 200) {
         return new Response('Unauthorized. See https://boardgamegeek.com/using_the_xml_api', { status: w.bggStatus });
@@ -71,6 +92,8 @@ function world(opts) {
     },
   };
   w.search = opts.search || {};
+  w.ol = opts.ol || {};
+  w.al = opts.al || {};
   w.bggStatus = opts.bggStatus || 200;
   w.thing = opts.thing || {};
   return w;
@@ -97,21 +120,47 @@ async function drain(w, maxTicks = 60) {
   const w = world({
     books: [
       { id: 'gid://p/1', title: 'Attack on Titan 24', barcode: '9781632365354' },
-      { id: 'gid://p/2', title: 'HAIKYU!! VOL. 36', barcode: '9781421587264' },
-      { id: 'gid://p/3', title: 'Already Done 1', barcode: '', enriched: '2026-09-01' },
+      { id: 'gid://p/2', title: 'AKAME GA KILL GN VOL. 3', barcode: '9781421587264' },
+      // stamped at the CURRENT version: must be skipped
+      { id: 'gid://p/3', title: 'Already Done 1', barcode: '', enriched: '2026-09-01', version: 2 },
+      // stamped at v1: must be RE-enriched so the new fields backfill
+      { id: 'gid://p/4', title: 'One Piece 5', barcode: '', enriched: '2026-09-01', version: 1 },
     ],
     games: [],
+    ol: {
+      '9781632365354': { authors: [{ name: '\u677e\u4e95 \u512a\u5f81' }], publishers: [{ name: 'VIZ Media LLC' }] },
+      '9781421587264': { authors: [{ name: 'Takahiro' }], publishers: [{ name: 'Yen Press, LLC' }] },
+    },
+    al: {
+      'Attack on Titan': { title: { romaji: 'Shingeki no Kyojin' }, volumes: 34, status: 'FINISHED',
+        tags: [{ name: 'Shounen' }], staff: { edges: [{ role: 'Story & Art', node: { name: { full: 'Hajime Isayama' } } } ] } },
+      'AKAME GA KILL': { title: { romaji: 'Akame ga Kill!' }, volumes: 15, status: 'FINISHED',
+        tags: [{ name: 'Shounen' }], staff: { edges: [{ role: 'Story', node: { name: { full: 'Takahiro' } } } ] } },
+    },
   });
   const ticks = await drain(w);
   ok('books run finishes', ticks > 0, 'ticks=' + ticks);
   const last = await w.cx.storage.get('en:last');
-  eq('books seen/skipped', [last.seen, last.skipped, last.ok], [3, 1, 2]);
+  eq('current-version product skipped, v1 product re-done', [last.seen, last.skipped, last.ok], [4, 1, 3]);
   const byKey = (id, k) => (w.written.find((m) => m.ownerId === id && m.key === k) || {}).value;
   eq('series written', byKey('gid://p/1', 'series'), 'Attack on Titan');
-  eq('volume written', byKey('gid://p/2', 'volume'), '36');
+  eq('series_key written', byKey('gid://p/1', 'series_key'), 'attackontitan');
+  eq('volume written', byKey('gid://p/2', 'volume'), '3');
+  eq('trade shorthand stripped from series', byKey('gid://p/2', 'series'), 'Akame Ga Kill');
   eq('isbn written', byKey('gid://p/1', 'isbn'), '9781632365354');
-  ok('enriched product not rewritten', !w.written.some((m) => m.ownerId === 'gid://p/3'));
+  eq('publisher normalised', byKey('gid://p/1', 'publisher'), 'VIZ Media');
+  eq('second publisher normalised', byKey('gid://p/2', 'publisher'), 'Yen Press');
+  eq('non-latin OL author replaced by the AniList one', byKey('gid://p/1', 'author'), 'Hajime Isayama');
+  eq('latin OL author kept', byKey('gid://p/2', 'author'), 'Takahiro');
+  eq('demographic from AniList', byKey('gid://p/1', 'demographic'), 'Shonen');
+  eq('series status mapped', byKey('gid://p/1', 'series_status'), 'Completed');
+  eq('volumes_total from AniList', byKey('gid://p/1', 'volumes_total'), '34');
+  eq('version stamped', byKey('gid://p/1', 'enrich_version'), '2');
+  ok('current-version product not rewritten', !w.written.some((m) => m.ownerId === 'gid://p/3'));
+  ok('v1 product WAS rewritten', w.written.some((m) => m.ownerId === 'gid://p/4'));
   eq('no bgg calls for books', w.bggCalls, 0);
+  ok('open library and anilist were both used', w.olCalls > 0 && w.alCalls > 0, 'ol=' + w.olCalls + ' al=' + w.alCalls);
+  eq('one anilist lookup per series, cached', w.alCalls, 1);
 }
 
 // ---------- 2. games: exact match enriches, ambiguous writes only a flag ----------
@@ -210,7 +259,7 @@ async function drain(w, maxTicks = 60) {
   eq('games flagged as still owed', last.gamesPending, true);
   eq('books still written', (w.written.find((m) => m.ownerId === 'gid://p/1' && m.key === 'series') || {}).value, 'One Piece');
   ok('no game was stamped enriched', !w.written.some((m) => m.ownerId.startsWith('gid://g/') ), 'game writes=' + w.written.filter((m) => m.ownerId.startsWith('gid://g/')).length);
-  eq('it gave up after one gated call, not 1500', w.bggCalls, 1);
+  eq('it gave up after one gated BGG call, not 1500', w.bggCalls, 1);
   ok('next alarm is a day out, not an hourly retry', w.cx.storage.alarmAt() - w.now > 3600000, 'delta=' + (w.cx.storage.alarmAt() - w.now));
 }
 
