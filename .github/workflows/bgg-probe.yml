@@ -1,0 +1,41 @@
+name: bgg-probe
+# Is BoardGameGeek's XML API actually gated, or is it the request that is wrong?
+# The deploy smoke got HTTP 401 with curl's default User-Agent from a GitHub
+# runner. Three things could cause that and they need different fixes:
+#   1. a missing/!default User-Agent  -> send a real one
+#   2. datacenter IP blocking          -> the Cloudflare Worker may still be fine
+#   3. a genuine auth requirement      -> board games need a different source
+# Log-only.
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: BGG reachability matrix
+        run: |
+          set +e
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+          try() {
+            printf '%-46s ' "$1"
+            shift
+            curl -sS -o /tmp/bgg-out -w 'HTTP %{http_code}  %{size_download}B  %{time_total}s\n' --max-time 25 "$@"
+            head -c 160 /tmp/bgg-out | tr '\n' ' '
+            printf '\n'
+          }
+          echo "===== v2 search ====="
+          try "v2 default UA"            "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=Wingspan"
+          try "v2 browser UA"     -H "User-Agent: $UA" "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=Wingspan"
+          try "v2 browser UA + accept" -H "User-Agent: $UA" -H 'Accept: application/xml,text/xml,*/*' "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=Wingspan"
+          try "v2 named bot UA"   -H 'User-Agent: ExorGamesCatalogue/1.0 (+https://exorgames.com)' "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=Wingspan"
+          echo "===== v2 thing ====="
+          try "v2 thing browser UA" -H "User-Agent: $UA" "https://boardgamegeek.com/xmlapi2/thing?stats=1&id=266192"
+          echo "===== v1 (legacy) ====="
+          try "v1 search browser UA" -H "User-Agent: $UA" "https://boardgamegeek.com/xmlapi/search?search=Wingspan"
+          try "v1 thing browser UA"  -H "User-Agent: $UA" "https://boardgamegeek.com/xmlapi/boardgame/266192"
+          echo "===== www vs api host ====="
+          try "api.geekdo browser UA" -H "User-Agent: $UA" "https://api.geekdo.com/xmlapi2/search?type=boardgame&query=Wingspan"
+          echo "===== what does the 401 body actually say ====="
+          curl -sS -D /tmp/bgg-h -o /tmp/bgg-b --max-time 25 "https://boardgamegeek.com/xmlapi2/thing?id=266192"
+          grep -iE '^(HTTP|server|cf-|www-authenticate|content-type)' /tmp/bgg-h || true
+          cat /tmp/bgg-b | head -c 400; printf '\n'
