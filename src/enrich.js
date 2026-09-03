@@ -851,8 +851,41 @@ export async function bggCheck(cx) {
   }
 }
 
+/* The first v2 sweep filled author and publisher from Open Library but left
+   demographic, series_status and volumes_total empty on every product - so
+   AniList answered nothing, even though the same query matched 8/23 series
+   from a GitHub runner. Different network, same question as BoardGameGeek.
+   This asks from the DO and reports the raw status and body. */
+export async function aniListCheck(cx) {
+  const t0 = cx.now();
+  const q = 'query { a0: Media(search: "Attack on Titan", type: MANGA) { title { romaji } volumes status tags { name } staff(perPage: 2) { edges { node { name { full } } } } } }';
+  try {
+    const r = await cx.fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json", "user-agent": BGG_UA },
+      body: JSON.stringify({ query: q }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const text = await r.text();
+    let j = null;
+    try { j = JSON.parse(text); } catch {}
+    const media = j && j.data ? j.data.a0 : null;
+    return {
+      ok: true, status: r.status, ms: cx.now() - t0,
+      server: r.headers.get("server") || null,
+      reachable: !!media,
+      parsed: media ? readAniListMedia(media) : null,
+      errors: j && j.errors ? JSON.stringify(j.errors).slice(0, 300) : null,
+      body: text.slice(0, 300),
+    };
+  } catch (e) {
+    return { ok: false, status: null, ms: cx.now() - t0, error: msg(e) };
+  }
+}
+
 export async function enrichDoFetch(cx, request, url) {
   await armEnrichAlarm(cx);
+  if (url.pathname === "/_en/al-check") return doJson(await aniListCheck(cx));
   if (url.pathname === "/_en/status") return doJson(await statusOf(cx));
   if (url.pathname === "/_en/bgg-check") return doJson(await bggCheck(cx));
   if (url.pathname === "/_en/run" && request.method === "POST") return doJson(await kickRun(cx));
@@ -864,6 +897,7 @@ export async function serveEnrich(request, env, ctx) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   const inner = url.pathname === "/enrich/run" ? "/_en/run"
     : url.pathname === "/enrich/bgg-check" ? "/_en/bgg-check"
+    : url.pathname === "/enrich/al-check" ? "/_en/al-check"
     : "/_en/status";
   const stub = env.ROOM.get(env.ROOM.idFromName(ENRICH_DO));
   const r = await stub.fetch(new Request(url.origin + inner, { method: request.method }));
