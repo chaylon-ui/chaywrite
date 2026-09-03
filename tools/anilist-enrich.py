@@ -31,6 +31,11 @@ OUT = os.environ.get("OUT", "data/anilist-series.json")
 UA = "ExorGamesCatalogue/1.0 (+https://exorgames.com)"
 DRY = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 LIMIT_SERIES = int(os.environ.get("LIMIT_SERIES", "0") or 0)
+# Comma-separated names to look up INSTEAD of the worker's list. Lets a run
+# prove the pipeline against titles AniList certainly has, separating "our
+# matching is broken" from "these particular series are not in AniList".
+TEST_SERIES = [x.strip() for x in os.environ.get("TEST_SERIES", "").split(",") if x.strip()]
+DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 AL_URL = "https://graphql.anilist.co"
 AL_CHUNK = 8          # aliased Media() lookups per GraphQL document
@@ -144,6 +149,9 @@ def anilist(names):
         except Exception as e:
             print("  anilist batch %d failed: %s" % (i, e))
             continue
+        if DEBUG and i == 0:
+            print("  DEBUG asked: %s" % json.dumps(chunk)[:220])
+            print("  DEBUG reply: %s" % json.dumps(r)[:600])
         data = r.get("data") or {}
         for k, n in enumerate(chunk):
             v = read_media(data.get("a%d" % (i + k)))
@@ -160,7 +168,12 @@ def anilist(names):
 
 
 def main():
-    names = read_series()
+    if TEST_SERIES:
+        names = TEST_SERIES
+        print("TEST_SERIES set - looking up %d given names, ignoring the worker list" % len(names))
+    else:
+        names = read_series()
+        print("first 12 series as published: %s" % json.dumps(names[:12], ensure_ascii=False))
     if LIMIT_SERIES:
         names = names[:LIMIT_SERIES]
         print("LIMIT_SERIES=%d, looking up only the first %d" % (LIMIT_SERIES, len(names)))
