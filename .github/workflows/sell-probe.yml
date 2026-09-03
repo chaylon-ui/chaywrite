@@ -118,11 +118,11 @@ jobs:
             v('light-cards-are-light', !!prev.sell && lum(prev.sell.cardBg) > 700 && lum(prev.sell.cardInk) < 300, prev.sell ? 'card bg ' + prev.sell.cardBg + ' ink ' + prev.sell.cardInk : 'none');
             for (const [label, r] of [['live', live], ['preview', prev]]) {
               const s = r.sell;
-              const first = s && s.geom && s.geom[0] ? s.geom[0] : '';
+              const first = r.geom && r.geom[0] ? r.geom[0] : '';
               const L = parseInt((first.match(/ L(-?\d+)/) || [])[1], 10);
               const R = parseInt((first.match(/ R(-?\d+)/) || [])[1], 10);
               v(label + '-centred-on-the-page', Number.isFinite(L) && Number.isFinite(R) && Math.abs(L - R) <= 8, 'left gap ' + L + 'px vs right gap ' + R + 'px (viewport ' + (s ? s.vw : '?') + ')');
-              if (s && s.geom) for (const g of s.geom) console.log(label.toUpperCase() + '-BOX ' + g);
+              if (r.geom) for (const g of r.geom) console.log(label.toUpperCase() + '-BOX ' + g);
             }
             console.log('SELL-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
             await browser.close();
