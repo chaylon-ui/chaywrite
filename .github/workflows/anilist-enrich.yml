@@ -1,0 +1,32 @@
+name: anilist-enrich
+# Fills exor.demographic / series_status / volumes_total on the book
+# catalogue. It runs HERE rather than in the worker because AniList blocks
+# Cloudflare Workers' shared egress range outright - 403 "You have been
+# manually blocked" from the worker, 200 from this runner, measured side by
+# side in bgg-probe run 33799658686. The Open Library half of the
+# enrichment is unaffected and stays in the worker.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Look everything up but write nothing
+        default: "false"
+      limit_series:
+        description: Only look up the first N series (0 = all)
+        default: "0"
+  schedule:
+    # 07:20 UTC daily, after the worker's 06:00 sweep has set exor.series
+    # on anything new, and before the 08:00 price run.
+    - cron: "20 7 * * *"
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enrich from AniList
+        env:
+          SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT_SERIES: ${{ inputs.limit_series }}
+        run: python3 tools/anilist-enrich.py
