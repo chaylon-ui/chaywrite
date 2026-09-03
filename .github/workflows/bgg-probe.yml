@@ -61,3 +61,11 @@ jobs:
           set +e
           echo "=== GET /enrich/bgg-check from exor-binder ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/enrich/bgg-check" | python3 -m json.tool || true
+          echo "=== GET /enrich/al-check from exor-binder (AniList, same question) ==="
+          curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/enrich/al-check" | python3 -m json.tool || true
+          echo "=== and AniList straight from this runner, for comparison ==="
+          curl -sS -o /tmp/al -w 'anilist from runner: HTTP %{http_code} %{size_download}B\n' --max-time 25 \
+            -X POST -H 'content-type: application/json' -H 'accept: application/json' \
+            --data '{"query":"query { a0: Media(search: \"Attack on Titan\", type: MANGA) { volumes status } }"}' \
+            https://graphql.anilist.co || true
+          head -c 300 /tmp/al; printf '\n'
