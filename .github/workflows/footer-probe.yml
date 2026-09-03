@@ -22,9 +22,9 @@ jobs:
           const H = 'https://exorgames.com';
           (async () => {
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-            const look = async (label, dark) => {
+            const look = async (label, dark, W) => {
               const page = await browser.newPage();
-              await page.setViewport({ width: 1366, height: 900 });
+              await page.setViewport({ width: W, height: 900, isMobile: W < 700, hasTouch: W < 700 });
               await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
               await page.evaluateOnNewDocument((d) => { try { if (d) localStorage.setItem('xgTheme', 'dark'); else localStorage.removeItem('xgTheme'); } catch (e) {} }, dark);
               try { await page.goto(H + '/?preview_theme_id=' + T, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) { console.log(label + ' NAV-ERR ' + String(e).slice(0,80)); }
@@ -56,17 +56,33 @@ jobs:
                   const h = q('.xg-newsletter .footer-heading');
                   if (h) { out.headingTag = h.tagName; out.headingInline = h.getAttribute('style') || ''; out.headingParentColor = getComputedStyle(h.parentElement).color; }
                 }
-                const others = [...document.querySelectorAll('.footer-heading')].slice(0, 5)
-                  .map(e => (e.textContent || '').trim().slice(0, 22) + ' -> ' + getComputedStyle(e).color);
-                out.allFooterHeadings = others;
+                /* Every heading in the footer with its text, colour and whether it
+                   is visible at this width - the desktop run found only
+                   "Newsletter" while the owner's screenshot says "Subscribe to
+                   our newsletter!", so the block they see is a different one. */
+                out.allFooterHeadings = [...document.querySelectorAll('#footer .footer-heading, .site-footer .footer-heading, footer .footer-heading')]
+                  .map(e => { const b = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+                    return { t: (e.textContent || '').trim().slice(0, 34), color: cs.color, shown: b.height > 0, w: Math.round(b.width) }; })
+                  .slice(0, 8);
+                /* Any element in the footer whose text mentions subscribe/newsletter,
+                   wherever it lives - app blocks included. */
+                out.subscribeish = [...document.querySelectorAll('footer *, #footer *, .site-footer *')]
+                  .filter(e => e.children.length === 0 && /subscribe|newsletter/i.test(e.textContent || ''))
+                  .slice(0, 6)
+                  .map(e => { const cs = getComputedStyle(e); const b = e.getBoundingClientRect();
+                    return { tag: e.tagName, cls: e.className.toString().slice(0, 40), t: (e.textContent||'').trim().slice(0,34),
+                             color: cs.color, h: Math.round(b.height) }; });
+                out.mobileBlock = box(q('#_mobile_newsletter'));
+                out.mobileHasContent = !!(q('#_mobile_newsletter') && q('#_mobile_newsletter').children.length);
                 return out;
               });
               console.log('\n===== ' + label + ' =====');
               console.log(JSON.stringify(r, null, 1));
               await page.close();
             };
-            await look('PREVIEW-light', false);
-            await look('PREVIEW-dark', true);
+            await look('DESKTOP-1366-dark', true, 1366);
+            await look('PHONE-390-dark', true, 390);
+            await look('PHONE-390-light', false, 390);
             await browser.close();
           })().catch(e => { console.log('PROBE-ERR ' + (e && e.message)); process.exit(0); });
           EOF
