@@ -57,6 +57,12 @@ jobs:
                 const rects = cards.map(c => c.getBoundingClientRect());
                 const boxes = [...root.querySelectorAll('[data-xgd-hours]')];
                 out.styled = !!cs && /gradient/.test(cs.backgroundImage || '') && cs.borderRadius !== '0px';
+                const sec = document.querySelector('.xg-page');
+                const hero = sec ? sec.querySelector('.xg-page__hero') : null;
+                out.heroInDom = !!hero;
+                out.heroH = hero ? Math.round(hero.getBoundingClientRect().height) : 0;
+                out.heroText = hero ? hero.textContent.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+                out.h1s = sec ? sec.querySelectorAll('h1').length : 0;
                 out.cards = cards.length;
                 out.cities = cards.map(c => c.getAttribute('data-xgd-city')).join(',');
                 out.rows = new Set(rects.map(r => Math.round(r.top))).size;
@@ -94,6 +100,17 @@ jobs:
               v(label + '-week-lists-with-today', r.weeks === 6 && r.weekRows >= 40 && r.today >= 6, r.weeks + ' week lists, ' + r.weekRows + ' rows, ' + r.today + ' marked today');
               v(label + '-centred', Math.abs(r.gapL - r.gapR) <= 8, 'left ' + r.gapL + ' vs right ' + r.gapR + ' (width ' + r.w + ')');
               v(label + '-wide-column-not-reading-measure', r.w >= 1000, 'width ' + r.w + 'px at a 1366px viewport, ' + r.rows + ' grid row(s)');
+              /* The section's own title band duplicated the page's hero. It is
+                 collapsed to screen-reader-only, so it must render at no height
+                 while its <h1> stays in the DOM - the page keeps ONE h1. The
+                 rule lives in xg-policy.css, which the live theme does not
+                 have, so live is logged rather than judged until publish. */
+              if (label.indexOf('preview') === 0) {
+                v(label + '-no-duplicate-title-band', r.heroInDom && r.heroH <= 2, 'section band renders ' + r.heroH + 'px tall, still in DOM: ' + r.heroInDom + ' ("' + r.heroText + '")');
+                v(label + '-exactly-one-h1', r.h1s === 1, r.h1s + ' h1 in the page section');
+              } else {
+                console.log(label + ' NOTE section band ' + r.heroH + 'px tall, ' + r.h1s + ' h1 (live has no xg-policy.css yet)');
+              }
             }
             v('dark-cards-are-dark', lum(dark.cardBg) < 300 && lum(dark.cityInk) > 500, 'card bg ' + dark.cardBg + ' city ink ' + dark.cityInk);
             v('light-cards-are-light', lum(prev.cardBg) > 700 && lum(prev.cityInk) < 300, 'card bg ' + prev.cardBg + ' city ink ' + prev.cityInk);
