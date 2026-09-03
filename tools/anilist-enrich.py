@@ -142,10 +142,24 @@ def read_series():
 # one-shot that shares the serial's name - "Naruto" alone matched #36444,
 # the 1997 single chapter, instead of the 72-volume series. Novels stay in,
 # because a good part of the shelf is light novels.
-ALIAS = ('a%d: Media(search: %s, type: MANGA, format_not: ONE_SHOT) '
-         '{ id format chapters volumes status '
+# Every alias is wrapped in Page rather than being a bare Media lookup, and
+# that is not cosmetic. A bare Media(search:) that matches nothing raises
+# instead of resolving to null, and GraphQL propagates that failure up to the
+# nearest nullable parent - which, for an aliased top-level field, is the
+# whole data object. So a single unmatchable name wiped out its entire batch
+# of eight, including the seven that had matched. That is what "8 matched of
+# 1380" meant: exactly one batch in 173 happened to contain no misses.
+# Page.media returns an empty list instead of raising, so a miss now costs
+# only itself.
+ALIAS = ('a%d: Page(perPage: 1) { media(search: %s, type: MANGA, '
+         'format_not: ONE_SHOT) { id format chapters volumes status '
          'title { romaji english } tags { name } '
-         'staff(perPage: 8) { edges { role node { name { full } } } } }')
+         'staff(perPage: 8) { edges { role node { name { full } } } } } }')
+
+
+def media_of(node):
+    lst = ((node or {}).get("media") or [])
+    return lst[0] if lst else None
 
 
 def pick_author(m):
@@ -212,14 +226,14 @@ def anilist(names):
             # seeing - a plausible-looking miss is usually a wrong match, not a
             # broken query.
             for k, n in enumerate(chunk):
-                m = data.get("a%d" % (i + k)) or {}
+                m = media_of(data.get("a%d" % (i + k))) or {}
                 t = (m.get("title") or {})
                 print("  DEBUG %-34s -> #%s %s [%s] vols=%s ch=%s"
                       % (n[:34], m.get("id"), (t.get("english") or t.get("romaji") or "-")[:40],
                          m.get("format"), m.get("volumes"), m.get("chapters")))
         got = 0
         for k, n in enumerate(chunk):
-            v = read_media(data.get("a%d" % (i + k)))
+            v = read_media(media_of(data.get("a%d" % (i + k))))
             if v:
                 found[n] = v
                 got += 1
