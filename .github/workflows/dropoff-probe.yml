@@ -45,7 +45,7 @@ jobs:
               try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) { console.log(label + ' NAV-ERR ' + String(e).slice(0, 90)); }
               /* the hours are painted after a fetch to the worker, so give it
                  a real chance before judging "no hours" */
-              try { await page.waitForFunction(() => { const b = document.querySelector('[data-xgd-hours]'); return b && !b.hidden; }, { timeout: 12000 }); } catch (e) { console.log(label + ' HOURS-WAIT timed out'); }
+              try { await page.waitForFunction(() => { const b = document.querySelector('.xgdrop__hours'); return b && !b.hidden && !!b.querySelector('.xgdrop__pill'); }, { timeout: 12000 }); } catch (e) { console.log(label + ' HOURS-WAIT timed out'); }
               await sleep(600);
               const r = await page.evaluate(() => {
                 const root = document.querySelector('.xgdrop');
@@ -53,9 +53,9 @@ jobs:
                 if (!root) return out;
                 const band = root.querySelector('.xgdrop__band');
                 const cs = band ? getComputedStyle(band) : null;
-                const cards = [...root.querySelectorAll('[data-xgd-city]')];
+                const cards = [...root.querySelectorAll('.xgdrop__card')];
                 const rects = cards.map(c => c.getBoundingClientRect());
-                const boxes = [...root.querySelectorAll('[data-xgd-hours]')];
+                const boxes = [...root.querySelectorAll('.xgdrop__hours')];
                 out.styled = !!cs && /gradient/.test(cs.backgroundImage || '') && cs.borderRadius !== '0px';
                 const sec = document.querySelector('.xg-page');
                 const hero = sec ? sec.querySelector('.xg-page__hero') : null;
@@ -64,7 +64,7 @@ jobs:
                 out.heroText = hero ? hero.textContent.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
                 out.h1s = sec ? sec.querySelectorAll('h1').length : 0;
                 out.cards = cards.length;
-                out.cities = cards.map(c => c.getAttribute('data-xgd-city')).join(',');
+                out.cities = cards.map(c => { const h = c.querySelector('.xgdrop__city'); return h ? h.textContent.split(',')[0].trim().toLowerCase() : '?'; }).join(',');
                 out.rows = new Set(rects.map(r => Math.round(r.top))).size;
                 out.maps = root.querySelectorAll('.xgdrop__map iframe[src*="output=embed"]').length;
                 out.mapH = root.querySelector('.xgdrop__map') ? Math.round(root.querySelector('.xgdrop__map').getBoundingClientRect().height) : 0;
@@ -74,7 +74,7 @@ jobs:
                 out.weekRows = root.querySelectorAll('.xgdrop__week .r').length;
                 out.today = root.querySelectorAll('.xgdrop__week .r.is-today').length;
                 out.sample = boxes.map(b => b.textContent.replace(/\s+/g, ' ').trim().slice(0, 46)).filter(Boolean).slice(0, 6);
-                out.phones = root.querySelectorAll('[data-xgd-phone]').length;
+                out.phones = root.querySelectorAll('.xgdrop__tel').length;
                 out.dirs = root.querySelectorAll('a[href*="maps/dir"]').length;
                 const c0 = cards[0];
                 out.cardBg = c0 ? getComputedStyle(c0).backgroundColor : null;
@@ -96,8 +96,17 @@ jobs:
               v(label + '-six-cards', r.cards === 6 && r.rows <= 3, r.cards + ' cards in ' + r.rows + ' row(s): ' + r.cities);
               v(label + '-six-maps', r.maps === 6 && r.mapH >= 120, r.maps + ' embedded maps, ' + r.mapH + 'px tall');
               v(label + '-six-directions-links', r.dirs === 6, r.dirs + ' directions links');
-              v(label + '-script-survived-and-hours-live', r.hoursShown === 6 && r.pills === 6, r.hoursShown + '/6 hour blocks painted, ' + r.pills + ' pills :: ' + JSON.stringify(r.sample));
-              v(label + '-week-lists-with-today', r.weeks === 6 && r.weekRows >= 40 && r.today >= 6, r.weeks + ' week lists, ' + r.weekRows + ' rows, ' + r.today + ' marked today');
+              /* The hours code is assets/xg-dropoff-hours.js, which only the
+                 preview theme has - it moved out of the page body after the
+                 editor stripped the <script> on 2026-09-03. Live cannot have
+                 it (we never write to the live theme), so live is logged
+                 until the owner publishes. */
+              if (label.indexOf('preview') === 0) {
+                v(label + '-hours-live', r.hoursShown === 6 && r.pills === 6, r.hoursShown + '/6 hour blocks painted, ' + r.pills + ' pills :: ' + JSON.stringify(r.sample));
+                v(label + '-week-lists-with-today', r.weeks === 6 && r.weekRows >= 40 && r.today >= 6, r.weeks + ' week lists, ' + r.weekRows + ' rows, ' + r.today + ' marked today');
+              } else {
+                console.log(label + ' NOTE ' + r.hoursShown + '/6 hour blocks, ' + r.pills + ' pills (live has no xg-dropoff-hours.js until publish)');
+              }
               v(label + '-centred', Math.abs(r.gapL - r.gapR) <= 8, 'left ' + r.gapL + ' vs right ' + r.gapR + ' (width ' + r.w + ')');
               v(label + '-wide-column-not-reading-measure', r.w >= 1000, 'width ' + r.w + 'px at a 1366px viewport, ' + r.rows + ' grid row(s)');
               /* The section's own title band duplicated the page's hero. It is
