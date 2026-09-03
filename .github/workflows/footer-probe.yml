@@ -20,6 +20,12 @@ jobs:
           const puppeteer = require('puppeteer-core');
           const T = '157462692013';
           const H = 'https://exorgames.com';
+          /* Collected and re-printed at the very END. The dumps run ~840 lines
+             across three viewports, so a verdict emitted next to its own dump
+             is unreadable from the tail - the drop-off probe learned this
+             already with its FAILS summary line. */
+          const V = [];
+          const say = (s) => { V.push(s); console.log(s); };
           (async () => {
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
             const look = async (label, dark, W) => {
@@ -84,14 +90,14 @@ jobs:
                 const wantRow = W > 480;
                 const okRow = sameRow === wantRow;
                 const fits = !b2 || (inp.x + inp.w) <= (b2.x + 2);
-                console.log('VERDICT ' + (okRow ? 'PASS' : 'FAIL') + ' ' + label + '-input-and-button-layout :: ' +
+                say('VERDICT ' + (okRow ? 'PASS' : 'FAIL') + ' ' + label + '-input-and-button-layout :: ' +
                   (sameRow ? 'same row' : 'stacked') + ' (expected ' + (wantRow ? 'same row' : 'stacked') + ') ' +
                   'input y' + inp.y + ' h' + inp.h + ' w' + inp.w + ', button y' + bs.y + ' ' +
                   (b2 ? 'w' + b2.w + ' r' + b2.radius : 'no button') + (fits ? '' : ' OVERLAP'));
-                console.log('VERDICT ' + (inp.h >= 36 && inp.h <= 48 ? 'PASS' : 'FAIL') + ' ' + label + '-field-height :: ' + inp.h + 'px, radius ' + inp.radius);
+                say('VERDICT ' + (inp.h >= 36 && inp.h <= 48 ? 'PASS' : 'FAIL') + ' ' + label + '-field-height :: ' + inp.h + 'px, radius ' + inp.radius);
               }
               const lede = (r.subscribeish || []).find(e => /subscribe to our/i.test(e.t || ''));
-              if (lede) console.log('VERDICT INFO ' + label + '-lede-colour :: "' + lede.t + '" -> ' + lede.color);
+              if (lede) say('VERDICT INFO ' + label + '-lede-colour :: "' + lede.t + '" -> ' + lede.color);
               console.log('\n===== ' + label + ' =====');
               console.log(JSON.stringify(r, null, 1));
               await page.close();
@@ -100,6 +106,9 @@ jobs:
             await look('PHONE-390-dark', true, 390);
             await look('PHONE-390-light', false, 390);
             await browser.close();
+            console.log('\n================ SUMMARY ================');
+            V.forEach((l) => console.log(l));
+            console.log('FOOTER-FAILS ' + V.filter((l) => l.indexOf('VERDICT FAIL') === 0).length);
           })().catch(e => { console.log('PROBE-ERR ' + (e && e.message)); process.exit(0); });
           EOF
           node foot.js
