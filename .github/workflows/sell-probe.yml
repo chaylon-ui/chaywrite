@@ -1,0 +1,70 @@
+name: sell-probe
+on:
+  workflow_dispatch: {}
+
+# Log-only: the sell page's route images, measured on the LIVE theme and on
+# the PREVIEW theme, light and dark. Prints each image's natural size, its
+# rendered size, and the width of the cell holding it, so "the images
+# shrank" is a number rather than an impression.
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22
+
+      - name: Measure the sell page on both themes
+        run: |
+          cat > sell.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = '157462692013';
+          const P = '/pages/sell-to-exor-games-bulk-or-create-a-list';
+          const H = 'https://exorgames.com';
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const fails = [];
+          const v = (n, ok, d) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + n + ' :: ' + d); if (!ok) fails.push(n); };
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const look = async (label, url, dark) => {
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1366, height: 900 });
+              await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+              await page.evaluateOnNewDocument((d) => { try { if (d) localStorage.setItem('xgTheme', 'dark'); else localStorage.removeItem('xgTheme'); } catch (e) {} }, dark);
+              try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) { console.log(label + ' NAV-ERR ' + String(e).slice(0, 90)); }
+              await sleep(1500);
+              const r = await page.evaluate(() => {
+                const out = { title: document.title.slice(0, 60), theme: document.documentElement.getAttribute('data-xg-theme'), hasPolicyCss: false, frame: !!document.querySelector('.xg-page'), imgs: [], table: null };
+                for (const s of document.styleSheets) { try { if ((s.href || '').includes('xg-policy')) out.hasPolicyCss = true; } catch (e) {} }
+                const t = document.querySelector('.xg-prose table, .rte table, #MainContent table');
+                if (t) { const tr = t.getBoundingClientRect(); const cs = getComputedStyle(t); out.table = { w: Math.round(tr.width), border: cs.borderTopWidth, bg: cs.backgroundColor, attr: t.getAttribute('border'), inline: (t.getAttribute('width') || '') }; }
+                const scope = document.querySelector('#MainContent') || document.body;
+                for (const im of [...scope.querySelectorAll('table img')].slice(0, 6)) {
+                  const b = im.getBoundingClientRect();
+                  const cell = im.closest('td');
+                  const cb = cell ? cell.getBoundingClientRect() : null;
+                  out.imgs.push({ nat: im.naturalWidth + 'x' + im.naturalHeight, shown: Math.round(b.width) + 'x' + Math.round(b.height), cell: cb ? Math.round(cb.width) : null, src: (im.getAttribute('src') || '').split('/').pop().split('?')[0].slice(0, 34) });
+                }
+                return out;
+              });
+              console.log(label + ' ' + JSON.stringify(r));
+              await page.close();
+              return r;
+            };
+            // Live theme: a clean context, no preview cookie.
+            const live = await look('LIVE-light', H + P, false);
+            // Preview theme: Shopify drops the query param and sets a cookie,
+            // so the landing load is what a shopper on the preview sees.
+            const prev = await look('PREVIEW-light', H + P + '?preview_theme_id=' + T, false);
+            const prevDark = await look('PREVIEW-dark', H + P + '?preview_theme_id=' + T, true);
+            const small = (r) => r.imgs.filter(i => parseInt(i.shown) < 80).length;
+            v('preview-is-the-preview-theme', prev.hasPolicyCss || prev.frame, 'xg-policy.css=' + prev.hasPolicyCss + ' xg-page frame=' + prev.frame);
+            v('live-images-full-size', live.imgs.length > 0 && small(live) === 0, live.imgs.map(i => i.shown + ' in ' + i.cell).join(' | ') || 'no table images found');
+            v('preview-images-full-size', prev.imgs.length > 0 && small(prev) === 0, prev.imgs.map(i => i.shown + ' in ' + i.cell).join(' | ') || 'no table images found');
+            v('preview-dark-images-full-size', prevDark.imgs.length > 0 && small(prevDark) === 0, prevDark.imgs.map(i => i.shown + ' in ' + i.cell).join(' | ') || 'no table images found');
+            v('layout-table-not-gridlined', !!prev.table && (prev.table.border === '0px' || prev.table.attr !== '0'), prev.table ? JSON.stringify(prev.table) : 'no table');
+            console.log('SELL-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node sell.js
