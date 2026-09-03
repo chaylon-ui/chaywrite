@@ -112,7 +112,12 @@ def read_series():
     return names
 
 
-ALIAS = ('a%d: Media(search: %s, type: MANGA) { id format chapters volumes status '
+# format_not: ONE_SHOT keeps search relevance from landing on a prototype
+# one-shot that shares the serial's name - "Naruto" alone matched #36444,
+# the 1997 single chapter, instead of the 72-volume series. Novels stay in,
+# because a good part of the shelf is light novels.
+ALIAS = ('a%d: Media(search: %s, type: MANGA, format_not: ONE_SHOT) '
+         '{ id format chapters volumes status '
          'title { romaji english } tags { name } '
          'staff(perPage: 8) { edges { role node { name { full } } } } }')
 
