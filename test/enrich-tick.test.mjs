@@ -1,4 +1,4 @@
-import { enrichTick, statusOf, kickRun } from '../src/enrich.js';
+import { enrichTick, statusOf, kickRun, ENRICH_VERSION } from '../src/enrich.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, d) => { if (c) pass++; else { fail++; console.log('FAIL ' + n + (d ? ' :: ' + d : '')); } };
@@ -121,7 +121,7 @@ async function drain(w, maxTicks = 60) {
       { id: 'gid://p/1', title: 'Attack on Titan 24', barcode: '9781632365354' },
       { id: 'gid://p/2', title: 'AKAME GA KILL GN VOL. 3', barcode: '9781421587264' },
       // stamped at the CURRENT version: must be skipped
-      { id: 'gid://p/3', title: 'Already Done 1', barcode: '', enriched: '2026-09-01', version: 2 },
+      { id: 'gid://p/3', title: 'Already Done 1', barcode: '', enriched: '2026-09-01', version: ENRICH_VERSION },
       // stamped at v1: must be RE-enriched so the new fields backfill
       { id: 'gid://p/4', title: 'One Piece 5', barcode: '', enriched: '2026-09-01', version: 1 },
     ],
@@ -152,7 +152,7 @@ async function drain(w, maxTicks = 60) {
   eq('demographic from AniList', byKey('gid://p/1', 'demographic'), 'Shonen');
   eq('series status mapped', byKey('gid://p/1', 'series_status'), 'Completed');
   eq('volumes_total from AniList', byKey('gid://p/1', 'volumes_total'), '34');
-  eq('version stamped', byKey('gid://p/1', 'enrich_version'), '2');
+  eq('version stamped', byKey('gid://p/1', 'enrich_version'), String(ENRICH_VERSION));
   ok('current-version product not rewritten', !w.written.some((m) => m.ownerId === 'gid://p/3'));
   ok('v1 product WAS rewritten', w.written.some((m) => m.ownerId === 'gid://p/4'));
   eq('no bgg calls for books', w.bggCalls, 0);

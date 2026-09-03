@@ -73,8 +73,13 @@ export const MAX_MECHANICS = 12;
 /* Bump when a new field is added: the sweep re-enriches anything stamped below
    this, which is how new metafields backfill onto the products already done.
    v2 (2026-09-03) added author, publisher, demographic, series_status,
-   volumes_total, series_key, and cleaned the series name itself. */
-export const ENRICH_VERSION = 2;
+   volumes_total, series_key, and cleaned the series name itself.
+   v3 (2026-09-03) re-reads every title so the dotless "V1" form is filed as a
+   volume. The parser fix alone changes nothing already stored: series and
+   volume were written from the old reading, so "Yona of the Dawn V1" stays
+   wrong on the product - and in the series list we publish - until the sweep
+   comes back round. */
+export const ENRICH_VERSION = 3;
 
 export const BOOKS_QUERY = "product_type:Books AND status:active";
 export const GAMES_QUERY = "product_type:'Board Games' AND status:active";
