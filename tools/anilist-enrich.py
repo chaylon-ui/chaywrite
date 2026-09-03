@@ -87,6 +87,7 @@ def post(url, payload, headers, tries=4):
             # for exactly that reason: one batch got through and the other 172
             # were rate-limited into silence. Require real data instead.
             if e.code != 429 and isinstance(j, dict) and j.get("data"):
+                j["_http"] = e.code
                 return j
             if e.code in (429, 500, 502, 503, 504) and attempt < tries - 1:
                 if e.code == 429:
@@ -216,12 +217,20 @@ def anilist(names):
                 print("  DEBUG %-34s -> #%s %s [%s] vols=%s ch=%s"
                       % (n[:34], m.get("id"), (t.get("english") or t.get("romaji") or "-")[:40],
                          m.get("format"), m.get("volumes"), m.get("chapters")))
+        got = 0
         for k, n in enumerate(chunk):
             v = read_media(data.get("a%d" % (i + k)))
             if v:
                 found[n] = v
+                got += 1
             else:
                 misses += 1
+        if DEBUG and not got:
+            # A batch of eight that yields nothing is either eight honest
+            # misses or one failed request, and those read identically from
+            # the outside. Print what AniList actually said.
+            print("  DEBUG empty batch http=%s reply=%s"
+                  % (r.get("_http", 200), json.dumps(r)[:700]))
         time.sleep(AL_GAP)
         if (i // AL_CHUNK) % 10 == 0:
             print("  ...%d/%d series looked up" % (min(i + AL_CHUNK, len(names)), len(names)))
