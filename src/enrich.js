@@ -46,6 +46,13 @@ export const TICK_MS = 20000;          // wall budget for one alarm tick
 export const RETRY_FAILED_MS = 3600000;
 export const BGG_GAP_MS = 2200;        // BoardGameGeek asks for ~1 request / 2s
 export const BGG_TRIES_202 = 4;        // it answers 202 while it builds a response
+/* 2026-09-03: BGG now answers 401 "Unauthorized. See .../using_the_xml_api" to
+   every anonymous call - xmlapi2, legacy xmlapi and api.geekdo alike, on any
+   User-Agent, from a Cloudflare edge. That is a gate, not a hiccup, so the
+   games phase must recognise it and stand down for the night instead of
+   retrying 1500 games against a closed door every hour. */
+export const BGG_GATED = [401, 403];
+export const BGG_UA = "ExorGamesCatalogue/1.0 (+https://exorgames.com)";
 export const MAX_MECHANICS = 12;
 
 export const BOOKS_QUERY = "product_type:Books AND status:active";
@@ -361,9 +368,14 @@ async function bggGet(cx, url) {
     const wait = BGG_GAP_MS - (cx.now() - last);
     if (wait > 0) await cx.sleep(wait);
     if (cx.mem) cx.mem.lastBgg = cx.now();
-    const r = await cx.fetch(url, { headers: { accept: "application/xml" }, signal: AbortSignal.timeout(20000) });
+    const r = await cx.fetch(url, { headers: { accept: "application/xml", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
     if (r.status === 202) { await cx.sleep(1500); continue; }
     if (r.status === 429) { await cx.sleep(5000); continue; }
+    if (BGG_GATED.indexOf(r.status) !== -1) {
+      const e = new Error("bgg HTTP " + r.status + " (API gated - needs credentials)");
+      e.blocked = r.status;
+      throw e;
+    }
     if (!r.ok) throw new Error("bgg HTTP " + r.status);
     return await r.text();
   }
@@ -446,6 +458,16 @@ export async function enrichTick(cx) {
       let res = null;
       try { res = await enrichGame(cx, item, dateStr); }
       catch (e) {
+        /* Gated, not broken: books are already done and nothing about these
+           games is written, so close the run cleanly and let the owner supply
+           credentials. Retrying hourly would just hammer a closed door. */
+        if (e && e.blocked) {
+          run.bggBlocked = "HTTP " + e.blocked;
+          run.pending = [];
+          run.gamesPending = true;
+          cx.log("enrich: BoardGameGeek gated (" + run.bggBlocked + ") - games phase stood down for today");
+          return finish(cx, run, null);
+        }
         run.errors++;
         run.errStreak++;
         run.pending.shift();
@@ -545,6 +567,7 @@ function publicRun(run, now) {
     pages: run.pages, seen: run.seen, written: run.written, skipped: run.skipped,
     ok: run.ok, ambiguous: run.ambiguous, notfound: run.notfound,
     errors: run.errors, throttled: run.throttled, ticks: run.ticks,
+    bggBlocked: run.bggBlocked, gamesPending: !!run.gamesPending,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,
     error: run.error,

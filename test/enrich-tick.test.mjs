@@ -59,6 +59,9 @@ function world(opts) {
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
       w.bggCalls++;
+      if (w.bggStatus && w.bggStatus !== 200) {
+        return new Response('Unauthorized. See https://boardgamegeek.com/using_the_xml_api', { status: w.bggStatus });
+      }
       if (u.includes('/search?')) {
         const q = decodeURIComponent(u.split('query=')[1] || '');
         return new Response(w.search[q] || '<items></items>', { status: 200 });
@@ -68,6 +71,7 @@ function world(opts) {
     },
   };
   w.search = opts.search || {};
+  w.bggStatus = opts.bggStatus || 200;
   w.thing = opts.thing || {};
   return w;
 }
@@ -186,6 +190,28 @@ async function drain(w, maxTicks = 60) {
   eq('exactly two BGG calls per game, none repeated', w.bggCalls, 16);
   const ids = w.written.filter((m) => m.key === 'bgg_id').map((m) => m.ownerId);
   eq('no duplicate writes', ids.length, new Set(ids).size);
+}
+
+// ---------- 6. a gated BoardGameGeek stands down, it does not thrash ----------
+// 2026-09-03: BGG began answering 401 to every anonymous call. The books
+// already written must survive, no game may be stamped enriched (or it would
+// be skipped forever), and the run must close CLEANLY - a failed run retries
+// in an hour, which would mean 1500 games against a closed door every hour.
+{
+  const w = world({
+    books: [{ id: 'gid://p/1', title: 'One Piece 5', barcode: '9781234567897' }],
+    games: [{ id: 'gid://g/1', title: 'WINGSPAN' }, { id: 'gid://g/2', title: 'CALICO' }],
+    bggStatus: 401,
+  });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('run closed without error', last.error, undefined);
+  eq('the gate is recorded', last.bggBlocked, 'HTTP 401');
+  eq('games flagged as still owed', last.gamesPending, true);
+  eq('books still written', (w.written.find((m) => m.ownerId === 'gid://p/1' && m.key === 'series') || {}).value, 'One Piece');
+  ok('no game was stamped enriched', !w.written.some((m) => m.ownerId.startsWith('gid://g/') ), 'game writes=' + w.written.filter((m) => m.ownerId.startsWith('gid://g/')).length);
+  eq('it gave up after one gated call, not 1500', w.bggCalls, 1);
+  ok('next alarm is a day out, not an hourly retry', w.cx.storage.alarmAt() - w.now > 3600000, 'delta=' + (w.cx.storage.alarmAt() - w.now));
 }
 
 // ---------- 6. no token: fails loudly instead of silently ----------
