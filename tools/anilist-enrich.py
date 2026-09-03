@@ -112,8 +112,35 @@ def read_series():
     return names
 
 
-ALIAS = ('a%d: Media(search: %s, type: MANGA) { volumes status tags { name } '
-         'staff(perPage: 2) { edges { node { name { full } } } } }')
+ALIAS = ('a%d: Media(search: %s, type: MANGA) { id format chapters volumes status '
+         'title { romaji english } tags { name } '
+         'staff(perPage: 8) { edges { role node { name { full } } } } }')
+
+
+def pick_author(m):
+    """AniList credits every contributor - guest illustrators, cover artists,
+    spin-off writers - and the first edge is not reliably the person who made
+    the series (Attack on Titan's first edge is Tatsuya Endou, of Spy x Family).
+    Rank the edges by role instead: creator, then writer, then artist."""
+    best, best_rank = "", 99
+    for e in ((m.get("staff") or {}).get("edges") or []):
+        full = (((e or {}).get("node") or {}).get("name") or {}).get("full")
+        if not full:
+            continue
+        role = str((e or {}).get("role") or "").lower()
+        if "original creator" in role or "story & art" in role:
+            rank = 0
+        elif "story" in role:
+            rank = 1
+        elif "art" in role:
+            rank = 2
+        else:
+            rank = 3
+        if rank < best_rank:
+            best, best_rank = full, rank
+        if best_rank == 0:
+            break
+    return best
 
 
 def read_media(m):
@@ -125,12 +152,7 @@ def read_media(m):
         if d:
             demo = d
             break
-    author = ""
-    for e in ((m.get("staff") or {}).get("edges") or []):
-        full = (((e or {}).get("node") or {}).get("name") or {}).get("full")
-        if full:
-            author = full
-            break
+    author = pick_author(m)
     vols = m.get("volumes")
     out = {"demographic": demo, "status": STATUS.get(str(m.get("status") or ""), ""),
            "volumes": vols if isinstance(vols, int) and vols > 0 else None, "author": author}
@@ -149,10 +171,17 @@ def anilist(names):
         except Exception as e:
             print("  anilist batch %d failed: %s" % (i, e))
             continue
-        if DEBUG and i == 0:
-            print("  DEBUG asked: %s" % json.dumps(chunk)[:220])
-            print("  DEBUG reply: %s" % json.dumps(r)[:600])
         data = r.get("data") or {}
+        if DEBUG:
+            # Which AniList entry a name actually landed on is the thing worth
+            # seeing - a plausible-looking miss is usually a wrong match, not a
+            # broken query.
+            for k, n in enumerate(chunk):
+                m = data.get("a%d" % (i + k)) or {}
+                t = (m.get("title") or {})
+                print("  DEBUG %-34s -> #%s %s [%s] vols=%s ch=%s"
+                      % (n[:34], m.get("id"), (t.get("english") or t.get("romaji") or "-")[:40],
+                         m.get("format"), m.get("volumes"), m.get("chapters")))
         for k, n in enumerate(chunk):
             v = read_media(data.get("a%d" % (i + k)))
             if v:
