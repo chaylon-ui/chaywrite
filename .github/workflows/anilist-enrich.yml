@@ -19,6 +19,12 @@ on:
       limit_series:
         description: Only look up the first N series (0 = all)
         default: "0"
+      test_series:
+        description: Comma-separated names to look up instead of the worker list
+        default: ""
+      debug:
+        description: Print the first batch's request and reply
+        default: "false"
   schedule:
     # 07:20 UTC daily: after the worker's 06:00 sweep has set exor.series on
     # new stock, and before the 08:00 price run.
@@ -35,6 +41,8 @@ jobs:
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           LIMIT_SERIES: ${{ inputs.limit_series }}
+          TEST_SERIES: ${{ inputs.test_series }}
+          DEBUG: ${{ inputs.debug }}
         run: python3 tools/anilist-enrich.py
       - name: Commit the file when it changed
         if: ${{ inputs.dry_run != 'true' }}
