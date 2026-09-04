@@ -61,13 +61,17 @@ export async function serveBuylistPoc(request, env) {
 
   if (path === "/buylist/poc/search") {
     const q = String(url.searchParams.get("q") || "").slice(0, 80);
-    const game = String(url.searchParams.get("game") || "mtg").slice(0, 24);
+    const game = String(url.searchParams.get("game") || "mtg").replace(/[^A-Za-z]/g, "").slice(0, 24);
     if (q.length < 2) return json({ error: "q too short" }, 400);
-    const key = env && env.BINDERPOS_API_KEY;
-    if (!key) return json({ error: "no key on this worker" }, 503);
-    const qs = new URLSearchParams({ storeUrl: STORE_URL, keyword: q, game, buyingEnabled: "true", limit: "3", offset: "0" });
-    const r = await passthrough(`${PORTAL}/external/shopify/buylist/cards/forStore?${qs}`, {
-      headers: { accept: "application/json", authorization: key, "user-agent": UA },
+    // The search BinderPOS's own app makes - no key. (The keyed cards/forStore
+    // variant is not usable here: this worker holds no BINDERPOS_API_KEY,
+    // which the first read-only run exposed with a 503.) Hits carry id,
+    // cardName, setName, game, imageUrl, cardTypes[] and variants[] with
+    // id, variantName and cardBuylistTypes[] - every field the app's saved
+    // card object is built from.
+    const qs = new URLSearchParams({ keyword: q, limit: "3", offset: "0" });
+    const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {
+      headers: { accept: "application/json", "content-type": "application/json", "user-agent": UA },
     });
     // Trim: the first two hits, each with its first two variants, so the
     // shape is readable in a log without dumping a whole set.
