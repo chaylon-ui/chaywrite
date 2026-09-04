@@ -1,0 +1,10 @@
+name: buylist-js-probe
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read what BinderPOS's buylist app sends and receives
+        run: python3 tools/buylist-js-probe.py
