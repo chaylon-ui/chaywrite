@@ -53,47 +53,78 @@ def main():
     for p in paths:
         url = BASE + p + ("&" if "?" in p else "?") + "preview_theme_id=" + PREVIEW
         st, html, final = get(url)
-        has = "buylist selling" in html.lower()
-        print("%-28s %s %5dKB selling-heading=%s final=%s" % (p, st, len(html) // 1024, has, final[:70]))
+        # the og:description in <head> repeats the heading, so look in the body only
+        body_at = html.lower().find("<body")
+        has = "buylist selling" in html.lower()[body_at:] if body_at >= 0 else False
+        print("%-38s %s %5dKB selling-heading-in-body=%s" % (p, st, len(html) // 1024, has))
         if has and hit is None:
             hit = (p, html)
+        if hit:
+            break
     if not hit:
-        print("NO CANDIDATE carried the heading; pass the real path as BUYLIST_PATH")
+        print("NO CANDIDATE carried the heading in its body")
         return 0
     p, html = hit
-    print("\n=== %s: markup around the tiles (scripts/styles stripped) ===" % p)
     low = html.lower()
-    i = low.find("buylist selling")
-    region = html[max(0, i - 900): i + 4500]
-    iframes = re.findall(r"<iframe[^>]+>", html, re.I)
-    print("iframes on page: %d %s" % (len(iframes), [f[:100] for f in iframes[:2]]))
+    body_at = low.find("<body")
+    i = low.find("buylist selling", body_at)
+    region = html[max(body_at, i - 400): i + 5200]
+
+    print("\n=== anchor target: does anything carry id=\"buylist\"? ===")
+    ids = re.findall(r'<([a-z0-9]+)[^>]*\sid=["\']buylist["\'][^>]*>', html, re.I)
+    print("  elements with id=buylist: %d %s" % (len(ids), ids[:3]))
+    print("  'binderpos' occurrences in page HTML: %d" % low.count("binderpos"))
+    for m in list(re.finditer(r"binderpos", low))[:3]:
+        print("    ..." + re.sub(r"\s+", " ", html[max(0, m.start() - 70): m.start() + 90]) + "...")
+
+    print("\n=== body markup around the tiles (scripts/styles stripped) ===")
     txt = strip(region)
-    for k in range(0, min(len(txt), 4200), 700):
+    for k in range(0, min(len(txt), 4900), 700):
         print("  | " + txt[k:k + 700])
-    print("\n=== tile links ===")
-    for m in re.findall(r'<a[^>]+href=["\']([^"\']*)["\'][^>]*>\s*<img[^>]+src=["\']([^"\']*)["\']', region, re.I | re.S)[:10]:
-        print("  href=%s  img=%s" % (m[0][:80], m[1][-60:]))
-    print("\n=== BinderPOS scripts on the page ===")
-    srcs = [s for s in re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.I) if "binder" in s.lower()]
-    for s in srcs[:6]:
-        print("  " + s[:120])
-    print("\n=== endpoints named inside those scripts (external/shopify/...) ===")
-    seen = set()
-    for s in srcs[:4]:
-        if s.startswith("//"):
-            s = "https:" + s
-        elif s.startswith("/"):
-            s = BASE + s
-        st, js, _ = get(s, "*/*")
+
+    print("\n=== tile images: intrinsic size from the PNG header ===")
+    imgs = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', region, re.I)
+    seen = []
+    for src in imgs:
+        if src in seen:
+            continue
+        seen.append(src)
+        u = ("https:" + src) if src.startswith("//") else src
+        req = urllib.request.Request(u, headers={"User-Agent": UA, "Range": "bytes=0-31"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                b = r.read(32)
+        except Exception as e:
+            print("  %-70s %s" % (u[-70:], type(e).__name__))
+            continue
+        if b[:8] == b"\x89PNG\r\n\x1a\n" and len(b) >= 24:
+            w = int.from_bytes(b[16:20], "big"); h = int.from_bytes(b[20:24], "big")
+            print("  %-46s %4d x %4d  ratio %.2f" % (u.split("/")[-1].split("?")[0], w, h, w / h))
+        else:
+            print("  %-46s not PNG (%r)" % (u.split("/")[-1].split("?")[0], b[:8]))
+
+    print("\n=== every external script on the page ===")
+    srcs = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.I)
+    ext = []
+    for s in srcs:
+        u = ("https:" + s) if s.startswith("//") else (BASE + s if s.startswith("/") else s)
+        if u not in ext:
+            ext.append(u)
+    for u in ext[:40]:
+        flag = " <-- app embed" if "/extensions/" in u else (" <-- binder" if "binder" in u.lower() else "")
+        print("  " + u[:130] + flag)
+
+    print("\n=== inside app-embed / binder scripts: endpoints and buylist URLs ===")
+    picked = [u for u in ext if "/extensions/" in u or "binder" in u.lower()][:8]
+    for u in picked:
+        st, js, _ = get(u, "*/*")
+        js = js[:2_000_000]
         eps = sorted(set(re.findall(r'external/shopify/[A-Za-z0-9/_\-]+', js)))
-        methods = sorted(set(re.findall(r'(?:buylist|submit|create|checkout)[A-Za-z]*\s*[:(]', js)))[:12]
-        print("  %s %s %dKB endpoints=%d" % (st, s[-60:], len(js) // 1024, len(eps)))
-        for e in eps:
-            if e not in seen:
-                seen.add(e)
-                print("     " + e)
-        if methods:
-            print("     fn-names: " + ", ".join(m.strip() for m in methods))
+        urls = sorted(set(re.findall(r'https?://[a-z0-9.\-]*binderpos[a-z0-9.\-]*/[A-Za-z0-9/_\-.?=]*', js, re.I)))[:8]
+        print("  %s %dKB %s" % (st, len(js) // 1024, u[-80:]))
+        print("     binderpos mentions=%d endpoints=%s" % (js.lower().count("binderpos"), eps[:12]))
+        for x in urls:
+            print("     url: " + x[:120])
     print("\nBUYLIST-PROBE done")
     return 0
 
