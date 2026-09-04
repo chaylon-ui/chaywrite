@@ -42,7 +42,20 @@ try {
   console.log("  how their Search() builds its URL: " + JSON.stringify(uniq(js.match(/.{0,220}keyword=.{0,220}/g) || []).slice(0, 3)));
   console.log("  how they load and use sets: " + JSON.stringify(uniq(js.match(/.{0,160}(\/sets|setName).{0,220}/g) || []).slice(0, 6)));
   const sets = await (await fetch(`https://portal.binderpos.com/api/cards/mtg/sets`, { headers: { "content-type": "application/json" } })).text();
-  console.log("  /api/cards/mtg/sets: " + sets.length + "B  " + JSON.stringify(sets.slice(0, 260)));
+  console.log("  /api/cards/mtg/sets: " + sets.length + "B  " + JSON.stringify(sets.slice(0, 120)));
+  // their search, called their way, with the set and with a deeper page
+  const SET = encodeURIComponent("Magic Player Rewards 2010");
+  for (const qs of [
+    `setName=${SET}&keyword=Lightning%20Bolt&limit=20&offset=0`,
+    `keyword=Lightning%20Bolt&limit=60&offset=0`,
+    `keyword=Lightning%20Bolt&setName=${SET}&limit=60&offset=0`,
+    `setName=${SET}&keyword=&limit=20&offset=0`,
+  ]) {
+    const r = await fetch(`https://portal.binderpos.com/external/shopify/${STORE_ID}/cards/mtg?${qs}`, { headers: { "content-type": "application/json" } });
+    const t = await r.text();
+    let n = -1; try { const j = JSON.parse(t); n = Array.isArray(j) ? j.length : -1; } catch {}
+    console.log("  cards/mtg?" + qs + ": HTTP " + r.status + " " + t.length + "B hits=" + n + "  " + JSON.stringify(t.slice(0, 100)));
+  }
 } catch (e) { console.log("  (could not fetch their page: " + e.message + ")"); }
 
 // 3. the page in a browser
