@@ -6,5 +6,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Look up nine Games Workshop products against every keyless source
-        run: python3 tools/gw-sources-probe.py
+      - name: Second pass on what the first left open (slower, narrower)
+        run: python3 tools/gw-sources-probe2.py
