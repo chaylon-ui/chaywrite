@@ -10,13 +10,18 @@ on:
         description: "Game id (mtg, pokemon, yugioh, fleshAndBlood, ...)"
         required: false
         default: "mtg"
+      do_save:
+        description: "yes = save ONE card from the first hit into the OWNER's own draft buylist (owner approved 2026-09-04); anything else = read-only"
+        required: false
+        default: "no"
 jobs:
   poc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Search the buylist and read the owner's saved list (read-only)
+      - name: Search the buylist, optionally save one card to the owner's draft, read the list back
         env:
           Q: ${{ inputs.q }}
           GAME: ${{ inputs.game }}
+          DO_SAVE: ${{ inputs.do_save }}
         run: python3 tools/buylist-poc.py
