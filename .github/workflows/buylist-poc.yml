@@ -1,0 +1,22 @@
+name: buylist-poc
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        description: "Card name to search on the buylist"
+        required: false
+        default: "Lightning Bolt"
+      game:
+        description: "Game id (mtg, pokemon, yugioh, fleshAndBlood, ...)"
+        required: false
+        default: "mtg"
+jobs:
+  poc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Search the buylist and read the owner's saved list (read-only)
+        env:
+          Q: ${{ inputs.q }}
+          GAME: ${{ inputs.game }}
+        run: python3 tools/buylist-poc.py
