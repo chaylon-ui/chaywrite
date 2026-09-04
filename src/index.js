@@ -6,6 +6,7 @@ import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO 
 import { serveIcs } from "./ics.js";
 import { servePriceHistory } from "./price-history.js";
 import { serveEnrich } from "./enrich.js";
+import { serveBuylistPoc } from "./buylist-poc.js";
 
 export { BinderRoom };
 
@@ -211,6 +212,13 @@ export default {
           })).catch(() => {}));
       }
       return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*" } });
+    }
+
+    // Proof of concept, owner's account only: our front end on BinderPOS's
+    // buylist. Read-only in phase one. See src/buylist-poc.js; remove when
+    // the question is decided.
+    if (url.pathname.startsWith("/buylist/poc/")) {
+      return serveBuylistPoc(request, env);
     }
 
     if (url.pathname === "/buyprice.json") {
