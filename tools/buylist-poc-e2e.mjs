@@ -14,12 +14,20 @@ const fail = (m) => { fails++; console.log("  FAIL " + m); };
 const ok = (m) => console.log("  ok   " + m);
 const uniq = (a) => a.filter((s, i) => a.indexOf(s) === i);
 
-// 1. plain fetches of the worker routes
-for (const p of ["/buylist/poc/", "/buylist-poc.html", "/buylist-poc.js", "/buylist/poc/list"]) {
+// 1. plain fetches of the worker routes. The search's "count" field and a
+//    400 (not 404) from an empty submit body only exist in the second
+//    proof-of-concept module, so they say which worker version is live.
+const PROBES = [
+  ["/buylist/poc/"], ["/buylist-poc.html"], ["/buylist-poc.js"], ["/buylist/poc/list"],
+  ["/buylist/poc/search?q=Lightning%20Bolt&limit=1"],
+  ["/buylist/poc/submit", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+];
+for (const [p, init] of PROBES) {
   try {
-    const r = await fetch(BASE + p, { redirect: "manual" });
+    const r = await fetch(BASE + p, { redirect: "manual", ...(init || {}) });
     const t = await r.text();
-    console.log("GET " + p + ": HTTP " + r.status + " " + (r.headers.get("content-type") || "") + " " + t.length + "B  " + JSON.stringify(t.slice(0, 90)));
+    const note = p.includes("/search") ? (t.includes('"count"') ? "  [new module]" : "  [old module]") : "";
+    console.log((init ? init.method : "GET") + " " + p + ": HTTP " + r.status + " " + (r.headers.get("content-type") || "") + " " + t.length + "B  " + JSON.stringify(t.slice(0, 90)) + note);
   } catch (e) { console.log("GET " + p + ": " + e.message); }
 }
 
