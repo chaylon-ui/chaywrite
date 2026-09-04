@@ -197,8 +197,11 @@ const browser = await chromium.launch({ executablePath: CHROME, args: ["--no-san
   if (mounted) fail("the app mounted without a customer");
   if (assets["buylist.css"] !== 200 || assets["buylist.js"] !== 200) fail("buylist assets did not load from the worker");
   if (tiles < 6) fail("expected the six game tiles to point at #buylist");
-  if (errors.length) { console.log("page errors:"); errors.forEach((e) => console.log("  " + e)); }
-  else ok("no page errors on the sell page");
+  // the sell page carries third-party scripts (Omnisend, shop.app, analytics)
+  // that fail on a runner; only errors that touch our code count
+  const ours = errors.filter((e) => /buylist|workers\.dev/i.test(e));
+  if (ours.length) { console.log("errors touching the buylist:"); ours.forEach((e) => console.log("  " + e)); fail(ours.length + " buylist error(s) on the sell page"); }
+  else ok("no buylist errors on the sell page (" + errors.length + " third-party noise line(s) ignored)");
   await ctx.close();
 }
 
