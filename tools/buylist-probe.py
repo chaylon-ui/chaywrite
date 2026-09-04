@@ -190,6 +190,43 @@ def main():
             if c not in done and c not in queue:
                 queue.append(c)
 
+    print("\n=== buylist-setup.js in full (3KB), whitespace collapsed ===")
+    st, shim, _ = get("https://portal.binderpos.com/shopify/js/buylist-setup.js", "*/*")
+    flat = re.sub(r"\s+", " ", shim)
+    for k in range(0, min(len(flat), 3600), 600):
+        print("  | " + flat[k:k + 600])
+
+    print("\n=== the hosted buylist app the iframe loads ===")
+    cands = re.findall(r'["\'](https?://[^"\']+|/[^"\']+)["\']', shim)
+    cands = [c for c in cands if "css" not in c and ".js" not in c and "binderpos" in c or c.startswith("/")]
+    print("  url-like strings in the shim: %s" % cands[:8])
+    src = None
+    for c in cands:
+        if c.startswith("http"):
+            src = c
+            break
+    if not src:
+        src = "https://portal.binderpos.com/shopify/buylist?shop=most-wanted-ca.myshopify.com"
+    if "?" not in src:
+        src += "?shop=most-wanted-ca.myshopify.com"
+    st, app, final = get(src, "text/html,*/*")
+    print("  GET %s -> %s %dKB final=%s" % (src[:90], st, len(app) // 1024, final[:90]))
+    print("  title: %s" % (re.findall(r"<title[^>]*>(.*?)</title>", app, re.S | re.I) or ["-"])[0][:80])
+    frames = re.findall(r'<iframe[^>]+src=["\']([^"\']+)', app, re.I)
+    print("  iframes inside: %s" % frames[:3])
+    appscripts = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', app, re.I)
+    print("  scripts: %s" % [a[-70:] for a in appscripts[:8]])
+    for a in appscripts[:5]:
+        u = a if a.startswith("http") else ("https:" + a if a.startswith("//") else "https://portal.binderpos.com" + a)
+        st2, js, _ = get(u, "*/*")
+        js = js[:6_000_000]
+        eps = sorted(set(re.findall(r'external/shopify/[A-Za-z0-9/_\-]+', js)))
+        print("  %s %dKB %s" % (st2, len(js) // 1024, u[-70:]))
+        if eps:
+            print("     endpoints (%d): %s" % (len(eps), eps[:40]))
+        for m in list(re.finditer(r"(?:submit|create)[A-Za-z]*Buylist|buylist/(?:submit|create|save|checkout)[A-Za-z/]*", js, re.I))[:5]:
+            print("     ..." + re.sub(r"\s+", " ", js[max(0, m.start() - 100): m.start() + 140]) + "...")
+
     print("\nBUYLIST-PROBE done")
     return 0
 
