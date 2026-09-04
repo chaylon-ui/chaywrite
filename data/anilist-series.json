@@ -1,7 +1,7 @@
 {
- "asked": 1380,
- "count": 365,
- "generated": "2026-09-03T22:55:12Z",
+ "asked": 812,
+ "count": 388,
+ "generated": "2026-09-04T12:13:26Z",
  "series": {
   "2.5 Dimensional Seduction": {
    "author": "Yuu Hashimoto",
@@ -471,6 +471,12 @@
    "status": "Ongoing",
    "volumes": null
   },
+  "Dandadan": {
+   "author": "Yukinobu Tatsu",
+   "demographic": "Shonen",
+   "status": "Ongoing",
+   "volumes": null
+  },
   "Danganronpa 2: Nanami Goodbye Despair Quest": {
    "author": "Karin Suzuragi",
    "demographic": "",
@@ -488,6 +494,24 @@
    "demographic": "Seinen",
    "status": "Ongoing",
    "volumes": null
+  },
+  "Demon Slayer Academy": {
+   "author": "Koyoharu Gotouge",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 6
+  },
+  "Demon Slayer Kimetsu": {
+   "author": "Koyoharu Gotouge",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 23
+  },
+  "Demon Slayer Yaiba": {
+   "author": "Koyoharu Gotouge",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 23
   },
   "Demon Sword Master of Excalibur Academy": {
    "author": "Asuka Keigen",
@@ -639,6 +663,18 @@
    "status": "Completed",
    "volumes": 34
   },
+  "Fire Punch": {
+   "author": "Tatsuki Fujimoto",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 8
+  },
+  "Fist of North Star": {
+   "author": "Yoshiyuki Okamura",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 27
+  },
   "Fist of the North Star": {
    "author": "Yoshiyuki Okamura",
    "demographic": "Shonen",
@@ -663,11 +699,23 @@
    "status": "Ongoing",
    "volumes": null
   },
+  "Frieren": {
+   "author": "Kanehito Yamada",
+   "demographic": "",
+   "status": "Ongoing",
+   "volumes": null
+  },
   "Frieren Beyond Journey's End": {
    "author": "Kanehito Yamada",
    "demographic": "",
    "status": "Ongoing",
    "volumes": null
+  },
+  "Fullmetal": {
+   "author": "Gou Nagai",
+   "demographic": "",
+   "status": "Completed",
+   "volumes": 1
   },
   "Fullmetal Alchemist": {
    "author": "Hiromu Arakawa",
@@ -873,6 +921,24 @@
    "status": "Ongoing",
    "volumes": null
   },
+  "Jojo Part 1": {
+   "author": "Hirohiko Araki",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 5
+  },
+  "Jojo Part 2": {
+   "author": "Hirohiko Araki",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 7
+  },
+  "Jojo Part 3": {
+   "author": "Hirohiko Araki",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 16
+  },
   "Jojo's Bizarre Adventure Part 6 Stone Ocean": {
    "author": "Hirohiko Araki",
    "demographic": "Shonen",
@@ -897,6 +963,18 @@
    "status": "Completed",
    "volumes": 16
   },
+  "Jojo's Part 5": {
+   "author": "Hirohiko Araki",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 17
+  },
+  "Jojo's Part 6": {
+   "author": "Hirohiko Araki",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 17
+  },
   "Jujutsu Kaisen": {
    "author": "Gege Akutami",
    "demographic": "Shonen",
@@ -915,11 +993,29 @@
    "status": "Completed",
    "volumes": 10
   },
+  "Kaguya Sama": {
+   "author": "Ryuu Horie",
+   "demographic": "",
+   "status": "Completed",
+   "volumes": 1
+  },
+  "Kaguya-sama": {
+   "author": "Ryuu Horie",
+   "demographic": "",
+   "status": "Completed",
+   "volumes": 1
+  },
   "Kaiju No 8": {
    "author": "Naoya Matsumoto",
    "demographic": "Shonen",
    "status": "Completed",
    "volumes": 16
+  },
+  "Kamisama Kiss": {
+   "author": "Julietta Suzuki",
+   "demographic": "Shojo",
+   "status": "Completed",
+   "volumes": 25
   },
   "Keep Your Hands Off Eizouken!": {
    "author": "Sumito Oowara",
@@ -980,6 +1076,18 @@
    "demographic": "",
    "status": "Completed",
    "volumes": 3
+  },
+  "Komi Can't Comm": {
+   "author": "Tomohito Oda",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 37
+  },
+  "Kuroko's Basketball": {
+   "author": "Tadatoshi Fujimaki",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 30
   },
   "Lazy Dungeon Master": {
    "author": "Nanaroku",
@@ -1347,6 +1455,18 @@
    "status": "Completed",
    "volumes": 1
   },
+  "One Punch Man": {
+   "author": "ONE",
+   "demographic": "Seinen",
+   "status": "Ongoing",
+   "volumes": null
+  },
+  "One-punch Man": {
+   "author": "ONE",
+   "demographic": "Seinen",
+   "status": "Ongoing",
+   "volumes": null
+  },
   "Only the Stars Know": {
    "author": "Nagisa Furuya",
    "demographic": "",
@@ -1473,6 +1593,12 @@
    "status": "Completed",
    "volumes": 7
   },
+  "Promised Neverland": {
+   "author": "Kaiu Shirai",
+   "demographic": "Shonen",
+   "status": "Completed",
+   "volumes": 20
+  },
   "Psycho Pass Inspector Shinya Kogami": {
    "author": "Gen Urobuchi",
    "demographic": "Shonen",
@@ -1528,8 +1654,8 @@
    "volumes": 8
   },
   "Reincarnated As a Sword": {
-   "author": "Yuu Tanaka",
-   "demographic": "",
+   "author": "Tomoo Maruyama",
+   "demographic": "Shonen",
    "status": "Ongoing",
    "volumes": null
   },
@@ -1959,6 +2085,12 @@
    "status": "Ongoing",
    "volumes": null
   },
+  "Tokyo Ghoul": {
+   "author": "Sui Ishida",
+   "demographic": "Seinen",
+   "status": "Completed",
+   "volumes": 14
+  },
   "Tokyo Ghoul Re": {
    "author": "Sui Ishida",
    "demographic": "Seinen",
@@ -2102,6 +2234,12 @@
    "demographic": "Seinen",
    "status": "Completed",
    "volumes": 12
+  },
+  "Way of Househusband": {
+   "author": "Kousuke Oono",
+   "demographic": "Seinen",
+   "status": "Ongoing",
+   "volumes": null
   },
   "What Did You Eat Yesterday?": {
    "author": "Fumi Yoshinaga",
