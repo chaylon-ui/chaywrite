@@ -44,6 +44,8 @@ const UA = "ExorBuylistPoc/0.2 (+workers.dev)";
 const HEADERS = { accept: "application/json", "content-type": "application/json", "user-agent": UA };
 const MAX_CARDS = 60;
 const PAYMENT_TYPES = ["Cash", "Store Credit"];
+const SETS_TTL = 6 * 3600 * 1000;
+const setsMemo = {};   // game -> { at, list }; per isolate, so a cheap memo, not a cache
 
 const LIST_URL = `${PORTAL}/external/shopify/${STORE_ID}/buylist/forMe?shopifyCustomerId=${OWNER}`;
 const SAVE_URL = `${PORTAL}/external/shopify/${STORE_ID}/buylist/save/forMe?shopifyCustomerId=${OWNER}`;
@@ -77,6 +79,18 @@ function cleanCards(v) {
   return out;
 }
 
+// Their set list, whatever shape it comes in, as sorted unique names.
+function normaliseSets(v) {
+  const arr = Array.isArray(v) ? v : (v && (Array.isArray(v.sets) ? v.sets : Array.isArray(v.data) ? v.data : null));
+  if (!arr) return [];
+  const out = new Set();
+  for (const s of arr) {
+    const name = typeof s === "string" ? s : (s && (s.setName || s.name || s.label || s.set));
+    if (typeof name === "string" && name.trim()) out.add(name.trim());
+  }
+  return [...out].sort((a, b) => a.localeCompare(b));
+}
+
 async function readBody(request) {
   try { return await request.json(); } catch { return null; }
 }
@@ -100,12 +114,29 @@ async function route(request, env) {
     const q = String(url.searchParams.get("q") || "").slice(0, 80);
     const game = String(url.searchParams.get("game") || "mtg").replace(/[^A-Za-z]/g, "").slice(0, 24);
     const limit = Math.max(1, Math.min(25, parseInt(url.searchParams.get("limit"), 10) || 20));
+    const set = String(url.searchParams.get("set") || "").slice(0, 120);
     if (q.length < 2) return json({ error: "q too short" }, 400);
-    // The search BinderPOS's own app makes - no key.
-    const qs = new URLSearchParams({ keyword: q, limit: String(limit), offset: "0" });
+    // The search BinderPOS's own app makes - no key. Their form's set field
+    // is named setName, so that is passed on; the hits are filtered here as
+    // well, with a deeper page, in case their search ignores it.
+    const qs = new URLSearchParams({ keyword: q, limit: String(set ? 60 : limit), offset: "0" });
+    if (set) qs.set("setName", set);
     const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {});
-    const hits = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
-    return json({ upstream: r.status, q, game, count: hits.length, hits });
+    let hits = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
+    const upstreamCount = hits.length;
+    if (set) hits = hits.filter((h) => h && String(h.setName || "").trim() === set).slice(0, limit);
+    return json({ upstream: r.status, q, game, set, upstreamCount, count: hits.length, hits });
+  }
+
+  if (path === "/buylist/poc/sets") {
+    const game = String(url.searchParams.get("game") || "mtg").replace(/[^A-Za-z]/g, "").slice(0, 24);
+    const m = setsMemo[game];
+    if (m && Date.now() - m.at < SETS_TTL) return json({ game, count: m.list.length, sets: m.list, memo: true });
+    // The list their own search page loads.
+    const r = await passthrough(`${PORTAL}/api/cards/${game}/sets`, {});
+    const list = normaliseSets(r.body);
+    if (list.length) setsMemo[game] = { at: Date.now(), list };
+    return json({ upstream: r.status, game, count: list.length, sets: list, sample: list.length ? undefined : (typeof r.body === "string" ? r.body.slice(0, 300) : r.body) });
   }
 
   if (path === "/buylist/poc/list") {

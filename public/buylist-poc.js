@@ -19,6 +19,15 @@
   function setStatus(t) { $("#status").textContent = t; }
   function setMsg(t) { $("#msg").textContent = t; }
 
+  var toastTimer = null;
+  function toast(text) {
+    var t = $("#toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2600);
+  }
+
   function api(path, body) {
     var init = body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : undefined;
     return fetch(API + path, init).then(function (r) {
@@ -34,15 +43,28 @@
 
   function search() {
     var q = $("#q").value.trim();
+    var set = $("#set").value;
     if (q.length < 2) { setStatus("Type at least two letters."); return; }
     setStatus("Searching…");
     $("#hits").innerHTML = "";
-    api("/search?q=" + encodeURIComponent(q) + "&game=mtg&limit=20").then(function (j) {
+    var where = set ? " in " + set : "";
+    api("/search?q=" + encodeURIComponent(q) + "&game=mtg&limit=20" + (set ? "&set=" + encodeURIComponent(set) : "")).then(function (j) {
       lastHits = Array.isArray(j.hits) ? j.hits : [];
       renderHits(lastHits);
-      setStatus(lastHits.length ? lastHits.length + " result" + (lastHits.length === 1 ? "" : "s") + " for “" + q + "”" : "Nothing on the buylist matches “" + q + "”.");
+      setStatus(lastHits.length ? lastHits.length + " result" + (lastHits.length === 1 ? "" : "s") + " for “" + q + "”" + where : "Nothing on the buylist matches “" + q + "”" + where + ".");
     }).catch(function (err) { setStatus("Search failed: " + err.message); });
   }
+
+  // The set list their own search page uses.
+  api("/sets?game=mtg").then(function (j) {
+    var sel = $("#set");
+    (Array.isArray(j.sets) ? j.sets : []).forEach(function (s) {
+      var o = document.createElement("option");
+      o.value = s;
+      o.textContent = s;
+      sel.appendChild(o);
+    });
+  }).catch(function () {});
 
   // One row per condition x finish the store is buying.
   function offersOf(h) {
@@ -65,7 +87,7 @@
         return "<tr><td>" + esc(o.v.variantName) + finish(o.p.type) + "</td><td>" + money(o.cash) + "</td><td>" + money(o.credit) + "</td><td>" +
           '<button type="button" class="add" data-h="' + i + '" data-o="' + k + '"' + (o.max > 0 ? "" : ' disabled title="Not buying more right now"') + ">Add</button></td></tr>";
       }).join("");
-      return '<article class="hit"><img src="' + esc(h.imageUrl) + '" alt="" loading="lazy"><div><h3>' + esc(h.cardName) + '</h3><p class="muted">' + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</p>" +
+      return '<article class="hit" data-set="' + esc(h.setName) + '"><img src="' + esc(h.imageUrl) + '" alt="" loading="lazy"><div><h3>' + esc(h.cardName) + '</h3><p class="muted">' + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</p>" +
         (rows ? "<table><thead><tr><th>Condition</th><th>Cash</th><th>Credit</th><th></th></tr></thead><tbody>" + rows + "</tbody></table>" : '<p class="muted">Not currently buying this printing.</p>') + "</div></article>";
     }).join("");
   }
@@ -75,12 +97,12 @@
     if (!b) return;
     var h = lastHits[+b.dataset.h];
     var o = h && offersOf(h)[+b.dataset.o];
-    if (o) add(h, o);
+    if (o) add(h, o, b);
   });
 
   /* ---- cart ---- */
   // The card object BinderPOS's app saves, field for field.
-  function add(h, o) {
+  function add(h, o, button) {
     var card = {
       cardId: h.id, cardName: h.cardName, setName: h.setName, game: h.game, type: o.p.type, imageUrl: h.imageUrl,
       quantity: "1", cashBuyPrice: o.cash, storeCreditBuyPrice: o.credit,
@@ -93,7 +115,13 @@
     else cart.push(card);
     renderCart();
     persist();
-    setMsg(card.cardName + " (" + card.conditionName + ") added.");
+    var what = card.cardName + " · " + card.conditionName + (card.type && card.type !== "Normal" ? " · " + card.type : "");
+    setMsg(what + " added.");
+    toast("Added to your buylist: " + what);
+    if (button) {
+      button.textContent = "Added ✓";
+      setTimeout(function () { button.textContent = "Add"; }, 1400);
+    }
   }
 
   function maxOf(c) { return maxByKey[keyOf(c)] || 99; }
