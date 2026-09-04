@@ -7,12 +7,9 @@ import { chromium } from "playwright-core";
 
 const BASE = process.env.POC_BASE || "https://exor-binder.nevski.workers.dev";
 const CHROME = process.env.CHROME_PATH || "/usr/bin/google-chrome";
-const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";
-const OWNER = "3957471740057";
 let fails = 0;
 const fail = (m) => { fails++; console.log("  FAIL " + m); };
 const ok = (m) => console.log("  ok   " + m);
-const uniq = (a) => a.filter((s, i) => a.indexOf(s) === i);
 
 // 1. plain fetches of the worker routes. The search's "count" field and a
 //    400 (not 404) from an empty submit body only exist in the second
@@ -31,34 +28,7 @@ for (const [p, init] of PROBES) {
   } catch (e) { console.log("GET " + p + ": " + e.message); }
 }
 
-// 2. BinderPOS's own page and script: what the payment-type select sends
-try {
-  const html = await (await fetch(`https://portal.binderpos.com/external/shopify/${STORE_ID}/buylist?shopifyCustomerId=${OWNER}`)).text();
-  console.log("binderpos buylist page: " + html.length + " bytes");
-  console.log("  selects: " + JSON.stringify(uniq(html.match(/<select[^>]*>/g) || []).slice(0, 6)));
-  console.log("  options: " + JSON.stringify(uniq(html.match(/<option[^>]*>[^<]*/g) || []).slice(0, 12)));
-  const js = await (await fetch("https://portal.binderpos.com/shopify/js/buylist.js?v=4")).text();
-  console.log("  cashOrStoreCredit assignments: " + JSON.stringify(uniq(js.match(/cashOrStoreCredit=[^,;)]{0,40}/g) || [])));
-  console.log("  how their Search() builds its URL: " + JSON.stringify(uniq(js.match(/.{0,220}keyword=.{0,220}/g) || []).slice(0, 3)));
-  console.log("  how they load and use sets: " + JSON.stringify(uniq(js.match(/.{0,160}(\/sets|setName).{0,220}/g) || []).slice(0, 6)));
-  const sets = await (await fetch(`https://portal.binderpos.com/api/cards/mtg/sets`, { headers: { "content-type": "application/json" } })).text();
-  console.log("  /api/cards/mtg/sets: " + sets.length + "B  " + JSON.stringify(sets.slice(0, 120)));
-  // their search, called their way, with the set and with a deeper page
-  const SET = encodeURIComponent("Magic Player Rewards 2010");
-  for (const qs of [
-    `setName=${SET}&keyword=Lightning%20Bolt&limit=20&offset=0`,
-    `keyword=Lightning%20Bolt&limit=60&offset=0`,
-    `keyword=Lightning%20Bolt&setName=${SET}&limit=60&offset=0`,
-    `setName=${SET}&keyword=&limit=20&offset=0`,
-  ]) {
-    const r = await fetch(`https://portal.binderpos.com/external/shopify/${STORE_ID}/cards/mtg?${qs}`, { headers: { "content-type": "application/json" } });
-    const t = await r.text();
-    let n = -1; try { const j = JSON.parse(t); n = Array.isArray(j) ? j.length : -1; } catch {}
-    console.log("  cards/mtg?" + qs + ": HTTP " + r.status + " " + t.length + "B hits=" + n + "  " + JSON.stringify(t.slice(0, 100)));
-  }
-} catch (e) { console.log("  (could not fetch their page: " + e.message + ")"); }
-
-// 3. the page in a browser
+// 2. the page in a browser
 const browser = await chromium.launch({ executablePath: CHROME, args: ["--no-sandbox"] });
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 const errors = [];
@@ -134,8 +104,13 @@ try {
       const sets = await page.locator(".hit").evaluateAll((els) => els.map((e) => e.getAttribute("data-set")));
       console.log("set filter " + JSON.stringify(firstSet) + ": " + sets.length + " hit(s), from other sets: " + sets.filter((s) => s !== firstSet).length + "; status: " + (await page.locator("#status").textContent()));
       if (!sets.length || sets.some((s) => s !== firstSet)) fail("set filter did not narrow to the chosen set");
-      const sj = await (await fetch(BASE + "/buylist/poc/search?q=Lightning%20Bolt&set=" + encodeURIComponent(firstSet))).json();
-      console.log("worker set search: " + sj.upstreamCount + " from BinderPOS, " + sj.count + " after the worker's own filter" + (sj.upstreamCount === 0 ? " (BinderPOS matched nothing for that set value)" : sj.upstreamCount === sj.count ? " (BinderPOS honoured it)" : " (BinderPOS ignored it)"));
+      // browse the set: no keyword at all
+      await page.fill("#q", "");
+      await page.press("#q", "Enter");
+      await page.waitForFunction(() => !/Searching/.test(document.querySelector("#status").textContent), null, { timeout: 45000 }).catch(() => fail("set browse never finished"));
+      const browse = await page.locator(".hit").evaluateAll((els) => els.map((e) => e.getAttribute("data-set")));
+      console.log("browse " + JSON.stringify(firstSet) + " with no keyword: " + browse.length + " hit(s), from other sets: " + browse.filter((s) => s !== firstSet).length + "; status: " + (await page.locator("#status").textContent()));
+      if (!browse.length || browse.some((s) => s !== firstSet)) fail("set browse did not work");
     } else fail("first hit's set " + JSON.stringify(firstSet) + " is not in the dropdown");
   }
 } catch (e) { fail("browser flow threw: " + e.message); }
