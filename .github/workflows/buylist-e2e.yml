@@ -1,4 +1,4 @@
-name: buylist-poc-e2e
+name: buylist-e2e
 on:
   workflow_dispatch:
 jobs:
@@ -8,5 +8,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install playwright-core (drives the runner's own Chrome)
         run: npm install --no-save --no-audit --no-fund playwright-core@1.47.2
-      - name: Load the proof-of-concept page, search, add, check the draft, undo (never submits)
-        run: node tools/buylist-poc-e2e.mjs
+      - name: Worker routes, the test page in a browser, the sell page on the preview theme (never submits)
+        run: node tools/buylist-e2e.mjs
