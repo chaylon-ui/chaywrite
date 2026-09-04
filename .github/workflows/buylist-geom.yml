@@ -1,0 +1,12 @@
+name: buylist-geom
+on:
+  workflow_dispatch:
+jobs:
+  geom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install playwright-core (drives the runner's own Chrome)
+        run: npm install --no-save --no-audit --no-fund playwright-core@1.47.2
+      - name: Measure the seven buylist tiles at 1280 / 820 / 390
+        run: node tools/buylist-geom.mjs
