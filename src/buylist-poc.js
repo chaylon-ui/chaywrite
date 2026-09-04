@@ -113,19 +113,20 @@ async function route(request, env) {
   if (path === "/buylist/poc/search") {
     const q = String(url.searchParams.get("q") || "").slice(0, 80);
     const game = String(url.searchParams.get("game") || "mtg").replace(/[^A-Za-z]/g, "").slice(0, 24);
-    const limit = Math.max(1, Math.min(25, parseInt(url.searchParams.get("limit"), 10) || 20));
+    const limit = Math.max(1, Math.min(20, parseInt(url.searchParams.get("limit"), 10) || 20));
     const set = String(url.searchParams.get("set") || "").slice(0, 120);
-    if (q.length < 2) return json({ error: "q too short" }, 400);
+    if (q.length < 2 && !set) return json({ error: "q too short" }, 400);
     // The search BinderPOS's own app makes - no key. Their form's set field
-    // is named setName, so that is passed on; the hits are filtered here as
-    // well, with a deeper page, in case their search ignores it.
-    const qs = new URLSearchParams({ keyword: q, limit: String(set ? 60 : limit), offset: "0" });
+    // is named setName, so that is passed on; with a set and no keyword it
+    // browses the set. Their API answers 400 to a page above 20, so the
+    // page size is theirs.
+    const qs = new URLSearchParams({ keyword: q, limit: String(limit), offset: "0" });
     if (set) qs.set("setName", set);
     const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {});
     let hits = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
     const upstreamCount = hits.length;
-    if (set) hits = hits.filter((h) => h && String(h.setName || "").trim() === set).slice(0, limit);
-    return json({ upstream: r.status, q, game, set, upstreamCount, count: hits.length, hits });
+    if (set) hits = hits.filter((h) => h && String(h.setName || "").trim() === set);
+    return json({ upstream: r.status, q, game, set, upstreamCount, count: hits.length, hits, upstreamError: Array.isArray(r.body) ? undefined : r.body });
   }
 
   if (path === "/buylist/poc/sets") {

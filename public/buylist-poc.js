@@ -44,16 +44,19 @@
   function search() {
     var q = $("#q").value.trim();
     var set = $("#set").value;
-    if (q.length < 2) { setStatus("Type at least two letters."); return; }
+    if (q.length < 2 && !set) { setStatus("Type at least two letters, or pick a set."); return; }
     setStatus("Searching…");
     $("#hits").innerHTML = "";
-    var where = set ? " in " + set : "";
+    var what = q ? "“" + q + "”" + (set ? " in " + set : "") : set;
     api("/search?q=" + encodeURIComponent(q) + "&game=mtg&limit=20" + (set ? "&set=" + encodeURIComponent(set) : "")).then(function (j) {
       lastHits = Array.isArray(j.hits) ? j.hits : [];
       renderHits(lastHits);
-      setStatus(lastHits.length ? lastHits.length + " result" + (lastHits.length === 1 ? "" : "s") + " for “" + q + "”" + where : "Nothing on the buylist matches “" + q + "”" + where + ".");
+      setStatus(lastHits.length ? lastHits.length + " result" + (lastHits.length === 1 ? "" : "s") + " for " + what + (lastHits.length >= 20 ? " (first 20)" : "") : "Nothing on the buylist matches " + what + ".");
     }).catch(function (err) { setStatus("Search failed: " + err.message); });
   }
+  $("#set").addEventListener("change", function () {
+    if ($("#q").value.trim().length >= 2 || $("#set").value) search();
+  });
 
   // The set list their own search page uses.
   api("/sets?game=mtg").then(function (j) {
