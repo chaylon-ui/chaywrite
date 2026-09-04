@@ -209,10 +209,21 @@ def main():
         store_id = m.group(1) if m else None
         m = re.search(r'portal-url\\?["\']?\s*[:=]\s*\\?["\']([^"\'\\]+)', html)
         portal = m.group(1) if m else None
+    if not (store_id and portal):
+        # The tag is created at runtime by app.binderpos.com's bootstrap; the
+        # attributes are literals inside it. Print it whole - it is tiny.
+        st, boot, _ = get("https://app.binderpos.com/external/shopify/buylist/script?shop=most-wanted-ca.myshopify.com", "*/*")
+        flat = re.sub(r"\s+", " ", boot)
+        print("  bootstrap %s %d bytes:" % (st, len(boot)))
+        for k in range(0, min(len(flat), 2400), 600):
+            print("  | " + flat[k:k + 600])
+        m = re.search(r'store-id\W{1,6}([A-Za-z0-9_\-]{2,64})', boot)
+        store_id = m.group(1) if m else store_id
+        m = re.search(r'portal-url\W{1,6}(https?://[A-Za-z0-9.\-]+)', boot)
+        portal = m.group(1) if m else portal
     print("  store-id=%s portal-url=%s" % (store_id, portal))
     if not (store_id and portal):
-        for m in list(re.finditer(r"binderpos-buylist-js", html))[:3]:
-            print("  ctx ..." + re.sub(r"\s+", " ", html[max(0, m.start() - 300): m.start() + 300]) + "...")
+        print("  could not recover store-id / portal-url")
     else:
         for suffix in ("", "?shopifyCustomerId=0"):
             src = "%s/external/shopify/%s/buylist%s" % (portal.rstrip("/"), store_id, suffix)
