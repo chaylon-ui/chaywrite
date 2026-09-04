@@ -197,35 +197,45 @@ def main():
         print("  | " + flat[k:k + 600])
 
     print("\n=== the hosted buylist app the iframe loads ===")
-    cands = re.findall(r'["\'](https?://[^"\']+|/[^"\']+)["\']', shim)
-    cands = [c for c in cands if "css" not in c and ".js" not in c and "binderpos" in c or c.startswith("/")]
-    print("  url-like strings in the shim: %s" % cands[:8])
-    src = None
-    for c in cands:
-        if c.startswith("http"):
-            src = c
-            break
-    if not src:
-        src = "https://portal.binderpos.com/shopify/buylist?shop=most-wanted-ca.myshopify.com"
-    if "?" not in src:
-        src += "?shop=most-wanted-ca.myshopify.com"
-    st, app, final = get(src, "text/html,*/*")
-    print("  GET %s -> %s %dKB final=%s" % (src[:90], st, len(app) // 1024, final[:90]))
-    print("  title: %s" % (re.findall(r"<title[^>]*>(.*?)</title>", app, re.S | re.I) or ["-"])[0][:80])
-    frames = re.findall(r'<iframe[^>]+src=["\']([^"\']+)', app, re.I)
-    print("  iframes inside: %s" % frames[:3])
-    appscripts = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', app, re.I)
-    print("  scripts: %s" % [a[-70:] for a in appscripts[:8]])
-    for a in appscripts[:5]:
-        u = a if a.startswith("http") else ("https:" + a if a.startswith("//") else "https://portal.binderpos.com" + a)
-        st2, js, _ = get(u, "*/*")
-        js = js[:6_000_000]
-        eps = sorted(set(re.findall(r'external/shopify/[A-Za-z0-9/_\-]+', js)))
-        print("  %s %dKB %s" % (st2, len(js) // 1024, u[-70:]))
-        if eps:
-            print("     endpoints (%d): %s" % (len(eps), eps[:40]))
-        for m in list(re.finditer(r"(?:submit|create)[A-Za-z]*Buylist|buylist/(?:submit|create|save|checkout)[A-Za-z/]*", js, re.I))[:5]:
-            print("     ..." + re.sub(r"\s+", " ", js[max(0, m.start() - 100): m.start() + 140]) + "...")
+    # The shim builds portalUrl from attributes on <script id="binderpos-buylist-js">:
+    #   <portal-url> + "/external/shopify/" + <store-id> + "/buylist" [+ ?shopifyCustomerId=<__st.cid>]
+    tag = re.search(r'<script[^>]*id=["\']binderpos-buylist-js["\'][^>]*>', html, re.I)
+    tag_s = tag.group(0) if tag else ""
+    store_id = (re.search(r'store-id=["\']([^"\']+)', tag_s) or [None, None])[1]
+    portal = (re.search(r'portal-url=["\']([^"\']+)', tag_s) or [None, None])[1]
+    print("  loader tag: %s" % (tag_s[:220] or "(not in served HTML - injected at runtime; checking the inline loader)"))
+    if not store_id:
+        m = re.search(r'store-id\\?["\']?\s*[:=]\s*\\?["\']([^"\'\\]+)', html)
+        store_id = m.group(1) if m else None
+        m = re.search(r'portal-url\\?["\']?\s*[:=]\s*\\?["\']([^"\'\\]+)', html)
+        portal = m.group(1) if m else None
+    print("  store-id=%s portal-url=%s" % (store_id, portal))
+    if not (store_id and portal):
+        for m in list(re.finditer(r"binderpos-buylist-js", html))[:3]:
+            print("  ctx ..." + re.sub(r"\s+", " ", html[max(0, m.start() - 300): m.start() + 300]) + "...")
+    else:
+        for suffix in ("", "?shopifyCustomerId=0"):
+            src = "%s/external/shopify/%s/buylist%s" % (portal.rstrip("/"), store_id, suffix)
+            st, app, final = get(src, "text/html,*/*")
+            print("  GET %s -> %s %dKB final=%s" % (src[:110], st, len(app) // 1024, final[:100]))
+            print("     title: %s" % (re.findall(r"<title[^>]*>(.*?)</title>", app, re.S | re.I) or ["-"])[0][:80])
+            appscripts = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', app, re.I)
+            print("     scripts: %s" % [a[-80:] for a in appscripts[:10]])
+            inline_eps = sorted(set(re.findall(r'external/shopify/[A-Za-z0-9/_\-]+', app)))
+            if inline_eps:
+                print("     endpoints in page: %s" % inline_eps[:20])
+            for a in appscripts[:6]:
+                u = a if a.startswith("http") else ("https:" + a if a.startswith("//") else portal.rstrip("/") + ("" if a.startswith("/") else "/") + a)
+                st2, js, _ = get(u, "*/*")
+                js = js[:8_000_000]
+                eps = sorted(set(re.findall(r'external/shopify/[A-Za-z0-9/_\-{}$]+', js)))
+                print("     %s %dKB %s" % (st2, len(js) // 1024, u[-80:]))
+                if eps:
+                    print("        endpoints (%d): %s" % (len(eps), eps[:60]))
+                for m in list(re.finditer(r"(?:submit|create|save|finali[sz]e)[A-Za-z]*[Bb]uylist|[Bb]uylist(?:Submit|Create|Save)[A-Za-z]*", js))[:6]:
+                    print("        ..." + re.sub(r"\s+", " ", js[max(0, m.start() - 120): m.start() + 160]) + "...")
+            if st == 200 and appscripts:
+                break
 
     print("\nBUYLIST-PROBE done")
     return 0
