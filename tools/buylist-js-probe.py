@@ -45,6 +45,7 @@ def main():
         show(js, r"currentSearchResults\s*=", 120, 260, 4, "where search results come from")
         show(js, r"function\s+(?:search|doSearch|searchCards|loadBuylist|getBuylist|populateList)\b", 20, 700, 6, "search / load functions")
         show(js, r"(?:cardId|variantId|productId|setName|condition|printing|foil|quantity|cashBuyPrice|storeCreditBuyPrice|imageUrl|game)\s*:", 60, 160, 12, "object literal fields")
+        show(js, r"function Search\(", 10, 1500, 1, "the Search() function - the unkeyed search URL the app calls")
         show(js, r"customerId\s*=", 80, 240, 3, "how customerId is obtained")
         show(js, r"baseUrl\s*=|storeId\s*=", 80, 200, 3, "baseUrl / storeId")
         print()
