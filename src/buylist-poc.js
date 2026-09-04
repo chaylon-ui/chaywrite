@@ -88,9 +88,24 @@ export async function serveBuylistPoc(request, env) {
     return json({ upstream: r.status, contentType: r.contentType, customer: OWNER, list: r.body });
   }
 
-  // Phase one is read-only. The save half (POST buylist/save/forMe with the
-  // card array) is held back until the owner explicitly approves a write
-  // into their own BinderPOS draft list.
+  // Save: approved by the owner on 2026-09-04 for their own account only.
+  // Overwrites the owner's draft list with the cards given (max 5). The
+  // owner clears it with BinderPOS's own "Clear list" button.
+  if (path === "/buylist/poc/save" && request.method === "POST") {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ error: "body must be JSON" }, 400); }
+    if (payload && payload.customer && String(payload.customer) !== OWNER) {
+      return json({ error: "proof of concept writes only to the owner's own list" }, 403);
+    }
+    const cards = Array.isArray(payload && payload.cards) ? payload.cards.slice(0, 5) : null;
+    if (!cards || !cards.length) return json({ error: "cards[] required" }, 400);
+    const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/buylist/save/forMe?shopifyCustomerId=${OWNER}`, {
+      method: "POST",
+      body: JSON.stringify(cards),
+      headers: { accept: "application/json", "content-type": "application/json", "user-agent": UA },
+    });
+    return json({ upstream: r.status, contentType: r.contentType, sent: cards.length, reply: r.body });
+  }
 
   return json({ error: "not found" }, 404);
 }
