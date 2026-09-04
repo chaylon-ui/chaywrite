@@ -84,6 +84,7 @@
   border-radius: var(--xg-radius, 10px); padding: 14px 16px;
 }
 #xg-deck .xg-deck__input:focus { outline: none; border-color: var(--xg-red, #d62c28); box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.12); background: #fff; }
+#xg-deck .xg-deck__input::placeholder { color: #8a9299; opacity: 1; }
 #xg-deck .xg-deck__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
 #xg-deck .xg-deck__btn {
   font-family: inherit; font-weight: 700; font-size: 15px;
@@ -307,3 +308,17 @@
 /* Flavor-titled printings: point back at the decklist name so nobody
    thinks their card was skipped. */
 #xg-deck .xg-deck__matchnote { display: block; font-size: 12px; color: #8a6d1f; }
+
+/* ---- Dark mode ---------------------------------------------------------
+   The theme flags dark mode with html[data-xg-theme="dark"] - the same
+   attribute whether the shopper toggled it or the system chose it - and
+   swaps its tokens: --xg-ink becomes #eef2f4. The game <select> above reads
+   those tokens and goes dark with the page. The textarea hardcoded #f7f8fa,
+   and #fff on focus, so in dark mode it kept a near-white ground under
+   #eef2f4 text, and the placeholder, which inherits that colour, vanished
+   into it (owner screenshot, 2026-09-04). The values below are the ones
+   xg-dark.css already uses for the header search field, so the two inputs
+   read as one family. */
+html[data-xg-theme="dark"] #xg-deck .xg-deck__input { background: #1d2327; color: #e6ebee; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__input:focus { background: #1d2327; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__input::placeholder { color: #8a969d; opacity: 1; }
