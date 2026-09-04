@@ -113,6 +113,8 @@ function normaliseSets(v) {
 }
 
 // Their game list as {id, name}, the id being what /cards/<game> takes.
+// Some ids come without a name; these are the shop's tiles.
+const GAME_NAMES = { one: "One Piece Card Game", lor: "Disney Lorcana", swu: "Star Wars: Unlimited" };
 function normaliseGames(v) {
   const arr = Array.isArray(v) ? v : (v && (Array.isArray(v.games) ? v.games : Array.isArray(v.data) ? v.data : null));
   if (!arr) return [];
@@ -123,7 +125,7 @@ function normaliseGames(v) {
     if (!g || typeof g !== "object") continue;
     const id = [g.gameId, g.game, g.code, g.id, g.name].find(isId);
     if (!id) continue;
-    const name = [g.gameName, g.displayName, g.label, g.name].find((x) => typeof x === "string" && x.trim()) || id;
+    const name = [g.gameName, g.displayName, g.label, g.name].find((x) => typeof x === "string" && x.trim() && x.trim() !== id) || GAME_NAMES[id] || id;
     out.push({ id, name: name.trim() });
   }
   return out;

@@ -101,20 +101,34 @@
       sets.forEach(function (s) { if (s.icon) iconBySet[s.name] = s.icon; });
     }).catch(function () {});
   }
-  // What was typed in the set box, as one of the store's set names when it
-  // clearly is one: exact, or the only set starting with or containing it.
+  // What was typed in the set box: {name} when it is clearly one of the
+  // store's sets (exact, or the only set starting with or containing it),
+  // {candidates} when several fit, neither when nothing does.
   function resolveSet(typed) {
     var t = typed.trim();
-    if (!t) return "";
+    if (!t) return { name: "" };
     var lower = t.toLowerCase();
     var exact = sets.filter(function (s) { return s.name.toLowerCase() === lower; })[0];
-    if (exact) return exact.name;
+    if (exact) return { name: exact.name };
     var starts = sets.filter(function (s) { return s.name.toLowerCase().indexOf(lower) === 0; });
-    if (starts.length === 1) return starts[0].name;
+    if (starts.length === 1) return { name: starts[0].name };
     var within = sets.filter(function (s) { return s.name.toLowerCase().indexOf(lower) >= 0; });
-    if (within.length === 1) return within[0].name;
-    return t;
+    if (within.length === 1) return { name: within[0].name };
+    var pool = starts.length ? starts : within;
+    return { name: "", candidates: pool.slice(0, 8).map(function (s) { return s.name; }), total: pool.length };
   }
+  function showChoices(res) {
+    var box = $("#bl-status");
+    box.innerHTML = "Which set? " + res.candidates.map(function (n) {
+      return '<button type="button" class="bl__chip" data-set="' + esc(n) + '">' + esc(n) + "</button>";
+    }).join("") + (res.total > res.candidates.length ? ' <span class="bl__muted">and ' + (res.total - res.candidates.length) + " more, keep typing</span>" : "");
+  }
+  $("#bl-status").addEventListener("click", function (e) {
+    var b = e.target.closest("button.bl__chip");
+    if (!b) return;
+    $("#bl-set").value = b.getAttribute("data-set");
+    search(false);
+  });
   function showPick(name) {
     var img = $("#bl-setpick"), u = iconBySet[name];
     if (u) { img.src = u; img.hidden = false; } else { img.hidden = true; img.removeAttribute("src"); }
@@ -139,7 +153,10 @@
 
   function search(more) {
     var q = $("#bl-q").value.trim();
-    var set = resolveSet($("#bl-set").value);
+    var typed = $("#bl-set").value.trim();
+    var res = resolveSet(typed);
+    if (typed && !res.name && res.candidates && res.candidates.length) { showChoices(res); return; }
+    var set = res.name || typed;             // unknown text goes to BinderPOS as typed
     if (set !== $("#bl-set").value) $("#bl-set").value = set;
     showPick(set);
     if (q.length < 2 && !set) { setStatus("Type a card name, or pick a set."); return; }
@@ -321,10 +338,17 @@
   });
 
   /* ---- the sell page's game tiles link to #buylist; one that names a game picks it ---- */
-  var TILE_KEYS = [["pokemon", "pokemon"], ["lorcana", "lorcana"], ["one_piece", "onepiece"], ["star_wars", "starwars"], ["ygo", "yugioh"], ["mtg", "mtg"], ["magic", "mtg"]];
-  function gameFor(key) {
-    var g = games.filter(function (g) { return (g.id + " " + g.name).toLowerCase().replace(/[^a-z]/g, "").indexOf(key) >= 0; })[0];
-    return g ? g.id : null;
+  // image file name fragment -> BinderPOS game ids to try, then words to look for
+  var TILE_KEYS = [["pokemon", ["pokemon"]], ["lorcana", ["lor", "lorcana"]], ["one_piece", ["one", "onepiece"]], ["star_wars", ["swu", "starwars"]], ["ygo", ["yugioh", "ygo"]], ["mtg", ["mtg"]], ["magic", ["mtg"]]];
+  function gameFor(keys) {
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var byId = games.filter(function (g) { return g.id === k; })[0];
+      if (byId) return byId.id;
+      var byName = games.filter(function (g) { return (g.id + " " + g.name).toLowerCase().replace(/[^a-z]/g, "").indexOf(k) >= 0; })[0];
+      if (byName) return byName.id;
+    }
+    return null;
   }
   function wireTiles() {
     Array.prototype.forEach.call(document.querySelectorAll('a[href="#buylist"]'), function (a) {
