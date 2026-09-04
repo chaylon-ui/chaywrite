@@ -115,7 +115,7 @@
     var within = sets.filter(function (s) { return s.name.toLowerCase().indexOf(lower) >= 0; });
     if (within.length === 1) return { name: within[0].name };
     var pool = starts.length ? starts : within;
-    return { name: "", candidates: pool.slice(0, 8).map(function (s) { return s.name; }), total: pool.length };
+    return { name: "", candidates: pool.slice(0, 12).map(function (s) { return s.name; }), total: pool.length };
   }
   function showChoices(res) {
     var box = $("#bl-status");

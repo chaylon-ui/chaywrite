@@ -113,20 +113,22 @@ function normaliseSets(v) {
 }
 
 // Their game list as {id, name}, the id being what /cards/<game> takes.
-// Some ids come without a name; these are the shop's tiles.
-const GAME_NAMES = { one: "One Piece Card Game", lor: "Disney Lorcana", swu: "Star Wars: Unlimited" };
+// supportedGames names only four of them ({gameId, gameName}); the rest come
+// as a bare gameId. These are named here; an id nobody can name is left out
+// rather than shown as a code (the e2e prints the raw list to catch new ones).
+const GAME_NAMES = { one: "One Piece Card Game", lor: "Disney Lorcana", swu: "Star Wars: Unlimited", scr: "Sorcery: Contested Realm" };
 function normaliseGames(v) {
   const arr = Array.isArray(v) ? v : (v && (Array.isArray(v.games) ? v.games : Array.isArray(v.data) ? v.data : null));
   if (!arr) return [];
   const isId = (x) => typeof x === "string" && /^[A-Za-z]+$/.test(x);
   const out = [];
   for (const g of arr) {
-    if (typeof g === "string") { if (isId(g)) out.push({ id: g, name: g }); continue; }
+    if (typeof g === "string") { if (isId(g) && GAME_NAMES[g]) out.push({ id: g, name: GAME_NAMES[g] }); continue; }
     if (!g || typeof g !== "object") continue;
     const id = [g.gameId, g.game, g.code, g.id, g.name].find(isId);
     if (!id) continue;
-    const name = [g.gameName, g.displayName, g.label, g.name].find((x) => typeof x === "string" && x.trim() && x.trim() !== id) || GAME_NAMES[id] || id;
-    out.push({ id, name: name.trim() });
+    const name = [g.gameName, g.displayName, g.label, g.name].find((x) => typeof x === "string" && x.trim() && x.trim() !== id) || GAME_NAMES[id];
+    if (name) out.push({ id, name: name.trim() });
   }
   return out;
 }
