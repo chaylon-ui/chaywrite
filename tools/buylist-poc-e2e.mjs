@@ -39,6 +39,10 @@ try {
   console.log("  options: " + JSON.stringify(uniq(html.match(/<option[^>]*>[^<]*/g) || []).slice(0, 12)));
   const js = await (await fetch("https://portal.binderpos.com/shopify/js/buylist.js?v=4")).text();
   console.log("  cashOrStoreCredit assignments: " + JSON.stringify(uniq(js.match(/cashOrStoreCredit=[^,;)]{0,40}/g) || [])));
+  console.log("  how their Search() builds its URL: " + JSON.stringify(uniq(js.match(/.{0,220}keyword=.{0,220}/g) || []).slice(0, 3)));
+  console.log("  how they load and use sets: " + JSON.stringify(uniq(js.match(/.{0,160}(\/sets|setName).{0,220}/g) || []).slice(0, 6)));
+  const sets = await (await fetch(`https://portal.binderpos.com/api/cards/mtg/sets`, { headers: { "content-type": "application/json" } })).text();
+  console.log("  /api/cards/mtg/sets: " + sets.length + "B  " + JSON.stringify(sets.slice(0, 260)));
 } catch (e) { console.log("  (could not fetch their page: " + e.message + ")"); }
 
 // 3. the page in a browser
@@ -118,7 +122,7 @@ try {
       console.log("set filter " + JSON.stringify(firstSet) + ": " + sets.length + " hit(s), from other sets: " + sets.filter((s) => s !== firstSet).length + "; status: " + (await page.locator("#status").textContent()));
       if (!sets.length || sets.some((s) => s !== firstSet)) fail("set filter did not narrow to the chosen set");
       const sj = await (await fetch(BASE + "/buylist/poc/search?q=Lightning%20Bolt&set=" + encodeURIComponent(firstSet))).json();
-      console.log("BinderPOS honoured setName itself: " + (sj.upstreamCount === sj.count ? "yes" : "no (" + sj.upstreamCount + " upstream, " + sj.count + " after the worker's filter)"));
+      console.log("worker set search: " + sj.upstreamCount + " from BinderPOS, " + sj.count + " after the worker's own filter" + (sj.upstreamCount === 0 ? " (BinderPOS matched nothing for that set value)" : sj.upstreamCount === sj.count ? " (BinderPOS honoured it)" : " (BinderPOS ignored it)"));
     } else fail("first hit's set " + JSON.stringify(firstSet) + " is not in the dropdown");
   }
 } catch (e) { fail("browser flow threw: " + e.message); }
