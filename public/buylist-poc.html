@@ -5,84 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:,">
-<title>Exor Games buylist · proof of concept</title>
+<title>Exor Games buylist · test page</title>
+<link rel="stylesheet" href="/buylist.css">
 <style>
-  :root { --bg:#f4f6f7; --surface:#fff; --ink:#14181b; --text:#3a444a; --muted:#6b7780; --line:#dde3e7; --accent:#0d7a5f; --accent-ink:#fff; --danger:#b42318; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#111517; --surface:#181d20; --ink:#eef2f4; --text:#c3ccd1; --muted:#8a969d; --line:#2a3237; --accent:#2fbf95; --accent-ink:#0b1a15; --danger:#ff7b6b; } }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  .top { padding:22px 20px 6px; max-width:1180px; margin:0 auto; }
-  h1 { margin:0 0 4px; font-size:26px; color:var(--ink); letter-spacing:-.01em; }
-  h1 .tag { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); vertical-align:middle; margin-left:8px; }
-  .note { margin:0; font-size:13px; color:var(--muted); }
-  .wrap { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:20px; max-width:1180px; margin:0 auto; padding:14px 20px 60px; align-items:start; }
-  @media (max-width: 860px) { .wrap { grid-template-columns:1fr; } .cart { position:static !important; } }
-  form { display:flex; flex-wrap:wrap; gap:8px; }
-  input[type=search] { flex:1 1 220px; min-width:0; padding:12px 14px; font-size:17px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); }
-  select { flex:0 1 230px; min-width:0; padding:11px 12px; font:inherit; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); }
-  .toast { position:fixed; left:50%; bottom:24px; transform:translate(-50%, 12px); z-index:10; max-width:min(92vw, 520px); padding:12px 18px; border-radius:12px; background:var(--ink); color:var(--bg); font-size:14px; font-weight:600; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.25); opacity:0; pointer-events:none; transition:opacity .18s ease, transform .18s ease; }
-  .toast.show { opacity:1; transform:translate(-50%, 0); }
-  button { padding:11px 16px; font:inherit; font-weight:600; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); cursor:pointer; }
-  button:disabled { opacity:.45; cursor:default; }
-  button.primary, form button { background:var(--accent); color:var(--accent-ink); border-color:transparent; }
-  .muted { color:var(--muted); }
-  #status { min-height:20px; font-size:13px; margin:10px 0 4px; }
-  .hit { display:grid; grid-template-columns:96px minmax(0,1fr); gap:14px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:10px; }
-  .hit img { width:96px; aspect-ratio:5/7; object-fit:cover; border-radius:6px; background:var(--line); }
-  .hit h3 { margin:0 0 2px; font-size:17px; color:var(--ink); }
-  .hit p { margin:0 0 8px; font-size:13px; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th { text-align:left; font-weight:600; color:var(--muted); font-size:12px; padding:4px 6px 4px 0; border-bottom:1px solid var(--line); }
-  td { padding:6px 6px 6px 0; border-bottom:1px solid var(--line); vertical-align:middle; }
-  tr:last-child td { border-bottom:0; }
-  td:last-child { text-align:right; }
-  .pill { display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:99px; background:var(--line); color:var(--ink); margin-left:6px; vertical-align:middle; }
-  button.add { padding:6px 12px; font-size:13px; }
-  .cart { position:sticky; top:14px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px; }
-  .cart h2 { margin:0 0 10px; font-size:18px; color:var(--ink); display:flex; justify-content:space-between; align-items:baseline; }
-  .cart h2 span { font-size:13px; font-weight:500; color:var(--muted); }
-  .line { display:grid; grid-template-columns:40px minmax(0,1fr) auto auto; gap:10px; align-items:center; padding:10px 0; border-top:1px solid var(--line); }
-  .line img { width:40px; aspect-ratio:5/7; object-fit:cover; border-radius:4px; background:var(--line); }
-  .line__body { display:flex; flex-direction:column; min-width:0; font-size:13px; }
-  .line__body b { color:var(--ink); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .line__qty { display:flex; align-items:center; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
-  .line__qty button { border:0; border-radius:0; padding:4px 9px; }
-  .line__qty input { width:42px; text-align:center; border:0; background:transparent; color:var(--ink); font:inherit; padding:4px 0; -moz-appearance:textfield; }
-  .line__qty input::-webkit-outer-spin-button, .line__qty input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
-  button.remove { border:0; background:transparent; color:var(--muted); font-size:20px; padding:0 4px; line-height:1; }
-  button.remove:hover { color:var(--danger); }
-  .pay { display:flex; gap:16px; margin:14px 0 8px; font-size:14px; color:var(--ink); }
-  .totals { display:flex; justify-content:space-between; font-size:14px; padding:10px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
-  .totals b { color:var(--ink); margin-left:6px; }
-  .actions { display:flex; gap:8px; margin-top:12px; }
-  .actions .primary { flex:1; }
-  #msg { font-size:13px; margin:10px 0 0; min-height:18px; }
+  body { margin: 0; background: #f4f6f7; color: #3a444a; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .top { max-width: 1180px; margin: 0 auto; padding: 22px 20px 0; }
+  .top h1 { margin: 0 0 4px; font-size: 26px; color: #14181b; }
+  .top h1 small { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: #0d7a5f; vertical-align: middle; margin-left: 8px; }
+  .top p { margin: 0 0 6px; font-size: 13px; color: #6b7780; }
+  @media (prefers-color-scheme: dark) { body { background: #111517; color: #c3ccd1; } .top h1 { color: #eef2f4; } .top h1 small { color: #2fbf95; } .top p { color: #8a969d; } }
 </style>
 </head>
 <body>
 <header class="top">
-  <h1>Sell us your cards <span class="tag">proof of concept</span></h1>
-  <p class="note">Magic: The Gathering only. This test page reads and writes the owner's own BinderPOS buylist, and "Submit buylist" sends a real buylist to the store.</p>
+  <h1>Sell us your cards <small>test page</small></h1>
+  <p>Acts on the owner's own BinderPOS buylist. The shop's version lives on the sell page of the preview theme and works for whoever is signed in.</p>
 </header>
-<main class="wrap">
-  <section>
-    <form id="f" autocomplete="off"><input id="q" type="search" placeholder="Card name, e.g. Lightning Bolt" autofocus><select id="set" aria-label="Set"><option value="">All sets</option></select><button type="submit">Search</button></form>
-    <p id="status" class="muted"></p>
-    <div id="hits"></div>
-  </section>
-  <aside class="cart">
-    <h2>Your buylist <span id="count"></span></h2>
-    <div id="lines"><p class="muted">Loading your saved list…</p></div>
-    <div class="pay">
-      <label><input type="radio" name="pay" value="Cash" checked> Cash</label>
-      <label><input type="radio" name="pay" value="Store Credit"> Store credit</label>
-    </div>
-    <div class="totals"><span>Cash <b id="tCash">$0.00</b></span><span>Store credit <b id="tCredit">$0.00</b></span></div>
-    <div class="actions"><button id="clear" type="button" disabled>Clear list</button><button id="submit" type="button" class="primary" disabled>Submit buylist</button></div>
-    <p id="msg" class="muted"></p>
-  </aside>
-</main>
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script src="/buylist-poc.js"></script>
+<section class="xg-buylist xg-buylist--standalone" data-api="/buylist/poc" data-worker="" data-customer="owner" data-game="mtg"></section>
+<script src="/buylist.js" defer></script>
 </body>
 </html>
