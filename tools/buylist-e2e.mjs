@@ -35,6 +35,8 @@ p = await probe("GET /buylist.css", BASE + "/buylist.css"); line(p, p.text.lengt
 p = await probe("GET /buylist.js", BASE + "/buylist.js"); line(p, p.text.length + "B"); if (p.status !== 200) fail("js");
 p = await probe("GET /buylist/api/games", BASE + "/buylist/api/games");
 line(p, JSON.stringify(p.json && (p.json.games || p.json.raw)).slice(0, 500)); if (!(p.json && p.json.count > 0)) fail("no games");
+p = await probe("BinderPOS supportedGames, raw", "https://portal.binderpos.com/external/shopify/a648e57a-678f-45eb-bae0-f8deb7940192/supportedGames", { headers: { "content-type": "application/json" } });
+line(p, p.text.replace(/\s+/g, " ").slice(0, 700));
 p = await probe("GET /buylist/api/sets?game=mtg", BASE + "/buylist/api/sets?game=mtg");
 const firstIcon = p.json && Array.isArray(p.json.sets) ? p.json.sets.find((s) => s.icon) : null;
 line(p, "sets=" + (p.json && p.json.count) + " withIcon=" + (p.json && p.json.withIcon) + " e.g. " + JSON.stringify(firstIcon));
@@ -113,18 +115,32 @@ const browser = await chromium.launch({ executablePath: CHROME, args: ["--no-san
       if (JSON.stringify(qUndo) !== JSON.stringify(qBefore)) fail("cart not back to where it started");
     }
 
-    // a typed, partial set name
+    // a typed set name: lower case in full, then a partial that fits several sets
     if (firstSet) {
-      const partial = firstSet.slice(0, Math.max(6, Math.floor(firstSet.length * 0.6))).toLowerCase();
-      await page.fill("#bl-set", partial);
+      await page.fill("#bl-set", firstSet.toLowerCase());
       await page.press("#bl-q", "Enter");
       await settled().catch(() => fail("set search never finished"));
       const resolved = await page.locator("#bl-set").inputValue();
       const seen = await page.locator(".bl__hit").evaluateAll((els) => els.map((e) => e.getAttribute("data-set")));
       const pick = !(await page.locator("#bl-setpick").isHidden());
-      console.log("typed " + JSON.stringify(partial) + " -> " + JSON.stringify(resolved) + "; " + seen.length + " hit(s), other sets: " + seen.filter((s) => s !== firstSet).length + "; symbol beside the box: " + pick + "; " + (await status()));
+      console.log("typed " + JSON.stringify(firstSet.toLowerCase()) + " -> " + JSON.stringify(resolved) + "; " + seen.length + " hit(s), other sets: " + seen.filter((s) => s !== firstSet).length + "; symbol beside the box: " + pick + "; " + (await status()));
       if (resolved !== firstSet) fail("typed set did not resolve to " + firstSet);
       if (!seen.length || seen.some((s) => s !== firstSet)) fail("set filter did not narrow to the chosen set");
+
+      const partial = firstSet.slice(0, 15).toLowerCase();
+      await page.fill("#bl-set", partial);
+      await page.press("#bl-q", "Enter");
+      await settled().catch(() => fail("partial set search never finished"));
+      const chips = await page.locator("#bl-status button.bl__chip").evaluateAll((bs) => bs.map((b) => b.getAttribute("data-set")));
+      console.log("typed " + JSON.stringify(partial) + " -> chooser with " + chips.length + " set(s): " + JSON.stringify(chips).slice(0, 200));
+      if (chips.length < 2) fail("no chooser for a partial set name that fits several sets");
+      if (chips.includes(firstSet)) {
+        await page.locator('#bl-status button.bl__chip[data-set="' + firstSet.replace(/"/g, '\\"') + '"]').click();
+        await settled().catch(() => fail("chip search never finished"));
+        const after = await page.locator(".bl__hit").evaluateAll((els) => els.map((e) => e.getAttribute("data-set")));
+        console.log("after choosing " + JSON.stringify(firstSet) + ": " + JSON.stringify(await page.locator("#bl-set").inputValue()) + ", " + after.length + " hit(s), other sets: " + after.filter((s) => s !== firstSet).length);
+        if (!after.length || after.some((s) => s !== firstSet)) fail("chip did not narrow to the chosen set");
+      } else fail("chooser lacks " + firstSet);
       await page.fill("#bl-q", "");
       await page.press("#bl-q", "Enter");
       await settled().catch(() => fail("set browse never finished"));
@@ -160,6 +176,8 @@ const browser = await chromium.launch({ executablePath: CHROME, args: ["--no-san
   const page = await ctx.newPage();
   const errors = [], assets = {};
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
+  page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text().slice(0, 200)); });
+  page.on("requestfailed", (r) => errors.push("requestfailed: " + r.url().slice(0, 160) + " " + ((r.failure() || {}).errorText || "")));
   page.on("response", (r) => { const u = r.url(); if (/\/buylist\.(css|js)(\?|$)/.test(u)) assets[u.split("/").pop()] = r.status(); });
   // The preview switch is a cookie set by the first response; the context keeps it.
   await page.goto(SHOP + "/?preview_theme_id=" + PREVIEW, { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => {});
