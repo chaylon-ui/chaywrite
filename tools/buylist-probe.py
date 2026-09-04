@@ -161,6 +161,35 @@ def main():
         for m in list(re.finditer(r"#buylist|id=.buylist|buylist-container|binder-buylist", js))[:4]:
             print("     ..." + re.sub(r"\s+", " ", js[max(0, m.start() - 80): m.start() + 100]) + "...")
 
+    print("\n=== the real widget: portal.binderpos.com/shopify/js/buylist-setup.js and what it chains to ===")
+    queue = ["https://portal.binderpos.com/shopify/js/buylist-setup.js"]
+    done = set()
+    while queue and len(done) < 4:
+        u = queue.pop(0)
+        if u in done:
+            continue
+        done.add(u)
+        st, js, _ = get(u, "*/*")
+        js = js[:4_000_000]
+        eps = sorted(set(re.findall(r'external/shopify/[A-Za-z0-9/_\-]+', js)))
+        hosts = sorted(set(re.findall(r'https?://[a-z0-9.\-]*binderpos[a-z0-9.\-]*(?:/[A-Za-z0-9/_\-.]*)?', js, re.I)))
+        targets = sorted(set(re.findall(r'(?:getElementById|querySelector(?:All)?)\(\s*["\']([^"\']{1,60})["\']', js)))[:25]
+        ids = sorted(set(re.findall(r'id=\\?["\']([a-zA-Z0-9_\-]{3,40})\\?["\']', js)))[:25]
+        words = sorted(set(re.findall(r'\b(?:submit[A-Za-z]*|create[A-Za-z]*|buylist[A-Za-z]*|customer[A-Za-z]*|checkout[A-Za-z]*|login[A-Za-z]*|token[A-Za-z]*)\b', js, re.I)))[:40]
+        print("  %s %s %dKB" % (st, u[-60:], len(js) // 1024))
+        print("     endpoints (%d): %s" % (len(eps), eps[:30]))
+        print("     hosts: %s" % hosts[:12])
+        print("     DOM targets: %s" % targets)
+        print("     ids written: %s" % ids)
+        print("     words: %s" % words)
+        for m in list(re.finditer(r"(?:fetch\(|\.ajax\(|axios\.|XMLHttpRequest|method:\s*['\"]POST)", js))[:6]:
+            print("     ..." + re.sub(r"\s+", " ", js[max(0, m.start() - 90): m.start() + 160]) + "...")
+        for m in list(re.finditer(r"#buylist|'buylist'|\"buylist\"", js))[:3]:
+            print("     anchor ..." + re.sub(r"\s+", " ", js[max(0, m.start() - 100): m.start() + 120]) + "...")
+        for c in re.findall(r'https?://portal\.binderpos\.com/[A-Za-z0-9/_\-.]+\.js', js):
+            if c not in done and c not in queue:
+                queue.append(c)
+
     print("\nBUYLIST-PROBE done")
     return 0
 
