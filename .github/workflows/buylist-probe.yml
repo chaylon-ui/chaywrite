@@ -1,0 +1,17 @@
+name: buylist-probe
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "Path of the BinderPOS buylist landing (tried first, then the usual candidates)"
+        required: false
+        default: "/a/buylist"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dump the buylist tile markup and the widget's endpoints
+        env:
+          BUYLIST_PATH: ${{ inputs.path }}
+        run: python3 tools/buylist-probe.py
