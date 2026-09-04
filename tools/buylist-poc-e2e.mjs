@@ -63,6 +63,10 @@ try {
     const qBefore = await snap();
     console.log("cart on load: " + qBefore.length + " line(s), " + sum(qBefore) + " card(s)");
 
+    await page.waitForFunction(() => document.querySelectorAll("#set option").length > 1, null, { timeout: 30000 }).catch(() => fail("set dropdown never filled"));
+    const setNames = await page.locator("#set option").evaluateAll((os) => os.map((o) => o.value));
+    console.log("sets in dropdown: " + (setNames.length - 1) + "  e.g. " + JSON.stringify(setNames.slice(1, 4)));
+
     await page.fill("#q", "Lightning Bolt");
     await page.press("#q", "Enter");
     await page.waitForSelector(".hit", { timeout: 45000 }).catch(() => fail("no search results within 45s"));
@@ -78,6 +82,9 @@ try {
       const isSave = (r) => r.url().includes("/buylist/poc/save") && r.request().method() === "POST";
       const saved = page.waitForResponse(isSave, { timeout: 30000 });
       await page.locator("button.add:not([disabled])").first().click();
+      await page.waitForSelector("#toast.show", { timeout: 5000 })
+        .then(async () => console.log("toast: " + JSON.stringify(await page.locator("#toast").textContent())))
+        .catch(() => fail("no toast after add"));
       const sr = await saved.catch(() => null);
       const body = sr ? await sr.json().catch(() => ({})) : {};
       console.log("save after add: HTTP " + (sr ? sr.status() : "none") + " reply=" + JSON.stringify(body.reply || body).slice(0, 160));
@@ -100,6 +107,19 @@ try {
       console.log("save after undo: HTTP " + (ur ? ur.status() : "none") + "; cart: " + qUndo.length + " line(s), " + sum(qUndo) + " card(s)");
       if (JSON.stringify(qUndo) !== JSON.stringify(qBefore)) fail("cart not back to where it started");
     }
+
+    // the set dropdown: search again within the first hit's set
+    const firstSet = await page.locator(".hit").first().getAttribute("data-set").catch(() => null);
+    if (firstSet && setNames.includes(firstSet)) {
+      await page.selectOption("#set", firstSet);
+      await page.press("#q", "Enter");
+      await page.waitForFunction(() => !/Searching/.test(document.querySelector("#status").textContent), null, { timeout: 45000 }).catch(() => fail("set search never finished"));
+      const sets = await page.locator(".hit").evaluateAll((els) => els.map((e) => e.getAttribute("data-set")));
+      console.log("set filter " + JSON.stringify(firstSet) + ": " + sets.length + " hit(s), from other sets: " + sets.filter((s) => s !== firstSet).length + "; status: " + (await page.locator("#status").textContent()));
+      if (!sets.length || sets.some((s) => s !== firstSet)) fail("set filter did not narrow to the chosen set");
+      const sj = await (await fetch(BASE + "/buylist/poc/search?q=Lightning%20Bolt&set=" + encodeURIComponent(firstSet))).json();
+      console.log("BinderPOS honoured setName itself: " + (sj.upstreamCount === sj.count ? "yes" : "no (" + sj.upstreamCount + " upstream, " + sj.count + " after the worker's filter)"));
+    } else fail("first hit's set " + JSON.stringify(firstSet) + " is not in the dropdown");
   }
 } catch (e) { fail("browser flow threw: " + e.message); }
 
