@@ -104,17 +104,73 @@ export function attribute(rec, orders, buylists) {
 /* ---------------- the DO side ---------------- */
 
 export async function holdDoFetch(cx, request, url) {
+  if (url.pathname === "/_hold/control" && request.method === "POST") return doJson(await control(cx, await bodyOf(request), url.origin));
+  const st = await stateOf(cx);
+  if (url.pathname === "/_hold/status") return doJson(await statusOf(cx, url, st));
+  if (url.pathname === "/_hold/health") return doJson(await healthOf(cx, st));
+  if (st.removed || st.paused) return doJson({ ok: true, ignored: st.removed ? "removed" : "paused" });
   if (!cx.mem.origin) { cx.mem.origin = url.origin; try { await cx.storage.put("hold:origin", url.origin); } catch {} }
   await armAlarm(cx);
   if (url.pathname === "/_hold/inv" && request.method === "POST") return doJson(await onInventory(cx, await bodyOf(request)));
   if (url.pathname === "/_hold/order" && request.method === "POST") return doJson(await onOrder(cx, await bodyOf(request)));
   if (url.pathname === "/_hold/buylist" && request.method === "POST") return doJson(await onBuylist(cx, await bodyOf(request)));
-  if (url.pathname === "/_hold/status") return doJson(await statusOf(cx, url));
-  if (url.pathname === "/_hold/health") return doJson(await healthOf(cx));
   return doJson({ ok: false, error: "not found" }, 404);
 }
 
+// Paused: the webhooks still arrive and are ignored. Removed: the order
+// webhook is unsubscribed, the storage wiped, and nothing is recorded
+// until resumed. Both are staff buttons on the shadow page.
+async function stateOf(cx) {
+  if (cx.mem.state && cx.now() - cx.mem.state.at < 30e3) return cx.mem.state;
+  const [paused, removed] = await Promise.all([cx.storage.get("hold:paused"), cx.storage.get("hold:removed")]);
+  cx.mem.state = { at: cx.now(), paused: !!paused, removed: !!removed };
+  return cx.mem.state;
+}
+
+async function control(cx, b, origin) {
+  const action = String((b && b.action) || "");
+  if (action === "pause") {
+    await cx.storage.put("hold:paused", cx.now());
+    cx.mem.state = null;
+    return { ok: true, paused: true };
+  }
+  if (action === "resume") {
+    await cx.storage.delete(["hold:paused", "hold:removed"]);
+    cx.mem.state = null;
+    if (origin) { cx.mem.origin = origin; await cx.storage.put("hold:origin", origin); }
+    try { await cx.storage.setAlarm(cx.now() + 5e3); } catch {}
+    return { ok: true, resumed: true };
+  }
+  if (action === "remove") {
+    let orderHook = "not checked";
+    try { orderHook = await dropOrderHook(cx); } catch (e) { orderHook = "failed: " + ((e && e.message) || e); }
+    await cx.storage.deleteAll();
+    try { await cx.storage.deleteAlarm(); } catch {}
+    await cx.storage.put("hold:removed", cx.now());
+    for (const k of Object.keys(cx.mem)) delete cx.mem[k];
+    return { ok: true, removed: true, orderHook };
+  }
+  return { ok: false, error: "action must be pause, resume or remove" };
+}
+
+// The orders/create subscription is this stage's own; the inventory one
+// predates it (the New Today strip) and stays.
+async function dropOrderHook(cx) {
+  const j = await cx.adminGql(`{webhookSubscriptions(first:50,topics:[ORDERS_CREATE]){edges{node{id endpoint{... on WebhookHttpEndpoint{callbackUrl}}}}}}`);
+  const edges = (j && j.webhookSubscriptions && j.webhookSubscriptions.edges) || [];
+  let n = 0;
+  for (const e of edges) {
+    const node = e && e.node;
+    if (!node || !node.endpoint || !/\/hook\/order$/.test(node.endpoint.callbackUrl || "")) continue;
+    const r = await cx.adminGql(`mutation($id:ID!){webhookSubscriptionDelete(id:$id){userErrors{message}}}`, { id: node.id });
+    if (r && !((r.webhookSubscriptionDelete && r.webhookSubscriptionDelete.userErrors) || []).length) n++;
+  }
+  return n + " unsubscribed";
+}
+
 export async function holdDoAlarm(cx) {
+  const st = await stateOf(cx);
+  if (st.removed) return;
   try { await ensureHooks(cx); } catch (e) { cx.log("hold: hooks: " + ((e && e.message) || e)); }
   try { await prune(cx); } catch (e) { cx.log("hold: prune: " + ((e && e.message) || e)); }
   try { await cx.storage.setAlarm(cx.now() + HOOKS_EVERY_MS); } catch {}
@@ -339,12 +395,14 @@ async function prune(cx) {
   cx.mem.orders = null; cx.mem.buylists = null;
 }
 
-async function healthOf(cx) {
+const modeOf = (st) => (st.removed ? "removed" : st.paused ? "paused" : HOLD_MODE);
+
+async function healthOf(cx, st) {
   const hooks = (await cx.storage.get("hold:hooks")) || null;
-  return { ok: true, mode: HOLD_MODE, counters: (await cx.storage.get("hold:counters")) || {}, hooks: hooks && { at: hooks.at, orders: !!hooks.orders, inventory: !!hooks.inventory, errors: hooks.errors || [] } };
+  return { ok: true, mode: modeOf(st), counters: (await cx.storage.get("hold:counters")) || {}, hooks: hooks && { at: hooks.at, orders: !!hooks.orders, inventory: !!hooks.inventory, errors: hooks.errors || [] } };
 }
 
-async function statusOf(cx, url) {
+async function statusOf(cx, url, st) {
   const days = Math.max(1, Math.min(30, parseInt(url.searchParams.get("days"), 10) || 7));
   const since = cx.now() - days * 86400e3;
   const l = await cx.storage.list({ prefix: "hd:", start: "hd:" + tsKey(since), limit: 2000 });
@@ -354,7 +412,7 @@ async function statusOf(cx, url) {
   const byCart = {};
   for (const d of decisions) if (d.reason === "cart" && d.cart) (byCart[d.cart] = byCart[d.cart] || []).push(d);
   return {
-    ok: true, mode: HOLD_MODE, days, generatedAt: cx.now(),
+    ok: true, mode: modeOf(st), days, generatedAt: cx.now(),
     windows: { orderLeadS: ORDER_LEAD_MS / 1000, orderLagS: ORDER_LAG_MS / 1000 },
     counters: (await cx.storage.get("hold:counters")) || {},
     hooks: (await cx.storage.get("hold:hooks")) || null,
@@ -364,7 +422,30 @@ async function statusOf(cx, url) {
   };
 }
 
-/* ---------------- worker side: the staff page ---------------- */
+/* ---------------- worker side: the staff page and its buttons ---------------- */
+
+// POST /hold/control, from the page's buttons (form) or a client (JSON):
+// { action: pause | resume | remove }. The worker checks the staff PIN
+// (staffOk is passed in, it lives in index.js) before anything reaches the DO.
+export async function serveHoldControl(request, env, url, staffOk) {
+  let k = "", action = "", form = false;
+  const ct = request.headers.get("content-type") || "";
+  if (/json/i.test(ct)) {
+    const b = await bodyOf(request);
+    k = String(b.k || ""); action = String(b.action || "");
+  } else {
+    form = true;
+    let fd; try { fd = await request.formData(); } catch { fd = null; }
+    k = String((fd && fd.get("k")) || ""); action = String((fd && fd.get("action")) || "");
+  }
+  if (!(await staffOk(env, url.origin, k))) return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
+  const r = await env.ROOM.get(env.ROOM.idFromName(HOLD_DO)).fetch(new Request(url.origin + "/_hold/control", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }),
+  }));
+  const text = await r.text();
+  if (form) return new Response(null, { status: 303, headers: { location: "/hold/shadow?k=" + encodeURIComponent(k), "cache-control": "no-store" } });
+  return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+}
 
 export async function serveHoldPage(request, env, url) {
   const stub = env.ROOM.get(env.ROOM.idFromName(HOLD_DO));
@@ -397,6 +478,10 @@ function renderPage(d, days, k) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Hold on arrival · shadow</title>
 <style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:26px 0 8px}.muted{color:#6b7780}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}.cart{margin:10px 0;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:12px}.cart h3{margin:0 0 6px;font-size:15px}.kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin:8px 0}.kv b{color:#1d2327}a{color:#0d7a5f}.wrap{max-width:1200px;margin:0 auto}</style></head><body><div class="wrap">
 <h1>Hold on arrival <span class="tag">${esc(d.mode || "shadow")} · nothing is moved</span></h1>
+<form method="post" action="/hold/control" class="ctl" style="margin:8px 0 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="hidden" name="k" value="${esc(k)}">
+${d.mode === "paused" || d.mode === "removed" ? '<button name="action" value="resume">Resume the shadow log</button>' : '<button name="action" value="pause">Pause the shadow log</button>'}
+${d.mode === "removed" ? '<span class="muted">Removed: the order webhook is unsubscribed and the log is empty. Resume starts it again from nothing.</span>' : '<button name="action" value="remove" onclick="return confirm(\'Delete the whole shadow log and unsubscribe the order webhook? The inventory webhook stays (the New Today strip uses it).\')">Remove stage 1</button>'}
+</form>
 <p class="muted">Last ${days} days, Atlantic time. Every stock rise on a single is listed with the decision the live version would take. Compare each cart's rises with its BinderPOS page. <a href="${esc(link(days))}">refresh</a> · <a href="${esc(link(1))}">today</a> · <a href="${esc(link(30))}">30 days</a></p>
 <div class="kv"><span>Rises seen <b>${c.rises || 0}</b></span><span>Would hold, cart <b>${c.wouldHoldCart || 0}</b></span><span>Would hold, buylist <b>${c.wouldHoldBuylist || 0}</b></span><span>Singles with no source <b>${c.skipNoSource || 0}</b></span><span>Not singles <b>${c.skipNotSingle || 0}</b></span><span>Baselines learned <b>${c.baselines || 0}</b></span><span>First sightings inside a cart window <b>${c.firstSightInWindow || 0}</b></span><span>Carts with buys <b>${c.cartsWithBuys || 0}</b></span><span>Sales-only carts <b>${c.cartsSalesOnly || 0}</b></span></div>
 <p class="muted">Webhooks: ${d.hooks ? `orders ${d.hooks.orders ? "on" : "MISSING"}, inventory ${d.hooks.inventory ? "on" : "MISSING"}, checked ${esc(when(d.hooks.at))}${(d.hooks.errors || []).length ? " · errors: " + esc(d.hooks.errors.join("; ")) : ""}` : "not checked yet (first check a minute after deploy)"}. Window: a cart's order up to ${d.windows ? d.windows.orderLeadS : "?"} s before a rise or ${d.windows ? d.windows.orderLagS : "?"} s after it.</p>

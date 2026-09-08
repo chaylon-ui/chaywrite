@@ -7,7 +7,7 @@ import { serveIcs } from "./ics.js";
 import { servePriceHistory } from "./price-history.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist } from "./buylist.js";
-import { HOLD_DO, serveHoldPage } from "./hold.js";
+import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
 
 export { BinderRoom };
 
@@ -230,6 +230,7 @@ export default {
       return Response.json({ ok: true });
     }
     if (url.pathname === "/hold/health") return serveHoldPage(request, env, url);
+    if (url.pathname === "/hold/control" && request.method === "POST") return serveHoldControl(request, env, url, staffOk);
     if (url.pathname === "/hold/shadow" || url.pathname === "/hold/shadow.json") {
       if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
         return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
