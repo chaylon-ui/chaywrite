@@ -2,6 +2,7 @@ import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TA
 import { CACHE_DO, WARM_EVERY_MS, gzipText, warmWithStore } from "./binder-search.js";
 import { PRICE_DO, priceDoFetch, priceDoAlarm } from "./price-history.js";
 import { ENRICH_DO, enrichDoFetch, enrichDoAlarm } from "./enrich.js";
+import { HOLD_DO, holdDoFetch, holdDoAlarm } from "./hold.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -48,6 +49,9 @@ export class BinderRoom {
     // its own DO instance, its own alarm, its own /_en/* paths.
     this.isEnrichDo = false;
     try { this.isEnrichDo = !!env.ROOM?.idFromName(ENRICH_DO)?.equals?.(state.id); } catch {}
+    // And for the hold-on-arrival shadow log (src/hold.js): /_hold/* only.
+    this.isHoldDo = false;
+    try { this.isHoldDo = !!env.ROOM?.idFromName(HOLD_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -609,6 +613,18 @@ export class BinderRoom {
     };
   }
 
+  holdCx() {
+    if (!this.holdMem) this.holdMem = {};
+    return {
+      storage: this.state.storage,
+      env: this.env,
+      adminGql: (q, v) => this.adminGql(q, v),
+      now: () => Date.now(),
+      log: (s) => console.log(s),
+      mem: this.holdMem,
+    };
+  }
+
   priceCx() {
     if (!this.phMem) this.phMem = {};
     return {
@@ -640,6 +656,7 @@ export class BinderRoom {
     // The price DO's alarm is the nightly snapshot clock (price-history.js).
     if (this.isPriceDo) { await priceDoAlarm(this.priceCx()); return; }
     if (this.isEnrichDo) { await enrichDoAlarm(this.enrichCx()); return; }
+    if (this.isHoldDo) { await holdDoAlarm(this.holdCx()); return; }
     if (!this.isCacheDo) return;
     try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
     let r = null;
@@ -663,7 +680,11 @@ export class BinderRoom {
       if (url.pathname.startsWith("/_en/")) return enrichDoFetch(this.enrichCx(), request, url);
       return new Response(null, { status: 404 });
     }
-    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/")) return new Response(null, { status: 404 });
+    if (this.isHoldDo) {
+      if (url.pathname.startsWith("/_hold/")) return holdDoFetch(this.holdCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });

@@ -7,6 +7,7 @@ import { serveIcs } from "./ics.js";
 import { servePriceHistory } from "./price-history.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist } from "./buylist.js";
+import { HOLD_DO, serveHoldPage } from "./hold.js";
 
 export { BinderRoom };
 
@@ -217,6 +218,24 @@ export default {
     // Our buylist on top of BinderPOS's: /buylist/api/* for the shop's sell
     // page (signed-in customer), /buylist/poc/* for the owner-only test page.
     // See src/buylist.js.
+    // Hold on arrival, stage 1 (shadow): Shopify's order webhook, so a
+    // BinderPOS POS cart is known by its cart number the moment it is
+    // submitted. Untrusted hint; the hold DO re-reads the order with its
+    // own token. Nothing in this stage changes inventory. See src/hold.js.
+    if (url.pathname === "/hook/order" && request.method === "POST") {
+      let b; try { b = await request.json(); } catch { b = {}; }
+      const id = String((b && b.id) || "").replace(/\D/g, "").slice(0, 24);
+      if (id) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName(HOLD_DO))
+        .fetch(new Request(url.origin + "/_hold/order", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) })));
+      return Response.json({ ok: true });
+    }
+    if (url.pathname === "/hold/health") return serveHoldPage(request, env, url);
+    if (url.pathname === "/hold/shadow" || url.pathname === "/hold/shadow.json") {
+      if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
+        return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
+      }
+      return serveHoldPage(request, env, url);
+    }
     if (url.pathname.startsWith("/buylist/poc/") || url.pathname.startsWith("/buylist/api/")) {
       return serveBuylist(request, env);
     }
@@ -274,6 +293,10 @@ export default {
       const item = String((b && b.inventory_item_id) || "").replace(/\D/g, "").slice(0, 24);
       if (item) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
         .fetch(new Request(url.origin + "/inv-hint", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item }) })));
+      // The same hint feeds the hold-on-arrival shadow log (src/hold.js).
+      if (item) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName(HOLD_DO))
+        .fetch(new Request(url.origin + "/_hold/inv", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ item, location: String((b && b.location_id) || "").replace(/\D/g, "").slice(0, 24), available: Number(b && b.available) }) })));
       return Response.json({ ok: true });
     }
 

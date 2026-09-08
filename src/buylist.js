@@ -38,6 +38,8 @@
    for Magic come from Scryfall's set list, matched by name. No key is used
    or exposed. */
 
+import { HOLD_DO } from "./hold.js";
+
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
 const OWNER = "3957471740057";                               // the owner's own Shopify customer id
@@ -255,6 +257,15 @@ async function route(mode, action, request, env, url, cors) {
     const accepted = r.status >= 200 && r.status < 300 && !(r.body && r.body.actionPass === false);
     let cleared = null, confirmation = "";
     if (accepted) {
+      // Tell the hold-on-arrival log which cards this buylist listed, so
+      // their arrival can be attributed when staff complete it (src/hold.js).
+      try {
+        await env.ROOM.get(env.ROOM.idFromName(HOLD_DO)).fetch(new Request(new URL("/_hold/buylist", url).toString(), {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ number: r.body && r.body.data != null ? String(r.body.data) : "", customer, paymentType,
+            cards: cards.slice(0, 100).map((c) => ({ n: c.cardName, s: c.setName, c: c.conditionName, t: c.type, q: c.quantity })) }),
+        }));
+      } catch {}
       // clearBuylist() in their app: the draft is saved back empty.
       const c = await passthrough(SAVE_URL(customer), { method: "POST", body: "[]" });
       cleared = c.status;
