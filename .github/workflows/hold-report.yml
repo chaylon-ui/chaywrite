@@ -1,0 +1,24 @@
+name: hold-report
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days of the shadow log to check"
+        required: false
+        default: "7"
+  schedule:
+    - cron: "0 3 * * *"   # 03:00 UTC = midnight Atlantic, after the day's carts
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      # The script and the worker's config live on the worker branch; this
+      # workflow lives on main so it can be dispatched and scheduled.
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/shopify-site-improvements-ztgdt8
+      - name: Check the hold-on-arrival shadow log (read-only)
+        env:
+          DAYS: ${{ inputs.days || '1' }}
+          HOLD_REPORT_PIN: ${{ secrets.HOLD_REPORT_PIN }}
+        run: node tools/hold-report.mjs
