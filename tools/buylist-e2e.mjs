@@ -33,6 +33,7 @@ const line = (p, extra) => console.log(p.label + ": HTTP " + p.status + (extra ?
 let p = await probe("GET /buylist/poc/", BASE + "/buylist/poc/"); line(p, p.text.length + "B"); if (p.status !== 200) fail("test page");
 p = await probe("GET /buylist.css", BASE + "/buylist.css"); line(p, p.text.length + "B"); if (p.status !== 200) fail("css");
 p = await probe("GET /buylist.js", BASE + "/buylist.js"); line(p, p.text.length + "B"); if (p.status !== 200) fail("js");
+p = await probe("GET /hold/health (shadow stage, counts only)", BASE + "/hold/health"); line(p, p.text.replace(/\s+/g, " ").slice(0, 400)); if (p.status !== 200) fail("hold health");
 p = await probe("GET /buylist/api/games", BASE + "/buylist/api/games");
 line(p, JSON.stringify(p.json && (p.json.games || p.json.raw)).slice(0, 500)); if (!(p.json && p.json.count > 0)) fail("no games");
 p = await probe("BinderPOS supportedGames, raw", "https://portal.binderpos.com/external/shopify/a648e57a-678f-45eb-bae0-f8deb7940192/supportedGames", { headers: { "content-type": "application/json" } });
