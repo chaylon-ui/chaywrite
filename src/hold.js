@@ -148,7 +148,30 @@ async function onInventory(cx, b) {
   const now = cx.now();
   const prev = await cx.storage.get("hv:" + item);
   await cx.storage.put("hv:" + item, available);
-  if (typeof prev !== "number") { await bump(cx, "baselines"); return { ok: true, baseline: true }; }
+  if (typeof prev !== "number") {
+    // First sight of this item: no baseline, so a rise cannot be measured.
+    // If a buy cart or a submitted buylist is in the window it is still
+    // written down as a probable one, delta unknown, so the cart comparison
+    // stays complete during the shadow weeks. (The live stage needs real
+    // baselines loaded for every single first.)
+    await bump(cx, "baselines");
+    if (available > 0) {
+      const info = await itemInfo(cx, item);
+      if (info && SINGLE_RE.test(info.type || "")) {
+        const rec = attribute({
+          ts: now, item, delta: null, before: null, after: available, firstSight: true,
+          v: info.variantId, sku: info.sku, title: info.title, variantTitle: info.variantTitle, type: info.type, handle: info.handle,
+          single: true, verified: null, decision: "skip", reason: "none",
+        }, await recentOrders(cx), await recentBuylists(cx));
+        if (rec.decision === "hold") {
+          rec.decision = "hold?";
+          await cx.storage.put("hd:" + tsKey(now) + "-" + item, rec);
+          await bump(cx, "firstSightInWindow");
+        }
+      }
+    }
+    return { ok: true, baseline: true };
+  }
   const delta = available - prev;
   if (delta <= 0) { await bump(cx, delta < 0 ? "falls" : "unchanged"); return { ok: true, delta }; }
   await bump(cx, "rises");
@@ -365,7 +388,7 @@ function renderPage(d, days, k) {
   const link = (n) => `?days=${n}&k=${encodeURIComponent(k)}`;
   const c = d.counters || {};
   const rows = (list, f) => list.length ? list.map(f).join("") : '<tr><td colspan="9" class="muted">nothing yet</td></tr>';
-  const riseRow = (r) => `<tr><td>${esc(when(r.ts))}</td><td>${esc(r.title)}<span class="muted"> · ${esc(r.variantTitle)}</span></td><td>+${r.delta}</td><td>${r.before} → ${r.after}</td><td>${esc(r.type)}</td><td>${r.offset != null ? r.offset + " s" + (r.late ? " (matched late)" : "") : ""}</td><td>${r.verified === false ? "payload ≠ Shopify" : r.verified ? "ok" : "not re-read"}</td></tr>`;
+  const riseRow = (r) => `<tr><td>${esc(when(r.ts))}</td><td>${esc(r.title)}<span class="muted"> · ${esc(r.variantTitle)}</span></td><td>${r.firstSight ? '<span class="muted">first sight, now ' + r.after + "</span>" : "+" + r.delta}</td><td>${r.firstSight ? "?" : r.before + " → " + r.after}</td><td>${esc(r.type)}</td><td>${r.offset != null ? r.offset + " s" + (r.late ? " (matched late)" : "") : ""}</td><td>${r.firstSight ? "probable" : r.verified === false ? "payload ≠ Shopify" : r.verified ? "ok" : "not re-read"}</td></tr>`;
   const orders = (d.orders || []).filter((o) => o.bought);
   const salesOnly = (d.orders || []).filter((o) => !o.bought).length;
   const none = (d.decisions || []).filter((x) => x.single && x.reason === "none");
@@ -375,7 +398,7 @@ function renderPage(d, days, k) {
 <style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:26px 0 8px}.muted{color:#6b7780}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}.cart{margin:10px 0;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:12px}.cart h3{margin:0 0 6px;font-size:15px}.kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin:8px 0}.kv b{color:#1d2327}a{color:#0d7a5f}.wrap{max-width:1200px;margin:0 auto}</style></head><body><div class="wrap">
 <h1>Hold on arrival <span class="tag">${esc(d.mode || "shadow")} · nothing is moved</span></h1>
 <p class="muted">Last ${days} days, Atlantic time. Every stock rise on a single is listed with the decision the live version would take. Compare each cart's rises with its BinderPOS page. <a href="${esc(link(days))}">refresh</a> · <a href="${esc(link(1))}">today</a> · <a href="${esc(link(30))}">30 days</a></p>
-<div class="kv"><span>Rises seen <b>${c.rises || 0}</b></span><span>Would hold, cart <b>${c.wouldHoldCart || 0}</b></span><span>Would hold, buylist <b>${c.wouldHoldBuylist || 0}</b></span><span>Singles with no source <b>${c.skipNoSource || 0}</b></span><span>Not singles <b>${c.skipNotSingle || 0}</b></span><span>Baselines learned <b>${c.baselines || 0}</b></span><span>Carts with buys <b>${c.cartsWithBuys || 0}</b></span><span>Sales-only carts <b>${c.cartsSalesOnly || 0}</b></span></div>
+<div class="kv"><span>Rises seen <b>${c.rises || 0}</b></span><span>Would hold, cart <b>${c.wouldHoldCart || 0}</b></span><span>Would hold, buylist <b>${c.wouldHoldBuylist || 0}</b></span><span>Singles with no source <b>${c.skipNoSource || 0}</b></span><span>Not singles <b>${c.skipNotSingle || 0}</b></span><span>Baselines learned <b>${c.baselines || 0}</b></span><span>First sightings inside a cart window <b>${c.firstSightInWindow || 0}</b></span><span>Carts with buys <b>${c.cartsWithBuys || 0}</b></span><span>Sales-only carts <b>${c.cartsSalesOnly || 0}</b></span></div>
 <p class="muted">Webhooks: ${d.hooks ? `orders ${d.hooks.orders ? "on" : "MISSING"}, inventory ${d.hooks.inventory ? "on" : "MISSING"}, checked ${esc(when(d.hooks.at))}${(d.hooks.errors || []).length ? " · errors: " + esc(d.hooks.errors.join("; ")) : ""}` : "not checked yet (first check a minute after deploy)"}. Window: a cart's order up to ${d.windows ? d.windows.orderLeadS : "?"} s before a rise or ${d.windows ? d.windows.orderLagS : "?"} s after it.</p>
 <h2>Counter buys (BinderPOS carts with items sold to the store) · ${orders.length}<span class="muted"> · ${salesOnly} sales-only carts ignored</span></h2>
 ${orders.length ? orders.map((o) => `<div class="cart"><h3>Cart ${esc(o.cart)} <span class="muted">· ${esc(when(o.ts))} · order ${esc(o.name)} · ${esc(o.customer || "no customer")}</span> · <a href="${esc(o.link)}" target="_blank" rel="noopener">open in BinderPOS</a></h3><div class="kv"><span>Bought total <b>${esc(o.boughtTotal || "?")}</b></span><span>${esc((o.tenders || []).join(" · ") || "no tender line")}</span><span>Sold in the same cart: <b>${esc((o.sold || []).join(", ") || "nothing")}</b></span></div><table><thead><tr><th>Stock rose at</th><th>Card</th><th>Qty</th><th>Available</th><th>Type</th><th>After the order by</th><th>Re-read</th></tr></thead><tbody>${rows(o.rises || [], riseRow)}</tbody></table></div>`).join("") : '<p class="muted">No cart with buys in this period.</p>'}
