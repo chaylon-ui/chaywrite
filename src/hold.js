@@ -44,12 +44,13 @@
 
 export const HOLD_DO = "buylist-hold";
 export const HOLD_MODE = "shadow";
-// Measured on the first real cart (32640862, 2026-09-08): BinderPOS created
-// the order, then pushed the bought cards' stock 175 to 205 seconds later,
-// about one card every ten seconds. So the order may come well before its
-// rises; a rise a little before the order is allowed for too.
+// Measured on the first real cart (32640862, 2026-09-08, confirmed against
+// the cart page): BinderPOS created the order, then pushed the four bought
+// cards 175 to 205 seconds later, one every ten seconds. A card that rose
+// two minutes BEFORE the order was not in the cart. So: a long window after
+// the order, and only webhook-ordering slack before it.
 export const ORDER_LEAD_MS = 600e3;   // a cart's order may come before its stock rises by this much
-export const ORDER_LAG_MS = 240e3;    // or after them by this much
+export const ORDER_LAG_MS = 60e3;     // or after them by this much
 const KEEP_MS = 30 * 86400e3;
 const INFO_TTL_MS = 7 * 86400e3;
 const HOOKS_EVERY_MS = 6 * 3600e3;
