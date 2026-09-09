@@ -295,7 +295,8 @@
       if (lv.credit != null) t.lcredit += lv.credit * l.qty;
       html += '<tr><td>' + (l.image ? '<img class="thumb" loading="lazy" src="' + esc(l.image) + '" alt="">' : '') + '</td>' +
         '<td><div><strong>' + esc(l.name) + '</strong></div><small class="muted">' + esc([l.set, l.rarity, l.game].filter(Boolean).join(' · ')) + '</small></td>' +
-        '<td class="nw">' + esc(l.condition || '—') + (l.finish && l.finish !== 'Non-foil' ? ' <span class="badge foil">' + esc(l.finish) + '</span>' : '') + '</td>' +
+        '<td class="nw">' + esc(l.condition || '—') + (l.finish && l.finish !== 'Non-foil' ? ' <span class="badge foil">' + esc(l.finish) + '</span>' : '') +
+        (l.overstock ? ' <span class="badge pending" title="copies past the buylist\'s max, at the overstock rate">overstock</span>' : '') + '</td>' +
         '<td class="num"><strong>' + esc(l.qty) + '</strong></td>' +
         '<td class="num">' + money(l.cash) + (l.qty > 1 ? '<br><small class="muted">' + money(l.cashTotal) + '</small>' : '') + '</td>' +
         '<td class="num">' + money(l.credit) + (l.qty > 1 ? '<br><small class="muted">' + money(l.creditTotal) + '</small>' : '') + '</td>';

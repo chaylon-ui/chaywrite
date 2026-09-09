@@ -194,15 +194,35 @@ function normalizeLine(l) {
     creditTotal: credit != null ? round2(credit * qty) : null,
     image: str(l.imageUrl),
     productVariantId: str(l.productVariantId),
+    overstock: false,
     live: null,
   };
 }
 
-// Request body the portal sends to allPrices — its bundle's helper posts
-// whatever array it is handed (`payload: t`, default []); the shapes probe
-// establishes the element shape.
-function pricesBody(lines) {
-  return lines.map((l) => ({ cardId: l.cardId, variantId: l.variantId, type: l.type }));
+/* Request bodies for allPrices, as the portal's buylist page builds them
+   (its getBuylistCardPrices, read out of the bundle 2026-09-09): the lines
+   are taken 20 cards at a time, each batch grouped by game, and posted as
+   [{ game: "mtg", ids: [cardId, ...] }, ...]. Every other shape answers a
+   bare 400. */
+function priceBatches(rawLines) {
+  const seen = new Set(), pairs = [];
+  for (const l of rawLines) {
+    if (l.cardId == null) continue;
+    const key = str(l.gameId) + "|" + str(l.cardId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push({ game: str(l.gameId), id: l.cardId });
+  }
+  const batches = [];
+  for (let i = 0; i < pairs.length; i += 20) {
+    const byGame = new Map();
+    for (const p of pairs.slice(i, i + 20)) {
+      if (!byGame.has(p.game)) byGame.set(p.game, []);
+      byGame.get(p.game).push(p.id);
+    }
+    batches.push(Array.from(byGame, ([game, ids]) => ({ game, ids })));
+  }
+  return batches;
 }
 
 /* Live buy prices for the lines' cards, keyed "cardId|condition|finish" ->
@@ -212,35 +232,62 @@ function pricesBody(lines) {
    (finishes: type "Normal"/"Foil"…, legacyType "Non foil"/"Foil", with
    storeSellPrice, buyPrice, creditBuyPrice, maxPurchaseQuantity,
    canPurchaseOverstock, overStockBuyPrice, creditOverstockBuyPrice,
-   productVariantId). */
+   productVariantId). A failed batch costs its cards their live column,
+   not the whole page; the first failure is reported in priceError. */
 async function livePrices(env, rawLines) {
   const out = new Map();
-  if (!rawLines.length) return out;
-  const cards = await post(env, "/api/buylists/cards/allPrices", pricesBody(rawLines));
-  for (const c of Array.isArray(cards) ? cards : []) {
-    for (const v of c.variants || []) {
-      for (const t of v.cardBuylistTypes || []) {
-        const entry = {
-          buy: num(t.buyPrice), credit: num(t.creditBuyPrice), sell: num(t.storeSellPrice),
-          max: num(t.maxPurchaseQuantity), overstock: !!t.canPurchaseOverstock,
-          overstockBuy: num(t.overStockBuyPrice), overstockCredit: num(t.creditOverstockBuyPrice),
-          condition: str(v.variantName), finish: finishLabel(t.legacyType || t.type),
-          productVariantId: str(t.productVariantId),
-        };
-        for (const f of [t.legacyType, t.type]) if (f) out.set(str(c.id) + "|" + norm(v.variantName) + "|" + norm(f), entry);
+  let error = null;
+  const results = await Promise.allSettled(priceBatches(rawLines).map((b) => post(env, "/api/buylists/cards/allPrices", b)));
+  for (const r of results) {
+    if (r.status !== "fulfilled") { if (!error) error = String((r.reason && r.reason.message) || r.reason).slice(0, 200); continue; }
+    const cards = r.value;
+    for (const c of Array.isArray(cards) ? cards : []) {
+      for (const v of c.variants || []) {
+        for (const t of v.cardBuylistTypes || []) {
+          const entry = {
+            buy: num(t.buyPrice), credit: num(t.creditBuyPrice), sell: num(t.storeSellPrice),
+            max: num(t.maxPurchaseQuantity), overstock: !!t.canPurchaseOverstock,
+            overstockBuy: num(t.overStockBuyPrice), overstockCredit: num(t.creditOverstockBuyPrice),
+            condition: str(v.variantName), finish: finishLabel(t.legacyType || t.type),
+            productVariantId: str(t.productVariantId),
+          };
+          for (const f of [t.legacyType, t.type]) if (f) out.set(str(c.id) + "|" + norm(v.variantName) + "|" + norm(f), entry);
+        }
       }
     }
   }
+  out.error = error;
   return out;
 }
 
 function priceFor(prices, ln) {
   if (!ln.cardId) return null;
-  const exact = prices.get(ln.cardId + "|" + norm(ln.condition) + "|" + norm(ln.finishRaw));
-  if (exact) return exact;
-  // the same product variant, whatever it is labelled now
-  if (ln.productVariantId) for (const v of prices.values()) if (v.productVariantId && v.productVariantId === ln.productVariantId) return v;
-  return null;
+  let p = prices.get(ln.cardId + "|" + norm(ln.condition) + "|" + norm(ln.finishRaw)) || null;
+  // else the same product variant, whatever it is labelled now
+  if (!p && ln.productVariantId) for (const v of prices.values()) if (v.productVariantId && v.productVariantId === ln.productVariantId) { p = v; break; }
+  if (!p) return null;
+  // an overstock line is paid the overstock price
+  if (ln.overstock && (p.overstockBuy != null || p.overstockCredit != null)) {
+    p = Object.assign({}, p, { buy: p.overstockBuy != null ? p.overstockBuy : p.buy, credit: p.overstockCredit != null ? p.overstockCredit : p.credit });
+  }
+  return p;
+}
+
+/* The portal's own rule (its details loader): when a buylist holds two lines
+   for the same card + condition + finish, the one with the lower cash price
+   is the overstock line — copies past the buylist's max, taken at the
+   overstock rate. */
+function markOverstock(lines) {
+  const groups = new Map();
+  for (const ln of lines) {
+    const key = ln.cardId + "|" + ln.variantId + "|" + norm(ln.finishRaw);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(ln);
+  }
+  for (const g of groups.values()) {
+    if (g.length !== 2 || g[0].cash == null || g[1].cash == null || g[0].cash === g[1].cash) continue;
+    (g[0].cash < g[1].cash ? g[0] : g[1]).overstock = true;
+  }
 }
 
 export async function buylistDetail(env, id) {
@@ -249,8 +296,10 @@ export async function buylistDetail(env, id) {
   const rawFinal = Array.isArray(d.finalBuylistDetails) ? d.finalBuylistDetails : [];
   const lines = raw.map(normalizeLine);
   const finalLines = rawFinal.map(normalizeLine);
+  markOverstock(lines);
+  markOverstock(finalLines);
   let prices = new Map(), priceError = null;
-  try { prices = await livePrices(env, raw); }
+  try { prices = await livePrices(env, raw); priceError = prices.error || null; }
   catch (e) { priceError = String((e && e.message) || e).slice(0, 200); }
   const totals = { lines: lines.length, cards: 0, quoted: 0, quotedCash: 0, quotedCredit: 0, liveCash: 0, liveCredit: 0, livePriced: 0 };
   let quotedKnown = true;
