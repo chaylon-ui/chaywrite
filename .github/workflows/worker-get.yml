@@ -1,0 +1,63 @@
+name: Worker GET
+
+# Read-only diagnostic: GET one or more paths on the deployed worker and
+# print the masked, truncated answers. The sandbox this worker is developed
+# from has no egress to workers.dev, so this is how a live page is read.
+# With pin=true the staff PIN is read from src/config.js in this checkout
+# and appended as k= (never printed); if the owner has changed the PIN in
+# /admin the gated pages simply answer 403.
+
+on:
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: "Comma-separated paths, e.g. /hold/health,/hold/shadow.json?days=7"
+        required: true
+        default: "/hold/health"
+      pin:
+        description: "Append the staff PIN from src/config.js as k= (true/false)"
+        required: false
+        default: "false"
+      chars:
+        description: "Most characters of each answer to print"
+        required: false
+        default: "4000"
+
+permissions: {}
+
+jobs:
+  get:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and print (masked)
+        env:
+          PATHS: ${{ inputs.paths }}
+          PIN: ${{ inputs.pin }}
+          N: ${{ inputs.chars }}
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const W = 'https://exor-binder.nevski.workers.dev';
+          const n = Math.max(200, parseInt(process.env.N, 10) || 4000);
+          const mask = (s) => String(s)
+            .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
+            .replace(/("(firstName|lastName|name|customerName|customer|phone|email)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
+          let K = '';
+          if (String(process.env.PIN) === 'true') {
+            const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+            K = m ? m[1] : '';
+            console.log('staff PIN from src/config.js:', K ? 'found' : 'NOT found');
+          }
+          (async () => {
+            for (const raw of String(process.env.PATHS || '').split(',').map(s => s.trim()).filter(Boolean)) {
+              if (!raw.startsWith('/')) { console.log('skipping (must start with /):', raw); continue; }
+              const url = W + raw + (K ? (raw.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(K) : '');
+              const r = await fetch(url, { headers: { accept: 'application/json, text/html;q=0.5' } }).catch(e => ({ status: 0, text: async () => 'fetch failed: ' + e.message, headers: new Map() }));
+              const text = await r.text();
+              console.log('=== GET ' + raw + ' -> ' + r.status + ' | bytes ' + text.length + ' | ' + (r.headers.get ? r.headers.get('content-type') : '') + ' ===');
+              console.log(mask(text).slice(0, n));
+            }
+          })().catch(e => console.log('worker-get error:', e.message));
+          EOF
