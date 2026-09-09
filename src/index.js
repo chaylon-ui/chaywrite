@@ -8,6 +8,7 @@ import { servePriceHistory } from "./price-history.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
+import { servePortal } from "./portal.js";
 
 export { BinderRoom };
 
@@ -239,6 +240,17 @@ export default {
     }
     if (url.pathname.startsWith("/buylist/poc/") || url.pathname.startsWith("/buylist/api/")) {
       return serveBuylist(request, env);
+    }
+
+    // Round 32: our own read-only view of BinderPOS's online buylists
+    // (pending / approved / completed, with live buy prices), behind the
+    // staff PIN. The page is a static shell; every read goes through
+    // src/portal.js, which signs in to the portal with the staff login.
+    if (url.pathname === "/portal/buylists") {
+      return serveAsset(env, "/buylists.html", request);
+    }
+    if (url.pathname.startsWith("/portal/") && url.pathname.endsWith(".json")) {
+      return servePortal(request, env, url, staffOk);
     }
 
     if (url.pathname === "/buyprice.json") {

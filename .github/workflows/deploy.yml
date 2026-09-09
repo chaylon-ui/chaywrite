@@ -61,6 +61,25 @@ jobs:
             echo "No BINDERPOS_API_KEY repo secret set - skipping (add one to enable the what-we-pay buylist reveal)"
           fi
 
+      # The BinderPOS PORTAL staff login (a portal user made for this, not
+      # the API key): powers the read-only buylists screen at
+      # /portal/buylists (src/portal.js). Same pattern: the repo Actions
+      # secrets BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD sync to the
+      # worker on every deploy and never appear in the repo or logs.
+      - name: Sync BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD worker secrets (when configured)
+        env:
+          BINDERPOS_LOGIN_EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
+          BINDERPOS_LOGIN_PASSWORD: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$BINDERPOS_LOGIN_EMAIL" ] && [ -n "$BINDERPOS_LOGIN_PASSWORD" ]; then
+            printf '%s' "$BINDERPOS_LOGIN_EMAIL" | npx wrangler@4 secret put BINDERPOS_LOGIN_EMAIL
+            printf '%s' "$BINDERPOS_LOGIN_PASSWORD" | npx wrangler@4 secret put BINDERPOS_LOGIN_PASSWORD
+          else
+            echo "No BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD repo secrets set - skipping (add both to enable the buylists screen)"
+          fi
+
       # Log-only probe of the freshly deployed similar-cards endpoints. The
       # sandbox this worker is developed from has no outbound internet, so
       # this step is where the real upstream shapes and live responses become
@@ -299,3 +318,48 @@ jobs:
           curl -sS -o /tmp/bgg-t -w 'bgg thing:  HTTP %{http_code} %{size_download}B\n' --max-time 25 \
             "https://boardgamegeek.com/xmlapi2/thing?stats=1&id=266192" || true
           echo "minplayers/maxplayers/averageweight present: $(grep -coE '<(minplayers|maxplayers|averageweight)' /tmp/bgg-t || true)"
+
+      # Log-only probe of the staff buylists screen (src/portal.js,
+      # public/buylists.html). The gate must answer 403 without a key. The
+      # gated reads use the staff PIN read from src/config.js in this
+      # checkout — never printed — and log only statuses, shapes and counts,
+      # with customer names and emails masked. If the owner has changed the
+      # PIN in /admin the gated part just reports 403 and stops.
+      - name: Smoke-test /portal buylists (log-only)
+        run: |
+          set +e
+          W=https://exor-binder.nevski.workers.dev
+          curl -sS -o /dev/null -w '/portal/buylists page: HTTP %{http_code} %{content_type}\n' --max-time 20 "$W/portal/buylists" || true
+          echo "page shell served (title + login card): $(curl -sS --max-time 20 "$W/portal/buylists" | grep -c 'Buylists' || true)"
+          curl -sS -o /dev/null -w '/portal/buylists.json no key : HTTP %{http_code} (expect 403)\n' --max-time 20 "$W/portal/buylists.json" || true
+          curl -sS -o /dev/null -w '/portal/buylist.json no key  : HTTP %{http_code} (expect 403)\n' --max-time 20 "$W/portal/buylist.json?id=1" || true
+          node <<'EOF'
+          const fs = require('fs');
+          const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+          const K = m ? m[1] : '';
+          const W = 'https://exor-binder.nevski.workers.dev';
+          const mask = (s) => String(s).replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>').replace(/("(name|email|phone|notes)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
+          (async () => {
+            if (!K) { console.log('no DEFAULT_PIN found in src/config.js; gated probes skipped'); return; }
+            const j = async (p) => { const r = await fetch(W + p + (p.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(K)); return { status: r.status, body: await r.json().catch(() => null) }; };
+            const st = await j('/portal/status.json');
+            console.log('status.json:', st.status, JSON.stringify(st.body));
+            if (st.status === 403) { console.log('the staff PIN in src/config.js is not the live one (changed in /admin?) - gated probes skipped'); return; }
+            const li = await j('/portal/buylists.json?status=pending&take=3&days=90');
+            console.log('buylists.json pending take=3 days=90:', li.status, 'rows', li.body && li.body.rows ? li.body.rows.length : '-', 'more', li.body && li.body.more, li.body && li.body.error ? '| error ' + li.body.error : '');
+            const first = li.body && li.body.rows && li.body.rows[0];
+            if (first) console.log('row[0]:', mask(JSON.stringify(first)));
+            if (first) {
+              const d = await j('/portal/buylist.json?id=' + first.id);
+              const b = d.body || {};
+              console.log('buylist.json:', d.status, 'stage', b.stage, 'payment', b.paymentType, 'lines', b.lines ? b.lines.length : '-', 'final', b.finalLines ? b.finalLines.length : '-', '| totals', JSON.stringify(b.totals), '| priceError', b.priceError || 'none', b.error ? '| error ' + b.error : '');
+              if (b.customer) console.log('customer keys:', Object.keys(b.customer).join(','), '| storeCredit', b.customer.storeCredit);
+              if (b.lines && b.lines[0]) console.log('line[0]:', JSON.stringify(b.lines[0]).slice(0, 800));
+              console.log('lines with a live price:', (b.lines || []).filter(l => l.live).length, '/', (b.lines || []).length);
+            }
+            for (const s of ['approved', 'completed']) {
+              const r = await j('/portal/buylists.json?status=' + s + '&take=2&days=60');
+              console.log(s + ' take=2 days=60:', r.status, 'rows', r.body && r.body.rows ? r.body.rows.length : '-', r.body && r.body.error ? '| error ' + r.body.error : '');
+            }
+          })().catch(e => console.log('portal smoke error:', e.message));
+          EOF

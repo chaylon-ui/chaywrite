@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Buylists - Exor Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📥</text></svg>">
+<style>
+  :root { --red: #d62c28; --amber: #ff7a2f; --teal: #34b2c2; --ink: #eef3f5; --dim: #8fa0a8; --ok: #4caf7d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: linear-gradient(160deg, #12181a, #0c1013 60%); color: var(--ink);
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 26px 18px 60px; }
+  h1 { font-size: 26px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .06em; }
+  h1::after { content: ""; display: block; width: 72px; height: 3px; margin-top: 8px; border-radius: 3px;
+              background: linear-gradient(90deg, var(--red), var(--amber)); }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 26px 0 10px; }
+  .sub { color: var(--dim); margin: 10px 0 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 14px; }
+  .bar.split { justify-content: space-between; align-items: flex-start; }
+  .tabs { display: flex; gap: 3px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); border-radius: 999px; padding: 3px; }
+  .tabs button { background: transparent; color: var(--dim); padding: 6px 14px; }
+  .tabs button.on { background: linear-gradient(135deg, var(--red), #ff5a36); color: #fff; font-weight: 600; }
+  select, input[type="search"] { font: inherit; color: var(--ink); background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 7px 10px; }
+  input[type="search"] { min-width: 210px; flex: 1 1 210px; max-width: 360px; }
+  button, .btn { font: inherit; border: 0; border-radius: 999px; cursor: pointer; padding: 6px 14px; text-decoration: none; display: inline-block; line-height: 1.4; }
+  .btn-main { background: linear-gradient(135deg, var(--red), #ff5a36); color: #fff !important; font-weight: 600; padding: 9px 20px; }
+  .btn-dim { background: rgba(255,255,255,.08); color: var(--ink) !important; border: 1px solid rgba(255,255,255,.14); font-size: 13px; }
+  .btn-dim:hover { background: rgba(255,255,255,.14); }
+  .btn-link { background: rgba(52,178,194,.14); color: #8fdbe6 !important; border: 1px solid rgba(52,178,194,.4); font-size: 13px; }
+  .btn-link:hover { background: var(--teal); color: #052024 !important; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 9px; border-bottom: 1px solid rgba(255,255,255,.07); vertical-align: middle; }
+  th { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; white-space: nowrap; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.nw { white-space: nowrap; }
+  tr.total td { border-top: 2px solid rgba(255,255,255,.18); border-bottom: 0; font-size: 15px; }
+  tr.row-link { cursor: pointer; }
+  tr.row-link:hover td { background: rgba(255,255,255,.035); }
+  .scroll { overflow-x: auto; }
+  .badge { display: inline-block; border-radius: 6px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+  .badge.cash { background: rgba(52,178,194,.18); color: #8fdbe6; }
+  .badge.credit { background: rgba(76,175,125,.2); color: #8fe0b4; }
+  .badge.pending { background: rgba(255,122,47,.2); color: #ffc38a; }
+  .badge.approved { background: rgba(52,178,194,.18); color: #8fdbe6; }
+  .badge.completed { background: rgba(76,175,125,.2); color: #8fe0b4; }
+  .badge.foil { background: rgba(214,44,40,.18); color: #ff9b8f; font-size: 11px; }
+  .who { font-weight: 600; }
+  .who small { display: block; color: var(--dim); font-weight: 400; font-size: 12.5px; }
+  .thumb { width: 38px; height: 53px; object-fit: cover; border-radius: 4px; background: #222; display: block; }
+  .card { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 13px 15px; }
+  .card .k { color: var(--dim); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
+  .card .v { font-size: 22px; font-weight: 700; margin-top: 2px; line-height: 1.25; }
+  .card .d { color: var(--dim); font-size: 13px; margin-top: 3px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .notes { background: rgba(255,122,47,.1); border: 1px solid rgba(255,122,47,.35); border-radius: 12px; padding: 10px 14px; margin: 12px 0; }
+  .muted { color: var(--dim); }
+  .down { color: #ff9b8f; }
+  .up { color: #8fe0b4; }
+  .err { color: #ff9b8f; }
+  .empty { background: rgba(255,255,255,.045); border: 1px dashed rgba(255,255,255,.16); border-radius: 12px; padding: 22px; text-align: center; color: var(--dim); }
+  .note { color: var(--dim); font-size: 13px; margin-top: 28px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; }
+  .login { max-width: 380px; margin: 12vh auto 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 26px; text-align: center; }
+  .login h1 { font-size: 20px; }
+  .login h1::after { margin-left: auto; margin-right: auto; }
+  .login input { width: 100%; font: inherit; font-size: 19px; letter-spacing: .35em; text-align: center; color: var(--ink);
+                 background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 11px; margin: 14px 0; }
+  .login input:focus { outline: 2px solid var(--amber); }
+  a { color: var(--teal); }
+  @media (max-width: 640px) { .card .v { font-size: 18px; } th, td { padding: 7px 6px; } }
+  @media print {
+    body { background: #fff; color: #000; font-size: 12px; }
+    .noprint, .note { display: none !important; }
+    .card, .notes { border-color: #999; background: none; }
+    .card .k, .card .d, .muted, .who small, h2 { color: #444; }
+    th, td { border-color: #bbb; }
+    .badge { border: 1px solid #999; background: none; color: #000; }
+    a { color: #000; text-decoration: none; }
+    .thumb { width: 26px; height: 36px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="page"></div>
+<script>
+/* Buylists — our own read-only window on BinderPOS's online buylists
+   (owner, 2026-09-09). The worker (src/portal.js) signs in to the portal
+   and answers /portal/buylists.json and /portal/buylist.json behind the
+   staff PIN (same one as /staff, /pickups and /deckstats, same lockout).
+   Approve / decline / complete are links into BinderPOS itself; nothing
+   on this page writes anywhere. */
+(function () {
+  var K = '';
+  try { K = localStorage.getItem('xgdk') || ''; } catch (e) {}
+  var page = document.getElementById('page');
+  var S = { status: 'pending', days: '90', rows: [], skip: 0, take: 50, more: false, q: '', busy: false, error: '', loaded: false, detail: null, detailId: '' };
+  try {
+    var saved = JSON.parse(localStorage.getItem('xgbl') || '{}');
+    if (/^(pending|approved|completed)$/.test(saved.status || '')) S.status = saved.status;
+    if (/^(30|90|365|all)$/.test(String(saved.days || ''))) S.days = String(saved.days);
+  } catch (e) {}
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function money(n) {
+    if (n == null || isNaN(n)) return '—';
+    return '$' + Number(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function when(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d)) return String(iso);
+    var opts = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleString('en-CA', opts);
+  }
+  function ago(iso) {
+    if (!iso) return '';
+    var ms = Date.now() - new Date(iso).getTime();
+    if (isNaN(ms)) return '';
+    var m = Math.round(ms / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + ' min ago';
+    var h = Math.round(m / 60);
+    if (h < 24) return h + ' h ago';
+    var d = Math.round(h / 24);
+    if (d < 14) return d + ' d ago';
+    if (d < 60) return Math.round(d / 7) + ' wk ago';
+    if (d < 365) return Math.round(d / 30) + ' mo ago';
+    return (d / 365).toFixed(1) + ' yr ago';
+  }
+  function isCredit(t) { return /credit/i.test(t || ''); }
+  function payBadge(t) { return '<span class="badge ' + (isCredit(t) ? 'credit' : 'cash') + '">' + esc(t || '—') + '</span>'; }
+  function stageBadge(s) { return '<span class="badge ' + esc(s) + '">' + esc(cap(s || '')) + '</span>'; }
+  function diffClass(live, quoted) {
+    if (live == null || quoted == null) return '';
+    if (Math.abs(live - quoted) < 0.005) return '';
+    return live < quoted ? 'down' : 'up';
+  }
+  function saveView() { try { localStorage.setItem('xgbl', JSON.stringify({ status: S.status, days: S.days })); } catch (e) {} }
+
+  function api(path) {
+    return fetch(path + (path.indexOf('?') > -1 ? '&' : '?') + 'k=' + encodeURIComponent(K), { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 403) throw new Error('pin');
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+          return j;
+        });
+      });
+  }
+
+  /* ---------------- login ---------------- */
+  function showLogin(msg) {
+    page.innerHTML =
+      '<div class="login"><h1>Buylists</h1>' +
+      '<p class="sub">Enter your staff PIN (same one as the staff, pickups and Deck Builder screens).</p>' +
+      '<input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="24">' +
+      (msg ? '<p class="err">' + esc(msg) + '</p>' : '') +
+      '<button class="btn-main" id="go">Open</button></div>';
+    var input = document.getElementById('pin');
+    input.focus();
+    function go() {
+      K = input.value.trim();
+      if (!K) return;
+      api('/portal/status.json').then(function (st) {
+        try { localStorage.setItem('xgdk', K); } catch (e) {}
+        if (!st.configured) { S.error = 'The BinderPOS staff login is not set on the worker yet (BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD).'; }
+        else if (!st.signedIn) { S.error = 'BinderPOS sign-in failed: ' + (st.error || 'unknown reason') + '. Was the portal password changed? Update the repo secret and redeploy.'; }
+        route();
+      }).catch(function (e) {
+        if (e.message === 'pin') showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.');
+        else showLogin('Could not reach the worker: ' + e.message);
+      });
+    }
+    document.getElementById('go').addEventListener('click', go);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+  }
+
+  /* ---------------- routing ---------------- */
+  function route() {
+    if (!K) return showLogin();
+    var m = location.hash.match(/^#\/b\/(\d+)/);
+    if (m) loadDetail(m[1]);
+    else { S.detail = null; S.detailId = ''; renderList(); if (!S.loaded && !S.busy) loadList(false); }
+  }
+  window.addEventListener('hashchange', route);
+
+  /* ---------------- list ---------------- */
+  function loadList(append) {
+    S.busy = true; S.error = '';
+    if (!append) { S.skip = 0; S.rows = []; }
+    renderList();
+    var p = '/portal/buylists.json?status=' + S.status + '&take=' + S.take + '&skip=' + S.skip + (S.days !== 'all' ? '&days=' + S.days : '');
+    var wanted = S.status + '|' + S.days;
+    api(p).then(function (d) {
+      if (wanted !== S.status + '|' + S.days) return;   // the user switched tabs meanwhile
+      S.rows = append ? S.rows.concat(d.rows || []) : (d.rows || []);
+      S.more = !!d.more;
+      S.skip = S.skip + (d.rows || []).length;
+      S.busy = false; S.loaded = true;
+      renderList();
+    }).catch(function (e) {
+      if (e.message === 'pin') { K = ''; return showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.'); }
+      S.busy = false; S.error = e.message; renderList();
+    });
+  }
+  function matches(r) {
+    if (!S.q) return true;
+    var q = S.q.toLowerCase();
+    return (r.customer.name + ' ' + r.customer.email + ' ' + r.id).toLowerCase().indexOf(q) > -1;
+  }
+  function dateHead() { return S.status === 'approved' ? 'Approved' : S.status === 'completed' ? 'Completed' : 'Submitted'; }
+  function renderList() {
+    var rows = S.rows.filter(matches);
+    var html =
+      '<div class="bar split noprint"><div><h1>Buylists</h1>' +
+      '<p class="sub">Online buylists from BinderPOS, read-only. Approving, declining and completing stay in BinderPOS, one click away on each row.</p></div>' +
+      '<div><button class="btn-dim" id="refresh">Refresh</button> <button class="btn-dim" id="logout">Log out</button></div></div>' +
+      '<div class="bar noprint"><div class="tabs">' +
+      ['pending', 'approved', 'completed'].map(function (s) { return '<button data-tab="' + s + '"' + (S.status === s ? ' class="on"' : '') + '>' + cap(s) + '</button>'; }).join('') +
+      '</div><select id="days">' +
+      [['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last year'], ['all', 'All time']].map(function (o) { return '<option value="' + o[0] + '"' + (S.days === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+      '</select><input type="search" id="q" placeholder="Filter by name, email or number" value="' + esc(S.q) + '"></div>';
+    if (S.error) html += '<p class="err">' + esc(S.error) + '</p>';
+    if (S.busy && !S.rows.length) html += '<div class="empty">Loading ' + esc(S.status) + ' buylists…</div>';
+    else if (!rows.length) html += '<div class="empty">' + (S.q ? 'No buylists match that filter.' : 'No ' + esc(S.status) + ' buylists in this range.') + '</div>';
+    else {
+      html += '<div class="scroll"><table><thead><tr><th>' + dateHead() + '</th><th>Customer</th><th>Payment</th><th class="num">#</th><th class="noprint"></th></tr></thead><tbody>';
+      rows.forEach(function (r) {
+        var d = S.status === 'approved' ? r.approved : S.status === 'completed' ? r.completed : r.submitted;
+        html += '<tr class="row-link" data-id="' + esc(r.id) + '">' +
+          '<td class="nw"><div>' + esc(when(d)) + '</div><small class="muted">' + esc(ago(d)) + '</small></td>' +
+          '<td><span class="who">' + esc(r.customer.name || '(no name)') + '<small>' + esc(r.customer.email) + '</small></span></td>' +
+          '<td>' + payBadge(r.paymentType) + '</td>' +
+          '<td class="num muted">' + esc(r.id) + '</td>' +
+          '<td class="nw noprint"><a href="#/b/' + esc(r.id) + '" class="btn btn-dim">View</a> ' +
+          '<a href="' + esc(r.portalUrl) + '" target="_blank" rel="noopener" class="btn btn-link" data-ext="1">BinderPOS ↗</a></td></tr>';
+      });
+      html += '</tbody></table></div>';
+      html += '<p class="muted" style="margin-top:10px">' + rows.length + ' shown' +
+        (S.more ? ' · <button class="btn-dim" id="more"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'Loading…' : 'Load 50 more') + '</button>' : '') + '</p>';
+    }
+    html += '<p class="note">Read straight from BinderPOS each time this page opens or refreshes; nothing is stored here. Times are in this device\'s time zone.</p>';
+    page.innerHTML = html;
+    var days = document.getElementById('days');
+    if (days) days.addEventListener('change', function () { S.days = days.value; saveView(); S.loaded = false; loadList(false); });
+    var q = document.getElementById('q');
+    if (q) q.addEventListener('input', function () {
+      var pos = q.selectionStart;
+      S.q = q.value;
+      renderList();
+      var nq = document.getElementById('q');
+      if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    var more = document.getElementById('more');
+    if (more) more.addEventListener('click', function () { loadList(true); });
+    var refresh = document.getElementById('refresh');
+    if (refresh) refresh.addEventListener('click', function () { S.loaded = false; loadList(false); });
+    var logout = document.getElementById('logout');
+    if (logout) logout.addEventListener('click', function () {
+      try { localStorage.removeItem('xgdk'); } catch (e) {}
+      K = ''; S.loaded = false; S.rows = []; showLogin();
+    });
+  }
+  page.addEventListener('click', function (e) {
+    var tab = e.target.closest && e.target.closest('[data-tab]');
+    if (tab) { S.status = tab.getAttribute('data-tab'); saveView(); S.loaded = false; loadList(false); return; }
+    if (e.target.closest && e.target.closest('a, button, input, select')) return;
+    var row = e.target.closest && e.target.closest('tr.row-link');
+    if (row) location.hash = '#/b/' + row.getAttribute('data-id');
+  });
+
+  /* ---------------- detail ---------------- */
+  function loadDetail(id) {
+    S.detailId = id; S.detail = null; S.error = '';
+    renderDetail();
+    api('/portal/buylist.json?id=' + encodeURIComponent(id)).then(function (d) {
+      if (S.detailId !== id) return;
+      S.detail = d; renderDetail();
+    }).catch(function (e) {
+      if (e.message === 'pin') { K = ''; return showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.'); }
+      S.error = e.message; renderDetail();
+    });
+  }
+  function linesTable(lines, withLive) {
+    var html = '<div class="scroll"><table><thead><tr><th></th><th>Card</th><th>Condition</th><th class="num">Qty</th><th class="num">Quoted cash</th><th class="num">Quoted credit</th>' +
+      (withLive ? '<th class="num">Live cash</th><th class="num">Live credit</th><th class="num">Sells for</th><th class="num">Max</th>' : '') + '</tr></thead><tbody>';
+    var t = { qty: 0, cash: 0, credit: 0, lcash: 0, lcredit: 0 };
+    lines.forEach(function (l) {
+      var lv = l.live || {};
+      t.qty += l.qty || 0; t.cash += l.cashTotal || 0; t.credit += l.creditTotal || 0;
+      if (lv.buy != null) t.lcash += lv.buy * l.qty;
+      if (lv.credit != null) t.lcredit += lv.credit * l.qty;
+      html += '<tr><td>' + (l.image ? '<img class="thumb" loading="lazy" src="' + esc(l.image) + '" alt="">' : '') + '</td>' +
+        '<td><div><strong>' + esc(l.name) + '</strong></div><small class="muted">' + esc([l.set, l.rarity, l.game].filter(Boolean).join(' · ')) + '</small></td>' +
+        '<td class="nw">' + esc(l.condition || '—') + (l.finish && l.finish !== 'Non-foil' ? ' <span class="badge foil">' + esc(l.finish) + '</span>' : '') + '</td>' +
+        '<td class="num"><strong>' + esc(l.qty) + '</strong></td>' +
+        '<td class="num">' + money(l.cash) + (l.qty > 1 ? '<br><small class="muted">' + money(l.cashTotal) + '</small>' : '') + '</td>' +
+        '<td class="num">' + money(l.credit) + (l.qty > 1 ? '<br><small class="muted">' + money(l.creditTotal) + '</small>' : '') + '</td>';
+      if (withLive) {
+        html += '<td class="num ' + diffClass(lv.buy, l.cash) + '">' + money(lv.buy) + '</td>' +
+          '<td class="num ' + diffClass(lv.credit, l.credit) + '">' + money(lv.credit) + '</td>' +
+          '<td class="num muted">' + money(lv.sell != null ? lv.sell : l.sell) + '</td>' +
+          '<td class="num muted' + (lv.max != null && l.qty > lv.max && !lv.overstock ? ' down' : '') + '">' + (lv.max != null ? esc(lv.max) + (lv.overstock ? '+' : '') : '—') + '</td>';
+      }
+      html += '</tr>';
+    });
+    html += '<tr class="total"><td></td><td><strong>Total</strong></td><td></td><td class="num"><strong>' + t.qty + '</strong></td>' +
+      '<td class="num"><strong>' + money(t.cash) + '</strong></td><td class="num"><strong>' + money(t.credit) + '</strong></td>' +
+      (withLive ? '<td class="num"><strong>' + money(t.lcash) + '</strong></td><td class="num"><strong>' + money(t.lcredit) + '</strong></td><td></td><td></td>' : '') +
+      '</tr></tbody></table></div>';
+    return html;
+  }
+  function renderDetail() {
+    var d = S.detail;
+    var html = '<div class="bar noprint"><a href="#/" class="btn btn-dim">‹ All ' + esc(S.status) + '</a></div>';
+    if (!d) {
+      html += S.error ? '<p class="err">' + esc(S.error) + '</p>' : '<div class="empty">Loading buylist ' + esc(S.detailId) + '…</div>';
+      page.innerHTML = html;
+      return;
+    }
+    var c = d.customer || {};
+    var credit = isCredit(d.paymentType);
+    var quoted = d.totals.quoted != null ? d.totals.quoted : (credit ? d.totals.quotedCredit : d.totals.quotedCash);
+    var live = credit ? d.totals.liveCredit : d.totals.liveCash;
+    html += '<div class="bar split"><div><h1>Buylist ' + esc(d.id) + '</h1>' +
+      '<p class="sub">' + stageBadge(d.stage) + ' ' + payBadge(d.paymentType) + ' · submitted ' + esc(when(d.submitted)) + ' <span class="muted">(' + esc(ago(d.submitted)) + ')</span>' +
+      (d.completed ? ' · completed ' + esc(when(d.completed)) : '') + '</p></div>' +
+      '<div class="noprint"><a class="btn btn-main" href="' + esc(d.portalUrl) + '" target="_blank" rel="noopener">Open in BinderPOS ↗</a> <button class="btn-dim" id="print">Print</button></div></div>';
+    html += '<div class="grid">' +
+      '<div class="card"><div class="k">Customer</div><div class="v">' + esc(c.name || '(no name)') + '</div>' +
+      (c.email ? '<div class="d"><a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a></div>' : '') +
+      (c.phone ? '<div class="d">' + esc(c.phone) + '</div>' : '') +
+      (c.shopifyId ? '<div class="d noprint"><a href="https://admin.shopify.com/store/most-wanted-ca/customers/' + esc(c.shopifyId) + '" target="_blank" rel="noopener">Shopify customer ↗</a></div>' : '') + '</div>' +
+      '<div class="card"><div class="k">Store credit balance</div><div class="v">' + money(c.storeCredit) + '</div>' +
+      (c.totalSpent != null ? '<div class="d">spent with us: ' + money(c.totalSpent) + '</div>' : '') +
+      (c.lastOrderName ? '<div class="d">last order ' + esc(c.lastOrderName) + '</div>' : '') + '</div>' +
+      '<div class="card"><div class="k">Quoted ' + (credit ? 'in store credit' : 'in cash') + '</div><div class="v">' + money(quoted) + '</div>' +
+      '<div class="d">' + esc(d.totals.cards) + ' cards on ' + esc(d.totals.lines) + ' lines · ' + (credit ? 'cash would be ' + money(d.totals.quotedCash) : 'credit would be ' + money(d.totals.quotedCredit)) + '</div></div>' +
+      '<div class="card"><div class="k">Buy prices right now</div><div class="v">' + (d.priceError ? '—' : money(live)) + '</div>' +
+      '<div class="d">' + (d.priceError ? '<span class="err">live prices unavailable: ' + esc(d.priceError) + '</span>' :
+        esc(d.totals.livePriced) + ' of ' + esc(d.totals.lines) + ' lines priced · cash ' + money(d.totals.liveCash) + ' / credit ' + money(d.totals.liveCredit)) + '</div></div></div>';
+    if (d.declinedReason || d.approvedNotes || c.notes) {
+      html += '<div class="notes">' +
+        (d.declinedReason ? '<div><strong>Declined:</strong> ' + esc(d.declinedReason) + '</div>' : '') +
+        (d.approvedNotes ? '<div><strong>Approval notes:</strong> ' + esc(d.approvedNotes) + '</div>' : '') +
+        (c.notes ? '<div><strong>Customer notes:</strong> ' + esc(c.notes) + '</div>' : '') + '</div>';
+    }
+    html += '<h2>Cards as submitted</h2>' + (d.lines.length ? linesTable(d.lines, true) : '<div class="empty">No lines on this buylist.</div>');
+    if (d.finalLines && d.finalLines.length) {
+      html += '<h2>Final, as ' + (d.stage === 'completed' ? 'completed' : 'approved') + '</h2>' + linesTable(d.finalLines, false);
+    }
+    html += '<p class="note">Quoted prices are what the customer saw when they submitted. Live columns are what BinderPOS pays for the same card and condition right now: red when it dropped, green when it rose. "Max" is the most copies the buylist takes (a plus means overstock is still accepted at a lower price).</p>';
+    page.innerHTML = html;
+    var print = document.getElementById('print');
+    if (print) print.addEventListener('click', function () { window.print(); });
+    window.scrollTo(0, 0);
+  }
+
+  route();
+})();
+</script>
+</body>
+</html>
