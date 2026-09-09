@@ -3,7 +3,14 @@ name: dom-probe
 # Read-only diagnostic: open a page in headless Chrome, let its scripts
 # settle, and print every text node that equals the given text with its
 # ancestor chain, whether it is visible, and the markup around it. Answers
-# "what is printing this, and why twice" without guessing.
+# "what is printing this, and why twice" without guessing. Also reports
+# which theme rendered (Shopify.theme), the deck-list nudge's state and the
+# first bracketed result titles, for search-page checks.
+#
+# A preview_theme_id in the URL is honoured only after the storefront has
+# set its preview cookie, and the search app's proxy path does not set it,
+# so the probe first visits the home page with the parameter, then the
+# target.
 
 on:
   workflow_dispatch:
@@ -37,11 +44,24 @@ jobs:
             const page = await browser.newPage();
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36');
             await page.setViewport({ width: 1366, height: 900 });
+            const target = new URL(process.env.URL);
+            const pt = target.searchParams.get('preview_theme_id');
+            if (pt) {
+              const warm = await page.goto(target.origin + '/?preview_theme_id=' + pt, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => null);
+              console.log('preview warm-up', warm ? warm.status() : 'none', '| theme now', await page.evaluate(() => JSON.stringify(window.Shopify && window.Shopify.theme)).catch(() => '?'));
+            }
             const r = await page.goto(process.env.URL, { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
             console.log('status', r ? r.status() : 'none', '| title', await page.title());
+            console.log('theme', await page.evaluate(() => JSON.stringify(window.Shopify && window.Shopify.theme)).catch(() => '?'));
             const head = await page.evaluate(() => document.body.innerText.slice(0, 160).replace(/\s+/g, ' '));
             if (/just a moment|verify you are human/i.test(head)) { console.log('CLOUDFLARE CHALLENGE - the runner was not let in'); await browser.close(); return; }
-            await new Promise(res => setTimeout(res, 7000));
+            await new Promise(res => setTimeout(res, 9000));
+            const extra = await page.evaluate(() => {
+              const n = document.getElementById('xg-decknote');
+              const titles = Array.from(document.querySelectorAll('a')).map(a => (a.textContent || '').trim()).filter(t => /\[[^\]]{2,}\]/.test(t)).slice(0, 3);
+              return { decknote: n ? (n.hidden ? 'present, hidden' : 'present, shown') : 'absent', bracketTitles: titles };
+            });
+            console.log('deck-list nudge:', extra.decknote, '| bracketed titles:', JSON.stringify(extra.bracketTitles));
             const out = await page.evaluate((text) => {
               const hits = [];
               const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
