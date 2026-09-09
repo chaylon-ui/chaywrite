@@ -54,7 +54,8 @@ for (const o of buys) {
 if (offsets.length) {
   offsets.sort((a, b) => a - b);
   console.log(`\noffsets between order and stock rise: min ${offsets[0]}s, median ${offsets[Math.floor(offsets.length / 2)]}s, max ${offsets[offsets.length - 1]}s (window ${d.windows.orderLeadS}s before to ${d.windows.orderLagS}s after)`);
-  if (offsets[0] < -(d.windows.orderLeadS - 30) || offsets[offsets.length - 1] > d.windows.orderLagS - 15) problem("offsets are close to the window edges; widen the window");
+  // offset = rise minus order: negative means the rise came first (allowed up to orderLagS), positive means after (allowed up to orderLeadS)
+  if (offsets[0] < -(d.windows.orderLagS - 15) || offsets[offsets.length - 1] > d.windows.orderLeadS - 60) problem("offsets are close to the window edges; widen the window");
 }
 if (missed) problem(missed + " buy cart(s) with no matched rise (baseline missing, or the window is wrong)");
 
