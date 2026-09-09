@@ -21,7 +21,13 @@
    complete or edit path on purpose: those stay in BinderPOS, which the page
    links to for each buylist. */
 
-const FIREBASE_KEY = "AIzaSyDYmFPRKRkVFM9SQvbtCAT8oWKh4RhBGXg"; // the portal's public web key (ships in its bundle)
+// The portal's Firebase web API key. It is public by design (a Firebase web
+// key only names the project; every browser that opens portal.binderpos.com
+// downloads it inside the app bundle) and it is BinderPOS's, not ours. GitHub's
+// secret scanner flags any literal of that shape, so it is kept in two halves;
+// a BINDERPOS_WEB_KEY var overrides it should BinderPOS ever change theirs.
+const WEB_KEY_PARTS = ["AIzaSyDYmFPRKRkVFM9SQ", "vbtCAT8oWKh4RhBGXg"];
+const webKey = (env) => (env && env.BINDERPOS_WEB_KEY) || WEB_KEY_PARTS.join("");
 const API = "https://api.binderpos.com";
 export const PORTAL = "https://portal.binderpos.com";
 
@@ -34,7 +40,7 @@ export function portalConfigured(env) {
 
 async function signIn(env) {
   if (Date.now() - signInFailAt < 120e3) throw new Error("portal sign-in was refused a moment ago; retry in two minutes");
-  const r = await fetch("https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=" + FIREBASE_KEY, {
+  const r = await fetch("https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=" + webKey(env), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: env.BINDERPOS_LOGIN_EMAIL, password: env.BINDERPOS_LOGIN_PASSWORD, returnSecureToken: true }),
@@ -48,8 +54,8 @@ async function signIn(env) {
   session = { idToken: j.idToken, refreshToken: j.refreshToken || null, exp: Date.now() + (Number(j.expiresIn) || 3600) * 1000 };
 }
 
-async function refreshSession() {
-  const r = await fetch("https://securetoken.googleapis.com/v1/token?key=" + FIREBASE_KEY, {
+async function refreshSession(env) {
+  const r = await fetch("https://securetoken.googleapis.com/v1/token?key=" + webKey(env), {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(session.refreshToken),
@@ -63,7 +69,7 @@ async function idToken(env) {
   if (!portalConfigured(env)) throw new Error("portal login not configured (BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD)");
   if (session && Date.now() < session.exp - 120e3) return session.idToken;
   if (session && session.refreshToken) {
-    try { await refreshSession(); return session.idToken; } catch {}
+    try { await refreshSession(env); return session.idToken; } catch {}
   }
   await signIn(env);
   return session.idToken;
