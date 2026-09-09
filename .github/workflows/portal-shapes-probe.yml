@@ -1,0 +1,145 @@
+name: Portal shapes probe
+
+# Read-only, browser-free follow-up to portal-buylists-probe: sign in to the
+# BinderPOS portal the way its own web app does (Firebase Identity Toolkit,
+# REST) with the staff login held as repo Actions secrets, then print the
+# SHAPES the worker's pending-buylist screen needs:
+#   - the field names of a buylist's detail lines (quantity, condition, price)
+#   - the request body the portal sends to /api/buylists/cards/allPrices
+#     (read out of the portal's JS bundle, then tried live)
+#   - whether the GraphQL API offers a count for paging
+# Nothing is written to BinderPOS. Log hygiene: tokens are never printed
+# (only their lengths); emails, names and contact fields are masked.
+#
+# Secrets required (Settings -> Secrets and variables -> Actions):
+#   BINDERPOS_LOGIN_EMAIL      portal login email
+#   BINDERPOS_LOGIN_PASSWORD   portal login password
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Sign in (REST) and print the buylist JSON shapes (masked)
+        env:
+          EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
+          PASS: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
+        run: |
+          if [ -z "$EMAIL" ] || [ -z "$PASS" ]; then
+            echo "Secrets not set. Add BINDERPOS_LOGIN_EMAIL and BINDERPOS_LOGIN_PASSWORD"
+            echo "under repo Settings -> Secrets and variables -> Actions, then re-run."
+            exit 0
+          fi
+          node <<'EOF'
+          const KEY = 'AIzaSyDYmFPRKRkVFM9SQvbtCAT8oWKh4RhBGXg';   // the portal's public Firebase web key (ships in its bundle)
+          const API = 'https://api.binderpos.com';
+          const PORTAL = 'https://portal.binderpos.com';
+          const H = (tok) => ({ 'authorization': 'Bearer ' + tok, 'accept': 'application/json', 'content-type': 'application/json', 'origin': PORTAL, 'referer': PORTAL + '/' });
+          const mask = (s) => String(s)
+            .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
+            .replace(/("(firstName|lastName|name|phone|phoneNumber|addressLine1|addressLine2|zipCode|notes|address|storeName)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
+          const t0 = Date.now();
+          (async () => {
+            const r = await fetch('https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=' + KEY, {
+              method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email: process.env.EMAIL, password: process.env.PASS, returnSecureToken: true }),
+            });
+            const j = await r.json().catch(() => ({}));
+            console.log('verifyPassword:', r.status, '| keys:', Object.keys(j).join(','), '| idToken chars:', String(j.idToken || '').length, '| refreshToken chars:', String(j.refreshToken || '').length, '| expiresIn:', j.expiresIn, j.error ? '| error: ' + JSON.stringify(j.error).slice(0, 300) : '', '| ms', Date.now() - t0);
+            if (!j.idToken) return;
+            const tok = j.idToken;
+            const get = async (p) => { const x = await fetch(API + p, { headers: H(tok) }); return { status: x.status, text: await x.text() }; };
+            const post = async (p, body) => { const x = await fetch(API + p, { method: 'POST', headers: H(tok), body: JSON.stringify(body) }); return { status: x.status, text: await x.text() }; };
+            const gql = (query, variables) => post('/graphql', { query, variables });
+
+            // refresh, as the worker will do it every hour
+            const rf = await fetch('https://securetoken.googleapis.com/v1/token?key=' + KEY, {
+              method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+              body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(j.refreshToken),
+            });
+            const rj = await rf.json().catch(() => ({}));
+            console.log('securetoken refresh:', rf.status, '| keys:', Object.keys(rj).join(','), '| id_token chars:', String(rj.id_token || '').length, '| expires_in:', rj.expires_in);
+
+            const s = await get('/api/screens/forMe');
+            console.log('screens/forMe:', s.status, s.text.slice(0, 200));
+
+            const Q = 'query GetBuylists($where: ShopifyCustomerBuylistWhereInput, $orderBy: [ShopifyCustomerBuylistOrderByWithRelationInput!], $take: Int, $skip: Int) { ShopifyCustomerBuylist(take: $take, skip: $skip, where: $where, orderBy: $orderBy) { id dateSubmitted dateApproved dateCompleted paymentType approved completed ShopifyCustomer { firstName lastName email } } }';
+            const wherePending = { approved: { equals: false }, completed: { equals: false }, dateSubmitted: { not: null } };
+            const pend = await gql(Q, { where: wherePending, take: 3, skip: 0, orderBy: [{ dateSubmitted: 'desc' }] });
+            console.log('pending, newest 3:', pend.status, mask(pend.text).slice(0, 1500));
+            const since = await gql(Q, { where: Object.assign({}, wherePending, { dateSubmitted: { gte: '2026-06-01T00:00:00.000Z' } }), take: 50, skip: 0, orderBy: [{ dateSubmitted: 'desc' }] });
+            let sinceN = -1; try { sinceN = JSON.parse(since.text).data.ShopifyCustomerBuylist.length; } catch {}
+            console.log('pending since 2026-06-01 (gte filter):', since.status, 'rows', sinceN, sinceN < 0 ? since.text.slice(0, 300) : '');
+            const appr = await gql(Q, { where: { approved: { equals: true }, completed: { equals: false } }, take: 2, skip: 0, orderBy: [{ dateApproved: 'desc' }] });
+            console.log('approved-not-completed, newest 2:', appr.status, mask(appr.text).slice(0, 700));
+            const done = await gql(Q, { where: { completed: { equals: true } }, take: 2, skip: 0, orderBy: [{ dateCompleted: 'desc' }] });
+            console.log('completed, newest 2:', done.status, mask(done.text).slice(0, 700));
+            for (const q of [
+              '{ aggregateShopifyCustomerBuylist(where: { approved: { equals: false }, completed: { equals: false }, dateSubmitted: { not: null } }) { _count { id } } }',
+              '{ ShopifyCustomerBuylistCount(where: { approved: { equals: false }, completed: { equals: false }, dateSubmitted: { not: null } }) }',
+              '{ countShopifyCustomerBuylist(where: { approved: { equals: false }, completed: { equals: false } }) }',
+            ]) {
+              const c = await gql(q, {});
+              console.log('count try:', q.slice(0, 40), '->', c.status, c.text.slice(0, 260));
+            }
+
+            let ids = []; try { ids = JSON.parse(pend.text).data.ShopifyCustomerBuylist.map(b => b.id); } catch {}
+            const id = ids[0];
+            let lines = [];
+            if (id) {
+              const d = await get('/api/buylist/byId/' + id + '/details');
+              let dj = null; try { dj = JSON.parse(d.text); } catch {}
+              console.log('details ' + id + ':', d.status, 'bytes', d.text.length);
+              if (dj) {
+                const top = {};
+                for (const k of Object.keys(dj)) top[k] = Array.isArray(dj[k]) ? '[' + dj[k].length + ' items]' : (dj[k] && typeof dj[k] === 'object' ? '{' + Object.keys(dj[k]).join(',') + '}' : dj[k]);
+                console.log('details top-level:', mask(JSON.stringify(top)));
+                lines = dj.shopifyCustomerBuylistDetails || [];
+                const keys = new Set(); lines.forEach(l => Object.keys(l).forEach(k => keys.add(k)));
+                console.log('line keys (union over ' + lines.length + ' lines):', Array.from(keys).join(','));
+                console.log('line[0]:', mask(JSON.stringify(lines[0])).slice(0, 2500));
+                if (lines[1]) console.log('line[1]:', mask(JSON.stringify(lines[1])).slice(0, 1200));
+              } else console.log('details body head:', mask(d.text).slice(0, 400));
+            }
+
+            // the portal bundle: how does it build the allPrices request, and which other buylist endpoints exist?
+            const html = await (await fetch(PORTAL + '/')).text();
+            const srcs = Array.from(html.matchAll(/<script[^>]+src="([^"]+)"/g)).map(m => m[1]).filter(s => /\.js/.test(s));
+            console.log('portal scripts:', srcs.join(' | ') || 'none found in HTML head');
+            const seen = new Set();
+            const scan = async (u, depth) => {
+              if (seen.has(u) || seen.size > 60) return;
+              seen.add(u);
+              const res = await fetch(u).catch(() => null);
+              if (!res || !res.ok) return;
+              const js = await res.text();
+              for (const needle of ['allPrices', 'buylist/byId', 'buylists/pending', 'buylistGames', 'buylist/games', 'buylistDetails', 'approveBuylist', 'ShopifyCustomerBuylist(']) {
+                let at = -1, n = 0;
+                while ((at = js.indexOf(needle, at + 1)) !== -1 && n++ < 2) console.log('[' + needle + '] ' + u.slice(-48) + ' @' + at + ': ' + js.slice(Math.max(0, at - 420), at + 320).replace(/\s+/g, ' '));
+              }
+              if (depth > 0) {
+                // lazy chunks referenced by the main bundle
+                const chunks = Array.from(new Set(Array.from(js.matchAll(/["'](\/?static\/js\/[\w.-]+\.js|[\w.-]+\.chunk\.js)["']/g)).map(m => m[1])));
+                for (const c of chunks.slice(0, 50)) await scan(c.startsWith('http') ? c : PORTAL + '/' + c.replace(/^\//, ''), depth - 1);
+              }
+            };
+            for (const src of srcs) await scan(src.startsWith('http') ? src : PORTAL + '/' + src.replace(/^\//, ''), 1);
+            console.log('bundle files scanned:', seen.size);
+
+            // live tries of the likely request bodies (card ids from the buylist above)
+            const cardIds = Array.from(new Set(lines.map(l => l.cardId).filter(Boolean))).slice(0, 4);
+            if (cardIds.length) {
+              for (const body of [{ cardIds }, cardIds, { ids: cardIds }, { cards: cardIds.map(c => ({ cardId: c })) }, { cardIds, game: lines[0] && lines[0].gameId }, cardIds.map(c => ({ cardId: c })), cardIds.map(c => ({ id: c }))]) {
+                const p = await post('/api/buylists/cards/allPrices', body);
+                console.log('allPrices with', JSON.stringify(body).slice(0, 90), '->', p.status, p.text.slice(0, 220).replace(/\s+/g, ' '));
+                if (p.status === 200 && /^\s*\[\s*\{/.test(p.text)) break;
+              }
+            }
+            console.log('done in ms', Date.now() - t0);
+          })().catch(e => console.log('probe error:', e.message));
+          EOF
