@@ -1,0 +1,76 @@
+name: Bundle peek
+
+# Credential-free diagnostic: fetch a PUBLIC file (a site's JS bundle, an
+# HTML page) and print either a character range of it or the context around
+# every hit of a needle. The sandbox this worker is developed from has no
+# egress to most hosts, so this is how a third party's client code gets
+# read. Nothing is logged in; nothing is written anywhere.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Public file to read"
+        required: true
+        default: "https://portal.binderpos.com/static/js/main.8ca9fbb6.chunk.js"
+      needle:
+        description: "Text to find (optional)"
+        required: false
+        default: ""
+      context:
+        description: "Characters of context on each side of a hit"
+        required: false
+        default: "600"
+      max:
+        description: "Most hits to print"
+        required: false
+        default: "5"
+      start:
+        description: "Print this character range: start (optional)"
+        required: false
+        default: ""
+      end:
+        description: "Print this character range: end (optional)"
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  peek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Fetch and print
+        env:
+          URL: ${{ inputs.url }}
+          NEEDLE: ${{ inputs.needle }}
+          CTX: ${{ inputs.context }}
+          MAX: ${{ inputs.max }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: |
+          node <<'EOF'
+          (async () => {
+            const r = await fetch(process.env.URL, { headers: { 'user-agent': 'Mozilla/5.0 (bundle-peek)' } });
+            const js = await r.text();
+            console.log('status', r.status, '| chars', js.length, '| content-type', r.headers.get('content-type'));
+            const s = parseInt(process.env.START, 10), e = parseInt(process.env.END, 10);
+            if (!isNaN(s) && !isNaN(e) && e > s) {
+              console.log('=== range', s, '-', e, '===');
+              console.log(js.slice(s, e));
+            }
+            const needle = process.env.NEEDLE || '';
+            if (needle) {
+              const ctx = Math.max(0, parseInt(process.env.CTX, 10) || 600);
+              const max = Math.max(1, parseInt(process.env.MAX, 10) || 5);
+              let at = -1, n = 0;
+              while ((at = js.indexOf(needle, at + 1)) !== -1 && n < max) {
+                n++;
+                console.log('=== hit', n, '@', at, '===');
+                console.log(js.slice(Math.max(0, at - ctx), at + needle.length + ctx));
+              }
+              console.log('hits printed:', n, n >= max ? '(more may exist)' : '');
+            }
+          })().catch(e => console.log('peek error:', e.message));
+          EOF
