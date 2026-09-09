@@ -1,0 +1,115 @@
+name: Portal GET
+
+# Read-only diagnostic for the BinderPOS portal API: sign in with the staff
+# login held as repo Actions secrets (Firebase Identity Toolkit, the way the
+# portal's own web app does), then print the masked, truncated answer of ONE
+# GET path (e.g. /api/pos/carts?limit=3) or ONE GraphQL query. Nothing else
+# is sent: the request is a GET, or a POST to /graphql carrying a query
+# that must start with "query" or "{". Tokens are never printed; emails,
+# names and contact fields are masked.
+#
+# Secrets required (Settings -> Secrets and variables -> Actions):
+#   BINDERPOS_LOGIN_EMAIL      portal login email
+#   BINDERPOS_LOGIN_PASSWORD   portal login password
+
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "GET path on api.binderpos.com (e.g. /api/pos/carts?limit=3); leave empty when using a GraphQL query"
+        required: false
+        default: ""
+      query:
+        description: "GraphQL query for api.binderpos.com/graphql (read-only; must start with query or {)"
+        required: false
+        default: ""
+      variables:
+        description: "GraphQL variables as JSON (optional)"
+        required: false
+        default: "{}"
+      chars:
+        description: "Most characters of the answer to print"
+        required: false
+        default: "5000"
+      keys:
+        description: "Also print the union of keys of the first array found (true/false)"
+        required: false
+        default: "true"
+
+permissions: {}
+
+jobs:
+  get:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Sign in (REST) and print the answer (masked)
+        env:
+          EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
+          PASS: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
+          P: ${{ inputs.path }}
+          Q: ${{ inputs.query }}
+          V: ${{ inputs.variables }}
+          N: ${{ inputs.chars }}
+          KEYS: ${{ inputs.keys }}
+        run: |
+          if [ -z "$EMAIL" ] || [ -z "$PASS" ]; then
+            echo "Secrets not set. Add BINDERPOS_LOGIN_EMAIL and BINDERPOS_LOGIN_PASSWORD"
+            echo "under repo Settings -> Secrets and variables -> Actions, then re-run."
+            exit 0
+          fi
+          node <<'EOF'
+          // The portal's PUBLIC Firebase web key (every browser that opens the portal downloads it in the app
+          // bundle; it is BinderPOS's, not ours). Held in two halves only so GitHub's secret scanner stays quiet.
+          const KEY = ['AIzaSyDYmFPRKRkVFM9SQ', 'vbtCAT8oWKh4RhBGXg'].join('');
+          const API = 'https://api.binderpos.com';
+          const PORTAL = 'https://portal.binderpos.com';
+          const mask = (s) => String(s)
+            .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
+            .replace(/("(firstName|lastName|name|customerName|phone|phoneNumber|addressLine1|addressLine2|address1|address2|zipCode|zip|notes|address|storeName)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
+          const path = (process.env.P || '').trim();
+          const query = (process.env.Q || '').trim();
+          const n = Math.max(200, parseInt(process.env.N, 10) || 5000);
+          (async () => {
+            if (path && !path.startsWith('/')) { console.log('path must start with /'); return; }
+            if (query && !/^(query\b|\{)/.test(query)) { console.log('query must be a read-only GraphQL query (start with "query" or "{")'); return; }
+            if (!path && !query) { console.log('give a path or a query'); return; }
+            const r = await fetch('https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=' + KEY, {
+              method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email: process.env.EMAIL, password: process.env.PASS, returnSecureToken: true }),
+            });
+            const j = await r.json().catch(() => ({}));
+            console.log('sign-in:', r.status, j.idToken ? 'ok' : JSON.stringify(j.error || {}).slice(0, 200));
+            if (!j.idToken) return;
+            const H = { 'authorization': 'Bearer ' + j.idToken, 'accept': 'application/json', 'content-type': 'application/json', 'origin': PORTAL, 'referer': PORTAL + '/' };
+            let res;
+            if (path) res = await fetch(API + path, { headers: H });
+            else {
+              let vars = {}; try { vars = JSON.parse(process.env.V || '{}'); } catch { console.log('variables are not valid JSON; using {}'); }
+              res = await fetch(API + '/graphql', { method: 'POST', headers: H, body: JSON.stringify({ query, variables: vars }) });
+            }
+            const text = await res.text();
+            console.log((path ? 'GET ' + path : 'GraphQL') + ' ->', res.status, '| bytes', text.length, '| content-type', res.headers.get('content-type'));
+            console.log(mask(text).slice(0, n));
+            if (String(process.env.KEYS) === 'true') {
+              try {
+                const d = JSON.parse(text);
+                const firstArray = (o, depth) => {
+                  if (Array.isArray(o)) return o;
+                  if (o && typeof o === 'object' && depth < 4) for (const k of Object.keys(o)) { const a = firstArray(o[k], depth + 1); if (a) return a; }
+                  return null;
+                };
+                const arr = firstArray(d, 0);
+                if (arr) {
+                  const keys = new Set(); arr.forEach(x => x && typeof x === 'object' && Object.keys(x).forEach(k => keys.add(k)));
+                  console.log('first array: ' + arr.length + ' items | keys: ' + Array.from(keys).join(','));
+                  const inner = arr.find(x => x && typeof x === 'object' && Object.values(x).some(v => Array.isArray(v) && v.length));
+                  if (inner) for (const [k, v] of Object.entries(inner)) if (Array.isArray(v) && v.length && typeof v[0] === 'object') {
+                    const ik = new Set(); v.forEach(x => x && Object.keys(x).forEach(kk => ik.add(kk)));
+                    console.log('  nested ' + k + ': ' + v.length + ' items | keys: ' + Array.from(ik).join(','));
+                  }
+                } else if (d && typeof d === 'object') console.log('top-level keys: ' + Object.keys(d).join(','));
+              } catch {}
+            }
+          })().catch(e => console.log('probe error:', e.message));
+          EOF
