@@ -1,0 +1,47 @@
+# Read-only look at what Cloudflare's edge saw for exorgames.com, by day and
+# country, plus the state of the bot rules. Answers "is the Singapore traffic
+# coming through Cloudflare (then the rule can stop it) or around it".
+# Prints counts and rule text only; never the token.
+name: cf-traffic
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back"
+        required: false
+        default: "21"
+permissions: {}
+jobs:
+  traffic:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_ZONE_TOKEN != '' && secrets.CLOUDFLARE_ZONE_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+      DAYS: ${{ inputs.days || '21' }}
+      ZONE: exorgames.com
+    steps:
+      - name: Requests by day and country, and the bot rules (read-only)
+        run: |
+          api() { curl -s -H "Authorization: Bearer $CF_TOKEN" -H 'content-type: application/json' "$@"; }
+          B=https://api.cloudflare.com/client/v4
+          ZID=$(api "$B/zones?name=$ZONE" | jq -r '.result[0].id // empty')
+          if [ -z "$ZID" ]; then echo "zone not visible to this token"; exit 1; fi
+          echo "== proxy state =="
+          api "$B/zones/$ZID/dns_records?per_page=50" | jq -r '.result[]? | select(.type=="A" or .type=="CNAME") | "\(.name) \(.type) -> \(.content) proxied=\(.proxied)"'
+          echo "== custom WAF rules =="
+          api "$B/zones/$ZID/rulesets/phases/http_request_firewall_custom/entrypoint" | jq -r '.result.rules[]? | "enabled=\(.enabled) action=\(.action) :: \(.description) :: \(.expression)"'
+          echo "== rate limit rules =="
+          api "$B/zones/$ZID/rulesets/phases/http_ratelimit/entrypoint" | jq -r '.result.rules[]? | "enabled=\(.enabled) action=\(.action) :: \(.description) :: \(.expression) :: \(.ratelimit | tostring)"'
+          echo "== bot fight mode / challenge passage / security level =="
+          api "$B/zones/$ZID/bot_management" | jq -c '.result | {fight_mode, ai_bots_protection, enable_js}'
+          api "$B/zones/$ZID/settings/challenge_ttl" | jq -c '{challenge_ttl_seconds: .result.value}'
+          api "$B/zones/$ZID/settings/security_level" | jq -c '{security_level: .result.value}'
+          SINCE=$(date -u -d "-$DAYS days" +%F)
+          echo "== requests per day, top countries (Cloudflare edge, since $SINCE) =="
+          Q='query($zid:String!,$since:Date!){viewer{zones(filter:{zoneTag:$zid}){httpRequests1dGroups(filter:{date_geq:$since},limit:60,orderBy:[date_ASC]){dimensions{date} sum{requests pageViews threats countryMap{clientCountryName requests threats}}}}}}'
+          BODY=$(jq -nc --arg q "$Q" --arg zid "$ZID" --arg since "$SINCE" '{query:$q, variables:{zid:$zid, since:$since}}')
+          RESP=$(api -X POST "$B/graphql" --data "$BODY")
+          ERR=$(echo "$RESP" | jq -c '.errors // empty')
+          if [ -n "$ERR" ] && [ "$ERR" != "null" ]; then echo "graphql errors: $ERR"; fi
+          echo "$RESP" | jq -r '.data.viewer.zones[0].httpRequests1dGroups[]? | "\(.dimensions.date)  requests=\(.sum.requests)  pageViews=\(.sum.pageViews)  threats=\(.sum.threats)  " + ([.sum.countryMap[] | select(.requests >= 50)] | sort_by(-.requests) | .[:8] | map("\(.clientCountryName)=\(.requests)") | join(" "))'
+          echo "== Singapore, China, Hong Kong per day =="
+          echo "$RESP" | jq -r '.data.viewer.zones[0].httpRequests1dGroups[]? | "\(.dimensions.date)  " + ([.sum.countryMap[] | select(.clientCountryName | IN("SG","CN","HK","Singapore","China","Hong Kong"))] | map("\(.clientCountryName)=\(.requests)") | join(" "))'
