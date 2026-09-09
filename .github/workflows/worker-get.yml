@@ -3,9 +3,9 @@ name: Worker GET
 # Read-only diagnostic: GET one or more paths on the deployed worker and
 # print the masked, truncated answers. The sandbox this worker is developed
 # from has no egress to workers.dev, so this is how a live page is read.
-# With pin=true the staff PIN is read from src/config.js in this checkout
-# and appended as k= (never printed); if the owner has changed the PIN in
-# /admin the gated pages simply answer 403.
+# With pin=true the staff PIN is read from src/config.js on the worker
+# branch and appended as k= (never printed); if the owner has changed the
+# PIN in /admin the gated pages simply answer 403.
 
 on:
   workflow_dispatch:
@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: claude/shopify-site-improvements-ztgdt8
       - name: Fetch and print (masked)
         env:
           PATHS: ${{ inputs.paths }}
@@ -46,7 +48,8 @@ jobs:
             .replace(/("(firstName|lastName|name|customerName|customer|phone|email)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
           let K = '';
           if (String(process.env.PIN) === 'true') {
-            const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+            let src = ''; try { src = fs.readFileSync('src/config.js', 'utf8'); } catch {}
+            const m = src.match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
             K = m ? m[1] : '';
             console.log('staff PIN from src/config.js:', K ? 'found' : 'NOT found');
           }
