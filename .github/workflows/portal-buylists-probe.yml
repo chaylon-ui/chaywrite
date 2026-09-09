@@ -14,7 +14,9 @@ name: Portal buylists probe
 # Log hygiene: auth-ish URLs are listed by method and status only; request
 # headers are never printed, and request bodies only for GraphQL (query text
 # and variables); storage and cookie NAMES print with value lengths only;
-# buylist JSON prints truncated with emails and contact fields masked.
+# buylist JSON prints truncated with emails and contact fields masked. The
+# schema questions (introspection and one buylist read) reuse the token the
+# page itself obtained, held in memory only.
 
 on:
   workflow_dispatch:
@@ -55,6 +57,7 @@ jobs:
             const authCalls = [];
             const gql = [];
             let bearer = null;
+            let tokenHeader = null;   // the page's own API token, kept in memory for the read-only schema questions below; never printed
             page.on('request', (req) => {
               try {
                 const url = req.url();
@@ -62,6 +65,7 @@ jobs:
                 const h = req.headers();
                 const a = h['authorization'] || h['Authorization'];
                 if (a && !bearer) bearer = a.split(' ')[0] + ' (' + a.length + ' chars)';
+                if (a && /api\.binderpos\.com/i.test(url)) tokenHeader = a;
                 if (SENSITIVE.test(url)) authCalls.push({ method: req.method(), url, post: req.postData() ? req.postData().length : 0 });
                 // GraphQL request bodies are query text and variables, not credentials (the token rides in a header, never printed)
                 else if (/binderpos\.com\/graphql/i.test(url) && req.method() === 'POST') gql.push({ url, body: mask(String(req.postData() || '').slice(0, 1800)) });
@@ -148,29 +152,58 @@ jobs:
             const before = seen.length;
             const hasDetail = () => seen.slice(before).some(e => e.body && /\/graphql/.test(e.url) && /card|quantity/i.test(e.body));
             if (firstName) {
-              // click the row that shows the name; never a button, link or input
-              const clicked = await page.evaluate((name) => {
-                const bad = (el) => el.closest('button, a, input, [role="button"]');
-                const els = Array.from(document.querySelectorAll('td, div, span, p, li, tr')).filter(el => el.children.length === 0 && el.textContent.trim().indexOf(name) === 0 && !bad(el));
-                const el = els[0];
-                if (!el) return 'no element shows that name';
-                const row = el.closest('tr, [role="row"], li') || el;
-                row.click();
-                return 'clicked ' + row.tagName.toLowerCase() + ' "' + row.textContent.trim().slice(0, 60) + '"';
+              // the row that shows the name: list its controls (names and classes only), then click one only if it is clearly "view"
+              const info = await page.evaluate((name) => {
+                const leaf = Array.from(document.querySelectorAll('td, div, span, p, li, tr')).find(el => el.children.length === 0 && el.textContent.trim().indexOf(name) === 0);
+                if (!leaf) return { found: false };
+                let row = leaf;
+                for (let i = 0; i < 6 && row.parentElement && row.querySelectorAll('button, a, [role="button"]').length === 0; i++) row = row.parentElement;
+                const cls = (c) => String(c.className && c.className.baseVal !== undefined ? c.className.baseVal : (c.className || '')).slice(0, 80);
+                const nameOf = (c) => ((c.textContent || '').trim() + ' ' + (c.getAttribute('aria-label') || '') + ' ' + (c.getAttribute('title') || '') + ' ' + cls(c)).trim();
+                const all = Array.from(row.querySelectorAll('button, a, [role="button"]'));
+                const controls = all.map(c => ({ tag: c.tagName.toLowerCase(), name: nameOf(c).slice(0, 90), href: c.getAttribute('href') || '' }));
+                const safe = /view|open|detail|see|show|eye|inspect/i, unsafe = /approve|complete|delete|remove|pay|submit|cancel|reject|sync|push|save|edit/i;
+                const pick = all.find(c => safe.test(nameOf(c)) && !unsafe.test(nameOf(c)));
+                if (pick) pick.click();
+                return { found: true, row: row.tagName.toLowerCase(), controls, clicked: pick ? nameOf(pick).slice(0, 60) : null };
               }, firstName.split(' ')[0]);
-              console.log('   row click:', mask(clicked));
+              console.log('   row controls:', mask(JSON.stringify(info)).slice(0, 1500));
               await sleep(7000);
               console.log('   now at', page.url(), '| detail JSON seen:', hasDetail());
             }
-            if (!hasDetail() && firstId) {
-              for (const r of ['#/buylists/pending/' + firstId, '#/buylists/' + firstId, '#/buylists/view/' + firstId, '#/buylist/' + firstId, '#/buylists/pending/view/' + firstId]) {
-                console.log('   trying', r);
-                await page.goto(abs(r), { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
-                await sleep(7000);
-                if (hasDetail()) { console.log('   detail JSON seen at', page.url()); break; }
+            console.log('   page text head:', await head(page, 700));
+
+            console.log('');
+            console.log('=== schema questions to api.binderpos.com/graphql (read-only, with the token the page itself uses; never printed) ===');
+            const gqlFetch = async (query) => {
+              if (!tokenHeader) return { status: 0, text: 'no token captured' };
+              const r = await fetch('https://api.binderpos.com/graphql', { method: 'POST', headers: { 'content-type': 'application/json', 'authorization': tokenHeader, 'origin': 'https://portal.binderpos.com', 'referer': 'https://portal.binderpos.com/' }, body: JSON.stringify({ query, variables: {} }) });
+              return { status: r.status, text: await r.text() };
+            };
+            const show = (label, r, n) => console.log(label, r.status, mask(String(r.text).slice(0, n)));
+            show('root query and mutation NAMES:', await gqlFetch('{ __schema { queryType { fields { name } } mutationType { fields { name } } } }'), 6000);
+            const typeQ = (name) => '{ __type(name: "' + name + '") { name fields { name type { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } }';
+            const named = (t) => { while (t && !t.name) t = t.ofType; return t; };
+            const isScalar = (f) => { const t = named(f.type); return t && (t.kind === 'SCALAR' || t.kind === 'ENUM'); };
+            const fieldsOf = async (name) => { const r = await gqlFetch(typeQ(name)); show(name + ' fields:', r, 3000); try { return JSON.parse(r.text).data.__type.fields; } catch (e) { return null; } };
+            const blFields = await fieldsOf('ShopifyCustomerBuylist');
+            let sel = 'id dateSubmitted paymentType approved completed ShopifyCustomer { firstName lastName }';
+            if (blFields) {
+              const rels = blFields.filter(f => { const t = named(f.type); return t && t.kind === 'OBJECT'; }).slice(0, 5);
+              console.log('relations:', rels.map(f => f.name + ' -> ' + named(f.type).name).join(', ') || 'none');
+              sel = blFields.filter(isScalar).map(f => f.name).join(' ');
+              for (const f of rels) {
+                const rf = await fieldsOf(named(f.type).name);
+                if (rf) sel += ' ' + f.name + ' { ' + rf.filter(isScalar).map(x => x.name).join(' ') + ' }';
+              }
+            } else console.log('introspection unavailable; using a guessed selection');
+            if (firstId) {
+              for (const idv of ['"' + firstId + '"', firstId]) {
+                const d = await gqlFetch('{ ShopifyCustomerBuylist(take: 1, where: { id: { equals: ' + idv + ' } }) { ' + sel + ' } }');
+                show('buylist ' + firstId + ' with its relations (id sent as ' + (idv[0] === '"' ? 'string' : 'number') + '):', d, 3500);
+                if (!/"errors"/.test(d.text)) break;
               }
             }
-            console.log('   page text head:', await head(page, 700));
 
             console.log('');
             console.log('=== GraphQL requests (query text and variables) ===');
