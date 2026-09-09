@@ -1,0 +1,163 @@
+name: Portal buylists probe
+
+# Read-only look at the BinderPOS PORTAL's pending-buylist pages, for the
+# "our own pending buylist screen" idea: log in with the staff login held as
+# repo Actions secrets, learn HOW the login works (a plain request the worker
+# could repeat, or a browser-only flow), find the Pending Buylists route,
+# open it and the first buylist in it, and inventory the JSON the portal app
+# loads for them. Nothing is written to BinderPOS.
+#
+# Secrets required (Settings -> Secrets and variables -> Actions):
+#   BINDERPOS_LOGIN_EMAIL      portal login email
+#   BINDERPOS_LOGIN_PASSWORD   portal login password
+#
+# Log hygiene: auth-ish URLs are listed by method and status only; request
+# bodies and headers are never printed; storage and cookie NAMES print with
+# value lengths only; buylist JSON prints truncated with emails and phone
+# fields masked.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Login + map the pending buylist endpoints (read-only)
+        env:
+          EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
+          PASS: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
+        run: |
+          if [ -z "$EMAIL" ] || [ -z "$PASS" ]; then
+            echo "Secrets not set. Add BINDERPOS_LOGIN_EMAIL and BINDERPOS_LOGIN_PASSWORD"
+            echo "under repo Settings -> Secrets and variables -> Actions, then re-run."
+            exit 0
+          fi
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const SENSITIVE = /login|auth|token|session|password|signin|oauth|firebase|identitytoolkit|securetoken/i;
+          const mask = (s) => String(s)
+            .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
+            .replace(/("[^"]*(phone|mobile|address|postal|zip)[^"]*"\s*:\s*")[^"]*(")/gi, '$1<masked>$3')
+            .replace(/AIza[\w-]+/g, 'AIza...');
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const head = async (page, n) => mask((await page.evaluate((n) => document.body.innerText.slice(0, n), n)).replace(/\s+/g, ' '));
+          const abs = (h) => h.startsWith('http') ? h : 'https://portal.binderpos.com/' + h.replace(/^\//, '');
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1366, height: 900 });
+            const seen = [];
+            const authCalls = [];
+            let bearer = null;
+            page.on('request', (req) => {
+              try {
+                const url = req.url();
+                if (!/binderpos|firebase|googleapis/i.test(url)) return;
+                const h = req.headers();
+                const a = h['authorization'] || h['Authorization'];
+                if (a && !bearer) bearer = a.split(' ')[0] + ' (' + a.length + ' chars)';
+                if (SENSITIVE.test(url)) authCalls.push({ method: req.method(), url, post: req.postData() ? req.postData().length : 0 });
+              } catch {}
+            });
+            page.on('response', async (res) => {
+              try {
+                const url = res.url();
+                if (!/binderpos|firebase|googleapis/i.test(url)) return;
+                const ct = String(res.headers()['content-type'] || '');
+                if (!/json/i.test(ct)) return;
+                const entry = { method: res.request().method(), url, status: res.status(), body: null };
+                if (!SENSITIVE.test(url)) {
+                  const text = await res.text().catch(() => '');
+                  entry.body = mask(text.slice(0, 1600));
+                  entry.size = text.length;
+                }
+                seen.push(entry);
+              } catch {}
+            });
+
+            console.log('-> opening portal');
+            await page.goto('https://portal.binderpos.com/', { waitUntil: 'networkidle2', timeout: 60000 });
+            console.log('landed on:', page.url(), '| title:', await page.title());
+            const challenged = await page.evaluate(() => document.body.innerText.slice(0, 200));
+            if (/just a moment|verify you are human|cloudflare/i.test(challenged)) {
+              console.log('CLOUDFLARE CHALLENGE on portal login page - headless login blocked at the edge.');
+              await browser.close(); return;
+            }
+            const emailSel = await page.waitForSelector('input[type="email"], input[name*="email" i], input[placeholder*="email" i]', { timeout: 20000 }).catch(() => null);
+            const passSel = await page.$('input[type="password"]');
+            if (!emailSel || !passSel) {
+              console.log('LOGIN FORM NOT FOUND. Page text head:', await head(page, 300));
+              await browser.close(); return;
+            }
+            await emailSel.type(process.env.EMAIL, { delay: 25 });
+            await passSel.type(process.env.PASS, { delay: 25 });
+            await Promise.all([
+              page.keyboard.press('Enter'),
+              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 }).catch(() => null),
+            ]);
+            await sleep(7000);
+            const afterText = await head(page, 300);
+            console.log('after login attempt:', page.url());
+            console.log('page text head:', afterText);
+            if (/verify|verification|code|two.?factor|2fa/i.test(afterText)) {
+              console.log('VERIFICATION STEP DETECTED - the portal wants a code. Owner action needed on first login.');
+            }
+
+            console.log('');
+            console.log('=== login mechanism (auth-ish calls, bodies and headers never printed) ===');
+            for (const c of authCalls) console.log(c.method, c.url, '| request body bytes:', c.post);
+            const store = await page.evaluate(() => ({
+              ls: Object.keys(localStorage).map(k => k + ' (' + String(localStorage.getItem(k) || '').length + ' chars)'),
+              ss: Object.keys(sessionStorage).map(k => k + ' (' + String(sessionStorage.getItem(k) || '').length + ' chars)'),
+              ck: document.cookie.split(';').map(s => s.trim().split('=')[0]).filter(Boolean)
+            }));
+            console.log('localStorage keys:', mask(store.ls.join(' | ')) || 'none');
+            console.log('sessionStorage keys:', mask(store.ss.join(' | ')) || 'none');
+            console.log('cookie names:', store.ck.join(' | ') || 'none');
+            console.log('authorization header on API calls:', bearer || 'none seen');
+
+            const links = await page.evaluate(() => Array.from(new Set(Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(h => /buylist/i.test(h)))));
+            console.log('');
+            console.log('=== links mentioning buylist ===');
+            console.log(links.slice(0, 40).join('\n') || 'none');
+
+            const pendingLinks = links.filter(h => /pending/i.test(h));
+            const routes = pendingLinks.length ? pendingLinks : ['#/buylists/pending', '#/buylists'];
+            for (const route of routes.slice(0, 2)) {
+              console.log('');
+              console.log('-> visiting', abs(route));
+              await page.goto(abs(route), { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
+              await sleep(9000);
+              console.log('   page text head:', await head(page, 500));
+            }
+
+            const detail = await page.evaluate(() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).find(h => /buylists?\/\d+/i.test(h)));
+            if (detail) {
+              console.log('');
+              console.log('-> opening the first buylist', abs(detail));
+              await page.goto(abs(detail), { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
+              await sleep(9000);
+              console.log('   page text head:', await head(page, 500));
+            } else {
+              const clicked = await page.evaluate(() => { const r = document.querySelector('table tbody tr'); if (r) { r.click(); return true; } return false; });
+              console.log('');
+              console.log('-> no buylist link found; clicked the first table row:', clicked);
+              await sleep(9000);
+              console.log('   now at', page.url());
+              console.log('   page text head:', await head(page, 500));
+            }
+
+            console.log('');
+            console.log('=== JSON endpoints observed (auth-ish bodies withheld; emails and contact fields masked) ===');
+            for (const e of seen) {
+              console.log('---', e.method, e.status, e.url, e.size != null ? '(' + e.size + ' bytes)' : '(body withheld)');
+              if (e.body) console.log(e.body);
+            }
+            await browser.close();
+          })().catch(e => console.log('probe error:', e.message));
+          EOF
