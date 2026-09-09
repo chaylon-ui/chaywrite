@@ -6,7 +6,9 @@
    matched by the search filter product_type:*Single*, never by a hard-coded
    list; the types the run actually saw are recorded in its summary) — and
    records, per product, the FIRST variant's price (the NM / default
-   condition on this store) plus the cheapest variant's price. A product's
+   condition on this store), the cheapest variant's price and, since
+   2026-09-10, the dearest variant's price (the Near Mint foil on cards that
+   have one; the theme's widget follows the picked variant). A product's
    record only grows when a price actually moves, so ~60k products cost a
    few megabytes once, not a few megabytes a day. The card page sparkline
    (assets/xg-price-history.js in the theme) reads it back through
@@ -27,8 +29,9 @@
 
    Storage (the DO named PRICE_DO, class BinderRoom in room.js, its own
    instance — never a screen, never the search cache):
-     ph:<productId>  { s: firstDay, d: lastSeenDay, p: [[day, cents, minCents], ...] }
-                     p gets a point only when cents or minCents differ from
+     ph:<productId>  { s: firstDay, d: lastSeenDay, p: [[day, cents, minCents, maxCents], ...] }
+                     (points written before 2026-09-10 carry no maxCents)
+                     p gets a point only when cents, minCents or maxCents differ from
                      the last point (at most one point per day: a same-day
                      re-snapshot corrects that day's point instead of adding
                      one), capped at MAX_POINTS oldest-first; s survives the
@@ -49,7 +52,10 @@
                  today-89) to today, the price in effect that day) - NOT the
                  raw change points; those are in
             changes:[["YYYY-MM-DD", price, min], ...],
-            change7d:{abs,pct}|null, change30d:{abs,pct}|null }
+            change7d:{abs,pct}|null, change30d:{abs,pct}|null,
+            top: { since, current:{price}, points, change7d, change30d } | null
+                 <- the dearest variant's own series, null until a point
+                    carries maxCents (the theme shows it for the foil) }
           Unknown id -> { ok:true, id, since:null, days:0, current:null,
           points:[] } with HTTP 200 so the theme hides quietly.
           CORS *, cache-control public max-age 3600 (+ caches.default).
@@ -120,14 +126,17 @@ export function nextRunAt(now) {
 // writing at all: an unchanged price is rewritten (last-seen day bumped)
 // only once every SEEN_REFRESH_DAYS, so a quiet catalogue costs almost no
 // writes.
-export function applySnapshot(rec, day, cents, minCents) {
+export function applySnapshot(rec, day, cents, minCents, maxCents = null) {
   const r = rec && Array.isArray(rec.p) ? rec : { s: day, d: 0, p: [] };
   if (!r.s || r.s > day) r.s = day;
   const last = r.p[r.p.length - 1];
   let changed = false;
-  if (!last || last[1] !== cents || last[2] !== minCents) {
-    if (last && last[0] === day) { last[1] = cents; last[2] = minCents; }
-    else if (!last || last[0] < day) r.p.push([day, cents, minCents]);
+  // maxCents joined the point in 2026-09: a snapshot that carries it differs
+  // from an older three-value point, which starts the top series that day
+  const maxDiffers = maxCents != null && (!last || last[3] !== maxCents);
+  if (!last || last[1] !== cents || last[2] !== minCents || maxDiffers) {
+    if (last && last[0] === day) { last[1] = cents; last[2] = minCents; if (maxCents != null) last[3] = maxCents; }
+    else if (!last || last[0] < day) r.p.push(maxCents != null ? [day, cents, minCents, maxCents] : [day, cents, minCents]);
     // (a point older than the last one - a late tick of an earlier run
     //  day - is ignored: the newer snapshot already speaks for that product)
     else return { rec: r, changed: false, write: false };
@@ -150,7 +159,7 @@ export function pointAt(points, day) {
 // The step series the JSON surface serves: one [date, price] per day from
 // max(first point, today - days + 1) to today, each day carrying the price
 // in effect that day (a price holds until the next change point).
-export function expandSeries(rec, today, days = SERIES_DAYS) {
+export function expandSeries(rec, today, days = SERIES_DAYS, idx = 1) {
   const pts = (rec && rec.p) || [];
   if (!pts.length) return [];
   const start = Math.max(pts[0][0], today - days + 1);
@@ -158,7 +167,8 @@ export function expandSeries(rec, today, days = SERIES_DAYS) {
   let i = 0, cur = null;
   for (let d = start; d <= today; d++) {
     while (i < pts.length && pts[i][0] <= d) cur = pts[i++];
-    if (cur) out.push([dateOf(d), cur[1] / 100]);
+    // idx 1 = first variant, 3 = dearest variant (absent on older points)
+    if (cur && cur[idx] != null) out.push([dateOf(d), cur[idx] / 100]);
   }
   return out;
 }
@@ -167,16 +177,16 @@ export function expandSeries(rec, today, days = SERIES_DAYS) {
 // ago. null when the product was not being tracked n days ago (a card
 // first seen yesterday has no honest "this week" number) or the old price
 // is unknown after the point cap. abs in dollars, pct to one decimal.
-export function changeOver(rec, today, n) {
+export function changeOver(rec, today, n, idx = 1, since = null) {
   const pts = (rec && rec.p) || [];
   if (!pts.length) return null;
-  const since = rec.s || pts[0][0];
-  if (today - n < since) return null;
+  const s = since != null ? since : (rec.s || pts[0][0]);
+  if (today - n < s) return null;
   const old = pointAt(pts, today - n);
   const cur = pointAt(pts, today) || pts[pts.length - 1];
-  if (!old) return null;
-  const abs = Math.round(cur[1] - old[1]) / 100;
-  return { abs, pct: old[1] ? Math.round(((cur[1] - old[1]) / old[1]) * 1000) / 10 : null };
+  if (!old || old[idx] == null || cur[idx] == null) return null;
+  const abs = Math.round(cur[idx] - old[idx]) / 100;
+  return { abs, pct: old[idx] ? Math.round(((cur[idx] - old[idx]) / old[idx]) * 1000) / 10 : null };
 }
 
 // The public JSON for one product (see the header for the contract). asOf
@@ -185,9 +195,13 @@ export function changeOver(rec, today, n) {
 export function buildPayload(id, rec, now) {
   const today = dayOf(now);
   const pts = (rec && rec.p) || [];
-  if (!pts.length) return { ok: true, id, since: null, days: 0, current: null, raw: false, points: [], change7d: null, change30d: null };
+  if (!pts.length) return { ok: true, id, since: null, days: 0, current: null, raw: false, points: [], change7d: null, change30d: null, top: null };
   const since = rec.s || pts[0][0];
   const last = pts[pts.length - 1];
+  // the dearest variant's series starts at the first point that carries it
+  const firstTop = pts.find((p) => p[3] != null);
+  let lastTop = null;
+  for (let i = pts.length - 1; i >= 0 && !lastTop; i--) if (pts[i][3] != null) lastTop = pts[i];
   return {
     ok: true,
     id,
@@ -200,12 +214,19 @@ export function buildPayload(id, rec, now) {
     changes: pts.map((p) => [dateOf(p[0]), p[1] / 100, p[2] / 100]),
     change7d: changeOver(rec, today, 7),
     change30d: changeOver(rec, today, 30),
+    top: firstTop ? {
+      since: dateOf(firstTop[0]),
+      current: { price: lastTop[3] / 100 },
+      points: expandSeries(rec, today, SERIES_DAYS, 3),
+      change7d: changeOver(rec, today, 7, 3, firstTop[0]),
+      change30d: changeOver(rec, today, 30, 3, firstTop[0]),
+    } : null,
   };
 }
 
 /* ---- Shopify Admin GraphQL --------------------------------------------- */
 
-const PRODUCTS_GQL = `query($q:String!,$n:Int!,$after:String){products(first:$n,query:$q,after:$after,sortKey:ID){nodes{id handle productType priceRangeV2{minVariantPrice{amount}} variants(first:1){nodes{price}}} pageInfo{hasNextPage endCursor}}}`;
+const PRODUCTS_GQL = `query($q:String!,$n:Int!,$after:String){products(first:$n,query:$q,after:$after,sortKey:ID){nodes{id handle productType priceRangeV2{minVariantPrice{amount} maxVariantPrice{amount}} variants(first:1){nodes{price}}} pageInfo{hasNextPage endCursor}}}`;
 const TYPES_GQL = `{shop{productTypes(first:250){edges{node}}}}`;
 
 // One Admin GraphQL round trip (same endpoint/headers as cards.js). Returns
@@ -253,9 +274,12 @@ export function throttleWait(cost, fallbackCost) {
 
 const toCents = (s) => { const n = Number(s); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null; };
 
-// One products page -> { items:[{id, handle, cents, min}], cursor, hasNext }.
+// One products page -> { items:[{id, handle, cents, min, max}], cursor, hasNext }.
 // cents = the first variant's price; min = the cheapest variant's price
-// (never above cents). Products without a priced variant are dropped.
+// (never above cents); max = the dearest variant's price (never below
+// cents; null when it is the theme's "email us" sentinel, so an unpriced
+// foil never becomes a series). Products without a priced variant are
+// dropped.
 export function parsePage(data) {
   const pr = data && data.products;
   if (!pr || !Array.isArray(pr.nodes)) throw new Error("admin products shape");
@@ -267,7 +291,9 @@ export function parsePage(data) {
     const cents = toCents(v && v.price);
     if (cents == null) continue;
     const minC = toCents(p.priceRangeV2 && p.priceRangeV2.minVariantPrice && p.priceRangeV2.minVariantPrice.amount);
-    items.push({ id, handle: String(p.handle || ""), cents, min: minC == null ? cents : Math.min(minC, cents) });
+    const maxC = toCents(p.priceRangeV2 && p.priceRangeV2.maxVariantPrice && p.priceRangeV2.maxVariantPrice.amount);
+    const max = maxC == null ? cents : Math.max(maxC, cents);
+    items.push({ id, handle: String(p.handle || ""), cents, min: minC == null ? cents : Math.min(minC, cents), max: max >= NO_PRICE_CENTS ? null : max });
   }
   const pi = pr.pageInfo || {};
   return { items, cursor: pi.endCursor || null, hasNext: !!pi.hasNextPage };
@@ -294,7 +320,7 @@ export async function storePage(storage, items, day) {
     let n = 0;
     for (const it of chunk) {
       const k = "ph:" + it.id;
-      const r = applySnapshot(cur instanceof Map ? cur.get(k) : (cur || {})[k], day, it.cents, it.min);
+      const r = applySnapshot(cur instanceof Map ? cur.get(k) : (cur || {})[k], day, it.cents, it.min, it.max == null ? null : it.max);
       if (r.changed) changed++;
       if (r.write) { puts[k] = r.rec; n++; }
     }
