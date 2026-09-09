@@ -3,11 +3,10 @@ name: Portal shapes probe
 # Read-only, browser-free follow-up to portal-buylists-probe: sign in to the
 # BinderPOS portal the way its own web app does (Firebase Identity Toolkit,
 # REST) with the staff login held as repo Actions secrets, then print the
-# SHAPES the worker's pending-buylist screen needs:
-#   - the field names of a buylist's detail lines (quantity, condition, price)
-#   - the request body the portal sends to /api/buylists/cards/allPrices
-#     (read out of the portal's JS bundle, then tried live)
-#   - whether the GraphQL API offers a count for paging
+# SHAPES the worker's pending-buylist screen needs. Run 1 confirmed the
+# login, the list filters and the detail line fields; run 2 hunts the
+# request body of /api/buylists/cards/allPrices: the portal bundle's call
+# site (export alias -> module id -> consumers) plus live tries.
 # Nothing is written to BinderPOS. Log hygiene: tokens are never printed
 # (only their lengths); emails, names and contact fields are masked.
 #
@@ -25,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Sign in (REST) and print the buylist JSON shapes (masked)
+      - name: Sign in (REST) and hunt the allPrices request body (masked)
         env:
           EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
           PASS: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
@@ -50,94 +49,104 @@ jobs:
               body: JSON.stringify({ email: process.env.EMAIL, password: process.env.PASS, returnSecureToken: true }),
             });
             const j = await r.json().catch(() => ({}));
-            console.log('verifyPassword:', r.status, '| keys:', Object.keys(j).join(','), '| idToken chars:', String(j.idToken || '').length, '| refreshToken chars:', String(j.refreshToken || '').length, '| expiresIn:', j.expiresIn, j.error ? '| error: ' + JSON.stringify(j.error).slice(0, 300) : '', '| ms', Date.now() - t0);
+            console.log('verifyPassword:', r.status, '| idToken chars:', String(j.idToken || '').length, j.error ? '| error: ' + JSON.stringify(j.error).slice(0, 300) : '');
             if (!j.idToken) return;
             const tok = j.idToken;
             const get = async (p) => { const x = await fetch(API + p, { headers: H(tok) }); return { status: x.status, text: await x.text() }; };
             const post = async (p, body) => { const x = await fetch(API + p, { method: 'POST', headers: H(tok), body: JSON.stringify(body) }); return { status: x.status, text: await x.text() }; };
             const gql = (query, variables) => post('/graphql', { query, variables });
 
-            // refresh, as the worker will do it every hour
-            const rf = await fetch('https://securetoken.googleapis.com/v1/token?key=' + KEY, {
-              method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-              body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(j.refreshToken),
-            });
-            const rj = await rf.json().catch(() => ({}));
-            console.log('securetoken refresh:', rf.status, '| keys:', Object.keys(rj).join(','), '| id_token chars:', String(rj.id_token || '').length, '| expires_in:', rj.expires_in);
-
-            const s = await get('/api/screens/forMe');
-            console.log('screens/forMe:', s.status, s.text.slice(0, 200));
-
-            const Q = 'query GetBuylists($where: ShopifyCustomerBuylistWhereInput, $orderBy: [ShopifyCustomerBuylistOrderByWithRelationInput!], $take: Int, $skip: Int) { ShopifyCustomerBuylist(take: $take, skip: $skip, where: $where, orderBy: $orderBy) { id dateSubmitted dateApproved dateCompleted paymentType approved completed ShopifyCustomer { firstName lastName email } } }';
-            const wherePending = { approved: { equals: false }, completed: { equals: false }, dateSubmitted: { not: null } };
-            const pend = await gql(Q, { where: wherePending, take: 3, skip: 0, orderBy: [{ dateSubmitted: 'desc' }] });
-            console.log('pending, newest 3:', pend.status, mask(pend.text).slice(0, 1500));
-            const since = await gql(Q, { where: Object.assign({}, wherePending, { dateSubmitted: { gte: '2026-06-01T00:00:00.000Z' } }), take: 50, skip: 0, orderBy: [{ dateSubmitted: 'desc' }] });
-            let sinceN = -1; try { sinceN = JSON.parse(since.text).data.ShopifyCustomerBuylist.length; } catch {}
-            console.log('pending since 2026-06-01 (gte filter):', since.status, 'rows', sinceN, sinceN < 0 ? since.text.slice(0, 300) : '');
-            const appr = await gql(Q, { where: { approved: { equals: true }, completed: { equals: false } }, take: 2, skip: 0, orderBy: [{ dateApproved: 'desc' }] });
-            console.log('approved-not-completed, newest 2:', appr.status, mask(appr.text).slice(0, 700));
-            const done = await gql(Q, { where: { completed: { equals: true } }, take: 2, skip: 0, orderBy: [{ dateCompleted: 'desc' }] });
-            console.log('completed, newest 2:', done.status, mask(done.text).slice(0, 700));
-            for (const q of [
-              '{ aggregateShopifyCustomerBuylist(where: { approved: { equals: false }, completed: { equals: false }, dateSubmitted: { not: null } }) { _count { id } } }',
-              '{ ShopifyCustomerBuylistCount(where: { approved: { equals: false }, completed: { equals: false }, dateSubmitted: { not: null } }) }',
-              '{ countShopifyCustomerBuylist(where: { approved: { equals: false }, completed: { equals: false } }) }',
-            ]) {
-              const c = await gql(q, {});
-              console.log('count try:', q.slice(0, 40), '->', c.status, c.text.slice(0, 260));
-            }
-
-            let ids = []; try { ids = JSON.parse(pend.text).data.ShopifyCustomerBuylist.map(b => b.id); } catch {}
-            const id = ids[0];
+            const Q = 'query GetBuylists($where: ShopifyCustomerBuylistWhereInput, $orderBy: [ShopifyCustomerBuylistOrderByWithRelationInput!], $take: Int, $skip: Int) { ShopifyCustomerBuylist(take: $take, skip: $skip, where: $where, orderBy: $orderBy) { id } }';
+            const pend = await gql(Q, { where: { approved: { equals: false }, completed: { equals: false }, dateSubmitted: { not: null } }, take: 1, skip: 0, orderBy: [{ dateSubmitted: 'desc' }] });
+            let id = null; try { id = JSON.parse(pend.text).data.ShopifyCustomerBuylist[0].id; } catch {}
+            console.log('newest pending id:', id);
             let lines = [];
             if (id) {
               const d = await get('/api/buylist/byId/' + id + '/details');
-              let dj = null; try { dj = JSON.parse(d.text); } catch {}
-              console.log('details ' + id + ':', d.status, 'bytes', d.text.length);
-              if (dj) {
-                const top = {};
-                for (const k of Object.keys(dj)) top[k] = Array.isArray(dj[k]) ? '[' + dj[k].length + ' items]' : (dj[k] && typeof dj[k] === 'object' ? '{' + Object.keys(dj[k]).join(',') + '}' : dj[k]);
-                console.log('details top-level:', mask(JSON.stringify(top)));
-                lines = dj.shopifyCustomerBuylistDetails || [];
-                const keys = new Set(); lines.forEach(l => Object.keys(l).forEach(k => keys.add(k)));
-                console.log('line keys (union over ' + lines.length + ' lines):', Array.from(keys).join(','));
-                console.log('line[0]:', mask(JSON.stringify(lines[0])).slice(0, 2500));
-                if (lines[1]) console.log('line[1]:', mask(JSON.stringify(lines[1])).slice(0, 1200));
-              } else console.log('details body head:', mask(d.text).slice(0, 400));
+              try { lines = JSON.parse(d.text).shopifyCustomerBuylistDetails || []; } catch {}
+              console.log('details:', d.status, 'lines', lines.length);
+            }
+            // the status-count query the schema hinted at (paging / tab badges)
+            for (const q of [
+              '{ ShopifyCustomerBuylistStatusCount { pending approved completed } }',
+              '{ ShopifyCustomerBuylistStatusCount }',
+              '{ __type(name: "ShopifyCustomerBuylistStatusCount") { name fields { name } } }',
+            ]) { const c = await gql(q, {}); console.log('status count try:', q.slice(0, 60), '->', c.status, c.text.slice(0, 300)); }
+
+            // ---- the portal bundle: who calls the allPrices helper, and with what?
+            const html = await (await fetch(PORTAL + '/')).text();
+            const srcs = Array.from(html.matchAll(/<script[^>]+src="([^"]+)"/g)).map(m => m[1]).filter(s => /static\/js\//.test(s));
+            for (const src of srcs) {
+              const u = src.startsWith('http') ? src : PORTAL + '/' + src.replace(/^\//, '');
+              const js = await (await fetch(u)).text();
+              const pos = js.indexOf('/buylists/cards/allPrices');
+              if (pos < 0) continue;
+              console.log('bundle', u.slice(-36), 'chars', js.length, 'allPrices @', pos);
+              // the public wrapper: function NAME(){return INNER.apply(this,arguments)} just before the helper
+              const before = js.slice(Math.max(0, pos - 1500), pos);
+              const wraps = Array.from(before.matchAll(/function (\w+)\(\)\{return (\w+)\.apply\(this,arguments\)\}/g));
+              const wrap = wraps.length ? wraps[wraps.length - 1] : null;
+              console.log('wrapper candidates:', wraps.map(w => w[1] + '<-' + w[2]).join(' '));
+              // the innermost named function containing pos
+              const inner = (() => { const m = Array.from(before.matchAll(/function (\w+)\(\)\{return \1=Object/g)); return m.length ? m[m.length - 1][1] : null; })();
+              const pub = wrap && wrap[2] === inner ? wrap[1] : (wrap ? wrap[1] : null);
+              console.log('helper inner:', inner, 'public:', pub);
+              if (pub) {
+                const ex = Array.from(js.matchAll(new RegExp('n\\.d\\(t,"(\\w+)",\\(function\\(\\)\\{return ' + pub + '\\}\\)\\)', 'g')));
+                console.log('export bindings for ' + pub + ':', ex.map(m => m[1] + '@' + m.index).join(' ') || 'none');
+                // the enclosing module id: last "ID:function(e,t,n){" before pos
+                const mods = Array.from(js.slice(0, pos).matchAll(/[,{](\d+|"[^"]+"):function\(e,t,n\)\{/g));
+                const mod = mods.length ? mods[mods.length - 1] : null;
+                console.log('enclosing module id:', mod ? mod[1] + ' @' + mod.index : 'not found');
+                const alias = ex.map(m => m[1]).find(a => !!mod && Math.abs(0) === 0) || (ex[0] && ex[0][1]);
+                if (mod && alias) {
+                  const idq = mod[1].replace(/"/g, '');
+                  const users = Array.from(js.matchAll(new RegExp('(\\w+)=n\\(' + idq + '\\)', 'g')));
+                  console.log('modules importing ' + idq + ':', users.length);
+                  let shown = 0;
+                  for (const um of users) {
+                    const v = um[1];
+                    const re = new RegExp('Object\\(' + v + '\\.' + alias + '\\)\\(', 'g');
+                    let hit;
+                    while ((hit = re.exec(js)) && shown < 6) {
+                      shown++;
+                      console.log('CALL SITE ' + shown + ' @' + hit.index + ': ' + js.slice(Math.max(0, hit.index - 700), hit.index + 260).replace(/\s+/g, ' '));
+                    }
+                  }
+                  if (!shown) console.log('no Object(v.alias)( call sites found; alias/module guess may be off');
+                }
+              }
+              // the response field in use, for how conditions/finishes are matched up
+              let at = -1, n = 0;
+              while ((at = js.indexOf('cardBuylistTypes', at + 1)) !== -1 && n++ < 4) console.log('[cardBuylistTypes] @' + at + ': ' + js.slice(Math.max(0, at - 300), at + 200).replace(/\s+/g, ' '));
             }
 
-            // the portal bundle: how does it build the allPrices request, and which other buylist endpoints exist?
-            const html = await (await fetch(PORTAL + '/')).text();
-            const srcs = Array.from(html.matchAll(/<script[^>]+src="([^"]+)"/g)).map(m => m[1]).filter(s => /\.js/.test(s));
-            console.log('portal scripts:', srcs.join(' | ') || 'none found in HTML head');
-            const seen = new Set();
-            const scan = async (u, depth) => {
-              if (seen.has(u) || seen.size > 60) return;
-              seen.add(u);
-              const res = await fetch(u).catch(() => null);
-              if (!res || !res.ok) return;
-              const js = await res.text();
-              for (const needle of ['allPrices', 'buylist/byId', 'buylists/pending', 'buylistGames', 'buylist/games', 'buylistDetails', 'approveBuylist', 'ShopifyCustomerBuylist(']) {
-                let at = -1, n = 0;
-                while ((at = js.indexOf(needle, at + 1)) !== -1 && n++ < 2) console.log('[' + needle + '] ' + u.slice(-48) + ' @' + at + ': ' + js.slice(Math.max(0, at - 420), at + 320).replace(/\s+/g, ' '));
-              }
-              if (depth > 0) {
-                // lazy chunks referenced by the main bundle
-                const chunks = Array.from(new Set(Array.from(js.matchAll(/["'](\/?static\/js\/[\w.-]+\.js|[\w.-]+\.chunk\.js)["']/g)).map(m => m[1])));
-                for (const c of chunks.slice(0, 50)) await scan(c.startsWith('http') ? c : PORTAL + '/' + c.replace(/^\//, ''), depth - 1);
-              }
-            };
-            for (const src of srcs) await scan(src.startsWith('http') ? src : PORTAL + '/' + src.replace(/^\//, ''), 1);
-            console.log('bundle files scanned:', seen.size);
-
-            // live tries of the likely request bodies (card ids from the buylist above)
-            const cardIds = Array.from(new Set(lines.map(l => l.cardId).filter(Boolean))).slice(0, 4);
-            if (cardIds.length) {
-              for (const body of [{ cardIds }, cardIds, { ids: cardIds }, { cards: cardIds.map(c => ({ cardId: c })) }, { cardIds, game: lines[0] && lines[0].gameId }, cardIds.map(c => ({ cardId: c })), cardIds.map(c => ({ id: c }))]) {
+            // ---- live tries
+            const L = lines.slice(0, 3);
+            const ids = L.map(l => l.cardId);
+            if (L.length) {
+              const tries = [
+                ['raw line objects', L],
+                ['{cardId, variantId, type}', L.map(l => ({ cardId: l.cardId, variantId: l.variantId, type: l.type }))],
+                ['{cardId, gameId}', L.map(l => ({ cardId: l.cardId, gameId: l.gameId }))],
+                ['{cardId, game}', L.map(l => ({ cardId: l.cardId, game: l.game }))],
+                ['{id, gameId}', L.map(l => ({ id: l.cardId, gameId: l.gameId }))],
+                ['{cardId:{id}}', L.map(l => ({ cardId: { id: l.cardId } }))],
+                ['{card:{id}}', L.map(l => ({ card: { id: l.cardId } }))],
+                ['string ids', ids.map(String)],
+                ['{productVariantId}', L.map(l => ({ productVariantId: l.productVariantId }))],
+                ['{cardId, productVariantId}', L.map(l => ({ cardId: l.cardId, productVariantId: l.productVariantId }))],
+                ['{cardName, setName, gameId}', L.map(l => ({ cardName: l.cardName, setName: l.setName, gameId: l.gameId }))],
+              ];
+              for (const [label, body] of tries) {
                 const p = await post('/api/buylists/cards/allPrices', body);
-                console.log('allPrices with', JSON.stringify(body).slice(0, 90), '->', p.status, p.text.slice(0, 220).replace(/\s+/g, ' '));
-                if (p.status === 200 && /^\s*\[\s*\{/.test(p.text)) break;
+                console.log('allPrices ' + label + ' ->', p.status, mask(p.text).slice(0, 260).replace(/\s+/g, ' '));
+                if (p.status === 200 && /^\s*\[\s*\{/.test(p.text)) { console.log('MATCH:', label, '| sample body:', JSON.stringify(body[0]).slice(0, 300)); break; }
+              }
+              // query-string variants of the simplest body
+              for (const qs of ['?gameId=mtg', '?game=mtg']) {
+                const x = await fetch(API + '/api/buylists/cards/allPrices' + qs, { method: 'POST', headers: H(tok), body: JSON.stringify(ids) });
+                console.log('allPrices ids' + qs + ' ->', x.status, (await x.text()).slice(0, 160).replace(/\s+/g, ' '));
               }
             }
             console.log('done in ms', Date.now() - t0);
