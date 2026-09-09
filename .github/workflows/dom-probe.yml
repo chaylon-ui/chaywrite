@@ -1,0 +1,80 @@
+name: dom-probe
+
+# Read-only diagnostic: open a page in headless Chrome, let its scripts
+# settle, and print every text node that equals the given text with its
+# ancestor chain, whether it is visible, and the markup around it. Answers
+# "what is printing this, and why twice" without guessing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Page to open"
+        required: true
+        default: "https://exorgames.com/"
+      text:
+        description: "Exact text to find (trimmed)"
+        required: true
+        default: "Exor Games Charlottetown"
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      URL: ${{ inputs.url }}
+      TEXT: ${{ inputs.text }}
+    steps:
+      - name: Open the page and locate the text
+        run: |
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36');
+            await page.setViewport({ width: 1366, height: 900 });
+            const r = await page.goto(process.env.URL, { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
+            console.log('status', r ? r.status() : 'none', '| title', await page.title());
+            const head = await page.evaluate(() => document.body.innerText.slice(0, 160).replace(/\s+/g, ' '));
+            if (/just a moment|verify you are human/i.test(head)) { console.log('CLOUDFLARE CHALLENGE - the runner was not let in'); await browser.close(); return; }
+            await new Promise(res => setTimeout(res, 7000));
+            const out = await page.evaluate((text) => {
+              const hits = [];
+              const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+              let n;
+              while ((n = walker.nextNode())) {
+                if ((n.textContent || '').trim() !== text) continue;
+                let el = n.parentElement;
+                const chain = [];
+                for (let i = 0; el && i < 8; i++) {
+                  const cls = typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 3).join('.') : '';
+                  chain.push(el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (cls ? '.' + cls : ''));
+                  el = el.parentElement;
+                }
+                const p = n.parentElement;
+                const box = p ? p.getBoundingClientRect() : null;
+                const cs = p ? getComputedStyle(p) : null;
+                hits.push({
+                  chain: chain.join('  <  '),
+                  visible: !!(box && box.width && box.height && cs && cs.visibility !== 'hidden' && cs.display !== 'none'),
+                  top: box ? Math.round(box.top + window.scrollY) : null,
+                  left: box ? Math.round(box.left) : null,
+                  html: (p && p.parentElement ? p.parentElement.outerHTML : (p ? p.outerHTML : '')).replace(/\s+/g, ' ').slice(0, 700),
+                });
+              }
+              return hits;
+            }, process.env.TEXT);
+            console.log('matches for "' + process.env.TEXT + '":', out.length);
+            for (const h of out) {
+              console.log('');
+              console.log('---', h.visible ? 'VISIBLE' : 'hidden', 'at top', h.top, 'left', h.left);
+              console.log('   ', h.chain);
+              console.log('   ', h.html);
+            }
+            await browser.close();
+          })().catch(e => console.log('probe error:', e.message));
+          EOF
