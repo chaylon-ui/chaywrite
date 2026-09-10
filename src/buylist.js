@@ -120,9 +120,21 @@ const NAME_TO_ID = {
   "sorcery: contested realm": "scr", "riftbound": "riftbound",
 };
 const KNOWN_IDS = ["mtg", "pokemon", "yugioh", "one", "ones", "lor", "swu", "fleshAndBlood", "scr", "riftbound"];
-function gameIdOf(c) {
-  // A card object carries the game as an id ("mtg"), sometimes as a name.
-  const games = memoGet("games") || [];
+// BinderPOS's supported games as {id, name}, memoised for MEMO_TTL; [] when
+// they cannot be fetched (the tables above still cover the known names).
+async function gamesList(env) {
+  let games = memoGet("games");
+  if (!games) {
+    const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/supportedGames`, {}).catch(() => null);
+    games = r ? normaliseGames(r.body) : [];
+    if (games.length) memoSet("games", games);
+  }
+  return games;
+}
+function gameIdOf(c, games) {
+  // A card object carries the game as a name ("Magic: The Gathering" on the
+  // search hits the page adds from) or as an id ("mtg").
+  games = games || [];
   for (const raw of [c.gameId, c.game]) {
     const s = String(raw || "").trim();
     if (!s) continue;
@@ -138,12 +150,14 @@ function gameIdOf(c) {
 }
 async function repriceCards(env, cards) {
   if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
+  const games = await gamesList(env);
   const seen = new Set(), pairs = [];
   for (const c of cards) {
-    const key = gameIdOf(c) + "|" + String(c.cardId);
+    const game = gameIdOf(c, games);
+    const key = game + "|" + String(c.cardId);
     if (seen.has(key)) continue;
     seen.add(key);
-    pairs.push({ game: gameIdOf(c), id: Number(c.cardId) });
+    pairs.push({ game, id: Number(c.cardId) });
   }
   const priced = new Map();   // "cardId|conditionId|finish" -> today's offer
   for (let i = 0; i < pairs.length; i += 20) {              // the portal's own batch size, one request at a time
