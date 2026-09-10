@@ -1,0 +1,47 @@
+name: link-check
+
+# Read-only diagnostic: open each URL in headless Chrome (real browser
+# headers, so sites that answer 403 to curl still load) and print the HTTP
+# status, the final URL after redirects, the page title and the first
+# words of the body. Used to pick the publisher "how to play" links the
+# learn-to-play hub carries.
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Space-separated URLs to open"
+        required: true
+        default: "https://fabtcg.com/en/how-to-play/"
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      URLS: ${{ inputs.urls }}
+    steps:
+      - name: Open each URL
+        run: |
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36');
+            await page.setViewport({ width: 1366, height: 900 });
+            for (const u of process.env.URLS.split(/\s+/).filter(Boolean)) {
+              let r = null, err = '';
+              try { r = await page.goto(u, { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch (e) { err = e.message; }
+              await new Promise(res => setTimeout(res, 2500));
+              const title = await page.title().catch(() => '?');
+              const text = await page.evaluate(() => document.body ? document.body.innerText.replace(/\s+/g, ' ').slice(0, 160) : '').catch(() => '');
+              console.log((r ? r.status() : 'ERR') + ' | ' + u + ' -> ' + (r ? r.url() : '-') + ' | title: ' + title + (err ? ' | ' + err : ''));
+              console.log('      ' + text);
+            }
+            await browser.close();
+          })().catch(e => console.log('error', e.message));
+          EOF
