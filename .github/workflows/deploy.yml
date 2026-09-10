@@ -200,11 +200,9 @@ jobs:
           for s in summerside bridgewater dartmouth new-glasgow truro; do
             curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/sisternew.json?store=$s" | jq -c '{store, source, count, recent7, newest, oldest, first: (.products[0] // null | if . then {title, price, updated, created, type} else null end)}' || true
           done
-          echo "=== BinderPOS public events feed per store origin (store pages: does the feed answer a sister store's events when asked as that store?) ==="
-          T=$(date -u +%F); E=$(date -u -d '+30 days' +%F)
-          for o in https://exorgames.com https://exor-games-truro.myshopify.com https://exor-games-dartmouth.myshopify.com https://exor-games-summserside.myshopify.com https://exor-games-new-glasgow.myshopify.com https://exor-games-bridgewater.myshopify.com; do
-            printf '%s -> ' "$o"
-            curl -sS --max-time 25 -H "Origin: $o" -H "Referer: $o/" -H 'content-type: application/json' "https://portal.binderpos.com/api/events/forStore?startDate=$T&endDate=$E" | jq -c 'if type=="array" then {count: length, cities: ([.[].city]|unique), first: (.[0].title // null)} else {status: "not an array", body: (tostring|.[0:120])} end' || echo error
+          echo "=== /events.json?store= (store pages: the sister store's events, asked of BinderPOS as that store; deploy 264 raw test: Truro 6, New Glasgow 9, the other three none) ==="
+          for s in truro new-glasgow dartmouth; do
+            curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/events.json?store=$s" | jq -c '{store, ok, count, error, first: (.events[0] // null | if . then {title, date, time, game, city, url} else null end)}' || true
           done
           echo "=== /reviews.json carries a place id per review (store pages match on it) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/reviews.json" | jq -c '{count, places: ([.reviews[].place]|unique), locations: ([.reviews[].location]|unique)}' || true

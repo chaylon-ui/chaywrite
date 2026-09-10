@@ -33,7 +33,7 @@ const REVIEWS_CACHE_CONTROL = `public, max-age=${BROWSER_TTL_S}, s-maxage=${REVI
    v2: six stores across both provinces (was three, PEI-only).
    v3: per-city discovery (the province queries surfaced two of six).
    v4: browser max-age 5 min (the cached entries carried the 6h header). */
-const REVIEWS_CACHE_V = "4";
+const REVIEWS_CACHE_V = "5"; // v5: place id per review (store pages match on it)
 
 // Words/phrases that mark a review as not-showcase material even at five
 // stars. Deliberately trigger-happy: a false positive only hides one quote,

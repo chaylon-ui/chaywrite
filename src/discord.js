@@ -112,6 +112,60 @@ async function hydrate(handle) {
   };
 }
 
+// One Admin API query resolves every unposted handle at once (the pattern
+// cards.js's adminSearch uses): no per-product storefront fetches, so neither
+// the owner's Cloudflare rules on exorgames.com (403, deploy 261) nor the
+// myshopify host's rate limit (429, deploy 264), each of which deferred all
+// 40 hydrations, can starve the poster. Returns handle -> card, or handle ->
+// null for a product that is gone or sold out; a handle the query did not
+// answer is left out for the next tick. Without an Admin token the storefront
+// route stays as the fallback, ten at a time and stopping at the first 429.
+async function hydrateMany(env, handles) {
+  const out = new Map();
+  if (!handles.length) return out;
+  const token = env && env.SHOPIFY_ADMIN_TOKEN;
+  if (!token) {
+    for (const h of handles.slice(0, 10)) {
+      try { out.set(h, await hydrate(h)); } catch (e) { if (/429/.test(String(e && e.message))) break; throw e; }
+      await new Promise((res) => setTimeout(res, 250));
+    }
+    return out;
+  }
+  const shop = env.SHOPIFY_SHOP || "most-wanted-ca.myshopify.com";
+  const clean = handles.map((h) => String(h).replace(/[^a-z0-9-]/gi, "")).filter(Boolean);
+  const gql = `query($q:String!){products(first:50,query:$q){edges{node{handle title productType featuredImage{url}
+    variants(first:20){edges{node{title price availableForSale inventoryQuantity}}}}}}}`;
+  let r;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ query: gql, variables: { q: clean.map((h) => "handle:" + h).join(" OR ") } }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (r.status !== 429) break;
+    await new Promise((res) => setTimeout(res, 500 * (attempt + 1)));
+  }
+  if (!r.ok) throw new Error("admin products " + r.status);
+  const j = await r.json();
+  if (j.errors) throw new Error("admin products: " + String((j.errors[0] && j.errors[0].message) || "error").slice(0, 100));
+  const want = new Set(clean);
+  for (const e of ((j.data && j.data.products && j.data.products.edges) || [])) {
+    const p = e && e.node;
+    if (!p || !want.has(p.handle)) continue;
+    const vs = ((p.variants && p.variants.edges) || []).map((x) => x.node).filter((v) => v && (v.availableForSale || Number(v.inventoryQuantity) > 0));
+    if (!vs.length) { out.set(p.handle, null); continue; }
+    const cheapest = vs.reduce((a, v) => (Number(v.price) < Number(a.price) ? v : a), vs[0]);
+    out.set(p.handle, {
+      handle: p.handle, title: String(p.title || p.handle), type: String(p.productType || ""), game: gameOf(p.productType),
+      price: Number(cheapest.price), conditions: vs.map((v) => String(v.title)).slice(0, 6),
+      image: (p.featuredImage && p.featuredImage.url) || null, url: SHOP + "/products/" + p.handle,
+    });
+  }
+  for (const h of clean) if (!out.has(h)) out.set(h, null); // unknown to the Admin API: gone
+  return out;
+}
+
 // What has not been posted today, hydrated; cheap bulk, tickets and internal
 // listings are remembered as skipped so they are not fetched again.
 export async function pendingDrops(env, state) {
@@ -120,10 +174,12 @@ export async function pendingDrops(env, state) {
   const done = new Set([...(state.posted || []), ...(state.skipped || [])]);
   const todo = handles.filter((h) => !done.has(h)).slice(0, 40);
   const pending = [], skipped = [], deferred = [];
-  let error = null; // the last hydration failure, so the preview can say why nothing is pending
+  let error = null; // the hydration failure, if any, so the preview can say why nothing is pending
+  let cards = new Map();
+  try { cards = await hydrateMany(env, todo); } catch (e) { error = String((e && e.message) || e).slice(0, 160); }
   for (const h of todo) {
-    let c;
-    try { c = await hydrate(h); } catch (e) { deferred.push(h); error = String((e && e.message) || e).slice(0, 160); continue; }
+    if (!cards.has(h)) { deferred.push(h); continue; }
+    const c = cards.get(h);
     if (!c || c.price < minPrice || /event ticket|bulkcard|internal|tbd/i.test(c.type)) { skipped.push(h); continue; }
     pending.push(c);
   }

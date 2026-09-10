@@ -1311,7 +1311,7 @@ export async function serveSisterNew(request, ctx) {
   const sister = SISTERS.find((s) => s.store.toLowerCase().replace(/[^a-z]+/g, "-") === slug);
   if (!sister) return Response.json({ ok: false, error: "unknown store" }, { status: 404, headers: { ...cors, "cache-control": "no-store" } });
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/sisternew.json?s=" + slug, request.url).toString());
+  const cacheKey = new Request(new URL("/sisternew.json?v=2&s=" + slug, request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
   const headers = { accept: "application/json", "user-agent": "ExorStorePages/1.0 (+workers.dev)" };
