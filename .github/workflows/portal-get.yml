@@ -2,12 +2,13 @@ name: Portal GET
 
 # Read-only diagnostic for the BinderPOS portal API: sign in with the staff
 # login held as repo Actions secrets (Firebase Identity Toolkit, the way the
-# portal's own web app does), then print the masked, truncated answer of ONE
-# GET path (e.g. /api/pos/carts?limit=3) or ONE GraphQL query. Nothing else
-# is sent: the request is a GET, or a POST to /graphql carrying a query
-# that must start with "query" or "{". Tokens are never printed; emails,
-# names and contact fields are masked. An optional `pick` JS expression
-# over the parsed answer (as `d`) reduces a long list before printing.
+# portal's own web app does), then print the masked, truncated answer of one
+# or more GET paths (separated by " | ", run one after another, each timed)
+# or ONE GraphQL query. Nothing else is sent: the requests are GETs, or a
+# POST to /graphql carrying a query that must start with "query" or "{".
+# Tokens are never printed; emails, names and contact fields are masked. An
+# optional `pick` JS expression over the parsed answer (as `d`) reduces a
+# long list before printing.
 #
 # Secrets required (Settings -> Secrets and variables -> Actions):
 #   BINDERPOS_LOGIN_EMAIL      portal login email
@@ -17,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       path:
-        description: "GET path on api.binderpos.com (e.g. /api/pos/carts?limit=3); leave empty when using a GraphQL query"
+        description: "GET path(s) on api.binderpos.com, several separated by ' | '; leave empty when using a GraphQL query"
         required: false
         default: ""
       query:
@@ -33,7 +34,7 @@ on:
         required: false
         default: ""
       chars:
-        description: "Most characters of the answer to print"
+        description: "Most characters of each answer to print"
         required: false
         default: "5000"
       keys:
@@ -46,9 +47,9 @@ permissions: {}
 jobs:
   get:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
-      - name: Sign in (REST) and print the answer (masked)
+      - name: Sign in (REST) and print the answers (masked)
         env:
           EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
           PASS: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
@@ -73,36 +74,16 @@ jobs:
           const mask = (s) => String(s)
             .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
             .replace(/("(firstName|lastName|name|customerName|phone|phoneNumber|addressLine1|addressLine2|address1|address2|zipCode|zip|notes|address|storeName)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
-          const path = (process.env.P || '').trim();
+          const paths = String(process.env.P || '').split('|').map(s => s.trim()).filter(Boolean);
           const query = (process.env.Q || '').trim();
           const pick = (process.env.PICK || '').trim();
           const n = Math.max(200, parseInt(process.env.N, 10) || 5000);
-          (async () => {
-            if (path && !path.startsWith('/')) { console.log('path must start with /'); return; }
-            if (query && !/^(query\b|\{)/.test(query)) { console.log('query must be a read-only GraphQL query (start with "query" or "{")'); return; }
-            if (!path && !query) { console.log('give a path or a query'); return; }
-            const r = await fetch('https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=' + KEY, {
-              method: 'POST', headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ email: process.env.EMAIL, password: process.env.PASS, returnSecureToken: true }),
-            });
-            const j = await r.json().catch(() => ({}));
-            console.log('sign-in:', r.status, j.idToken ? 'ok' : JSON.stringify(j.error || {}).slice(0, 200));
-            if (!j.idToken) return;
-            const H = { 'authorization': 'Bearer ' + j.idToken, 'accept': 'application/json', 'content-type': 'application/json', 'origin': PORTAL, 'referer': PORTAL + '/' };
-            let res;
-            if (path) res = await fetch(API + path, { headers: H });
-            else {
-              let vars = {}; try { vars = JSON.parse(process.env.V || '{}'); } catch { console.log('variables are not valid JSON; using {}'); }
-              res = await fetch(API + '/graphql', { method: 'POST', headers: H, body: JSON.stringify({ query, variables: vars }) });
-            }
-            const text = await res.text();
-            console.log((path ? 'GET ' + path : 'GraphQL') + ' ->', res.status, '| bytes', text.length, '| content-type', res.headers.get('content-type'));
+          const show = (label, res, text, ms) => {
+            console.log(label + ' ->', res.status, '| ms', ms, '| bytes', text.length, '| content-type', res.headers.get('content-type'));
             let d = null; try { d = JSON.parse(text); } catch {}
             if (pick && d !== null) {
-              try {
-                const out = new Function('d', 'return (' + pick + ');')(d);
-                console.log('pick ->', mask(JSON.stringify(out)).slice(0, n));
-              } catch (e) { console.log('pick failed:', e.message); }
+              try { console.log('pick ->', mask(JSON.stringify(new Function('d', 'return (' + pick + ');')(d))).slice(0, n)); }
+              catch (e) { console.log('pick failed:', e.message); }
             } else console.log(mask(text).slice(0, n));
             if (String(process.env.KEYS) === 'true' && d !== null) {
               try {
@@ -122,6 +103,32 @@ jobs:
                   }
                 } else if (d && typeof d === 'object') console.log('top-level keys: ' + Object.keys(d).join(','));
               } catch {}
+            }
+          };
+          (async () => {
+            for (const p of paths) if (!p.startsWith('/')) { console.log('path must start with /:', p); return; }
+            if (query && !/^(query\b|\{)/.test(query)) { console.log('query must be a read-only GraphQL query (start with "query" or "{")'); return; }
+            if (!paths.length && !query) { console.log('give a path or a query'); return; }
+            const r = await fetch('https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=' + KEY, {
+              method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email: process.env.EMAIL, password: process.env.PASS, returnSecureToken: true }),
+            });
+            const j = await r.json().catch(() => ({}));
+            console.log('sign-in:', r.status, j.idToken ? 'ok' : JSON.stringify(j.error || {}).slice(0, 200));
+            if (!j.idToken) return;
+            const H = { 'authorization': 'Bearer ' + j.idToken, 'accept': 'application/json', 'content-type': 'application/json', 'origin': PORTAL, 'referer': PORTAL + '/' };
+            for (const p of paths) {
+              const t0 = Date.now();
+              const res = await fetch(API + p, { headers: H });
+              const text = await res.text();
+              show('GET ' + p, res, text, Date.now() - t0);
+            }
+            if (query) {
+              let vars = {}; try { vars = JSON.parse(process.env.V || '{}'); } catch { console.log('variables are not valid JSON; using {}'); }
+              const t0 = Date.now();
+              const res = await fetch(API + '/graphql', { method: 'POST', headers: H, body: JSON.stringify({ query, variables: vars }) });
+              const text = await res.text();
+              show('GraphQL', res, text, Date.now() - t0);
             }
           })().catch(e => console.log('probe error:', e.message));
           EOF
