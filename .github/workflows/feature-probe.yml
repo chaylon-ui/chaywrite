@@ -46,7 +46,6 @@ jobs:
             await page.setViewport({ width: 1366, height: 900 });
             const fails = [];
             const check = (name, ok, detail) => { console.log((ok ? 'PASS' : 'FAIL') + ' ' + name + (detail ? ' | ' + detail : '')); if (!ok) fails.push(name); };
-            const txt = (s) => document.querySelector(s) ? document.querySelector(s).innerText.replace(/\s+/g, ' ').trim().slice(0, 220) : null;
             const open = async (p, settle) => {
               const r = await page.goto(u(p), { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
               await wait(settle || 6000);
@@ -93,20 +92,21 @@ jobs:
               const q = (s) => document.querySelector(s);
               const t = (s) => q(s) ? q(s).innerText.replace(/\s+/g, ' ').trim().slice(0, 220) : null;
               const shown = (s) => q(s) ? !q(s).hidden : null;
-              return { title: t('.xg-store__title'), key: q('.xg-store') ? q('.xg-store').getAttribute('data-key') : null, hours: shown('[data-hours]'), pill: t('.xg-store__pill'), week: document.querySelectorAll('[data-week] li').length, today: t('[data-week] li.is-today'), address: t('[data-address]'), phone: t('[data-phone]'), partner: shown('[data-partner]'), directions: q('[data-directions]') ? q('[data-directions]').href.slice(0, 80) : null, events: shown('[data-events]') ? document.querySelectorAll('[data-events-list] li').length : 'hidden', firstEvent: t('[data-events-list] li'), picks: document.querySelectorAll('.xg-store__pick').length, firstPick: t('.xg-store__pick'), landed: shown('[data-landed]') ? document.querySelectorAll('[data-landed-list] li').length : 'hidden', landedNote: t('[data-landed-sub]'), firstLanded: t('[data-landed-list] li'), reviews: shown('[data-reviews]') ? document.querySelectorAll('.xg-store__rev').length : 'hidden', map: !!q('.xg-store__map iframe'), body: t('.xg-store__body') };
+              const firstEv = q('[data-events-list] li a');
+              return { title: t('.xg-store__title'), key: q('.xg-store') ? q('.xg-store').getAttribute('data-key') : null, hours: shown('[data-hours]'), pill: t('.xg-store__pill'), week: document.querySelectorAll('[data-week] li').length, today: t('[data-week] li.is-today'), address: t('[data-address]'), phone: t('[data-phone]'), partner: shown('[data-partner]'), directions: q('[data-directions]') ? q('[data-directions]').href.slice(0, 80) : null, events: shown('[data-events]') ? document.querySelectorAll('[data-events-list] li').length : 'hidden', firstEvent: t('[data-events-list] li'), firstEventHref: firstEv ? firstEv.getAttribute('href') : null, picks: document.querySelectorAll('.xg-store__pick').length, firstPick: t('.xg-store__pick'), landed: shown('[data-landed]') ? document.querySelectorAll('[data-landed-list] li').length : 'hidden', landedNote: t('[data-landed-sub]'), firstLanded: t('[data-landed-list] li'), reviews: shown('[data-reviews]') ? document.querySelectorAll('.xg-store__rev').length : 'hidden', firstReview: t('.xg-store__rev'), map: !!q('.xg-store__map iframe'), body: t('.xg-store__body') };
             };
             await open('/pages/exor-games-truro', 14000);
             const tr = await page.evaluate(readStore);
             console.log('truro:', JSON.stringify(tr));
             check('store template rendered for Truro', tr.key === 'truro' && !!tr.title, tr.title);
             check('Truro live hours painted', tr.hours === true && tr.week === 7, tr.pill + ' | today: ' + tr.today);
-            check('Truro address + phone', !!tr.address && !!tr.phone, tr.address + ' / ' + tr.phone);
-            check('Truro events', typeof tr.events === 'number' && tr.events > 0, 'events ' + tr.events + ' first: ' + tr.firstEvent);
+            check('Truro address (phone is reported, not required: the Google listing carries none)', !!tr.address, tr.address + ' | phone: ' + (tr.phone || 'none'));
+            check('Truro events through the worker (asked of BinderPOS as the Truro store)', typeof tr.events === 'number' && tr.events > 0, 'events ' + tr.events + ' first: ' + tr.firstEvent + ' -> ' + tr.firstEventHref);
             check('Truro staff picks', tr.picks > 0, tr.picks + ' picks; first: ' + tr.firstPick);
             check('Truro arrivals from its own storefront', typeof tr.landed === 'number' && tr.landed > 0, tr.landed + ' | ' + tr.landedNote + ' | ' + tr.firstLanded);
             check('Truro map embed', tr.map);
             check('Truro page body rendered', !!tr.body, tr.body);
-            console.log('Truro reviews:', tr.reviews);
+            console.log('Truro reviews:', tr.reviews, tr.firstReview);
             await open('/pages/exor-games-dartmouth', 14000);
             const da = await page.evaluate(readStore);
             console.log('dartmouth:', JSON.stringify(da));
@@ -114,34 +114,36 @@ jobs:
             check('Dartmouth hours painted', da.hours === true && da.week === 7, da.pill);
             check('Dartmouth map built from the feed address', da.map);
             check('Dartmouth arrivals', typeof da.landed === 'number' && da.landed > 0, da.landed + ' | ' + da.landedNote);
+            console.log('Dartmouth events (BinderPOS lists none for this store as of 2026-09-10):', da.events);
             await open('/pages/exor-games-charlottetown', 14000);
             const ch = await page.evaluate(readStore);
             console.log('charlottetown:', JSON.stringify(ch));
             check('Charlottetown hours + arrivals from the New Today feed', ch.hours === true && typeof ch.landed === 'number' && ch.landed > 0, ch.pill + ' | ' + ch.landed + ' ' + ch.landedNote);
             check('Charlottetown events', typeof ch.events === 'number' && ch.events > 0, 'events ' + ch.events + ' first: ' + ch.firstEvent);
-            console.log('Charlottetown reviews:', ch.reviews);
+            check('Charlottetown staff picks (published products only)', ch.picks >= 2, ch.picks + ' picks; first: ' + ch.firstPick);
+            check('reviews matched to a store by place id (Charlottetown or Truro)', (typeof ch.reviews === 'number' && ch.reviews > 0) || (typeof tr.reviews === 'number' && tr.reviews > 0), 'charlottetown ' + ch.reviews + ' | truro ' + tr.reviews + ' | ' + (ch.firstReview || tr.firstReview));
 
             // 4. learn hub + one game page
             await open('/pages/learn-to-play', 10000);
             const hub = await page.evaluate(() => ({ tiles: Array.from(document.querySelectorAll('.xg-learn__tile b')).map(b => b.textContent.trim()), stock: Array.from(document.querySelectorAll('.xg-learn__tile em')).map(e => e.textContent.trim()), hrefs: Array.from(document.querySelectorAll('.xg-learn__tile a')).map(a => a.getAttribute('href')), events: document.querySelector('[data-events]') && !document.querySelector('[data-events]').hidden ? document.querySelectorAll('[data-events-list] li').length : 'hidden', note: document.querySelector('[data-events-note]') ? document.querySelector('[data-events-note]').textContent : null, first: document.querySelector('[data-events-list] li') ? document.querySelector('[data-events-list] li').innerText.replace(/\s+/g, ' ') : null }));
             console.log('hub:', JSON.stringify(hub));
             check('hub shows the eight games', hub.tiles.length === 8, hub.tiles.join(', '));
-            check('hub tiles carry live starter stock', hub.stock.filter(s => /in stock/i.test(s)).length >= 4, hub.stock.join(' | '));
+            check('hub tiles carry live starter stock', hub.stock.filter(s => /in stock/i.test(s)).length >= 5, hub.stock.join(' | '));
             console.log('hub beginner nights:', hub.events, hub.note, hub.first);
             await open('/pages/learn-to-play-pokemon', 10000);
             const g = await page.evaluate(() => {
               const q = (s) => document.querySelector(s);
               const t = (s) => q(s) ? q(s).innerText.replace(/\s+/g, ' ').trim().slice(0, 220) : null;
               let stored = 'err'; try { stored = localStorage.getItem('xgGame'); } catch (e) {}
-              return { title: t('.xg-learn__title'), key: q('.xg-learn') ? q('.xg-learn').getAttribute('data-key') : null, starters: document.querySelectorAll('.xg-learn__starter').length, starter1: t('.xg-learn__starter'), addToCart: !!q('.xg-learn__buy button'), prose: t('.xg-learn__prose h3'), events: q('[data-events]') && !q('[data-events]').hidden ? document.querySelectorAll('[data-events-list] li').length : 'hidden', none: q('[data-events-none]') ? !q('[data-events-none]').hidden : null, note: t('[data-events-note]'), firstEvent: t('[data-events-list] li'), links: Array.from(document.querySelectorAll('.xg-learn__links b')).map(b => b.textContent.trim()), meta: q('meta[name="xg-game"]') ? q('meta[name="xg-game"]').getAttribute('content') : null, stored };
+              return { title: t('.xg-learn__title'), key: q('.xg-learn') ? q('.xg-learn').getAttribute('data-key') : null, starters: document.querySelectorAll('.xg-learn__starter').length, starter1: t('.xg-learn__starter'), addToCart: !!q('.xg-learn__buy button'), prose: t('.xg-learn__prose h3'), events: q('[data-events]') && !q('[data-events]').hidden ? document.querySelectorAll('[data-events-list] li').length : 'hidden', none: q('[data-events-none]') ? !q('[data-events-none]').hidden : null, note: t('[data-events-note]'), firstEvent: t('[data-events-list] li'), links: Array.from(document.querySelectorAll('.xg-learn__links b')).map(b => b.textContent.trim()), rules: Array.from(document.querySelectorAll('.xg-learn__links a')).map(a => a.getAttribute('href')).filter(h => /^https?:/.test(h)), meta: q('meta[name="xg-game"]') ? q('meta[name="xg-game"]').getAttribute('content') : null, stored };
             });
             console.log('pokemon page:', JSON.stringify(g));
             check('game page rendered', g.key === 'pokemon' && /pok/i.test(g.title || ''), g.title);
-            check('starters with live stock', g.starters >= 1 && /in stock|sold out/i.test(g.starter1 || ''), g.starter1);
+            check('starters with live stock (published products)', g.starters >= 1 && /in stock|sold out/i.test(g.starter1 || ''), g.starters + ' | ' + g.starter1);
             check('add-to-cart on an in-stock starter', g.addToCart);
             check('how-it-plays prose from the page body', !!g.prose, g.prose);
             check('events for the game, or the honest fallback', (typeof g.events === 'number' && g.events > 0) || g.none === true, 'events ' + g.events + ' | none ' + g.none + ' | ' + g.note + ' | ' + g.firstEvent);
-            check('keep-going links', g.links.length >= 4, g.links.join(', '));
+            check('keep-going links', g.links.length >= 4, g.links.join(', ') + ' | ' + g.rules.join(' '));
             check('game page teaches the homepage', !!g.stored && /pokemon/.test(g.stored), 'meta ' + g.meta + ' stored ' + g.stored);
 
             console.log('\nFEATURE-FAILS ' + fails.length + (fails.length ? ': ' + fails.join('; ') : ''));
