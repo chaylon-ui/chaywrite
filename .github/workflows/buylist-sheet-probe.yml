@@ -1,0 +1,140 @@
+name: buylist-sheet-probe
+
+# Read-only diagnostic for the sell page's buylist app on the PREVIEW theme.
+# The app only mounts for a logged-in customer, so the probe gives the
+# section a stand-in customer id, answers the worker's /buylist/api calls
+# itself (a three-card list, a few search hits) and re-runs the page's own
+# script. Then it measures the list panel at the given viewport width: where
+# the panel is, what is painted on top of it, which ancestors could break a
+# fixed-position element (transform, filter, contain, overflow), the ticker
+# and the header variables, at the top of the page, scrolled, and at the
+# bottom, and again after tapping the sheet bar.
+
+on:
+  workflow_dispatch:
+    inputs:
+      width:
+        description: "Viewport width in px"
+        required: true
+        default: "390"
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      W: ${{ inputs.width }}
+    steps:
+      - name: Mount the list with a stand-in customer and measure the panel
+        run: |
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = '157462692013', H = 'https://exorgames.com', P = '/pages/selling-to-exor-games-buylist';
+          const IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="140"><rect width="100" height="140" rx="8" fill="#556"/></svg>');
+          const card = (id, name, set, cond, type, cash, credit) => ({ cardId: id, cardName: name, setName: set, game: 'Magic: The Gathering', type, imageUrl: IMG, quantity: '1', cashBuyPrice: cash, storeCreditBuyPrice: credit, condition: 1, conditionName: cond, shopifyVariantId: 1 });
+          const list = [card(1045, 'Sol Ring', 'From the Vault: Relics', 'Near Mint', 'Foil', 16.7, 23.38), card(2001, 'Fireball', 'Unlimited Edition', 'Near Mint', 'Normal', 2.5, 3.5), card(2002, 'Fireball', 'Arena League 1996', 'Near Mint', 'Normal', 6.52, 9.14)];
+          const hit = (id, name, set) => ({ id, cardName: name, setName: set, game: 'Magic: The Gathering', gameId: 'mtg', imageUrl: IMG, variants: [{ id: 1, variantName: 'Near Mint', cardBuylistTypes: [{ type: 'Normal', buyPrice: 2.5, creditBuyPrice: 3.5, maxPurchaseQuantity: 50, productVariantId: 1 }] }, { id: 2, variantName: 'Lightly Played', cardBuylistTypes: [{ type: 'Normal', buyPrice: 2.1, creditBuyPrice: 2.9, maxPurchaseQuantity: 50, productVariantId: 2 }] }] });
+          const W = parseInt(process.env.W, 10) || 390;
+          const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            const phone = W < 700;
+            await page.setViewport({ width: W, height: phone ? 844 : 900, isMobile: phone, hasTouch: phone, deviceScaleFactor: phone ? 2 : 1 });
+            await page.setUserAgent(phone ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+              const m = req.url().match(/\/buylist\/api\/([a-z]+)/);
+              if (!m) return req.continue();
+              const a = m[1];
+              const body = a === 'games' ? { games: [{ id: 'mtg', name: 'Magic: The Gathering' }] }
+                : a === 'sets' ? { sets: [] }
+                : a === 'list' ? { list }
+                : a === 'search' ? { hits: [hit(2001, 'Fireball', 'Unlimited Edition'), hit(2002, 'Fireball', 'Arena League 1996'), hit(2003, 'Fireball', 'Revised Edition')], more: true }
+                : {};
+              req.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+            });
+            const warm = await page.goto(H + '/?preview_theme_id=' + T, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => null);
+            console.log('warm-up', warm ? warm.status() : 'none');
+            const r = await page.goto(H + P + '?preview_theme_id=' + T, { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
+            console.log('page', r ? r.status() : 'none', '| theme', await page.evaluate(() => JSON.stringify(window.Shopify && window.Shopify.theme && { id: window.Shopify.theme.id, role: window.Shopify.theme.role })).catch(() => '?'));
+            const head = await page.evaluate(() => document.body.innerText.slice(0, 160).replace(/\s+/g, ' '));
+            if (/just a moment|verify you are human/i.test(head)) { console.log('CLOUDFLARE CHALLENGE - the runner was not let in'); await browser.close(); return; }
+            const mounted = await page.evaluate(() => {
+              const root = document.querySelector('.xg-buylist');
+              if (!root) return 'no .xg-buylist section on the page';
+              root.setAttribute('data-customer', '123456');
+              root.removeAttribute('data-mounted');
+              const s = document.createElement('script');
+              s.src = 'https://exor-binder.nevski.workers.dev/buylist.js?probe=' + Date.now();
+              document.body.appendChild(s);
+              return 'stand-in customer set, script re-injected; css: ' + [...document.querySelectorAll('link[href*="buylist.css"]')].map(l => l.href).join(' ');
+            });
+            console.log('mount:', mounted);
+            await page.waitForSelector('.bl__cart', { timeout: 20000 }).catch(() => console.log('no .bl__cart within 20 s'));
+            await sleep(2500);
+            await page.evaluate(() => { const q = document.getElementById('bl-q'); const f = document.getElementById('bl-form'); if (q && f) { q.value = 'Fireball'; f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); } });
+            await sleep(2500);
+            const measure = async (tag) => {
+              const m = await page.evaluate(() => {
+                const el = document.querySelector('.bl__cart'), bar = document.getElementById('bl-sheetbar');
+                if (!el) return { missing: true, loginCard: !!document.querySelector('.xg-buylist__login'), sectionHtml: document.querySelector('.xg-buylist') ? document.querySelector('.xg-buylist').innerHTML.slice(0, 300) : null };
+                const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+                const rs = getComputedStyle(document.documentElement);
+                const out = {
+                  vw: innerWidth, vh: innerHeight, scrollY: Math.round(scrollY), docH: document.documentElement.scrollHeight,
+                  cart: { pos: cs.position, display: cs.display, vis: cs.visibility, opacity: cs.opacity, z: cs.zIndex, top: cs.top, bottom: cs.bottom, maxH: cs.maxHeight, h: Math.round(r.height), w: Math.round(r.width), rectTop: Math.round(r.top), rectBottom: Math.round(r.bottom), left: Math.round(r.left), open: el.classList.contains('bl__cart--open'), bg: cs.backgroundColor },
+                  bar: bar ? { display: getComputedStyle(bar).display, h: Math.round(bar.getBoundingClientRect().height), top: Math.round(bar.getBoundingClientRect().top), text: bar.innerText.replace(/\s+/g, ' ').slice(0, 80) } : 'NO BAR ELEMENT (old JS served?)',
+                  vars: { tick: rs.getPropertyValue('--xg-tick-h'), fixedBottom: rs.getPropertyValue('--xg-fixed-bottom') },
+                  cssHasSheet: [...document.styleSheets].some(s => { try { return [...s.cssRules].some(rule => (rule.cssText || '').includes('bl__sheetbar')); } catch (e) { return false; } }),
+                  ancestors: [], ticker: null, atBar: null, nearBottom: null
+                };
+                let n = el.parentElement;
+                for (let i = 0; n && i < 14; n = n.parentElement, i++) {
+                  const c = getComputedStyle(n);
+                  const flags = [];
+                  if (c.transform !== 'none') flags.push('transform=' + c.transform);
+                  if (c.filter !== 'none') flags.push('filter=' + c.filter);
+                  if (c.perspective !== 'none') flags.push('perspective=' + c.perspective);
+                  if (c.willChange !== 'auto') flags.push('will-change=' + c.willChange);
+                  if (c.contain !== 'none') flags.push('contain=' + c.contain);
+                  if (c.backdropFilter && c.backdropFilter !== 'none') flags.push('backdrop-filter');
+                  if (c.overflow !== 'visible') flags.push('overflow=' + c.overflow);
+                  if (c.position !== 'static') flags.push('pos=' + c.position + '/z=' + c.zIndex);
+                  if (c.opacity !== '1') flags.push('opacity=' + c.opacity);
+                  if (c.zoom && c.zoom !== '1') flags.push('zoom=' + c.zoom);
+                  if (flags.length) out.ancestors.push(n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (typeof n.className === 'string' && n.className ? '.' + n.className.trim().split(/\s+/).slice(0, 2).join('.') : '') + ' {' + flags.join(' ') + '}');
+                }
+                const t = document.getElementById('xg-ticker');
+                if (t) { const tr = t.getBoundingClientRect(); out.ticker = { h: Math.round(tr.height), top: Math.round(tr.top), z: getComputedStyle(t).zIndex, display: getComputedStyle(t).display }; }
+                const at = (x, y) => { const e = document.elementFromPoint(x, y); return (e ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '') : 'none') + ' @' + x + ',' + y; };
+                const px = Math.round(innerWidth / 2);
+                out.atBar = at(px, Math.round(r.top + Math.min(28, Math.max(1, r.height / 2))));
+                out.nearBottom = at(px, innerHeight - 40);
+                return out;
+              });
+              console.log(tag + ' ' + JSON.stringify(m));
+              return m;
+            };
+            const top = await measure('AT-TOP');
+            await page.evaluate(() => window.scrollTo(0, 900));
+            await sleep(800);
+            const mid = await measure('SCROLLED-900');
+            await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+            await sleep(800);
+            const bottom = await measure('AT-BOTTOM');
+            const tapped = await page.evaluate(() => { const b = document.getElementById('bl-sheetbar'); if (!b) return 'no bar'; b.click(); return 'clicked'; });
+            await sleep(600);
+            console.log('tap:', tapped);
+            await measure('OPENED');
+            for (const [tag, m] of [['top', top], ['scrolled', mid], ['bottom', bottom]]) {
+              const c = m.cart || {};
+              const visible = !m.missing && c.display !== 'none' && c.vis !== 'hidden' && c.rectTop >= 0 && c.rectTop < m.vh && c.h > 0 && /bl__sheetbar|bl__cart|bl__sheettext|bl__chev|bl__sheetsum/.test(m.atBar || '');
+              console.log('VERDICT ' + (visible ? 'PASS ' : 'FAIL ') + tag + '-sheet-bar-visible :: ' + (m.missing ? 'no .bl__cart (login card: ' + m.loginCard + ')' : 'panel top ' + c.rectTop + ' of ' + m.vh + 'px, height ' + c.h + ', position ' + c.pos + ', painted at the bar: ' + m.atBar));
+            }
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 400)); process.exit(0); });
+          EOF
