@@ -5,11 +5,12 @@ name: buylist-sheet-probe
 # section a stand-in customer id, answers the worker's /buylist/api calls
 # itself (a three-card list, a few search hits) and re-runs the page's own
 # script. Then it measures the list panel at the given viewport width: where
-# the panel is, what is painted on top of it at three points inside its bar,
-# every fixed element near the bottom edge (Shopify's preview bar, the
-# ticker, app bars) with its z-index, which ancestors could break a
-# fixed-position element, at the top of the page, scrolled, at the bottom,
-# and again after tapping the sheet bar.
+# the panel is, what is painted on top of it at three points inside its bar
+# (as-is, and again with the popup app's overlay dismissed the way a shopper
+# would), every fixed element near the bottom edge (Shopify's preview bar,
+# the ticker, app bars and buttons) with its z-index, which ancestors could
+# break a fixed-position element, at the top of the page, scrolled, at the
+# bottom, and again after tapping the sheet bar.
 
 on:
   workflow_dispatch:
@@ -91,7 +92,7 @@ jobs:
                   cart: { pos: cs.position, display: cs.display, vis: cs.visibility, opacity: cs.opacity, z: cs.zIndex, bottom: cs.bottom, maxH: cs.maxHeight, h: Math.round(r.height), w: Math.round(r.width), rectTop: Math.round(r.top), rectBottom: Math.round(r.bottom), open: el.classList.contains('bl__cart--open') },
                   bar: bar ? { display: getComputedStyle(bar).display, h: Math.round(bar.getBoundingClientRect().height), top: Math.round(bar.getBoundingClientRect().top), text: bar.innerText.replace(/\s+/g, ' ').slice(0, 80) } : 'NO BAR ELEMENT (old JS served?)',
                   vars: { tick: rs.getPropertyValue('--xg-tick-h'), fixedBottom: rs.getPropertyValue('--xg-fixed-bottom'), sheetOff: document.querySelector('.xg-buylist').style.getPropertyValue('--bl-sheet-off') },
-                  ancestors: [], fixed: [], pbar: null, samples: []
+                  ancestors: [], fixed: [], pbar: null, popup: null, samplesRaw: [], samples: []
                 };
                 let n = el.parentElement;
                 for (let i = 0; n && i < 14; n = n.parentElement, i++) {
@@ -106,23 +107,34 @@ jobs:
                   if (c.position !== 'static') flags.push('pos=' + c.position + '/z=' + c.zIndex);
                   if (flags.length) out.ancestors.push(name(n) + ' {' + flags.join(' ') + '}');
                 }
-                // Every fixed element within three levels of body that sits in
-                // the lower half of the screen: the candidates for covering
-                // the sheet, with the numbers the page's own measurement uses.
-                for (const e of document.querySelectorAll('body > *, body > * > *, body > * > * > *')) {
-                  if (e === el || el.contains(e)) continue;
+                // Every fixed element on the page whose box reaches the lower
+                // half of the screen: the candidates for covering the sheet.
+                let count = 0;
+                for (const e of document.querySelectorAll('body *')) {
+                  if (e === el || el.contains(e) || count >= 14) continue;
                   const c = getComputedStyle(e);
                   if (c.position !== 'fixed' || c.display === 'none' || c.visibility === 'hidden') continue;
                   const b = e.getBoundingClientRect();
-                  if (b.height <= 0 || b.bottom < innerHeight * 0.5) continue;
-                  out.fixed.push(name(e) + ' top ' + Math.round(b.top) + ' bottom ' + Math.round(b.bottom) + ' h ' + Math.round(b.height) + ' w ' + Math.round(b.width) + ' z ' + c.zIndex + ' pe ' + c.pointerEvents);
+                  if (b.height <= 0 || b.width <= 0 || b.bottom < innerHeight * 0.5) continue;
+                  count++;
+                  out.fixed.push(name(e) + ' ' + Math.round(b.top) + '-' + Math.round(b.bottom) + ' w' + Math.round(b.width) + ' z' + c.zIndex + ' pe:' + c.pointerEvents + ' op:' + c.opacity);
                 }
-                const pb = document.getElementById('PBarNextFrame');
+                const pb = document.getElementById('PBarNextFrameWrapper') || document.getElementById('PBarNextFrame');
                 if (pb) { const b = pb.getBoundingClientRect(); out.pbar = { top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height), z: getComputedStyle(pb).zIndex }; }
                 const at = (x, y) => { const e = document.elementFromPoint(x, y); return (e ? name(e) : 'none') + ' @' + x + ',' + y; };
                 const px = Math.round(innerWidth / 2);
                 const br = bar ? bar.getBoundingClientRect() : r;
-                for (const y of [br.top + 6, br.top + br.height / 2, br.bottom - 6]) out.samples.push(at(px, Math.round(y)));
+                const ys = [br.top + 6, br.top + br.height / 2, br.bottom - 6].map(Math.round);
+                for (const y of ys) out.samplesRaw.push(at(px, y));
+                // The popup app's layer, described, then dismissed the way a
+                // shopper closes a popup, so the samples show the page itself.
+                const pc = document.getElementById('pop-convert-app');
+                if (pc) {
+                  const c = getComputedStyle(pc), b = pc.getBoundingClientRect();
+                  out.popup = { pos: c.position, z: c.zIndex, rect: Math.round(b.top) + '-' + Math.round(b.bottom) + ' w' + Math.round(b.width), opacity: c.opacity, bg: c.backgroundColor, pe: c.pointerEvents, kids: pc.children.length, text: pc.innerText.replace(/\s+/g, ' ').slice(0, 140), html: pc.innerHTML.replace(/\s+/g, ' ').slice(0, 220) };
+                  pc.remove();
+                }
+                for (const y of ys) out.samples.push(at(px, y));
                 return out;
               });
               console.log(tag + ' ' + JSON.stringify(m));
@@ -145,7 +157,7 @@ jobs:
               const onScreen = !m.missing && c.display !== 'none' && c.vis !== 'hidden' && c.rectTop >= 0 && c.rectTop < m.vh && c.h > 0;
               const unobstructed = !m.missing && m.samples.length === 3 && m.samples.every(own);
               const clearsBar = !m.missing && (!m.pbar || c.rectBottom <= m.pbar.top + 1);
-              console.log('VERDICT ' + (onScreen && unobstructed && clearsBar ? 'PASS ' : 'FAIL ') + tag + '-sheet-bar-visible-and-tappable :: ' + (m.missing ? 'no .bl__cart (login card: ' + m.loginCard + ')' : 'panel ' + c.rectTop + '-' + c.rectBottom + ' of ' + m.vh + 'px (offset ' + (m.vars.sheetOff || 'none') + '), preview bar ' + (m.pbar ? m.pbar.top + '-' + m.pbar.bottom + ' z ' + m.pbar.z : 'absent') + ', painted in the bar: ' + m.samples.join(' | ')));
+              console.log('VERDICT ' + (onScreen && unobstructed && clearsBar ? 'PASS ' : 'FAIL ') + tag + '-sheet-bar-visible-and-tappable :: ' + (m.missing ? 'no .bl__cart (login card: ' + m.loginCard + ')' : 'panel ' + c.rectTop + '-' + c.rectBottom + ' of ' + m.vh + 'px (offset ' + (m.vars.sheetOff || 'none') + '), preview bar ' + (m.pbar ? m.pbar.top + '-' + m.pbar.bottom : 'absent') + ', painted in the bar: ' + m.samples.join(' | ') + (m.popup ? ' [popup layer was on top first: ' + m.samplesRaw.join(' | ') + ']' : '')));
             }
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 400)); process.exit(0); });
