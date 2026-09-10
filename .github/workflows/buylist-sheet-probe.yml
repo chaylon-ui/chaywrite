@@ -121,17 +121,20 @@ jobs:
                 }
                 const pb = document.getElementById('PBarNextFrameWrapper') || document.getElementById('PBarNextFrame');
                 if (pb) { const b = pb.getBoundingClientRect(); out.pbar = { top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height), z: getComputedStyle(pb).zIndex }; }
-                const at = (x, y) => { const e = document.elementFromPoint(x, y); return (e ? name(e) : 'none') + ' @' + x + ',' + y; };
+                // A hit anywhere inside the sheet counts as the sheet (the
+                // bar's bold title is a bare <b>).
+                const at = (x, y) => { const e = document.elementFromPoint(x, y); const inSheet = e && e.closest && e.closest('.bl__cart'); return (inSheet ? 'SHEET:' : '') + (e ? name(e) : 'none') + ' @' + x + ',' + y; };
                 const px = Math.round(innerWidth / 2);
                 const br = bar ? bar.getBoundingClientRect() : r;
                 const ys = [br.top + 6, br.top + br.height / 2, br.bottom - 6].map(Math.round);
                 for (const y of ys) out.samplesRaw.push(at(px, y));
-                // The popup app's layer, described, then dismissed the way a
-                // shopper closes a popup, so the samples show the page itself.
+                // The popup app's layer (a shadow host: its popup and backdrop
+                // live in a shadow root, so hit tests report the host),
+                // described, then dismissed the way a shopper closes a popup.
                 const pc = document.getElementById('pop-convert-app');
                 if (pc) {
                   const c = getComputedStyle(pc), b = pc.getBoundingClientRect();
-                  out.popup = { pos: c.position, z: c.zIndex, rect: Math.round(b.top) + '-' + Math.round(b.bottom) + ' w' + Math.round(b.width), opacity: c.opacity, bg: c.backgroundColor, pe: c.pointerEvents, kids: pc.children.length, text: pc.innerText.replace(/\s+/g, ' ').slice(0, 140), html: pc.innerHTML.replace(/\s+/g, ' ').slice(0, 220) };
+                  out.popup = { pos: c.position, z: c.zIndex, rect: Math.round(b.top) + '-' + Math.round(b.bottom) + ' w' + Math.round(b.width), shadow: !!pc.shadowRoot, shadowText: pc.shadowRoot ? (pc.shadowRoot.textContent || '').replace(/\s+/g, ' ').slice(0, 160) : null, kids: pc.children.length };
                   pc.remove();
                 }
                 for (const y of ys) out.samples.push(at(px, y));
@@ -151,7 +154,7 @@ jobs:
             await sleep(600);
             console.log('tap:', tapped);
             const opened = await measure('OPENED');
-            const own = (s) => /bl__sheetbar|bl__cart|bl__sheettext|bl__sheetsum|bl__chev/.test(s || '');
+            const own = (s) => /^SHEET:/.test(s || '');
             for (const [tag, m] of [['top', top], ['scrolled', mid], ['bottom', bottom], ['opened', opened]]) {
               const c = m.cart || {};
               const onScreen = !m.missing && c.display !== 'none' && c.vis !== 'hidden' && c.rectTop >= 0 && c.rectTop < m.vh && c.h > 0;
