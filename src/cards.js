@@ -1327,12 +1327,19 @@ export async function serveSisterNew(request, ctx) {
     } catch { return null; } finally { clearTimeout(t); }
   };
   let source = "new-arrivals";
-  let list = await grab("/collections/new-arrivals/products.json?limit=24");
+  let list = await grab("/collections/new-arrivals/products.json?limit=48");
   if (!list || !list.length) {
     source = "products";
     list = (await grab("/products.json?limit=250")) || [];
-    list.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
   }
+  // Newest touch first: a restock updates the product, its creation date does
+  // not move (deploy 261 showed a 2023 creation at the top of one store's
+  // new-arrivals collection). recent7 counts touches inside the last week so
+  // the smoke step can tell a live list from a stale one.
+  const stamp = (p) => String(p.updated_at || p.published_at || p.created_at || "");
+  list.sort((a, b) => stamp(b).localeCompare(stamp(a)));
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  let recent7 = 0;
   const products = [];
   for (const p of list) {
     const vs = (p.variants || []).filter((v) => v && v.available !== false);
@@ -1342,13 +1349,14 @@ export async function serveSisterNew(request, ctx) {
     products.push({
       title: String(p.title || ""), handle: p.handle, type: String(p.product_type || ""),
       price: price.toFixed(2), image: abs((p.images && p.images[0] && p.images[0].src) || null),
-      url: sister.base + "/products/" + p.handle, created: String(p.created_at || "").slice(0, 10),
+      url: sister.base + "/products/" + p.handle, updated: stamp(p).slice(0, 10), created: String(p.created_at || "").slice(0, 10),
     });
+    if (stamp(p) >= weekAgo) recent7++;
     if (products.length >= 12) break;
   }
   const out = {
-    ok: true, store: slug, name: sister.store, source, count: products.length,
-    newest: products[0] ? products[0].created : null, oldest: products.length ? products[products.length - 1].created : null, products,
+    ok: true, store: slug, name: sister.store, source, count: products.length, recent7,
+    newest: products[0] ? products[0].updated : null, oldest: products.length ? products[products.length - 1].updated : null, products,
   };
   const res = Response.json(out, { headers: { ...cors, "cache-control": "public, max-age=" + SISTER_NEW_TTL_S } });
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
