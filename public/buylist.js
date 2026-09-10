@@ -36,7 +36,7 @@
       '<aside class="bl__cart">' +
         // Phones: the panel is a bottom sheet and this bar is all that shows
         // until it is tapped (buylist.css, max-width 860px). Hidden on desktop.
-        '<div id="bl-sheetbar" class="bl__sheetbar" role="button" tabindex="0" aria-expanded="false" aria-controls="bl-lines"><b>Your buylist</b><span id="bl-sheetsum" class="bl__sheetsum bl__muted">Empty</span><span class="bl__chev" aria-hidden="true">&#9650;</span></div>' +
+        '<div id="bl-sheetbar" class="bl__sheetbar" role="button" tabindex="0" aria-expanded="false" aria-controls="bl-lines"><span class="bl__sheettext"><b>Your buylist</b><span id="bl-sheetsum" class="bl__sheetsum bl__muted">Empty</span></span><span class="bl__chev" aria-hidden="true">&#9650;</span></div>' +
         '<h2 class="bl__h2">Your buylist <span id="bl-count" class="bl__muted"></span></h2>' +
         '<div id="bl-lines"><p class="bl__muted">Loading your saved list…</p></div>' +
         '<div class="bl__pay"><label><input type="radio" name="bl-pay" value="Cash" checked> Cash</label><label><input type="radio" name="bl-pay" value="Store Credit"> Store credit</label></div>' +
