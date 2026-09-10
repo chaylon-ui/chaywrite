@@ -2,10 +2,10 @@ name: sell-probe
 on:
   workflow_dispatch: {}
 
-# Log-only: the sell page's route images, measured on the LIVE theme and on
-# the PREVIEW theme, light and dark. Prints each image's natural size, its
-# rendered size, and the width of the cell holding it, so "the images
-# shrank" is a number rather than an impression.
+# Log-only: the sell page's route cards, measured on the LIVE theme and on
+# the PREVIEW theme, light and dark, at desktop width and at phone width.
+# Prints what the page body actually renders as, so "the images shrank" or
+# "each option fills the screen" is a number rather than an impression.
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -21,25 +21,34 @@ jobs:
           const T = '157462692013';
           const P = '/pages/sell-to-exor-games-bulk-or-create-a-list';
           const H = 'https://exorgames.com';
+          // FNV-1a of the page body's <style> text and of the .xgsell root's
+          // outerHTML, computed locally over the exact body that was
+          // uploaded (round 37b): equal here means the storefront serves
+          // that body byte for byte, whatever the admin's editor did to it.
+          const EXPECT_STYLE_FNV = '138946fb', EXPECT_ROOT_FNV = '324d1a86';
           const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           const fails = [];
           const v = (n, ok, d) => { console.log((ok ? 'VERDICT PASS ' : 'VERDICT FAIL ') + n + ' :: ' + d); if (!ok) fails.push(n); };
           (async () => {
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-            const look = async (label, url, dark) => {
+            const look = async (label, url, dark, width) => {
               const page = await browser.newPage();
-              await page.setViewport({ width: 1366, height: 900 });
-              await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+              const phone = !!width && width < 700;
+              await page.setViewport({ width: width || 1366, height: phone ? 844 : 900, isMobile: phone, hasTouch: phone, deviceScaleFactor: phone ? 2 : 1 });
+              await page.setUserAgent(phone
+                ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+                : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
               await page.evaluateOnNewDocument((d) => { try { if (d) localStorage.setItem('xgTheme', 'dark'); else localStorage.removeItem('xgTheme'); } catch (e) {} }, dark);
               try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) { console.log(label + ' NAV-ERR ' + String(e).slice(0, 90)); }
               await sleep(1500);
               const r = await page.evaluate(() => {
                 const out = { title: document.title.slice(0, 60), theme: document.documentElement.getAttribute('data-xg-theme'), hasPolicyCss: false, frame: !!document.querySelector('.xg-page'), imgs: [], table: null };
-                // Round 29b: the page body is now a self-contained design
+                // Round 29b: the page body is a self-contained design
                 // (.xgsell + its own <style>), so measure THAT: does the
                 // style block survive Shopify, do the cards lay out in a
-                // real grid, is every card image square and sized, and is
-                // every link a live URL rather than a dead anchor.
+                // real grid, is every card image sized, and is every link a
+                // live URL rather than a dead anchor. Round 37b adds the
+                // phone layout (a compact row per route) and clickable art.
                 const root = document.querySelector('.xgsell');
                 if (root) {
                   const band = root.querySelector('.xgsell__band');
@@ -47,13 +56,19 @@ jobs:
                   const cs = band ? getComputedStyle(band) : null;
                   const rects = cards.map(c => c.getBoundingClientRect());
                   const cols = new Set(rects.map(r => Math.round(r.top))).size;
+                  const fnv = (t) => { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+                  const st = [...document.querySelectorAll('style')].find(s => (s.textContent || '').includes('.xgsell{'));
                   out.sell = {
                     styled: !!cs && cs.borderRadius !== '0px' && /gradient/.test(cs.backgroundImage || ''),
                     band: band ? Math.round(band.getBoundingClientRect().width) : 0,
                     cards: cards.length,
                     rows: cols,
                     cardW: rects.map(r => Math.round(r.width)).join('/'),
+                    cardH: rects.map(r => Math.round(r.height)).join('/'),
+                    routesH: rects.length ? Math.round(Math.max(...rects.map(r => r.bottom)) - Math.min(...rects.map(r => r.top))) : 0,
                     art: [...root.querySelectorAll('.xgsell__card img')].map(i => Math.round(i.getBoundingClientRect().width) + 'x' + Math.round(i.getBoundingClientRect().height)).join(' '),
+                    artLinks: cards.map(c => { const a = c.querySelector('a.xgsell__art'); const go = c.querySelector('a.xgsell__go'); return a && go && a.querySelector('img') && a.getAttribute('href') === go.getAttribute('href') ? 1 : 0; }).reduce((x, y) => x + y, 0),
+                    tileBesideText: cards[0] && cards[0].querySelector('img') && cards[0].querySelector('h3') ? cards[0].querySelector('img').getBoundingClientRect().right <= cards[0].querySelector('h3').getBoundingClientRect().left + 1 : false,
                     fit: cards[0] ? getComputedStyle(cards[0].querySelector('img')).objectFit : null,
                     pos: cards[0] ? getComputedStyle(cards[0].querySelector('img')).objectPosition : null,
                     stats: root.querySelectorAll('.xgsell__stats li').length,
@@ -64,12 +79,23 @@ jobs:
                     links: [...root.querySelectorAll('a[href]')].length,
                     inkOnBand: cs ? getComputedStyle(root.querySelector('.xgsell__band h2')).color : null,
                     cardBg: cards[0] ? getComputedStyle(cards[0]).backgroundColor : null,
-                    cardInk: cards[0] ? getComputedStyle(cards[0].querySelector('h3')).color : null
+                    cardInk: cards[0] ? getComputedStyle(cards[0].querySelector('h3')).color : null,
+                    styleFnv: st ? fnv(st.textContent) : null,
+                    styleLen: st ? st.textContent.length : 0,
+                    rootFnv: fnv(root.outerHTML),
+                    rootLen: root.outerHTML.length
                   };
-                  // Owner: "it isn't centered to the page". Walk the ancestor
-                  // chain and print each box's left/right edge against the
-                  // viewport, so the asymmetry is attributable to a specific
-                  // wrapper rather than guessed at.
+                  // What a tap lands on: the centre of the first card and the
+                  // centre of its image, after scrolling the card into view.
+                  if (cards[0]) {
+                    cards[0].scrollIntoView({ block: 'center' });
+                    const cr = cards[0].getBoundingClientRect();
+                    const ir = cards[0].querySelector('img').getBoundingClientRect();
+                    const at = (x, y) => { const el = document.elementFromPoint(x, y); const a = el && el.closest ? el.closest('a[href]') : null; return a ? String(a.className) + ' -> ' + a.getAttribute('href').slice(0, 70) : (el ? 'NOT A LINK: ' + el.tagName.toLowerCase() + '.' + String(el.className).slice(0, 40) : 'none'); };
+                    out.sell.hitCard = at(cr.left + cr.width * 0.5, cr.top + cr.height * 0.5);
+                    out.sell.hitImg = at(ir.left + ir.width * 0.5, ir.top + ir.height * 0.5);
+                    window.scrollTo(0, 0);
+                  }
                   out.vw = document.documentElement.clientWidth;
                   out.geom = [];
                   let n = root;
@@ -82,15 +108,6 @@ jobs:
                   }
                 }
                 for (const s of document.styleSheets) { try { if ((s.href || '').includes('xg-policy')) out.hasPolicyCss = true; } catch (e) {} }
-                const t = document.querySelector('.xg-prose table, .rte table, #MainContent table');
-                if (t) { const tr = t.getBoundingClientRect(); const cs = getComputedStyle(t); out.table = { w: Math.round(tr.width), border: cs.borderTopWidth, bg: cs.backgroundColor, attr: t.getAttribute('border'), inline: (t.getAttribute('width') || '') }; }
-                const scope = document.querySelector('#MainContent') || document.body;
-                for (const im of [...scope.querySelectorAll('table img')].slice(0, 6)) {
-                  const b = im.getBoundingClientRect();
-                  const cell = im.closest('td');
-                  const cb = cell ? cell.getBoundingClientRect() : null;
-                  out.imgs.push({ nat: im.naturalWidth + 'x' + im.naturalHeight, shown: Math.round(b.width) + 'x' + Math.round(b.height), cell: cb ? Math.round(cb.width) : null, src: (im.getAttribute('src') || '').split('/').pop().split('?')[0].slice(0, 34) });
-                }
                 return out;
               });
               console.log(label + ' ' + JSON.stringify(r));
@@ -103,6 +120,10 @@ jobs:
             // so the landing load is what a shopper on the preview sees.
             const prev = await look('PREVIEW-light', H + P + '?preview_theme_id=' + T, false);
             const prevDark = await look('PREVIEW-dark', H + P + '?preview_theme_id=' + T, true);
+            // Phone width, both themes: the owner's complaint was that one
+            // option filled the whole screen and the art was not a link.
+            const phoneLive = await look('PHONE-live', H + P, false, 390);
+            const phonePrev = await look('PHONE-preview', H + P + '?preview_theme_id=' + T, false, 390);
             v('preview-is-the-preview-theme', prev.hasPolicyCss || prev.frame, 'xg-policy.css=' + prev.hasPolicyCss + ' xg-page frame=' + prev.frame);
             // The design must hold on BOTH themes: the live theme has none
             // of the xg- stylesheets, so the page's own <style> is the only
@@ -111,18 +132,29 @@ jobs:
               const s = r.sell;
               v(label + '-design-renders', !!s && s.styled, s ? 'band ' + s.band + 'px, gradient+radius applied' : 'no .xgsell root - the style block or markup did not survive');
               v(label + '-four-cards-in-a-grid', !!s && s.cards === 4 && s.rows < 4, s ? s.cards + ' cards, ' + s.rows + ' row(s), widths ' + s.cardW : 'no cards');
-              // Owner: "graphics should be larger and centered in the pill".
-              // Each image is now the card's own tile: full card width, tall,
-              // object-fit contain (which centres the art and crops nothing).
-              // Assert every tile is the same size, tall enough to read, and
-              // as wide as the card it sits in.
+              // Desktop keeps the large tile: full card width, tall,
+              // object-fit contain (centred art, nothing cropped).
               const tiles = s ? s.art.split(' ') : [];
               const tall = tiles.length === 4 && tiles.every(a => a === tiles[0] && parseInt(a.split('x')[1], 10) >= 120);
               const wide = !!s && tiles.length === 4 && Math.abs(parseInt(tiles[0], 10) - (parseInt(s.cardW.split('/')[0], 10) - 32)) <= 4;
               v(label + '-art-is-a-large-tile', tall && wide, s ? 'tiles ' + s.art + ' in ' + s.cardW + 'px cards' : 'no art');
               v(label + '-art-centred-not-cropped', !!s && s.fit === 'contain' && s.pos === '50% 50%', s ? 'object-fit ' + s.fit + ', position ' + s.pos : 'no art');
+              v(label + '-art-is-a-link', !!s && s.artLinks === 4, s ? s.artLinks + ' of 4 images wrapped in a link to the card\'s own destination' : 'none');
+              v(label + '-whole-card-clickable', !!s && /xgsell__(go|art)/.test(s.hitCard || '') && /xgsell__(go|art)/.test(s.hitImg || ''), s ? 'card centre: ' + s.hitCard + ' | image centre: ' + s.hitImg : 'none');
               v(label + '-supporting-blocks', !!s && s.stats === 4 && s.steps === 3 && s.fine === 6 && s.pills === 4, s ? s.stats + ' stats, ' + s.steps + ' steps, ' + s.fine + ' notes, ' + s.pills + ' pills' : 'none');
               v(label + '-no-dead-links', !!s && s.dead === 0 && s.links >= 10, s ? s.links + ' links, ' + s.dead + ' dead' : 'none');
+            }
+            for (const [label, r] of [['live', live], ['preview', prev]]) {
+              const s = r.sell;
+              v(label + '-body-is-the-uploaded-body', !!s && s.styleFnv === EXPECT_STYLE_FNV && s.rootFnv === EXPECT_ROOT_FNV, s ? 'style ' + s.styleFnv + ' (' + s.styleLen + ' chars) root ' + s.rootFnv + ' (' + s.rootLen + ' chars); expected ' + EXPECT_STYLE_FNV + ' / ' + EXPECT_ROOT_FNV : 'none');
+            }
+            for (const [label, r] of [['phone-live', phoneLive], ['phone-preview', phonePrev]]) {
+              const s = r.sell;
+              const hs = s ? s.cardH.split('/').map(Number) : [];
+              v(label + '-four-compact-rows', !!s && s.cards === 4 && hs.length === 4 && hs.every(h => h <= 200) && s.routesH <= 760, s ? 'card heights ' + s.cardH + 'px, all four span ' + s.routesH + 'px at ' + r.vw + 'px wide' : 'no cards');
+              v(label + '-tile-beside-the-text', !!s && s.art.split(' ').every(a => a === '92x92') && s.tileBesideText, s ? 'tiles ' + s.art + ', tile left of the title: ' + s.tileBesideText : 'no art');
+              v(label + '-image-and-card-clickable', !!s && s.artLinks === 4 && /xgsell__(go|art)/.test(s.hitCard || '') && /xgsell__(go|art)/.test(s.hitImg || ''), s ? s.artLinks + '/4 art links; card centre: ' + s.hitCard + ' | image centre: ' + s.hitImg : 'none');
+              v(label + '-design-renders', !!s && s.styled, s ? 'band ' + s.band + 'px' : 'no .xgsell root');
             }
             const lum = (c) => { const m = (c || '').match(/[0-9.]+/g); return m && m.length >= 3 ? (+m[0] + +m[1] + +m[2]) : -1; };
             v('dark-cards-are-dark', !!prevDark.sell && lum(prevDark.sell.cardBg) < 300 && lum(prevDark.sell.cardInk) > 500, prevDark.sell ? 'card bg ' + prevDark.sell.cardBg + ' ink ' + prevDark.sell.cardInk : 'none');
@@ -132,7 +164,7 @@ jobs:
               const first = r.geom && r.geom[0] ? r.geom[0] : '';
               const L = parseInt((first.match(/ L(-?\d+)/) || [])[1], 10);
               const R = parseInt((first.match(/ R(-?\d+)/) || [])[1], 10);
-              v(label + '-centred-on-the-page', Number.isFinite(L) && Number.isFinite(R) && Math.abs(L - R) <= 8, 'left gap ' + L + 'px vs right gap ' + R + 'px (viewport ' + (s ? s.vw : '?') + ')');
+              v(label + '-centred-on-the-page', Number.isFinite(L) && Number.isFinite(R) && Math.abs(L - R) <= 8, 'left gap ' + L + 'px vs right gap ' + R + 'px (viewport ' + (r.vw || '?') + ')');
               if (r.geom) for (const g of r.geom) console.log(label.toUpperCase() + '-BOX ' + g);
             }
             console.log('SELL-FAILS ' + fails.length + (fails.length ? ' :: ' + fails.join(', ') : ''));
