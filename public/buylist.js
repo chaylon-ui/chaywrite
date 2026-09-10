@@ -196,8 +196,13 @@
     var html = hits.map(function (h, k) {
       var i = start + k;
       var rows = offersOf(h).map(function (o, j) {
+        // BinderPOS sends, per condition, how many more copies the store will
+        // take (its rule's cap minus stock). Zero used to be a grey Add with a
+        // tooltip nobody on a phone could see; now it says so (owner, 2026-09-10).
         return "<tr><td>" + esc(o.v.variantName) + finish(o.p.type) + "</td><td>" + money(o.cash) + "</td><td>" + money(o.credit) + "</td><td>" +
-          '<button type="button" class="bl__btn bl__add" data-h="' + i + '" data-o="' + j + '"' + (o.max > 0 ? "" : ' disabled title="Not buying more right now"') + ">Add</button></td></tr>";
+          (o.max > 0
+            ? '<button type="button" class="bl__btn bl__add" data-h="' + i + '" data-o="' + j + '">Add</button>'
+            : '<span class="bl__nobuy" title="BinderPOS reports its limit for this condition is reached">Limit reached</span>') + "</td></tr>";
       }).join("");
       return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="" loading="lazy"><div>' +
         '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p>" +

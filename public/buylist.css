@@ -67,6 +67,7 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 .bl__offers td:last-child { text-align: right; }
 .bl__pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bl-line); color: var(--bl-ink); margin-left: 6px; vertical-align: middle; }
 .bl__add { padding: 6px 12px; font-size: 13px; }
+.bl__nobuy { display: inline-block; font-size: 12px; line-height: 1.2; color: var(--bl-muted); text-align: right; max-width: 78px; }
 .bl__more { display: block; margin: 6px auto 0; }
 /* The list panel stays in view under the fixed header and scrolls on its
    own (owner, 2026-09-10: a long list used to drag the whole page along
@@ -86,9 +87,15 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 .bl__group-head .bl__muted { display: block; font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bl__group-head .bl__seticon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
 .bl__line--in { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 0 4px 44px; border-top: 0; }
-.bl__cond { min-width: 0; font-size: 13px; line-height: 1.25; color: var(--bl-ink); }
-.bl__cond small { display: block; font-size: 12px; color: var(--bl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bl__cond { min-width: 0; font-size: 13px; line-height: 1.3; color: var(--bl-ink); }
+.bl__cond small { display: inline; margin-left: 6px; font-size: 12px; color: var(--bl-muted); white-space: nowrap; }
 .bl__cond .bl__pill { margin-left: 5px; }
+/* The theme stretches every input to 100% width, which turned the −/1/+
+   stepper into most of the row on phones (owner, 2026-09-10). Pin it. */
+.bl .bl__qtywrap { flex: 0 0 auto; width: auto; }
+.bl .bl__qtywrap .bl__btn { padding: 4px 8px; }
+.bl .bl__qtywrap .bl__qty { width: 36px !important; min-width: 0; max-width: 36px; flex: 0 0 36px; height: auto; margin: 0; padding: 4px 0; }
+@media (max-width: 480px) { .bl__line--in { padding-left: 0; } }
 .bl__h2 { margin: 0 0 10px; font-size: 18px; color: var(--bl-ink); display: flex; justify-content: space-between; align-items: baseline; }
 .bl__h2 span { font-size: 13px; font-weight: 500; }
 .bl__line { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--bl-line); }
