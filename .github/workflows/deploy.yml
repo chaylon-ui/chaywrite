@@ -361,12 +361,13 @@ jobs:
               const r = await j('/portal/buylists.json?status=' + s + '&take=2&days=60');
               console.log(s + ' take=2 days=60:', r.status, 'rows', r.body && r.body.rows ? r.body.rows.length : '-', r.body && r.body.error ? '| error ' + r.body.error : '');
             }
-            // in-store buy carts: the first read of a day is the slow one (portal fetch), the second is the cache
+            // in-store buy carts, the last 24 h only (BinderPOS's cart list is its slowest call):
+            // the first read of a day is the slow one (portal fetch), the second is the cache
             for (const pass of [1, 2]) {
               const t0 = Date.now();
-              const ca = await j('/portal/carts.json?days=3&take=3');
+              const ca = await j('/portal/carts.json?days=1&take=3');
               const cb = ca.body || {};
-              console.log('carts.json days=3 take=3 pass ' + pass + ':', ca.status, 'ms', Date.now() - t0, '| total', cb.total, 'rows', cb.rows ? cb.rows.length : '-', 'more', cb.more, '| totals', JSON.stringify(cb.totals), cb.error ? '| error ' + cb.error : '');
+              console.log('carts.json days=1 take=3 pass ' + pass + ':', ca.status, 'ms', Date.now() - t0, '| total', cb.total, 'rows', cb.rows ? cb.rows.length : '-', 'more', cb.more, '| totals', JSON.stringify(cb.totals), cb.error ? '| error ' + cb.error : '');
               if (pass === 2 && cb.rows && cb.rows[0]) {
                 const c0 = cb.rows[0];
                 console.log('cart row[0]:', mask(JSON.stringify(c0)).slice(0, 700));

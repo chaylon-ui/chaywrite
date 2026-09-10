@@ -477,16 +477,44 @@ function trimCart(c) {
   };
 }
 
+/* The carts endpoint, measured 2026-09-10 (portal-get runs 6-8): a small
+   page answers in about a second whatever the date window (limit=2 on one
+   day 1.4 s; limit=50 over ten days 1.2 s, 40 carts, 155 KB), and rows come
+   back in id order. `limit` is not a cart count — limit=50 yielded 40
+   carts, limit=200 yielded 173 — it bounds some joined row set, so a
+   "full" page cannot be told from its size. What killed the first version
+   was four parallel limit=500 calls: each sat for a minute and died at
+   their gateway (502) and their origin stayed sore for minutes. So: modest
+   pages, one request at a time isolate-wide, offset advanced by the carts
+   actually seen (overlaps are deduped, nothing is skipped), stop on an
+   empty page or one with nothing new, and a two-minute back-off after any
+   failure so a staff member reloading cannot pile on. */
+const CARTS_PAGE = 50;
+let cartsFailAt = 0;
+let cartsChain = Promise.resolve();   // day fetches queue behind each other
+
 async function fetchDayCarts(env, day) {
+  if (Date.now() - cartsFailAt < 120e3) throw new Error("BinderPOS's cart list is not answering right now; try again in a couple of minutes");
   const start = encodeURIComponent(day + "T00:00:00.000Z"), end = encodeURIComponent(day + "T23:59:59.999Z");
-  const out = [];
+  const out = [], seen = new Set();
   let offset = 0;
-  for (let page = 0; page < 4; page++) {
-    const arr = await get(env, "/api/pos/carts/all?limit=500&offset=" + offset + "&submitted=true&startDate=" + start + "&endDate=" + end);
-    if (!Array.isArray(arr)) break;
-    for (const c of arr) { if (c && !c.abandoned) { const t = trimCart(c); if (t) out.push(t); } }
-    if (arr.length < 500) break;
-    offset += arr.length;
+  try {
+    for (let page = 0; page < 40; page++) {
+      const arr = await get(env, "/api/pos/carts/all?limit=" + CARTS_PAGE + "&offset=" + offset + "&submitted=true&startDate=" + start + "&endDate=" + end);
+      if (!Array.isArray(arr) || !arr.length) break;
+      let fresh = 0;
+      for (const c of arr) {
+        if (!c || seen.has(String(c.id))) continue;
+        seen.add(String(c.id));
+        fresh++;
+        if (!c.abandoned) { const t = trimCart(c); if (t) out.push(t); }
+      }
+      if (!fresh) break;
+      offset += arr.length;
+    }
+  } catch (e) {
+    cartsFailAt = Date.now();
+    throw e;
   }
   return out;
 }
@@ -495,7 +523,8 @@ async function dayCarts(env, day) {
   const key = "carts:" + CARTS_VER + ":" + day;
   const cached = await kvGet(env, key);
   if (cached) { try { return JSON.parse(cached); } catch {} }
-  const carts = await fetchDayCarts(env, day);
+  // one portal query at a time, isolate-wide
+  const carts = await (cartsChain = cartsChain.catch(() => {}).then(() => fetchDayCarts(env, day)));
   const now = Date.now();
   const dayEnd = Date.parse(day + "T23:59:59.999Z");
   // today: three minutes; a day that ended within the last two hours: ten
@@ -515,7 +544,8 @@ export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
   const since = now - days * DAY_MS;
   const keys = new Set();
   for (let t = now; t >= since - DAY_MS; t -= DAY_MS) keys.add(dayKey(t));
-  const perDay = await Promise.all(Array.from(keys).map((d) => dayCarts(env, d)));
+  const perDay = [];
+  for (const d of keys) perDay.push(await dayCarts(env, d));   // newest day first, one at a time
   const all = perDay.flat()
     .filter((c) => (Date.parse(c.submitted || "") || 0) >= since)
     .sort((a, b) => (Date.parse(b.submitted || "") || 0) - (Date.parse(a.submitted || "") || 0));
