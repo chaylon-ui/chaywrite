@@ -1180,8 +1180,10 @@ const SISTERS_MAX = 12;
    AVAILABLE variant across all five stores wins. Sister stock is link-out
    only (separate Shopify stores, separate carts), so the result carries the
    store name and that store's product URL for the UI to label clearly. */
+// Games the deck builder does not lane but the product page still asks about.
+const SISTER_ONLY_MATCH = { lorcana: /lorcana/i, fab: /flesh\s*and\s*blood/i };
 async function findAtSisters(name, game) {
-  const gmatch = (GAMES[game] && GAMES[game].match) || /^mtg\b/i;
+  const gmatch = (GAMES[game] && GAMES[game].match) || SISTER_ONLY_MATCH[game] || /^mtg\b/i;
   const want = baseName(name).toLowerCase();
   const codeMode = CODE_RE.test(name);
   const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
