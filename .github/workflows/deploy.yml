@@ -418,3 +418,39 @@ jobs:
           JS=$(curl -sS --max-time 20 "$W/buylist.js" || true)
           echo "buylist.css: row-grid fix $(printf '%s' "$CSS" | grep -c 'bl__line.bl__line--in' || true) | sheet bar $(printf '%s' "$CSS" | grep -c 'bl__sheetbar' || true) | sheet open rule $(printf '%s' "$CSS" | grep -c 'bl__cart--open' || true) | grouped rows $(printf '%s' "$CSS" | grep -c 'bl__group-head' || true)"
           echo "buylist.js: sheet bar markup $(printf '%s' "$JS" | grep -c 'bl-sheetbar' || true) | toggle $(printf '%s' "$JS" | grep -c 'toggleSheet' || true) | re-pricing notes $(printf '%s' "$JS" | grep -c 'j.repriced' || true)"
+      # Shelf drops to Discord (src/discord.js): a channel webhook URL pasted
+      # as the repo Actions secret DISCORD_WEBHOOK_URL (optional per-game
+      # DISCORD_WEBHOOK_MTG / POKEMON / YUGIOH / LORCANA / ONEPIECE / FAB /
+      # SWU / RIFTBOUND / SPORTS / SEALED) syncs on the next deploy and never
+      # appears in the repo or logs.
+      - name: Sync DISCORD_WEBHOOK_URL worker secret (when configured)
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            printf '%s' "$DISCORD_WEBHOOK_URL" | npx wrangler@4 secret put DISCORD_WEBHOOK_URL
+          else
+            echo "No DISCORD_WEBHOOK_URL repo secret set - skipping (add one to post new arrivals to Discord)"
+          fi
+      - name: Smoke-test /discord shelf drops (log-only)
+        run: |
+          set +e
+          W=https://exor-binder.nevski.workers.dev
+          curl -sS -o /dev/null -w '/discord/preview.json no key: HTTP %{http_code} (expect 403)\n' --max-time 20 "$W/discord/preview.json" || true
+          echo "buylist condition guide served (js/css): $(curl -sS --max-time 20 "$W/buylist.js" | grep -c 'bl__condbtn' || true) / $(curl -sS --max-time 20 "$W/buylist.css" | grep -c 'bl__guide' || true)"
+          node <<'EOF'
+          const fs = require('fs');
+          const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+          const K = m ? m[1] : '';
+          const W = 'https://exor-binder.nevski.workers.dev';
+          (async () => {
+            if (!K) { console.log('no DEFAULT_PIN found; discord preview skipped'); return; }
+            const r = await fetch(W + '/discord/preview.json?k=' + encodeURIComponent(K));
+            const b = await r.json().catch(() => null);
+            if (!b) { console.log('discord preview: HTTP ' + r.status + ', no JSON'); return; }
+            console.log('discord preview:', r.status, '| configured', b.configured, '| channels', JSON.stringify(b.channels), '| min $' + b.minPrice, '| now', JSON.stringify(b.now), '| state', JSON.stringify(b.state), '| today arrivals', b.todayArrivals, '| pending', b.pending ? b.pending.length : '-', b.error ? '| error ' + b.error : '');
+            if (b.pending && b.pending[0]) console.log('first pending:', JSON.stringify(b.pending[0]).slice(0, 300));
+          })().catch(e => console.log('discord smoke error:', e.message));
+          EOF

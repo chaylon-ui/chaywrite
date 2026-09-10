@@ -402,14 +402,15 @@ async function gunzipBuf(buf) {
   w.close();
   return new Response(ds.readable).text();
 }
-async function kvGet(env, key) {
+// Also used by src/discord.js for its per-day "already posted" memory.
+export async function kvGet(env, key) {
   try {
     const r = await kvStub(env).fetch(new Request(DO_ORIGIN + "/_kv/get?k=" + encodeURIComponent(key)));
     if (!r.ok) return null;
     return await gunzipBuf(await r.arrayBuffer());
   } catch { return null; }
 }
-async function kvPut(env, key, text, ttlMs) {
+export async function kvPut(env, key, text, ttlMs) {
   try {
     const body = await gzipText(text);
     if (body.byteLength > 120 * 1024) return false;

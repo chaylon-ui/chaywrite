@@ -92,6 +92,21 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 .bl__pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bl-line); color: var(--bl-ink); margin-left: 6px; vertical-align: middle; }
 .bl__add { padding: 6px 12px; font-size: 13px; }
 .bl__nobuy { display: inline-block; font-size: 12px; line-height: 1.2; color: var(--bl-muted); text-align: right; max-width: 78px; }
+/* Condition guide: a condition in the offers table opens the store's own
+   photo and definition for that grade (from /pages/grading-guide). */
+.bl .bl__condbtn { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: var(--bl-ink); text-decoration: underline dotted; text-decoration-color: var(--bl-muted); text-underline-offset: 3px; cursor: pointer; }
+.bl .bl__condbtn:hover, .bl .bl__condbtn:focus-visible { color: var(--bl-accent); text-decoration-color: currentColor; }
+.bl__guide { border: 0; border-radius: 16px; padding: 0; width: min(92vw, 420px); max-width: 92vw; background: var(--bl-surface); color: var(--bl-text); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+.bl__guide::backdrop { background: rgba(0, 0, 0, 0.55); }
+.bl__guide-img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 16px 16px 0 0; background: var(--bl-line); }
+.bl__guide-body { padding: 14px 18px 18px; }
+.bl__guide-body h3 { margin: 0 0 8px; font-size: 18px; color: var(--bl-ink); }
+.bl__guide-body ul { margin: 0; padding: 0 0 0 18px; font-size: 13.5px; line-height: 1.45; }
+.bl__guide-body li { margin: 0 0 4px; }
+.bl__guide-body li b { color: var(--bl-ink); }
+.bl__guide-note { font-size: 12px; margin: 10px 0 0; }
+.bl__guide-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+.bl__link { color: var(--bl-accent); font-weight: 600; }
 .bl__more { display: block; margin: 6px auto 0; }
 /* The list panel stays in view under the fixed header and scrolls on its
    own (owner, 2026-09-10: a long list used to drag the whole page along

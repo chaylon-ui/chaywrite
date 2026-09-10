@@ -9,6 +9,7 @@ import { serveEnrich } from "./enrich.js";
 import { serveBuylist } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
 import { servePortal } from "./portal.js";
+import { serveDiscord, discordTick } from "./discord.js";
 
 export { BinderRoom };
 
@@ -259,6 +260,9 @@ export default {
 
     // Homepage reviews band: Google reviews proxied + curated server-side
     // (5-star only, text sentiment-screened) so the key stays private.
+    // Shelf drops to Discord: staff preview / test / post-now (src/discord.js).
+    if (url.pathname.startsWith("/discord/")) return serveDiscord(request, env, url, staffOk);
+
     if (url.pathname === "/reviews.json") {
       return serveReviews(request, env, ctx);
     }
@@ -390,6 +394,9 @@ export default {
   async scheduled(event, env, ctx) {
     try { await warmBinderSearch(env); }
     catch (e) { console.log("binder-warm: failed: " + ((e && e.message) || e)); }
+    // Shelf drops to Discord (quiet unless a DISCORD_WEBHOOK_* secret is set).
+    try { const d = await discordTick(env); if (d && (d.posted || d.errors)) console.log("discord: " + JSON.stringify(d)); }
+    catch (e) { console.log("discord: failed: " + ((e && e.message) || e)); }
   },
 };
 

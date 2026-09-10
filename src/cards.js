@@ -287,6 +287,10 @@ export async function serveCards(request, env, ctx, collection = "new-arrivals",
       take += 5;
       built = buildCards([...freshOnes, ...fill.slice(0, take)], { perLane: 99 });
     }
+    // Mark the genuine arrivals so a consumer can tell them from the day's
+    // filler (the Discord poster in src/discord.js only announces these).
+    const freshHandles = new Set(freshOnes.map((p) => p.handle));
+    built.cards.forEach((c) => { c.fresh = freshHandles.has(String(c.url || "").split("/products/")[1] || ""); });
   } else {
     built = buildCards(products);
   }

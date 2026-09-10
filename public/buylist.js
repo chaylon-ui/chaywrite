@@ -45,6 +45,7 @@
         '<p id="bl-msg" class="bl__msg bl__muted"></p>' +
       '</aside>' +
       '<div id="bl-toast" class="bl__toast" role="status" aria-live="polite"></div>' +
+      '<dialog id="bl-guide" class="bl__guide" aria-labelledby="bl-guide-title"></dialog>' +
     '</div>';
 
   var $ = function (s) { return root.querySelector(s); };
@@ -195,6 +196,66 @@
   }
   function finish(type) { return type && type !== "Normal" ? ' <span class="bl__pill">' + esc(type) + "</span>" : ""; }
 
+  /* Tap a condition in the offers table to see the store's own grading
+     examples — the words and photos from /pages/grading-guide — so fewer
+     cards arrive graded wrong (owner, 2026-09-10). */
+  var GUIDE = [
+    { k: "nm", m: /^near mint/i, name: "Near Mint (NM)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image2_480x480.png?v=1712685664", pts: [
+      ["Appearance", "Minor superficial imperfections at most. Near Mint is not Mint, and not guaranteed to be suitable for grading."],
+      ["Surface", "Free from noticeable scratches and scuffs."],
+      ["Edges", "Sharp and clean, with little noticeable whitening or wear."],
+      ["Corners", "Crisp, with no bends, fraying or whitening beyond the manufacturing process."],
+      ["Other", "No clouding, staining or other imperfections. Foils have little to no scuffing or clouding."]] },
+    { k: "lp", m: /^lightly played/i, name: "Lightly Played (LP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image4_480x480.png?v=1712685664", pts: [
+      ["Appearance", "Minor imperfections that are visible on close inspection."],
+      ["Surface", "Minor surface wear or a few very light scratches."],
+      ["Edges", "Slight edge wear or a bit of whitening."],
+      ["Corners", "Lightly worn corners or a minor bend."],
+      ["Other", "No major creases. Foils may have light scuffing or minor clouding."]] },
+    { k: "mp", m: /^moderately played/i, name: "Moderately Played (MP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image1_b9974032-87c5-45a0-928a-5b06e5085956_480x480.png?v=1712685664", pts: [
+      ["Appearance", "Moderate wear, but fine for sleeved play."],
+      ["Surface", "Noticeable scuffing or light scratches."],
+      ["Edges", "Moderate edge wear or whitening."],
+      ["Corners", "Moderate wear or minor creases."]] },
+    { k: "hp", m: /^heavily played/i, name: "Heavily Played (HP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/hp_480x480.png?v=1712686010", pts: [
+      ["Appearance", "Significant wear, but the card is intact and lies flat."],
+      ["Surface", "Scuffing, scratches or minor staining."],
+      ["Edges", "Significant edge wear, whitening or minor tears."],
+      ["Corners", "Worn, possibly with minor tears or heavy creases."],
+      ["Other", "Major creases, fading or minor water damage may be present. Foils show significant clouding or wear."]] },
+    { k: "dmg", m: /^damaged/i, name: "Damaged (DMG)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image3_480x480.png?v=1712685664", pts: [
+      ["Appearance", "Major flaws that affect the card's structure or looks."],
+      ["Surface", "Heavy scratches, staining, indents, holes or inking."],
+      ["Edges", "Frayed edges or significant tears."],
+      ["Corners", "Heavy wear, major creases or significant bends."],
+      ["Other", "Torn, water-damaged or written on. Foils in this condition are usually not tournament-legal."]] }
+  ];
+  var GUIDE_NOTE = "Grading is a scale and we grade fairly. Minor manufacturing defects such as print lines, cut lines, edge wear and centering are not counted against a card.";
+  function guideFor(name) { for (var i = 0; i < GUIDE.length; i++) if (GUIDE[i].m.test(String(name || ""))) return GUIDE[i]; return null; }
+  function condBtn(name) {
+    var g = guideFor(name);
+    return g ? '<button type="button" class="bl__condbtn" data-cond="' + g.k + '" aria-label="What does ' + esc(name) + ' mean?">' + esc(name) + '</button>' : esc(name);
+  }
+  function openGuide(k) {
+    var g = null, d = $("#bl-guide");
+    for (var i = 0; i < GUIDE.length; i++) if (GUIDE[i].k === k) g = GUIDE[i];
+    if (!g || !d) return;
+    d.innerHTML = '<img class="bl__guide-img" src="' + g.img + '" alt="Example of a ' + esc(g.name) + ' card">' +
+      '<div class="bl__guide-body"><h3 id="bl-guide-title">' + esc(g.name) + '</h3><ul>' +
+      g.pts.map(function (p) { return "<li><b>" + esc(p[0]) + ":</b> " + esc(p[1]) + "</li>"; }).join("") + "</ul>" +
+      '<p class="bl__muted bl__guide-note">' + esc(GUIDE_NOTE) + "</p>" +
+      '<div class="bl__guide-actions"><a class="bl__link" href="/pages/grading-guide" target="_blank" rel="noopener">Full grading guide</a>' +
+      '<button type="button" class="bl__btn bl__btn--primary bl__guide-close">Got it</button></div></div>';
+    if (typeof d.showModal === "function") { if (!d.open) d.showModal(); } else d.setAttribute("open", "");
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    var b = t.closest ? t.closest(".bl__condbtn") : null;
+    if (b) { e.preventDefault(); openGuide(b.getAttribute("data-cond")); return; }
+    var d = $("#bl-guide");
+    if (d && d.open && (t === d || (t.closest && t.closest(".bl__guide-close")))) { if (typeof d.close === "function") d.close(); else d.removeAttribute("open"); }
+  });
+
   function renderHits(hits, start) {
     var html = hits.map(function (h, k) {
       var i = start + k;
@@ -202,7 +263,7 @@
         // BinderPOS sends, per condition, how many more copies the store will
         // take (its rule's cap minus stock). Zero used to be a grey Add with a
         // tooltip nobody on a phone could see; now it says so (owner, 2026-09-10).
-        return "<tr><td>" + esc(o.v.variantName) + finish(o.p.type) + "</td><td>" + money(o.cash) + "</td><td>" + money(o.credit) + "</td><td>" +
+        return "<tr><td>" + condBtn(o.v.variantName) + finish(o.p.type) + "</td><td>" + money(o.cash) + "</td><td>" + money(o.credit) + "</td><td>" +
           (o.max > 0
             ? '<button type="button" class="bl__btn bl__add" data-h="' + i + '" data-o="' + j + '">Add</button>'
             : '<span class="bl__nobuy" title="BinderPOS reports its limit for this condition is reached">Limit reached</span>') + "</td></tr>";
