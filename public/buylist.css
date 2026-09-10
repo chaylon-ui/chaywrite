@@ -39,7 +39,27 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 
 /* the app */
 .bl { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
-@media (max-width: 860px) { .bl { grid-template-columns: 1fr; } .bl__cart { position: static !important; max-height: none; } .bl__cart > #bl-lines { max-height: 60vh; } }
+/* Phones and narrow tablets: one column, and the list panel becomes a bottom
+   sheet pinned above the ticker (owner, 2026-09-10: "on mobile the cart is
+   way at the bottom of search results"). Collapsed it is one bar with the
+   count and totals; tapping it opens the panel over the results, with the
+   lines scrolling inside it. Doubled selectors beat the desktop .bl__cart
+   rule below on specificity, not source order. */
+@media (max-width: 860px) {
+  .bl { grid-template-columns: 1fr; }
+  .xg-buylist { padding-bottom: calc(84px + var(--xg-tick-h, 0px)); }
+  .bl .bl__cart { position: fixed !important; top: auto !important; left: 0; right: 0; bottom: var(--xg-tick-h, 0px); z-index: 60; margin: 0; max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 12px); border-radius: 16px 16px 0 0; border-bottom: 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18); padding: 0 14px 14px; }
+  .bl .bl__cart:not(.bl__cart--open) { padding-bottom: 0; }
+  .bl .bl__cart:not(.bl__cart--open) > :not(.bl__sheetbar) { display: none; }
+  .bl .bl__cart .bl__h2 { display: none; }
+  .bl .bl__sheetbar { display: flex; }
+  .xg-buylist .bl__toast { bottom: calc(var(--xg-tick-h, 0px) + 74px); }
+}
+.bl__sheetbar { display: none; align-items: center; gap: 10px; min-height: 56px; padding: 8px 0; color: var(--bl-ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.bl__sheetbar b { flex: 0 0 auto; font-size: 15px; white-space: nowrap; }
+.bl__sheetsum { flex: 1 1 auto; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl__chev { flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid var(--bl-line); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; transition: transform 0.18s ease; }
+.bl__cart--open .bl__chev { transform: rotate(180deg); }
 .bl__bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .bl__input, .bl__select { min-width: 0; margin: 0; padding: 11px 13px; font: inherit; font-size: 16px; line-height: 1.3; border: 1px solid var(--bl-line); border-radius: 10px; background: var(--bl-surface); color: var(--bl-ink); }
 .bl__select { flex: 0 1 210px; }
@@ -86,16 +106,19 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 .bl__group-head b { display: block; color: var(--bl-ink); font-size: 14px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bl__group-head .bl__muted { display: block; font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bl__group-head .bl__seticon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
-.bl__line--in { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 0 4px 44px; border-top: 0; }
+/* Doubled class on purpose: the base .bl__line rule further down used to win
+   on source order (2026-09-10 screenshots: four columns, the stepper
+   stretched across the 1fr track, the prices drawn underneath it). */
+.bl__line.bl__line--in { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 0 4px 44px; border-top: 0; }
 .bl__cond { min-width: 0; font-size: 13px; line-height: 1.3; color: var(--bl-ink); }
-.bl__cond small { display: inline; margin-left: 6px; font-size: 12px; color: var(--bl-muted); white-space: nowrap; }
+.bl__cond small { display: block; margin: 1px 0 0; font-size: 12px; color: var(--bl-muted); }
 .bl__cond .bl__pill { margin-left: 5px; }
 /* The theme stretches every input to 100% width, which turned the −/1/+
    stepper into most of the row on phones (owner, 2026-09-10). Pin it. */
 .bl .bl__qtywrap { flex: 0 0 auto; width: auto; }
 .bl .bl__qtywrap .bl__btn { padding: 4px 8px; }
 .bl .bl__qtywrap .bl__qty { width: 36px !important; min-width: 0; max-width: 36px; flex: 0 0 36px; height: auto; margin: 0; padding: 4px 0; }
-@media (max-width: 480px) { .bl__line--in { padding-left: 0; } }
+@media (max-width: 480px) { .bl__line.bl__line--in { padding-left: 0; } }
 .bl__h2 { margin: 0 0 10px; font-size: 18px; color: var(--bl-ink); display: flex; justify-content: space-between; align-items: baseline; }
 .bl__h2 span { font-size: 13px; font-weight: 500; }
 .bl__line { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--bl-line); }

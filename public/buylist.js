@@ -34,6 +34,9 @@
         '<button id="bl-more" type="button" class="bl__btn bl__more" hidden>Show more</button>' +
       '</div>' +
       '<aside class="bl__cart">' +
+        // Phones: the panel is a bottom sheet and this bar is all that shows
+        // until it is tapped (buylist.css, max-width 860px). Hidden on desktop.
+        '<div id="bl-sheetbar" class="bl__sheetbar" role="button" tabindex="0" aria-expanded="false" aria-controls="bl-lines"><b>Your buylist</b><span id="bl-sheetsum" class="bl__sheetsum bl__muted">Empty</span><span class="bl__chev" aria-hidden="true">&#9650;</span></div>' +
         '<h2 class="bl__h2">Your buylist <span id="bl-count" class="bl__muted"></span></h2>' +
         '<div id="bl-lines"><p class="bl__muted">Loading your saved list…</p></div>' +
         '<div class="bl__pay"><label><input type="radio" name="bl-pay" value="Cash" checked> Cash</label><label><input type="radio" name="bl-pay" value="Store Credit"> Store credit</label></div>' +
@@ -279,11 +282,26 @@
     }
     var n = totalQty();
     $("#bl-count").textContent = n ? n + (n === 1 ? " card" : " cards") : "";
-    $("#bl-tcash").textContent = money(cart.reduce(function (s, c) { return s + qty(c) * (Number(c.cashBuyPrice) || 0); }, 0));
-    $("#bl-tcredit").textContent = money(cart.reduce(function (s, c) { return s + qty(c) * (Number(c.storeCreditBuyPrice) || 0); }, 0));
+    var tcash = cart.reduce(function (s, c) { return s + qty(c) * (Number(c.cashBuyPrice) || 0); }, 0);
+    var tcredit = cart.reduce(function (s, c) { return s + qty(c) * (Number(c.storeCreditBuyPrice) || 0); }, 0);
+    $("#bl-tcash").textContent = money(tcash);
+    $("#bl-tcredit").textContent = money(tcredit);
+    $("#bl-sheetsum").textContent = n ? n + (n === 1 ? " card" : " cards") + " · " + money(tcash) + " cash · " + money(tcredit) + " credit" : "Empty — add cards from the results";
     $("#bl-submit").disabled = !cart.length;
     $("#bl-clear").disabled = !cart.length;
   }
+
+  // The phone bottom sheet: the bar toggles the rest of the panel.
+  function toggleSheet(open) {
+    var aside = $(".bl__cart"), bar = $("#bl-sheetbar");
+    var now = typeof open === "boolean" ? open : !aside.classList.contains("bl__cart--open");
+    aside.classList.toggle("bl__cart--open", now);
+    bar.setAttribute("aria-expanded", now ? "true" : "false");
+  }
+  $("#bl-sheetbar").addEventListener("click", function () { toggleSheet(); });
+  $("#bl-sheetbar").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSheet(); }
+  });
 
   $("#bl-lines").addEventListener("click", function (e) {
     var b = e.target.closest("button");
