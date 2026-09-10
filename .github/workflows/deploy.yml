@@ -190,6 +190,7 @@ jobs:
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/buyprice.json?name=Mimikyu&type=Pokemon%20Single" | head -c 600 || true
           printf '\n'
           curl -sS -o /dev/null -w 'buyprice-reveal.js: %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buyprice-reveal.js" || true
+          echo "buylist page: grouped list rows served (js/css) + sticky panel scroll: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.js' | grep -c 'bl__group-head' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.css' | grep -c 'bl__group-head' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.css' | grep -c 'xg-fixed-bottom' || true)"
           echo "=== /buy-rules.json (estimate rules; enabled flag gates the storefront) ==="
           curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json" | jq -c '{enabled, updated, games: (.games|length)}' || true
           echo "=== /sisterstock.json (partial-line follow-up; sister qty is opportunistic - null when their product JSON hides counts) ==="

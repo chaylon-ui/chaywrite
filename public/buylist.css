@@ -39,7 +39,7 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 
 /* the app */
 .bl { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
-@media (max-width: 860px) { .bl { grid-template-columns: 1fr; } .bl__cart { position: static !important; } }
+@media (max-width: 860px) { .bl { grid-template-columns: 1fr; } .bl__cart { position: static !important; max-height: none; } .bl__cart > #bl-lines { max-height: 60vh; } }
 .bl__bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .bl__input, .bl__select { min-width: 0; margin: 0; padding: 11px 13px; font: inherit; font-size: 16px; line-height: 1.3; border: 1px solid var(--bl-line); border-radius: 10px; background: var(--bl-surface); color: var(--bl-ink); }
 .bl__select { flex: 0 1 210px; }
@@ -68,7 +68,27 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 .bl__pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bl-line); color: var(--bl-ink); margin-left: 6px; vertical-align: middle; }
 .bl__add { padding: 6px 12px; font-size: 13px; }
 .bl__more { display: block; margin: 6px auto 0; }
-.bl__cart { position: sticky; top: 14px; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: 14px; padding: 16px; }
+/* The list panel stays in view under the fixed header and scrolls on its
+   own (owner, 2026-09-10: a long list used to drag the whole page along
+   until the results ran out). Only the lines scroll; the title, payment
+   choice, totals and buttons stay put. --xg-fixed-bottom is the header's
+   bottom edge (xg-header-offset.js), --xg-tick-h the ticker pinned to the
+   bottom of the screen (xg-ticker.js). */
+.bl__cart { position: sticky; top: calc(var(--xg-fixed-bottom, 0px) + 14px); max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 28px); display: flex; flex-direction: column; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: 14px; padding: 16px; }
+.bl__cart > * { flex: 0 0 auto; }
+.bl__cart > #bl-lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -8px; padding: 0 8px; }
+/* one heading per card, its conditions beneath it */
+.bl__group { border-top: 1px solid var(--bl-line); padding: 8px 0 4px; }
+.bl__group:first-child { border-top: 0; padding-top: 0; }
+.bl__group-head { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 2px; }
+.bl__group-head .bl__thumb { width: 34px; }
+.bl__group-head b { display: block; color: var(--bl-ink); font-size: 14px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl__group-head .bl__muted { display: block; font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl__group-head .bl__seticon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
+.bl__line--in { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 0 4px 44px; border-top: 0; }
+.bl__cond { min-width: 0; font-size: 13px; line-height: 1.25; color: var(--bl-ink); }
+.bl__cond small { display: block; font-size: 12px; color: var(--bl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bl__cond .bl__pill { margin-left: 5px; }
 .bl__h2 { margin: 0 0 10px; font-size: 18px; color: var(--bl-ink); display: flex; justify-content: space-between; align-items: baseline; }
 .bl__h2 span { font-size: 13px; font-weight: 500; }
 .bl__line { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--bl-line); }

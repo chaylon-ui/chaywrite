@@ -246,14 +246,30 @@
     if (!cart.length) {
       box.innerHTML = '<p class="bl__muted">Nothing yet. Search for a card and press Add.</p>';
     } else {
-      box.innerHTML = cart.map(function (c, i) {
-        return '<div class="bl__line"><img class="bl__thumb" src="' + esc(c.imageUrl) + '" alt=""><div class="bl__line-body"><b>' + esc(c.cardName) + '</b>' +
-          '<span class="bl__muted">' + seticon(c.setName) + esc(c.setName) + " · " + esc(c.conditionName) + (c.type && c.type !== "Normal" ? " · " + esc(c.type) : "") + "</span>" +
-          '<span class="bl__muted">' + money(c.cashBuyPrice) + " cash · " + money(c.storeCreditBuyPrice) + " credit each</span></div>" +
-          '<div class="bl__qtywrap"><button type="button" class="bl__btn bl__dec" data-i="' + i + '" aria-label="Fewer">&minus;</button>' +
-          '<input class="bl__qty" data-i="' + i + '" type="number" min="1" max="' + maxOf(c) + '" value="' + qty(c) + '">' +
-          '<button type="button" class="bl__btn bl__inc" data-i="' + i + '" aria-label="More">+</button></div>' +
-          '<button type="button" class="bl__remove" data-i="' + i + '" aria-label="Remove">×</button></div>';
+      // One heading per card (name + set), its conditions as short rows
+      // beneath it: seven Sol Rings used to be seven four-line entries
+      // (owner, 2026-09-10). data-i still indexes into `cart`.
+      var groups = [], byKey = {};
+      cart.forEach(function (c, i) {
+        var key = JSON.stringify([c.cardName || "", c.setName || ""]);
+        var g = byKey[key];
+        if (!g) { g = byKey[key] = { c: c, rows: [] }; groups.push(g); }
+        g.rows.push(i);
+      });
+      box.innerHTML = groups.map(function (g) {
+        var c0 = g.c;
+        return '<div class="bl__group"><div class="bl__group-head"><img class="bl__thumb" src="' + esc(c0.imageUrl) + '" alt=""><div><b>' + esc(c0.cardName) + '</b>' +
+          '<span class="bl__muted">' + seticon(c0.setName) + esc(c0.setName) + '</span></div></div>' +
+          g.rows.map(function (i) {
+            var c = cart[i];
+            return '<div class="bl__line bl__line--in"><span class="bl__cond">' + esc(c.conditionName) +
+              (c.type && c.type !== "Normal" ? '<span class="bl__pill">' + esc(c.type) + '</span>' : '') +
+              '<small>' + money(c.cashBuyPrice) + ' cash · ' + money(c.storeCreditBuyPrice) + ' credit</small></span>' +
+              '<div class="bl__qtywrap"><button type="button" class="bl__btn bl__dec" data-i="' + i + '" aria-label="Fewer">&minus;</button>' +
+              '<input class="bl__qty" data-i="' + i + '" type="number" min="1" max="' + maxOf(c) + '" value="' + qty(c) + '">' +
+              '<button type="button" class="bl__btn bl__inc" data-i="' + i + '" aria-label="More">+</button></div>' +
+              '<button type="button" class="bl__remove" data-i="' + i + '" aria-label="Remove">×</button></div>';
+          }).join("") + '</div>';
       }).join("");
     }
     var n = totalQty();
