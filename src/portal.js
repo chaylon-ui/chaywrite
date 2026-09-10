@@ -377,7 +377,7 @@ export async function buylistDetail(env, id) {
    pure buy cart has no Shopify order at all. Read-only, like the rest. */
 const PORTAL_DO = "portal-cache";
 const DO_ORIGIN = "https://" + PORTAL_DO + ".internal"; // the DO only reads the path
-const CARTS_VER = "v1";
+const CARTS_VER = "v2";
 const DAY_MS = 86400e3;
 export const PORTAL_CART = "https://portal.binderpos.com/#/pointOfSale/carts/";
 
@@ -477,61 +477,86 @@ function trimCart(c) {
   };
 }
 
-/* The carts endpoint, measured 2026-09-10 (portal-get runs 6-8): a small
-   page answers in about a second whatever the date window (limit=2 on one
-   day 1.4 s; limit=50 over ten days 1.2 s, 40 carts, 155 KB), and rows come
-   back in id order. `limit` is not a cart count — limit=50 yielded 40
-   carts, limit=200 yielded 173 — it bounds some joined row set, so a
-   "full" page cannot be told from its size. What killed the first version
-   was four parallel limit=500 calls: each sat for a minute and died at
-   their gateway (502) and their origin stayed sore for minutes. So: modest
-   pages, one request at a time isolate-wide, offset advanced by the carts
-   actually seen (overlaps are deduped, nothing is skipped), stop on an
-   empty page or one with nothing new, and a two-minute back-off after any
-   failure so a staff member reloading cannot pile on. */
+/* The carts endpoint, measured 2026-09-10 (portal-get runs 6-10). Rows
+   come in id order; `limit` is not a cart count (50 yielded 40 carts, 200
+   yielded 173), so a full page cannot be told from its size. Timings:
+     one day,   limit=50  : 60 s then their gateway's 502, twice, on a
+                            day of 65 carts whose biggest cart has 22 lines
+     one day,   limit=10  : 0.9 s
+     one day,   limit=2   : 1.4 s
+     ten days,  limit=50  : 1.2 s (40 carts, all from the first day)
+     2-3 hours, limit=50  : 75-200 ms, 0-31 carts each
+   Their query plan goes bad on a whole busy day with a page that size; the
+   data itself is small. So a day is read as twelve two-hour windows, one
+   request at a time isolate-wide (parallel calls of the first version
+   left their origin answering 502 to everything for minutes), each with a
+   20-second timeout: a window that fails is reported as missing instead
+   of sinking the day, and a one-minute back-off after any failure skips
+   the rest so a staff member reloading cannot pile on. */
 const CARTS_PAGE = 50;
+const WINDOW_H = 2;
+const WINDOW_TIMEOUT_MS = 20e3;
 let cartsFailAt = 0;
-let cartsChain = Promise.resolve();   // day fetches queue behind each other
+let cartsChain = Promise.resolve();   // window fetches queue behind each other
 
-async function fetchDayCarts(env, day) {
-  if (Date.now() - cartsFailAt < 120e3) throw new Error("BinderPOS's cart list is not answering right now; try again in a couple of minutes");
-  const start = encodeURIComponent(day + "T00:00:00.000Z"), end = encodeURIComponent(day + "T23:59:59.999Z");
+const pad2 = (n) => String(n).padStart(2, "0");
+
+async function fetchWindow(env, startIso, endIso) {
   const out = [], seen = new Set();
   let offset = 0;
-  try {
-    for (let page = 0; page < 40; page++) {
-      const arr = await get(env, "/api/pos/carts/all?limit=" + CARTS_PAGE + "&offset=" + offset + "&submitted=true&startDate=" + start + "&endDate=" + end);
-      if (!Array.isArray(arr) || !arr.length) break;
-      let fresh = 0;
-      for (const c of arr) {
-        if (!c || seen.has(String(c.id))) continue;
-        seen.add(String(c.id));
-        fresh++;
-        if (!c.abandoned) { const t = trimCart(c); if (t) out.push(t); }
-      }
-      if (!fresh) break;
-      offset += arr.length;
+  for (let page = 0; page < 20; page++) {
+    const arr = await call(env, "/api/pos/carts/all?limit=" + CARTS_PAGE + "&offset=" + offset + "&submitted=true&startDate=" + encodeURIComponent(startIso) + "&endDate=" + encodeURIComponent(endIso), { signal: AbortSignal.timeout(WINDOW_TIMEOUT_MS) });
+    if (!Array.isArray(arr) || !arr.length) break;
+    let fresh = 0;
+    for (const c of arr) {
+      if (!c || seen.has(String(c.id))) continue;
+      seen.add(String(c.id));
+      fresh++;
+      if (!c.abandoned) { const t = trimCart(c); if (t) out.push(t); }
     }
-  } catch (e) {
-    cartsFailAt = Date.now();
-    throw e;
+    // a two-hour window rarely reaches a page; ask again only when it might have
+    if (!fresh || arr.length < 20) break;
+    offset += arr.length;
   }
   return out;
+}
+
+// { carts, missing } for one UTC day; missing lists the windows BinderPOS
+// did not answer ("14-16Z"), so the page can say so.
+async function fetchDayCarts(env, day) {
+  const carts = [], missing = [];
+  const now = Date.now();
+  for (let h = 0; h < 24; h += WINDOW_H) {
+    const h1 = Math.min(24, h + WINDOW_H);
+    const start = day + "T" + pad2(h) + ":00:00.000Z";
+    const end = h1 === 24 ? day + "T23:59:59.999Z" : day + "T" + pad2(h1 - 1) + ":59:59.999Z";
+    if (Date.parse(start) > now) break;                      // the rest of today has not happened
+    const label = pad2(h) + "-" + pad2(h1) + "Z";
+    if (now - cartsFailAt < 60e3) { missing.push(label); continue; }
+    try {
+      const got = await (cartsChain = cartsChain.catch(() => {}).then(() => fetchWindow(env, start, end)));
+      carts.push(...got);
+    } catch (e) {
+      cartsFailAt = Date.now();
+      missing.push(label);
+    }
+  }
+  return { carts, missing };
 }
 
 async function dayCarts(env, day) {
   const key = "carts:" + CARTS_VER + ":" + day;
   const cached = await kvGet(env, key);
-  if (cached) { try { return JSON.parse(cached); } catch {} }
-  // one portal query at a time, isolate-wide
-  const carts = await (cartsChain = cartsChain.catch(() => {}).then(() => fetchDayCarts(env, day)));
+  if (cached) { try { const v = JSON.parse(cached); if (v && Array.isArray(v.carts)) return v; } catch {} }
+  const rec = await fetchDayCarts(env, day);
   const now = Date.now();
   const dayEnd = Date.parse(day + "T23:59:59.999Z");
-  // today: three minutes; a day that ended within the last two hours: ten
-  // minutes (late syncs around midnight); older days: a week
-  const ttl = now <= dayEnd ? 3 * 60e3 : now - dayEnd < 2 * 3600e3 ? 10 * 60e3 : 7 * DAY_MS;
-  await kvPut(env, key, JSON.stringify(carts), ttl);
-  return carts;
+  // a day with missing windows: two minutes, then try again; today: three
+  // minutes; a day that ended within the last two hours: ten minutes (late
+  // syncs around midnight); older complete days: a week
+  const ttl = rec.missing.length ? 2 * 60e3 : now <= dayEnd ? 3 * 60e3 : now - dayEnd < 2 * 3600e3 ? 10 * 60e3 : 7 * DAY_MS;
+  await kvPut(env, key, JSON.stringify(rec), ttl);
+  return rec;
 }
 
 const cartSummary = (c) => Object.assign({}, c, { lines: undefined, tenders: undefined });
@@ -544,22 +569,26 @@ export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
   const since = now - days * DAY_MS;
   const keys = new Set();
   for (let t = now; t >= since - DAY_MS; t -= DAY_MS) keys.add(dayKey(t));
-  const perDay = [];
-  for (const d of keys) perDay.push(await dayCarts(env, d));   // newest day first, one at a time
+  const perDay = [], partial = [];
+  for (const d of keys) {                                      // newest day first, one at a time
+    const rec = await dayCarts(env, d);
+    perDay.push(rec.carts);
+    if (rec.missing.length) partial.push({ day: d, windows: rec.missing });
+  }
   const all = perDay.flat()
     .filter((c) => (Date.parse(c.submitted || "") || 0) >= since)
     .sort((a, b) => (Date.parse(b.submitted || "") || 0) - (Date.parse(a.submitted || "") || 0));
   const totals = { carts: all.length, cards: 0, paid: 0, cash: 0, credit: 0, sells: 0 };
   for (const c of all) { totals.cards += c.bought.cards; totals.paid += c.bought.total; totals.cash += c.payout.cash; totals.credit += c.payout.credit; totals.sells += c.bought.sells; }
   for (const k of ["paid", "cash", "credit", "sells"]) totals[k] = round2(totals[k]);
-  return { ok: true, days, take, skip, total: all.length, totals, rows: all.slice(skip, skip + take).map(cartSummary), more: skip + take < all.length };
+  return { ok: true, days, take, skip, total: all.length, totals, partial, rows: all.slice(skip, skip + take).map(cartSummary), more: skip + take < all.length };
 }
 
 export async function cartDetail(env, id, day) {
   const base = Date.parse(day + "T12:00:00Z");
   const candidates = Number.isFinite(base) ? [day, dayKey(base - DAY_MS), dayKey(base + DAY_MS)] : [dayKey(Date.now())];
   for (const d of candidates) {
-    const c = (await dayCarts(env, d)).find((x) => x.id === id);
+    const c = (await dayCarts(env, d)).carts.find((x) => x.id === id);
     if (c) return Object.assign({ ok: true }, c);
   }
   throw new Error("cart " + id + " is not among the buy carts of " + candidates.join(", "));

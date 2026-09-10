@@ -222,6 +222,7 @@
       S.more = !!d.more;
       S.total = d.total != null ? d.total : null;
       S.totals = d.totals || null;
+      S.partial = d.partial || null;
       S.skip = S.skip + (d.rows || []).length;
       S.busy = false; S.loaded = true;
       renderList();
@@ -256,6 +257,11 @@
       '</div>' + windowSelect() +
       '<input type="search" id="q" placeholder="' + (isCarts() ? 'Filter by name, email, staff or cart number' : 'Filter by name, email or number') + '" value="' + esc(S.q) + '"></div>';
     if (S.error) html += '<p class="err">' + esc(S.error) + '</p>';
+    if (isCarts() && S.partial && S.partial.length && !S.busy) {
+      html += '<div class="notes"><strong>Incomplete:</strong> BinderPOS did not answer for ' +
+        S.partial.map(function (p) { return esc(p.day) + ' (' + esc(p.windows.join(', ')) + ')'; }).join('; ') +
+        '. Carts from those hours are not listed; refresh in a couple of minutes.</div>';
+    }
     if (isCarts() && S.totals && !S.busy) {
       var t = S.totals;
       html += '<div class="grid"><div class="card"><div class="k">Buy carts in this window</div><div class="v">' + esc(t.carts) + '</div><div class="d">' + esc(t.cards) + ' cards bought</div></div>' +
