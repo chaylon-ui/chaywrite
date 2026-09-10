@@ -1,0 +1,150 @@
+name: feature-probe
+
+# Read-only diagnostic for the 2026-09-10 six-feature round. Opens the
+# preview theme in headless Chrome and prints what each new piece rendered:
+# the "Also at our other Exor locations" band on a single-card page, the
+# personalised homepage that follows it (the card's game leads the tabs and
+# tiles), a store page (live hours, address, events for that city, staff
+# picks, arrivals, map) for an Exor-listed store and for one whose hours
+# come from the Most Wanted Pawn listing, and the learn-to-play hub plus one
+# game page. Ends with a FEATURE-FAILS count. Nothing is written anywhere.
+
+on:
+  workflow_dispatch:
+    inputs:
+      theme:
+        description: "preview_theme_id"
+        required: true
+        default: "157462692013"
+      product:
+        description: "Single-card product handle for the sister band"
+        required: true
+        default: "lightning-bolt-magic-2011"
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      THEME: ${{ inputs.theme }}
+      PRODUCT: ${{ inputs.product }}
+    steps:
+      - name: Open the pages and report
+        run: |
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const T = process.env.THEME, O = 'https://exorgames.com';
+          const u = (p) => O + p + (p.includes('?') ? '&' : '?') + 'preview_theme_id=' + T;
+          const wait = (ms) => new Promise(r => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36');
+            await page.setViewport({ width: 1366, height: 900 });
+            const fails = [];
+            const check = (name, ok, detail) => { console.log((ok ? 'PASS' : 'FAIL') + ' ' + name + (detail ? ' | ' + detail : '')); if (!ok) fails.push(name); };
+            const txt = (s) => document.querySelector(s) ? document.querySelector(s).innerText.replace(/\s+/g, ' ').trim().slice(0, 220) : null;
+            const open = async (p, settle) => {
+              const r = await page.goto(u(p), { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
+              await wait(settle || 6000);
+              const theme = await page.evaluate(() => (window.Shopify && window.Shopify.theme && window.Shopify.theme.id) || null).catch(() => '?');
+              const head = await page.evaluate(() => document.body.innerText.slice(0, 120).replace(/\s+/g, ' ')).catch(() => '');
+              console.log('\n=== ' + p + ' -> ' + (r ? r.status() : 'none') + ' | theme ' + theme + ' | ' + (await page.title()));
+              if (/just a moment|verify you are human/i.test(head)) console.log('CLOUDFLARE CHALLENGE - the runner was not let in');
+              return r;
+            };
+            await open('/', 2500);
+
+            // 1. single-card page: the sister band + the game memory
+            await open('/products/' + process.env.PRODUCT, 10000);
+            const sis = await page.evaluate(() => {
+              const h = document.querySelector('[data-xg-sis]');
+              return h ? { hidden: h.hidden, cls: h.className, name: h.getAttribute('data-name'), game: h.getAttribute('data-game'), text: h.innerText.replace(/\s+/g, ' ').slice(0, 400), links: h.querySelectorAll('a').length } : null;
+            });
+            console.log('sister band:', JSON.stringify(sis));
+            check('sister host on the card page', !!sis, sis && (sis.name + ' / ' + sis.game));
+            check('sister band rendered (or hidden because no other store has it)', !!sis && (sis.hidden ? true : sis.links > 0), sis && (sis.hidden ? 'hidden' : sis.links + ' store links'));
+            const mem = await page.evaluate(() => { const m = document.querySelector('meta[name="xg-game"]'); let s = 'err'; try { s = localStorage.getItem('xgGame'); } catch (e) {} return { meta: m ? m.getAttribute('content') : null, stored: s }; });
+            check('xg-game meta filled and remembered', !!mem.meta && !!mem.stored && mem.stored !== 'err', JSON.stringify(mem));
+
+            // 2. homepage: the remembered game leads
+            await open('/', 10000);
+            const home = await page.evaluate(() => {
+              const tabs = Array.from(document.querySelectorAll('ul.products-tab a[data-toggle="tab"]')).map(a => a.textContent.trim());
+              const active = document.querySelector('ul.products-tab li.active a, ul.products-tab a.active');
+              const note = document.querySelector('.xg-personal');
+              const grid = document.querySelector('.collection-grid .grid--uniform');
+              const tiles = grid ? Array.from(grid.children).slice(0, 3).map(t => t.textContent.replace(/\s+/g, ' ').trim().slice(0, 40)) : [];
+              const evs = Array.from(document.querySelectorAll('.xg-evs__meta')).slice(0, 4).map(e => e.textContent.trim());
+              return { tabs, active: active ? active.textContent.trim() : null, note: note ? note.innerText.replace(/\s+/g, ' ') : null, button: note && note.querySelector('button') ? note.querySelector('button').textContent.trim() : null, tiles, evs };
+            });
+            console.log('homepage:', JSON.stringify(home));
+            check('personalised note shown', !!home.note, home.note);
+            check('remembered game leads the singles tabs', home.tabs.length > 0 && /magic/i.test(home.tabs[0]), 'first tab ' + home.tabs[0] + ' | active ' + home.active);
+            check('remembered game leads the sealed tiles', home.tiles.length > 0 && /magic|mtg/i.test(home.tiles[0]), home.tiles.join(' || '));
+            check('"Show everything" control', home.button === 'Show everything', home.button);
+            console.log('events strip first metas:', JSON.stringify(home.evs));
+
+            // 3. store pages: an Exor-listed store and a partner-hours store
+            const readStore = () => {
+              const q = (s) => document.querySelector(s);
+              const t = (s) => q(s) ? q(s).innerText.replace(/\s+/g, ' ').trim().slice(0, 220) : null;
+              const shown = (s) => q(s) ? !q(s).hidden : null;
+              return { title: t('.xg-store__title'), key: q('.xg-store') ? q('.xg-store').getAttribute('data-key') : null, hours: shown('[data-hours]'), pill: t('.xg-store__pill'), week: document.querySelectorAll('[data-week] li').length, today: t('[data-week] li.is-today'), address: t('[data-address]'), phone: t('[data-phone]'), partner: shown('[data-partner]'), directions: q('[data-directions]') ? q('[data-directions]').href.slice(0, 80) : null, events: shown('[data-events]') ? document.querySelectorAll('[data-events-list] li').length : 'hidden', firstEvent: t('[data-events-list] li'), picks: document.querySelectorAll('.xg-store__pick').length, firstPick: t('.xg-store__pick'), landed: shown('[data-landed]') ? document.querySelectorAll('[data-landed-list] li').length : 'hidden', landedNote: t('[data-landed-sub]'), firstLanded: t('[data-landed-list] li'), reviews: shown('[data-reviews]') ? document.querySelectorAll('.xg-store__rev').length : 'hidden', map: !!q('.xg-store__map iframe'), body: t('.xg-store__body') };
+            };
+            await open('/pages/exor-games-truro', 14000);
+            const tr = await page.evaluate(readStore);
+            console.log('truro:', JSON.stringify(tr));
+            check('store template rendered for Truro', tr.key === 'truro' && !!tr.title, tr.title);
+            check('Truro live hours painted', tr.hours === true && tr.week === 7, tr.pill + ' | today: ' + tr.today);
+            check('Truro address + phone', !!tr.address && !!tr.phone, tr.address + ' / ' + tr.phone);
+            check('Truro events', typeof tr.events === 'number' && tr.events > 0, 'events ' + tr.events + ' first: ' + tr.firstEvent);
+            check('Truro staff picks', tr.picks > 0, tr.picks + ' picks; first: ' + tr.firstPick);
+            check('Truro arrivals from its own storefront', typeof tr.landed === 'number' && tr.landed > 0, tr.landed + ' | ' + tr.landedNote + ' | ' + tr.firstLanded);
+            check('Truro map embed', tr.map);
+            check('Truro page body rendered', !!tr.body, tr.body);
+            console.log('Truro reviews:', tr.reviews);
+            await open('/pages/exor-games-dartmouth', 14000);
+            const da = await page.evaluate(readStore);
+            console.log('dartmouth:', JSON.stringify(da));
+            check('Dartmouth address from the Google listing + partner note', !!da.address && da.partner === true, da.address);
+            check('Dartmouth hours painted', da.hours === true && da.week === 7, da.pill);
+            check('Dartmouth map built from the feed address', da.map);
+            check('Dartmouth arrivals', typeof da.landed === 'number' && da.landed > 0, da.landed + ' | ' + da.landedNote);
+            await open('/pages/exor-games-charlottetown', 14000);
+            const ch = await page.evaluate(readStore);
+            console.log('charlottetown:', JSON.stringify(ch));
+            check('Charlottetown hours + arrivals from the New Today feed', ch.hours === true && typeof ch.landed === 'number' && ch.landed > 0, ch.pill + ' | ' + ch.landed + ' ' + ch.landedNote);
+            check('Charlottetown events', typeof ch.events === 'number' && ch.events > 0, 'events ' + ch.events + ' first: ' + ch.firstEvent);
+            console.log('Charlottetown reviews:', ch.reviews);
+
+            // 4. learn hub + one game page
+            await open('/pages/learn-to-play', 10000);
+            const hub = await page.evaluate(() => ({ tiles: Array.from(document.querySelectorAll('.xg-learn__tile b')).map(b => b.textContent.trim()), stock: Array.from(document.querySelectorAll('.xg-learn__tile em')).map(e => e.textContent.trim()), hrefs: Array.from(document.querySelectorAll('.xg-learn__tile a')).map(a => a.getAttribute('href')), events: document.querySelector('[data-events]') && !document.querySelector('[data-events]').hidden ? document.querySelectorAll('[data-events-list] li').length : 'hidden', note: document.querySelector('[data-events-note]') ? document.querySelector('[data-events-note]').textContent : null, first: document.querySelector('[data-events-list] li') ? document.querySelector('[data-events-list] li').innerText.replace(/\s+/g, ' ') : null }));
+            console.log('hub:', JSON.stringify(hub));
+            check('hub shows the eight games', hub.tiles.length === 8, hub.tiles.join(', '));
+            check('hub tiles carry live starter stock', hub.stock.filter(s => /in stock/i.test(s)).length >= 4, hub.stock.join(' | '));
+            console.log('hub beginner nights:', hub.events, hub.note, hub.first);
+            await open('/pages/learn-to-play-pokemon', 10000);
+            const g = await page.evaluate(() => {
+              const q = (s) => document.querySelector(s);
+              const t = (s) => q(s) ? q(s).innerText.replace(/\s+/g, ' ').trim().slice(0, 220) : null;
+              let stored = 'err'; try { stored = localStorage.getItem('xgGame'); } catch (e) {}
+              return { title: t('.xg-learn__title'), key: q('.xg-learn') ? q('.xg-learn').getAttribute('data-key') : null, starters: document.querySelectorAll('.xg-learn__starter').length, starter1: t('.xg-learn__starter'), addToCart: !!q('.xg-learn__buy button'), prose: t('.xg-learn__prose h3'), events: q('[data-events]') && !q('[data-events]').hidden ? document.querySelectorAll('[data-events-list] li').length : 'hidden', none: q('[data-events-none]') ? !q('[data-events-none]').hidden : null, note: t('[data-events-note]'), firstEvent: t('[data-events-list] li'), links: Array.from(document.querySelectorAll('.xg-learn__links b')).map(b => b.textContent.trim()), meta: q('meta[name="xg-game"]') ? q('meta[name="xg-game"]').getAttribute('content') : null, stored };
+            });
+            console.log('pokemon page:', JSON.stringify(g));
+            check('game page rendered', g.key === 'pokemon' && /pok/i.test(g.title || ''), g.title);
+            check('starters with live stock', g.starters >= 1 && /in stock|sold out/i.test(g.starter1 || ''), g.starter1);
+            check('add-to-cart on an in-stock starter', g.addToCart);
+            check('how-it-plays prose from the page body', !!g.prose, g.prose);
+            check('events for the game, or the honest fallback', (typeof g.events === 'number' && g.events > 0) || g.none === true, 'events ' + g.events + ' | none ' + g.none + ' | ' + g.note + ' | ' + g.firstEvent);
+            check('keep-going links', g.links.length >= 4, g.links.join(', '));
+            check('game page teaches the homepage', !!g.stored && /pokemon/.test(g.stored), 'meta ' + g.meta + ' stored ' + g.stored);
+
+            console.log('\nFEATURE-FAILS ' + fails.length + (fails.length ? ': ' + fails.join('; ') : ''));
+            await browser.close();
+          })().catch(e => console.log('probe error:', e.message));
+          EOF
