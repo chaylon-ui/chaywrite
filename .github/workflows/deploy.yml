@@ -381,3 +381,33 @@ jobs:
             }
           })().catch(e => console.log('portal smoke error:', e.message));
           EOF
+      - name: Smoke-test buylist submit re-pricing (dry run, log-only)
+        run: |
+          # Nothing reaches BinderPOS's submit: ?dry=1 stops after the re-pricing
+          # and returns what would have gone out. The customer id is a placeholder.
+          node - <<'EOF'
+          const W = 'https://exor-binder.nevski.workers.dev';
+          const j = async (p, init) => { const r = await fetch(W + p, init); let b = null; try { b = await r.json(); } catch {} return { status: r.status, body: b }; };
+          const post = (p, body) => j(p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+          (async () => {
+            const s = await j('/buylist/api/search?q=' + encodeURIComponent('Sol Ring') + '&game=mtg');
+            const hits = (s.body && s.body.hits) || [];
+            console.log('search:', s.status, 'hits', hits.length, hits[0] ? '| hit keys ' + Object.keys(hits[0]).join(',') : '');
+            let card = null, expectMax = 0;
+            for (const h of hits) for (const v of h.variants || []) for (const p of v.cardBuylistTypes || []) {
+              if (!card && Number(p.maxPurchaseQuantity) > 0 && Number(p.buyPrice) > 0.02) {
+                expectMax = Number(p.maxPurchaseQuantity);
+                card = { cardId: h.id, cardName: h.cardName, setName: h.setName, game: h.game, type: p.type, imageUrl: h.imageUrl, quantity: '999', cashBuyPrice: 0.01, storeCreditBuyPrice: 0.01, condition: v.id, conditionName: v.variantName, shopifyVariantId: p.productVariantId };
+                console.log('picked:', h.cardName, '[' + h.setName + ']', v.variantName, p.type, '| game field', JSON.stringify(h.game), '| live', p.buyPrice, '/', p.creditBuyPrice, 'max', expectMax);
+              }
+            }
+            if (!card) { console.log('no buyable offer in the search result; dry run skipped'); return; }
+            const d = await post('/buylist/api/submit?customer=123456&dry=1', { paymentType: 'Cash', cards: [card] });
+            console.log('submit dry=1:', d.status, JSON.stringify(d.body).slice(0, 900));
+            const c0 = d.body && d.body.cards && d.body.cards[0];
+            const ok = d.status === 200 && d.body.dry === true && c0 && Number(c0.cash) > 0.01 && Number(c0.quantity) === expectMax;
+            console.log('re-pricing check:', ok ? 'PASS (browser price replaced, quantity capped at ' + expectMax + ')' : 'FAIL');
+            const u = await post('/buylist/api/submit?customer=123456&dry=1', { paymentType: 'Cash', cards: [{ ...card, cardId: 999999999 }] });
+            console.log('unknown card dry=1:', u.status, '(expect 409)', JSON.stringify(u.body).slice(0, 300));
+          })().catch(e => console.log('re-pricing smoke error:', e.message));
+          EOF

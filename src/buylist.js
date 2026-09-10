@@ -347,6 +347,12 @@ async function route(mode, action, request, env, url, cors) {
     if (!cards.length) {
       return json({ error: "None of these cards can be bought right now: " + repriced.dropped.join("; "), accepted: false, repriced: { dropped: repriced.dropped, changed: [], capped: [] } }, 409, cors);
     }
+    if (url.searchParams.get("dry") === "1") {
+      // A rehearsal (the deploy smoke uses it): what would be sent, without sending.
+      return json({ dry: true, paymentType, submitted: cards.length,
+        cards: cards.map((c) => ({ cardId: c.cardId, cardName: c.cardName, condition: c.conditionName, type: c.type, quantity: c.quantity, cash: c.cashBuyPrice, credit: c.storeCreditBuyPrice, shopifyVariantId: c.shopifyVariantId })),
+        repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
+    }
     const r = await passthrough(SUBMIT_URL(customer), { method: "POST", body: JSON.stringify({ paymentType, buylistCards: cards }) });
     const accepted = r.status >= 200 && r.status < 300 && !(r.body && r.body.actionPass === false);
     let cleared = null, confirmation = "";
