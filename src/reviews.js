@@ -462,7 +462,7 @@ export async function serveReviews(request, env, ctx) {
       .filter(Boolean);
     if (!ids.length) ids = await discoverPlaceIds(key, request, ctx);
     const places = (
-      await Promise.all(ids.slice(0, MAX_PLACES).map((id) => fetchPlace(id, key).catch(() => null)))
+      await Promise.all(ids.slice(0, MAX_PLACES).map((id) => fetchPlace(id, key).then((p) => (p ? Object.assign(p, { place_id: id }) : null)).catch(() => null)))
     ).filter(Boolean);
     let ratingSum = 0;
     for (const p of places) {
@@ -480,6 +480,10 @@ export async function serveReviews(request, env, ctx) {
           when: String(rv.relative_time_description || "").slice(0, 40),
           time: rv.time || 0,
           location: String(p.name || "").slice(0, 60),
+          // Google names every Exor location plainly "Exor Games", so the place id
+          // (the same id /stores.json carries) is what tells the store pages
+          // which shop a review belongs to.
+          place: String(p.place_id || "").slice(0, 80),
         });
       }
     }
