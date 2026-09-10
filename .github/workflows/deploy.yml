@@ -474,7 +474,7 @@ jobs:
             const r = await fetch(W + '/discord/preview.json?k=' + encodeURIComponent(K));
             const b = await r.json().catch(() => null);
             if (!b) { console.log('discord preview: HTTP ' + r.status + ', no JSON'); return; }
-            console.log('discord preview:', r.status, '| configured', b.configured, '| channels', JSON.stringify(b.channels), '| min $' + b.minPrice, '| now', JSON.stringify(b.now), '| state', JSON.stringify(b.state), '| today arrivals', b.todayArrivals, '| pending', b.pending ? b.pending.length : '-', '| skipped now', b.skippedNow ? b.skippedNow.length : '-', '| deferred', b.deferred ? b.deferred.length : '-', b.error ? '| error ' + b.error : '');
+            console.log('discord preview:', r.status, '| configured', b.configured, '| channels', JSON.stringify(b.channels), '| min $' + b.minPrice, '| now', JSON.stringify(b.now), '| state', JSON.stringify(b.state), '| today arrivals', b.todayArrivals, '| pending', b.pending ? b.pending.length : '-', '| skipped now', b.skippedNow ? b.skippedNow.length : '-', '| deferred', b.deferred ? b.deferred.length : '-', b.deferredError ? '| deferred error: ' + b.deferredError : '', b.error ? '| error ' + b.error : '');
             if (b.pending && b.pending[0]) console.log('first pending:', JSON.stringify(b.pending[0]).slice(0, 300));
           })().catch(e => console.log('discord smoke error:', e.message));
           EOF

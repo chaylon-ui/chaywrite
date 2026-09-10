@@ -33,6 +33,11 @@ const MAX_EMBEDS = 10;              // Discord's ceiling per message
 const MIN_GAP_MS = 15 * 60e3;       // a burst of restocks becomes one message, not ten
 const OPEN_HOUR = 8, CLOSE_HOUR = 22;
 const SHOP = "https://exorgames.com";
+// Product JSON is read from the myshopify host, the way every other storefront
+// fetch in this worker does (cards.js): exorgames.com sits behind the owner's
+// Cloudflare bot rules, which turned away all 40 hydrations on 2026-09-10
+// (deploy 261: pending 0, deferred 40). Links in the posts stay on exorgames.com.
+const JSON_HOST = "https://most-wanted-ca.myshopify.com";
 
 const GAMES = [
   ["mtg", /^mtg|magic/i, "Magic: The Gathering", 0xf4a300],
@@ -91,7 +96,7 @@ async function todaysHandles(env) {
 // card is not worth a post (gone, sold out again); throws on a transient
 // failure so the caller leaves it for the next tick.
 async function hydrate(handle) {
-  const r = await fetch(SHOP + "/products/" + encodeURIComponent(handle) + ".js", { headers: { accept: "application/json" }, cf: { cacheTtl: 60 } });
+  const r = await fetch(JSON_HOST + "/products/" + encodeURIComponent(handle) + ".js", { headers: { accept: "application/json", "user-agent": "ExorShelfDrops/1.0 (+workers.dev)" }, cf: { cacheTtl: 60 } });
   if (r.status === 404) return null;
   if (!r.ok) throw new Error("product json " + r.status);
   const p = await r.json();
@@ -115,14 +120,15 @@ export async function pendingDrops(env, state) {
   const done = new Set([...(state.posted || []), ...(state.skipped || [])]);
   const todo = handles.filter((h) => !done.has(h)).slice(0, 40);
   const pending = [], skipped = [], deferred = [];
+  let error = null; // the last hydration failure, so the preview can say why nothing is pending
   for (const h of todo) {
     let c;
-    try { c = await hydrate(h); } catch { deferred.push(h); continue; }
+    try { c = await hydrate(h); } catch (e) { deferred.push(h); error = String((e && e.message) || e).slice(0, 160); continue; }
     if (!c || c.price < minPrice || /event ticket|bulkcard|internal|tbd/i.test(c.type)) { skipped.push(h); continue; }
     pending.push(c);
   }
   pending.sort((a, b) => b.price - a.price);
-  return { pending, skipped, deferred, today: handles.length };
+  return { pending, skipped, deferred, today: handles.length, error };
 }
 
 const money = (n) => "$" + Number(n).toFixed(2);
@@ -205,7 +211,7 @@ export async function serveDiscord(request, env, url, staffOk) {
       return Response.json({
         configured: discordConfigured(env), channels: channels(env), minPrice: Number(env.DISCORD_MIN_PRICE) || 5, now,
         state: { day: state.day, posted: (state.posted || []).length, skipped: (state.skipped || []).length, posts: state.posts || 0, lastPostAt: state.lastPostAt, lastError: state.lastError },
-        todayArrivals: p.today, deferred: p.deferred, skippedNow: p.skipped,
+        todayArrivals: p.today, deferred: p.deferred, deferredError: p.error, skippedNow: p.skipped,
         pending: p.pending.map((c) => ({ handle: c.handle, title: c.title, price: c.price, conditions: c.conditions, game: c.game.key, url: c.url, channel: webhookFor(env, c.game) ? (env["DISCORD_WEBHOOK_" + c.game.key.toUpperCase()] ? c.game.key : (c.game.sealed && env.DISCORD_WEBHOOK_SEALED ? "sealed" : "default")) : "none" })),
       }, { headers: cors });
     } catch (e) {
