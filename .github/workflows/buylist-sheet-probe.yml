@@ -5,10 +5,11 @@ name: buylist-sheet-probe
 # section a stand-in customer id, answers the worker's /buylist/api calls
 # itself (a three-card list, a few search hits) and re-runs the page's own
 # script. Then it measures the list panel at the given viewport width: where
-# the panel is, what is painted on top of it, which ancestors could break a
-# fixed-position element (transform, filter, contain, overflow), the ticker
-# and the header variables, at the top of the page, scrolled, and at the
-# bottom, and again after tapping the sheet bar.
+# the panel is, what is painted on top of it at three points inside its bar,
+# every fixed element near the bottom edge (Shopify's preview bar, the
+# ticker, app bars) with its z-index, which ancestors could break a
+# fixed-position element, at the top of the page, scrolled, at the bottom,
+# and again after tapping the sheet bar.
 
 on:
   workflow_dispatch:
@@ -77,20 +78,20 @@ jobs:
             await page.waitForSelector('.bl__cart', { timeout: 20000 }).catch(() => console.log('no .bl__cart within 20 s'));
             await sleep(2500);
             await page.evaluate(() => { const q = document.getElementById('bl-q'); const f = document.getElementById('bl-form'); if (q && f) { q.value = 'Fireball'; f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); } });
-            await sleep(2500);
+            await sleep(4500);
             const measure = async (tag) => {
               const m = await page.evaluate(() => {
                 const el = document.querySelector('.bl__cart'), bar = document.getElementById('bl-sheetbar');
                 if (!el) return { missing: true, loginCard: !!document.querySelector('.xg-buylist__login'), sectionHtml: document.querySelector('.xg-buylist') ? document.querySelector('.xg-buylist').innerHTML.slice(0, 300) : null };
                 const cs = getComputedStyle(el), r = el.getBoundingClientRect();
                 const rs = getComputedStyle(document.documentElement);
+                const name = (e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
                 const out = {
                   vw: innerWidth, vh: innerHeight, scrollY: Math.round(scrollY), docH: document.documentElement.scrollHeight,
-                  cart: { pos: cs.position, display: cs.display, vis: cs.visibility, opacity: cs.opacity, z: cs.zIndex, top: cs.top, bottom: cs.bottom, maxH: cs.maxHeight, h: Math.round(r.height), w: Math.round(r.width), rectTop: Math.round(r.top), rectBottom: Math.round(r.bottom), left: Math.round(r.left), open: el.classList.contains('bl__cart--open'), bg: cs.backgroundColor },
+                  cart: { pos: cs.position, display: cs.display, vis: cs.visibility, opacity: cs.opacity, z: cs.zIndex, bottom: cs.bottom, maxH: cs.maxHeight, h: Math.round(r.height), w: Math.round(r.width), rectTop: Math.round(r.top), rectBottom: Math.round(r.bottom), open: el.classList.contains('bl__cart--open') },
                   bar: bar ? { display: getComputedStyle(bar).display, h: Math.round(bar.getBoundingClientRect().height), top: Math.round(bar.getBoundingClientRect().top), text: bar.innerText.replace(/\s+/g, ' ').slice(0, 80) } : 'NO BAR ELEMENT (old JS served?)',
-                  vars: { tick: rs.getPropertyValue('--xg-tick-h'), fixedBottom: rs.getPropertyValue('--xg-fixed-bottom') },
-                  cssHasSheet: [...document.styleSheets].some(s => { try { return [...s.cssRules].some(rule => (rule.cssText || '').includes('bl__sheetbar')); } catch (e) { return false; } }),
-                  ancestors: [], ticker: null, atBar: null, nearBottom: null
+                  vars: { tick: rs.getPropertyValue('--xg-tick-h'), fixedBottom: rs.getPropertyValue('--xg-fixed-bottom'), sheetOff: document.querySelector('.xg-buylist').style.getPropertyValue('--bl-sheet-off') },
+                  ancestors: [], fixed: [], pbar: null, samples: []
                 };
                 let n = el.parentElement;
                 for (let i = 0; n && i < 14; n = n.parentElement, i++) {
@@ -101,19 +102,27 @@ jobs:
                   if (c.perspective !== 'none') flags.push('perspective=' + c.perspective);
                   if (c.willChange !== 'auto') flags.push('will-change=' + c.willChange);
                   if (c.contain !== 'none') flags.push('contain=' + c.contain);
-                  if (c.backdropFilter && c.backdropFilter !== 'none') flags.push('backdrop-filter');
                   if (c.overflow !== 'visible') flags.push('overflow=' + c.overflow);
                   if (c.position !== 'static') flags.push('pos=' + c.position + '/z=' + c.zIndex);
-                  if (c.opacity !== '1') flags.push('opacity=' + c.opacity);
-                  if (c.zoom && c.zoom !== '1') flags.push('zoom=' + c.zoom);
-                  if (flags.length) out.ancestors.push(n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (typeof n.className === 'string' && n.className ? '.' + n.className.trim().split(/\s+/).slice(0, 2).join('.') : '') + ' {' + flags.join(' ') + '}');
+                  if (flags.length) out.ancestors.push(name(n) + ' {' + flags.join(' ') + '}');
                 }
-                const t = document.getElementById('xg-ticker');
-                if (t) { const tr = t.getBoundingClientRect(); out.ticker = { h: Math.round(tr.height), top: Math.round(tr.top), z: getComputedStyle(t).zIndex, display: getComputedStyle(t).display }; }
-                const at = (x, y) => { const e = document.elementFromPoint(x, y); return (e ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '') : 'none') + ' @' + x + ',' + y; };
+                // Every fixed element within three levels of body that sits in
+                // the lower half of the screen: the candidates for covering
+                // the sheet, with the numbers the page's own measurement uses.
+                for (const e of document.querySelectorAll('body > *, body > * > *, body > * > * > *')) {
+                  if (e === el || el.contains(e)) continue;
+                  const c = getComputedStyle(e);
+                  if (c.position !== 'fixed' || c.display === 'none' || c.visibility === 'hidden') continue;
+                  const b = e.getBoundingClientRect();
+                  if (b.height <= 0 || b.bottom < innerHeight * 0.5) continue;
+                  out.fixed.push(name(e) + ' top ' + Math.round(b.top) + ' bottom ' + Math.round(b.bottom) + ' h ' + Math.round(b.height) + ' w ' + Math.round(b.width) + ' z ' + c.zIndex + ' pe ' + c.pointerEvents);
+                }
+                const pb = document.getElementById('PBarNextFrame');
+                if (pb) { const b = pb.getBoundingClientRect(); out.pbar = { top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height), z: getComputedStyle(pb).zIndex }; }
+                const at = (x, y) => { const e = document.elementFromPoint(x, y); return (e ? name(e) : 'none') + ' @' + x + ',' + y; };
                 const px = Math.round(innerWidth / 2);
-                out.atBar = at(px, Math.round(r.top + Math.min(28, Math.max(1, r.height / 2))));
-                out.nearBottom = at(px, innerHeight - 40);
+                const br = bar ? bar.getBoundingClientRect() : r;
+                for (const y of [br.top + 6, br.top + br.height / 2, br.bottom - 6]) out.samples.push(at(px, Math.round(y)));
                 return out;
               });
               console.log(tag + ' ' + JSON.stringify(m));
@@ -129,11 +138,14 @@ jobs:
             const tapped = await page.evaluate(() => { const b = document.getElementById('bl-sheetbar'); if (!b) return 'no bar'; b.click(); return 'clicked'; });
             await sleep(600);
             console.log('tap:', tapped);
-            await measure('OPENED');
-            for (const [tag, m] of [['top', top], ['scrolled', mid], ['bottom', bottom]]) {
+            const opened = await measure('OPENED');
+            const own = (s) => /bl__sheetbar|bl__cart|bl__sheettext|bl__sheetsum|bl__chev/.test(s || '');
+            for (const [tag, m] of [['top', top], ['scrolled', mid], ['bottom', bottom], ['opened', opened]]) {
               const c = m.cart || {};
-              const visible = !m.missing && c.display !== 'none' && c.vis !== 'hidden' && c.rectTop >= 0 && c.rectTop < m.vh && c.h > 0 && /bl__sheetbar|bl__cart|bl__sheettext|bl__chev|bl__sheetsum/.test(m.atBar || '');
-              console.log('VERDICT ' + (visible ? 'PASS ' : 'FAIL ') + tag + '-sheet-bar-visible :: ' + (m.missing ? 'no .bl__cart (login card: ' + m.loginCard + ')' : 'panel top ' + c.rectTop + ' of ' + m.vh + 'px, height ' + c.h + ', position ' + c.pos + ', painted at the bar: ' + m.atBar));
+              const onScreen = !m.missing && c.display !== 'none' && c.vis !== 'hidden' && c.rectTop >= 0 && c.rectTop < m.vh && c.h > 0;
+              const unobstructed = !m.missing && m.samples.length === 3 && m.samples.every(own);
+              const clearsBar = !m.missing && (!m.pbar || c.rectBottom <= m.pbar.top + 1);
+              console.log('VERDICT ' + (onScreen && unobstructed && clearsBar ? 'PASS ' : 'FAIL ') + tag + '-sheet-bar-visible-and-tappable :: ' + (m.missing ? 'no .bl__cart (login card: ' + m.loginCard + ')' : 'panel ' + c.rectTop + '-' + c.rectBottom + ' of ' + m.vh + 'px (offset ' + (m.vars.sheetOff || 'none') + '), preview bar ' + (m.pbar ? m.pbar.top + '-' + m.pbar.bottom + ' z ' + m.pbar.z : 'absent') + ', painted in the bar: ' + m.samples.join(' | ')));
             }
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 400)); process.exit(0); });
