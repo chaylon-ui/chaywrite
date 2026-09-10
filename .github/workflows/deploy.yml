@@ -411,3 +411,10 @@ jobs:
             console.log('unknown card dry=1:', u.status, '(expect 409)', JSON.stringify(u.body).slice(0, 300));
           })().catch(e => console.log('re-pricing smoke error:', e.message));
           EOF
+      - name: Smoke-test buylist page assets (log-only)
+        run: |
+          W=https://exor-binder.nevski.workers.dev
+          CSS=$(curl -sS --max-time 20 "$W/buylist.css" || true)
+          JS=$(curl -sS --max-time 20 "$W/buylist.js" || true)
+          echo "buylist.css: row-grid fix $(printf '%s' "$CSS" | grep -c 'bl__line.bl__line--in' || true) | sheet bar $(printf '%s' "$CSS" | grep -c 'bl__sheetbar' || true) | sheet open rule $(printf '%s' "$CSS" | grep -c 'bl__cart--open' || true) | grouped rows $(printf '%s' "$CSS" | grep -c 'bl__group-head' || true)"
+          echo "buylist.js: sheet bar markup $(printf '%s' "$JS" | grep -c 'bl-sheetbar' || true) | toggle $(printf '%s' "$JS" | grep -c 'toggleSheet' || true) | re-pricing notes $(printf '%s' "$JS" | grep -c 'j.repriced' || true)"
