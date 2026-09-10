@@ -42,9 +42,11 @@
   .badge { display: inline-block; border-radius: 6px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; vertical-align: middle; }
   .badge.cash { background: rgba(52,178,194,.18); color: #8fdbe6; }
   .badge.credit { background: rgba(76,175,125,.2); color: #8fe0b4; }
-  .badge.pending { background: rgba(255,122,47,.2); color: #ffc38a; }
-  .badge.approved { background: rgba(52,178,194,.18); color: #8fdbe6; }
+  .badge.other { background: rgba(255,255,255,.1); color: var(--ink); }
+  .badge.pending, .badge.trade { background: rgba(255,122,47,.2); color: #ffc38a; }
+  .badge.approved, .badge.buy { background: rgba(52,178,194,.18); color: #8fdbe6; }
   .badge.completed { background: rgba(76,175,125,.2); color: #8fe0b4; }
+  .badge.return { background: rgba(214,44,40,.18); color: #ff9b8f; }
   .badge.foil { background: rgba(214,44,40,.18); color: #ff9b8f; font-size: 11px; }
   .who { font-weight: 600; }
   .who small { display: block; color: var(--dim); font-weight: 400; font-size: 12.5px; }
@@ -84,21 +86,24 @@
 <body>
 <div class="wrap" id="page"></div>
 <script>
-/* Buylists — our own read-only window on BinderPOS's online buylists
-   (owner, 2026-09-09). The worker (src/portal.js) signs in to the portal
-   and answers /portal/buylists.json and /portal/buylist.json behind the
-   staff PIN (same one as /staff, /pickups and /deckstats, same lockout).
-   Approve / decline / complete are links into BinderPOS itself; nothing
-   on this page writes anywhere. */
+/* Buylists — our own read-only window on BinderPOS's online buylists and
+   in-store buy carts (owner, 2026-09-09/10). The worker (src/portal.js)
+   signs in to the portal and answers /portal/*.json behind the staff PIN
+   (same one as /staff, /pickups and /deckstats, same lockout). Approve /
+   decline / complete are links into BinderPOS itself; nothing on this page
+   writes anywhere and nothing moves stock. */
 (function () {
   var K = '';
   try { K = localStorage.getItem('xgdk') || ''; } catch (e) {}
   var page = document.getElementById('page');
-  var S = { status: 'pending', days: '90', rows: [], skip: 0, take: 50, more: false, q: '', busy: false, error: '', loaded: false, detail: null, detailId: '' };
+  var TABS = [['pending', 'Pending'], ['approved', 'Approved'], ['completed', 'Completed'], ['carts', 'In-store buys']];
+  var S = { status: 'pending', days: '90', cartDays: '3', rows: [], skip: 0, take: 50, more: false, total: null, totals: null,
+            q: '', busy: false, error: '', loaded: false, detail: null, detailId: '', detailKind: '' };
   try {
     var saved = JSON.parse(localStorage.getItem('xgbl') || '{}');
-    if (/^(pending|approved|completed)$/.test(saved.status || '')) S.status = saved.status;
+    if (/^(pending|approved|completed|carts)$/.test(saved.status || '')) S.status = saved.status;
     if (/^(30|90|365|all)$/.test(String(saved.days || ''))) S.days = String(saved.days);
+    if (/^(1|3|7|14|31)$/.test(String(saved.cartDays || ''))) S.cartDays = String(saved.cartDays);
   } catch (e) {}
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -133,12 +138,22 @@
   function isCredit(t) { return /credit/i.test(t || ''); }
   function payBadge(t) { return '<span class="badge ' + (isCredit(t) ? 'credit' : 'cash') + '">' + esc(t || '—') + '</span>'; }
   function stageBadge(s) { return '<span class="badge ' + esc(s) + '">' + esc(cap(s || '')) + '</span>'; }
+  function staffName(email) { return String(email || '').split('@')[0] || '—'; }
+  function isCarts() { return S.status === 'carts'; }
   function diffClass(live, quoted) {
     if (live == null || quoted == null) return '';
     if (Math.abs(live - quoted) < 0.005) return '';
     return live < quoted ? 'down' : 'up';
   }
-  function saveView() { try { localStorage.setItem('xgbl', JSON.stringify({ status: S.status, days: S.days })); } catch (e) {} }
+  function payoutBadges(p) {
+    if (!p) return '—';
+    var out = [];
+    if (p.cash) out.push('<span class="badge cash">' + money(p.cash) + ' cash</span>');
+    if (p.credit) out.push('<span class="badge credit">' + money(p.credit) + ' credit</span>');
+    if (p.other) out.push('<span class="badge other">' + money(p.other) + '</span>');
+    return out.length ? out.join(' ') : '<span class="muted">none</span>';
+  }
+  function saveView() { try { localStorage.setItem('xgbl', JSON.stringify({ status: S.status, days: S.days, cartDays: S.cartDays })); } catch (e) {} }
 
   function api(path) {
     return fetch(path + (path.indexOf('?') > -1 ? '&' : '?') + 'k=' + encodeURIComponent(K), { cache: 'no-store' })
@@ -177,75 +192,115 @@
     document.getElementById('go').addEventListener('click', go);
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
   }
+  function pinLost() { K = ''; showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.'); }
 
   /* ---------------- routing ---------------- */
   function route() {
     if (!K) return showLogin();
-    var m = location.hash.match(/^#\/b\/(\d+)/);
-    if (m) loadDetail(m[1]);
+    var b = location.hash.match(/^#\/b\/(\d+)/);
+    var c = location.hash.match(/^#\/c\/(\d{4}-\d{2}-\d{2})\/(\d+)/);
+    if (b) loadDetail(b[1]);
+    else if (c) loadCart(c[1], c[2]);
     else { S.detail = null; S.detailId = ''; renderList(); if (!S.loaded && !S.busy) loadList(false); }
   }
   window.addEventListener('hashchange', route);
 
   /* ---------------- list ---------------- */
+  function listPath() {
+    if (isCarts()) return '/portal/carts.json?days=' + S.cartDays + '&take=' + S.take + '&skip=' + S.skip;
+    return '/portal/buylists.json?status=' + S.status + '&take=' + S.take + '&skip=' + S.skip + (S.days !== 'all' ? '&days=' + S.days : '');
+  }
+  function viewKey() { return S.status + '|' + S.days + '|' + S.cartDays; }
   function loadList(append) {
     S.busy = true; S.error = '';
-    if (!append) { S.skip = 0; S.rows = []; }
+    if (!append) { S.skip = 0; S.rows = []; S.total = null; S.totals = null; }
     renderList();
-    var p = '/portal/buylists.json?status=' + S.status + '&take=' + S.take + '&skip=' + S.skip + (S.days !== 'all' ? '&days=' + S.days : '');
-    var wanted = S.status + '|' + S.days;
-    api(p).then(function (d) {
-      if (wanted !== S.status + '|' + S.days) return;   // the user switched tabs meanwhile
+    var wanted = viewKey();
+    api(listPath()).then(function (d) {
+      if (wanted !== viewKey()) return;   // the user switched tabs meanwhile
       S.rows = append ? S.rows.concat(d.rows || []) : (d.rows || []);
       S.more = !!d.more;
+      S.total = d.total != null ? d.total : null;
+      S.totals = d.totals || null;
       S.skip = S.skip + (d.rows || []).length;
       S.busy = false; S.loaded = true;
       renderList();
     }).catch(function (e) {
-      if (e.message === 'pin') { K = ''; return showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.'); }
+      if (e.message === 'pin') return pinLost();
       S.busy = false; S.error = e.message; renderList();
     });
   }
   function matches(r) {
     if (!S.q) return true;
     var q = S.q.toLowerCase();
-    return (r.customer.name + ' ' + r.customer.email + ' ' + r.id).toLowerCase().indexOf(q) > -1;
+    var c = r.customer || {};
+    return ((c.name || '') + ' ' + (c.email || '') + ' ' + r.id + ' ' + (r.staff || '')).toLowerCase().indexOf(q) > -1;
   }
-  function dateHead() { return S.status === 'approved' ? 'Approved' : S.status === 'completed' ? 'Completed' : 'Submitted'; }
+  function dateHead() { return S.status === 'approved' ? 'Approved' : S.status === 'completed' ? 'Completed' : isCarts() ? 'Rang up' : 'Submitted'; }
+  function windowSelect() {
+    if (isCarts()) {
+      return '<select id="days">' + [['1', 'Last 24 hours'], ['3', 'Last 3 days'], ['7', 'Last 7 days'], ['14', 'Last 14 days'], ['31', 'Last 31 days']]
+        .map(function (o) { return '<option value="' + o[0] + '"' + (S.cartDays === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+    }
+    return '<select id="days">' + [['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last year'], ['all', 'All time']]
+      .map(function (o) { return '<option value="' + o[0] + '"' + (S.days === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+  }
   function renderList() {
     var rows = S.rows.filter(matches);
     var html =
       '<div class="bar split noprint"><div><h1>Buylists</h1>' +
-      '<p class="sub">Online buylists from BinderPOS, read-only. Approving, declining and completing stay in BinderPOS, one click away on each row.</p></div>' +
+      '<p class="sub">Online buylists and in-store buys from BinderPOS, read-only. Approving, declining and completing stay in BinderPOS, one click away on each row.</p></div>' +
       '<div><button class="btn-dim" id="refresh">Refresh</button> <button class="btn-dim" id="logout">Log out</button></div></div>' +
       '<div class="bar noprint"><div class="tabs">' +
-      ['pending', 'approved', 'completed'].map(function (s) { return '<button data-tab="' + s + '"' + (S.status === s ? ' class="on"' : '') + '>' + cap(s) + '</button>'; }).join('') +
-      '</div><select id="days">' +
-      [['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last year'], ['all', 'All time']].map(function (o) { return '<option value="' + o[0] + '"' + (S.days === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
-      '</select><input type="search" id="q" placeholder="Filter by name, email or number" value="' + esc(S.q) + '"></div>';
+      TABS.map(function (t) { return '<button data-tab="' + t[0] + '"' + (S.status === t[0] ? ' class="on"' : '') + '>' + t[1] + '</button>'; }).join('') +
+      '</div>' + windowSelect() +
+      '<input type="search" id="q" placeholder="' + (isCarts() ? 'Filter by name, email, staff or cart number' : 'Filter by name, email or number') + '" value="' + esc(S.q) + '"></div>';
     if (S.error) html += '<p class="err">' + esc(S.error) + '</p>';
-    if (S.busy && !S.rows.length) html += '<div class="empty">Loading ' + esc(S.status) + ' buylists…</div>';
-    else if (!rows.length) html += '<div class="empty">' + (S.q ? 'No buylists match that filter.' : 'No ' + esc(S.status) + ' buylists in this range.') + '</div>';
-    else {
+    if (isCarts() && S.totals && !S.busy) {
+      var t = S.totals;
+      html += '<div class="grid"><div class="card"><div class="k">Buy carts in this window</div><div class="v">' + esc(t.carts) + '</div><div class="d">' + esc(t.cards) + ' cards bought</div></div>' +
+        '<div class="card"><div class="k">Paid for cards</div><div class="v">' + money(t.paid) + '</div><div class="d">' + money(t.cash) + ' cash out · ' + money(t.credit) + ' credit issued</div></div>' +
+        '<div class="card"><div class="k">They sell for</div><div class="v">' + money(t.sells) + '</div><div class="d">' + (t.sells && t.paid ? 'bought at ' + Math.round(t.paid / t.sells * 100) + '% of sell price' : 'catalogue cards only') + '</div></div></div>';
+    }
+    if (S.busy && !S.rows.length) html += '<div class="empty">Loading ' + (isCarts() ? 'in-store buys (a fresh day takes a few seconds)' : esc(S.status) + ' buylists') + '…</div>';
+    else if (!rows.length) html += '<div class="empty">' + (S.q ? 'Nothing matches that filter.' : isCarts() ? 'No in-store buys in this window.' : 'No ' + esc(S.status) + ' buylists in this range.') + '</div>';
+    else if (isCarts()) {
+      html += '<div class="scroll"><table><thead><tr><th>Rang up</th><th>Customer</th><th>Staff</th><th>Paid out</th><th class="num">Cards</th><th class="num">#</th><th class="noprint"></th></tr></thead><tbody>';
+      rows.forEach(function (r) {
+        var c = r.customer || {};
+        html += '<tr class="row-link" data-href="#/c/' + esc(r.day) + '/' + esc(r.id) + '">' +
+          '<td class="nw"><div>' + esc(when(r.submitted)) + '</div><small class="muted">' + esc(ago(r.submitted)) + (r.type !== 'buy' ? ' · <span class="badge ' + esc(r.type) + '">' + esc(r.type) + '</span>' : '') + '</small></td>' +
+          '<td><span class="who">' + esc(c.name || (r.customer ? '(no name)' : 'walk-in')) + '<small>' + esc(c.email || '') + '</small></span></td>' +
+          '<td class="nw">' + esc(staffName(r.staff)) + '</td>' +
+          '<td class="nw">' + payoutBadges(r.payout) + '</td>' +
+          '<td class="num">' + esc(r.bought.cards) + (r.sold && r.sold.cards ? '<br><small class="muted">+' + esc(r.sold.cards) + ' sold</small>' : '') + '</td>' +
+          '<td class="num muted">' + esc(r.id) + '</td>' +
+          '<td class="nw noprint"><a href="#/c/' + esc(r.day) + '/' + esc(r.id) + '" class="btn btn-dim">View</a> ' +
+          '<a href="' + esc(r.portalUrl) + '" target="_blank" rel="noopener" class="btn btn-link">BinderPOS ↗</a></td></tr>';
+      });
+      html += '</tbody></table></div>';
+    } else {
       html += '<div class="scroll"><table><thead><tr><th>' + dateHead() + '</th><th>Customer</th><th>Payment</th><th class="num">#</th><th class="noprint"></th></tr></thead><tbody>';
       rows.forEach(function (r) {
         var d = S.status === 'approved' ? r.approved : S.status === 'completed' ? r.completed : r.submitted;
-        html += '<tr class="row-link" data-id="' + esc(r.id) + '">' +
+        html += '<tr class="row-link" data-href="#/b/' + esc(r.id) + '">' +
           '<td class="nw"><div>' + esc(when(d)) + '</div><small class="muted">' + esc(ago(d)) + '</small></td>' +
           '<td><span class="who">' + esc(r.customer.name || '(no name)') + '<small>' + esc(r.customer.email) + '</small></span></td>' +
           '<td>' + payBadge(r.paymentType) + '</td>' +
           '<td class="num muted">' + esc(r.id) + '</td>' +
           '<td class="nw noprint"><a href="#/b/' + esc(r.id) + '" class="btn btn-dim">View</a> ' +
-          '<a href="' + esc(r.portalUrl) + '" target="_blank" rel="noopener" class="btn btn-link" data-ext="1">BinderPOS ↗</a></td></tr>';
+          '<a href="' + esc(r.portalUrl) + '" target="_blank" rel="noopener" class="btn btn-link">BinderPOS ↗</a></td></tr>';
       });
       html += '</tbody></table></div>';
-      html += '<p class="muted" style="margin-top:10px">' + rows.length + ' shown' +
+    }
+    if (rows.length) {
+      html += '<p class="muted" style="margin-top:10px">' + rows.length + ' shown' + (S.total != null ? ' of ' + S.total : '') +
         (S.more ? ' · <button class="btn-dim" id="more"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'Loading…' : 'Load 50 more') + '</button>' : '') + '</p>';
     }
-    html += '<p class="note">Read straight from BinderPOS each time this page opens or refreshes; nothing is stored here. Times are in this device\'s time zone.</p>';
+    html += '<p class="note">Read straight from BinderPOS each time this page opens or refreshes; in-store days are cached for a few minutes so the page stays quick. Times are in this device\'s time zone.</p>';
     page.innerHTML = html;
     var days = document.getElementById('days');
-    if (days) days.addEventListener('change', function () { S.days = days.value; saveView(); S.loaded = false; loadList(false); });
+    if (days) days.addEventListener('change', function () { if (isCarts()) S.cartDays = days.value; else S.days = days.value; saveView(); S.loaded = false; loadList(false); });
     var q = document.getElementById('q');
     if (q) q.addEventListener('input', function () {
       var pos = q.selectionStart;
@@ -269,20 +324,23 @@
     if (tab) { S.status = tab.getAttribute('data-tab'); saveView(); S.loaded = false; loadList(false); return; }
     if (e.target.closest && e.target.closest('a, button, input, select')) return;
     var row = e.target.closest && e.target.closest('tr.row-link');
-    if (row) location.hash = '#/b/' + row.getAttribute('data-id');
+    if (row) location.hash = row.getAttribute('data-href');
   });
 
-  /* ---------------- detail ---------------- */
+  /* ---------------- buylist detail ---------------- */
   function loadDetail(id) {
-    S.detailId = id; S.detail = null; S.error = '';
+    S.detailId = id; S.detailKind = 'buylist'; S.detail = null; S.error = '';
     renderDetail();
     api('/portal/buylist.json?id=' + encodeURIComponent(id)).then(function (d) {
       if (S.detailId !== id) return;
       S.detail = d; renderDetail();
     }).catch(function (e) {
-      if (e.message === 'pin') { K = ''; return showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.'); }
+      if (e.message === 'pin') return pinLost();
       S.error = e.message; renderDetail();
     });
+  }
+  function backLink() {
+    return '<div class="bar noprint"><a href="#/" class="btn btn-dim">‹ All ' + (isCarts() ? 'in-store buys' : esc(S.status)) + '</a></div>';
   }
   function linesTable(lines, withLive) {
     var html = '<div class="scroll"><table><thead><tr><th></th><th>Card</th><th>Condition</th><th class="num">Qty</th><th class="num">Quoted cash</th><th class="num">Quoted credit</th>' +
@@ -316,7 +374,7 @@
   }
   function renderDetail() {
     var d = S.detail;
-    var html = '<div class="bar noprint"><a href="#/" class="btn btn-dim">‹ All ' + esc(S.status) + '</a></div>';
+    var html = backLink();
     if (!d) {
       html += S.error ? '<p class="err">' + esc(S.error) + '</p>' : '<div class="empty">Loading buylist ' + esc(S.detailId) + '…</div>';
       page.innerHTML = html;
@@ -354,6 +412,87 @@
       html += '<h2>Final, as ' + (d.stage === 'completed' ? 'completed' : 'approved') + '</h2>' + linesTable(d.finalLines, false);
     }
     html += '<p class="note">Quoted prices are what the customer saw when they submitted. Live columns are what BinderPOS pays for the same card and condition right now: red when it dropped, green when it rose. "Max" is the most copies the buylist takes (a plus means overstock is still accepted at a lower price).</p>';
+    page.innerHTML = html;
+    var print = document.getElementById('print');
+    if (print) print.addEventListener('click', function () { window.print(); });
+    window.scrollTo(0, 0);
+  }
+
+  /* ---------------- in-store cart detail ---------------- */
+  function loadCart(day, id) {
+    S.detailId = id; S.detailKind = 'cart'; S.detail = null; S.error = '';
+    if (!isCarts()) { S.status = 'carts'; saveView(); S.loaded = false; }
+    renderCart();
+    api('/portal/cart.json?id=' + encodeURIComponent(id) + '&day=' + encodeURIComponent(day)).then(function (d) {
+      if (S.detailId !== id) return;
+      S.detail = d; renderCart();
+    }).catch(function (e) {
+      if (e.message === 'pin') return pinLost();
+      S.error = e.message; renderCart();
+    });
+  }
+  function spread(l) {
+    if (l.sell == null || l.paid == null) return '<td class="num muted">—</td>';
+    var s = l.sell - l.paid;
+    var pct = l.sell > 0 ? Math.round(l.paid / l.sell * 100) : null;
+    return '<td class="num ' + (s < 0 ? 'down' : '') + '">' + money(s) + (pct != null ? '<br><small class="muted">paid ' + pct + '%</small>' : '') + '</td>';
+  }
+  function renderCart() {
+    var d = S.detail;
+    var html = backLink();
+    if (!d) {
+      html += S.error ? '<p class="err">' + esc(S.error) + '</p>' : '<div class="empty">Loading cart ' + esc(S.detailId) + '…</div>';
+      page.innerHTML = html;
+      return;
+    }
+    var c = d.customer;
+    var buys = d.lines.filter(function (l) { return l.buying; });
+    var sells = d.lines.filter(function (l) { return !l.buying; });
+    html += '<div class="bar split"><div><h1>Cart ' + esc(d.id) + '</h1>' +
+      '<p class="sub"><span class="badge ' + esc(d.type) + '">' + esc(d.type) + '</span> · rang up ' + esc(when(d.submitted)) + ' <span class="muted">(' + esc(ago(d.submitted)) + ')</span>' +
+      ' · by ' + esc(staffName(d.staff)) + (d.till ? ' on ' + esc(d.till) : '') + (d.orderNumber ? ' · order #' + esc(d.orderNumber) : '') + '</p></div>' +
+      '<div class="noprint"><a class="btn btn-main" href="' + esc(d.portalUrl) + '" target="_blank" rel="noopener">Open in BinderPOS ↗</a> <button class="btn-dim" id="print">Print</button></div></div>';
+    html += '<div class="grid">' +
+      '<div class="card"><div class="k">Customer</div><div class="v">' + esc(c ? (c.name || '(no name)') : 'Walk-in, not on file') + '</div>' +
+      (c && c.email ? '<div class="d"><a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a></div>' : '') +
+      (c && c.phone ? '<div class="d">' + esc(c.phone) + '</div>' : '') +
+      (c && c.storeCredit != null ? '<div class="d">store credit balance now: ' + money(c.storeCredit) + '</div>' : '') + '</div>' +
+      '<div class="card"><div class="k">Paid out</div><div class="v">' + money(d.payout.total) + '</div><div class="d">' + payoutBadges(d.payout) + '</div></div>' +
+      '<div class="card"><div class="k">Bought</div><div class="v">' + esc(d.bought.cards) + ' cards</div><div class="d">' + money(d.bought.total) + ' for cards' +
+      (d.bought.sells ? ' · sell for ' + money(d.bought.sells) : '') + '</div></div>' +
+      (sells.length ? '<div class="card"><div class="k">Sold in the same cart</div><div class="v">' + money(d.sold.total) + '</div><div class="d">' + esc(d.sold.cards) + ' items · ' + money(d.taken.total) + ' taken</div></div>' : '') +
+      '</div>';
+    if (d.notes) html += '<div class="notes"><strong>Cart notes:</strong> ' + esc(d.notes) + '</div>';
+    html += '<h2>Cards we bought</h2>';
+    if (!buys.length) html += '<div class="empty">No buy lines on this cart.</div>';
+    else {
+      html += '<div class="scroll"><table><thead><tr><th></th><th>Card</th><th>Condition</th><th class="num">Qty</th><th class="num">Paid each</th><th class="num">Paid</th><th class="num">Sells for</th><th class="num">Spread</th></tr></thead><tbody>';
+      var t = { qty: 0, paid: 0, sells: 0 };
+      buys.forEach(function (l) {
+        t.qty += l.qty; t.paid += (l.paid || 0) * l.qty; if (l.sell != null) t.sells += l.sell * l.qty;
+        html += '<tr><td>' + (l.image ? '<img class="thumb" loading="lazy" src="' + esc(l.image) + '" alt="">' : '') + '</td>' +
+          '<td><strong>' + esc(l.title) + '</strong></td>' +
+          '<td class="nw">' + esc(l.condition || '—') + '</td>' +
+          '<td class="num"><strong>' + esc(l.qty) + '</strong></td>' +
+          '<td class="num">' + money(l.paid) + '</td>' +
+          '<td class="num">' + money(l.paid != null ? l.paid * l.qty : null) + '</td>' +
+          '<td class="num muted">' + money(l.sell) + '</td>' + spread(l) + '</tr>';
+      });
+      html += '<tr class="total"><td></td><td><strong>Total</strong></td><td></td><td class="num"><strong>' + t.qty + '</strong></td><td></td>' +
+        '<td class="num"><strong>' + money(t.paid) + '</strong></td><td class="num"><strong>' + money(t.sells) + '</strong></td>' +
+        '<td class="num"><strong>' + money(t.sells - t.paid) + '</strong></td></tr></tbody></table></div>';
+    }
+    if (sells.length) {
+      html += '<h2>Sold in the same cart</h2><div class="scroll"><table><thead><tr><th>Item</th><th>Condition</th><th class="num">Qty</th><th class="num">Price</th></tr></thead><tbody>';
+      sells.forEach(function (l) {
+        html += '<tr><td>' + esc(l.title) + '</td><td class="nw">' + esc(l.condition || '—') + '</td><td class="num">' + esc(l.qty) + '</td><td class="num">' + money(l.price) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    if (d.tenders && d.tenders.length) {
+      html += '<p class="muted" style="margin-top:12px">Tenders: ' + d.tenders.map(function (x) { return esc(x.type) + ' ' + money(Math.abs(x.amount)) + (x.amount < 0 ? ' out' : ' in'); }).join(' · ') + '</p>';
+    }
+    html += '<p class="note">"Paid each" is what the register paid per copy; "Sells for" is our price for that card and condition at the time. A trade cart also lists what the customer took home. Graded and custom items have no condition or sell price on file.</p>';
     page.innerHTML = html;
     var print = document.getElementById('print');
     if (print) print.addEventListener('click', function () { window.print(); });

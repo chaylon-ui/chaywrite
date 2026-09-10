@@ -555,6 +555,40 @@ export class BinderRoom {
     await this.state.storage.put(puts);
   }
 
+  // A small key/value store with a TTL, for modules that need one shared
+  // cache across isolates but not the search cache's 30-minute sweep. First
+  // user: src/portal.js, one entry per day of BinderPOS POS carts, in its
+  // own instance ("portal-cache"); any instance answers these paths.
+  //   GET  /_kv/get?k=            404 when absent or past its ttl; else the gz bytes + x-age
+  //   POST /_kv/put?k=&ttl=<ms>   body = gz bytes (<= 126 KiB)
+  async kvOp(request, url) {
+    const now = Date.now();
+    const k = String(url.searchParams.get("k") || "");
+    if (!/^[a-z0-9:_.-]{1,80}$/.test(k)) return Response.json({ error: "bad key" }, { status: 400 });
+    if (url.pathname === "/_kv/get") {
+      const rec = await this.state.storage.get("pkv:" + k);
+      if (!rec || !rec.gz || now - (rec.ts || 0) >= (rec.ttl || 0)) return new Response(null, { status: 404 });
+      return new Response(rec.gz, { headers: { "content-type": "application/gzip", "x-age": String(now - rec.ts), "cache-control": "no-store" } });
+    }
+    if (url.pathname === "/_kv/put" && request.method === "POST") {
+      const gz = await request.arrayBuffer();
+      if (!gz.byteLength || gz.byteLength > 126 * 1024) return Response.json({ error: "bad size" }, { status: 413 });
+      const ttl = Math.max(1000, Math.min(30 * 86400e3, parseInt(url.searchParams.get("ttl"), 10) || 3600e3));
+      await this.state.storage.put({ ["pkv:" + k]: { ts: now, ttl, gz }, ["pkvt:" + k]: { ts: now, ttl } });
+      if (now - (this.pkvSweepAt || 0) > 36e5) {
+        this.pkvSweepAt = now;
+        try {
+          const idx = await this.state.storage.list({ prefix: "pkvt:", limit: 1000 });
+          const dead = [];
+          for (const [ik, m] of idx) if (!m || now - (m.ts || 0) >= (m.ttl || 0)) dead.push(ik, "pkv:" + ik.slice(5));
+          for (let i = 0; i < dead.length; i += 128) await this.state.storage.delete(dead.slice(i, i + 128));
+        } catch (e) { console.log("kv sweep failed: " + ((e && e.message) || e)); }
+      }
+      return Response.json({ ok: true });
+    }
+    return Response.json({ error: "not found" }, { status: 404 });
+  }
+
   // Store one gz'd answer (+ its index row); sweep dead rows hourly.
   async cachePut(k, gz, warm) {
     const now = Date.now();
@@ -670,6 +704,7 @@ export class BinderRoom {
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/_cache/")) return this.cacheOp(request, url);
+    if (url.pathname.startsWith("/_kv/")) return this.kvOp(request, url);
     // The price DO answers only its own paths, and nothing else answers
     // them (a ?room=price-history screen must not share its storage).
     if (this.isPriceDo) {

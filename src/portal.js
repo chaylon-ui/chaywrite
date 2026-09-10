@@ -362,6 +362,179 @@ export async function buylistDetail(env, id) {
   };
 }
 
+/* ----------------------------------------------------------- POS carts */
+
+/* In-store buys live in BinderPOS POS carts (owner, 2026-09-10: "Add in
+   store carts"). GET /api/pos/carts/all lists submitted carts for a date
+   range, oldest first, with every line of every cart — a trading day runs
+   60-80 carts and ~200 KB and takes several seconds — so the worker reads
+   one UTC day at a time (days in parallel), keeps only the carts that
+   bought something, trimmed to what the page shows, and caches each day in
+   its own Durable Object (the /_kv/ paths in room.js): a past day for a
+   week (a submitted cart is final), today for three minutes. A buy line is
+   `buying: true` with a NEGATIVE price (what we paid) beside the sell price
+   (shopifyPrice); a negative tender is money out (cash) or credit issued. A
+   pure buy cart has no Shopify order at all. Read-only, like the rest. */
+const PORTAL_DO = "portal-cache";
+const DO_ORIGIN = "https://" + PORTAL_DO + ".internal"; // the DO only reads the path
+const CARTS_VER = "v1";
+const DAY_MS = 86400e3;
+export const PORTAL_CART = "https://portal.binderpos.com/#/pointOfSale/carts/";
+
+const kvStub = (env) => env.ROOM.get(env.ROOM.idFromName(PORTAL_DO));
+async function gzipText(text) {
+  const cs = new CompressionStream("gzip");
+  const w = cs.writable.getWriter();
+  w.write(new TextEncoder().encode(text));
+  w.close();
+  return new Response(cs.readable).arrayBuffer();
+}
+async function gunzipBuf(buf) {
+  const ds = new DecompressionStream("gzip");
+  const w = ds.writable.getWriter();
+  w.write(buf);
+  w.close();
+  return new Response(ds.readable).text();
+}
+async function kvGet(env, key) {
+  try {
+    const r = await kvStub(env).fetch(new Request(DO_ORIGIN + "/_kv/get?k=" + encodeURIComponent(key)));
+    if (!r.ok) return null;
+    return await gunzipBuf(await r.arrayBuffer());
+  } catch { return null; }
+}
+async function kvPut(env, key, text, ttlMs) {
+  try {
+    const body = await gzipText(text);
+    if (body.byteLength > 120 * 1024) return false;
+    const r = await kvStub(env).fetch(new Request(DO_ORIGIN + "/_kv/put?k=" + encodeURIComponent(key) + "&ttl=" + ttlMs, { method: "POST", body }));
+    return r.ok;
+  } catch { return false; }
+}
+
+const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
+const tenderBucket = (type) => (/store\s*credit/i.test(type) ? "credit" : /^cash$/i.test(str(type).trim()) ? "cash" : "other");
+
+// A cart as the page needs it, or null when nothing in it was bought.
+function trimCart(c) {
+  const items = Array.isArray(c.cartItems) ? c.cartItems : [];
+  if (!items.some((i) => i && i.buying)) return null;
+  const lines = items.map((i) => {
+    const qty = Math.max(0, num(i.quantity) || 0);
+    const price = num(i.price);
+    const cond = str(i.variantTitle).trim();
+    return {
+      id: str(i.id),
+      title: str(i.productTitle),
+      condition: cond === "-" ? "" : cond,
+      variantId: str(i.variantId),
+      qty,
+      buying: !!i.buying,
+      paid: i.buying && price != null ? round2(Math.abs(price)) : null,   // per unit, what we paid
+      price: !i.buying && price != null ? price : null,                    // per unit, what they paid us
+      sell: num(i.shopifyPrice),
+      image: str(i.imageSrc),
+      discount: num(i.discountValue),
+    };
+  });
+  const payout = { cash: 0, credit: 0, other: 0, total: 0 };
+  const taken = { cash: 0, credit: 0, other: 0, total: 0 };
+  const tenders = [];
+  for (const t of Array.isArray(c.tenders) ? c.tenders : []) {
+    const a = num(t && t.amount);
+    if (a == null) continue;
+    tenders.push({ type: str(t.type), amount: a });
+    const b = tenderBucket(t.type);
+    if (a < 0) { payout[b] += -a; payout.total += -a; } else { taken[b] += a; taken.total += a; }
+  }
+  for (const k of Object.keys(payout)) { payout[k] = round2(payout[k]); taken[k] = round2(taken[k]); }
+  const bought = { lines: 0, cards: 0, total: 0, sells: 0 };
+  const sold = { lines: 0, cards: 0, total: 0 };
+  for (const l of lines) {
+    if (l.buying) { bought.lines++; bought.cards += l.qty; bought.total += (l.paid || 0) * l.qty; if (l.sell != null) bought.sells += l.sell * l.qty; }
+    else { sold.lines++; sold.cards += l.qty; sold.total += (l.price || 0) * l.qty; }
+  }
+  bought.total = round2(bought.total); bought.sells = round2(bought.sells); sold.total = round2(sold.total);
+  const cu = c.customer || null;
+  const submittedMs = Date.parse(c.dateSubmitted || "") || 0;
+  return {
+    id: str(c.id),
+    day: submittedMs ? dayKey(submittedMs) : "",
+    submitted: c.dateSubmitted || null,
+    staff: str(c.submittedBy || c.createdBy),
+    till: str(c.till && (c.till.description || c.till.name)),
+    type: c.cartType ? str(c.cartType) : sold.lines ? "trade" : "buy",
+    orderNumber: c.orderNumber != null ? str(c.orderNumber) : "",
+    shopifyOrderId: c.shopifyOrderId != null ? str(c.shopifyOrderId) : "",
+    notes: c.cartNotes || null,
+    customer: cu ? {
+      id: str(cu.id),
+      name: [cu.firstName, cu.lastName].filter(Boolean).join(" ").replace(/\s+/g, " ").trim(),
+      email: str(cu.email), phone: str(cu.phone), storeCredit: num(cu.storeCredit),
+    } : null,
+    payout, taken, bought, sold, tenders, lines,
+    portalUrl: PORTAL_CART + encodeURIComponent(str(c.id)),
+  };
+}
+
+async function fetchDayCarts(env, day) {
+  const start = encodeURIComponent(day + "T00:00:00.000Z"), end = encodeURIComponent(day + "T23:59:59.999Z");
+  const out = [];
+  let offset = 0;
+  for (let page = 0; page < 4; page++) {
+    const arr = await get(env, "/api/pos/carts/all?limit=500&offset=" + offset + "&submitted=true&startDate=" + start + "&endDate=" + end);
+    if (!Array.isArray(arr)) break;
+    for (const c of arr) { if (c && !c.abandoned) { const t = trimCart(c); if (t) out.push(t); } }
+    if (arr.length < 500) break;
+    offset += arr.length;
+  }
+  return out;
+}
+
+async function dayCarts(env, day) {
+  const key = "carts:" + CARTS_VER + ":" + day;
+  const cached = await kvGet(env, key);
+  if (cached) { try { return JSON.parse(cached); } catch {} }
+  const carts = await fetchDayCarts(env, day);
+  const now = Date.now();
+  const dayEnd = Date.parse(day + "T23:59:59.999Z");
+  // today: three minutes; a day that ended within the last two hours: ten
+  // minutes (late syncs around midnight); older days: a week
+  const ttl = now <= dayEnd ? 3 * 60e3 : now - dayEnd < 2 * 3600e3 ? 10 * 60e3 : 7 * DAY_MS;
+  await kvPut(env, key, JSON.stringify(carts), ttl);
+  return carts;
+}
+
+const cartSummary = (c) => Object.assign({}, c, { lines: undefined, tenders: undefined });
+
+export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
+  days = Math.max(1, Math.min(31, days | 0));
+  take = Math.max(1, Math.min(200, take | 0));
+  skip = Math.max(0, skip | 0);
+  const now = Date.now();
+  const since = now - days * DAY_MS;
+  const keys = new Set();
+  for (let t = now; t >= since - DAY_MS; t -= DAY_MS) keys.add(dayKey(t));
+  const perDay = await Promise.all(Array.from(keys).map((d) => dayCarts(env, d)));
+  const all = perDay.flat()
+    .filter((c) => (Date.parse(c.submitted || "") || 0) >= since)
+    .sort((a, b) => (Date.parse(b.submitted || "") || 0) - (Date.parse(a.submitted || "") || 0));
+  const totals = { carts: all.length, cards: 0, paid: 0, cash: 0, credit: 0, sells: 0 };
+  for (const c of all) { totals.cards += c.bought.cards; totals.paid += c.bought.total; totals.cash += c.payout.cash; totals.credit += c.payout.credit; totals.sells += c.bought.sells; }
+  for (const k of ["paid", "cash", "credit", "sells"]) totals[k] = round2(totals[k]);
+  return { ok: true, days, take, skip, total: all.length, totals, rows: all.slice(skip, skip + take).map(cartSummary), more: skip + take < all.length };
+}
+
+export async function cartDetail(env, id, day) {
+  const base = Date.parse(day + "T12:00:00Z");
+  const candidates = Number.isFinite(base) ? [day, dayKey(base - DAY_MS), dayKey(base + DAY_MS)] : [dayKey(Date.now())];
+  for (const d of candidates) {
+    const c = (await dayCarts(env, d)).find((x) => x.id === id);
+    if (c) return Object.assign({ ok: true }, c);
+  }
+  throw new Error("cart " + id + " is not among the buy carts of " + candidates.join(", "));
+}
+
 /* ------------------------------------------------------------- routes */
 
 const NO_STORE = { "content-type": "application/json", "cache-control": "no-store" };
@@ -395,6 +568,20 @@ export async function servePortal(request, env, url, staffOk) {
       const id = (url.searchParams.get("id") || "").replace(/\D/g, "").slice(0, 16);
       if (!id) return Response.json({ error: "id required" }, { status: 400, headers: NO_STORE });
       return Response.json(await buylistDetail(env, id), { headers: NO_STORE });
+    }
+    if (url.pathname === "/portal/carts.json") {
+      return Response.json(await listCarts(env, {
+        days: parseInt(url.searchParams.get("days") || "3", 10) || 3,
+        take: parseInt(url.searchParams.get("take") || "50", 10) || 50,
+        skip: parseInt(url.searchParams.get("skip") || "0", 10) || 0,
+      }), { headers: NO_STORE });
+    }
+    if (url.pathname === "/portal/cart.json") {
+      const id = (url.searchParams.get("id") || "").replace(/\D/g, "").slice(0, 16);
+      const day = url.searchParams.get("day") || "";
+      if (!id) return Response.json({ error: "id required" }, { status: 400, headers: NO_STORE });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return Response.json({ error: "day required (YYYY-MM-DD)" }, { status: 400, headers: NO_STORE });
+      return Response.json(await cartDetail(env, id, day), { headers: NO_STORE });
     }
     return Response.json({ error: "not found" }, { status: 404, headers: NO_STORE });
   } catch (e) {
