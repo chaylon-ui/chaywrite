@@ -1296,6 +1296,65 @@ export async function serveSisterCheck(request, ctx) {
   return res;
 }
 
+/* Store pages: what landed at a sister store this week. Each sister is its
+   own Shopify storefront, so its newest listings come from its public
+   product JSON: the store's new-arrivals collection when it has one, else
+   the first page of /products.json sorted by created_at (deploy.yml's smoke
+   step prints which path answered and the date span, so the fallback is
+   judged by its output, not assumed). Cheap bulk, tickets and internal
+   listings are dropped. Cached at the edge for 30 minutes per store. */
+const SISTER_NEW_TTL_S = 1800;
+export async function serveSisterNew(request, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
+  const url = new URL(request.url);
+  const slug = String(url.searchParams.get("store") || "").toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "").slice(0, 20);
+  const sister = SISTERS.find((s) => s.store.toLowerCase().replace(/[^a-z]+/g, "-") === slug);
+  if (!sister) return Response.json({ ok: false, error: "unknown store" }, { status: 404, headers: { ...cors, "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/sisternew.json?s=" + slug, request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const headers = { accept: "application/json", "user-agent": "ExorStorePages/1.0 (+workers.dev)" };
+  const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
+  const grab = async (path) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const r = await fetch(sister.base + path, { headers, signal: ctrl.signal });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return Array.isArray(j && j.products) ? j.products : null;
+    } catch { return null; } finally { clearTimeout(t); }
+  };
+  let source = "new-arrivals";
+  let list = await grab("/collections/new-arrivals/products.json?limit=24");
+  if (!list || !list.length) {
+    source = "products";
+    list = (await grab("/products.json?limit=250")) || [];
+    list.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  }
+  const products = [];
+  for (const p of list) {
+    const vs = (p.variants || []).filter((v) => v && v.available !== false);
+    if (!vs.length || /event ticket|bulkcard|internal|tbd/i.test(String(p.product_type || ""))) continue;
+    const price = vs.reduce((m, v) => Math.min(m, Number(v.price) || Infinity), Infinity);
+    if (!isFinite(price) || price <= 0) continue;
+    products.push({
+      title: String(p.title || ""), handle: p.handle, type: String(p.product_type || ""),
+      price: price.toFixed(2), image: abs((p.images && p.images[0] && p.images[0].src) || null),
+      url: sister.base + "/products/" + p.handle, created: String(p.created_at || "").slice(0, 10),
+    });
+    if (products.length >= 12) break;
+  }
+  const out = {
+    ok: true, store: slug, name: sister.store, source, count: products.length,
+    newest: products[0] ? products[0].created : null, oldest: products.length ? products[products.length - 1].created : null, products,
+  };
+  const res = Response.json(out, { headers: { ...cors, "cache-control": "public, max-age=" + SISTER_NEW_TTL_S } });
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 export async function serveSisters(request, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);

@@ -1,5 +1,5 @@
 import { BinderRoom } from "./room.js";
-import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
+import { serveCards, serveSearch, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveSisterNew, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 import { serveReviews } from "./reviews.js";
 import { serveStores } from "./stores.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
@@ -295,6 +295,11 @@ export default {
     // stock at a sister store? Batched over their public search (cards.js).
     if (url.pathname === "/sisterstock.json") {
       return serveSisterCheck(request, ctx);
+    }
+
+    // Store pages: the newest listings at a sister store's own storefront.
+    if (url.pathname === "/sisternew.json") {
+      return serveSisterNew(request, ctx);
     }
 
     if (url.pathname === "/qty.json") {

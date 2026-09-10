@@ -196,6 +196,10 @@ jobs:
           echo "=== /sisterstock.json (partial-line follow-up; sister qty is opportunistic - null when their product JSON hides counts) ==="
           curl -sS --max-time 40 "https://exor-binder.nevski.workers.dev/sisterstock.json?game=mtg&names=Solitude%7CHumility" | head -c 900 || true
           printf '\n'
+          echo "=== /sisternew.json (store pages: what landed at each sister store; source = which path answered, dates = the span it covers) ==="
+          for s in summerside bridgewater dartmouth new-glasgow truro; do
+            curl -sS --max-time 45 "https://exor-binder.nevski.workers.dev/sisternew.json?store=$s" | jq -c '{store, source, count, newest, oldest, first: (.products[0] // null | if . then {title, price, created, type} else null end)}' || true
+          done
           echo "=== /sisters.json?q=humility (expect cheapest IN-STOCK prices; New Glasgow Humility = 79.10 not 40.50; 5-min edge cache may lag one run) ==="
           curl -sS --max-time 30 "https://exor-binder.nevski.workers.dev/sisters.json?q=humility" | head -c 1500 || true
           printf '\n'
@@ -434,6 +438,26 @@ jobs:
           else
             echo "No DISCORD_WEBHOOK_URL repo secret set - skipping (add one to post new arrivals to Discord)"
           fi
+      - name: Smoke-test learn-to-play outbound links (log-only)
+        run: |
+          # The learn hub's "official rules" links (templates/page.learn.json on the
+          # theme mirror). A non-200 here means the template default needs a new URL.
+          for u in \
+            https://www.pokemon.com/us/pokemon-tcg/rules \
+            https://magic.wizards.com/en/how-to-play \
+            https://www.disneylorcana.com/en-US/how-to-play \
+            https://en.onepiece-cardgame.com/rules/ \
+            https://www.yugioh-card.com/en/howto/ \
+            https://starwarsunlimited.com/how-to-play \
+            https://riftbound.leagueoflegends.com/en-us/how-to-play/ \
+            https://fabtcg.com/en/how-to-play/ \
+            https://fabtcg.com/learn-to-play/ \
+            https://www.disneylorcana.com/en-US/how-to-play/ \
+            https://www.pokemon.com/us/pokemon-tcg/how-to-play; do
+            printf '%s -> ' "$u"
+            curl -sS -o /dev/null -L --max-time 25 -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/127.0 Safari/537.36' -w '%{http_code} %{url_effective}\n' "$u" || echo 'error'
+          done
+
       - name: Smoke-test /discord shelf drops (log-only)
         run: |
           set +e
@@ -450,7 +474,7 @@ jobs:
             const r = await fetch(W + '/discord/preview.json?k=' + encodeURIComponent(K));
             const b = await r.json().catch(() => null);
             if (!b) { console.log('discord preview: HTTP ' + r.status + ', no JSON'); return; }
-            console.log('discord preview:', r.status, '| configured', b.configured, '| channels', JSON.stringify(b.channels), '| min $' + b.minPrice, '| now', JSON.stringify(b.now), '| state', JSON.stringify(b.state), '| today arrivals', b.todayArrivals, '| pending', b.pending ? b.pending.length : '-', b.error ? '| error ' + b.error : '');
+            console.log('discord preview:', r.status, '| configured', b.configured, '| channels', JSON.stringify(b.channels), '| min $' + b.minPrice, '| now', JSON.stringify(b.now), '| state', JSON.stringify(b.state), '| today arrivals', b.todayArrivals, '| pending', b.pending ? b.pending.length : '-', '| skipped now', b.skippedNow ? b.skippedNow.length : '-', '| deferred', b.deferred ? b.deferred.length : '-', b.error ? '| error ' + b.error : '');
             if (b.pending && b.pending[0]) console.log('first pending:', JSON.stringify(b.pending[0]).slice(0, 300));
           })().catch(e => console.log('discord smoke error:', e.message));
           EOF
