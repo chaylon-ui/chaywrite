@@ -47,13 +47,16 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
    rule below on specificity, not source order. */
 @media (max-width: 860px) {
   .bl { grid-template-columns: 1fr; }
-  .xg-buylist { padding-bottom: calc(84px + var(--xg-tick-h, 0px)); }
-  .bl .bl__cart { position: fixed !important; top: auto !important; left: 0; right: 0; bottom: var(--xg-tick-h, 0px); z-index: 60; margin: 0; max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 12px); border-radius: 16px 16px 0 0; border-bottom: 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18); padding: 0 14px 14px; }
+  /* --bl-sheet-off is measured by buylist.js: the height of whatever fixed
+     bars own the bottom edge (ticker, Shopify's preview bar, app bars). */
+  .xg-buylist { padding-bottom: calc(84px + var(--bl-sheet-off, var(--xg-tick-h, 0px))); }
+  .bl .bl__cart { position: fixed !important; top: auto !important; left: 0; right: 0; bottom: var(--bl-sheet-off, var(--xg-tick-h, 0px)); z-index: 9980; margin: 0; max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--bl-sheet-off, var(--xg-tick-h, 0px)) - 12px); border-radius: 16px 16px 0 0; border-bottom: 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18); padding: 0 14px 14px; }
   .bl .bl__cart:not(.bl__cart--open) { padding-bottom: 0; }
   .bl .bl__cart:not(.bl__cart--open) > :not(.bl__sheetbar) { display: none; }
   .bl .bl__cart .bl__h2 { display: none; }
   .bl .bl__sheetbar { display: flex; }
-  .xg-buylist .bl__toast { bottom: calc(var(--xg-tick-h, 0px) + 74px); }
+  .js-drawer-open .bl .bl__cart { display: none; }
+  .xg-buylist .bl__toast { bottom: calc(var(--bl-sheet-off, var(--xg-tick-h, 0px)) + 74px); }
 }
 .bl__sheetbar { display: none; align-items: center; gap: 10px; min-height: 56px; padding: 8px 0; color: var(--bl-ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .bl__sheettext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }

@@ -302,6 +302,43 @@
   $("#bl-sheetbar").addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSheet(); }
   });
+  // The sheet sits above whatever else owns the bottom edge: the theme's
+  // ticker, Shopify's preview bar on an unpublished theme (which covered the
+  // whole bar, 2026-09-10), an app's bottom bar. Measured, not assumed:
+  // every fixed, wide, short element in the lower part of the screen, as a
+  // contiguous stack up from the bottom edge. buylist.css reads
+  // --bl-sheet-off for the sheet, the toast and the page's bottom padding.
+  function bottomStack() {
+    var vh = window.innerHeight, vw = window.innerWidth, own = $(".bl__cart"), bars = [];
+    var all = document.querySelectorAll("body > *, body > * > *, body > * > * > *");
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el === own || (own && own.contains(el)) || el.tagName === "SCRIPT" || el.tagName === "STYLE" || el.tagName === "LINK") continue;
+      var cs = getComputedStyle(el);
+      if (cs.position !== "fixed" || cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity || "1") < 0.05) continue;
+      var r = el.getBoundingClientRect();
+      if (r.height > 0 && r.height < vh * 0.4 && r.width > vw * 0.5 && r.bottom > vh * 0.6 && r.top < vh) bars.push(r);
+    }
+    bars.sort(function (a, b) { return b.bottom - a.bottom; });
+    var max = 0;
+    for (var j = 0; j < bars.length; j++) {
+      var b = bars[j];
+      if (vh - b.bottom <= max + 2 && vh - b.top > max) max = vh - b.top;
+    }
+    return Math.round(Math.min(max, vh * 0.4));
+  }
+  var placeT = null;
+  function placeSheet() {
+    var tick = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--xg-tick-h")) || 0;
+    root.style.setProperty("--bl-sheet-off", Math.max(bottomStack(), tick) + "px");
+  }
+  function placeSoon() { clearTimeout(placeT); placeT = setTimeout(placeSheet, 150); }
+  placeSheet();
+  setTimeout(placeSheet, 1200);
+  setTimeout(placeSheet, 4000);
+  window.addEventListener("resize", placeSoon);
+  window.addEventListener("orientationchange", placeSoon);
+  window.addEventListener("scroll", placeSoon, { passive: true });
 
   $("#bl-lines").addEventListener("click", function (e) {
     var b = e.target.closest("button");
