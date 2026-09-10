@@ -39,6 +39,7 @@
    or exposed. */
 
 import { HOLD_DO } from "./hold.js";
+import { portalConfigured, portalPost } from "./portal.js";
 
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
@@ -100,6 +101,89 @@ function cleanCards(v) {
     out.push({ ...c, quantity: String(q) });
   }
   return out;
+}
+
+/* Server-side truth for what leaves the browser (owner, 2026-09-10: "Go").
+   A saved or submitted card object carries the prices the page had, and
+   neither BinderPOS's overlay nor ours used to recompute them, so an edited
+   request could quote any price. At submit every line now takes BinderPOS's
+   CURRENT buy prices for its card, condition and finish from the portal's
+   allPrices (staff login, src/portal.js), its quantity is capped at what the
+   store will take, a line the store takes none of is dropped (or priced at
+   the over-limit rate when the rule allows), and the Shopify variant id is
+   the portal's. Fails closed: no portal answer, no submission. */
+const money = (n) => "$" + (Number(n) || 0).toFixed(2);
+const normType = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+const NAME_TO_ID = {
+  "magic: the gathering": "mtg", "magic the gathering": "mtg", "pokémon": "pokemon", "pokemon": "pokemon", "yu-gi-oh!": "yugioh", "yugioh": "yugioh",
+  "one piece card game": "one", "disney lorcana": "lor", "lorcana": "lor", "star wars: unlimited": "swu", "flesh and blood": "fleshAndBlood",
+  "sorcery: contested realm": "scr", "riftbound": "riftbound",
+};
+const KNOWN_IDS = ["mtg", "pokemon", "yugioh", "one", "ones", "lor", "swu", "fleshAndBlood", "scr", "riftbound"];
+function gameIdOf(c) {
+  // A card object carries the game as an id ("mtg"), sometimes as a name.
+  const games = memoGet("games") || [];
+  for (const raw of [c.gameId, c.game]) {
+    const s = String(raw || "").trim();
+    if (!s) continue;
+    const lc = s.toLowerCase();
+    const known = KNOWN_IDS.find((k) => k.toLowerCase() === lc) || games.map((g) => String(g.id || "")).find((k) => k && k.toLowerCase() === lc);
+    if (known) return known;
+    if (NAME_TO_ID[lc]) return NAME_TO_ID[lc];
+    const hit = games.find((g) => String(g.name || "").toLowerCase() === lc);
+    if (hit && hit.id) return String(hit.id);
+    if (/^[A-Za-z]{2,24}$/.test(s)) return s;   // an id we have not met; send it as-is
+  }
+  return "mtg";
+}
+async function repriceCards(env, cards) {
+  if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
+  const seen = new Set(), pairs = [];
+  for (const c of cards) {
+    const key = gameIdOf(c) + "|" + String(c.cardId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push({ game: gameIdOf(c), id: Number(c.cardId) });
+  }
+  const priced = new Map();   // "cardId|conditionId|finish" -> today's offer
+  for (let i = 0; i < pairs.length; i += 20) {              // the portal's own batch size, one request at a time
+    const grouped = new Map();
+    for (const p of pairs.slice(i, i + 20)) { if (!grouped.has(p.game)) grouped.set(p.game, []); grouped.get(p.game).push(p.id); }
+    const res = await portalPost(env, "/api/buylists/cards/allPrices", Array.from(grouped, ([game, ids]) => ({ game, ids })));
+    for (const card of Array.isArray(res) ? res : []) {
+      for (const v of card.variants || []) {
+        for (const t of v.cardBuylistTypes || []) {
+          const entry = {
+            buy: Number(t.buyPrice), credit: Number(t.creditBuyPrice), max: Number(t.maxPurchaseQuantity) || 0,
+            overstock: !!t.canPurchaseOverstock, overBuy: t.overStockBuyPrice, overCredit: t.creditOverstockBuyPrice,
+            productVariantId: t.productVariantId,
+          };
+          for (const f of [t.type, t.legacyType]) if (f) priced.set(String(card.id) + "|" + String(v.id) + "|" + normType(f), entry);
+        }
+      }
+    }
+  }
+  const out = [], dropped = [], changed = [], capped = [];
+  for (const c of cards) {
+    const label = String(c.cardName || c.cardId) + " · " + String(c.conditionName || c.condition) + (c.type && c.type !== "Normal" ? " · " + c.type : "");
+    const p = priced.get(String(c.cardId) + "|" + String(c.condition) + "|" + normType(c.type));
+    if (!p || !Number.isFinite(p.buy) || !Number.isFinite(p.credit)) { dropped.push(label + " (not on the buylist right now)"); continue; }
+    let buy = p.buy, credit = p.credit, max = p.max;
+    if (!(max > 0)) {
+      if (p.overstock && (p.overBuy != null || p.overCredit != null)) {
+        buy = p.overBuy != null ? Number(p.overBuy) : buy;
+        credit = p.overCredit != null ? Number(p.overCredit) : credit;
+        max = 999;
+      } else { dropped.push(label + " (limit reached)"); continue; }
+    }
+    let q = Math.max(1, parseInt(c.quantity, 10) || 1);
+    if (q > max) { capped.push(label + " (" + q + " to " + max + ")"); q = max; }
+    if (Math.abs(Number(c.cashBuyPrice) - buy) > 0.005 || Math.abs(Number(c.storeCreditBuyPrice) - credit) > 0.005) {
+      changed.push(label + " (" + money(c.cashBuyPrice) + " cash / " + money(c.storeCreditBuyPrice) + " credit is now " + money(buy) + " / " + money(credit) + ")");
+    }
+    out.push({ ...c, quantity: String(q), cashBuyPrice: buy, storeCreditBuyPrice: credit, shopifyVariantId: p.productVariantId != null ? p.productVariantId : c.shopifyVariantId });
+  }
+  return { cards: out, dropped, changed, capped };
 }
 
 // Their set list, whatever shape it comes in, as sorted unique names.
@@ -253,6 +337,16 @@ async function route(mode, action, request, env, url, cors) {
       cards = Array.isArray(r.body) ? r.body : [];
     }
     if (!cards.length) return json({ error: "the list is empty" }, 400, cors);
+    // BinderPOS's current prices and limits replace whatever the browser sent.
+    let repriced;
+    try { repriced = await repriceCards(env, cards); }
+    catch (e) {
+      return json({ error: "We could not confirm today's prices with BinderPOS (" + String((e && e.message) || e).slice(0, 120) + "). Nothing was sent; please try again in a minute.", accepted: false }, 502, cors);
+    }
+    cards = repriced.cards;
+    if (!cards.length) {
+      return json({ error: "None of these cards can be bought right now: " + repriced.dropped.join("; "), accepted: false, repriced: { dropped: repriced.dropped, changed: [], capped: [] } }, 409, cors);
+    }
     const r = await passthrough(SUBMIT_URL(customer), { method: "POST", body: JSON.stringify({ paymentType, buylistCards: cards }) });
     const accepted = r.status >= 200 && r.status < 300 && !(r.body && r.body.actionPass === false);
     let cleared = null, confirmation = "";
@@ -272,7 +366,8 @@ async function route(mode, action, request, env, url, cors) {
       const t = await passthrough(CONFIRM_URL, {}).catch(() => null);
       if (t && typeof t.body === "string") confirmation = t.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     }
-    return json({ upstream: r.status, paymentType, submitted: cards.length, accepted, cleared, confirmation, reply: r.body }, 200, cors);
+    return json({ upstream: r.status, paymentType, submitted: cards.length, accepted, cleared, confirmation, reply: r.body,
+      repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
   }
 
   return json({ error: "not found" }, 404, cors);

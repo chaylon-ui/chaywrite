@@ -350,7 +350,13 @@
       cart = [];
       renderCart();
       var done = (j.confirmation || "Thank you, your buylist was submitted.") + (j.reply && j.reply.data != null ? " Reference " + j.reply.data + "." : "");
-      setMsg(done);
+      // The worker re-prices every line from BinderPOS's current buylist at
+      // submit; say so when that changed anything.
+      var rp = j.repriced || {}, notes = [];
+      if (rp.changed && rp.changed.length) notes.push("Prices were refreshed to today's buylist: " + rp.changed.join("; ") + ".");
+      if (rp.capped && rp.capped.length) notes.push("Quantities were capped at what we can take: " + rp.capped.join("; ") + ".");
+      if (rp.dropped && rp.dropped.length) notes.push("Left out: " + rp.dropped.join("; ") + ".");
+      setMsg(done + (notes.length ? " " + notes.join(" ") : ""));
       toast("Buylist submitted");
     }).catch(function (err) {
       setMsg("Submit failed: " + err.message);

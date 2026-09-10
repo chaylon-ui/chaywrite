@@ -88,6 +88,12 @@ async function call(env, path, init, retry = true) {
 const get = (env, path) => call(env, path);
 const post = (env, path, body) => call(env, path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
+// For other modules that need one read from the portal with the staff login
+// (src/buylist.js re-prices a customer's submission from allPrices).
+export async function portalPost(env, path, body) {
+  return post(env, path, body);
+}
+
 async function gql(env, query, variables) {
   const j = await post(env, "/graphql", { query, variables });
   if (j && j.errors && j.errors.length) throw new Error("BinderPOS GraphQL: " + String(j.errors[0].message || "error").slice(0, 200));
