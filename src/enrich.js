@@ -53,6 +53,21 @@ export const BGG_TRIES_202 = 4;        // it answers 202 while it builds a respo
    retrying 1500 games against a closed door every hour. */
 export const BGG_GATED = [401, 403];
 export const BGG_UA = "ExorGamesCatalogue/1.0 (+https://exorgames.com)";
+/* 2026-09-11: the application was approved and BGG issued an "API Access
+   token" (worker secret BGG_TOKEN, synced from the repo Actions secret by
+   deploy.yml). BGG's instructions page sits behind a browser challenge and
+   the 401 carries no WWW-Authenticate hint, so the header shape could not be
+   read from here: the three shapes BGG client libraries use are tried in
+   order on a 401 and the one that answers is kept for the rest of the run.
+   No token configured: anonymous, exactly as before. */
+export const BGG_AUTH_STYLES = ["bearer", "raw", "query"];
+export function bggAuthed(url, token, style) {
+  const headers = { accept: "application/xml", "user-agent": BGG_UA };
+  if (!token || !style) return { url, headers };
+  if (style === "bearer") { headers.authorization = "Bearer " + token; return { url, headers }; }
+  if (style === "raw") { headers.authorization = token; return { url, headers }; }
+  return { url: url + (url.indexOf("?") === -1 ? "?" : "&") + "token=" + encodeURIComponent(token), headers };
+}
 
 /* AniList blocks Cloudflare Workers' shared egress outright (403 "You have
    been manually blocked", measured from this DO; a GitHub runner gets 200 for
@@ -476,20 +491,26 @@ async function writeMetafields(cx, list) {
    One request every BGG_GAP_MS, tracked on the DO's in-memory scratch so the
    pace survives across items inside a tick. */
 async function bggGet(cx, url) {
-  for (let i = 0; i < BGG_TRIES_202; i++) {
+  const token = (cx.env && cx.env.BGG_TOKEN) || "";
+  let style = token ? ((cx.mem && cx.mem.bggAuth) || BGG_AUTH_STYLES[0]) : null;
+  for (let i = 0; i < BGG_TRIES_202 + BGG_AUTH_STYLES.length; i++) {
     const last = (cx.mem && cx.mem.lastBgg) || 0;
     const wait = BGG_GAP_MS - (cx.now() - last);
     if (wait > 0) await cx.sleep(wait);
     if (cx.mem) cx.mem.lastBgg = cx.now();
-    const r = await cx.fetch(url, { headers: { accept: "application/xml", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    const req = bggAuthed(url, token, style);
+    const r = await cx.fetch(req.url, { headers: req.headers, signal: AbortSignal.timeout(20000) });
     if (r.status === 202) { await cx.sleep(1500); continue; }
     if (r.status === 429) { await cx.sleep(5000); continue; }
     if (BGG_GATED.indexOf(r.status) !== -1) {
-      const e = new Error("bgg HTTP " + r.status + " (API gated - needs credentials)");
+      const next = style ? BGG_AUTH_STYLES[BGG_AUTH_STYLES.indexOf(style) + 1] : null;
+      if (next) { style = next; continue; }   // token not accepted in this shape: try the next
+      const e = new Error("bgg HTTP " + r.status + (token ? " (API gated - BGG_TOKEN rejected in every shape)" : " (API gated - BGG_TOKEN not configured)"));
       e.blocked = r.status;
       throw e;
     }
     if (!r.ok) throw new Error("bgg HTTP " + r.status);
+    if (style && cx.mem) cx.mem.bggAuth = style;
     return await r.text();
   }
   throw new Error("bgg still queueing after " + BGG_TRIES_202 + " tries");
@@ -882,21 +903,31 @@ const doJson = (b, s) => new Response(JSON.stringify(b), { status: s || 200, hea
 export async function bggCheck(cx) {
   const url = "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=Wingspan";
   const t0 = cx.now();
+  const token = (cx.env && cx.env.BGG_TOKEN) || "";
+  const out = { ok: true, token: !!token, status: null, style: null, tried: [], reachable: false, results: 0, first: null, body: "", server: null, ms: 0 };
   try {
-    const r = await cx.fetch(url, { headers: { accept: "application/xml", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
-    const text = await r.text();
-    const hits = parseBggSearch(text);
-    return {
-      ok: true, status: r.status, ms: cx.now() - t0,
-      server: r.headers.get("server") || null,
-      reachable: r.ok && hits.length > 0,
-      results: hits.length,
-      first: hits[0] || null,
-      body: text.slice(0, 200),
-    };
+    // With a token, each shape is tried until one is accepted (never the token itself in the output).
+    const styles = token ? BGG_AUTH_STYLES : [null];
+    for (let i = 0; i < styles.length; i++) {
+      if (i) await cx.sleep(BGG_GAP_MS);
+      const req = bggAuthed(url, token, styles[i]);
+      const r = await cx.fetch(req.url, { headers: req.headers, signal: AbortSignal.timeout(20000) });
+      const text = await r.text();
+      out.tried.push({ style: styles[i] || "anonymous", status: r.status });
+      out.status = r.status; out.server = r.headers.get("server") || null; out.body = text.slice(0, 200);
+      if (r.ok) {
+        const hits = parseBggSearch(text);
+        out.style = styles[i] || "anonymous"; out.reachable = hits.length > 0; out.results = hits.length; out.first = hits[0] || null;
+        if (styles[i] && cx.mem) cx.mem.bggAuth = styles[i];
+        break;
+      }
+      if (BGG_GATED.indexOf(r.status) === -1) break;
+    }
   } catch (e) {
-    return { ok: false, status: null, ms: cx.now() - t0, error: msg(e) };
+    out.ok = false; out.error = msg(e);
   }
+  out.ms = cx.now() - t0;
+  return out;
 }
 
 /* The first v2 sweep filled author and publisher from Open Library but left

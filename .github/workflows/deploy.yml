@@ -433,8 +433,11 @@ jobs:
       # DISCORD_WEBHOOK_MTG / POKEMON / YUGIOH / LORCANA / ONEPIECE / FAB /
       # SWU / RIFTBOUND / SPORTS / SEALED) syncs on the next deploy and never
       # appears in the repo or logs.
-      - name: Sync DISCORD_* worker secrets (each one that is configured)
+      # BoardGameGeek XML API token (src/enrich.js, approved 2026-09-11): the
+      # repo Actions secret BGG_TOKEN syncs the same way.
+      - name: Sync optional worker secrets (each one that is configured)
         env:
+          BGG_TOKEN: ${{ secrets.BGG_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_WEBHOOK_MTG: ${{ secrets.DISCORD_WEBHOOK_MTG }}
           DISCORD_WEBHOOK_POKEMON: ${{ secrets.DISCORD_WEBHOOK_POKEMON }}
@@ -451,10 +454,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           # Actions cannot look secrets up by name at run time, so every name the
-          # worker understands (src/discord.js) is listed above; each one that is
-          # set becomes the worker secret of the same name, the rest are skipped.
+          # worker understands (src/discord.js, src/enrich.js) is listed above; each
+          # one that is set becomes the worker secret of the same name, the rest are skipped.
           n=0
-          for name in DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE; do
+          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE; do
             val="${!name}"
             if [ -n "$val" ]; then
               printf '%s' "$val" | npx wrangler@4 secret put "$name" && n=$((n+1))
