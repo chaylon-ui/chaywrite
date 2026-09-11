@@ -1,0 +1,113 @@
+name: probe
+
+# Read-only diagnostic. Two halves, either may be empty:
+#   curls     one URL per line, fetched with curl: status + the first 3500
+#             characters of the body (JSON is pretty-printed and trimmed).
+#   url       one page opened in headless Chrome at the given width, after a
+#             preview warm-up when the URL carries preview_theme_id. Prints
+#             the theme, every product link title (unique, in order), and for
+#             each comma-separated selector the first 12 matches' bounding
+#             rects, display/flex-direction and trimmed text.
+
+on:
+  workflow_dispatch:
+    inputs:
+      curls:
+        description: "URLs to curl, one per line"
+        required: false
+        default: ""
+      url:
+        description: "Page to open in Chrome (blank to skip)"
+        required: false
+        default: ""
+      width:
+        description: "Viewport width"
+        required: false
+        default: "390"
+      selectors:
+        description: "CSS selectors, comma separated"
+        required: false
+        default: ""
+      js:
+        description: "Optional JS expression evaluated on the page; its JSON is printed"
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CURLS: ${{ inputs.curls }}
+      URL: ${{ inputs.url }}
+      WIDTH: ${{ inputs.width }}
+      SELECTORS: ${{ inputs.selectors }}
+      JS: ${{ inputs.js }}
+    steps:
+      - name: curl
+        if: ${{ inputs.curls != '' }}
+        run: |
+          printf '%s\n' "$CURLS" | while IFS= read -r u; do
+            [ -z "$u" ] && continue
+            echo "=== GET $u"
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/127.0.0.0 Safari/537.36' -H 'accept: application/json, text/html' --max-time 40 "$u" || echo ERR)
+            echo "status $code | bytes $(wc -c < /tmp/body)"
+            if jq -e . /tmp/body >/dev/null 2>&1; then jq -c . /tmp/body | cut -c1-3500; else tr -s ' \n' ' ' < /tmp/body | cut -c1-3500; fi
+            echo
+          done
+      - name: chrome
+        if: ${{ inputs.url != '' }}
+        run: |
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            const w = parseInt(process.env.WIDTH, 10) || 390;
+            await page.setUserAgent(w < 700
+              ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+              : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36');
+            await page.setViewport({ width: w, height: 844, isMobile: w < 700, hasTouch: w < 700, deviceScaleFactor: 1 });
+            const target = new URL(process.env.URL);
+            const pt = target.searchParams.get('preview_theme_id');
+            if (pt) {
+              const warm = await page.goto(target.origin + '/?preview_theme_id=' + pt, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => null);
+              console.log('warm-up', warm ? warm.status() : 'none');
+            }
+            const r = await page.goto(process.env.URL, { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => null);
+            console.log('status', r ? r.status() : 'none', '| final url', page.url(), '| title', await page.title());
+            console.log('theme', await page.evaluate(() => JSON.stringify(window.Shopify && window.Shopify.theme)).catch(() => '?'));
+            const head = await page.evaluate(() => document.body.innerText.slice(0, 160).replace(/\s+/g, ' '));
+            if (/just a moment|verify you are human/i.test(head)) { console.log('CLOUDFLARE CHALLENGE'); await browser.close(); return; }
+            await new Promise(res => setTimeout(res, 8000));
+            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+            await new Promise(res => setTimeout(res, 2500));
+            const out = await page.evaluate((sels, js) => {
+              const seen = new Set(), titles = [];
+              document.querySelectorAll('a[href*="/products/"]').forEach(a => {
+                const t = (a.getAttribute('title') || a.textContent || '').trim().replace(/\s+/g, ' ');
+                const h = a.getAttribute('href').split('?')[0];
+                if (t.length > 2 && !seen.has(h)) { seen.add(h); titles.push(t.slice(0, 90) + ' -> ' + h); }
+              });
+              const res = { productLinks: titles.length, titles: titles.slice(0, 60), selectors: {} };
+              sels.split(',').map(s => s.trim()).filter(Boolean).forEach(sel => {
+                const list = [];
+                try {
+                  document.querySelectorAll(sel).forEach((el, i) => {
+                    if (i >= 12) return;
+                    const b = el.getBoundingClientRect(), cs = getComputedStyle(el);
+                    list.push({ tag: el.tagName.toLowerCase(), cls: (el.className && el.className.baseVal === undefined ? el.className : '').slice(0, 80), x: Math.round(b.left), y: Math.round(b.top + window.scrollY), w: Math.round(b.width), h: Math.round(b.height), display: cs.display, dir: cs.flexDirection, float: cs.float, text: el.innerText ? el.innerText.trim().replace(/\s+/g, ' ').slice(0, 120) : '' });
+                  });
+                } catch (e) { list.push({ error: String(e) }); }
+                res.selectors[sel] = list;
+              });
+              if (js) { try { res.js = eval(js); } catch (e) { res.js = 'ERR ' + e; } }
+              return res;
+            }, process.env.SELECTORS || '', process.env.JS || '');
+            console.log(JSON.stringify(out, null, 1));
+            await browser.close();
+          })().catch(e => { console.log('probe failed', e && e.message); process.exit(0); });
+          EOF
