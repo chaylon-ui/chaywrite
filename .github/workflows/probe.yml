@@ -2,7 +2,8 @@ name: probe
 
 # Read-only diagnostic. Two halves, either may be empty:
 #   curls     one URL per line, fetched with curl: status + the first 3500
-#             characters of the body (JSON is pretty-printed and trimmed).
+#             characters of the body (JSON is passed through `jq` with the
+#             given filter, `.` by default, then trimmed).
 #   url       one page opened in headless Chrome at the given width, after a
 #             preview warm-up when the URL carries preview_theme_id. Prints
 #             the theme, every product link title (unique, in order), and for
@@ -16,6 +17,10 @@ on:
         description: "URLs to curl, one per line"
         required: false
         default: ""
+      jq:
+        description: "jq filter applied to JSON curl bodies"
+        required: false
+        default: "."
       url:
         description: "Page to open in Chrome (blank to skip)"
         required: false
@@ -41,6 +46,7 @@ jobs:
     timeout-minutes: 8
     env:
       CURLS: ${{ inputs.curls }}
+      JQ: ${{ inputs.jq }}
       URL: ${{ inputs.url }}
       WIDTH: ${{ inputs.width }}
       SELECTORS: ${{ inputs.selectors }}
@@ -52,9 +58,9 @@ jobs:
           printf '%s\n' "$CURLS" | while IFS= read -r u; do
             [ -z "$u" ] && continue
             echo "=== GET $u"
-            code=$(curl -sS -o /tmp/body -w '%{http_code}' -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/127.0.0.0 Safari/537.36' -H 'accept: application/json, text/html' --max-time 40 "$u" || echo ERR)
+            code=$(curl -sS -g -o /tmp/body -w '%{http_code}' -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/127.0.0.0 Safari/537.36' -H 'accept: application/json, text/html' --max-time 40 "$u" || echo ERR)
             echo "status $code | bytes $(wc -c < /tmp/body)"
-            if jq -e . /tmp/body >/dev/null 2>&1; then jq -c . /tmp/body | cut -c1-3500; else tr -s ' \n' ' ' < /tmp/body | cut -c1-3500; fi
+            if jq -e . /tmp/body >/dev/null 2>&1; then jq -c "$JQ" /tmp/body | cut -c1-3500; else tr -s ' \n' ' ' < /tmp/body | cut -c1-3500; fi
             echo
           done
       - name: chrome
