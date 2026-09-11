@@ -183,6 +183,19 @@
   }
 
   // One row per condition x finish the store is buying.
+  // Offers come from BinderPOS interleaved (Near Mint Foil, Near Mint,
+  // Lightly Played Foil, ...). Shown non-foil first, then foil, then any
+  // other finish, each in NM, LP, MP, HP, DMG order (owner, 2026-09-11).
+  var COND_RANK = ["near mint", "lightly played", "moderately played", "heavily played", "damaged"];
+  function condRank(name) {
+    var s = String(name || "").toLowerCase();
+    for (var i = 0; i < COND_RANK.length; i++) if (s.indexOf(COND_RANK[i]) === 0) return i;
+    return COND_RANK.length;
+  }
+  function finishRank(type) {
+    var t = String(type || "").toLowerCase();
+    return !t || t === "normal" ? 0 : t === "foil" ? 1 : 2;
+  }
   function offersOf(h) {
     var out = [];
     (h.variants || []).forEach(function (v) {
@@ -191,6 +204,11 @@
         if (cash <= 0 && credit <= 0) return;
         out.push({ v: v, p: p, cash: cash, credit: credit, max: Number(p.maxPurchaseQuantity) || 0 });
       });
+    });
+    out.sort(function (a, b) {
+      return finishRank(a.p.type) - finishRank(b.p.type) ||
+        condRank(a.v.variantName) - condRank(b.v.variantName) ||
+        String(a.p.type || "").localeCompare(String(b.p.type || ""));
     });
     return out;
   }
