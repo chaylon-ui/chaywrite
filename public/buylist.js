@@ -200,36 +200,39 @@
      examples — the words and photos from /pages/grading-guide — so fewer
      cards arrive graded wrong (owner, 2026-09-10). */
   var GUIDE = [
-    { k: "nm", m: /^near mint/i, name: "Near Mint (NM)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image2_480x480.png?v=1712685664", pts: [
+    { k: "nm", m: /^near mint/i, name: "Near Mint (NM)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image2.png?v=1712685664", pts: [
       ["Appearance", "Minor superficial imperfections at most. Near Mint is not Mint, and not guaranteed to be suitable for grading."],
       ["Surface", "Free from noticeable scratches and scuffs."],
       ["Edges", "Sharp and clean, with little noticeable whitening or wear."],
       ["Corners", "Crisp, with no bends, fraying or whitening beyond the manufacturing process."],
       ["Other", "No clouding, staining or other imperfections. Foils have little to no scuffing or clouding."]] },
-    { k: "lp", m: /^lightly played/i, name: "Lightly Played (LP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image4_480x480.png?v=1712685664", pts: [
+    { k: "lp", m: /^lightly played/i, name: "Lightly Played (LP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image4.png?v=1712685664", pts: [
       ["Appearance", "Minor imperfections that are visible on close inspection."],
       ["Surface", "Minor surface wear or a few very light scratches."],
       ["Edges", "Slight edge wear or a bit of whitening."],
       ["Corners", "Lightly worn corners or a minor bend."],
       ["Other", "No major creases. Foils may have light scuffing or minor clouding."]] },
-    { k: "mp", m: /^moderately played/i, name: "Moderately Played (MP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image1_b9974032-87c5-45a0-928a-5b06e5085956_480x480.png?v=1712685664", pts: [
+    { k: "mp", m: /^moderately played/i, name: "Moderately Played (MP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image1_b9974032-87c5-45a0-928a-5b06e5085956.png?v=1712685664", pts: [
       ["Appearance", "Moderate wear, but fine for sleeved play."],
       ["Surface", "Noticeable scuffing or light scratches."],
       ["Edges", "Moderate edge wear or whitening."],
       ["Corners", "Moderate wear or minor creases."]] },
-    { k: "hp", m: /^heavily played/i, name: "Heavily Played (HP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/hp_480x480.png?v=1712686010", pts: [
+    { k: "hp", m: /^heavily played/i, name: "Heavily Played (HP)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/hp.png?v=1712686010", pts: [
       ["Appearance", "Significant wear, but the card is intact and lies flat."],
       ["Surface", "Scuffing, scratches or minor staining."],
       ["Edges", "Significant edge wear, whitening or minor tears."],
       ["Corners", "Worn, possibly with minor tears or heavy creases."],
       ["Other", "Major creases, fading or minor water damage may be present. Foils show significant clouding or wear."]] },
-    { k: "dmg", m: /^damaged/i, name: "Damaged (DMG)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image3_480x480.png?v=1712685664", pts: [
+    { k: "dmg", m: /^damaged/i, name: "Damaged (DMG)", img: "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/image3.png?v=1712685664", pts: [
       ["Appearance", "Major flaws that affect the card's structure or looks."],
       ["Surface", "Heavy scratches, staining, indents, holes or inking."],
       ["Edges", "Frayed edges or significant tears."],
       ["Corners", "Heavy wear, major creases or significant bends."],
       ["Other", "Torn, water-damaged or written on. Foils in this condition are usually not tournament-legal."]] }
   ];
+  // Sharper example photos, when the theme editor has them (page.liquid,
+  // sell page: "Condition photo" pickers -> data-guide-nm/lp/mp/hp/dmg).
+  GUIDE.forEach(function (g) { var u = root.getAttribute("data-guide-" + g.k); if (u) g.img = u; });
   var GUIDE_NOTE = "Grading is a scale and we grade fairly. Minor manufacturing defects such as print lines, cut lines, edge wear and centering are not counted against a card.";
   function guideFor(name) { for (var i = 0; i < GUIDE.length; i++) if (GUIDE[i].m.test(String(name || ""))) return GUIDE[i]; return null; }
   function condBtn(name) {
@@ -240,7 +243,7 @@
     var g = null, d = $("#bl-guide");
     for (var i = 0; i < GUIDE.length; i++) if (GUIDE[i].k === k) g = GUIDE[i];
     if (!g || !d) return;
-    d.innerHTML = '<img class="bl__guide-img" src="' + g.img + '" alt="Example of a ' + esc(g.name) + ' card">' +
+    d.innerHTML = '<img class="bl__guide-img" src="' + esc(g.img) + '" alt="Example of a ' + esc(g.name) + ' card" decoding="async">' +
       '<div class="bl__guide-body"><h3 id="bl-guide-title">' + esc(g.name) + '</h3><ul>' +
       g.pts.map(function (p) { return "<li><b>" + esc(p[0]) + ":</b> " + esc(p[1]) + "</li>"; }).join("") + "</ul>" +
       '<p class="bl__muted bl__guide-note">' + esc(GUIDE_NOTE) + "</p>" +
@@ -263,14 +266,15 @@
         // BinderPOS sends, per condition, how many more copies the store will
         // take (its rule's cap minus stock). Zero used to be a grey Add with a
         // tooltip nobody on a phone could see; now it says so (owner, 2026-09-10).
-        return "<tr><td>" + condBtn(o.v.variantName) + finish(o.p.type) + "</td><td>" + money(o.cash) + "</td><td>" + money(o.credit) + "</td><td>" +
+        return '<div class="bl__orow" role="row"><span class="bl__ocond" role="cell">' + condBtn(o.v.variantName) + finish(o.p.type) + '</span>' +
+          '<span class="bl__oprice" role="cell">' + money(o.cash) + '</span><span class="bl__oprice bl__oprice--credit" role="cell">' + money(o.credit) + '</span><span role="cell">' +
           (o.max > 0
             ? '<button type="button" class="bl__btn bl__add" data-h="' + i + '" data-o="' + j + '">Add</button>'
-            : '<span class="bl__nobuy" title="BinderPOS reports its limit for this condition is reached">Limit reached</span>') + "</td></tr>";
+            : '<span class="bl__nobuy" title="BinderPOS reports the store has all it wants of this condition right now">At limit</span>') + "</span></div>";
       }).join("");
       return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="" loading="lazy"><div>' +
         '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p>" +
-        (rows ? '<table class="bl__offers"><thead><tr><th>Condition</th><th>Cash</th><th>Credit</th><th></th></tr></thead><tbody>' + rows + "</tbody></table>" : '<p class="bl__muted">Not currently buying this printing.</p>') +
+        (rows ? '<div class="bl__offers" role="table"><div class="bl__orow bl__orow--head" role="row"><span role="columnheader">Condition</span><span role="columnheader">Cash</span><span role="columnheader">Credit</span><span role="columnheader"><span class="bl__sr">Add</span></span></div>' + rows + "</div>" : '<p class="bl__muted">Not currently buying this printing.</p>') +
         "</div></article>";
     }).join("");
     $("#bl-hits").insertAdjacentHTML("beforeend", html);

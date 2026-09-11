@@ -1,17 +1,26 @@
-/* Exor Games buylist (public/buylist.js). Colours come from the theme's
-   --xg-* tokens where it runs inside exorgames.com (xg-dark.css redefines
-   them under html[data-xg-theme="dark"]), with light fallbacks for the
-   standalone test page, which follows the system for dark. */
+/* Exor Games buylist (public/buylist.js) — 2026-09-11 redesign.
+   Colours come from the theme's --xg-* tokens where it runs inside
+   exorgames.com (xg-dark.css redefines them under html[data-xg-theme="dark"]),
+   with light fallbacks for the standalone test page, which follows the
+   system for dark. Layout: a search toolbar, one card per printing with an
+   aligned offers grid (condition · cash · credit · action), and the list
+   panel — a sticky column on desktop, a bottom sheet on phones. */
 .xg-buylist {
   --bl-bg: var(--xg-bg, #f5f6f7);
   --bl-surface: var(--xg-surface, #ffffff);
+  --bl-surface-2: var(--xg-bg, #f5f6f7);
   --bl-ink: var(--xg-ink, #171b1d);
   --bl-text: var(--xg-text, #3d454b);
   --bl-muted: var(--xg-muted, #707a83);
-  --bl-line: rgba(128, 140, 150, 0.28);
+  --bl-line: rgba(128, 140, 150, 0.22);
+  --bl-line-strong: rgba(128, 140, 150, 0.4);
   --bl-accent: #0d7a5f;
+  --bl-accent-soft: rgba(13, 122, 95, 0.1);
   --bl-accent-ink: #ffffff;
   --bl-danger: #b42318;
+  --bl-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px -12px rgba(16, 24, 40, 0.18);
+  --bl-radius: 16px;
+  --bl-card-radius: 5% / 3.6%;
   box-sizing: border-box;
   max-width: 1180px;
   margin: 0 auto;
@@ -19,144 +28,189 @@
   color: var(--bl-text);
   font-size: 15px;
   line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 }
 .xg-buylist *, .xg-buylist *::before, .xg-buylist *::after { box-sizing: border-box; }
-html[data-xg-theme="dark"] .xg-buylist { --bl-accent: #2fbf95; --bl-accent-ink: #0b1a15; --bl-danger: #ff7b6b; }
+html[data-xg-theme="dark"] .xg-buylist { --bl-accent: #2fbf95; --bl-accent-soft: rgba(47, 191, 149, 0.14); --bl-accent-ink: #0b1a15; --bl-danger: #ff7b6b; --bl-line: rgba(160, 175, 185, 0.18); --bl-line-strong: rgba(160, 175, 185, 0.34); --bl-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px -12px rgba(0, 0, 0, 0.6); }
 html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 @media (prefers-color-scheme: dark) {
-  .xg-buylist--standalone { --bl-bg: #111517; --bl-surface: #181d20; --bl-ink: #eef2f4; --bl-text: #c3ccd1; --bl-muted: #8a969d; --bl-accent: #2fbf95; --bl-accent-ink: #0b1a15; --bl-danger: #ff7b6b; }
+  .xg-buylist--standalone { --bl-bg: #111517; --bl-surface: #181d20; --bl-surface-2: #111517; --bl-ink: #eef2f4; --bl-text: #c3ccd1; --bl-muted: #8a969d; --bl-accent: #2fbf95; --bl-accent-soft: rgba(47, 191, 149, 0.14); --bl-accent-ink: #0b1a15; --bl-danger: #ff7b6b; --bl-line: rgba(160, 175, 185, 0.18); --bl-line-strong: rgba(160, 175, 185, 0.34); }
   .xg-buylist--standalone .bl__seticon { filter: invert(1); }
 }
 .xg-buylist [hidden] { display: none !important; }
+.xg-buylist button, .xg-buylist input, .xg-buylist select { font-family: inherit; }
+.xg-buylist :focus-visible { outline: 2px solid var(--bl-accent); outline-offset: 2px; }
 
 /* logged out */
 .xg-buylist__loading { text-align: center; color: var(--bl-muted); }
-.xg-buylist__login { max-width: 520px; margin: 0 auto; padding: 28px 24px; text-align: center; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: 16px; }
+.xg-buylist__login { max-width: 520px; margin: 0 auto; padding: 32px 24px; text-align: center; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); }
 .xg-buylist__login h2 { margin: 0 0 6px; font-size: 22px; color: var(--bl-ink); }
-.xg-buylist__login p { margin: 0 0 16px; }
-.xg-buylist__btn { display: inline-block; padding: 11px 20px; border-radius: 10px; background: var(--bl-accent); color: var(--bl-accent-ink) !important; font-weight: 600; text-decoration: none !important; }
+.xg-buylist__login p { margin: 0 0 18px; }
+.xg-buylist__btn { display: inline-block; padding: 12px 22px; border-radius: 999px; background: var(--bl-accent); color: var(--bl-accent-ink) !important; font-weight: 700; text-decoration: none !important; }
 .xg-buylist__link { display: inline-block; margin-left: 14px; color: var(--bl-muted); }
 
-/* the app */
-.bl { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
-/* Phones and narrow tablets: one column, and the list panel becomes a bottom
-   sheet pinned above the ticker (owner, 2026-09-10: "on mobile the cart is
-   way at the bottom of search results"). Collapsed it is one bar with the
-   count and totals; tapping it opens the panel over the results, with the
-   lines scrolling inside it. Doubled selectors beat the desktop .bl__cart
-   rule below on specificity, not source order. */
+/* ---- layout ------------------------------------------------------- */
+.bl { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
+
+/* ---- search toolbar ----------------------------------------------- */
+.bl__bar { display: grid; grid-template-columns: 200px minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; margin: 0; padding: 10px; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); }
+.bl__input, .bl__select { min-width: 0; width: 100%; height: 46px; margin: 0; padding: 0 14px; font: inherit; font-size: 16px; line-height: 1.3; border: 1px solid var(--bl-line-strong); border-radius: 12px; background: var(--bl-surface-2); color: var(--bl-ink); box-shadow: none; -webkit-appearance: none; appearance: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.bl__input::placeholder { color: var(--bl-muted); opacity: 1; }
+.bl__input:focus, .bl__select:focus { border-color: var(--bl-accent); box-shadow: 0 0 0 3px var(--bl-accent-soft); outline: none; }
+.bl__select { padding-right: 36px; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%23707a83' stroke-width='1.8' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 14px center; font-weight: 600; }
+.bl__input[type="search"] { -webkit-appearance: none; }
+.bl__input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+.bl__setwrap { position: relative; display: flex; min-width: 0; }
+.bl__input--set { flex: 1; }
+.bl__setwrap .bl__seticon--pick { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; pointer-events: none; }
+.bl__setwrap .bl__seticon--pick:not([hidden]) + .bl__input--set { padding-left: 40px; }
+.bl__btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin: 0; padding: 0 18px; height: 46px; font: inherit; font-size: 15px; font-weight: 700; line-height: 1; border: 1px solid var(--bl-line-strong); border-radius: 12px; background: var(--bl-surface); color: var(--bl-ink); cursor: pointer; white-space: nowrap; transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease; }
+.bl__btn:hover { border-color: var(--bl-accent); }
+.bl__btn:active { transform: translateY(1px); }
+.bl__btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.bl__btn--primary { background: var(--bl-accent); color: var(--bl-accent-ink); border-color: transparent; }
+.bl__btn--primary:hover { filter: brightness(1.06); border-color: transparent; }
+.bl__muted { color: var(--bl-muted); }
+.bl__status { min-height: 20px; font-size: 13.5px; margin: 12px 2px 10px; }
+.bl__chip { display: inline-block; margin: 6px 6px 0 0; padding: 6px 12px; border: 1px solid var(--bl-line-strong); border-radius: 999px; background: var(--bl-surface); color: var(--bl-ink); font: inherit; font-size: 13px; font-weight: 600; line-height: 1.3; cursor: pointer; }
+.bl__chip:hover { border-color: var(--bl-accent); color: var(--bl-accent); }
+
+/* ---- results: one card per printing ------------------------------ */
+.bl__hit { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 16px; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); padding: 14px; margin-bottom: 12px; }
+.bl__card { width: 104px; aspect-ratio: 5 / 7; object-fit: cover; border-radius: var(--bl-card-radius); background: var(--bl-surface-2); align-self: start; }
+.bl__name { margin: 2px 0 2px; font-size: 18px; font-weight: 700; line-height: 1.25; color: var(--bl-ink); letter-spacing: -0.01em; }
+.bl__set { margin: 0 0 10px; font-size: 13px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bl__set span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl__seticon { width: 18px; height: 18px; vertical-align: middle; flex: 0 0 auto; }
+/* The offers grid: four aligned columns, every cell centred on its row —
+   condition (left), cash, credit, action. Tabular figures keep the prices
+   in a straight line. */
+.bl__offers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(64px, auto) minmax(64px, auto) minmax(72px, auto); column-gap: 8px; font-size: 14px; border: 1px solid var(--bl-line); border-radius: 12px; overflow: hidden; }
+.bl__orow { display: contents; }
+.bl__orow > span { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 6px 8px; border-top: 1px solid var(--bl-line); text-align: center; }
+.bl__orow > span:first-child { justify-content: flex-start; text-align: left; padding-left: 12px; }
+.bl__orow > span:last-child { padding-right: 10px; }
+.bl__orow--head > span { min-height: 30px; padding-top: 4px; padding-bottom: 4px; border-top: 0; background: var(--bl-surface-2); font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bl-muted); }
+.bl__ocond { flex-wrap: wrap; gap: 4px 6px; color: var(--bl-ink); font-weight: 600; }
+.bl__oprice { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--bl-ink); white-space: nowrap; }
+.bl__oprice--credit { color: var(--bl-accent); }
+.bl__pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--bl-accent-soft); color: var(--bl-accent); line-height: 1.4; vertical-align: middle; white-space: nowrap; }
+.bl__add { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 999px; }
+.bl__nobuy { display: inline-block; font-size: 11.5px; font-weight: 700; line-height: 1.2; padding: 6px 9px; border-radius: 999px; background: var(--bl-surface-2); color: var(--bl-muted); white-space: nowrap; }
+/* Condition guide: a condition in the offers grid opens the store's own
+   photo and definition for that grade (from /pages/grading-guide). */
+.bl .bl__condbtn { margin: 0; padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--bl-ink); text-decoration: underline dotted; text-decoration-color: var(--bl-muted); text-underline-offset: 3px; cursor: pointer; text-align: left; }
+.bl .bl__condbtn:hover, .bl .bl__condbtn:focus-visible { color: var(--bl-accent); text-decoration-color: currentColor; }
+.bl__guide { border: 0; border-radius: 18px; padding: 0; width: min(94vw, 440px); max-width: 94vw; max-height: 92vh; overflow: auto; background: var(--bl-surface); color: var(--bl-text); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4); }
+.bl__guide::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(2px); }
+/* The example photo is shown whole at its own proportions, never cropped
+   to a square or blown up past its pixels (the store's originals are
+   398×218: a square crop of that was the blur, 2026-09-11). */
+.bl__guide-img { display: block; width: 100%; height: auto; max-height: 60vh; object-fit: contain; border-radius: 18px 18px 0 0; background: #0f1416; }
+.bl__guide-body { padding: 16px 20px 20px; }
+.bl__guide-body h3 { margin: 0 0 10px; font-size: 19px; color: var(--bl-ink); }
+.bl__guide-body ul { margin: 0; padding: 0 0 0 18px; font-size: 13.5px; line-height: 1.5; }
+.bl__guide-body li { margin: 0 0 5px; }
+.bl__guide-body li b { color: var(--bl-ink); }
+.bl__guide-note { font-size: 12px; margin: 12px 0 0; }
+.bl__guide-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.bl__guide-actions .bl__btn { height: 42px; border-radius: 999px; }
+.bl__link { color: var(--bl-accent); font-weight: 700; }
+.bl__more { display: flex; margin: 8px auto 0; border-radius: 999px; }
+
+/* ---- the list panel ----------------------------------------------- */
+/* Stays in view under the fixed header and scrolls on its own; only the
+   lines scroll, the title, payment choice, totals and buttons stay put.
+   --xg-fixed-bottom is the header's bottom edge (xg-header-offset.js),
+   --xg-tick-h the ticker pinned to the bottom of the screen (xg-ticker.js). */
+.bl__cart { position: sticky; top: calc(var(--xg-fixed-bottom, 0px) + 14px); max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 28px); display: flex; flex-direction: column; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); padding: 18px; }
+.bl__cart > * { flex: 0 0 auto; }
+.bl__cart > #bl-lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -8px; padding: 0 8px; }
+.bl__h2 { margin: 0 0 12px; font-size: 18px; font-weight: 700; color: var(--bl-ink); display: flex; justify-content: space-between; align-items: baseline; }
+.bl__h2 span { font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--bl-accent-soft); color: var(--bl-accent); }
+.bl__h2 span:empty { display: none; }
+/* one heading per card, its conditions beneath it */
+.bl__group { border-top: 1px solid var(--bl-line); padding: 10px 0 6px; }
+.bl__group:first-child { border-top: 0; padding-top: 0; }
+.bl__group-head { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 4px; }
+.bl__group-head .bl__thumb { width: 36px; }
+.bl__group-head b { display: block; color: var(--bl-ink); font-size: 14px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl__group-head .bl__muted { display: block; font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl__group-head .bl__seticon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
+.bl__line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 5px 0 5px 46px; }
+.bl__cond { min-width: 0; font-size: 13px; line-height: 1.3; color: var(--bl-ink); font-weight: 600; }
+.bl__cond small { display: block; margin: 1px 0 0; font-size: 12px; font-weight: 500; color: var(--bl-muted); font-variant-numeric: tabular-nums; }
+.bl__cond .bl__pill { margin-left: 5px; }
+.bl__thumb { width: 40px; aspect-ratio: 5 / 7; object-fit: cover; border-radius: var(--bl-card-radius); background: var(--bl-surface-2); }
+/* The theme stretches every input to 100% width, which turned the −/1/+
+   stepper into most of the row on phones. Pin it. */
+.bl .bl__qtywrap { display: flex; align-items: center; flex: 0 0 auto; width: auto; height: 34px; border: 1px solid var(--bl-line-strong); border-radius: 999px; overflow: hidden; background: var(--bl-surface); }
+.bl .bl__qtywrap .bl__btn { height: 100%; padding: 0 10px; border: 0; border-radius: 0; background: transparent; font-size: 16px; }
+.bl .bl__qtywrap .bl__btn:hover { background: var(--bl-accent-soft); color: var(--bl-accent); }
+.bl .bl__qtywrap .bl__qty { width: 34px !important; min-width: 0; max-width: 34px; flex: 0 0 34px; height: 100%; margin: 0; padding: 0; text-align: center; border: 0; border-radius: 0; background: transparent; color: var(--bl-ink); font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; -moz-appearance: textfield; box-shadow: none; }
+.bl__qty::-webkit-outer-spin-button, .bl__qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.bl__remove { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--bl-muted); font-size: 20px; padding: 0; line-height: 1; cursor: pointer; }
+.bl__remove:hover { color: var(--bl-danger); background: rgba(180, 35, 24, 0.08); }
+/* payout choice as a segmented control */
+.bl__pay { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 14px 0 10px; padding: 4px; border-radius: 12px; background: var(--bl-surface-2); font-size: 14px; color: var(--bl-ink); }
+.bl__pay label { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; height: 36px; border-radius: 9px; font-weight: 600; cursor: pointer; }
+.bl__pay input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.bl__pay label:has(input:checked) { background: var(--bl-surface); color: var(--bl-accent); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12); }
+.bl__pay label:has(input:focus-visible) { outline: 2px solid var(--bl-accent); outline-offset: 1px; }
+.bl__totals { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding: 12px 0; border-top: 1px solid var(--bl-line); border-bottom: 1px solid var(--bl-line); }
+.bl__totals span { display: flex; flex-direction: column; gap: 2px; }
+.bl__totals span:last-child { text-align: right; }
+.bl__totals b { color: var(--bl-ink); font-size: 18px; font-variant-numeric: tabular-nums; }
+.bl__actions { display: flex; gap: 8px; margin-top: 14px; }
+.bl__actions .bl__btn { border-radius: 999px; }
+.bl__actions .bl__btn--primary { flex: 1; }
+.bl__msg { font-size: 13px; margin: 10px 0 0; min-height: 18px; }
+.bl__toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 12px); z-index: 50; max-width: min(92vw, 520px); padding: 12px 18px; border-radius: 999px; background: var(--bl-ink); color: var(--bl-bg); font-size: 14px; font-weight: 600; text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease; }
+.bl__toast--show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---- phones and narrow tablets ------------------------------------ */
+/* One column; the list panel becomes a bottom sheet pinned above the
+   ticker. Collapsed it is one bar with the count and totals; tapping it
+   opens the panel over the results, with the lines scrolling inside it.
+   Doubled selectors beat the desktop .bl__cart rule on specificity. */
+.bl__sheetbar { display: none; align-items: center; gap: 10px; min-height: 58px; padding: 8px 0; color: var(--bl-ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.bl__sheettext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.bl__sheettext b { font-size: 15px; }
+.bl__sheetsum { display: block; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl__chev { flex: 0 0 auto; width: 30px; height: 30px; border: 1px solid var(--bl-line-strong); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; transition: transform 0.18s ease; }
+.bl__cart--open .bl__chev { transform: rotate(180deg); }
 @media (max-width: 860px) {
-  .bl { grid-template-columns: 1fr; }
+  .xg-buylist { padding: 8px 14px calc(84px + var(--bl-sheet-off, var(--xg-tick-h, 0px))); }
+  .bl { grid-template-columns: 1fr; gap: 16px; }
+  .bl__bar { grid-template-columns: 1fr 1fr; padding: 8px; }
+  .bl__bar .bl__select { grid-column: 1 / -1; }
+  .bl__bar .bl__input[type="search"] { grid-column: 1 / -1; }
+  .bl__bar .bl__setwrap { grid-column: 1 / 2; }
+  .bl__bar .bl__btn--primary { grid-column: 2 / 3; }
+  .bl__hit { grid-template-columns: 84px minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .bl__card { width: 84px; }
+  .bl__name { font-size: 16.5px; }
+  .bl__offers { grid-template-columns: minmax(0, 1fr) auto auto auto; column-gap: 2px; font-size: 13.5px; }
+  .bl__orow > span { padding: 6px 5px; min-height: 42px; }
+  .bl__orow > span:first-child { padding-left: 10px; }
+  .bl__orow > span:last-child { padding-right: 6px; }
+  .bl__add { padding: 0 12px; height: 32px; }
   /* --bl-sheet-off is measured by buylist.js: the height of whatever fixed
      bars own the bottom edge (ticker, Shopify's preview bar, app bars). */
-  .xg-buylist { padding-bottom: calc(84px + var(--bl-sheet-off, var(--xg-tick-h, 0px))); }
-  .bl .bl__cart { position: fixed !important; top: auto !important; left: 0; right: 0; bottom: var(--bl-sheet-off, var(--xg-tick-h, 0px)); z-index: 9980; margin: 0; max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--bl-sheet-off, var(--xg-tick-h, 0px)) - 12px); border-radius: 16px 16px 0 0; border-bottom: 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18); padding: 0 14px 14px; }
+  .bl .bl__cart { position: fixed !important; top: auto !important; left: 0; right: 0; bottom: var(--bl-sheet-off, var(--xg-tick-h, 0px)); z-index: 9980; margin: 0; max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--bl-sheet-off, var(--xg-tick-h, 0px)) - 12px); border-radius: 18px 18px 0 0; border-bottom: 0; box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.2); padding: 0 16px 16px; }
   .bl .bl__cart:not(.bl__cart--open) { padding-bottom: 0; }
   .bl .bl__cart:not(.bl__cart--open) > :not(.bl__sheetbar) { display: none; }
   .bl .bl__cart .bl__h2 { display: none; }
   .bl .bl__sheetbar { display: flex; }
   .js-drawer-open .bl .bl__cart { display: none; }
   .xg-buylist .bl__toast { bottom: calc(var(--bl-sheet-off, var(--xg-tick-h, 0px)) + 74px); }
+  .bl__line { padding-left: 0; }
 }
-.bl__sheetbar { display: none; align-items: center; gap: 10px; min-height: 56px; padding: 8px 0; color: var(--bl-ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.bl__sheettext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
-.bl__sheettext b { font-size: 15px; }
-.bl__sheetsum { display: block; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bl__chev { flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid var(--bl-line); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; transition: transform 0.18s ease; }
-.bl__cart--open .bl__chev { transform: rotate(180deg); }
-.bl__bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
-.bl__input, .bl__select { min-width: 0; margin: 0; padding: 11px 13px; font: inherit; font-size: 16px; line-height: 1.3; border: 1px solid var(--bl-line); border-radius: 10px; background: var(--bl-surface); color: var(--bl-ink); }
-.bl__select { flex: 0 1 210px; }
-.bl__input[type="search"] { flex: 1 1 200px; }
-.bl__setwrap { position: relative; flex: 1 1 230px; display: flex; min-width: 0; }
-.bl__input--set { flex: 1; width: 100%; }
-.bl__setwrap .bl__seticon--pick { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; pointer-events: none; }
-.bl__setwrap .bl__seticon--pick:not([hidden]) + .bl__input--set { padding-left: 38px; }
-.bl__btn { margin: 0; padding: 11px 16px; font: inherit; font-weight: 600; line-height: 1.3; border: 1px solid var(--bl-line); border-radius: 10px; background: var(--bl-surface); color: var(--bl-ink); cursor: pointer; }
-.bl__btn:disabled { opacity: 0.45; cursor: default; }
-.bl__btn--primary { background: var(--bl-accent); color: var(--bl-accent-ink); border-color: transparent; }
-.bl__muted { color: var(--bl-muted); }
-.bl__status { min-height: 20px; font-size: 13px; margin: 10px 0 4px; }
-.bl__chip { display: inline-block; margin: 4px 6px 0 0; padding: 4px 10px; border: 1px solid var(--bl-line); border-radius: 99px; background: var(--bl-surface); color: var(--bl-ink); font: inherit; font-size: 13px; line-height: 1.3; cursor: pointer; }
-.bl__chip:hover { border-color: var(--bl-accent); }
-.bl__hit { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
-.bl__card { width: 96px; aspect-ratio: 5 / 7; object-fit: cover; border-radius: 6px; background: var(--bl-line); }
-.bl__name { margin: 0 0 2px; font-size: 17px; line-height: 1.25; color: var(--bl-ink); }
-.bl__set { margin: 0 0 8px; font-size: 13px; display: flex; align-items: center; gap: 6px; }
-.bl__seticon { width: 18px; height: 18px; vertical-align: middle; flex: 0 0 auto; }
-.bl__offers { width: 100%; margin: 0; border-collapse: collapse; font-size: 14px; }
-.bl__offers th { text-align: left; font-weight: 600; color: var(--bl-muted); font-size: 12px; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--bl-line); background: transparent; }
-.bl__offers td { padding: 6px 6px 6px 0; border-bottom: 1px solid var(--bl-line); vertical-align: middle; background: transparent; }
-.bl__offers tr:last-child td { border-bottom: 0; }
-.bl__offers td:last-child { text-align: right; }
-.bl__pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bl-line); color: var(--bl-ink); margin-left: 6px; vertical-align: middle; }
-.bl__add { padding: 6px 12px; font-size: 13px; }
-.bl__nobuy { display: inline-block; font-size: 12px; line-height: 1.2; color: var(--bl-muted); text-align: right; max-width: 78px; }
-/* Condition guide: a condition in the offers table opens the store's own
-   photo and definition for that grade (from /pages/grading-guide). */
-.bl .bl__condbtn { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: var(--bl-ink); text-decoration: underline dotted; text-decoration-color: var(--bl-muted); text-underline-offset: 3px; cursor: pointer; }
-.bl .bl__condbtn:hover, .bl .bl__condbtn:focus-visible { color: var(--bl-accent); text-decoration-color: currentColor; }
-.bl__guide { border: 0; border-radius: 16px; padding: 0; width: min(92vw, 420px); max-width: 92vw; background: var(--bl-surface); color: var(--bl-text); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
-.bl__guide::backdrop { background: rgba(0, 0, 0, 0.55); }
-.bl__guide-img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 16px 16px 0 0; background: var(--bl-line); }
-.bl__guide-body { padding: 14px 18px 18px; }
-.bl__guide-body h3 { margin: 0 0 8px; font-size: 18px; color: var(--bl-ink); }
-.bl__guide-body ul { margin: 0; padding: 0 0 0 18px; font-size: 13.5px; line-height: 1.45; }
-.bl__guide-body li { margin: 0 0 4px; }
-.bl__guide-body li b { color: var(--bl-ink); }
-.bl__guide-note { font-size: 12px; margin: 10px 0 0; }
-.bl__guide-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
-.bl__link { color: var(--bl-accent); font-weight: 600; }
-.bl__more { display: block; margin: 6px auto 0; }
-/* The list panel stays in view under the fixed header and scrolls on its
-   own (owner, 2026-09-10: a long list used to drag the whole page along
-   until the results ran out). Only the lines scroll; the title, payment
-   choice, totals and buttons stay put. --xg-fixed-bottom is the header's
-   bottom edge (xg-header-offset.js), --xg-tick-h the ticker pinned to the
-   bottom of the screen (xg-ticker.js). */
-.bl__cart { position: sticky; top: calc(var(--xg-fixed-bottom, 0px) + 14px); max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 28px); display: flex; flex-direction: column; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: 14px; padding: 16px; }
-.bl__cart > * { flex: 0 0 auto; }
-.bl__cart > #bl-lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -8px; padding: 0 8px; }
-/* one heading per card, its conditions beneath it */
-.bl__group { border-top: 1px solid var(--bl-line); padding: 8px 0 4px; }
-.bl__group:first-child { border-top: 0; padding-top: 0; }
-.bl__group-head { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 2px; }
-.bl__group-head .bl__thumb { width: 34px; }
-.bl__group-head b { display: block; color: var(--bl-ink); font-size: 14px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bl__group-head .bl__muted { display: block; font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bl__group-head .bl__seticon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
-/* Doubled class on purpose: the base .bl__line rule further down used to win
-   on source order (2026-09-10 screenshots: four columns, the stepper
-   stretched across the 1fr track, the prices drawn underneath it). */
-.bl__line.bl__line--in { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 0 4px 44px; border-top: 0; }
-.bl__cond { min-width: 0; font-size: 13px; line-height: 1.3; color: var(--bl-ink); }
-.bl__cond small { display: block; margin: 1px 0 0; font-size: 12px; color: var(--bl-muted); }
-.bl__cond .bl__pill { margin-left: 5px; }
-/* The theme stretches every input to 100% width, which turned the −/1/+
-   stepper into most of the row on phones (owner, 2026-09-10). Pin it. */
-.bl .bl__qtywrap { flex: 0 0 auto; width: auto; }
-.bl .bl__qtywrap .bl__btn { padding: 4px 8px; }
-.bl .bl__qtywrap .bl__qty { width: 36px !important; min-width: 0; max-width: 36px; flex: 0 0 36px; height: auto; margin: 0; padding: 4px 0; }
-@media (max-width: 480px) { .bl__line.bl__line--in { padding-left: 0; } }
-.bl__h2 { margin: 0 0 10px; font-size: 18px; color: var(--bl-ink); display: flex; justify-content: space-between; align-items: baseline; }
-.bl__h2 span { font-size: 13px; font-weight: 500; }
-.bl__line { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--bl-line); }
-.bl__thumb { width: 40px; aspect-ratio: 5 / 7; object-fit: cover; border-radius: 4px; background: var(--bl-line); }
-.bl__line-body { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
-.bl__line-body b { color: var(--bl-ink); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bl__line-body .bl__seticon { width: 14px; height: 14px; margin-right: 4px; }
-.bl__qtywrap { display: flex; align-items: center; border: 1px solid var(--bl-line); border-radius: 8px; overflow: hidden; }
-.bl__qtywrap .bl__btn { border: 0; border-radius: 0; padding: 4px 9px; }
-.bl__qty { width: 42px; margin: 0; text-align: center; border: 0; background: transparent; color: var(--bl-ink); font: inherit; padding: 4px 0; -moz-appearance: textfield; }
-.bl__qty::-webkit-outer-spin-button, .bl__qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.bl__remove { border: 0; background: transparent; color: var(--bl-muted); font-size: 20px; padding: 0 4px; line-height: 1; cursor: pointer; }
-.bl__remove:hover { color: var(--bl-danger); }
-.bl__pay { display: flex; gap: 16px; margin: 14px 0 8px; font-size: 14px; color: var(--bl-ink); }
-.bl__pay label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
-.bl__totals { display: flex; justify-content: space-between; font-size: 14px; padding: 10px 0; border-top: 1px solid var(--bl-line); border-bottom: 1px solid var(--bl-line); }
-.bl__totals b { color: var(--bl-ink); margin-left: 6px; }
-.bl__actions { display: flex; gap: 8px; margin-top: 12px; }
-.bl__actions .bl__btn--primary { flex: 1; }
-.bl__msg { font-size: 13px; margin: 10px 0 0; min-height: 18px; }
-.bl__toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 12px); z-index: 50; max-width: min(92vw, 520px); padding: 12px 18px; border-radius: 12px; background: var(--bl-ink); color: var(--bl-bg); font-size: 14px; font-weight: 600; text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease; }
-.bl__toast--show { opacity: 1; transform: translate(-50%, 0); }
+@media (max-width: 380px) {
+  .bl__hit { grid-template-columns: 1fr; }
+  .bl__card { width: 96px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xg-buylist * { transition: none !important; }
+}
+.bl__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
