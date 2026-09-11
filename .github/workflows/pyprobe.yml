@@ -1,0 +1,36 @@
+name: pyprobe
+# Runs a Python 3 snippet on a GitHub runner, which can reach hosts the
+# development sandbox cannot (boardgamegeek.com, the Shopify CDN). The
+# optional url is downloaded to input.bin first; the snippet sees its path
+# in $INPUT. pillow, numpy and requests are installed. No secrets are
+# exposed to the snippet.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: URL to download to input.bin before the snippet runs (optional)
+        required: false
+        default: ""
+      py:
+        description: Python 3 code to run
+        required: true
+
+jobs:
+  py:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: deps
+        run: python3 -m pip install -q pillow numpy requests
+      - name: run
+        env:
+          URL: ${{ inputs.url }}
+          PY: ${{ inputs.py }}
+          UA: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36
+        run: |
+          if [ -n "$URL" ]; then
+            curl -sSL -A "$UA" -o input.bin "$URL"
+            ls -la input.bin
+          fi
+          printf '%s' "$PY" > /tmp/probe.py
+          INPUT=input.bin python3 /tmp/probe.py
