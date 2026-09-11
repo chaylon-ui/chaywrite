@@ -272,10 +272,14 @@
             ? '<button type="button" class="bl__btn bl__add" data-h="' + i + '" data-o="' + j + '">Add</button>'
             : '<span class="bl__nobuy" title="BinderPOS reports the store has all it wants of this condition right now">At limit</span>') + "</span></div>";
       }).join("");
-      return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="" loading="lazy"><div>' +
-        '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p>" +
-        (rows ? '<div class="bl__offers" role="table"><div class="bl__orow bl__orow--head" role="row"><span role="columnheader">Condition</span><span role="columnheader">Cash</span><span role="columnheader">Credit</span><span role="columnheader"><span class="bl__sr">Add</span></span></div>' + rows + "</div>" : '<p class="bl__muted">Not currently buying this printing.</p>') +
-        "</div></article>";
+      // Photo, heading and offers are three grid areas (buylist.css): on a
+      // desktop the offers sit beside the photo, on a phone they take the
+      // card's full width so the condition column is not squeezed
+      // (2026-09-11 probe at 390px: 42px for "Lightly Played Foil").
+      return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="" loading="lazy"><div class="bl__head">' +
+        '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p></div>" +
+        (rows ? '<div class="bl__offers" role="table"><div class="bl__orow bl__orow--head" role="row"><span role="columnheader">Condition</span><span role="columnheader">Cash</span><span role="columnheader">Credit</span><span role="columnheader"><span class="bl__sr">Add</span></span></div>' + rows + "</div>" : '<p class="bl__muted bl__none">Not currently buying this printing.</p>') +
+        "</article>";
     }).join("");
     $("#bl-hits").insertAdjacentHTML("beforeend", html);
   }
