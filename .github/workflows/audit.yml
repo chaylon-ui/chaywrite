@@ -1,0 +1,182 @@
+name: audit
+
+# Read-only site sweep. Opens every URL in `urls` at each width in headless
+# Chrome and prints one PAGE json line per page/width: horizontal overflow,
+# widest overflowing elements, the hero and its media (object-fit, crop %),
+# hero text clipped/outside, image sizing (oversized / blurry / no alt),
+# resource totals and the six largest, timings (TTFB, DCL, load, LCP, CLS),
+# JS/console errors, failed requests, tiny text, clipped headings, junk
+# strings. Then a Python step spell-checks the page text (pyspellchecker,
+# TCG allowlist) and runs punctuation/grammar regexes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Pages, one per line"
+        required: true
+      widths:
+        description: "Viewport widths, comma separated"
+        required: false
+        default: "390,1366"
+      theme:
+        description: "preview_theme_id (blank for the live theme)"
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      URLS: ${{ inputs.urls }}
+      WIDTHS: ${{ inputs.widths }}
+      THEME: ${{ inputs.theme }}
+    steps:
+      - name: chrome
+        run: |
+          npm i --no-audit --no-fund puppeteer-core@22 >/dev/null 2>&1
+          mkdir -p texts
+          node <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
+          (async () => {
+            const urls = process.env.URLS.split('\n').map(s => s.trim()).filter(Boolean);
+            const widths = (process.env.WIDTHS || '390,1366').split(',').map(n => parseInt(n, 10)).filter(Boolean);
+            const pt = (process.env.THEME || '').trim();
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+            for (const w of widths) {
+              const page = await browser.newPage();
+              const mobile = w < 700;
+              await page.setUserAgent(mobile
+                ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+                : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36');
+              await page.setViewport({ width: w, height: mobile ? 844 : 900, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 1 });
+              await page.evaluateOnNewDocument(() => {
+                window.__lcp = []; window.__cls = 0; window.__errs = [];
+                try { new PerformanceObserver(l => { l.getEntries().forEach(e => window.__lcp.push({ t: Math.round(e.startTime), size: e.size, el: e.element ? (e.element.tagName + '.' + String(e.element.className || '').split(' ').slice(0, 2).join('.')) : '', url: (e.url || '').split('/').pop().split('?')[0].slice(0, 50) })); }).observe({ type: 'largest-contentful-paint', buffered: true }); } catch (e) {}
+                try { new PerformanceObserver(l => { l.getEntries().forEach(e => { if (!e.hadRecentInput) window.__cls += e.value; }); }).observe({ type: 'layout-shift', buffered: true }); } catch (e) {}
+                window.addEventListener('error', e => window.__errs.push(String(e.message).slice(0, 120)));
+              });
+              const failed = []; page.on('response', r => { const s = r.status(); if (s >= 400) failed.push(s + ' ' + r.url().split('?')[0].slice(-80)); });
+              const cerr = []; page.on('console', m => { if (m.type() === 'error') cerr.push(m.text().slice(0, 140)); });
+              if (pt) { await page.goto(new URL(urls[0]).origin + '/?preview_theme_id=' + pt, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => null); }
+              for (const u0 of urls) {
+                const u = pt ? u0 + (u0.includes('?') ? '&' : '?') + 'preview_theme_id=' + pt : u0;
+                failed.length = 0; cerr.length = 0;
+                const t0 = Date.now();
+                const r = await page.goto(u, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => null);
+                await new Promise(res => setTimeout(res, 3500));
+                const res = await page.evaluate(() => {
+                  const vw = document.documentElement.clientWidth;
+                  const o = {};
+                  const sel = el => { let s = el.tagName.toLowerCase(); if (el.id) s += '#' + el.id; const c = String(el.className || '').trim().split(/\s+/).filter(Boolean).slice(0, 2); if (c.length) s += '.' + c.join('.'); return s.slice(0, 70); };
+                  o.title = document.title.slice(0, 60);
+                  o.overflowPx = Math.max(0, document.documentElement.scrollWidth - vw);
+                  const over = [];
+                  document.querySelectorAll('body *').forEach(el => {
+                    if (over.length >= 400) return;
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0 && (r.right > vw + 2 || r.left < -2)) {
+                      const cs = getComputedStyle(el); if (cs.position === 'fixed' || cs.visibility === 'hidden') return;
+                      let p = el.parentElement, hidden = false;
+                      while (p && p !== document.body) { const pc = getComputedStyle(p); if (pc.overflowX === 'hidden' || pc.overflowX === 'auto' || pc.overflowX === 'scroll' || pc.overflow === 'hidden') { hidden = true; break; } p = p.parentElement; }
+                      if (hidden) return;
+                      over.push({ s: sel(el), l: Math.round(r.left), r: Math.round(r.right), w: Math.round(r.width) });
+                    }
+                  });
+                  o.overflow = over.sort((a, b) => b.w - a.w).slice(0, 6);
+                  const hero = document.querySelector('.xg-hero, [class*="hero-modern"], [id*="hero"], .hero, [class*="hero"]');
+                  if (hero) {
+                    const hr = hero.getBoundingClientRect();
+                    o.hero = { s: sel(hero), w: Math.round(hr.width), h: Math.round(hr.height) };
+                    const media = hero.querySelector('img, video');
+                    if (media) {
+                      const mr = media.getBoundingClientRect(); const cs = getComputedStyle(media);
+                      const nw = media.naturalWidth || media.videoWidth || 0, nh = media.naturalHeight || media.videoHeight || 0;
+                      o.hero.media = { s: sel(media), w: Math.round(mr.width), h: Math.round(mr.height), fit: cs.objectFit, pos: cs.objectPosition, nat: nw + 'x' + nh };
+                      if (nw && nh && cs.objectFit === 'cover') { const sc = Math.max(mr.width / nw, mr.height / nh); o.hero.media.cropX = Math.round(100 * (1 - mr.width / (nw * sc))); o.hero.media.cropY = Math.round(100 * (1 - mr.height / (nh * sc))); }
+                    }
+                    o.hero.text = [...hero.querySelectorAll('h1, h2, h3, p, a, button')].filter(e => e.innerText && e.innerText.trim()).slice(0, 8).map(e => { const r = e.getBoundingClientRect(); return { s: sel(e), t: e.innerText.trim().replace(/\s+/g, ' ').slice(0, 40), clippedX: e.scrollWidth > e.clientWidth + 1, outside: r.right > hr.right + 1 || r.bottom > hr.bottom + 1 || r.left < hr.left - 1 }; });
+                  }
+                  const imgs = [...document.images];
+                  const dpr = window.devicePixelRatio || 1;
+                  o.images = { count: imgs.length, noAlt: imgs.filter(i => !i.hasAttribute('alt')).length, lazy: imgs.filter(i => i.loading === 'lazy').length };
+                  o.images.oversized = imgs.filter(i => i.naturalWidth && i.clientWidth > 20 && i.naturalWidth > i.clientWidth * dpr * 2.2).map(i => ({ s: sel(i), nat: i.naturalWidth + 'x' + i.naturalHeight, css: i.clientWidth + 'x' + i.clientHeight, src: (i.currentSrc || i.src).split('/').pop().split('?')[0].slice(0, 40) })).sort((a, b) => parseInt(b.nat) - parseInt(a.nat)).slice(0, 5);
+                  o.images.blurry = imgs.filter(i => i.naturalWidth && i.clientWidth > 60 && i.naturalWidth < i.clientWidth * 0.8).map(i => ({ s: sel(i), nat: i.naturalWidth + 'x' + i.naturalHeight, css: i.clientWidth + 'x' + i.clientHeight, src: (i.currentSrc || i.src).split('/').pop().split('?')[0].slice(0, 40) })).slice(0, 5);
+                  const rs = performance.getEntriesByType('resource'); const by = {}; let tot = 0;
+                  rs.forEach(r => { const t = r.initiatorType || 'other'; by[t] = by[t] || { n: 0, kb: 0 }; by[t].n++; by[t].kb += r.transferSize / 1024; tot += r.transferSize; });
+                  o.res = { count: rs.length, totalKB: Math.round(tot / 1024), by: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, v.n + '/' + Math.round(v.kb) + 'KB'])), top: rs.slice().sort((a, b) => b.transferSize - a.transferSize).slice(0, 6).map(r => Math.round(r.transferSize / 1024) + 'KB ' + r.name.split('?')[0].split('/').slice(-2).join('/').slice(-60)) };
+                  const nav = performance.getEntriesByType('navigation')[0];
+                  if (nav) o.timing = { ttfb: Math.round(nav.responseStart), dcl: Math.round(nav.domContentLoadedEventEnd), load: Math.round(nav.loadEventEnd), htmlKB: Math.round(nav.transferSize / 1024) };
+                  o.lcp = (window.__lcp || []).slice(-1)[0] || null; o.cls = Math.round((window.__cls || 0) * 1000) / 1000; o.jsErrors = (window.__errs || []).slice(0, 5);
+                  o.tinyText = [...document.querySelectorAll('p, a, span, li, button, h1, h2, h3, h4, label, td')].filter(e => e.innerText && e.innerText.trim() && e.getClientRects().length && parseFloat(getComputedStyle(e).fontSize) < 11).length;
+                  o.clipped = [...document.querySelectorAll('h1, h2, h3, button, .btn, a.btn')].filter(e => e.innerText && e.innerText.trim() && e.scrollWidth > e.clientWidth + 2 && getComputedStyle(e).overflow !== 'visible').slice(0, 5).map(e => ({ s: sel(e), t: e.innerText.trim().slice(0, 40) }));
+                  const bt = document.body.innerText;
+                  o.junk = (bt.match(/Liquid error[^\n]{0,60}|\{\{[^}]{0,40}\}\}|\bundefined\b|\[object Object\]|\bNaN\b|Lorem ipsum|TODO/g) || []).slice(0, 6);
+                  o.bodyChars = bt.length;
+                  o.h1 = [...document.querySelectorAll('h1')].map(h => h.innerText.trim().slice(0, 50)).slice(0, 3);
+                  return o;
+                }).catch(e => ({ error: String(e).slice(0, 200) }));
+                res.url = u0; res.width = w; res.status = r ? r.status() : 'none'; res.ms = Date.now() - t0; res.failed = failed.slice(0, 8); res.consoleErrors = cerr.slice(0, 5);
+                if (w === widths[widths.length - 1]) {
+                  const txt = await page.evaluate((home) => { const c = home ? document.body : (document.querySelector('main') || document.body); return c.innerText; }, new URL(u0).pathname === '/').catch(() => '');
+                  const name = (new URL(u0).pathname + new URL(u0).search).replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'home';
+                  fs.writeFileSync('texts/' + name + '.txt', txt);
+                }
+                console.log('PAGE ' + JSON.stringify(res));
+              }
+              await page.close();
+            }
+            await browser.close();
+          })().catch(e => { console.log('audit failed', e && e.message); process.exit(0); });
+          EOF
+      - name: text
+        run: |
+          python3 -m pip install -q pyspellchecker >/dev/null 2>&1 || true
+          python3 <<'EOF'
+          import os, re, glob, json
+          from collections import Counter
+          try:
+              from spellchecker import SpellChecker
+              sp = SpellChecker()
+          except Exception:
+              sp = None
+          allow = set('''pokemon pokémon lorcana riftbound gunpla tcg tcgs etb etbs binderpos exor mtg ygo yugioh commander booster boosters prerelease preorder preorders sealed singles playmat playmats sleeves deckbox deckboxes charlottetown summerside bridgewater dartmouth truro glasgow pei dnd rpg rpgs warhammer wargames wargame manga anime figma bandai kotobukiya funko lgs foil foils holo holofoil nonfoil buylist buylists storewide ebay sezzle paypal shopify doordash bgg boardgamegeek mallow mallowgames neopets battledome digimon weiss schwarz vanguard cardfight metazoo konami wotc gamegenic ultrapro dragonshield toploaders toploader binders binder graded psa cgc slab slabs playset playsets decklist decklists mana prerelease sideboard mainboard cardboard collectables collectibles restock restocks restocked preowned gundam kits kit reprints reprint showcase borderless retro promo promos bundle bundles tins tin blister blisters commanders planeswalker planeswalkers tokens token etched textless serialized instore online'''.split())
+          skip_repeat = {'that', 'had', 'is', 'it', 'the', 'very', 'bye', 'ha', 'no', 'so'}
+          for f in sorted(glob.glob('texts/*.txt')):
+              page = os.path.basename(f)[:-4]
+              t = open(f, encoding='utf8', errors='replace').read()
+              out = []
+              def ctx(m, a=30, b=25): return t[max(0, m.start() - a):m.end() + b].replace('\n', ' | ')
+              for m in re.finditer(r'\b(\w{3,})\s+\1\b', t, flags=re.I):
+                  if m.group(1).lower() not in skip_repeat: out.append('repeat: ' + ctx(m))
+              for m in re.finditer(r'[A-Za-z]\s[,.;:!?](?![.\d])', t): out.append('space before punctuation: ' + ctx(m))
+              for m in re.finditer(r'[a-z]{2,}[.!?][A-Z][a-z]', t): out.append('no space after sentence: ' + ctx(m))
+              for m in re.finditer(r'[A-Za-z]{2,},[A-Za-z]{2,}', t):
+                  s = ctx(m)
+                  if not re.search(r'https?://|/', s): out.append('no space after comma: ' + s)
+              for m in re.finditer(r'[!?]{2,}|\.{4,}', t): out.append('punctuation run: ' + ctx(m))
+              for m in re.finditer(r'(?<=[.!?] )[a-z]{3,}\b', t): out.append('lowercase after full stop: ' + ctx(m))
+              for m in re.finditer(r"\b(its'|your welcome|alot|seperate|recieve|occured|accomodate|definately|untill|wich|teh|adress|accross|thier|recomend|garantee|guarentee|payed|loose your|everyday low|then you can not|can not\b|alright|irregardless|should of|could of|would of)\b", t, flags=re.I): out.append('wording: ' + ctx(m))
+              for m in re.finditer(r"\b(i)\s", t): out.append('lowercase I: ' + ctx(m))
+              v = {k: len(re.findall(k, t)) for k in ['Pokemon', 'Pokémon', 'POKEMON', 'Yu-Gi-Oh!', 'Yu-Gi-Oh(?!!)', 'Yugioh', 'YuGiOh', 'YUGIOH', 'Pre-Order', 'Pre Order', 'Preorder', 'pre-order', 'preorder', 'PRE ORDER', 'PRE-ORDER', 'E-mail', 'e-mail', 'Email', 'email', 'Store Credit', 'store credit', 'Buylist', 'buylist', 'Buy List', 'Magic: the Gathering', 'Magic: The Gathering', 'Magic The Gathering']}
+              v = {k: n for k, n in v.items() if n}
+              words = re.findall(r"[A-Za-z][a-z']{3,}", t)
+              lower = [w.strip("'") for w in words if w.islower()]
+              cnt = Counter(lower)
+              sus = []
+              if sp:
+                  unk = sp.unknown([w for w in set(lower) if w not in allow and "'" not in w])
+                  for w in sorted(unk):
+                      if cnt[w] > 2: continue
+                      i = t.find(w)
+                      sus.append(w + '  <<  ' + t[max(0, i - 28):i + len(w) + 28].replace('\n', ' | '))
+              print('=== ' + page + ' | chars ' + str(len(t)) + ' | variants ' + json.dumps(v, ensure_ascii=False))
+              for x in out[:30]: print('  ! ' + x)
+              if len(out) > 30: print('  ! ... ' + str(len(out) - 30) + ' more')
+              for x in sus[:40]: print('  ? ' + x)
+              if len(sus) > 40: print('  ? ... ' + str(len(sus) - 40) + ' more')
+          EOF
