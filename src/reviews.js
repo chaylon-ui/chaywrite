@@ -33,7 +33,7 @@ const REVIEWS_CACHE_CONTROL = `public, max-age=${BROWSER_TTL_S}, s-maxage=${REVI
    v2: six stores across both provinces (was three, PEI-only).
    v3: per-city discovery (the province queries surfaced two of six).
    v4: browser max-age 5 min (the cached entries carried the 6h header). */
-const REVIEWS_CACHE_V = "5"; // v5: place id per review (store pages match on it)
+const REVIEWS_CACHE_V = "6"; // v5: place id per review (store pages match on it). v6: four-star reviews kept, newest-sort merged, 24 returned (owner 2026-09-13: rotate, 4-5 stars, newest first)
 
 // Words/phrases that mark a review as not-showcase material even at five
 // stars. Deliberately trigger-happy: a false positive only hides one quote,
@@ -97,7 +97,7 @@ export function newFlavourSkipped(label) {
    null when the review is publishable, else a human-readable reason. */
 function rejectReason(rv) {
   if (!rv) return "empty";
-  if (rv.rating !== 5) return "rating " + rv.rating;
+  if (rv.rating !== 5 && rv.rating !== 4) return "rating " + rv.rating;
   const text = String(rv.text || "").trim();
   if (text.length < 40) return "too short (" + text.length + " chars)";
   if (rv.language && !/^en/i.test(rv.language)) return "language " + rv.language;
@@ -154,10 +154,23 @@ async function fetchPlaceLegacy(id, key) {
     encodeURIComponent(id) +
     "&fields=name,rating,user_ratings_total,reviews&key=" +
     encodeURIComponent(key);
-  const r = await fetch(u, { headers: GHEADERS, signal: AbortSignal.timeout(8000) });
-  if (!r.ok) return null;
-  const j = await r.json();
-  return j && j.status === "OK" && j.result ? j.result : null;
+  const get = async (url) => {
+    const r = await fetch(url, { headers: GHEADERS, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && j.status === "OK" && j.result ? j.result : null;
+  };
+  const a = await get(u);
+  if (!a) return null;
+  /* Google hands out five reviews per call. The default five are "most
+     relevant"; a second call sorted newest adds up to five more, merged by
+     author and time, so the homepage rotation has more than one handful. */
+  const b = await get(u + "&reviews_sort=newest").catch(() => null);
+  if (b && Array.isArray(b.reviews) && b.reviews.length) {
+    const seen = new Set((a.reviews || []).map((rv) => rv.author_name + "|" + rv.time));
+    a.reviews = (a.reviews || []).concat(b.reviews.filter((rv) => !seen.has(rv.author_name + "|" + rv.time)));
+  }
+  return a;
 }
 
 async function fetchPlace(id, key) {
@@ -475,7 +488,7 @@ export async function serveReviews(request, env, ctx) {
         const text = String(rv.text || "").trim();
         out.reviews.push({
           author: String(rv.author_name || "A customer").slice(0, 60),
-          rating: 5,
+          rating: rv.rating === 4 ? 4 : 5,
           text: text.slice(0, 600),
           when: String(rv.relative_time_description || "").slice(0, 40),
           time: rv.time || 0,
@@ -488,7 +501,7 @@ export async function serveReviews(request, env, ctx) {
       }
     }
     out.reviews.sort((a, b) => (b.time || 0) - (a.time || 0));
-    out.reviews = out.reviews.slice(0, 10);
+    out.reviews = out.reviews.slice(0, 24); // newest first; the band rotates a handful out of the newest dozen
     out.count = out.reviews.length;
     if (out.total) out.rating = Math.round((ratingSum / out.total) * 10) / 10;
     out.ok = places.length > 0;

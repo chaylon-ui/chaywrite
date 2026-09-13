@@ -94,7 +94,10 @@ export const MAX_MECHANICS = 12;
    volume were written from the old reading, so "Yona of the Dawn V1" stays
    wrong on the product - and in the series list we publish - until the sweep
    comes back round. */
-export const ENRICH_VERSION = 3;
+export const ENRICH_VERSION = 4;   // v4 (2026-09-13): year, publisher, categories, rating/rank, best players, language, expansions, description
+export const MAX_CATEGORIES = 8;
+export const MAX_EXPANSIONS = 12;
+export const MAX_DESCRIPTION = 1200;
 
 export const BOOKS_QUERY = "product_type:Books AND status:active";
 export const GAMES_QUERY = "product_type:'Board Games' AND status:active";
@@ -292,7 +295,7 @@ export function parseBggThing(xml) {
   const links = [];
   const lre = /<link\b([^>]*)\/?>/g;
   let m;
-  while ((m = lre.exec(s))) links.push({ type: attr(m[1], "type"), value: attr(m[1], "value") });
+  while ((m = lre.exec(s))) links.push({ type: attr(m[1], "type"), value: attr(m[1], "value"), id: Number(attr(m[1], "id")) || null, inbound: attr(m[1], "inbound") === "true" });
 
   const mechanics = [];
   for (let i = 0; i < links.length; i++) {
@@ -301,6 +304,48 @@ export function parseBggThing(xml) {
     }
   }
   const designer = (links.find((l) => l.type === "boardgamedesigner") || {}).value || "";
+  const publisher = (links.find((l) => l.type === "boardgamepublisher") || {}).value || "";
+  const categories = [];
+  for (const l of links) if (l.type === "boardgamecategory" && l.value && categories.length < MAX_CATEGORIES) categories.push(l.value);
+  /* boardgameexpansion links point both ways: on a base game they list its
+     expansions; on an expansion the link back to the base carries inbound="true". */
+  const expansions = [], base = [];
+  for (const l of links) {
+    if (l.type !== "boardgameexpansion" || !l.value || !l.id) continue;
+    if (l.inbound) { if (base.length < 3) base.push({ id: l.id, name: l.value }); }
+    else if (expansions.length < MAX_EXPANSIONS) expansions.push({ id: l.id, name: l.value });
+  }
+  const stat = (tag) => { const mm = s.match(new RegExp("<" + tag + "\\b([^>]*)\\/?>")); const v = mm ? Number(attr(mm[1], "value")) : NaN; return Number.isFinite(v) ? v : null; };
+  const rating = stat("average"), bayes = stat("bayesaverage"), votes = stat("usersrated");
+  const rk = s.match(/<rank\b[^>]*\bname="boardgame"[^>]*\/?>/);
+  const rankRaw = rk ? Number(attr(rk[0], "value")) : NaN;
+  const rank = Number.isFinite(rankRaw) && rankRaw > 0 ? rankRaw : null;
+  /* Player-count poll: "best" = the counts with the most Best votes, "recommended" =
+     counts where Best + Recommended outvote Not Recommended. Counts with fewer
+     than five votes and the open "N+" bucket are ignored. */
+  let best = [], rec = [], bestVotes = 0;
+  const pm = s.match(/<poll\b[^>]*name="suggested_numplayers"[^>]*>([\s\S]*?)<\/poll>/);
+  if (pm) {
+    const rre = /<results\b[^>]*numplayers="([^"]+)"[^>]*>([\s\S]*?)<\/results>/g;
+    let r;
+    while ((r = rre.exec(pm[1]))) {
+      const n = r[1];
+      if (/\+/.test(n)) continue;
+      const vote = (label) => { const v = r[2].match(new RegExp('<result\\b[^>]*value="' + label + '"[^>]*numvotes="(\\d+)"')); return v ? Number(v[1]) : 0; };
+      const b = vote("Best"), rc = vote("Recommended"), nr = vote("Not Recommended");
+      if (b + rc + nr < 5) continue;
+      if (b > bestVotes) { bestVotes = b; best = [n]; } else if (b === bestVotes && b > 0) best.push(n);
+      if (b + rc > nr) rec.push(n);
+    }
+  }
+  let language = "";
+  const lm = s.match(/<poll\b[^>]*name="language_dependence"[^>]*>([\s\S]*?)<\/poll>/);
+  if (lm) {
+    let top = 0; const lre2 = /<result\b[^>]*value="([^"]*)"[^>]*numvotes="(\d+)"/g; let r2;
+    while ((r2 = lre2.exec(lm[1]))) { const v = Number(r2[2]); if (v > top) { top = v; language = decodeXml(r2[1]); } }
+  }
+  const dm = s.match(/<description>([\s\S]*?)<\/description>/);
+  const description = dm ? cleanDescription(dm[1]) : "";
 
   const wm = s.match(/<averageweight\b([^>]*)\/?>/);
   const weightRaw = wm ? Number(attr(wm[1], "value")) : NaN;
@@ -316,7 +361,50 @@ export function parseBggThing(xml) {
     weight: weight,
     mechanics: mechanics,
     designer: designer,
+    year: one("yearpublished"),
+    publisher: publisher,
+    categories: categories,
+    expansions: expansions,
+    base: base,
+    rating: rating,
+    bayes: bayes,
+    votes: votes,
+    rank: rank,
+    playersBest: best.join(", "),
+    playersRecommended: rangeText(rec),
+    language: language,
+    description: description,
   };
+}
+
+/* ["2","3","4","6"] -> "2-4, 6" (en dash) */
+export function rangeText(list) {
+  const ns = (list || []).map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i < ns.length; i++) {
+    let j = i;
+    while (j + 1 < ns.length && ns[j + 1] === ns[j] + 1) j++;
+    out.push(j > i + 1 ? ns[i] + "\u2013" + ns[j] : j === i + 1 ? ns[i] + ", " + ns[j] : String(ns[i]));
+    i = j;
+  }
+  return out.join(", ");
+}
+
+/* BGG descriptions arrive double-encoded (&amp;#10; for a newline) with the
+   publisher's blurb and sometimes stray markup. Decode twice, drop tags,
+   keep paragraph breaks, and stop at a sentence end before MAX_DESCRIPTION. */
+const NAMED_ENTITIES = { mdash: "\u2014", ndash: "\u2013", hellip: "\u2026", rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201d", ldquo: "\u201c", nbsp: " ", quot: '"', amp: "&", eacute: "\u00e9", egrave: "\u00e8", uuml: "\u00fc", ouml: "\u00f6", auml: "\u00e4", ntilde: "\u00f1", ccedil: "\u00e7", trade: "\u2122", reg: "\u00ae", copy: "\u00a9", bull: "\u2022", times: "\u00d7" };
+export function cleanDescription(raw) {
+  let t = decodeXml(decodeXml(String(raw || "")));
+  t = t.replace(/&([a-z]+);/gi, (m, n) => (NAMED_ENTITIES[n.toLowerCase()] != null ? NAMED_ENTITIES[n.toLowerCase()] : m));
+  t = t.replace(/<[^>]+>/g, " ").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  t = t.replace(/\s*(?:[\u2014\u2013-]+|&mdash;)?\s*description from the publisher\s*$/i, "").trim();
+  if (t.length > MAX_DESCRIPTION) {
+    const cut = t.slice(0, MAX_DESCRIPTION);
+    const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".\n"), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+    t = end > MAX_DESCRIPTION * 0.5 ? cut.slice(0, end + 1) : cut.trim() + "\u2026";
+  }
+  return t;
 }
 
 /* Retail titles carry things BGG never has in its name. Strip those before
@@ -401,6 +489,19 @@ export function gameMetafields(ownerId, bggId, thing, today) {
     if (thing.weight != null) out.push(MF(ownerId, "weight", "number_decimal", thing.weight));
     if (thing.mechanics && thing.mechanics.length) out.push(MF(ownerId, "mechanics", "list.single_line_text_field", JSON.stringify(thing.mechanics)));
     if (thing.designer) out.push(MF(ownerId, "designer", "single_line_text_field", thing.designer));
+    if (thing.year) out.push(MF(ownerId, "year", "number_integer", thing.year));
+    if (thing.publisher) out.push(MF(ownerId, "publisher", "single_line_text_field", thing.publisher));
+    if (thing.categories && thing.categories.length) out.push(MF(ownerId, "categories", "list.single_line_text_field", JSON.stringify(thing.categories)));
+    if (thing.rating != null) out.push(MF(ownerId, "bgg_rating", "number_decimal", Math.round(thing.rating * 10) / 10));
+    if (thing.bayes != null) out.push(MF(ownerId, "bgg_geek_rating", "number_decimal", Math.round(thing.bayes * 100) / 100));
+    if (thing.votes != null) out.push(MF(ownerId, "bgg_votes", "number_integer", thing.votes));
+    if (thing.rank != null) out.push(MF(ownerId, "bgg_rank", "number_integer", thing.rank));
+    if (thing.playersBest) out.push(MF(ownerId, "players_best", "single_line_text_field", thing.playersBest));
+    if (thing.playersRecommended) out.push(MF(ownerId, "players_recommended", "single_line_text_field", thing.playersRecommended));
+    if (thing.language) out.push(MF(ownerId, "language_dependence", "single_line_text_field", thing.language));
+    if (thing.expansions && thing.expansions.length) out.push(MF(ownerId, "expansions", "json", JSON.stringify(thing.expansions)));
+    if (thing.base && thing.base.length) out.push(MF(ownerId, "base_game", "json", JSON.stringify(thing.base)));
+    if (thing.description) out.push(MF(ownerId, "bgg_description", "multi_line_text_field", thing.description));
   }
   out.push(MF(ownerId, "enrich_status", "single_line_text_field", thing ? "ok" : "notfound"));
   out.push(MF(ownerId, "enriched_at", "single_line_text_field", today));
@@ -417,6 +518,8 @@ export function flagMetafields(ownerId, status, today) {
   ];
 }
 
+function jsonOr(v, dflt) { try { const j = JSON.parse(v); return Array.isArray(j) ? j : dflt; } catch (e) { return dflt; } }
+
 export function parseProductPage(data) {
   const pr = data && data.products;
   const nodes = (pr && pr.nodes) || [];
@@ -432,6 +535,9 @@ export function parseProductPage(data) {
       enriched: n.enriched ? String(n.enriched.value || "") : "",
       version: n.ver && n.ver.value ? Number(n.ver.value) : 0,
       bggId: n.bgg && n.bgg.value ? Number(n.bgg.value) : null,
+      handle: String(n.handle || ""),
+      expansions: jsonOr(n.exp && n.exp.value, null),
+      baseGame: jsonOr(n.base && n.base.value, null),
     });
   }
   return {
@@ -451,6 +557,9 @@ const PRODUCT_PAGE = `query($q:String!,$n:Int!,$after:String){
       enriched: metafield(namespace:"exor", key:"enriched_at"){ value }
       ver: metafield(namespace:"exor", key:"enrich_version"){ value }
       bgg: metafield(namespace:"exor", key:"bgg_id"){ value }
+      exp: metafield(namespace:"exor", key:"expansions"){ value }
+      base: metafield(namespace:"exor", key:"base_game"){ value }
+      handle
       variants(first:1){ nodes{ barcode } }
     }
   }
@@ -472,7 +581,32 @@ async function fetchPage(cx, query, cursor, n) {
   const r = await adminGql(cx, PRODUCT_PAGE, { q: query, n: n, after: cursor });
   const page = parseProductPage(r.data);
   page.wait = throttleWait(r.cost, 30);
+  try { await noteHandles(cx, page.items); } catch (e) { cx.log("enrich: handle map: " + msg(e)); }
   return page;
+}
+
+/* bgg id -> product handle for every game already matched, kept in the DO so
+   expansion and base-game links can point at the products we stock. Built as
+   the pages go by; a game enriched before its expansion was mapped gets its
+   links on the next run (relinkItem), without another BGG call. */
+async function bggHandleMap(cx) {
+  if (!cx.mem) cx.mem = {};
+  if (!cx.mem.bggMap) cx.mem.bggMap = (cx.storage && (await cx.storage.get("en:bggmap"))) || {};
+  return cx.mem.bggMap;
+}
+async function noteHandles(cx, items) {
+  if (!cx.storage) return;
+  const map = await bggHandleMap(cx);
+  let changed = false;
+  for (const it of items) if (it.bggId && it.handle && map[it.bggId] !== it.handle) { map[it.bggId] = it.handle; changed = true; }
+  if (changed) await cx.storage.put("en:bggmap", map);
+}
+export function relinkItem(it, map) {
+  const out = [];
+  const fix = (list) => { let ch = false; for (const e of list || []) { if (e && e.id && !e.handle && map[e.id]) { e.handle = map[e.id]; ch = true; } } return ch; };
+  if (fix(it.expansions)) out.push(MF(it.id, "expansions", "json", JSON.stringify(it.expansions)));
+  if (fix(it.baseGame)) out.push(MF(it.id, "base_game", "json", JSON.stringify(it.baseGame)));
+  return out.length ? out : null;
 }
 
 async function writeMetafields(cx, list) {
@@ -530,6 +664,12 @@ export async function enrichGame(cx, item, dateStr) {
     id = choice.id;
   }
   const thing = parseBggThing(await bggGet(cx, "https://boardgamegeek.com/xmlapi2/thing?stats=1&id=" + id));
+  try {
+    const map = await bggHandleMap(cx);
+    for (const e of thing.expansions) if (map[e.id]) e.handle = map[e.id];
+    for (const b of thing.base) if (map[b.id]) b.handle = map[b.id];
+    if (item.handle && cx.storage) { map[id] = item.handle; await cx.storage.put("en:bggmap", map); }
+  } catch (e) { cx.log("enrich: handle links: " + msg(e)); }
   return { status: "ok", metafields: gameMetafields(item.id, id, thing, dateStr) };
 }
 
@@ -821,7 +961,13 @@ export async function enrichTick(cx) {
         }
       }
     } else {
-      run.pending = fresh.map((it) => ({ id: it.id, title: it.title, bggId: it.bggId }));
+      run.pending = fresh.map((it) => ({ id: it.id, title: it.title, bggId: it.bggId, handle: it.handle }));
+      try {
+        const map = await bggHandleMap(cx);
+        const relink = [];
+        for (const it of page.items) { if (fresh.indexOf(it) === -1) { const upd = relinkItem(it, map); if (upd) relink.push(...upd); } }
+        if (relink.length) run.written += await writeMetafields(cx, relink);
+      } catch (e) { cx.log("enrich: relink: " + msg(e)); }
     }
 
     await st.put("en:run", run);
