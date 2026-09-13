@@ -20,8 +20,12 @@
  *   Games   - the barcode is a plain UPC, which no free game database
  *             indexes, so these match on title against BoardGameGeek's
  *             XML API2. A single exact name match is accepted; several
- *             exact matches (reprints, reimplementations) are recorded as
- *             `ambiguous` and NO game data is written - a wrong player
+ *             exact matches (reprints, reimplementations) are settled the
+ *             way BGG's own search settles them - by popularity: one stats
+ *             call for the candidates, the most-rated entry wins when it has
+ *             at least twice the ratings of the runner-up (CATAN, 2026-09-13).
+ *             Otherwise the product is recorded as `ambiguous` and NO game
+ *             data is written - a wrong player
  *             count is worse than none. Setting exor.bgg_id by hand
  *             resolves one permanently: the next sweep sees the id and
  *             fetches it directly, never searching again.
@@ -438,6 +442,27 @@ export function chooseBggMatch(candidates, ourTitle) {
   return { status: "notfound", candidates: list.slice(0, 5).map((c) => c.id) };
 }
 
+/* Several exact matches: BGG's site search lists the well-known entry first
+   because it ranks by popularity. Same here - `thing?stats=1&id=a,b,c` in
+   one call, take the entry with the most user ratings when it clearly leads
+   (at least twice the runner-up); a close call stays ambiguous. */
+export function parseBggRatings(xml) {
+  const out = [];
+  const re = /<item\b[^>]*\bid="(\d+)"[^>]*>([\s\S]*?)<\/item>/g;
+  let m;
+  while ((m = re.exec(String(xml || "")))) {
+    const r = /<usersrated\s+value="(\d+)"/.exec(m[2]);
+    out.push({ id: Number(m[1]), rated: r ? Number(r[1]) : 0 });
+  }
+  return out;
+}
+export function pickPopular(list) {
+  const s = (list || []).filter((x) => x && x.rated > 0).sort((a, b) => b.rated - a.rated);
+  if (!s.length) return null;
+  if (s.length === 1 || s[0].rated >= 2 * s[1].rated) return s[0].id;
+  return null;
+}
+
 /* ---- pure: metafield payloads ------------------------------------------------ */
 
 const MF = (ownerId, key, type, value) => ({ ownerId, namespace: "exor", key, type, value: String(value) });
@@ -659,7 +684,12 @@ export async function enrichGame(cx, item, dateStr) {
     const term = searchTermFor(item.title);
     if (!term) return { status: "notfound", metafields: flagMetafields(item.id, "notfound", dateStr) };
     const xml = await bggGet(cx, "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=" + encodeURIComponent(term));
-    const choice = chooseBggMatch(parseBggSearch(xml), item.title);
+    let choice = chooseBggMatch(parseBggSearch(xml), item.title);
+    if (choice.status === "ambiguous" && choice.candidates.length > 1) {
+      const stats = await bggGet(cx, "https://boardgamegeek.com/xmlapi2/thing?stats=1&id=" + choice.candidates.join(","));
+      const popular = pickPopular(parseBggRatings(stats));
+      if (popular) choice = { status: "ok", id: popular };
+    }
     if (choice.status !== "ok") return { status: choice.status, metafields: flagMetafields(item.id, choice.status, dateStr) };
     id = choice.id;
   }
