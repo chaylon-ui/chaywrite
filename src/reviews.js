@@ -33,7 +33,7 @@ const REVIEWS_CACHE_CONTROL = `public, max-age=${BROWSER_TTL_S}, s-maxage=${REVI
    v2: six stores across both provinces (was three, PEI-only).
    v3: per-city discovery (the province queries surfaced two of six).
    v4: browser max-age 5 min (the cached entries carried the 6h header). */
-const REVIEWS_CACHE_V = "6"; // v5: place id per review (store pages match on it). v6: four-star reviews kept, newest-sort merged, 24 returned (owner 2026-09-13: rotate, 4-5 stars, newest first)
+const REVIEWS_CACHE_V = "7"; // v7: size talk ("small store") rejected. // v5: place id per review (store pages match on it). v6: four-star reviews kept, newest-sort merged, 24 returned (owner 2026-09-13: rotate, 4-5 stars, newest first)
 
 // Words/phrases that mark a review as not-showcase material even at five
 // stars. Deliberately trigger-happy: a false positive only hides one quote,
@@ -47,6 +47,10 @@ const NEGATIVE_RE = new RegExp(
     "won'?t be (?:back|returning)", "not worth", "long wait", "too long",
     "sadly", "unfortunately", "however", "complaint", "damaged", "broken",
     "sketchy", "dishonest", "overcharged", "stale",
+    // size talk (owner 2026-09-13: "the store isn't small")
+    "\\bsmall(?:er|ish)?\\b", "\\btiny\\b", "\\bcramped\\b", "\\blittle (?:store|shop|place)\\b",
+    "limited (?:selection|stock|space|room)", "not (?:a lot|much|a whole lot) (?:of )?(?:space|room|selection|stock)",
+    "hole[ -]in[ -]the[ -]wall", "\\bcompact\\b",
   ].join("|"),
   "i"
 );
