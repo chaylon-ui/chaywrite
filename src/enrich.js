@@ -867,6 +867,7 @@ async function finish(cx, run, error) {
     " seen=" + run.seen + " written=" + run.written + " ok=" + run.ok +
     " ambiguous=" + run.ambiguous + " notfound=" + run.notfound + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
+  refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
   return arm(cx, dayOf(now) > run.day ? now + 1000 : nextRunAt(now), "run finished");
 }
 
@@ -1185,8 +1186,184 @@ export async function seriesList(cx) {
   return { ok: true, cached: false, generated: new Date(now).toISOString(), pages: pages, count: names.length, series: names };
 }
 
+/* ---- "Games like this" (owner 2026-09-14) -------------------------------------
+   A chip on a board game's Classification card (category or mechanism)
+   opens the other board games we stock that share it. The index behind it
+   is every published, in-stock Board Games product with the exor.* facts
+   the nightly sweep wrote, read from the Admin API in pages, kept in this
+   DO's storage in chunks (a value is capped at 128 KB), refreshed after
+   every nightly run and whenever an answer finds it older than
+   GINDEX_MAX_AGE_MS (the stale copy answers first, the rebuild follows). */
+export const GINDEX_MAX_AGE_MS = 3 * 3600000;
+export const GINDEX_CHUNK = 150;
+export const GINDEX_PAGES_MAX = 40;
+export const GINDEX_QUERY = GAMES_QUERY + " AND published_status:published AND inventory_total:>0";
+export const LIKE_KINDS = { category: "c", mechanism: "m", designer: "d" };
+export const LIKE_LIMIT_MAX = 48;
+
+const GINDEX_PAGE = `query($q:String!,$n:Int!,$after:String){
+  products(first:$n, query:$q, sortKey:ID, after:$after){
+    pageInfo{ hasNextPage endCursor }
+    nodes{
+      id handle title totalInventory
+      featuredImage{ url }
+      priceRangeV2{ minVariantPrice{ amount } }
+      variants(first:1){ nodes{ id availableForSale } }
+      cat: metafield(namespace:"exor", key:"categories"){ value }
+      mech: metafield(namespace:"exor", key:"mechanics"){ value }
+      rating: metafield(namespace:"exor", key:"bgg_rating"){ value }
+      rank: metafield(namespace:"exor", key:"bgg_rank"){ value }
+      designer: metafield(namespace:"exor", key:"designer"){ value }
+      pmin: metafield(namespace:"exor", key:"players_min"){ value }
+      pmax: metafield(namespace:"exor", key:"players_max"){ value }
+      ptmin: metafield(namespace:"exor", key:"playtime_min"){ value }
+      ptmax: metafield(namespace:"exor", key:"playtime_max"){ value }
+    }
+  }
+}`;
+
+const numOr = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+const gidNum = (gid) => String(gid || "").replace(/^gid:\/\/shopify\/\w+\//, "");
+
+export function parseIndexPage(data) {
+  const pr = data && data.products;
+  const nodes = (pr && pr.nodes) || [];
+  const items = [];
+  for (const n of nodes) {
+    if (!n || !n.handle) continue;
+    const v = (n.variants && n.variants.nodes && n.variants.nodes[0]) || null;
+    const pmin = n.pmin && n.pmin.value, pmax = n.pmax && n.pmax.value;
+    const tmin = n.ptmin && n.ptmin.value, tmax = n.ptmax && n.ptmax.value;
+    items.push({
+      h: n.handle,
+      t: String(n.title || ""),
+      q: numOr(n.totalInventory, 0),
+      i: (n.featuredImage && n.featuredImage.url) || "",
+      p: Math.round(numOr(n.priceRangeV2 && n.priceRangeV2.minVariantPrice && n.priceRangeV2.minVariantPrice.amount, 0) * 100),
+      v: v && v.availableForSale !== false ? gidNum(v.id) : "",
+      c: jsonOr(n.cat && n.cat.value, []).map(String),
+      m: jsonOr(n.mech && n.mech.value, []).map(String),
+      r: n.rating && n.rating.value ? numOr(n.rating.value, null) : null,
+      k: n.rank && n.rank.value ? numOr(n.rank.value, null) : null,
+      d: n.designer && n.designer.value ? String(n.designer.value) : "",
+      pl: pmin ? (pmax && pmax !== pmin ? pmin + "–" + pmax : String(pmin)) : "",
+      tm: tmin ? (tmax && tmax !== tmin ? tmin + "–" + tmax : String(tmin)) : "",
+    });
+  }
+  return {
+    items,
+    cursor: (pr && pr.pageInfo && pr.pageInfo.endCursor) || null,
+    hasNext: !!(pr && pr.pageInfo && pr.pageInfo.hasNextPage),
+  };
+}
+
+async function buildGamesIndex(cx) {
+  if (!cx.mem) cx.mem = {};
+  const games = [];
+  let cursor = null, pages = 0;
+  for (;;) {
+    let r;
+    try { r = await adminGql(cx, GINDEX_PAGE, { q: GINDEX_QUERY, n: PAGE, after: cursor }); }
+    catch (e) {
+      if (e && e.throttled) { await cx.sleep(Math.max(1000, throttleWait(e.cost, 60))); continue; }
+      throw e;
+    }
+    const page = parseIndexPage(r.data);
+    for (const it of page.items) games.push(it);
+    pages++;
+    if (!page.hasNext || pages >= GINDEX_PAGES_MAX) break;
+    cursor = page.cursor;
+    const w = throttleWait(r.cost, 60);
+    if (w) await cx.sleep(w);
+  }
+  const builtAt = cx.now();
+  const chunks = Math.ceil(games.length / GINDEX_CHUNK);
+  const put = { "en:gindex:meta": { builtAt, count: games.length, chunks, pages } };
+  for (let i = 0; i < chunks; i++) put["en:gindex:" + i] = games.slice(i * GINDEX_CHUNK, (i + 1) * GINDEX_CHUNK);
+  await cx.storage.put(put);
+  const old = cx.mem.gindexChunks || 0;
+  for (let i = chunks; i < old; i++) { try { await cx.storage.delete("en:gindex:" + i); } catch (e) { /* stale chunk, harmless */ } }
+  cx.mem.gindexChunks = chunks;
+  cx.mem.gindex = { builtAt, games };
+  cx.log("enrich: games index built: " + games.length + " in-stock games over " + pages + " pages");
+  return cx.mem.gindex;
+}
+
+async function loadGamesIndex(cx) {
+  if (!cx.mem) cx.mem = {};
+  if (cx.mem.gindex) return cx.mem.gindex;
+  const meta = await cx.storage.get("en:gindex:meta");
+  if (!meta || !meta.chunks) return null;
+  const keys = [];
+  for (let i = 0; i < meta.chunks; i++) keys.push("en:gindex:" + i);
+  const got = await cx.storage.get(keys);
+  const games = [];
+  for (const k of keys) { const part = got && got.get ? got.get(k) : null; if (Array.isArray(part)) for (const g of part) games.push(g); }
+  cx.mem.gindexChunks = meta.chunks;
+  cx.mem.gindex = { builtAt: meta.builtAt, games };
+  return cx.mem.gindex;
+}
+
+/* Kept refreshed in the background: after a nightly run, and whenever an
+   answer finds the index older than GINDEX_MAX_AGE_MS. One rebuild at a time. */
+function refreshGamesIndexLater(cx) {
+  if (!cx.mem) cx.mem = {};
+  if (cx.mem.gindexBuilding) return;
+  cx.mem.gindexBuilding = true;
+  const p = buildGamesIndex(cx).catch((e) => cx.log("enrich: games index rebuild failed: " + msg(e)))
+    .then(() => { cx.mem.gindexBuilding = false; });
+  if (cx.waitUntil) cx.waitUntil(p);
+}
+
+const foldKey = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+export function likeGames(games, kind, value, exclude, limit) {
+  const field = LIKE_KINDS[kind];
+  const want = foldKey(value);
+  if (!field || !want) return { count: 0, games: [] };
+  const ex = foldKey(exclude);
+  const hit = (games || []).filter((g) => {
+    if (!g || !g.h || (ex && foldKey(g.h) === ex)) return false;
+    if (field === "d") return foldKey(g.d) === want;
+    return Array.isArray(g[field]) && g[field].some((x) => foldKey(x) === want);
+  });
+  hit.sort((a, b) => {
+    const ra = a.r == null ? -1 : a.r, rb = b.r == null ? -1 : b.r;
+    if (rb !== ra) return rb - ra;
+    return String(a.t).localeCompare(String(b.t));
+  });
+  const n = Math.max(1, Math.min(LIKE_LIMIT_MAX, numOr(limit, 24)));
+  return {
+    count: hit.length,
+    games: hit.slice(0, n).map((g) => ({
+      handle: g.h, title: g.t, url: "/products/" + g.h,
+      image: g.i ? g.i + (g.i.indexOf("?") > -1 ? "&" : "?") + "width=360" : null,
+      price: (g.p / 100).toFixed(2), qty: g.q, variant: g.v || null,
+      rating: g.r, rank: g.k, players: g.pl, time: g.tm, designer: g.d,
+    })),
+  };
+}
+
+async function gamesLike(cx, url) {
+  const kind = String(url.searchParams.get("kind") || "").trim().toLowerCase().slice(0, 20);
+  const value = String(url.searchParams.get("value") || "").trim().slice(0, 80);
+  const exclude = String(url.searchParams.get("exclude") || "").trim().slice(0, 200);
+  const limit = url.searchParams.get("limit");
+  if (!LIKE_KINDS[kind] || !value) return { ok: false, error: "kind (category|mechanism|designer) and value are required" };
+  let idx = await loadGamesIndex(cx);
+  if (!idx) {
+    if (!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) return { ok: false, error: "SHOPIFY_ADMIN_TOKEN not configured" };
+    idx = await buildGamesIndex(cx);
+  } else if (cx.now() - idx.builtAt > GINDEX_MAX_AGE_MS) {
+    refreshGamesIndexLater(cx);
+  }
+  const res = likeGames(idx.games, kind, value, exclude, limit);
+  return { ok: true, kind, value, builtAt: new Date(idx.builtAt).toISOString(), indexed: idx.games.length, count: res.count, games: res.games };
+}
+
 export async function enrichDoFetch(cx, request, url) {
   await armEnrichAlarm(cx);
+  if (url.pathname === "/_en/like") return doJson(await gamesLike(cx, url));
   if (url.pathname === "/_en/series") return doJson(await seriesList(cx));
   if (url.pathname === "/_en/al-check") return doJson(await aniListCheck(cx));
   if (url.pathname === "/_en/status") return doJson(await statusOf(cx));
@@ -1198,16 +1375,19 @@ export async function enrichDoFetch(cx, request, url) {
 export async function serveEnrich(request, env, ctx) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  const like = url.pathname === "/games/like.json";
   const inner = url.pathname === "/enrich/run" ? "/_en/run"
     : url.pathname === "/enrich/bgg-check" ? "/_en/bgg-check"
     : url.pathname === "/enrich/al-check" ? "/_en/al-check"
     : url.pathname === "/enrich/series.json" ? "/_en/series"
+    : like ? "/_en/like" + url.search
     : "/_en/status";
   const stub = env.ROOM.get(env.ROOM.idFromName(ENRICH_DO));
   const r = await stub.fetch(new Request(url.origin + inner, { method: request.method }));
   const body = await r.text();
   const h = new Headers(CORS);
   h.set("content-type", "application/json");
-  h.set("cache-control", "no-store");
+  // the like list is public and changes slowly: let the edge hold it a while
+  h.set("cache-control", like && r.status === 200 ? "public, max-age=600" : "no-store");
   return new Response(body, { status: r.status, headers: h });
 }

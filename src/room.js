@@ -644,6 +644,8 @@ export class BinderRoom {
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       log: (s) => console.log(s),
       mem: this.enMem,
+      // the "games like this" index refreshes after the answer goes out
+      waitUntil: (p) => { if (this.state.waitUntil) this.state.waitUntil(p); },
     };
   }
 
