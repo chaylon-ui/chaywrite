@@ -1,0 +1,104 @@
+name: BinderPOS portal rules sync
+
+# Owner directive (2026-09-14): read the buylist percentages straight from
+# the BinderPOS portal with the store's STAFF LOGIN, so the card-page
+# "What we pay" estimate carries the real rule for every price band and
+# game (the public feed only exposes rule output on cheap cards, so a
+# $1,915 Ultra Ball estimated 45/55 while the portal's rule is 55/70).
+#
+# Mechanism, no browser: the portal (portal.binderpos.com, a React SPA)
+# signs staff in through Firebase Auth (project hobby-pos; the web API key
+# below is the public one shipped in the portal's own bundle) and then
+# calls api.binderpos.com with the Firebase ID token as a Bearer header.
+# The two pages the owner pointed at map to:
+#   #/buylists/rules    -> GET /api/buylist/rule/list, /api/buylist/rule/byId/{id}
+#   #/settings/pricing  -> GET /api/settings/priceRulesForGames (+ /default)
+#
+# Secrets: BINDERPOS_LOGIN_EMAIL + BINDERPOS_LOGIN_PASSWORD (repo Actions
+# secrets). They are only ever passed to Firebase's sign-in endpoint; the
+# resulting token is masked in the log; nothing else is printed but the
+# store's own rule data.
+#
+# dry_run=true (default until the converter is confirmed): sign in, fetch,
+# print the JSON shapes, write nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = sign in + print the rule payloads only"
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    env:
+      API: https://api.binderpos.com
+      FIREBASE_KEY: AIzaSyDYmFPRKRkVFM9SQvbtCAT8oWKh4RhBGXg
+      BRANCH: claude/shopify-site-improvements-ztgdt8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/shopify-site-improvements-ztgdt8
+
+      - name: Sign in (Firebase, staff login from secrets)
+        id: login
+        env:
+          EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
+          PASSWORD: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
+        run: |
+          set +x
+          if [ -z "$EMAIL" ] || [ -z "$PASSWORD" ]; then echo "::error::BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD not set"; exit 1; fi
+          jq -nc --arg e "$EMAIL" --arg p "$PASSWORD" '{email:$e,password:$p,returnSecureToken:true}' > /tmp/login.json
+          code=$(curl -sS --max-time 30 -o /tmp/auth.json -w '%{http_code}' -H 'content-type: application/json' \
+            --data @/tmp/login.json "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$FIREBASE_KEY" || echo ERR)
+          rm -f /tmp/login.json
+          echo "firebase sign-in HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "sign-in failed:"; jq -c '{error: .error.message}' /tmp/auth.json 2>/dev/null || head -c 300 /tmp/auth.json; echo
+            exit 1
+          fi
+          TOKEN=$(jq -r '.idToken // empty' /tmp/auth.json)
+          rm -f /tmp/auth.json
+          if [ -z "$TOKEN" ]; then echo "::error::no idToken in sign-in response"; exit 1; fi
+          echo "::add-mask::$TOKEN"
+          printf '%s' "$TOKEN" > /tmp/token
+          chmod 600 /tmp/token
+          echo "signed in (token length ${#TOKEN})"
+
+      - name: Fetch the rules + pricing payloads
+        run: |
+          set +x
+          TOKEN=$(cat /tmp/token)
+          get() { # $1 label, $2 path
+            code=$(curl -sS --max-time 40 -o "/tmp/$1.json" -w '%{http_code}' -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API$2" || echo ERR)
+            echo "=== $1  GET $2  -> HTTP $code, $(wc -c < "/tmp/$1.json") bytes"
+            if jq -e . "/tmp/$1.json" >/dev/null 2>&1; then jq -c . "/tmp/$1.json" | cut -c1-6000; else head -c 600 "/tmp/$1.json"; fi
+            echo
+          }
+          get rulelist   /api/buylist/rule/list
+          get pricerules /api/settings/priceRulesForGames
+          get pricedef   /api/settings/priceRulesForGames/default
+          get v2games    /apiv2/customer/pricing/games
+          get v2default  /apiv2/customer/pricing/default
+          get settings   /api/settings/forMe
+          get games      /api/cards/games/supported
+          # One rule in full (the "View" eye icon in the portal), to learn the per-rarity / per-condition shape.
+          first=$(jq -r '(.. | objects | select(has("id")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | head -1)
+          if [ -n "$first" ]; then get rulebyid "/api/buylist/rule/byId/$first"; fi
+          # Every rule in full, saved for the converter (printed compactly).
+          mkdir -p /tmp/rules
+          for id in $(jq -r '(.. | objects | select(has("id")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | sort -u | head -60); do
+            curl -sS --max-time 40 -o "/tmp/rules/$id.json" -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API/api/buylist/rule/byId/$id" || true
+            sleep 0.3
+          done
+          echo "=== rules fetched in full: $(ls /tmp/rules | wc -l)"
+          for f in /tmp/rules/*.json; do jq -c . "$f" 2>/dev/null | cut -c1-2500; done
+
+      - name: Scrub
+        if: always()
+        run: rm -f /tmp/token
