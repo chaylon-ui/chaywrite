@@ -668,6 +668,80 @@ export async function servePickupDone(env, did) {
 const BETTER_TTL_S = 600;
 const DECK_TTL_S = 120;   // deck lookups are inventory-sensitive — brief cache only
 
+/* ---------------- Exact-title matches for the search page ----------------
+   The storefront's search (the Cloud Search app on /a/search, and Shopify's
+   own /search behind the by-game chips) scores every field, so "mana vault"
+   leads with Omnath, Locus of MANA [From the VAULT: Legends] and the actual
+   Mana Vault printings sit pages down (owner, 2026-09-14). This answers the
+   question the shopper actually asked - "the product whose NAME is what I
+   typed" - straight from the Admin API (published products only, so it can
+   never show something the storefront hides), and the search page draws it
+   as a strip above the app's results. Tiers: 0 the base title (before its
+   "[Set]" / trailing "(Foil Etched)") equals the words; 1 it starts with
+   them; 2 it carries them as a phrase; 3 only the full title does (a sealed
+   "From the Vault: Lore" for "vault lore"). Within a tier: in stock first,
+   then cheapest. Public product data only; edge-cached 5 min. */
+const EXACT_TTL_S = 300;
+const EXACT_MAX = 40;
+
+function foldTitle(s) {
+  return String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export async function serveExact(request, env, ctx) {
+  const cors = { "access-control-allow-origin": "*" };
+  const url = new URL(request.url);
+  const q = String(url.searchParams.get("q") || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  const qn = foldTitle(q);
+  const out = { q, count: 0, items: [] };
+  if (qn.length < 2 || !(env && env.SHOPIFY_ADMIN_TOKEN)) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/search/exact.json?k=" + encodeURIComponent(qn), request.url).toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  let products = null;
+  try { products = await adminSearch(q, env, "published_status:published", 2); } catch { products = null; }
+  const rows = [];
+  for (const p of (products || [])) {
+    const base = foldTitle(baseName(p.title));
+    const full = foldTitle(p.title);
+    let tier = -1;
+    if (base === qn || baseName(p.title).toLowerCase().split(/\s*\/\/\s*/).some((f) => foldTitle(f) === qn)) tier = 0;
+    else if (base.startsWith(qn + " ")) tier = 1;
+    else if ((" " + base + " ").indexOf(" " + qn + " ") >= 0) tier = 2;
+    else if ((" " + full + " ").indexOf(" " + qn + " ") >= 0) tier = 3;
+    if (tier < 0) continue;
+    let price = null, avail = null, availPrice = null, variant = null;
+    for (const v of (p.variants || [])) {
+      const pr = parseFloat(v.price);
+      if (!(pr > 0)) continue;
+      if (price === null || pr < price) price = pr;
+      if (v.available && (availPrice === null || pr < availPrice)) { availPrice = pr; variant = v.id; avail = true; }
+    }
+    if (price === null) continue;
+    rows.push({
+      tier,
+      title: p.title,
+      name: baseName(p.title),
+      set: (p.title.match(/\[([^\]]+)\]/) || [, ""])[1] || "",
+      handle: p.handle,
+      url: "https://exorgames.com/products/" + p.handle,
+      image: (p.images && p.images[0] && p.images[0].src) || null,
+      price: (avail ? availPrice : price).toFixed(2),
+      available: !!avail,
+      variant: variant,
+      type: p.product_type || "",
+    });
+  }
+  rows.sort((a, b) => (a.tier - b.tier) || ((b.available ? 1 : 0) - (a.available ? 1 : 0)) || (parseFloat(a.price) - parseFloat(b.price)) || a.title.localeCompare(b.title));
+  out.items = rows.slice(0, EXACT_MAX).map(({ tier, ...r }) => ({ ...r, tier }));
+  out.count = out.items.length;
+  const res = Response.json(out, { headers: { ...cors, "cache-control": `public, max-age=${EXACT_TTL_S}` } });
+  if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 export async function serveInstock(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
