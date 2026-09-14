@@ -1182,9 +1182,28 @@ const SISTERS_MAX = 12;
    store name and that store's product URL for the UI to label clearly. */
 // Games the deck builder does not lane but the product page still asks about.
 const SISTER_ONLY_MATCH = { lorcana: /lorcana/i, fab: /flesh\s*and\s*blood/i };
-async function findAtSisters(name, game) {
+// Product page (owner 2026-09-14, Mega Charizard X ex: "not finding the
+// exact card at the other sites"): with opts.set / opts.num from the page's
+// own title, the same printing (set bracket + collector number) ranks first
+// at every store, the same set second, any other printing last, and each
+// store's answer says which it was so the band can label it. The deck
+// builder passes no opts and keeps its cheapest-any-printing behaviour.
+async function findAtSisters(name, game, opts) {
+  opts = opts || {};
   const gmatch = (GAMES[game] && GAMES[game].match) || SISTER_ONLY_MATCH[game] || /^mtg\b/i;
   const want = baseName(name).toLowerCase();
+  const normNum = (x) => String(x || "").trim().toLowerCase().replace(/^0+(?=\d)/, "").replace(/\s+/g, "");
+  const setOf = (t) => ((String(t || "").match(/\[([^\]]+)\]/) || [, ""])[1] || "").trim();
+  const numOf = (t) => { const m = String(t || "").split("[")[0].match(/\(([^)]*\d[^)]*)\)\s*$/); return m ? m[1].trim() : ""; };
+  const wantSet = String(opts.set || "").trim().toLowerCase();
+  const wantNum = normNum(opts.num);
+  const tierOf = (t) => {
+    if (!wantSet) return 0;
+    const sameSet = setOf(t).toLowerCase() === wantSet;
+    if (sameSet && (!wantNum || normNum(numOf(t)) === wantNum)) return 0;
+    if (sameSet) return 1;
+    return 2;
+  };
   const codeMode = CODE_RE.test(name);
   const headers = { accept: "application/json", "user-agent": "ExorDeckBuilder/1.0 (+workers.dev)" };
   const abs = (u) => (typeof u === "string" && u.startsWith("//") ? "https:" + u : u);
@@ -1205,8 +1224,9 @@ async function findAtSisters(name, game) {
       // `type` authoritatively.
       const matches = hits.filter((h) => h && h.title && h.handle && h.available !== false
         && (codeMode || nameMatches(h.title, want)));
+      if (wantSet) matches.sort((a, b) => tierOf(a.title) - tierOf(b.title));
       let best = null;
-      for (const h of matches.slice(0, 2)) {   // hydrate at most 2 printings per store
+      for (const h of matches.slice(0, wantSet ? 3 : 2)) {   // hydrate at most 2 printings per store (3 when a printing is wanted)
         try {
           const c2 = new AbortController();
           const t2 = setTimeout(() => c2.abort(), 3500);
@@ -1226,10 +1246,12 @@ async function findAtSisters(name, game) {
             if (typeof v.inventory_quantity === "number" && v.inventory_quantity > 0) pq += v.inventory_quantity;
             else pqKnown = false;
           }
+          const tier = tierOf(p.title);
           for (const v of (p.variants || [])) {
             if (!v.available || !(v.price > 0) || v.price / 100 >= 99999) continue;
-            if (!best || v.price < best.cents) {
+            if (!best || tier < best.tier || (tier === best.tier && v.price < best.cents)) {
               best = {
+                tier,
                 cents: v.price,
                 qty: pqKnown && pq > 0 ? pq : null,
                 title: String(h.title),
@@ -1245,11 +1267,13 @@ async function findAtSisters(name, game) {
       return best ? { store: s.store, ...best } : null;
     } catch { return null; }
   }));
-  const hits = per.filter(Boolean).sort((a, b) => a.cents - b.cents);
+  const hits = per.filter(Boolean).sort((a, b) => (a.tier - b.tier) || (a.cents - b.cents));
   if (!hits.length) return null;
   const win = hits[0];
+  const printingOf = (h) => (h.tier === 0 ? "exact" : h.tier === 1 ? "set" : "other");
   return {
     store: win.store,
+    printing: printingOf(win),
     name: baseName(win.title),
     set: (win.title.match(/\[([^\]]+)\]/) || [, ""])[1] || "",
     condition: win.condition || "",
@@ -1263,6 +1287,9 @@ async function findAtSisters(name, game) {
     // clickable to that store's own product page).
     stores: hits.map((h) => ({
       store: h.store,
+      printing: printingOf(h),
+      set: setOf(h.title),
+      num: numOf(h.title),
       price: (h.cents / 100).toFixed(2),
       qty: typeof h.qty === "number" ? h.qty : null,
       condition: h.condition || "",
@@ -1282,13 +1309,19 @@ export async function serveSisterCheck(request, ctx) {
   const url = new URL(request.url);
   const game = String(url.searchParams.get("game") || "mtg").toLowerCase().slice(0, 20);
   const names = [...new Set(String(url.searchParams.get("names") || "").split("|").map((s) => s.trim().slice(0, 80)).filter((s) => s.length >= 2))].slice(0, 6);
+  // Product page only (one name): the page's full title names the printing.
+  const title = names.length === 1 ? String(url.searchParams.get("title") || "").trim().slice(0, 160) : "";
+  const opts = title ? {
+    set: ((title.match(/\[([^\]]+)\]/) || [, ""])[1] || "").trim(),
+    num: (((title.split("[")[0].match(/\(([^)]*\d[^)]*)\)\s*$/) || [, ""])[1]) || "").trim(),
+  } : {};
   const out = { game, count: 0, results: [] };
   if (!names.length) return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/sisterstock.json?g=" + game + "&n=" + encodeURIComponent(names.map((n) => n.toLowerCase()).sort().join("|")), request.url).toString());
+  const cacheKey = new Request(new URL("/sisterstock.json?g=" + game + "&n=" + encodeURIComponent(names.map((n) => n.toLowerCase()).sort().join("|")) + (title ? "&t=" + encodeURIComponent(title.toLowerCase()) : ""), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  const found = await Promise.all(names.map((n) => findAtSisters(n, game).catch(() => null)));
+  const found = await Promise.all(names.map((n) => findAtSisters(n, game, opts).catch(() => null)));
   names.forEach((n, i) => out.results.push({ q: n, sister: found[i] || null }));
   out.count = out.results.filter((r) => r.sister).length;
   const res = Response.json(out, { headers: { ...cors, "cache-control": "public, max-age=" + SISTER_CHECK_TTL_S } });
