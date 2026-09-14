@@ -70,14 +70,17 @@ jobs:
           chmod 600 /tmp/token
           echo "signed in (token length ${#TOKEN})"
 
-      - name: Fetch the rules + pricing payloads
+      - name: Fetch the rules + pricing payloads (compact shape report)
         run: |
           set +x
           TOKEN=$(cat /tmp/token)
+          TRIM='walk(if type=="array" and length>3 then .[:3] else . end)'
           get() { # $1 label, $2 path
             code=$(curl -sS --max-time 40 -o "/tmp/$1.json" -w '%{http_code}' -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API$2" || echo ERR)
             echo "=== $1  GET $2  -> HTTP $code, $(wc -c < "/tmp/$1.json") bytes"
-            if jq -e . "/tmp/$1.json" >/dev/null 2>&1; then jq -c . "/tmp/$1.json" | cut -c1-6000; else head -c 600 "/tmp/$1.json"; fi
+            if jq -e . "/tmp/$1.json" >/dev/null 2>&1; then
+              jq -c "if type==\"array\" then {n:length, first:(.[0]|$TRIM)} else $TRIM end" "/tmp/$1.json" | cut -c1-1500
+            else head -c 300 "/tmp/$1.json"; fi
             echo
           }
           get rulelist   /api/buylist/rule/list
@@ -85,19 +88,22 @@ jobs:
           get pricedef   /api/settings/priceRulesForGames/default
           get v2games    /apiv2/customer/pricing/games
           get v2default  /apiv2/customer/pricing/default
-          get settings   /api/settings/forMe
           get games      /api/cards/games/supported
-          # One rule in full (the "View" eye icon in the portal), to learn the per-rarity / per-condition shape.
-          first=$(jq -r '(.. | objects | select(has("id")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | head -1)
-          if [ -n "$first" ]; then get rulebyid "/api/buylist/rule/byId/$first"; fi
-          # Every rule in full, saved for the converter (printed compactly).
           mkdir -p /tmp/rules
-          for id in $(jq -r '(.. | objects | select(has("id")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | sort -u | head -60); do
+          for id in $(jq -r '(.. | objects | select(has("id")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | sort -un | head -60); do
             curl -sS --max-time 40 -o "/tmp/rules/$id.json" -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API/api/buylist/rule/byId/$id" || true
             sleep 0.3
           done
           echo "=== rules fetched in full: $(ls /tmp/rules | wc -l)"
-          for f in /tmp/rules/*.json; do jq -c . "$f" 2>/dev/null | cut -c1-2500; done
+          n=0
+          for f in $(ls /tmp/rules/*.json | sort -V); do
+            n=$((n+1))
+            if [ $n -le 4 ]; then echo "--- sample $(basename $f)"; jq -c "$TRIM" "$f" 2>/dev/null | cut -c1-1500; fi
+          done
+          echo "=== scalar table (one line per rule: every non-array, non-object field)"
+          for f in $(ls /tmp/rules/*.json | sort -V); do
+            jq -c 'if type=="object" then with_entries(select((.value|type)!="array" and (.value|type)!="object")) else . end' "$f" 2>/dev/null | cut -c1-300
+          done
 
       - name: Scrub
         if: always()
