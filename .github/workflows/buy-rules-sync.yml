@@ -1,5 +1,12 @@
 name: Buy-rules daily sync
 
+# SUPERSEDED (2026-09-15) by binderpos-portal-sync.yml, which reads the
+# portal's Buylist Rules directly with the staff login. This feed-derived
+# job now stands down whenever public/buy-rules.json carries "_portal":
+# true (it leaves the file untouched, so nothing is committed). It stays
+# as the no-credential fallback: if the portal login ever stops working
+# and the owner deletes the portal-sourced file, this derives again.
+#
 # Reads the store's buylist percentages out of BinderPOS EVERY DAY and
 # rewrites public/buy-rules.json — nothing hardcoded. Mechanism: BinderPOS
 # applies ("syncs") the portal's Buylist Rules onto card variants as
@@ -51,7 +58,18 @@ jobs:
         with:
           ref: claude/shopify-site-improvements-ztgdt8
 
+      - name: Stand down when the portal sync owns the file
+        id: guard
+        run: |
+          if jq -e '._portal == true' public/buy-rules.json >/dev/null 2>&1; then
+            echo "public/buy-rules.json is portal-sourced (binderpos-portal-sync.yml) - feed derivation stands down"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=0" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Sample BinderPOS percent stamps per game (titled probes — fast path)
+        if: ${{ steps.guard.outputs.skip != '1' }}
         timeout-minutes: 12
         run: |
           : > /tmp/samples.ndjson
@@ -85,6 +103,7 @@ jobs:
           echo "per game:"; jq -r .g /tmp/samples.ndjson | sort | uniq -c || true
 
       - name: Derive per-game, per-condition tiered percentages + guardrails
+        if: ${{ steps.guard.outputs.skip != '1' }}
         run: |
           python3 - <<'PY'
           import json, re, statistics, collections, datetime
@@ -238,7 +257,7 @@ jobs:
 
       - name: Commit when changed
         id: commit
-        if: ${{ inputs.dry_run != 'true' }}
+        if: ${{ inputs.dry_run != 'true' && steps.guard.outputs.skip != '1' }}
         run: |
           if git diff --quiet public/buy-rules.json; then
             echo "buy-rules.json unchanged - nothing to commit"
