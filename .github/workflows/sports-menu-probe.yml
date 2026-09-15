@@ -1,9 +1,10 @@
 name: sports-menu-probe
 # Read-only: the qikify Smart Menu draws the header from JSON in the page,
 # so the Sports Cards flyout only exists in a browser. Open the preview
-# theme, hover the top item, then the sub item inside the open dropdown,
-# print the flyout's markup (svg/iframe collapsed), the box and computed
-# size of every image and heading in it, and a reduced JPEG of the open
+# theme, hover the top item, then the sub item inside the open dropdown
+# (a TAB: its content is rendered in a sibling panel, not inside its li),
+# print the visible panel that contains the given child label, the box and
+# computed size of every element in it, and a reduced JPEG of the open
 # menu as base64 (the sandbox cannot fetch artifacts), for CSS work.
 on:
   workflow_dispatch:
@@ -16,6 +17,10 @@ on:
         description: Sub item label
         required: false
         default: "Sports Cards"
+      child:
+        description: A label that appears inside the sub item's panel
+        required: false
+        default: "Hockey Sealed Product"
 
 permissions: {}
 
@@ -26,6 +31,7 @@ jobs:
     env:
       TOP: ${{ inputs.top }}
       SUB: ${{ inputs.sub }}
+      CHILD: ${{ inputs.child }}
     steps:
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
@@ -59,38 +65,37 @@ jobs:
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
               const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
               const links = [...document.querySelectorAll('.tmenu_item--root a, .tmenu_item--root span')].filter(vis);
-              const texts = links.map(a => norm(a.textContent)).filter(t => t && t.length < 40);
               const hit = links.find(a => norm(a.textContent) === norm(label)) || links.find(a => norm(a.textContent).startsWith(norm(label)));
-              if (!hit) return { texts: [...new Set(texts)].slice(0, 60) };
+              if (!hit) return null;
               const r = hit.getBoundingClientRect();
               return { box: [r.x, r.y, r.width, r.height], tag: hit.tagName, cls: hit.className };
             }, process.env.SUB);
-            console.log('SUB', process.env.SUB, JSON.stringify(subBox).slice(0, 1500));
-            if (subBox.box) { await page.mouse.move(subBox.box[0] + subBox.box[2] / 2, subBox.box[1] + subBox.box[3] / 2); await sleep(1600); }
-            const out = await page.evaluate((subLabel) => {
+            console.log('SUB', process.env.SUB, JSON.stringify(subBox));
+            if (subBox && subBox.box) { await page.mouse.move(subBox.box[0] + subBox.box[2] / 2, subBox.box[1] + subBox.box[3] / 2); await sleep(1800); }
+            const out = await page.evaluate((childLabel) => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
               const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0'; };
-              const cn = (el) => el.tagName + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/).slice(0, 5).join('.') : '');
-              const link = [...document.querySelectorAll('.tmenu_item--root a, .tmenu_item--root span')].filter(vis).find(a => norm(a.textContent) === norm(subLabel));
-              const li = link ? link.closest('li, .tmenu_item') : null;
-              const panels = li ? [...li.querySelectorAll('ul, div')].filter(e => vis(e) && e !== li && e.getBoundingClientRect().width > 200) : [];
-              panels.sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return rb.width * rb.height - ra.width * ra.height; });
-              const panel = panels[0];
-              if (!panel) return { found: !!li, liCls: li ? cn(li) : null, html: '', rows: [] };
+              const cn = (el) => el.tagName + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/).slice(0, 6).join('.') : '');
+              // the visible element holding the child label, then walk up to the largest ancestor that is still a submenu panel (class contains tmenu_submenu) and not the whole root dropdown
+              const texts = [...document.querySelectorAll('a, span, h1, h2, h3, h4, h5, p')].filter(vis).filter(e => norm(e.textContent) === norm(childLabel));
+              if (!texts.length) return { found: false };
+              let el = texts[0], panel = null;
+              for (let a = el; a; a = a.parentElement) { if (/tmenu_submenu/.test(String(a.className || ''))) panel = a; if (/tmenu_item--root/.test(String(a.className || ''))) break; }
+              if (!panel) panel = el.closest('ul') || el.parentElement;
               const r0 = panel.getBoundingClientRect();
-              const chain = []; for (let a = panel.parentElement; a && chain.length < 5; a = a.parentElement) chain.push(cn(a));
+              const chain = []; for (let a = panel.parentElement; a && chain.length < 6; a = a.parentElement) chain.push(cn(a));
               const html = panel.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/<iframe[\s\S]*?<\/iframe>/g, '<iframe/>').replace(/\s+/g, ' ');
               const rows = [];
-              for (const el of [...panel.querySelectorAll('img, a, li, h1, h2, h3, h4, h5, span, div, ul')].filter(vis).slice(0, 220)) {
-                const r = el.getBoundingClientRect(); const cs = getComputedStyle(el);
-                rows.push({ el: cn(el).slice(0, 100), box: [Math.round(r.x - r0.x), Math.round(r.y - r0.y), Math.round(r.width), Math.round(r.height)], text: (el.tagName === 'IMG' ? (el.getAttribute('src') || '').split('/').pop().slice(0, 40) : (el.children.length ? '' : (el.textContent || '').trim().slice(0, 40))), fs: cs.fontSize, fw: cs.fontWeight, disp: cs.display, w: cs.width, mw: cs.maxWidth, pad: cs.padding, mar: cs.margin });
+              for (const e of [...panel.querySelectorAll('img, a, li, h1, h2, h3, h4, h5, span, div, ul')].filter(vis).slice(0, 220)) {
+                const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+                rows.push({ el: cn(e).slice(0, 110), box: [Math.round(r.x - r0.x), Math.round(r.y - r0.y), Math.round(r.width), Math.round(r.height)], text: (e.tagName === 'IMG' ? (e.getAttribute('src') || '').split('/').pop().slice(0, 40) : (e.children.length ? '' : (e.textContent || '').trim().slice(0, 40))), fs: cs.fontSize, fw: cs.fontWeight, disp: cs.display, w: cs.width, mw: cs.maxWidth, pad: cs.padding, mar: cs.margin });
               }
-              return { found: true, liCls: cn(li), chain: chain.join(' < '), panelCls: cn(panel), rect: [Math.round(r0.x), Math.round(r0.y), Math.round(r0.width), Math.round(r0.height)], html: html.slice(0, 18000), htmlLen: html.length, rows };
-            }, process.env.SUB);
-            console.log('PANEL', out.found, out.liCls, out.panelCls, JSON.stringify(out.rect), 'chain:', out.chain, 'html length', out.htmlLen);
-            console.log('HTML', out.html);
-            for (const r of out.rows) console.log('ROW', JSON.stringify(r));
-            const clip = out.rect ? { x: Math.max(0, out.rect[0] - 260), y: Math.max(0, out.rect[1] - 60), width: Math.min(1440, out.rect[2] + 300), height: Math.min(900, out.rect[3] + 80) } : { x: 0, y: 100, width: 1100, height: 800 };
+              return { found: true, chain: chain.join(' < '), panelCls: cn(panel), rect: [Math.round(r0.x), Math.round(r0.y), Math.round(r0.width), Math.round(r0.height)], html: html.slice(0, 20000), htmlLen: html.length, rows };
+            }, process.env.CHILD);
+            console.log('PANEL', out.found, out.panelCls, JSON.stringify(out.rect), 'chain:', out.chain, 'html length', out.htmlLen);
+            console.log('HTML', out.html || '');
+            for (const r of out.rows || []) console.log('ROW', JSON.stringify(r));
+            const clip = out.rect ? { x: Math.max(0, out.rect[0] - 240), y: Math.max(0, out.rect[1] - 60), width: Math.min(1440 - Math.max(0, out.rect[0] - 240), out.rect[2] + 300), height: Math.min(1000 - Math.max(0, out.rect[1] - 60), out.rect[3] + 80) } : { x: 0, y: 100, width: 1100, height: 800 };
             const jpg = await page.screenshot({ type: 'jpeg', quality: 55, clip });
             console.log('JPEG-B64 ' + jpg.toString('base64'));
             await browser.close();
