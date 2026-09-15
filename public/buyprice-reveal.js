@@ -7,13 +7,14 @@
         answers when the BINDERPOS_API_KEY worker secret is configured.
      2. RULES: /buy-rules.json holds the store's buy percentages (cash +
         store credit as a fraction of sell price, per game, per condition,
-        per price band). Since 2026-09-15 the file is read straight out of
-        the BinderPOS portal's Buylist Rules every morning with the staff
-        login (binderpos-portal-sync.yml; rules._portal / rule.exact), so
-        the ladder is the store's actual rule, not a derived estimate. The
-        script reads the product's own variants from /products/<handle>.js
-        (same origin) and prices each condition from today's live sell
-        price — so the numbers track the store's daily repricing.
+        per price band, with per-rarity overrides). Since 2026-09-15 the
+        file is read straight out of the BinderPOS portal's Buylist Rules
+        every morning with the staff login (binderpos-portal-sync.yml;
+        rules._portal / rule.exact), so the ladder is the store's actual
+        rule, not a derived estimate. The script reads the product's own
+        variants (and its Rarity row) from /products/<handle>.js (same
+        origin) and prices each condition from today's live sell price —
+        so the numbers track the store's daily repricing.
 
    Quiet by design: if neither source is live, the button never renders. */
 (function () {
@@ -70,14 +71,18 @@
     return rules.defaults || null;
   }
 
-  function pct(rule, sell, kind) {
+  // Percentage for one variant: the first tier whose upTo covers the sell
+  // price, else the open-ended base; a per-rarity override on that tier
+  // (the portal's "per-rarity columns") wins when the card's rarity names it.
+  function pct(rule, sell, kind, rarity) {
     var tiers = rule.tiers || [];
+    var tier = null;
     for (var i = 0; i < tiers.length; i++) {
-      if (sell <= (tiers[i].upTo || 0)) {
-        var v = tiers[i][kind];
-        if (typeof v === 'number') return v;
-      }
+      if (sell <= (tiers[i].upTo || 0)) { tier = tiers[i]; break; }
     }
+    var src = tier || rule;
+    if (rarity && src.rarities && src.rarities[rarity] && typeof src.rarities[rarity][kind] === 'number') return src.rarities[rarity][kind];
+    if (tier && typeof tier[kind] === 'number') return tier[kind];
     return typeof rule[kind] === 'number' ? rule[kind] : 0;
   }
 
@@ -98,6 +103,14 @@
     return (c && rule.conds && rule.conds[c]) || rule;
   }
 
+  // The card's rarity, read from the description table BinderPOS writes
+  // ("Rarity: Secret Rare"), lower-cased to match the rule file's keys.
+  function rarityOf(product) {
+    var text = String(product.body_html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+    var m = /Rarity:\s*([A-Za-z][A-Za-z0-9 \-\/']*?)\s*(?:$|[A-Z][A-Za-z ]{1,20}:)/.exec(text);
+    return m ? m[1].trim().toLowerCase() : '';
+  }
+
   function estimateOffers(rules, product) {
     var rule = gameRule(rules);
     if (!rule) return [];
@@ -107,6 +120,7 @@
     var setName = (String(product.title || '').match(/\[([^\]]+)\]/) || [])[1];
     var setRule = setName && rule.sets && rule.sets[String(setName).trim().toLowerCase()];
     var base = setRule ? { conds: setRule.conds || {}, cash: 0, credit: 0, tiers: [] } : rule;
+    var rarity = rule.exact ? rarityOf(product) : '';
     var minSell = typeof rule.minSell === 'number' ? rule.minSell : 0;
     // Evidence ceiling (feed-derived rules only): above the highest observed
     // sell an estimate would be extrapolation. Portal rules set it to 1e6.
@@ -125,7 +139,7 @@
       rows.push({
         title: v.title || '', foil: foil, sell: sell,
         rank: typeof rank === 'number' ? rank : -1,
-        cashPct: pct(r2, sell, 'cash'), creditPct: pct(r2, sell, 'credit')
+        cashPct: pct(r2, sell, 'cash', rarity), creditPct: pct(r2, sell, 'credit', rarity)
       });
     });
     // Feed-DERIVED ladders can invert (a condition with sparse data falls
