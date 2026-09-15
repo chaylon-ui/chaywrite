@@ -35,8 +35,13 @@ jobs:
               u = urllib.parse.urlparse(topic); server = u.scheme + "://" + u.netloc; name = u.path.rstrip("/").split("/")[-1]
           else:
               server = "https://ntfy.sh"; name = topic.lstrip("/")
+          # Cloudflare's browser-integrity check on workers.dev answers 403
+          # "error code: 1010" to the default Python-urllib agent.
+          UA = "ExorNtfyRelay/1.0 (+https://github.com/chaylon-ui/chaywrite)"
           def call(method, url, data=None, bearer=None):
               req = urllib.request.Request(url, data=data, method=method)
+              req.add_header("User-Agent", UA)
+              req.add_header("Accept", "application/json")
               if bearer: req.add_header("Authorization", "Bearer " + bearer)
               if data is not None: req.add_header("Content-Type", "application/json")
               try:
