@@ -217,7 +217,8 @@ export function decide(p, cfg, fx) {
   let comp = null;
   if (p.comp && p.comp.price > 0) {
     comp = { price: p.comp.price, available: !!p.comp.available, handle: p.comp.handle || null, title: p.comp.title || null, used: false };
-    if (cfg.compMode !== "off" && comp.available) {
+    const mode = p.compMode || cfg.compMode;
+    if (mode === "cap" && comp.available) {
       const cap = comp.price * (1 + (Number(cfg.compPct) || 0) / 100);
       if (target > cap) { target = Math.max(cap, floor); comp.used = target < raw || Math.abs(target - cap) < 0.005; }
     }
@@ -370,7 +371,8 @@ export function readProduct(node) {
     category: categoryOf(node.productType), variants: vs.length, variantId: v.id || null, variantTitle: v.title || "",
     price: num(v.price), cost, upc: normUpc(v.barcode || v.sku), stock: vs.reduce((a, x) => a + (Number(x.inventoryQuantity) || 0), 0),
     floor: num(mf.ap_floor), markupPct: num(mf.ap_markup), round: mf.ap_round || "auto",
-    tcgId: num(mf.ap_tcg_id), pcId: num(mf.ap_pc_id),
+    tcgId: num(mf.ap_tcg_id), pcId: num(mf.ap_pc_id), tcgIdMeta: num(mf.ap_tcg_id),
+    compMode: /^(cap|off|skip)$/.test(String(mf.ap_comp || "")) ? String(mf.ap_comp) : null,
   };
 }
 
@@ -500,6 +502,7 @@ async function phaseComp(cx, run, cfg, deadline) {
   if (cfg.compMode === "skip") { run.phase = "decide"; return; }
   while (run.compI < run.products.length && cx.now() < deadline - 2500) {
     const p = run.products[run.compI++];
+    if (p.compMode === "skip") { p.compMiss = "skipped for this product"; continue; }
     const q = compQuery(p.title);
     if (!q) continue;
     try {
@@ -530,7 +533,8 @@ async function phaseDecide(cx, run, cfg, deadline) {
     if (p.match && !p.tcgId && d.action === "skip") d.reason = p.match;
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null,
-      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, compMiss: p.compMiss || null, ...d });
+      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, compMiss: p.compMiss || null,
+      settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId }, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
   }
   run.rows = rows;
@@ -618,6 +622,48 @@ async function search(cx, q) {
   return { ok: true, q, results };
 }
 
+// Per-item settings from the row form (owner 2026-09-15: "alterations to the
+// auto pricing settings on the per-item line"): blank = clear the metafield
+// (back to the page default), then the product is repriced at once.
+const MF_DELETE = `mutation($m: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $m) { userErrors { field message } } }`;
+const SETTING_FIELDS = [
+  ["floor", "ap_floor", "number_decimal", (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? String(Number(v)) : null)],
+  ["markupPct", "ap_markup", "number_decimal", (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? String(Number(v)) : null)],
+  ["round", "ap_round", "single_line_text_field", (v) => (/^(1|5|10|25|50|100|none)$/.test(String(v).trim()) ? String(v).trim() : null)],
+  ["comp", "ap_comp", "single_line_text_field", (v) => (/^(cap|off|skip)$/.test(String(v).trim()) ? String(v).trim() : null)],
+  ["tcgId", "ap_tcg_id", "number_integer", (v) => (/^\d{3,9}$/.test(String(v).trim()) ? String(v).trim() : null)],
+  ["pcId", "ap_pc_id", "number_integer", (v) => (/^\d{3,12}$/.test(String(v).trim()) ? String(v).trim() : null)],
+];
+async function saveSettings(cx, b) {
+  const pid = String((b && b.id) || "");
+  if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
+  const sets = [], dels = [], saved = {};
+  for (const [field, key, type, norm] of SETTING_FIELDS) {
+    if (!(field in b)) continue;
+    const raw = String(b[field] == null ? "" : b[field]).trim();
+    if (raw === "") { dels.push({ ownerId: pid, namespace: "exor", key }); saved[field] = ""; continue; }
+    const v = norm(raw);
+    if (v == null) return { ok: false, error: "bad value for " + field + ": " + raw.slice(0, 40) };
+    sets.push({ ownerId: pid, namespace: "exor", key, type, value: v }); saved[field] = v;
+  }
+  if (sets.length) {
+    const r = await adminGql(cx, MF_SET, { m: sets });
+    const errs = (r.data.metafieldsSet || {}).userErrors || [];
+    if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
+  }
+  if (dels.length) {
+    try { await adminGql(cx, MF_DELETE, { m: dels }); } catch (e) { /* a metafield that never existed */ }
+  }
+  const rep = await cx.storage.get("ap:report");
+  if (rep && rep.rows) {
+    for (const row of rep.rows) if (row.id === pid) { row.settings = { ...(row.settings || {}), ...saved }; row.action = "pending"; row.reason = "settings saved: repricing now"; }
+    await cx.storage.put("ap:report", rep);
+  }
+  const cfg = await configOf(cx);
+  const kicked = await kickRun(cx, { apply: cfg.mode === "apply", delayMs: 1500 });
+  return { ok: true, id: pid, saved, kicked };
+}
+
 const TAG_ADD = `mutation($id: ID!, $t: [String!]!) { tagsAdd(id: $id, tags: $t) { userErrors { message } } }`;
 const TAG_REMOVE = `mutation($id: ID!, $t: [String!]!) { tagsRemove(id: $id, tags: $t) { userErrors { message } } }`;
 async function setListed(cx, id, on, b) {
@@ -670,6 +716,7 @@ async function control(cx, b) {
     return { ok: true, config: next };
   }
   if (action === "run") return kickRun(cx, { apply: cfg.mode === "apply" && b.apply === "1" });
+  if (action === "settings") return saveSettings(cx, b);
   if (action === "add") return setListed(cx, b.id, true, b);
   if (action === "remove") return setListed(cx, b.id, false, b);
   return { ok: false, error: "unknown action" };
@@ -751,16 +798,28 @@ function renderPage(s, rep, k, view) {
 <td>${r.comp ? `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener">${money(r.comp.price)}</a><div class="muted">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</div>` : `<span class="muted">${esc(r.compMiss || "not checked")}</span>`}</td>
 <td>${change(r.lastChange)}</td>
 <td>${ctlForm("remove", hidden("id", r.id), "Remove", "sm")}</td></tr>`;
+  const settingsRow = (r) => {
+    const st = r.settings || {};
+    const sel = (name, cur, opts) => `<select name="${name}">${opts.map(([v, l]) => `<option value="${esc(v)}"${String(cur == null ? "" : cur) === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    return `<tr class="set"><td colspan="9"><form method="post" action="/autoprice/control" class="setf">${hidden("k", k)}${hidden("action", "settings")}${hidden("id", r.id)}${v.game ? hidden("game", v.game) : ""}
+<label>Floor $<input type="number" step="0.01" min="0" name="floor" value="${esc(st.floor == null ? "" : st.floor)}" placeholder="cost+${esc(cfg.minMarginPct)}%"></label>
+<label>Markup %<input type="number" step="0.5" min="0" name="markupPct" value="${esc(st.markupPct == null ? "" : st.markupPct)}" placeholder="${esc(cfg.markupPct)}"></label>
+<label>Rounding ${sel("round", st.round, [["", "auto"], ["1", "$1 steps"], ["5", "$5 steps"], ["10", "$10 steps"], ["25", "$25 steps"], ["50", "$50 steps"], ["100", "$100 steps"], ["none", "none"]])}</label>
+<label>401 Games ${sel("comp", st.comp, [["", "page setting (" + (cfg.compMode === "cap" ? "hold to " + (cfg.compPct || 0) + "%" : cfg.compMode) + ")"], ["cap", "hold to at most " + (cfg.compPct || 0) + "% above"], ["off", "show only"], ["skip", "skip"]])}</label>
+<label>TCGplayer id <input type="text" inputmode="numeric" name="tcgId" value="${esc(st.tcgId == null ? "" : st.tcgId)}" placeholder="auto" style="width:80px"></label>
+${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numeric" name="pcId" value="${esc(st.pcId == null ? "" : st.pcId)}" placeholder="auto" style="width:90px"></label>` : ""}
+<button class="sm">Save &amp; reprice</button><span class="muted">blank = use the page default</span></form></td></tr>`;
+  };
   let groupRows = "", lastGame = null;
   for (const r of rows) {
     if (r.game !== lastGame) { lastGame = r.game; groupRows += `<tr class="grp"><td colspan="9">${esc(r.game)} <span class="muted">· ${rows.filter((x) => x.game === r.game).length}</span></td></tr>`; }
-    groupRows += row(r);
+    groupRows += row(r) + settingsRow(r);
   }
   const run = s.run || {};
   const found = v.found;
   const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}tr.set td{border-top:0;padding:0 10px 10px;background:#fbfcfd}.setf{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;color:#4b5563}.setf input[type=number]{width:84px}.setf select{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span></h1>
 <p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}.</p>
 <h2>Add products</h2>
