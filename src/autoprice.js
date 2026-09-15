@@ -199,7 +199,7 @@ export async function kickRun(cx, opts) {
   const run = await cx.storage.get("ap:run");
   if (run && !run.done && cx.now() - (run.tickAt || 0) < 120e3) return { ok: true, started: false, running: true };
   await cx.storage.put("ap:run", newRun(cx.now(), opts));
-  await arm(cx, cx.now() + 100, "kick");
+  await arm(cx, cx.now() + ((opts && opts.delayMs) || 100), "kick");
   return { ok: true, started: true };
 }
 
@@ -268,6 +268,10 @@ const PRODUCTS_Q = `query($after: String) { products(first: 50, after: $after, q
   variants(first: 10) { edges { node { id title price barcode sku inventoryQuantity inventoryItem { unitCost { amount } } } } }
   mf: metafields(first: 30, namespace: "exor") { edges { node { key value } } } } } pageInfo { hasNextPage endCursor } } }`;
 
+const PRODUCT_BY_ID_Q = `query($id: ID!) { product(id: $id) { id title handle productType tags
+  variants(first: 10) { edges { node { id title price barcode sku inventoryQuantity inventoryItem { unitCost { amount } } } } }
+  mf: metafields(first: 30, namespace: "exor") { edges { node { key value } } } } }`;
+
 export function readProduct(node) {
   const vs = ((node.variants && node.variants.edges) || []).map((e) => e.node);
   const mf = {};
@@ -290,6 +294,18 @@ async function phaseProducts(cx, run) {
   for (const e of conn.edges) run.products.push(readProduct(e.node));
   if (conn.pageInfo.hasNextPage) { run.cursor = conn.pageInfo.endCursor; await cx.sleep(throttleWait(r.cost, 60)); return; }
   run.cursor = null;
+  // Products added from the page moments ago may not be in the tag search
+  // index yet: the last report's pending rows are fetched by id.
+  const rep = await cx.storage.get("ap:report");
+  const have = new Set(run.products.map((p) => p.id));
+  for (const row of (rep && rep.rows) || []) {
+    if (row.action !== "pending" || have.has(row.id)) continue;
+    try {
+      const r2 = await adminGql(cx, PRODUCT_BY_ID_Q, { id: row.id });
+      const n = r2.data.product;
+      if (n && (n.tags || []).includes(TAG)) { run.products.push(readProduct(n)); have.add(n.id); }
+    } catch (e) { run.errors.push("added product " + row.id + ": " + msg(e)); }
+  }
   const cats = {};
   for (const p of run.products) if (p.category) cats[p.category] = 1;
   run.index = { cats: Object.keys(cats).map(Number), ci: 0 };
@@ -471,7 +487,7 @@ async function setListed(cx, id, on, b) {
   }
   await cx.storage.put("ap:report", rep);
   let kicked = null;
-  if (on) kicked = await kickRun(cx, { apply: false });
+  if (on) kicked = await kickRun(cx, { apply: false, delayMs: 3000 });
   return { ok: true, id: pid, listed: !!on, kicked };
 }
 
