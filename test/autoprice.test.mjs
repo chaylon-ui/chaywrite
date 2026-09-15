@@ -140,10 +140,11 @@ test("game labels and the add-to-list search query", () => {
   assert.equal(gameOf("Pokemon Sealed Product"), "Pokemon");
   assert.equal(gameOf("One Piece Card Game Sealed Product"), "One Piece Card Game");
   assert.equal(gameOf("MTG Single"), "MTG");
+  assert.equal(gameOf("Pokemon Single Graded"), "Pokemon Graded");
   assert.equal(gameOf(""), "Other");
   assert.equal(searchQueryFor("0196214154186"), "status:active (barcode:196214154186 OR barcode:0196214154186 OR sku:196214154186 OR sku:0196214154186)");
-  assert.equal(searchQueryFor("chaos rising booster"), "status:active product_type:*Sealed* chaos rising booster");
-  assert.equal(searchQueryFor(' "elite" (trainer)'), "status:active product_type:*Sealed* elite trainer");
+  assert.equal(searchQueryFor("chaos rising booster"), "status:active (product_type:*Sealed* OR product_type:*Graded*) chaos rising booster");
+  assert.equal(searchQueryFor(' "elite" (trainer)'), "status:active (product_type:*Sealed* OR product_type:*Graded*) elite trainer");
 });
 
 test("the shipped defaults: markup on top of market, no per-run cap", () => {
@@ -520,4 +521,57 @@ test("one tab per game with the error count in brackets and a price alert marker
   assert.match(page, /<a href="\/autoprice\?game=Magic" class="" title="1 listed">Magic <span class="n">1<\/span><\/a>/);
   assert.match(page, /<a href="\/autoprice\?game=Pokemon" class="on warn" title="3 listed, 1 not priced, 1 price alert">Pokemon <span class="n">3<\/span> <span class="err">\(1 error\)<\/span> <span class="al">⚠ 1<\/span><\/a>/);
   assert.equal(page.includes("chips"), false);
+});
+
+import { parseGraded, gradeField, pcPickGraded, isGradedType } from "../src/autoprice.js";
+test("graded titles parse into name, number, set, grader and grade", () => {
+  assert.deepEqual(parseGraded("Rapidash (44/64) [Jungle 1st Edition] Graded PSA 9"), { name: "Rapidash", number: "44", set: "Jungle 1st Edition", grader: "PSA", grade: 9, japanese: false });
+  assert.deepEqual(parseGraded("Fire Energy PSA:9 (102/106) [EX: Emerald] Graded"), { name: "Fire Energy", number: "102", set: "EX: Emerald", grader: "PSA", grade: 9, japanese: false });
+  assert.deepEqual(parseGraded("Squirtle Beckett:8.5 (63/102) [Base Set Shadowless Unlimited] GRADED"), { name: "Squirtle", number: "63", set: "Base Set Shadowless Unlimited", grader: "BGS", grade: 8.5, japanese: false });
+  assert.deepEqual(parseGraded("Charizard (4/102) [Base Set Unlimited] (7.5 Graded)"), { name: "Charizard", number: "4", set: "Base Set Unlimited", grader: null, grade: 7.5, japanese: false });
+  assert.deepEqual(parseGraded("PSA 9 - Umbreon VMAX 215/203) [Sword & Shield: Evolving Skies]"), { name: "Umbreon VMAX", number: "215", set: "Sword & Shield: Evolving Skies", grader: "PSA", grade: 9, japanese: false });
+  assert.deepEqual(parseGraded("Charizard VMAX (SV107/SV122) [Sword & Shield: Shining Fates] Graded PSA 10"), { name: "Charizard VMAX", number: "SV107", set: "Sword & Shield: Shining Fates", grader: "PSA", grade: 10, japanese: false });
+  assert.deepEqual(parseGraded("Ultra Ball (126/100) [Japanese Sword & Shield: Star Birth] Graded PSA 10"), { name: "Ultra Ball", number: "126", set: "Japanese Sword & Shield: Star Birth", grader: "PSA", grade: 10, japanese: true });
+  assert.deepEqual(parseGraded("Charizard GX PSA:10 (SM211) [Sun & Moon: Black Star Promos] Graded"), { name: "Charizard GX", number: "SM211", set: "Sun & Moon: Black Star Promos", grader: "PSA", grade: 10, japanese: false });
+  assert.deepEqual(parseGraded("Dark Charizard (Japanese) Beckett:9 (#006) [Team Rocket Unlimited] GRADED"), { name: "Dark Charizard", number: "6", set: "Team Rocket Unlimited", grader: "BGS", grade: 9, japanese: true });
+  assert.deepEqual(parseGraded("Copy of Charizard V PSA: 9 (SWSH050) [Sword & Shield: Black Star Promos] Graded"), { name: "Charizard V", number: "SWSH050", set: "Sword & Shield: Black Star Promos", grader: "PSA", grade: 9, japanese: false });
+  assert.deepEqual(parseGraded("Cramorant VMAX (055/072) [Sword & Shield: Shining Fates] Graded SGC 9.5"), { name: "Cramorant VMAX", number: "55", set: "Sword & Shield: Shining Fates", grader: "SGC", grade: 9.5, japanese: false });
+  assert.equal(isGradedType("Pokemon Single Graded"), true);
+  assert.equal(isGradedType("Pokemon Sealed Product"), false);
+});
+
+test("grade -> PriceCharting column", () => {
+  assert.deepEqual(gradeField("PSA", 10), { key: "manual-only-price", label: "PSA 10" });
+  assert.deepEqual(gradeField("BGS", 10), { key: "bgs-10-price", label: "BGS 10" });
+  assert.deepEqual(gradeField("CGC", 10), { key: "condition-17-price", label: "CGC 10" });
+  assert.deepEqual(gradeField("SGC", 10), { key: "condition-18-price", label: "SGC 10" });
+  assert.deepEqual(gradeField("AGS", 10), { key: "condition-17-price", label: "CGC 10 (stands in for AGS 10)" });
+  assert.deepEqual(gradeField("PSA", 9.5), { key: "box-only-price", label: "grade 9.5" });
+  assert.deepEqual(gradeField("PSA", 9), { key: "graded-price", label: "grade 9" });
+  assert.deepEqual(gradeField("BGS", 8.5), { key: "new-price", label: "grade 8" });
+  assert.deepEqual(gradeField(null, 7.5), { key: "cib-price", label: "grade 7" });
+  assert.deepEqual(gradeField("PSA", 4), { key: "condition-14-price", label: "grade 4" });
+  assert.equal(gradeField("PSA", null), null);
+});
+
+test("PriceCharting search hits: number, language and set must agree", () => {
+  const g = parseGraded("Charizard VMAX (SV107/SV122) [Sword & Shield: Shining Fates] Graded PSA 10");
+  const hits = [
+    { id: 1, "console-name": "Pokemon Shining Fates", "product-name": "Charizard VMAX #SV107" },
+    { id: 2, "console-name": "Pokemon Japanese Shiny Star V", "product-name": "Charizard VMAX #SV107" },
+    { id: 3, "console-name": "Pokemon Champion's Path", "product-name": "Charizard VMAX #74" },
+    { id: 4, "console-name": "Pokemon Shining Fates", "product-name": "Charizard VMAX [Shiny] #SV107" },
+  ];
+  assert.equal(pcPickGraded(g, hits).id, 1);
+  const jp = parseGraded("Ultra Ball (126/100) [Japanese Sword & Shield: Star Birth] Graded PSA 10");
+  assert.equal(pcPickGraded(jp, [{ id: 5, "console-name": "Pokemon Star Birth", "product-name": "Ultra Ball #126" }, { id: 6, "console-name": "Pokemon Japanese Star Birth", "product-name": "Ultra Ball #126" }]).id, 6);
+  assert.equal(pcPickGraded(g, [{ id: 7, "console-name": "Pokemon Evolving Skies", "product-name": "Charizard VMAX #SV107" }]), null);   // wrong set
+  assert.equal(pcPickGraded(g, [{ id: 8, "console-name": "Pokemon Shining Fates", "product-name": "Charizard V #SV107" }]), null);        // wrong card
+  // PriceCharting keeps 1st Edition / Shadowless as bracketed variants of the same card (pc-probe 35023283289)
+  const jungle = [{ id: 643331, "console-name": "Pokemon Jungle", "product-name": "Rapidash #44" }, { id: 643379, "console-name": "Pokemon Jungle", "product-name": "Rapidash [1st Edition] #44" }];
+  assert.equal(pcPickGraded(parseGraded("Rapidash (44/64) [Jungle 1st Edition] Graded PSA 9"), jungle).id, 643379);
+  assert.equal(pcPickGraded(parseGraded("Rapidash (44/64) [Jungle Unlimited] Graded PSA 9"), jungle).id, 643331);
+  const base = [{ id: 1, "console-name": "Pokemon Base Set", "product-name": "Charizard #4" }, { id: 2, "console-name": "Pokemon Base Set", "product-name": "Charizard [Shadowless] #4" }, { id: 3, "console-name": "Pokemon Base Set", "product-name": "Charizard [1st Edition] #4" }];
+  assert.equal(pcPickGraded(parseGraded("Charizard (4/102) [Base Set Unlimited] (7.5 Graded)"), base).id, 1);
+  assert.equal(pcPickGraded(parseGraded("Charmander (46/102) Beckett:8.5 [Base Set Shadowless Unlimited] Graded"), [{ id: 4, "console-name": "Pokemon Base Set", "product-name": "Charmander #46" }, { id: 5, "console-name": "Pokemon Base Set", "product-name": "Charmander [Shadowless] #46" }]).id, 5);
 });

@@ -113,8 +113,96 @@ export function categoryOf(productType) {
 
 // "Pokemon Sealed Product" -> "Pokemon": the group the report sorts and filters by.
 export function gameOf(productType) {
-  const t = String(productType || "").replace(/\s*(sealed product|sealed|singles?|single graded)\s*$/i, "").trim();
-  return t || "Other";
+  const graded = /graded/i.test(String(productType || ""));
+  const t = String(productType || "").replace(/\s*(sealed product|sealed|singles?|single graded|graded)\s*$/i, "").trim();
+  return (t || "Other") + (graded ? " Graded" : "");
+}
+
+/* ---- graded cards (owner, 2026-09-15: "what do we need to do to do this
+   for graded cards using price charting?") ----
+   Product type "Pokemon Single Graded" (183 products). The title carries
+   everything PriceCharting needs: "Rapidash (44/64) [Jungle 1st Edition]
+   Graded PSA 9", "Fire Energy PSA:9 (102/106) [EX: Emerald] Graded",
+   "Squirtle Beckett:8.5 (63/102) [Base Set Shadowless Unlimited] GRADED",
+   "PSA 9 - Umbreon VMAX 215/203) [Sword & Shield: Evolving Skies]". The
+   Prices API has one column per grade (api-documentation, 2026-09-15):
+   loose = ungraded, cib = 7/7.5, new = 8/8.5, graded = 9, box-only = 9.5,
+   manual-only = PSA 10, bgs-10, condition-17 = CGC 10, -18 = SGC 10,
+   -19 = CGC 10 Pristine, -20 = BGS 10 Black, condition-9..16 = grades 1-6.
+   Lookup: /api/products?q=<name> <number> (one call), the best candidate by
+   number + set + language, then /api/product?id= for its columns; the id is
+   pinned to exor.ap_pc_id afterwards, as for sealed. No TCGplayer, no 401. */
+export const PC_SEARCH = "https://www.pricecharting.com/api/products";
+export const isGradedType = (t) => /graded/i.test(String(t || ""));
+const GRADERS = { psa: "PSA", bgs: "BGS", beckett: "BGS", cgc: "CGC", sgc: "SGC", ags: "AGS", tag: "TAG", ace: "ACE" };
+export function parseGraded(title) {
+  let s = String(title || "").replace(/^copy of\s+/i, " ");
+  const setM = /\[([^\]]+)\]/.exec(s);
+  const set = setM ? setM[1].trim() : "";
+  s = s.replace(/\[[^\]]*\]/g, " ");
+  let grader = null, grade = null;
+  const gm = /\b(psa|bgs|beckett|cgc|sgc|ags|tag|ace)\s*:?\s*-?\s*(10|[1-9](?:\.5)?)\b/i.exec(s);
+  if (gm) { grader = GRADERS[gm[1].toLowerCase()]; grade = Number(gm[2]); s = s.replace(gm[0], " "); }
+  else { const g2 = /\(?\s*(10|[1-9](?:\.5)?)\s*graded\s*\)?/i.exec(s); if (g2) { grade = Number(g2[1]); s = s.replace(g2[0], " "); } }
+  s = s.replace(/\bgraded\b/gi, " ").replace(/\s+-\s+/g, " ");
+  let number = null;
+  const nm = /\(?\s*#?([A-Za-z]{0,5}\d{1,3}[a-z]?)(?:\s*\/\s*[A-Za-z]{0,5}\d{1,3})?\s*\)?/.exec(s);
+  if (nm) { number = nm[1].replace(/^0+(?=\d)/, ""); s = s.slice(0, nm.index) + " " + s.slice(nm.index + nm[0].length); }
+  const name = s.replace(/\([^)]*\)/g, " ").replace(/[^\w'&. -]/g, " ").replace(/\s+/g, " ").trim();
+  const japanese = /japanese/i.test(set) || /japanese/i.test(String(title || ""));
+  return { name, number, set, grader, grade, japanese };
+}
+// The PriceCharting column for a grade (and what to call it on the page).
+export function gradeField(grader, grade) {
+  const g = Number(grade);
+  if (!(g > 0)) return null;
+  const G = String(grader || "").toUpperCase();
+  if (g === 10) {
+    if (G === "PSA") return { key: "manual-only-price", label: "PSA 10" };
+    if (G === "BGS") return { key: "bgs-10-price", label: "BGS 10" };
+    if (G === "SGC") return { key: "condition-18-price", label: "SGC 10" };
+    return { key: "condition-17-price", label: "CGC 10" + (G && G !== "CGC" ? " (stands in for " + G + " 10)" : "") };
+  }
+  if (g === 9.5) return { key: "box-only-price", label: "grade 9.5" };
+  if (g === 9) return { key: "graded-price", label: "grade 9" };
+  if (g >= 8) return { key: "new-price", label: "grade 8" };
+  if (g >= 7) return { key: "cib-price", label: "grade 7" };
+  const map = { 6: "condition-16-price", 5: "condition-15-price", 4: "condition-14-price", 3: "condition-13-price", 2: "condition-10-price", 1: "condition-9-price" };
+  const k = map[Math.floor(g)];
+  return k ? { key: k, label: "grade " + Math.floor(g) } : null;
+}
+// Best PriceCharting search hit for a parsed graded title: the card number
+// must agree when we have one, the language must agree, and the set words
+// ("Shining Fates") should appear in PriceCharting's console name
+// ("Pokemon Shining Fates").
+export function pcPickGraded(g, products) {
+  const numNorm = (x) => String(x || "").toLowerCase().replace(/^0+(?=\d)/, "");
+  const nameToks = tok(g.name).filter((t) => !isCode(t));
+  const setToks = tok(g.set).filter((t) => !isCode(t) && !["japanese", "base", "set", "unlimited", "1st", "edition", "shadowless"].includes(t));
+  let best = null;
+  for (const p of products || []) {
+    const pn = String(p["product-name"] || ""), cn = String(p["console-name"] || "");
+    if (!!g.japanese !== /japanese/i.test(cn)) continue;
+    const pnum = (/#\s*([A-Za-z]{0,5}\d{1,3}[a-z]?)/.exec(pn) || [])[1];
+    if (g.number && pnum && numNorm(pnum) !== numNorm(g.number)) continue;
+    if (g.number && !pnum) continue;
+    // "[1st Edition]" / "[Shadowless]" are bracketed variants of the same
+    // card on PriceCharting; they must agree with the title's set words.
+    const pv = String(pn.match(/\[[^\]]*\]/g) || []).toLowerCase();
+    const ours = (g.set + " " + g.name).toLowerCase();
+    let bad = false;
+    for (const v of ["1st", "shadowless"]) if (pv.includes(v) !== ours.includes(v)) bad = true;
+    if (bad) continue;
+    const pToks = tok(pn.replace(/#\S+/g, " ").replace(/\[[^\]]*\]/g, " "));
+    const nameHit = nameToks.length ? nameToks.filter((t) => pToks.includes(t)).length / nameToks.length : 0;
+    if (nameHit < 0.6) continue;
+    const cToks = tok(cn);
+    const setHit = setToks.length ? setToks.filter((t) => cToks.includes(t)).length / setToks.length : 0.5;
+    if (setToks.length && setHit === 0) continue;
+    const score = (g.number ? 4 : 0) + nameHit * 3 + setHit * 2;
+    if (!best || score > best.score) best = { p, score };
+  }
+  return best ? best.p : null;
 }
 
 // Only sealed-looking TCGplayer products are indexed (singles are 95% of a group).
@@ -271,7 +359,7 @@ export function decide(p, cfg, fx) {
   const markup = Number.isFinite(p.markupPct) ? p.markupPct : cfg.markupPct;
   const srcs = [];
   if (p.tcgMarket > 0) srcs.push({ name: "tcgplayer", usd: p.tcgMarket, kind: p.tcgKind || "market" });
-  if (p.pcNew > 0) srcs.push({ name: "pricecharting", usd: p.pcNew });
+  if (p.pcNew > 0) srcs.push({ name: "pricecharting", usd: p.pcNew, label: p.pcGrade ? p.pcGrade.label : null });
   const mode = p.compMode || cfg.compMode;
   const compPct = Number(cfg.compPct) || 0;
   const comp = p.comp && p.comp.price > 0 ? { price: p.comp.price, available: !!p.comp.available, handle: p.comp.handle || null, title: p.comp.title || null, used: false } : null;
@@ -297,7 +385,7 @@ export function decide(p, cfg, fx) {
   } else {
     const skip = (reason) => ({ ...out, action: "skip", reason: alert ? alert.replace(/: priced from TCGplayer instead$/, "") + ", and " + reason : reason });
     if (!fx) return skip("no FX rate");
-    if (!srcs.length) return skip(p.tcgId || p.pcId ? "no price from the sources today" : "no match: set exor.ap_tcg_id (or ap_pc_id) on the product");
+    if (!srcs.length) return skip(p.graded ? (p.pcMiss || "no PriceCharting price: set exor.ap_pc_id on the product") : p.tcgId || p.pcId ? "no price from the sources today" : "no match: set exor.ap_tcg_id (or ap_pc_id) on the product");
     marketUsd = srcs.reduce((a, s) => a + s.usd, 0) / srcs.length;
     marketCad = marketUsd * fx;
     raw = marketCad * (1 + markup / 100);
@@ -581,6 +669,7 @@ export function readProduct(node) {
     floor: num(mf.ap_floor), markupPct: num(mf.ap_markup), round: mf.ap_round || "auto",
     tcgId: num(mf.ap_tcg_id), pcId: num(mf.ap_pc_id), tcgIdMeta: num(mf.ap_tcg_id),
     compMode: /^(cap|off|skip|follow)$/.test(String(mf.ap_comp || "")) ? String(mf.ap_comp) : null,
+    graded: isGradedType(node.productType) ? parseGraded(node.title) : null,
   };
 }
 
@@ -670,31 +759,55 @@ async function phaseIndex(cx, run) {
 // PriceCharting, one product per second, only with a token.
 async function phasePrices(cx, run, deadline) {
   if (!run.pcQueue) {
-    for (const p of run.products) if (!p.category) p.match = "no TCGplayer category for type " + p.type;
-    run.pcQueue = run.products.filter((p) => p.upc || p.pcId).map((p) => p.id);
+    for (const p of run.products) if (!p.category) p.match = p.graded ? "graded: PriceCharting only" : "no TCGplayer category for type " + p.type;
+    run.pcQueue = run.products.filter((p) => p.graded || p.upc || p.pcId).map((p) => p.id);
   }
   const token = cx.env && cx.env.PRICECHARTING_TOKEN;
   if (token) {
-    while (run.pcQueue.length && cx.now() < deadline - PC_GAP_MS - 1500) {
+    const call = async (url) => { const r = await cx.fetch(url + "&t=" + encodeURIComponent(token), { signal: AbortSignal.timeout(15000) }); run.pcCalls++; return r.json(); };
+    while (run.pcQueue.length && cx.now() < deadline - 2 * PC_GAP_MS - 1500) {
       const id = run.pcQueue.shift();
       const p = run.products.find((x) => x.id === id);
       if (!p) continue;
-      const q = p.pcId ? "id=" + p.pcId : "upc=" + encodeURIComponent(p.upc);
       try {
-        const r = await cx.fetch(PC + "?t=" + encodeURIComponent(token) + "&" + q, { signal: AbortSignal.timeout(15000) });
-        const j = await r.json();
-        run.pcCalls++;
+        let j = null;
+        if (p.graded && !p.pcId) {
+          // Graded: search by card name + number, pick, then fetch the columns.
+          const g = p.graded;
+          if (!g.name) { p.pcMiss = "could not read the card name from the title"; continue; }
+          const s = await call(PC_SEARCH + "?q=" + encodeURIComponent([g.name, g.number].filter(Boolean).join(" ")));
+          await cx.sleep(PC_GAP_MS);
+          const hit = s && s.status === "success" ? pcPickGraded(g, s.products) : null;
+          if (!hit) { p.pcMiss = s && s.status === "success" ? "no PriceCharting card matches " + [g.name, g.number, g.set].filter(Boolean).join(" · ") + " among " + ((s.products || []).length) : (s && s["error-message"]) || "search failed"; continue; }
+          j = { ...hit, status: "success" };   // the search rows carry every price column (pc-probe 35023283289): one call per card
+        } else {
+          j = await call(PC + "?" + (p.pcId ? "id=" + p.pcId : "upc=" + encodeURIComponent(p.upc)));
+        }
         if (j && j.status === "success") {
           if (!p.pcId && j.id) p.pcIdFound = Number(j.id);
-          const cents = Number(j["new-price"]);
-          if (cents > 0) p.pcNew = cents / 100;
           p.pcName = [j["console-name"], j["product-name"]].filter(Boolean).join(" / ");
+          if (p.graded) {
+            const f = gradeField(p.graded.grader, p.graded.grade);
+            if (!f) p.pcMiss = "no grade in the title";
+            else {
+              p.pcGrade = { ...f, grader: p.graded.grader, grade: p.graded.grade };
+              const cents = Number(j[f.key]);
+              if (cents > 0) p.pcNew = cents / 100; else p.pcMiss = "PriceCharting has no " + f.label + " price for " + p.pcName;
+              p.pcName += " · " + f.label;
+            }
+          } else {
+            const cents = Number(j["new-price"]);
+            if (cents > 0) p.pcNew = cents / 100;
+          }
         } else p.pcMiss = (j && j["error-message"]) || "no product";
       } catch (e) { run.errors.push("pricecharting " + p.handle + ": " + msg(e)); }
       await cx.sleep(PC_GAP_MS);
     }
     if (run.pcQueue.length) return;
-  } else run.pcQueue = [];
+  } else {
+    for (const p of run.products) if (p.graded) p.pcMiss = "no PRICECHARTING_TOKEN secret";
+    run.pcQueue = [];
+  }
   run.phase = "comp";
 }
 
@@ -727,6 +840,7 @@ async function phaseComp(cx, run, cfg, deadline) {
   if (cfg.compMode === "skip" && !run.products.some((p) => p.compMode && p.compMode !== "skip")) { run.phase = "decide"; return; }
   while (run.compI < run.products.length && cx.now() < deadline - 2500) {
     const p = run.products[run.compI++];
+    if (p.graded) { p.compMiss = "graded cards are not compared with 401 Games"; continue; }
     if (p.compMode === "skip" || (cfg.compMode === "skip" && !p.compMode)) { p.compMiss = "skipped for this product"; continue; }
     const q = compQuery(p.title);
     if (!q) continue;
@@ -757,7 +871,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     if (p.variants > 1 && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: one price per product only, set by hand"; }
     if (p.match && !p.tcgId && d.action === "skip") d.reason = p.match;
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId,
-      tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null,
+      tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
       pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, compMiss: p.compMiss || null,
       settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId }, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
@@ -840,7 +954,7 @@ export function searchQueryFor(q) {
     return "status:active (barcode:" + core + " OR barcode:0" + core + " OR sku:" + core + " OR sku:0" + core + ")";
   }
   const words = raw.replace(/["*():]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
-  return "status:active product_type:*Sealed* " + words;
+  return "status:active (product_type:*Sealed* OR product_type:*Graded*) " + words;
 }
 async function search(cx, q) {
   if (!String(q || "").trim()) return { ok: true, q: "", results: [] };
@@ -1152,7 +1266,7 @@ export function renderPage(s, rep, view) {
   // Owner: "add our margin to the line for each item based off its price and
   // suggested price" - profit and share of the price, under each of the two.
   const marginLine = (m, price) => m ? `<div class="muted mg${m.amount < 0 ? " neg" : ""}" title="price ${money(price)} − cost: ${money(m.amount)} profit, ${m.pct}% of the price">margin ${money(m.amount)} · ${m.pct}%</div>` : price != null ? '<div class="muted" title="No unit cost on the variant in Shopify">margin: no cost</div>' : "";
-  const srcLine = (x) => x.name === "tcgplayer" ? "TCG " + (x.kind && x.kind !== "market" ? x.kind + " " : "") + money(x.usd) + " US" : "PriceCharting " + money(x.usd) + " US";
+  const srcLine = (x) => x.name === "tcgplayer" ? "TCG " + (x.kind && x.kind !== "market" ? x.kind + " " : "") + money(x.usd) + " US" : "PriceCharting " + (x.label ? x.label + " " : "") + money(x.usd) + " US";
   // Settings, collapsed to one line that names only what differs from the
   // page default; click opens the form (owner: "a little hard to look at").
   const settingsBlock = (r) => {
