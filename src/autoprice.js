@@ -152,10 +152,13 @@ export function normUpc(s) {
    when it finds a Case for a non-case title (TCGplayer lists the Wilds of
    Eldraine box UPC on the Master Case row), or when the UPC row has no
    price and the name row has one. */
-const FILLER = new Set(["mtg", "magic", "the", "gathering", "pokemon", "tcg", "ccg", "yugioh", "yu", "gi", "oh", "of", "and", "a", "an", "edition", "english", "en", "limit", "1", "per", "customer", "sealed", "product", "new"]);
-const SYN = { display: "box", displays: "box", boxes: "box", packs: "pack", decks: "deck", bundles: "bundle", "pre": "prerelease", "release": "" };
+// 401 Games writes "MTG - Universes Beyond: Marvel's Spider-Man - English
+// Collector Booster Box": the brand words and "English" are noise, "Japanese"
+// is not (it names a different product).
+const FILLER = new Set(["mtg", "magic", "the", "gathering", "pokemon", "tcg", "ccg", "yugioh", "yu", "gi", "oh", "of", "and", "a", "an", "edition", "english", "en", "limit", "1", "per", "customer", "sealed", "product", "new", "universes", "beyond", "marvel", "marvels", "s"]);
+const SYN = { display: "box", displays: "box", boxes: "box", packs: "pack", decks: "deck", bundles: "bundle", kit: "pack", kits: "pack", "pre": "prerelease", "release": "" };
 export function tok(sx) {
-  return String(sx || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean)
+  return String(sx || "").toLowerCase().replace(/\((?:limit|pre-?order|in ?stock|coming soon)[^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean)
     .map((t) => (t in SYN ? SYN[t] : t)).filter((t) => t && !FILLER.has(t));
 }
 const isCode = (t) => /^[a-z]{1,4}\d{1,3}[a-z]?$/.test(t);   // ME04, SV10, OP09 ...
@@ -430,7 +433,7 @@ async function phaseIndex(cx, run) {
     // Fallbacks: a Case row for a non-case title, a UPC row with no price at
     // all, or no UPC row - try the set + kind name match.
     const titleIsCase = /\bcase\b/i.test(p.title || "");
-    if (p.match !== "metafield" && (!row || (isCaseRow(row) && !titleIsCase) || !rowPrice(row))) {
+    if (!row || (isCaseRow(row) && !titleIsCase) || !rowPrice(row)) {
       const byName = nameMatch(p.title, rows);
       if (byName && (!row || rowPrice(byName))) {
         p.match = row ? "name (upc row was " + (isCaseRow(row) && !titleIsCase ? "a case" : "unpriced") + ": " + row.name + ")" : "name";
@@ -504,13 +507,15 @@ async function phaseComp(cx, run, cfg, deadline) {
       const r = await cx.fetch(u, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12000) });
       if (!r.ok) { p.compMiss = "HTTP " + r.status; continue; }
       const j = await r.json();
-      const hit = pickComp(p.title, p.upc, (((j.resources || {}).results || {}).products) || []);
-      if (!hit) { p.compMiss = "no title match"; continue; }
-      const pr = await cx.fetch(COMP.base + "/products/" + hit.handle + ".js", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12000) });
-      if (!pr.ok) { p.compMiss = "product HTTP " + pr.status; continue; }
-      const pj = await pr.json();
-      const v = (pj.variants || [])[0] || {};
-      p.comp = { price: Number(v.price) / 100, available: !!(pj.available || v.available), handle: pj.handle, title: pj.title, barcode: v.barcode || null, at: cx.now() };
+      const results = (((j.resources || {}).results || {}).products) || [];
+      const hit = pickComp(p.title, p.upc, results);
+      if (!hit) { p.compMiss = results.length ? "no title match among " + results.length + " (first: " + String((results[0] || {}).title || "").slice(0, 60) + ")" : "nothing found"; continue; }
+      // The predictive-search row carries price and availability (their
+      // /products/<handle>.js answers 403 to Workers, 2026-09-15).
+      const v = (hit.variants || [])[0] || {};
+      const rawPrice = v.price != null ? v.price : hit.price;   // suggest: "199.95" (dollars); product JSON would be cents
+      const price = typeof rawPrice === "string" ? Number(rawPrice) : Number(rawPrice) / 100;
+      p.comp = { price, available: !!(hit.available || v.available), handle: hit.handle, title: hit.title, barcode: v.barcode || null, at: cx.now() };
     } catch (e) { p.compMiss = msg(e); }
   }
   if (run.compI < run.products.length) return;

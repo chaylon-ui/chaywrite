@@ -197,3 +197,20 @@ test("401 Games: exact title tokens, in stock holds the price down", () => {
   assert.equal(floorWins.suggested, 229.95);   // cost + 10% = 220 -> 229.95 beats the 401 cap
   assert.equal(COMP.base, "https://store.401games.ca");
 });
+
+test("401 Games naming: brand words and English are noise, Japanese is not, Kit = Pack", () => {
+  const r = [
+    { title: "MTG - Universes Beyond: Marvel's Spider-Man - Collector Booster Box", handle: "sm-cbb", available: true },
+    { title: "MTG - Universes Beyond: Marvel's Spider-Man - Play Booster Box", handle: "sm-pbb", available: true },
+    { title: "MTG - Kamigawa: Neon Dynasty - English Collector Booster Box", handle: "neo-cbb", available: true },
+    { title: "MTG - Kamigawa: Neon Dynasty - Japanese Collector Booster Box", handle: "neo-jp", available: true },
+    { title: "MTG - Universes Beyond: Marvel's Spider-Man - Prerelease Kit", handle: "sm-pre", available: true },
+    { title: "MTG - Universes Beyond: Final Fantasy - Play Booster Box", handle: "ff-pbb", available: true },
+  ];
+  assert.equal(pickComp("MTG SPIDER-MAN COLLECTOR BOOSTER BOX (LIMIT 2)", "", r).handle, "sm-cbb");
+  assert.equal(pickComp("MTG KAMIGAWA NEON DYNASTY COLLECTOR BOOSTER BOX", "", r).handle, "neo-cbb");
+  assert.equal(pickComp("MTG KAMIGAWA NEON DYNASTY JAPANESE COLLECTOR BOOSTER BOX", "", r).handle, "neo-jp");
+  assert.equal(pickComp("MTG SPIDER-MAN PRERELEASE PACK", "", r).handle, "sm-pre");
+  assert.equal(pickComp("MTG FINAL FANTASY PLAY BOOSTER BOX", "", r).handle, "ff-pbb");
+  assert.equal(pickComp("MTG FINAL FANTASY COLLECTOR BOOSTER BOX", "", r), null);
+});
