@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { niceUp, autoStep, decide, categoryOf, normUpc, readProduct, nextRunAt, DEFAULT_CONFIG } from "../src/autoprice.js";
+import { niceUp, autoStep, decide, margin, categoryOf, normUpc, readProduct, nextRunAt, DEFAULT_CONFIG } from "../src/autoprice.js";
+
+test("margin: profit and share of the selling price, from unit cost", () => {
+  assert.deepEqual(margin(219.95, 150), { amount: 69.95, pct: 31.8 });
+  assert.deepEqual(margin(89.95, 100), { amount: -10.05, pct: -11.2 });   // under cost shows negative, never hidden
+  assert.equal(margin(219.95, null), null);
+  assert.equal(margin(219.95, 0), null);
+  assert.equal(margin(null, 150), null);
+});
 
 test("normal-looking numbers: rounded UP onto the .95 grid", () => {
   assert.equal(niceUp(223.76), 229.95);   // the owner's example
@@ -77,6 +85,8 @@ test("two sources average; none skips with a useful reason", () => {
   assert.equal(d.marketUsd, 65);
   assert.equal(d.sources.length, 2);
   const s = decide({ price: 100, cost: 50 }, cfg, FX);
+  assert.deepEqual(s.marginNow, { amount: 50, pct: 50 });   // today's margin shows even when there is nothing to suggest
+  assert.equal(s.marginSuggested, undefined);
   assert.equal(s.action, "skip");
   assert.match(s.reason, /no match/);
   const t = decide({ price: 100, cost: 50, tcgId: 1 }, cfg, FX);
@@ -93,6 +103,8 @@ test("a fall is capped per run and never goes under the floor", () => {
   assert.equal(d.floorSrc, "cost+margin");
   assert.equal(d.suggested, 89.95);
   assert.equal(d.reason, "floor");
+  assert.deepEqual(d.marginNow, { amount: 20, pct: 20 });          // at today's $100
+  assert.deepEqual(d.marginSuggested, { amount: 9.95, pct: 11.1 });   // at the suggested $89.95
   const c = decide({ price: 100, cost: 20, tcgMarket: 30 }, cfg, FX);
   // market 41.73, floor 22: the fall is capped at 85 -> next $5 step ending .95 is 89.95
   assert.equal(c.capped, "down");
@@ -227,4 +239,69 @@ test("login sessions: signed, expiring, keyed by the secret; constant-time compa
   assert.equal(await safeEqual("hunter2", "hunter2"), true);
   assert.equal(await safeEqual("hunter2", "hunter3"), false);
   assert.equal(await safeEqual("", "x"), false);
+});
+
+test("report rows print our margin under today's price and under the suggested price", async () => {
+  const { renderPage } = await import("../src/autoprice.js");
+  const d = decide({ price: 219.95, cost: 150, tcgMarket: 198.98 }, { ...DEFAULT_CONFIG }, FX);
+  const rows = [
+    { id: "gid://shopify/Product/1", title: "Box A", handle: "box-a", type: "MTG Sealed", stock: 0, ...d },
+    { id: "gid://shopify/Product/2", title: "Box B", handle: "box-b", type: "MTG Sealed", stock: 3, ...decide({ price: 100, cost: 110, tcgMarket: 30 }, { ...DEFAULT_CONFIG }, FX) },
+    { id: "gid://shopify/Product/3", title: "Box C", handle: "box-c", type: "MTG Sealed", stock: 0, ...decide({ price: 50, cost: null, tcgMarket: 30 }, { ...DEFAULT_CONFIG }, FX) },
+  ];
+  const page = renderPage({ mode: "shadow", config: DEFAULT_CONFIG }, { rows }, { configured: true });
+  assert.match(page, /\$219\.95<\/b><div class="muted">cost \$150\.00<\/div><div class="muted mg" [^>]*>margin \$69\.95 · 31\.8%<\/div>/);
+  assert.match(page, new RegExp("\\$" + d.suggested.toFixed(2) + "</b><div class=\"muted mg\" [^>]*>margin \\$" + d.marginSuggested.amount.toFixed(2) + " · " + d.marginSuggested.pct + "%</div>"));
+  assert.match(page, /class="muted mg neg"[^>]*>margin \$-10\.00 · -10%<\/div>/);   // Box B is priced under cost today: red
+  assert.match(page, /cost —<\/div><div class="muted" title="No unit cost[^"]*">margin: no cost<\/div>/);   // Box C has no cost
+});
+
+test("follow 401 Games: their in-stock price is the price; out of stock alerts and falls back to TCGplayer", () => {
+  const follow = { ...DEFAULT_CONFIG, compMode: "follow" };
+  const f = decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: true, handle: "eoe-pbb" } }, follow, FX);
+  assert.equal(f.priceFrom, "401");
+  assert.equal(f.suggested, 199.95);   // TCG would say 309.95; bypassed
+  assert.equal(f.alert, null);
+  assert.equal(f.reason, "following 401 Games at $199.95 in stock");
+  assert.equal(f.comp.used, true);
+  assert.equal(f.marketCad, 262.98);   // still shown, not used
+  const noTcg = decide({ price: 0, cost: 120, comp: { price: 199.95, available: true } }, follow, FX);   // no TCGplayer match at all
+  assert.equal(noTcg.suggested, 199.95);
+  assert.equal(noTcg.action, "set");
+  const pct = decide({ price: 229.95, cost: 149.76, comp: { price: 199.95, available: true } }, { ...follow, compPct: 10 }, FX);
+  assert.equal(pct.suggested, 219.95);
+  assert.equal(pct.reason, "following 401 Games at $199.95 in stock (+10%)");
+  const fl = decide({ price: 219.95, cost: 200, tcgMarket: 189.07, comp: { price: 199.95, available: true } }, follow, FX);
+  assert.equal(fl.suggested, 229.95);   // cost + 10% floor still wins
+  assert.equal(fl.reason, "floor (401 Games is lower)");
+  const out = decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: false } }, follow, FX);
+  assert.equal(out.priceFrom, "market");
+  assert.equal(out.suggested, 309.95);   // the TCGplayer path, as with no 401 at all
+  assert.equal(out.alert, "401 Games is out of stock: priced from TCGplayer instead");
+  assert.equal(out.reason, "market");
+  const none = decide({ price: 229.95, cost: 149.76 }, follow, FX);   // not carried there, no TCGplayer match either
+  assert.equal(none.action, "skip");
+  assert.equal(none.alert, "401 Games does not list it: priced from TCGplayer instead");
+  assert.match(none.reason, /^401 Games does not list it, and no match/);
+  const per = decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, compMode: "follow", comp: { price: 199.95, available: true } }, { ...DEFAULT_CONFIG, compMode: "off" }, FX);
+  assert.equal(per.priceFrom, "401");   // the product's own setting wins over the page's
+  const cap = decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: true } }, { ...DEFAULT_CONFIG }, FX);
+  assert.equal(cap.suggested, 199.95);   // the hold mode is unchanged
+  assert.equal(cap.reason, "401 Games has it at $199.95 in stock");
+});
+
+test("the report flags follow-mode products that fell back to TCGplayer", async () => {
+  const { renderPage } = await import("../src/autoprice.js");
+  const follow = { ...DEFAULT_CONFIG, compMode: "follow" };
+  const rows = [
+    { id: "gid://shopify/Product/1", title: "Box A", handle: "a", type: "MTG Sealed", stock: 0, ...decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: true, handle: "a" } }, follow, FX) },
+    { id: "gid://shopify/Product/2", title: "Box B", handle: "b", type: "MTG Sealed", stock: 0, ...decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: false } }, follow, FX) },
+  ];
+  const page = renderPage({ mode: "shadow", config: follow }, { rows }, { configured: true });
+  assert.match(page, /<div class="alert"><b>⚠ 1 product set to follow 401 Games is priced from TCGplayer instead<\/b>/);
+  assert.match(page, /Box B<\/a> · 401 Games is out of stock: priced from TCGplayer instead · now \$229\.95 → \$309\.95/);
+  assert.match(page, /<tr class="a-raise alerted">/);
+  assert.match(page, /<div class="warn">⚠ 401 Games is out of stock: priced from TCGplayer instead<\/div>/);
+  assert.match(page, /<b>401 Games \$199\.95<\/b><div class="muted">followed · TCGplayer not used: TCG \$189\.07 US = \$262\.98 CAD<\/div>/);
+  assert.match(page, /<option value="follow" selected>/);
 });
