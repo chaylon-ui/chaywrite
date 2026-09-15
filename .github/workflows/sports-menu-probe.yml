@@ -72,6 +72,9 @@ jobs:
             }, process.env.SUB);
             console.log('SUB', process.env.SUB, JSON.stringify(subBox));
             if (subBox && subBox.box) { await page.mouse.move(subBox.box[0] + subBox.box[2] / 2, subBox.box[1] + subBox.box[3] / 2); await sleep(1800); }
+            const clip0 = subBox && subBox.box ? { x: Math.max(0, subBox.box[0] - 20), y: Math.max(0, subBox.box[1] - 460), width: 1100, height: 900 } : { x: 0, y: 100, width: 1100, height: 850 };
+            const jpg = await page.screenshot({ type: 'jpeg', quality: 55, clip: { x: clip0.x, y: clip0.y, width: Math.min(clip0.width, 1440 - clip0.x), height: Math.min(clip0.height, 1000 - clip0.y) } });
+            console.log('JPEG-B64 ' + jpg.toString('base64'));
             const out = await page.evaluate((childLabel) => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
               const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0'; };
@@ -95,9 +98,6 @@ jobs:
             console.log('PANEL', out.found, out.panelCls, JSON.stringify(out.rect), 'chain:', out.chain, 'html length', out.htmlLen);
             console.log('HTML', out.html || '');
             for (const r of out.rows || []) console.log('ROW', JSON.stringify(r));
-            const clip = out.rect ? { x: Math.max(0, out.rect[0] - 240), y: Math.max(0, out.rect[1] - 60), width: Math.min(1440 - Math.max(0, out.rect[0] - 240), out.rect[2] + 300), height: Math.min(1000 - Math.max(0, out.rect[1] - 60), out.rect[3] + 80) } : { x: 0, y: 100, width: 1100, height: 800 };
-            const jpg = await page.screenshot({ type: 'jpeg', quality: 55, clip });
-            console.log('JPEG-B64 ' + jpg.toString('base64'));
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
           EOF
