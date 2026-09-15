@@ -103,6 +103,19 @@ jobs:
           rm -f /tmp/token
           echo "rules fetched: $n"
 
+      - name: Diagnostics (list order + flags, raw rarity rows)
+        run: |
+          echo "== rule list: top-level type and first entry keys"
+          jq -c 'if type=="array" then {n: length, keys: (.[0]|keys)} else {keys: keys, inner: ((.. | arrays | .[0] | objects | keys)? // null)} end' /tmp/rulelist.json | cut -c1-800
+          echo "== rule list order as returned (id | name | any extra flags)"
+          jq -c '(if type=="array" then . else (.. | arrays | select(.[0]|type=="object" and has("id"))) end) | .[] | with_entries(select(.key|test("id|name|game|price|priceRule|enabled|active|status|sync|order|priority|created|updated|deleted";"i")))' /tmp/rulelist.json 2>/dev/null | cut -c1-260 | head -80
+          for id in 24688 8078 8074 21088; do
+            echo "== raw byId $id: NM variant scalar fields + first 5 rarity rows"
+            jq -c '.buylistVariants[]? | select(.variantName|test("near mint";"i")) | {variantName, cashPercent, storeCreditPercent, allowPurchase, quantity, overQuantityCashPercent, nRarity: (.buylistVariantRarityRules|length), rarity: (.buylistVariantRarityRules[:5] | map({rarity, cashPercent, storeCreditPercent, allowPurchase, quantity}))}' "/tmp/rules/$id.json" 2>/dev/null | cut -c1-1200
+            echo "   distinct (cashPercent, allowPurchase) combos across all NM rarity rows:"
+            jq -c '[.buylistVariants[]? | select(.variantName|test("near mint";"i")) | .buylistVariantRarityRules[]? | {c: .cashPercent, s: .storeCreditPercent, a: .allowPurchase, q: .quantity}] | group_by(.) | map({combo: .[0], n: length})' "/tmp/rules/$id.json" 2>/dev/null | cut -c1-600
+          done
+
       - name: Convert to public/buy-rules.json
         run: |
           python3 - <<'PY'
@@ -256,19 +269,13 @@ jobs:
           }
           with open('public/buy-rules.json', 'w') as f:
               json.dump(out, f, indent=2, ensure_ascii=False); f.write('\n')
-          # Summary, rarity report, and spot checks against the owner's screenshots.
+          # Summary and spot checks against the owner's screenshots.
           def fmt(t): return f"<= {t['upTo']}: {t['cash']:.2f}/{t['credit']:.2f}" + (" *" if t.get("rarities") else "")
           for gm in games:
               print(f"== {gm['key']}  rules: {len(gm['_rules'])}  sets: {len(gm.get('sets') or {})}")
               for c in ORDER:
                   e = gm["conds"].get(c)
                   if e: print(f"   {c}: " + ", ".join(fmt(t) for t in e["tiers"]) + f", above: {e['cash']:.2f}/{e['credit']:.2f}" + (" *" if e.get("rarities") else ""))
-          print("== rarity overrides (* above), NM/LP only, per rule")
-          for g, rs in sorted(general.items()):
-              for x in sorted(rs, key=lambda x: x["t"]):
-                  for c in ("NM", "LP"):
-                      e = x["conds"].get(c) or {}
-                      if e.get("rarities"): print(f"   {GAME[g][0]} | {x['name']} | {c} default {e['cash']:.2f}/{e['credit']:.2f} | " + json.dumps(e["rarities"]))
           def rate(key, c, P, rarity=None):
               gm = next((x for x in games if x["key"] == key), None)
               if not gm: return None
