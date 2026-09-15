@@ -481,3 +481,43 @@ test("Celebrations: '(Exclusive)' is noise, and a UPC shared by twins goes to th
   assert.equal(upcRow(ixc, "820650828942", plain).id, 251895);   // a lone UPC row as before (the case check comes later)
   assert.equal(upcRow(ixc, "000000000000", plain), null);
 });
+
+test("a title naming no design prices from the family of design rows; series stripped on both sides (151 Mini Tin, 2026-09-15)", () => {
+  const rows = [
+    { id: 502008, g: 23237, set: "SV: Scarlet & Violet 151", name: "151 Mini Tin Display", upc: "", market: 539.62, low: 528, mid: 609 },
+    { id: 522699, g: 23237, set: "SV: Scarlet & Violet 151", name: "151 Mini Tin [Arcanine & Omanyte]", upc: "", market: 54.62, low: 50, mid: 58 },
+    { id: 522700, g: 23237, set: "SV: Scarlet & Violet 151", name: "151 Mini Tin [Dragonite & Vileplume]", upc: "", market: 57.55, low: 46, mid: 58.48 },
+    { id: 522702, g: 23237, set: "SV: Scarlet & Violet 151", name: "151 Mini Tin [Gengar & Poliwag]", upc: "", market: 60.85, low: 51.5, mid: 63.84 },
+    { id: 668357, g: 23237, set: "SV: Scarlet & Violet 151", name: "151 Mini Tin Display Case", upc: "", market: 2265.93 },
+    { id: 662302, g: 23237, set: "SV: Scarlet & Violet 151", name: "Sam's Club 151 (4 Mini Tins + 4 Promo Cards Bundle)", upc: "0196214134478", market: 217.37 },
+  ];
+  const fam = nameMatch("POKEMON SV3.5 151 MINI TIN", rows);
+  assert.equal(fam.name, "151 Mini Tin [any of 3 designs]");
+  assert.deepEqual(fam.family, [522699, 522700, 522702]);
+  assert.equal(fam.market, 57.67);   // (54.62 + 57.55 + 60.85) / 3
+  assert.equal(fam.low, 49.17);
+  // the display still matches exactly, and a two-member family (edition pairs) never averages
+  assert.equal(nameMatch("POKEMON SV3.5 151 MINI TIN DISPLAY", rows).id, 502008);
+  const neo = [{ id: 1, set: "Neo Destiny", name: "Neo Destiny Booster Box [1st Edition]", market: 30000 }, { id: 2, set: "Neo Destiny", name: "Neo Destiny Booster Box [Unlimited Edition]", market: 9000 }];
+  assert.equal(nameMatch("POKEMON NEO DESTINY BOOSTER BOX", neo), null);
+  // a title that spells the series out still matches the same set
+  assert.equal(nameMatch("POKEMON SCARLET & VIOLET 151 MINI TIN DISPLAY", rows).id, 502008);
+  // a set that is nothing but the series keeps its tokens (stripping would leave none)
+  assert.equal(nameMatch("POKEMON SWSH1 SWORD & SHIELD BOOSTER BOX", [{ id: 9, set: "Sword & Shield", name: "Sword & Shield Booster Box", market: 800 }]).id, 9);
+  assert.equal(nameMatch("POKEMON SWSH1 SWORD & SHIELD BASE SET BOOSTER BOX", [{ id: 9, set: "SWSH01: Sword & Shield Base Set", name: "Sword & Shield Booster Box", market: 800 }]).id, 9);
+});
+
+test("one tab per game with the error count in brackets and a price alert marker", async () => {
+  const { renderPage } = await import("../src/autoprice.js");
+  const rows = [
+    { id: "gid://shopify/Product/1", title: "A", handle: "a", type: "Pokemon Sealed Product", stock: 1, current: 10, suggested: 10.95, action: "raise" },
+    { id: "gid://shopify/Product/2", title: "B", handle: "b", type: "Pokemon Sealed Product", stock: 1, current: 79.95, action: "skip", reason: "no match" },
+    { id: "gid://shopify/Product/3", title: "C", handle: "c", type: "Pokemon Sealed Product", stock: 1, current: 20, suggested: 19.95, action: "lower", alert: "401 Games is out of stock: priced from TCGplayer instead" },
+    { id: "gid://shopify/Product/4", title: "D", handle: "d", type: "Magic Sealed Product", stock: 0, current: 100, suggested: 109.95, action: "raise" },
+  ];
+  const page = renderPage({ mode: "apply", config: DEFAULT_CONFIG }, { rows }, { configured: true, game: "Pokemon" });
+  assert.match(page, /<div class="tabs"><a href="\/autoprice" class=" warn" title="4 listed, 1 not priced, 1 price alert">All <span class="n">4<\/span> <span class="err">\(1 error\)<\/span> <span class="al">⚠ 1<\/span><\/a>/);
+  assert.match(page, /<a href="\/autoprice\?game=Magic" class="" title="1 listed">Magic <span class="n">1<\/span><\/a>/);
+  assert.match(page, /<a href="\/autoprice\?game=Pokemon" class="on warn" title="3 listed, 1 not priced, 1 price alert">Pokemon <span class="n">3<\/span> <span class="err">\(1 error\)<\/span> <span class="al">⚠ 1<\/span><\/a>/);
+  assert.equal(page.includes("chips"), false);
+});

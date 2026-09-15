@@ -189,20 +189,45 @@ export function kindTokens(name, setName) {
   return tok(name).filter((t) => !st.has(t));
 }
 const sameSet = (a, b) => a.length === b.length && a.every((t) => b.includes(t));
+// Bracketed variants that change the price: never averaged into a family.
+const VARIANT_RE = /edition|unlimited|\b1st\b|shadowless|japanese|korean|set of|case|display|exclusive|bundle|\bpack\b|\bbox\b/i;
 export function nameMatch(title, rows) {
-  const tt = tok(title).filter((t) => !isCode(t));   // "POKEMON ME04 CHAOS RISING ..." - the set code is not a kind word
-  if (!tt.length) return null;
+  const tt0 = tok(title).filter((t) => !isCode(t));   // "POKEMON ME04 CHAOS RISING ..." - the set code is not a kind word
+  if (!tt0.length) return null;
   let best = null;
+  const families = {};
   for (const row of rows) {
-    const st = setTokens(row.set);
+    // TCGplayer's set "SV: Scarlet & Violet 151" carries the series where
+    // our "POKEMON SV3.5 151 MINI TIN" carries the code: strip it on both
+    // sides, unless nothing would be left (the "Sword & Shield" base set).
+    let st = setTokens(row.set), tt = tt0;
+    const stS = stripSeries(st);
+    if (stS.length && stS.length !== st.length) { st = stS; tt = stripSeries(tt0); }
     if (!st.length || !st.every((t) => tt.includes(t))) continue;
     const titleKind = [...new Set(tt.filter((t) => !st.includes(t)))];
     const kind = [...new Set(kindTokens(row.name, row.set))];
-    if (!kind.length || !sameSet(kind, titleKind)) continue;
-    const score = (row.market > 0 ? 2 : (row.mid > 0 || row.low > 0) ? 1 : 0) + st.length / 100;
-    if (!best || score > best.score) best = { row, score };
+    if (kind.length && sameSet(kind, titleKind)) {
+      const score = (row.market > 0 ? 2 : (row.mid > 0 || row.low > 0) ? 1 : 0) + st.length / 100;
+      if (!best || score > best.score) best = { row, score };
+      continue;
+    }
+    // A title naming no design ("151 MINI TIN") against TCGplayer's one row
+    // per design ("151 Mini Tin [Gengar & Poliwag]" x10): remember the family.
+    const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(row.name || "");
+    if (m && !isCaseRow(row) && !VARIANT_RE.test(m[2])) {
+      const baseKind = [...new Set(kindTokens(m[1], row.set))];
+      if (baseKind.length && sameSet(baseKind, titleKind)) (families[m[1]] = families[m[1]] || []).push(row);
+    }
   }
-  return best ? best.row : null;
+  if (best) return best.row;
+  const fam = Object.entries(families).sort((a, b) => b[1].length - a[1].length)[0];
+  if (!fam || fam[1].length < 3) return null;   // two members are usually an edition pair, not designs
+  const [base, frows] = fam;
+  const avg = (xs) => (xs.length ? round2(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+  const priced = frows.filter((r) => r.market > 0);
+  return { id: frows[0].id, g: frows[0].g, set: frows[0].set, name: base + " [any of " + frows.length + " designs]", upc: "",
+    market: avg(priced.map((r) => r.market)), low: avg(frows.filter((r) => r.low > 0).map((r) => r.low)), mid: avg(frows.filter((r) => r.mid > 0).map((r) => r.mid)),
+    family: frows.map((r) => r.id), sub: frows[0].sub };
 }
 export const isCaseRow = (row) => /\bcase\b/i.test(row && row.name || "");
 // Lookups for one category's rows. TCGplayer puts a product's UPC on its
@@ -633,6 +658,7 @@ async function phaseIndex(cx, run) {
     }
     if (row) {
       p.tcgId = row.id; p.tcgName = row.name; p.tcgGroup = row.g; p.tcgLow = row.low ?? null; p.tcgMid = row.mid ?? null;
+      if (row.family) { p.tcgFamily = row.family; p.match = (p.match || "name") + " (average of " + row.family.length + " designs)"; }
       const pr = rowPrice(row);
       if (pr) { p.tcgMarket = pr.usd; p.tcgKind = pr.kind; }
     } else if (!p.match || p.match === "upc") {
@@ -731,7 +757,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     if (p.variants > 1 && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: one price per product only, set by hand"; }
     if (p.match && !p.tcgId && d.action === "skip") d.reason = p.match;
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId,
-      tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null,
+      tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null,
       pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, compMiss: p.compMiss || null,
       settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId }, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
@@ -775,7 +801,7 @@ async function phaseWrite(cx, run, cfg, deadline) {
       row.lastChange = (await cx.storage.get("ap:last:" + row.id)) || null;
       m.push({ ownerId: row.id, namespace: "exor", key: "ap_suggest", type: "json", value: JSON.stringify(note) });
       if (row.pcIdFound && !row.pcId) m.push({ ownerId: row.id, namespace: "exor", key: "ap_pc_id", type: "number_integer", value: String(row.pcIdFound) });
-      if (row.tcgId && row.match && row.match !== "metafield") m.push({ ownerId: row.id, namespace: "exor", key: "ap_tcg_id", type: "number_integer", value: String(row.tcgId) });
+      if (row.tcgId && row.match && row.match !== "metafield" && !row.tcgFamily) m.push({ ownerId: row.id, namespace: "exor", key: "ap_tcg_id", type: "number_integer", value: String(row.tcgId) });   // a family average has no single id to pin
     }
     try {
       const r = await adminGql(cx, MF_SET, { m });
@@ -1105,6 +1131,20 @@ export function renderPage(s, rep, view) {
   const counts = {};
   for (const r of rows) counts[r.action] = (counts[r.action] || 0) + 1;
   const alerted = rows.filter((r) => r.alert);
+  // One tab per game (owner, 2026-09-15): the count, then in brackets how
+  // many rows could not be priced or written, and a warning when a row
+  // carries a price alert (a 401 follow fell back, a write failed, or a
+  // suggested price sits under cost).
+  const tabStats = (list) => {
+    const errors = list.filter((r) => r.action === "skip" || r.action === "review" || r.writeError).length;
+    const alerts = list.filter((r) => r.alert || r.writeError || (r.marginSuggested && r.marginSuggested.amount < 0)).length;
+    return { n: list.length, errors, alerts };
+  };
+  const tab = (game, label, list) => {
+    const s = tabStats(list);
+    const on = (game == null && !v.game) || v.game === game;
+    return `<a href="/autoprice${game == null ? "" : "?game=" + encodeURIComponent(game)}" class="${on ? "on" : ""}${s.alerts ? " warn" : ""}" title="${s.n} listed${s.errors ? ", " + s.errors + " not priced" : ""}${s.alerts ? ", " + s.alerts + " price alert" + (s.alerts === 1 ? "" : "s") : ""}">${esc(label)} <span class="n">${s.n}</span>${s.errors ? ` <span class="err">(${s.errors} error${s.errors === 1 ? "" : "s"})</span>` : ""}${s.alerts ? ` <span class="al">⚠ ${s.alerts}</span>` : ""}</a>`;
+  };
   const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
   const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
   const change = (c) => c ? `<span title="${esc(when(c.at))}">${esc(when(c.at).slice(0, 16))}</span><div class="muted">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto" : "by hand"}</div>` : '<span class="muted">—</span>';
@@ -1161,7 +1201,7 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const found = v.found;
   const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
 <p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority; when ntfy.sh refuses the worker (free plan, shared IP) the GitHub relay sends it at 22:50 UTC" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p>
 ${v.flash ? `<p class="flash">${esc(v.flash)}</p>` : ""}
@@ -1179,7 +1219,7 @@ ${s.ntfy ? ctlForm("ntfy-test", "", "Send test push") : ""}
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
 <h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
 ${alerted.length ? `<div class="alert"><b>⚠ ${alerted.length} product${alerted.length === 1 ? "" : "s"} set to follow ${esc(COMP.name)} ${alerted.length === 1 ? "is" : "are"} priced from TCGplayer instead</b> (out of stock or not listed there):<ul>${alerted.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.action === "skip" ? " · <b>skipped: " + esc(r.reason) + "</b>" : r.suggested != null ? " · now " + money(r.current) + " → " + money(r.suggested) : ""}</li>`).join("")}</ul></div>` : ""}
-<div class="chips"><a href="/autoprice" class="${v.game ? "" : "on"}">All (${all.length})</a>${games.map((g) => `<a href="/autoprice?game=${encodeURIComponent(g)}" class="${v.game === g ? "on" : ""}">${esc(g)} (${all.filter((x) => x.game === g).length})</a>`).join("")}</div>
+<div class="tabs">${tab(null, "All", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</div>
 <table class="rep"><thead><tr><th>Product</th><th>Today</th><th>Market</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
 <h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>ntfy</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}${r.nightly ? "" : ' <span class="muted">manual</span>'}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc(r.notify || "—")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">none</td></tr>'}</tbody></table>
 </div></body></html>`;
