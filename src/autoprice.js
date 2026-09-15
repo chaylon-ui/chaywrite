@@ -224,6 +224,13 @@ async function tick(cx) {
   // the nightly alarm starts a fresh run; a manual kick wrote its own first
   if (!run || run.done) run = newRun(now, { apply: (await configOf(cx)).mode === "apply" });
   run.ticks++; run.tickAt = now;
+  if (run.ticks === 1) {
+    try {
+      const marks = await cx.storage.list({ prefix: "ap:removed:" });
+      const old = [...marks].filter(([, at]) => now - Number(at) > 3600e3).map(([k]) => k);
+      if (old.length) await cx.storage.delete(old);
+    } catch {}
+  }
   const cfg = await configOf(cx);
   const deadline = now + TICK_MS;
   try {
@@ -294,7 +301,15 @@ export function readProduct(node) {
 async function phaseProducts(cx, run) {
   const r = await adminGql(cx, PRODUCTS_Q, { after: run.cursor });
   const conn = r.data.products;
-  for (const e of conn.edges) run.products.push(readProduct(e.node));
+  for (const e of conn.edges) {
+    // The tag SEARCH index lags tagsRemove by seconds to minutes (2026-09-15:
+    // a run right after four removals still listed them and, in apply mode,
+    // repriced one). The node's own tags are current, so they decide; a
+    // product removed from the page in the last hour is skipped as well.
+    if (!((e.node.tags || []).includes(TAG))) continue;
+    if (await cx.storage.get("ap:removed:" + e.node.id)) continue;
+    run.products.push(readProduct(e.node));
+  }
   if (conn.pageInfo.hasNextPage) { run.cursor = conn.pageInfo.endCursor; await cx.sleep(throttleWait(r.cost, 60)); return; }
   run.cursor = null;
   // Products added from the page moments ago may not be in the tag search
@@ -480,6 +495,8 @@ async function setListed(cx, id, on, b) {
   if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
   const rep = (await cx.storage.get("ap:report")) || { at: null, rows: [] };
   rep.rows = (rep.rows || []).filter((x) => x.id !== pid);
+  if (on) await cx.storage.delete("ap:removed:" + pid);
+  else await cx.storage.put("ap:removed:" + pid, cx.now());
   if (on) {
     // Show it in the list at once (owner 2026-09-15: "when I refresh it is
     // not in the list"), then price it now with a shadow run - the nightly
