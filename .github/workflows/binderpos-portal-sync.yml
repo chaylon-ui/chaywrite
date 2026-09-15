@@ -2,33 +2,45 @@ name: BinderPOS portal rules sync
 
 # Owner directive (2026-09-14): read the buylist percentages straight from
 # the BinderPOS portal with the store's STAFF LOGIN, so the card-page
-# "What we pay" estimate carries the real rule for every price band and
-# game (the public feed only exposes rule output on cheap cards, so a
-# $1,915 Ultra Ball estimated 45/55 while the portal's rule is 55/70).
+# "What we pay" panel carries the real rule for every price band and game
+# (the public feed only exposes rule output on cheap cards, so a $1,915
+# Ultra Ball estimated 45/55 while the portal's rule is 55/70).
 #
 # Mechanism, no browser: the portal (portal.binderpos.com, a React SPA)
 # signs staff in through Firebase Auth (project hobby-pos; the web API key
 # below is the public one shipped in the portal's own bundle) and then
 # calls api.binderpos.com with the Firebase ID token as a Bearer header.
-# The two pages the owner pointed at map to:
-#   #/buylists/rules    -> GET /api/buylist/rule/list, /api/buylist/rule/byId/{id}
-#   #/settings/pricing  -> GET /api/settings/priceRulesForGames (+ /default)
+# The rules page (#/buylists/rules) reads GET /api/buylist/rule/list and
+# /api/buylist/rule/byId/{id}: one rule per game x price band with a
+# threshold ("price" + "priceRule" >=, >, <=, <), per-CONDITION cash /
+# store-credit percentages (buylistVariants[].variantName) and per-rarity
+# overrides (null = inherit); set-specific rules carry setName (art cards,
+# prize packs = not buying); rules whose name says "test" are skipped.
+#
+# Converter: for every game the general rules are evaluated the way the
+# portal resolves them - the matching ">=" rule with the highest threshold,
+# the matching "<=" rule with the lowest, the narrower band when both kinds
+# match - at every price band edge, and the result is written as the
+# per-condition tier ladder public/buy-rules.json already carries
+# (buyprice-reveal.js reads it unchanged; "exact": true tells it not to
+# apply the evidence-based condition lift). Set rules go in "sets".
 #
 # Secrets: BINDERPOS_LOGIN_EMAIL + BINDERPOS_LOGIN_PASSWORD (repo Actions
-# secrets). They are only ever passed to Firebase's sign-in endpoint; the
-# resulting token is masked in the log; nothing else is printed but the
-# store's own rule data.
+# secrets). Passed only to Firebase's sign-in endpoint; the token is
+# masked; nothing else is printed but the store's own rule data.
 #
-# dry_run=true (default until the converter is confirmed): sign in, fetch,
-# print the JSON shapes, write nothing.
+# Runs daily after the feed-based sync (09:23 UTC) so the portal's exact
+# rules are what the storefront serves for the day.
 
 on:
+  schedule:
+    - cron: "40 9 * * *"   # daily 09:40 UTC ~ 6:40am Atlantic
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "true = sign in + print the rule payloads only"
+        description: "true = sign in, convert and print, but do not commit/deploy"
         required: false
-        default: "true"
+        default: "false"
 
 permissions:
   contents: write
@@ -46,7 +58,6 @@ jobs:
           ref: claude/shopify-site-improvements-ztgdt8
 
       - name: Sign in (Firebase, staff login from secrets)
-        id: login
         env:
           EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
           PASSWORD: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
@@ -70,40 +81,229 @@ jobs:
           chmod 600 /tmp/token
           echo "signed in (token length ${#TOKEN})"
 
-      - name: Fetch the rules + pricing payloads (compact shape report)
+      - name: Fetch every buylist rule
         run: |
           set +x
           TOKEN=$(cat /tmp/token)
-          TRIM='walk(if type=="array" and length>3 then .[:3] else . end)'
-          get() { # $1 label, $2 path
-            code=$(curl -sS --max-time 40 -o "/tmp/$1.json" -w '%{http_code}' -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API$2" || echo ERR)
-            echo "=== $1  GET $2  -> HTTP $code, $(wc -c < "/tmp/$1.json") bytes"
-            if jq -e . "/tmp/$1.json" >/dev/null 2>&1; then
-              jq -c "if type==\"array\" then {n:length, first:(.[0]|$TRIM)} else $TRIM end" "/tmp/$1.json" | cut -c1-1500
-            else head -c 300 "/tmp/$1.json"; fi
-            echo
-          }
-          get rulelist   /api/buylist/rule/list
-          get pricerules /api/settings/priceRulesForGames
-          get pricedef   /api/settings/priceRulesForGames/default
-          get v2games    /apiv2/customer/pricing/games
-          get v2default  /apiv2/customer/pricing/default
-          get games      /api/cards/games/supported
+          code=$(curl -sS --max-time 40 -o /tmp/rulelist.json -w '%{http_code}' -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API/api/buylist/rule/list" || echo ERR)
+          echo "rule list HTTP $code, $(wc -c < /tmp/rulelist.json) bytes"
+          [ "$code" = "200" ] || { head -c 300 /tmp/rulelist.json; echo; exit 1; }
           mkdir -p /tmp/rules
-          for id in $(jq -r '(.. | objects | select(has("id")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | sort -un | head -60); do
-            curl -sS --max-time 40 -o "/tmp/rules/$id.json" -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API/api/buylist/rule/byId/$id" || true
-            sleep 0.3
-          done
-          echo "=== rules fetched in full: $(ls /tmp/rules | wc -l)"
+          ids=$(jq -r '(.. | objects | select(has("id") and has("game")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | sort -un)
+          [ -n "$ids" ] || ids=$(jq -r '(.. | objects | select(has("id")) | .id) // empty' /tmp/rulelist.json 2>/dev/null | sort -un)
           n=0
-          for f in $(ls /tmp/rules/*.json | sort -V); do
-            n=$((n+1))
-            if [ $n -le 4 ]; then echo "--- sample $(basename $f)"; jq -c "$TRIM" "$f" 2>/dev/null | cut -c1-1500; fi
+          for id in $ids; do
+            curl -sS --max-time 40 -o "/tmp/rules/$id.json" -H "authorization: Bearer $TOKEN" -H 'accept: application/json' "$API/api/buylist/rule/byId/$id" || true
+            n=$((n+1)); sleep 0.25
           done
-          echo "=== scalar table (one line per rule: every non-array, non-object field)"
-          for f in $(ls /tmp/rules/*.json | sort -V); do
-            jq -c 'if type=="object" then with_entries(select((.value|type)!="array" and (.value|type)!="object")) else . end' "$f" 2>/dev/null | cut -c1-300
-          done
+          rm -f /tmp/token
+          echo "rules fetched: $n"
+
+      - name: Convert to public/buy-rules.json
+        run: |
+          python3 - <<'PY'
+          import json, glob, re, collections, datetime
+          GAME = {  # portal game code -> (our key, product-type match word)
+              "pokemon": ("pokemon", "pokemon"), "mtg": ("mtg", "mtg"), "yugioh": ("yugioh", "yugioh"),
+              "lor": ("lorcana", "lorcana"), "swu": ("starwars", "star wars"), "one": ("onepiece", "one piece"),
+              "fleshAndBlood": ("fab", "flesh"), "riftbound": ("riftbound", "riftbound"),
+          }
+          ORDER = ["NM", "LP", "MP", "HP", "DM"]
+          def cond_of(t):
+              t = (t or "").lower()
+              if "near mint" in t or re.search(r'\bnm\b', t): return "NM"
+              if "light" in t: return "LP"
+              if "moderate" in t: return "MP"
+              if "heav" in t: return "HP"
+              if "damag" in t or re.search(r'\bdmg\b', t): return "DM"
+              return ""
+          def pcts(v):
+              allow = v.get("allowPurchase", True) is not False
+              c = float(v.get("cashPercent") or 0) / 100.0 if allow else 0.0
+              s = float(v.get("storeCreditPercent") or 0) / 100.0 if allow else 0.0
+              return round(max(0.0, min(1.0, c)), 4), round(max(0.0, min(1.0, s)), 4)
+          def conds_of(rule):
+              conds = {}
+              for v in rule.get("buylistVariants") or []:
+                  c = cond_of(v.get("variantName"))
+                  if not c: continue
+                  foil = "foil" in (v.get("variantName") or "").lower()
+                  if c in conds and not conds[c]["_foil"] and foil: continue   # plain condition beats its foil twin
+                  cash, credit = pcts(v)
+                  e = {"cash": cash, "credit": credit, "_foil": foil}
+                  rar = {}
+                  for rr in v.get("buylistVariantRarityRules") or []:
+                      if rr.get("cashPercent") is None and rr.get("storeCreditPercent") is None and rr.get("allowPurchase") is not False:
+                          continue   # null = inherit the condition's numbers
+                      rc, rs = pcts({"cashPercent": rr.get("cashPercent") if rr.get("cashPercent") is not None else v.get("cashPercent"),
+                                     "storeCreditPercent": rr.get("storeCreditPercent") if rr.get("storeCreditPercent") is not None else v.get("storeCreditPercent"),
+                                     "allowPurchase": rr.get("allowPurchase", True)})
+                      if (rc, rs) != (cash, credit):
+                          rar[str(rr.get("rarity") or "").lower()] = {"cash": rc, "credit": rs}
+                  if rar: e["rarities"] = rar
+                  conds[c] = e
+              for e in conds.values(): e.pop("_foil", None)
+              return conds
+          rules = []
+          for f in glob.glob('/tmp/rules/*.json'):
+              try:
+                  r = json.load(open(f))
+                  if isinstance(r, dict) and r.get("game"): rules.append(r)
+              except Exception: pass
+          alerts, skipped = [], []
+          general = collections.defaultdict(list)
+          sets = collections.defaultdict(dict)
+          for r in rules:
+              g = r.get("game"); name = (r.get("name") or "").strip()
+              if g not in GAME:
+                  skipped.append(f"{name} (game {g} not mapped)"); continue
+              if re.search(r'\btest\b', name, re.I):
+                  skipped.append(f"{name} (test rule)"); continue
+              conds = conds_of(r)
+              if r.get("cardId") or r.get("cardName"):
+                  skipped.append(f"{name} (card-specific)"); continue
+              if r.get("setName"):
+                  sets[g][str(r["setName"]).strip().lower()] = {"name": name, "conds": conds}
+                  continue
+              op = r.get("priceRule") or ""
+              if op not in ("greaterThanOrEqualTo", "greaterThan", "lessThanOrEqualTo", "lessThan"):
+                  skipped.append(f"{name} (no price condition)"); continue
+              general[g].append({"t": float(r.get("price") or 0), "op": op, "name": name, "conds": conds})
+          def hits(x, P):
+              op, t = x["op"], x["t"]
+              return P >= t if op == "greaterThanOrEqualTo" else P > t if op == "greaterThan" else P <= t if op == "lessThanOrEqualTo" else P < t
+          def pick(rs, P):
+              ge = [x for x in rs if x["op"].startswith("greater") and hits(x, P)]
+              le = [x for x in rs if x["op"].startswith("less") and hits(x, P)]
+              a = max(ge, key=lambda x: x["t"]) if ge else None
+              b = min(le, key=lambda x: x["t"]) if le else None
+              if a and b:
+                  ups = sorted(x["t"] for x in rs if x["op"].startswith("greater") and x["t"] > a["t"])
+                  lows = sorted(x["t"] for x in rs if x["op"].startswith("less") and x["t"] < b["t"])
+                  wa = (ups[0] if ups else 1e9) - a["t"]
+                  wb = b["t"] - (lows[-1] if lows else 0.0)
+                  return b if wb < wa else a
+              return a or b
+          games = []
+          for g, rs in sorted(general.items()):
+              key, match = GAME[g]
+              cuts = set()
+              for x in rs:
+                  for d in (-0.01, 0.0, 0.01):
+                      v = round(x["t"] + d, 2)
+                      if v > 0: cuts.add(v)
+              cuts = sorted(cuts)
+              segs = []   # (lo, hi or None)
+              lo = 0.0
+              for c in cuts:
+                  segs.append((lo, c)); lo = c
+              segs.append((lo, None))
+              def rates_at(P, c):
+                  x = pick(rs, P)
+                  if not x: return (0.0, 0.0, None)
+                  e = x["conds"].get(c)
+                  if not e: return (0.0, 0.0, x["name"])
+                  return (e["cash"], e["credit"], x["name"])
+              conds_out = {}
+              for c in ORDER:
+                  ladder = []
+                  for (a, b) in segs:
+                      P = (a + b) / 2.0 if b is not None else a + 1.0
+                      cash, credit, nm = rates_at(P, c)
+                      up = round(b - 0.01, 2) if b is not None else None
+                      if ladder and ladder[-1]["cash"] == cash and ladder[-1]["credit"] == credit:
+                          ladder[-1]["upTo"] = up
+                      else:
+                          ladder.append({"upTo": up, "cash": cash, "credit": credit})
+                  base = ladder[-1]
+                  conds_out[c] = {"cash": base["cash"], "credit": base["credit"],
+                                  "tiers": [t for t in ladder if t["upTo"] is not None]}
+              # rarity overrides: attach per band from the rule that owns the band
+              rar_any = {}
+              for x in rs:
+                  for c, e in x["conds"].items():
+                      if e.get("rarities"):
+                          rar_any.setdefault(c, {}).setdefault(x["name"], e["rarities"])
+              nm = conds_out.get("NM") or conds_out[ORDER[0]]
+              entry = {
+                  "key": key, "match": match,
+                  "cash": nm["cash"], "credit": nm["credit"],
+                  "minSell": 0.01, "maxSell": 1000000, "buyFoils": True, "exact": True,
+                  "tiers": nm["tiers"], "conds": conds_out,
+                  "_source": "binderpos-portal", "_rules": [x["name"] for x in sorted(rs, key=lambda x: x["t"])],
+              }
+              if rar_any: entry["_rarityOverrides"] = rar_any
+              if sets.get(g): entry["sets"] = sets[g]
+              games.append(entry)
+          for g, s in sets.items():
+              if g in GAME and g not in general:
+                  key, match = GAME[g]
+                  games.append({"key": key, "match": match, "cash": 0, "credit": 0, "minSell": 0.01, "maxSell": 1000000,
+                                "buyFoils": True, "exact": True, "tiers": [], "conds": {}, "sets": s, "_source": "binderpos-portal", "_rules": []})
+          if skipped: alerts.append("skipped rules: " + "; ".join(skipped))
+          out = {
+              "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands; set-specific rules under sets; rules named test are skipped.",
+              "_portal": True,
+              "enabled": bool(games),
+              "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
+              "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
+              "defaults": None,
+              "games": games,
+              "_alerts": alerts,
+          }
+          with open('public/buy-rules.json', 'w') as f:
+              json.dump(out, f, indent=2, ensure_ascii=False); f.write('\n')
+          # Summary + two spot checks against the owner's screenshots.
+          for gm in games:
+              print(f"== {gm['key']}  rules: {len(gm['_rules'])}  sets: {len(gm.get('sets') or {})}")
+              for c in ORDER:
+                  e = gm["conds"].get(c)
+                  if e: print(f"   {c}: " + ", ".join(f"<= {t['upTo']}: {t['cash']:.2f}/{t['credit']:.2f}" for t in e["tiers"]) + f", above: {e['cash']:.2f}/{e['credit']:.2f}")
+          def rate(key, c, P):
+              gm = next((x for x in games if x["key"] == key), None)
+              if not gm: return None
+              e = gm["conds"].get(c) or gm
+              for t in e["tiers"]:
+                  if P <= t["upTo"]: return (t["cash"], t["credit"])
+              return (e["cash"], e["credit"])
+          print("spot check pokemon NM $1915.55 (portal widget said 55/70):", rate("pokemon", "NM", 1915.55))
+          print("spot check pokemon NM $10.45 (owner's rule view said 50/70):", rate("pokemon", "NM", 10.45))
+          print("alerts:", alerts)
+          PY
+
+      - name: Commit when changed
+        id: commit
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          if git diff --quiet public/buy-rules.json; then
+            echo "buy-rules.json unchanged - nothing to commit"; echo "changed=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git config user.name "binderpos-portal-sync"
+          git config user.email "actions@github.com"
+          git add public/buy-rules.json
+          git commit -m "buy-rules: portal sync $(date -u +%F)"
+          git push origin "$BRANCH"
+          echo "changed=1" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp build version
+        if: ${{ steps.commit.outputs.changed == '1' }}
+        run: |
+          sed -i "s/__BUILD__/$(git rev-parse --short HEAD)/" public/tv.html
+          printf '{"v":"%s"}' "$(git rev-parse --short HEAD)" > public/version.json
+
+      - name: Deploy worker with fresh rules
+        if: ${{ steps.commit.outputs.changed == '1' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify served rules
+        if: ${{ steps.commit.outputs.changed == '1' }}
+        run: |
+          sleep 30
+          V="$(git rev-parse --short HEAD)"
+          curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/buy-rules.json?v=$V" | jq -c '{enabled, updated, portal: ._portal, games: [.games[]? | {key, rules: (._rules|length), NM: .conds.NM.tiers}]}' || true
 
       - name: Scrub
         if: always()
