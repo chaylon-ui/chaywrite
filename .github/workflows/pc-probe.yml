@@ -1,0 +1,49 @@
+name: pc-probe
+# Checks the PriceCharting Prices API with the PRICECHARTING_TOKEN repo
+# secret (which deploy.yml also syncs to the worker): a product search and a
+# product fetch for graded cards, printing status, ids, names and the graded
+# price columns. The token is never printed. Manual only.
+on:
+  workflow_dispatch:
+    inputs:
+      queries:
+        description: "Search queries, one per line"
+        required: false
+        default: |
+          charizard vmax sv107 shining fates
+          rapidash 44 jungle
+          umbreon vmax 215 evolving skies
+          ultra ball 126 star birth japanese
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
+      QUERIES: ${{ inputs.queries }}
+    steps:
+      - name: search + product
+        run: |
+          python3 - <<'EOF'
+          import os, json, time, urllib.request, urllib.parse
+          t = os.environ.get("PRICECHARTING_TOKEN", "").strip()
+          print("token set:", bool(t), "| length:", len(t))
+          if not t: raise SystemExit(0)
+          def get(url):
+              req = urllib.request.Request(url, headers={"User-Agent": "ExorPcProbe/1.0"})
+              with urllib.request.urlopen(req, timeout=30) as r: return r.status, json.loads(r.read().decode())
+          GRADE_KEYS = ["loose-price","cib-price","new-price","graded-price","box-only-price","manual-only-price","bgs-10-price","condition-17-price","condition-18-price","condition-19-price","condition-20-price","condition-16-price","condition-15-price"]
+          for q in [x.strip() for x in os.environ.get("QUERIES","").splitlines() if x.strip()]:
+              st, j = get("https://www.pricecharting.com/api/products?t=" + t + "&q=" + urllib.parse.quote(q))
+              prods = j.get("products") or []
+              print("== search", repr(q), "->", st, j.get("status"), "|", len(prods), "results | keys of first:", sorted((prods[0] if prods else {}).keys()))
+              for p in prods[:6]:
+                  print("   ", p.get("id"), "|", p.get("console-name"), "|", p.get("product-name"), "|", {k: p.get(k) for k in GRADE_KEYS if p.get(k) is not None})
+              time.sleep(1.1)
+              if prods:
+                  st, d = get("https://www.pricecharting.com/api/product?t=" + t + "&id=" + str(prods[0]["id"]))
+                  print("   product", prods[0]["id"], "->", st, d.get("status"), "|", d.get("console-name"), "/", d.get("product-name"), "| release:", d.get("release-date"), "| genre:", d.get("genre"))
+                  print("   prices:", {k: d.get(k) for k in GRADE_KEYS if d.get(k) is not None})
+                  time.sleep(1.1)
+          EOF
