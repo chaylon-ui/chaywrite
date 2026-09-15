@@ -81,6 +81,15 @@ jobs:
               }, process.env.SUB);
               await sleep(1200);
             }
+            // Force the flyout visible for the screenshot: the app fades it in
+            // with a transition the capture never catches (runs 3-5).
+            await page.evaluate(() => {
+              const tab = document.querySelector('#tmenu-tabpanel-tmenu-menu-120456');
+              const flyout = tab && tab.closest('.tmenu_submenu_type_tab');
+              for (const el of [flyout, tab]) if (el) { el.style.setProperty('opacity', '1', 'important'); el.style.setProperty('visibility', 'visible', 'important'); el.style.setProperty('display', 'block', 'important'); el.style.setProperty('transform', 'none', 'important'); el.style.setProperty('pointer-events', 'auto', 'important'); }
+              if (tab) { for (const s of tab.parentElement.querySelectorAll('.tmenu_submenu_tab_item')) s.classList.toggle('tmenu_submenu_tab_active', s === tab); }
+            });
+            await sleep(500);
             const state = await page.evaluate(() => { const r = document.querySelector('.tmenu_item--root:hover'); const open = [...document.querySelectorAll('[class*="tmenu_submenu"]')].filter(e => { const b = e.getBoundingClientRect(); return b.width > 100 && b.height > 100; }); return { hoverRoot: r ? (r.textContent || '').trim().slice(0, 30) : null, openPanels: open.map(e => [e.className.trim().split(/\s+/).slice(0, 4).join('.'), Math.round(e.getBoundingClientRect().width), Math.round(e.getBoundingClientRect().height)]).slice(0, 8) }; });
             console.log('STATE', JSON.stringify(state));
             const clip0 = subBox && subBox.box ? { x: Math.max(0, subBox.box[0] - 20), y: Math.max(0, subBox.box[1] - 460), width: 1100, height: 900 } : { x: 0, y: 100, width: 1100, height: 850 };
