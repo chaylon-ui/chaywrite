@@ -728,65 +728,159 @@ export async function autopriceDoFetch(cx, request, url) {
   if (url.pathname === "/_ap/report") return doJson((await cx.storage.get("ap:report")) || { rows: [] });
   if (url.pathname === "/_ap/search") { try { return doJson(await search(cx, url.searchParams.get("q"))); } catch (e) { return doJson({ ok: false, error: msg(e) }, 500); } }
   if (url.pathname === "/_ap/control" && request.method === "POST") return doJson(await control(cx, await bodyOf(request)));
+  if (url.pathname === "/_ap/auth" && request.method === "POST") return doJson(await authOp(cx, await bodyOf(request)));
   return doJson({ ok: false, error: "not found" }, 404);
+}
+
+/* ---- login: username + password, signed session cookie ----------------
+   Owner 2026-09-15: "put this behind a better and more secure password and
+   username". Credentials are worker secrets AUTOPRICE_USER and
+   AUTOPRICE_PASSWORD (repo Actions secrets, synced by deploy.yml); until both
+   exist the login accepts the showcase admin PIN as the password so the
+   owner is never locked out (the page says so). A successful login sets an
+   HttpOnly, Secure, SameSite=Lax cookie holding an HMAC-SHA256-signed
+   {user, exp} good for 12 hours; the key is derived from the password and
+   the Admin token, so changing the password ends every session. Eight
+   failed attempts from one address lock it for 15 minutes (kept in the DO).
+   Nothing about the credentials is logged or echoed. */
+export const SESSION_COOKIE = "ap_s";
+export const SESSION_TTL_S = 12 * 3600;
+export const LOCK_AFTER = 8;
+export const LOCK_MS = 15 * 60e3;
+const enc = new TextEncoder();
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64u = (str) => { const t = String(str).replace(/-/g, "+").replace(/_/g, "/"); const pad = t + "=".repeat((4 - (t.length % 4)) % 4); return Uint8Array.from(atob(pad), (c) => c.charCodeAt(0)); };
+async function hmacKey(secret) {
+  const raw = await crypto.subtle.digest("SHA-256", enc.encode("autoprice-session:" + String(secret || "")));
+  return crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+}
+export async function signSession(secret, payload) {
+  const key = await hmacKey(secret);
+  const body = b64u(enc.encode(JSON.stringify(payload)));
+  const sig = b64u(await crypto.subtle.sign("HMAC", key, enc.encode(body)));
+  return body + "." + sig;
+}
+export async function verifySession(secret, token, now) {
+  try {
+    const [body, sig] = String(token || "").split(".");
+    if (!body || !sig) return null;
+    const key = await hmacKey(secret);
+    const ok = await crypto.subtle.verify("HMAC", key, unb64u(sig), enc.encode(body));
+    if (!ok) return null;
+    const payload = JSON.parse(new TextDecoder().decode(unb64u(body)));
+    if (!payload || typeof payload.exp !== "number" || payload.exp * 1000 < (now == null ? Date.now() : now)) return null;
+    return payload;
+  } catch { return null; }
+}
+// Constant-time string equality (both sides hashed first, so lengths never leak).
+export async function safeEqual(a, b) {
+  const [ha, hb] = await Promise.all([crypto.subtle.digest("SHA-256", enc.encode(String(a))), crypto.subtle.digest("SHA-256", enc.encode(String(b)))]);
+  const x = new Uint8Array(ha), y = new Uint8Array(hb);
+  let d = 0;
+  for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
+  return d === 0;
+}
+function sessionSecret(env) { return (env.AUTOPRICE_PASSWORD || "") + "|" + (env.SHOPIFY_ADMIN_TOKEN || "") + "|" + (env.AUTOPRICE_USER || ""); }
+function cookieOf(request, name) {
+  const m = ("; " + (request.headers.get("cookie") || "")).match(new RegExp("; " + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+function ipOf(request) { return request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown"; }
+async function lockState(cx, ip) {
+  const rec = (await cx.storage.get("ap:auth:" + ip)) || { fails: 0, at: 0 };
+  if (rec.fails >= LOCK_AFTER && cx.now() - rec.at < LOCK_MS) return { locked: true, until: rec.at + LOCK_MS };
+  if (cx.now() - rec.at > LOCK_MS) return { locked: false, fails: 0 };
+  return { locked: false, fails: rec.fails };
+}
+async function authOp(cx, b) {
+  const ip = String(b.ip || "unknown").slice(0, 64);
+  const st = await lockState(cx, ip);
+  if (b.op === "check") return st;
+  if (b.op === "fail") { await cx.storage.put("ap:auth:" + ip, { fails: (st.fails || 0) + 1, at: cx.now() }); return { ok: true, fails: (st.fails || 0) + 1 }; }
+  if (b.op === "clear") { await cx.storage.delete("ap:auth:" + ip); return { ok: true }; }
+  return { ok: false };
 }
 
 /* ---- public routes (index.js) ---- */
 
 export async function serveAutoprice(request, env, url, staffOk) {
   const stub = env.ROOM.get(env.ROOM.idFromName(AUTOPRICE_DO));
+  const configured = !!(env.AUTOPRICE_USER && env.AUTOPRICE_PASSWORD);
+  const secret = sessionSecret(env);
+  const html = (body, status, extra) => new Response(body, { status: status || 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...(extra || {}) } });
+  const cookie = (val, maxAge) => SESSION_COOKIE + "=" + encodeURIComponent(val) + "; Path=/autoprice; Max-Age=" + maxAge + "; HttpOnly; Secure; SameSite=Lax";
+
+  if (url.pathname === "/autoprice/logout") return html("", 303, { location: "/autoprice/login", "set-cookie": cookie("", 0) });
+  if (url.pathname === "/autoprice/login") {
+    if (request.method !== "POST") return html(renderLogin({ configured }));
+    let fd; try { fd = await request.formData(); } catch { fd = null; }
+    const user = String((fd && fd.get("u")) || "").trim().slice(0, 80), pass = String((fd && fd.get("p")) || "").slice(0, 200);
+    const ip = ipOf(request);
+    const auth = (op) => stub.fetch(new Request(url.origin + "/_ap/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op, ip }) })).then((r) => r.json()).catch(() => ({}));
+    const st = await auth("check");
+    if (st.locked) return html(renderLogin({ configured, error: "Too many attempts. Try again in " + Math.ceil((st.until - Date.now()) / 60000) + " minutes." }), 429);
+    let ok = false;
+    if (configured) ok = (await safeEqual(user, env.AUTOPRICE_USER)) && (await safeEqual(pass, env.AUTOPRICE_PASSWORD));
+    else ok = !!pass && (await staffOk(env, url.origin, pass));   // fallback: the admin PIN, until the secrets exist
+    if (!ok) { await auth("fail"); return html(renderLogin({ configured, error: "That did not open it." }), 403); }
+    await auth("clear");
+    const token = await signSession(secret, { u: configured ? user : "pin", exp: Math.floor(Date.now() / 1000) + SESSION_TTL_S });
+    return html("", 303, { location: "/autoprice", "set-cookie": cookie(token, SESSION_TTL_S) });
+  }
+
+  const session = await verifySession(secret, cookieOf(request, SESSION_COOKIE));
+  if (!session) {
+    if (url.pathname === "/autoprice" && request.method === "GET") return html("", 303, { location: "/autoprice/login" });
+    return Response.json({ error: "login required" }, { status: 401, headers: { "cache-control": "no-store" } });
+  }
   if (url.pathname === "/autoprice/status") {
     const r = await stub.fetch(new Request(url.origin + "/_ap/status"));
     return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
-  let k = url.searchParams.get("k") || "", body = null, form = false;
+  let body = null, form = false;
   if (request.method === "POST") {
     const ct = request.headers.get("content-type") || "";
-    if (/json/i.test(ct)) { body = await bodyOf(request); k = String(body.k || k); }
-    else { form = true; let fd; try { fd = await request.formData(); } catch { fd = null; } body = {}; if (fd) for (const [a, b] of fd.entries()) body[a] = String(b); k = String(body.k || k); }
-  }
-  if (!(await staffOk(env, url.origin, k))) {
-    // The plain link shows a PIN screen (the showcase admin PIN, as on /staff
-    // and /pickups); the JSON and control paths stay a bare 403.
-    if (url.pathname === "/autoprice" && request.method === "GET") return new Response(renderPin(!!k), { status: k ? 403 : 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
-    return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
+    if (/json/i.test(ct)) body = await bodyOf(request);
+    else { form = true; let fd; try { fd = await request.formData(); } catch { fd = null; } body = {}; if (fd) for (const [a, b] of fd.entries()) body[a] = String(b); }
   }
   if (url.pathname === "/autoprice/control" && request.method === "POST") {
     const r = await stub.fetch(new Request(url.origin + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
     const text = await r.text();
     const keepQ = body.q && body.action !== "add" && body.action !== "remove";
-    if (form) return new Response(null, { status: 303, headers: { location: "/autoprice?k=" + encodeURIComponent(k) + (keepQ ? "&q=" + encodeURIComponent(body.q) : "") + (body.game ? "&game=" + encodeURIComponent(body.game) : ""), "cache-control": "no-store" } });
+    const qs = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : ""].filter(Boolean).join("&");
+    if (form) return html("", 303, { location: "/autoprice" + (qs ? "?" + qs : "") });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
   const q = (url.searchParams.get("q") || "").slice(0, 120), game = (url.searchParams.get("game") || "").slice(0, 60);
   const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
-  return new Response(renderPage(status, report, k, { q, game, found }), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  return html(renderPage(status, report, { q, game, found, user: session.u, configured }));
 }
 
-function renderPin(wrong) {
+function renderLogin(o) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font:15px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}form{background:#fff;border:1px solid #dde3e7;border-radius:14px;padding:26px 28px;width:min(360px,90vw);box-shadow:0 10px 30px rgba(0,0,0,.06)}h1{font-size:20px;margin:0 0 6px}p{margin:0 0 14px;color:#6b7780;font-size:13.5px}input{width:100%;box-sizing:border-box;font-size:22px;letter-spacing:.2em;padding:10px 12px;border:1.5px solid ${wrong ? "#d62c28" : "#c9d1d6"};border-radius:10px;text-align:center}button{margin-top:12px;width:100%;padding:11px;font-size:15px;font-weight:700;color:#fff;background:#d62c28;border:0;border-radius:10px;cursor:pointer}.err{color:#d62c28;font-weight:600}</style></head><body>
-<form method="get" action="/autoprice"><h1>Sealed auto-pricing</h1><p>${wrong ? '<span class="err">That PIN did not open it.</span> ' : ""}Enter the showcase admin PIN (the same one as the staff and pickup screens).</p>
-<input name="k" type="password" inputmode="numeric" autocomplete="off" autofocus placeholder="PIN"><button>Open</button></form></body></html>`;
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font:15px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}form{background:#fff;border:1px solid #dde3e7;border-radius:14px;padding:26px 28px;width:min(380px,90vw);box-shadow:0 10px 30px rgba(0,0,0,.06)}h1{font-size:20px;margin:0 0 6px}p{margin:0 0 14px;color:#6b7780;font-size:13.5px}label{display:block;font-size:12.5px;color:#6b7780;margin:10px 0 4px}input{width:100%;box-sizing:border-box;font-size:16px;padding:9px 12px;border:1.5px solid ${o.error ? "#d62c28" : "#c9d1d6"};border-radius:10px}button{margin-top:16px;width:100%;padding:11px;font-size:15px;font-weight:700;color:#fff;background:#d62c28;border:0;border-radius:10px;cursor:pointer}.err{color:#d62c28;font-weight:600}</style></head><body>
+<form method="post" action="/autoprice/login" autocomplete="on"><h1>Sealed auto-pricing</h1><p>${o.error ? '<span class="err">' + esc(o.error) + "</span> " : ""}${o.configured ? "Sign in with the auto-pricing username and password." : "Username and password are not set up yet (add the AUTOPRICE_USER and AUTOPRICE_PASSWORD repo secrets). Until then: any username, and the showcase admin PIN as the password."}</p>
+<label>Username</label><input name="u" type="text" autocomplete="username" autofocus>
+<label>Password</label><input name="p" type="password" autocomplete="current-password">
+<button>Sign in</button></form></body></html>`;
 }
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 const when = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", hour12: false }) : "";
 const money = (n) => n == null ? "" : "$" + Number(n).toFixed(2);
 
-function renderPage(s, rep, k, view) {
+function renderPage(s, rep, view) {
   const cfg = s.config || DEFAULT_CONFIG;
   const v = view || {};
-  const ek = encodeURIComponent(k);
   const all = (rep.rows || []).map((r) => ({ ...r, game: r.game || gameOf(r.type) }));
   const games = [...new Set(all.map((r) => r.game))].sort((a, b) => a.localeCompare(b));
   const rows = all.filter((r) => !v.game || r.game === v.game).sort((a, b) => a.game.localeCompare(b.game) || (a.action === "skip") - (b.action === "skip") || String(a.title).localeCompare(String(b.title)));
   const counts = {};
   for (const r of rows) counts[r.action] = (counts[r.action] || 0) + 1;
   const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
-  const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("k", k)}${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
+  const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
   const change = (c) => c ? `<span title="${esc(when(c.at))}">${esc(when(c.at).slice(0, 16))}</span><div class="muted">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto" : "by hand"}</div>` : '<span class="muted">—</span>';
   const admin = (id) => "https://admin.shopify.com/store/most-wanted-ca/products/" + String(id || "").replace(/\D/g, "");
   const srcLine = (x) => x.name === "tcgplayer" ? "TCG " + (x.kind && x.kind !== "market" ? x.kind + " " : "") + money(x.usd) + " US" : "PriceCharting " + money(x.usd) + " US";
@@ -803,7 +897,7 @@ function renderPage(s, rep, k, view) {
     // the TCGplayer id is stored by every run, so it is not a "custom" setting here
     const summary = custom.length ? custom.join(" · ") : "page defaults";
     return `<details class="cfg"><summary title="Per-item settings: click to change">⚙ ${esc(summary)}</summary>
-<form method="post" action="/autoprice/control" class="setf">${hidden("k", k)}${hidden("action", "settings")}${hidden("id", r.id)}${v.game ? hidden("game", v.game) : ""}
+<form method="post" action="/autoprice/control" class="setf">${hidden("action", "settings")}${hidden("id", r.id)}${v.game ? hidden("game", v.game) : ""}
 <label>Floor $<input type="number" step="0.01" min="0" name="floor" value="${esc(st.floor == null ? "" : st.floor)}" placeholder="cost+${esc(cfg.minMarginPct)}%"></label>
 <label>Markup %<input type="number" step="0.5" min="0" name="markupPct" value="${esc(st.markupPct == null ? "" : st.markupPct)}" placeholder="${esc(cfg.markupPct)}"></label>
 <label>Rounding ${sel("round", st.round, [["", "auto"], ["1", "$1 steps"], ["5", "$5 steps"], ["10", "$10 steps"], ["25", "$25 steps"], ["50", "$50 steps"], ["100", "$100 steps"], ["none", "none"]])}</label>
@@ -832,21 +926,21 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
 <style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
-<h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span></h1>
+<h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
 <p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}.</p>
 <h2>Add products</h2>
-<form method="get" action="/autoprice" class="box">${hidden("k", k)}${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
+<form method="get" action="/autoprice" class="box">${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
 ${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (in APPLY mode that writes the prices now, not at 7:30 pm); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
 <h2>Controls</h2>
 <div class="ctl">
 ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}
-<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product within the guardrails.')">${hidden("k", k)}${hidden("action", "mode")}${hidden("mode", s.mode === "apply" ? "shadow" : "apply")}<button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
-<form method="post" action="/autoprice/control">${hidden("k", k)}${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="When 401 Games has the same product in stock, the price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><button>Save</button></form>
-<a href="/autoprice?k=${ek}">refresh</a> · <a href="/autoprice/report.json?k=${ek}">json</a>
+<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product within the guardrails.')">${hidden("action", "mode")}${hidden("mode", s.mode === "apply" ? "shadow" : "apply")}<button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
+<form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="When 401 Games has the same product in stock, the price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><button>Save</button></form>
+<a href="/autoprice">refresh</a> · <a href="/autoprice/report.json">json</a> · <a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>
 </div>
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
 <h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
-<div class="chips"><a href="/autoprice?k=${ek}" class="${v.game ? "" : "on"}">All (${all.length})</a>${games.map((g) => `<a href="/autoprice?k=${ek}&game=${encodeURIComponent(g)}" class="${v.game === g ? "on" : ""}">${esc(g)} (${all.filter((x) => x.game === g).length})</a>`).join("")}</div>
+<div class="chips"><a href="/autoprice" class="${v.game ? "" : "on"}">All (${all.length})</a>${games.map((g) => `<a href="/autoprice?game=${encodeURIComponent(g)}" class="${v.game === g ? "on" : ""}">${esc(g)} (${all.filter((x) => x.game === g).length})</a>`).join("")}</div>
 <table class="rep"><thead><tr><th>Product</th><th>Today</th><th>Market</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
 <h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">none</td></tr>'}</tbody></table>
 </div></body></html>`;

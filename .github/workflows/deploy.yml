@@ -80,6 +80,23 @@ jobs:
             echo "No BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD repo secrets set - skipping (add both to enable the buylists screen)"
           fi
 
+      # Login for the sealed auto-pricing page (/autoprice): username and
+      # password as repo Actions secrets, synced to the worker. Until both
+      # exist the page accepts the showcase admin PIN as the password.
+      - name: Sync AUTOPRICE_USER / AUTOPRICE_PASSWORD worker secrets (when configured)
+        env:
+          AUTOPRICE_USER: ${{ secrets.AUTOPRICE_USER }}
+          AUTOPRICE_PASSWORD: ${{ secrets.AUTOPRICE_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$AUTOPRICE_USER" ] && [ -n "$AUTOPRICE_PASSWORD" ]; then
+            printf '%s' "$AUTOPRICE_USER" | npx wrangler@4 secret put AUTOPRICE_USER
+            printf '%s' "$AUTOPRICE_PASSWORD" | npx wrangler@4 secret put AUTOPRICE_PASSWORD
+          else
+            echo "No AUTOPRICE_USER / AUTOPRICE_PASSWORD repo secrets set - skipping (the /autoprice login falls back to the admin PIN)"
+          fi
+
       # PriceCharting subscription token (optional): the sealed auto-pricer
       # (src/autoprice.js) adds PriceCharting's eBay-derived "new" price to
       # TCGplayer's market price when it is set. Same pattern.

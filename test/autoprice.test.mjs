@@ -214,3 +214,17 @@ test("401 Games naming: brand words and English are noise, Japanese is not, Kit 
   assert.equal(pickComp("MTG FINAL FANTASY PLAY BOOSTER BOX", "", r).handle, "ff-pbb");
   assert.equal(pickComp("MTG FINAL FANTASY COLLECTOR BOOSTER BOX", "", r), null);
 });
+
+import { signSession, verifySession, safeEqual } from "../src/autoprice.js";
+test("login sessions: signed, expiring, keyed by the secret; constant-time compare", async () => {
+  const tok = await signSession("secret-a", { u: "owner", exp: Math.floor(Date.now() / 1000) + 60 });
+  assert.equal((await verifySession("secret-a", tok)).u, "owner");
+  assert.equal(await verifySession("secret-b", tok), null);                       // another password: no session
+  assert.equal(await verifySession("secret-a", tok.slice(0, -2) + "xx"), null);   // tampered signature
+  const old = await signSession("secret-a", { u: "owner", exp: Math.floor(Date.now() / 1000) - 1 });
+  assert.equal(await verifySession("secret-a", old), null);                       // expired
+  assert.equal(await verifySession("secret-a", "garbage"), null);
+  assert.equal(await safeEqual("hunter2", "hunter2"), true);
+  assert.equal(await safeEqual("hunter2", "hunter3"), false);
+  assert.equal(await safeEqual("", "x"), false);
+});
