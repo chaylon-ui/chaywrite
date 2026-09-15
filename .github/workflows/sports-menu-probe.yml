@@ -86,7 +86,8 @@ jobs:
             await page.evaluate(() => {
               const tab = document.querySelector('#tmenu-tabpanel-tmenu-menu-120456');
               const flyout = tab && tab.closest('.tmenu_submenu_type_tab');
-              for (const el of [flyout, tab]) if (el) { el.style.setProperty('opacity', '1', 'important'); el.style.setProperty('visibility', 'visible', 'important'); el.style.setProperty('display', 'block', 'important'); el.style.setProperty('transform', 'none', 'important'); el.style.setProperty('pointer-events', 'auto', 'important'); }
+              for (const el of [flyout, tab]) if (el) { el.style.setProperty('opacity', '1', 'important'); el.style.setProperty('visibility', 'visible', 'important'); el.style.setProperty('transform', 'none', 'important'); el.style.setProperty('pointer-events', 'auto', 'important'); }
+              const st = document.createElement('style'); st.textContent = '#tmenu-tabpanel-tmenu-menu-120456, #tmenu-tabpanel-tmenu-menu-120456 *, .tmenu_submenu_type_tab { opacity: 1 !important; visibility: visible !important; transition: none !important; animation: none !important; }'; document.head.appendChild(st);
               if (tab) { for (const s of tab.parentElement.querySelectorAll('.tmenu_submenu_tab_item')) s.classList.toggle('tmenu_submenu_tab_active', s === tab); }
             });
             await sleep(500);
