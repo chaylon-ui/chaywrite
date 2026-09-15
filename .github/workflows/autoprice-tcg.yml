@@ -1,0 +1,110 @@
+name: autoprice-tcg
+# The sealed auto-pricer (src/autoprice.js in the worker) needs TCGplayer's
+# sealed-product prices. tcgcsv.com, the public daily mirror of TCGplayer's
+# catalogue and prices, answers 401 to Cloudflare Workers (2026-09-15) but
+# 200 to a GitHub runner, so this job reads it here nightly - every group of
+# every TCGplayer category the store sells - keeps the sealed-looking products
+# with their UPC and market/low/mid prices, and commits one small file per
+# category to data/autoprice/. The worker reads those back from raw.github.
+# tcgcsv refreshes around 20:00 UTC; this runs at 21:10 UTC.
+on:
+  schedule:
+    - cron: "10 21 * * *"
+  workflow_dispatch:
+    inputs:
+      cats:
+        description: "TCGplayer category ids, comma separated (blank = every category the store sells)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: deps
+        run: python3 -m pip install -q requests
+      - name: Build data/autoprice/tcg-<category>.json
+        env:
+          CATS: ${{ inputs.cats }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, time, datetime
+          from concurrent.futures import ThreadPoolExecutor
+          import requests
+          # keep in step with CATEGORIES in src/autoprice.js
+          ALL = [3, 1, 2, 71, 68, 79, 62, 63, 80, 27, 24, 74, 86, 81, 89, 72, 66, 84, 94, 92, 93, 20, 16, 77, 73, 87]
+          cats = [int(x) for x in os.environ.get("CATS", "").split(",") if x.strip()] or ALL
+          SEALED = re.compile(r"booster|\bbox\b|\bpack\b|bundle|\btin\b|collection|display|\bcase\b|\bkit\b|\bdeck\b|blister|elite trainer|starter|pre-?release|premium|\bset\b|lot\b|league|battle", re.I)
+          B = "https://tcgcsv.com/tcgplayer"
+          s = requests.Session()
+          s.headers["user-agent"] = "ExorGamesAutoprice/1.0 (+https://exorgames.com)"
+          def get(url):
+              for i in range(3):
+                  try:
+                      r = s.get(url, timeout=40)
+                      if r.status_code == 404: return None
+                      if r.ok: return r.json()
+                  except Exception as e:
+                      err = e
+                  time.sleep(1.5 * (i + 1))
+              print("  failed", url)
+              return None
+          def group_rows(cat, g):
+              prods = get(f"{B}/{cat}/{g['groupId']}/products")
+              if not prods: return []
+              keep = {}
+              for p in prods.get("results", []):
+                  name = p.get("name") or ""
+                  if not SEALED.search(name): continue
+                  upc = ""
+                  for x in p.get("extendedData") or []:
+                      if str(x.get("name", "")).lower() == "upc": upc = re.sub(r"\D", "", str(x.get("value") or ""))
+                  keep[p["productId"]] = {"id": p["productId"], "g": g["groupId"], "set": g.get("name"), "name": name, "upc": upc, "market": None, "low": None, "mid": None, "sub": None}
+              if not keep: return []
+              prices = get(f"{B}/{cat}/{g['groupId']}/prices") or {}
+              for row in prices.get("results", []):
+                  k = keep.get(row.get("productId"))
+                  if not k: continue
+                  sub = row.get("subTypeName") or ""
+                  if k["sub"] and k["sub"].lower() == "normal" and sub.lower() != "normal": continue
+                  k.update({"market": row.get("marketPrice"), "low": row.get("lowPrice"), "mid": row.get("midPrice"), "sub": sub})
+              return list(keep.values())
+          os.makedirs("data/autoprice", exist_ok=True)
+          now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+          index = {"builtAt": now, "categories": {}}
+          for cat in cats:
+              t0 = time.time()
+              groups = (get(f"{B}/{cat}/groups") or {}).get("results", [])
+              rows = []
+              with ThreadPoolExecutor(max_workers=6) as ex:
+                  for part in ex.map(lambda g: group_rows(cat, g), groups):
+                      rows.extend(part)
+              rows.sort(key=lambda r: (r["g"], r["id"]))
+              priced = sum(1 for r in rows if r["market"])
+              with_upc = sum(1 for r in rows if r["upc"])
+              out = {"builtAt": now, "category": cat, "groups": len(groups), "rows": rows}
+              with open(f"data/autoprice/tcg-{cat}.json", "w") as f:
+                  json.dump(out, f, separators=(",", ":"))
+              index["categories"][str(cat)] = {"groups": len(groups), "rows": len(rows), "priced": priced, "withUpc": with_upc}
+              print(f"category {cat}: {len(groups)} groups, {len(rows)} sealed rows, {priced} priced, {with_upc} with UPC, {time.time()-t0:.0f}s")
+          old = {}
+          try: old = json.load(open("data/autoprice/tcg-index.json"))
+          except Exception: pass
+          merged = old.get("categories", {}) if cats != ALL else {}
+          merged.update(index["categories"])
+          json.dump({"builtAt": now, "categories": merged}, open("data/autoprice/tcg-index.json", "w"), indent=1)
+          PY
+          du -sh data/autoprice; ls -la data/autoprice | head -40
+      - name: Commit when changed
+        run: |
+          git add data/autoprice
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git config user.name "autoprice-tcg"
+          git config user.email "actions@github.com"
+          git commit -m "autoprice-tcg: sealed prices $(date -u +%F)"
+          git push origin HEAD:main
