@@ -434,8 +434,16 @@ async function arm(cx, at, why) {
 }
 
 export async function armAlarm(cx) {
-  try { if ((await cx.storage.getAlarm()) == null) await cx.storage.setAlarm(nextRunAt(cx.now())); }
-  catch (e) { cx.log("autoprice: armAlarm failed: " + msg(e)); }
+  try {
+    if ((await cx.storage.getAlarm()) != null) return;
+    // A tick that died outright (CPU limit, eviction) persists nothing and
+    // leaves an unfinished run with no alarm behind it, so the run sits at
+    // its last saved phase until the next night. Any later touch of the
+    // room - a page load, the digest read - picks it back up (2026-09-15).
+    const run = await cx.storage.get("ap:run");
+    const stalled = run && !run.done && cx.now() - (run.tickAt || run.startedAt || 0) > 120e3;
+    await cx.storage.setAlarm(stalled ? cx.now() + 1000 : nextRunAt(cx.now()));
+  } catch (e) { cx.log("autoprice: armAlarm failed: " + msg(e)); }
 }
 
 export async function autopriceDoAlarm(cx) {
