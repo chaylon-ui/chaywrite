@@ -103,14 +103,29 @@
     return (c && rule.conds && rule.conds[c]) || rule;
   }
 
-  // The card's rarity, read from the description table BinderPOS writes
-  // ("Rarity: Secret Rare"), lower-cased to match the rule file's keys.
-  function rarityOf(product) {
-    // Curly apostrophes fold to straight ones, as the sync's norm_r does
-    // for the rule keys ("Trainer’s Rare" -> "trainer's rare").
-    var text = String(product.body_html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&rsquo;|&#8217;|’/g, "'").replace(/\s+/g, ' ');
-    var m = /Rarity:\s*([A-Za-z][A-Za-z0-9 \-\/']*?)\s*(?:$|[A-Z][A-Za-z ]{1,20}:)/.exec(text);
-    return m ? m[1].trim().toLowerCase() : '';
+  // The card's rarity, lower-cased to match the rule file's keys. The
+  // storefront product JSON carries BinderPOS's rarity as a TAG ("Secret
+  // Rare"; body_html is null on singles, 2026-09-15), so the tag that names
+  // one of this game's rarities wins; the description table ("Rarity:
+  // Secret Rare") is the fallback. Curly apostrophes fold to straight
+  // ones, as the sync's norm_r does ("Trainer\u2019s Rare" -> "trainer's rare").
+  function foldRarity(s) { return String(s || '').replace(/&rsquo;|&#8217;|\u2019/g, "'").replace(/\s+/g, ' ').trim().toLowerCase(); }
+  function rarityKeys(rule) {
+    var keys = {};
+    function take(o) { if (o && o.rarities) Object.keys(o.rarities).forEach(function (k) { keys[k] = 1; }); }
+    take(rule); (rule.tiers || []).forEach(take);
+    Object.keys(rule.conds || {}).forEach(function (c) { take(rule.conds[c]); (rule.conds[c].tiers || []).forEach(take); });
+    return keys;
+  }
+  function rarityOf(product, rule) {
+    var keys = rarityKeys(rule);
+    var tags = product.tags;
+    if (typeof tags === 'string') tags = tags.split(',');
+    var hit = (tags || []).map(foldRarity).filter(function (t) { return keys[t]; })[0];
+    if (hit) return hit;
+    var text = foldRarity(String(product.body_html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' '));
+    var m = /rarity:\s*([a-z][a-z0-9 \-\/']*?)\s*(?:$|[a-z][a-z ]{1,20}:)/.exec(text);
+    return m ? m[1].trim() : '';
   }
 
   function estimateOffers(rules, product) {
@@ -122,7 +137,7 @@
     var setName = (String(product.title || '').match(/\[([^\]]+)\]/) || [])[1];
     var setRule = setName && rule.sets && rule.sets[String(setName).trim().toLowerCase()];
     var base = setRule ? { conds: setRule.conds || {}, cash: 0, credit: 0, tiers: [] } : rule;
-    var rarity = rule.exact ? rarityOf(product) : '';
+    var rarity = rule.exact ? rarityOf(product, rule) : '';
     var minSell = typeof rule.minSell === 'number' ? rule.minSell : 0;
     // Evidence ceiling (feed-derived rules only): above the highest observed
     // sell an estimate would be extrapolation. Portal rules set it to 1e6.
