@@ -453,18 +453,26 @@ async function search(cx, q) {
 
 const TAG_ADD = `mutation($id: ID!, $t: [String!]!) { tagsAdd(id: $id, tags: $t) { userErrors { message } } }`;
 const TAG_REMOVE = `mutation($id: ID!, $t: [String!]!) { tagsRemove(id: $id, tags: $t) { userErrors { message } } }`;
-async function setListed(cx, id, on) {
+async function setListed(cx, id, on, b) {
   const pid = String(id || "");
   if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
   const r = await adminGql(cx, on ? TAG_ADD : TAG_REMOVE, { id: pid, t: [TAG] });
   const errs = ((r.data.tagsAdd || r.data.tagsRemove || {}).userErrors) || [];
   if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
-  if (!on) {
-    // drop the product from the last report so the page reflects it at once
-    const rep = await cx.storage.get("ap:report");
-    if (rep && rep.rows) { rep.rows = rep.rows.filter((x) => x.id !== pid); await cx.storage.put("ap:report", rep); }
+  const rep = (await cx.storage.get("ap:report")) || { at: null, rows: [] };
+  rep.rows = (rep.rows || []).filter((x) => x.id !== pid);
+  if (on) {
+    // Show it in the list at once (owner 2026-09-15: "when I refresh it is
+    // not in the list"), then price it now with a shadow run - the nightly
+    // apply run, if that mode is on, writes the price later as usual.
+    const price = Number(b && b.price);
+    rep.rows.push({ id: pid, title: String((b && b.title) || pid), handle: String((b && b.handle) || ""), type: String((b && b.type) || ""), game: gameOf(b && b.type),
+      stock: Number(b && b.stock) || 0, current: price > 0 ? price : null, sources: [], action: "pending", reason: "just added: pricing now, refresh in a moment" });
   }
-  return { ok: true, id: pid, listed: !!on };
+  await cx.storage.put("ap:report", rep);
+  let kicked = null;
+  if (on) kicked = await kickRun(cx, { apply: false });
+  return { ok: true, id: pid, listed: !!on, kicked };
 }
 
 /* ---- DO routes ---- */
@@ -492,8 +500,8 @@ async function control(cx, b) {
     return { ok: true, config: next };
   }
   if (action === "run") return kickRun(cx, { apply: cfg.mode === "apply" && b.apply === "1" });
-  if (action === "add") return setListed(cx, b.id, true);
-  if (action === "remove") return setListed(cx, b.id, false);
+  if (action === "add") return setListed(cx, b.id, true, b);
+  if (action === "remove") return setListed(cx, b.id, false, b);
   return { ok: false, error: "unknown action" };
 }
 
@@ -529,7 +537,8 @@ export async function serveAutoprice(request, env, url, staffOk) {
   if (url.pathname === "/autoprice/control" && request.method === "POST") {
     const r = await stub.fetch(new Request(url.origin + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
     const text = await r.text();
-    if (form) return new Response(null, { status: 303, headers: { location: "/autoprice?k=" + encodeURIComponent(k) + (body.q ? "&q=" + encodeURIComponent(body.q) : "") + (body.game ? "&game=" + encodeURIComponent(body.game) : ""), "cache-control": "no-store" } });
+    const keepQ = body.q && body.action !== "add" && body.action !== "remove";
+    if (form) return new Response(null, { status: 303, headers: { location: "/autoprice?k=" + encodeURIComponent(k) + (keepQ ? "&q=" + encodeURIComponent(body.q) : "") + (body.game ? "&game=" + encodeURIComponent(body.game) : ""), "cache-control": "no-store" } });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
   const q = (url.searchParams.get("q") || "").slice(0, 120), game = (url.searchParams.get("game") || "").slice(0, 60);
@@ -577,14 +586,14 @@ function renderPage(s, rep, k, view) {
   }
   const run = s.run || {};
   const found = v.found;
-  const foundRows = found && found.results ? found.results.map((f) => `<tr><td>${esc(f.title)}<div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
+  const foundRows = found && found.results ? found.results.map((f) => `<tr><td>${esc(f.title)}<div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span></h1>
 <p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}.</p>
 <h2>Add products</h2>
 <form method="get" action="/autoprice" class="box">${hidden("k", k)}${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
-${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Added products are priced on the next run: press Run now, or wait for tonight.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
+${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (shadow: nothing written); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
 <h2>Controls</h2>
 <div class="ctl">
 ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}
