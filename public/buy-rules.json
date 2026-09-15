@@ -1,100 +1,3732 @@
 {
-  "_what": "AUTO-GENERATED daily by buy-rules-sync.yml - do not hand-edit numbers; they are re-derived from BinderPOS every morning. Genuine per-variant cashBuyPercent/creditBuyPercent rule stamps (>=5%) in the public product feed are sampled per game and reduced to per-condition medians on the portal's own price bands; exclusion stamps are ignored, and estimates apply only between the lowest and highest stamped sells observed.",
+  "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
+  "_portal": true,
   "enabled": true,
-  "updated": "2026-09-14",
-  "disclaimer": "Estimate only, based on our current buylist rates and today's sell price. Final offer is confirmed when we check your cards - condition and demand can change it. Rates and prices update daily.",
+  "updated": "2026-09-15",
+  "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
     {
+      "key": "fab",
+      "match": "flesh",
+      "cash": 0.0,
+      "credit": 0.0,
+      "minSell": 0.01,
+      "maxSell": 1000000,
+      "buyFoils": true,
+      "exact": true,
+      "tiers": [],
+      "conds": {
+        "NM": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        },
+        "LP": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        },
+        "MP": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        },
+        "HP": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        },
+        "DM": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        }
+      },
+      "_source": "binderpos-portal",
+      "_rules": [
+        "FLESH AND BLOOD"
+      ],
+      "sets": {
+        "promo": {
+          "name": "F+B Promos",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "key": "lorcana",
+      "match": "lorcana",
+      "cash": 0.4,
+      "credit": 0.6,
+      "minSell": 0.01,
+      "maxSell": 1000000,
+      "buyFoils": true,
+      "exact": true,
+      "tiers": [
+        {
+          "upTo": 1.0,
+          "cash": 0.0,
+          "credit": 0.0,
+          "rarities": {
+            "enchanted": {
+              "cash": 0.05,
+              "credit": 0.07
+            },
+            "epic": {
+              "cash": 0.05,
+              "credit": 0.07
+            },
+            "legendary": {
+              "cash": 0.05,
+              "credit": 0.07
+            },
+            "rare": {
+              "cash": 0.05,
+              "credit": 0.07
+            },
+            "super rare": {
+              "cash": 0.05,
+              "credit": 0.07
+            }
+          }
+        },
+        {
+          "upTo": 3.0,
+          "cash": 0.0,
+          "credit": 0.0,
+          "rarities": {
+            "enchanted": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "legendary": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "promo": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "super rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            }
+          }
+        }
+      ],
+      "conds": {
+        "NM": {
+          "cash": 0.4,
+          "credit": 0.6,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "enchanted": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                },
+                "epic": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                },
+                "legendary": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                },
+                "rare": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                },
+                "super rare": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                }
+              }
+            },
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "enchanted": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "legendary": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "promo": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "super rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "common": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "epic": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "iconic": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "quest": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "uncommon": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "LP": {
+          "cash": 0.4,
+          "credit": 0.6,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "epic": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                },
+                "legendary": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                },
+                "rare": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                },
+                "super rare": {
+                  "cash": 0.05,
+                  "credit": 0.07
+                }
+              }
+            },
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "enchanted": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "legendary": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "promo": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "super rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "common": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "epic": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "iconic": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "quest": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "uncommon": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "MP": {
+          "cash": 0.4,
+          "credit": 0.6,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "enchanted": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "legendary": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "promo": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "super rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "common": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "epic": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "iconic": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "quest": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "uncommon": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "HP": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "enchanted": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "legendary": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "promo": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "super rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                }
+              }
+            }
+          ]
+        },
+        "DM": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "enchanted": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "legendary": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "promo": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
+                "super rare": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                }
+              }
+            }
+          ]
+        }
+      },
+      "_source": "binderpos-portal",
+      "_rules": [
+        "Lorcana $1 and under",
+        "Lorcana ($1-$3)",
+        "Lorcana ($3.01 and above)"
+      ],
+      "rarities": {
+        "common": {
+          "cash": 0.0,
+          "credit": 0.0
+        },
+        "epic": {
+          "cash": 0.0,
+          "credit": 0.0
+        },
+        "iconic": {
+          "cash": 0.0,
+          "credit": 0.0
+        },
+        "quest": {
+          "cash": 0.0,
+          "credit": 0.0
+        },
+        "uncommon": {
+          "cash": 0.0,
+          "credit": 0.0
+        }
+      }
+    },
+    {
+      "key": "mtg",
+      "match": "mtg",
+      "cash": 0.61,
+      "credit": 0.7,
+      "minSell": 0.01,
+      "maxSell": 1000000,
+      "buyFoils": true,
+      "exact": true,
+      "tiers": [
+        {
+          "upTo": 1.0,
+          "cash": 0.02,
+          "credit": 0.05,
+          "rarities": {
+            "common": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "uncommon": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        {
+          "upTo": 3.01,
+          "cash": 0.35,
+          "credit": 0.45
+        },
+        {
+          "upTo": 100.01,
+          "cash": 0.5,
+          "credit": 0.7
+        }
+      ],
+      "conds": {
+        "NM": {
+          "cash": 0.61,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.02,
+              "credit": 0.05,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 3.01,
+              "cash": 0.35,
+              "credit": 0.45
+            },
+            {
+              "upTo": 100.01,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ]
+        },
+        "LP": {
+          "cash": 0.61,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.02,
+              "credit": 0.05,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 3.01,
+              "cash": 0.35,
+              "credit": 0.45
+            },
+            {
+              "upTo": 100.01,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ],
+          "rarities": {
+            "mythic": {
+              "cash": 0.6,
+              "credit": 0.7
+            }
+          }
+        },
+        "MP": {
+          "cash": 0.6,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 1.0,
+              "cash": 0.02,
+              "credit": 0.05,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 3.01,
+              "cash": 0.3,
+              "credit": 0.45
+            },
+            {
+              "upTo": 100.01,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ]
+        },
+        "HP": {
+          "cash": 0.6,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 20.01,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 100.01,
+              "cash": 0.4,
+              "credit": 0.5
+            }
+          ]
+        },
+        "DM": {
+          "cash": 0.6,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 20.01,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 100.01,
+              "cash": 0.35,
+              "credit": 0.5
+            }
+          ]
+        }
+      },
+      "_source": "binderpos-portal",
+      "_rules": [
+        "MTG SINGLES $1 AND UNDER",
+        "MTG SINGLES $1.01 - $3",
+        "MTG SINGLES $3-$20",
+        "MTG singles $20.0-100",
+        "MTG SINGLES $100+"
+      ],
+      "sets": {
+        "marvel super heroes art series": {
+          "name": "marvel superheros art cards never delete",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "unstable": {
+          "name": "Unstable buylist rule. do not delete.",
+          "conds": {
+            "NM": {
+              "cash": 0.15,
+              "credit": 0.25,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mythic": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            "LP": {
+              "cash": 0.15,
+              "credit": 0.25,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mythic": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            "MP": {
+              "cash": 0.15,
+              "credit": 0.25,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mythic": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "secrets of strixhaven art series": {
+          "name": "STRIXHAVEN ART CARDS",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "final fantasy art series": {
+          "name": "MTG Final Fantasy Art Series",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "lorwyn eclipsed art series": {
+          "name": "Lorwyn art cards",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "edge of eternities art series": {
+          "name": "Edge of Eternities Art Cards",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "key": "onepiece",
+      "match": "one piece",
+      "cash": 0.5,
+      "credit": 0.7,
+      "minSell": 0.01,
+      "maxSell": 1000000,
+      "buyFoils": true,
+      "exact": true,
+      "tiers": [
+        {
+          "upTo": 2.99,
+          "cash": 0.0,
+          "credit": 0.0
+        },
+        {
+          "upTo": 3.01,
+          "cash": 0.5,
+          "credit": 0.7,
+          "rarities": {
+            "common": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "don!!": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "leader": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "promo": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "secret rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "super rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "treasure rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "uncommon": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        }
+      ],
+      "conds": {
+        "NM": {
+          "cash": 0.5,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 2.99,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 3.01,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "don!!": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "leader": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "secret rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "super rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "treasure rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "treasure rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "LP": {
+          "cash": 0.5,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 2.99,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 3.01,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "don!!": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "leader": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "secret rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "super rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "treasure rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "treasure rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "MP": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": [
+            {
+              "upTo": 3.01,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 9.99,
+              "cash": 0.3,
+              "credit": 0.5,
+              "rarities": {
+                "treasure rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "common": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "don!!": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "leader": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "promo": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "secret rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "super rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "uncommon": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        },
+        "HP": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": [
+            {
+              "upTo": 3.01,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 9.99,
+              "cash": 0.3,
+              "credit": 0.5,
+              "rarities": {
+                "treasure rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "common": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "don!!": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "leader": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "promo": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "secret rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "super rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "uncommon": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        },
+        "DM": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        }
+      },
+      "_source": "binderpos-portal",
+      "_rules": [
+        "One Piece (Under $3.00)",
+        "One Piece (Over $3.01)",
+        "One Piece (Over $10)",
+        "One Piece $3 - $10"
+      ],
+      "rarities": {
+        "treasure rare": {
+          "cash": 0.0,
+          "credit": 0.0
+        }
+      }
+    },
+    {
       "key": "pokemon",
       "match": "pokemon",
-      "cash": 0.35,
-      "credit": 0.45,
-      "minSell": 0.21,
-      "maxSell": 13094.75,
+      "cash": 0.6,
+      "credit": 0.7,
+      "minSell": 0.01,
+      "maxSell": 1000000,
       "buyFoils": true,
+      "exact": true,
       "tiers": [
+        {
+          "upTo": 1.99,
+          "cash": 0.0,
+          "credit": 0.0,
+          "rarities": {
+            "black white rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "double rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "hyper rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "illustration rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "mega attack rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "mega hyper rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "rare ace": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "secret rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "shiny rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "shiny ultra rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "special illustration rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            },
+            "ultra rare": {
+              "cash": 0.15,
+              "credit": 0.25
+            }
+          }
+        },
+        {
+          "upTo": 2.0,
+          "cash": 0.0,
+          "credit": 0.0
+        },
+        {
+          "upTo": 4.0,
+          "cash": 0.3,
+          "credit": 0.5,
+          "rarities": {
+            "black white rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "futuristic rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "mega attack rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "mega hyper rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
         {
           "upTo": 8.0,
           "cash": 0.5,
+          "credit": 0.7,
+          "rarities": {
+            "black white rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "double rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "mega hyper rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "unspecified": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        },
+        {
+          "upTo": 50.0,
+          "cash": 0.5,
+          "credit": 0.7,
+          "rarities": {
+            "black white rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "mega hyper rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "unspecified": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        },
+        {
+          "upTo": 100.0,
+          "cash": 0.5,
+          "credit": 0.7,
+          "rarities": {
+            "unspecified": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        },
+        {
+          "upTo": 249.99,
+          "cash": 0.55,
+          "credit": 0.7,
+          "rarities": {
+            "black white rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega attack rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "unspecified": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        }
+      ],
+      "conds": {
+        "NM": {
+          "cash": 0.6,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 1.99,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "double rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "hyper rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "illustration rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "mega attack rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "mega hyper rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "rare ace": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "secret rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "shiny rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "shiny ultra rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "special illustration rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                },
+                "ultra rare": {
+                  "cash": 0.15,
+                  "credit": 0.25
+                }
+              }
+            },
+            {
+              "upTo": 2.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 4.0,
+              "cash": 0.3,
+              "credit": 0.5,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "futuristic rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega attack rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 8.0,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "double rare": {
+                  "cash": 0.3,
+                  "credit": 0.5
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.3,
+                  "credit": 0.5
+                }
+              }
+            },
+            {
+              "upTo": 50.0,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.3,
+                  "credit": 0.5
+                }
+              }
+            },
+            {
+              "upTo": 100.0,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "unspecified": {
+                  "cash": 0.3,
+                  "credit": 0.5
+                }
+              }
+            },
+            {
+              "upTo": 249.99,
+              "cash": 0.55,
+              "credit": 0.7,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "mega attack rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "mega hyper rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "unspecified": {
+                  "cash": 0.3,
+                  "credit": 0.5
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "black star promo": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "black white rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "common": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "double rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "futuristic rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "holo rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "hyper rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "illustration rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "mega attack rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "promo": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "radiant rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "rare ace": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "secret rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "shiny rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "shiny ultra rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "special illustration rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "ultra rare": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "uncommon": {
+              "cash": 0.55,
+              "credit": 0.7
+            },
+            "unspecified": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        },
+        "LP": {
+          "cash": 0.6,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 2.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 4.0,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "futuristic rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega attack rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.4,
+                  "credit": 0.6
+                }
+              }
+            },
+            {
+              "upTo": 50.0,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 249.99,
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          ],
+          "rarities": {
+            "black star promo": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "black white rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "common": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "double rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "futuristic rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "holo rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "illustration rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega attack rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "promo": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "radiant rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "rare ace": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "secret rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "shiny rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "shiny ultra rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "special illustration rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "ultra rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "uncommon": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "unspecified": {
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          }
+        },
+        "MP": {
+          "cash": 0.5,
+          "credit": 0.6,
+          "tiers": [
+            {
+              "upTo": 2.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 4.0,
+              "cash": 0.4,
+              "credit": 0.6,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "futuristic rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega attack rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 50.0,
+              "cash": 0.4,
+              "credit": 0.6,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 249.99,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "unspecified": {
+                  "cash": 0.4,
+                  "credit": 0.6
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "black star promo": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "black white rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "common": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "double rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "futuristic rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "holo rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "illustration rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega attack rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "promo": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "radiant rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "rare ace": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "secret rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "shiny rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "shiny ultra rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "special illustration rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "ultra rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "uncommon": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "unspecified": {
+              "cash": 0.4,
+              "credit": 0.6
+            }
+          }
+        },
+        "HP": {
+          "cash": 0.4,
+          "credit": 0.5,
+          "tiers": [
+            {
+              "upTo": 15.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 50.0,
+              "cash": 0.3,
+              "credit": 0.5,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 249.99,
+              "cash": 0.3,
+              "credit": 0.5,
+              "rarities": {
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "black star promo": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "black white rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "common": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "double rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "futuristic rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "holo rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "hyper rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "illustration rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "mega attack rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "mega hyper rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "promo": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "radiant rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "rare ace": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "secret rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "shiny rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "shiny ultra rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "special illustration rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "ultra rare": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "uncommon": {
+              "cash": 0.3,
+              "credit": 0.5
+            },
+            "unspecified": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "DM": {
+          "cash": 0.3,
+          "credit": 0.4,
+          "tiers": [
+            {
+              "upTo": 15.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 20.0,
+              "cash": 0.1,
+              "credit": 0.2,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 50.0,
+              "cash": 0.1,
+              "credit": 0.12,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 100.0,
+              "cash": 0.1,
+              "credit": 0.2,
+              "rarities": {
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 249.99,
+              "cash": 0.2,
+              "credit": 0.3,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.1,
+                  "credit": 0.2
+                },
+                "mega attack rare": {
+                  "cash": 0.1,
+                  "credit": 0.2
+                },
+                "mega hyper rare": {
+                  "cash": 0.1,
+                  "credit": 0.2
+                },
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "black star promo": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "black white rare": {
+              "cash": 0.1,
+              "credit": 0.2
+            },
+            "common": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "double rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "futuristic rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "holo rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "hyper rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "illustration rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "mega attack rare": {
+              "cash": 0.1,
+              "credit": 0.2
+            },
+            "mega hyper rare": {
+              "cash": 0.1,
+              "credit": 0.2
+            },
+            "promo": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "radiant rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "rare ace": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "secret rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "shiny rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "shiny ultra rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "special illustration rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "ultra rare": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "uncommon": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
+            "unspecified": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        }
+      },
+      "_source": "binderpos-portal",
+      "_rules": [
+        "Pokemon BULK ($2.00 or Less)",
+        "Pokemon Singles, $2.01-$4.00",
+        "Pokemon Singles, $4.01-$8.00",
+        "Pokemon Singles, $8.01 - $15.00",
+        "Pokemon Singles, $15.01 - $20.00",
+        "Pokemon Singles, $20.01 - $50.00",
+        "Pokemon Singles, $50.01 - $100.00",
+        "Pokemon Singles, $100.01 and Up",
+        "Pokemon $250+"
+      ],
+      "rarities": {
+        "black star promo": {
+          "cash": 0.55,
           "credit": 0.7
+        },
+        "black white rare": {
+          "cash": 0.5,
+          "credit": 0.7
+        },
+        "common": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "double rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "futuristic rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "holo rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "hyper rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "illustration rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "mega attack rare": {
+          "cash": 0.5,
+          "credit": 0.7
+        },
+        "mega hyper rare": {
+          "cash": 0.5,
+          "credit": 0.7
+        },
+        "promo": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "radiant rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "rare ace": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "secret rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "shiny rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "shiny ultra rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "special illustration rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "ultra rare": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "uncommon": {
+          "cash": 0.55,
+          "credit": 0.7
+        },
+        "unspecified": {
+          "cash": 0.3,
+          "credit": 0.5
+        }
+      },
+      "sets": {
+        "prize pack series seven": {
+          "name": "Pokemon prize pack 7",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series eight": {
+          "name": "Pokemon Prize Pack Series 8",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series six": {
+          "name": "Pokemon Prize pack 6",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series five": {
+          "name": "pokemon prize pack 5",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series nine": {
+          "name": "Pokemon Prize Pack Series 9",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "world championships 2018": {
+          "name": "World Champs Pokemon",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "world championships 2019": {
+          "name": "World Champs Pokemon",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series two": {
+          "name": "Prizepack2",
+          "conds": {
+            "NM": {
+              "cash": 0.3,
+              "credit": 0.4,
+              "rarities": {
+                "black star promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "double rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "holo rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "illustration rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "radiant rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare ace": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "secret rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "shiny rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "shiny ultra rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special illustration rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "ultra rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series four": {
+          "name": "prize pack 4 (pokemon)",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series three": {
+          "name": "prize pack 3 (pokemon)",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "world championships 2022": {
+          "name": "World Championship Pokemon",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series one": {
+          "name": "Prizepack",
+          "conds": {
+            "NM": {
+              "cash": 0.3,
+              "credit": 0.4,
+              "rarities": {
+                "black star promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "double rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "holo rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "illustration rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "radiant rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare ace": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "secret rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "shiny rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "shiny ultra rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special illustration rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "ultra rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "key": "starwars",
+      "match": "star wars",
+      "cash": 0.5,
+      "credit": 0.7,
+      "minSell": 0.01,
+      "maxSell": 1000000,
+      "buyFoils": true,
+      "exact": true,
+      "tiers": [
+        {
+          "upTo": 2.99,
+          "cash": 0.3,
+          "credit": 0.4,
+          "rarities": {
+            "common": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "legendary": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "special": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "uncommon": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        {
+          "upTo": 3.0,
+          "cash": 0.0,
+          "credit": 0.0
+        }
+      ],
+      "conds": {
+        "NM": {
+          "cash": 0.5,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 2.99,
+              "cash": 0.3,
+              "credit": 0.4,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "legendary": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          ]
+        },
+        "LP": {
+          "cash": 0.5,
+          "credit": 0.7,
+          "tiers": [
+            {
+              "upTo": 2.99,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          ]
+        },
+        "MP": {
+          "cash": 0.4,
+          "credit": 0.5,
+          "tiers": [
+            {
+              "upTo": 3.0,
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          ]
+        },
+        "HP": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        },
+        "DM": {
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        }
+      },
+      "_source": "binderpos-portal",
+      "_rules": [
+        "SWU (3 and under)",
+        "Star Wars Unlimited (3+)"
+      ],
+      "sets": {
+        "sector and regional promos: season 1": {
+          "name": "Star wars promos.",
+          "conds": {
+            "NM": {
+              "cash": 0.4,
+              "credit": 0.5,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "legendary": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "key": "yugioh",
+      "match": "yugioh",
+      "cash": 0.5,
+      "credit": 0.7,
+      "minSell": 0.01,
+      "maxSell": 1000000,
+      "buyFoils": true,
+      "exact": true,
+      "tiers": [
+        {
+          "upTo": 1.99,
+          "cash": 0.02,
+          "credit": 0.04,
+          "rarities": {
+            "common": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "emblazoned secret rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            },
+            "emblazoned ultra rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            },
+            "promo": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        {
+          "upTo": 5.0,
+          "cash": 0.45,
+          "credit": 0.55,
+          "rarities": {
+            "emblazoned secret rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            },
+            "emblazoned ultra rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            },
+            "grand master rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            },
+            "platinum secret rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "prismatic collector's rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "prismatic ultimate rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "quarter century secret rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "secret pharaoh's rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "ultra pharaoh's rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          }
         },
         {
           "upTo": 15.0,
-          "cash": 0.25,
-          "credit": 0.35
+          "cash": 0.5,
+          "credit": 0.7,
+          "rarities": {
+            "emblazoned secret rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            },
+            "emblazoned ultra rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            },
+            "grand master rare": {
+              "cash": 0.5,
+              "credit": 0.65
+            }
+          }
         },
         {
           "upTo": 20.0,
-          "cash": 0.25,
-          "credit": 0.4
+          "cash": 0.5,
+          "credit": 0.65,
+          "rarities": {
+            "platinum secret rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "prismatic collector's rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "prismatic ultimate rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "quarter century secret rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "secret pharaoh's rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "ultra pharaoh's rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            }
+          }
+        },
+        {
+          "upTo": 100.0,
+          "cash": 0.5,
+          "credit": 0.7
         }
       ],
-      "_source": "binderpos-feed",
-      "_samples": 178,
       "conds": {
         "NM": {
-          "cash": 0.35,
-          "credit": 0.45,
+          "cash": 0.5,
+          "credit": 0.7,
           "tiers": [
             {
-              "upTo": 8.0,
+              "upTo": 1.99,
+              "cash": 0.02,
+              "credit": 0.04,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 5.0,
+              "cash": 0.45,
+              "credit": 0.55,
+              "rarities": {
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "grand master rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "platinum secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "quarter century secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                }
+              }
+            },
+            {
+              "upTo": 15.0,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "grand master rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                }
+              }
+            },
+            {
+              "upTo": 20.0,
+              "cash": 0.5,
+              "credit": 0.65,
+              "rarities": {
+                "platinum secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "quarter century secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                }
+              }
+            },
+            {
+              "upTo": 100.0,
               "cash": 0.5,
               "credit": 0.7
             }
           ],
-          "_n": 6
+          "rarities": {
+            "emblazoned secret rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "emblazoned ultra rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
         },
         "LP": {
-          "cash": 0.35,
-          "credit": 0.45,
+          "cash": 0.5,
+          "credit": 0.7,
           "tiers": [
             {
-              "upTo": 8.0,
+              "upTo": 1.99,
+              "cash": 0.02,
+              "credit": 0.04,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 5.0,
+              "cash": 0.3,
+              "credit": 0.5,
+              "rarities": {
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "grand master rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "platinum secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "quarter century secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                }
+              }
+            },
+            {
+              "upTo": 15.0,
+              "cash": 0.45,
+              "credit": 0.65,
+              "rarities": {
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "grand master rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "platinum secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "quarter century secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                }
+              }
+            },
+            {
+              "upTo": 20.0,
+              "cash": 0.5,
+              "credit": 0.65,
+              "rarities": {
+                "platinum secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "quarter century secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.5,
+                  "credit": 0.7
+                }
+              }
+            },
+            {
+              "upTo": 100.0,
               "cash": 0.5,
               "credit": 0.7
             }
           ],
-          "_n": 7
+          "rarities": {
+            "emblazoned secret rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "emblazoned ultra rare": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
         },
         "MP": {
-          "cash": 0.45,
-          "credit": 0.55,
+          "cash": 0.0,
+          "credit": 0.0,
           "tiers": [
             {
-              "upTo": 8.0,
+              "upTo": 1.99,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                }
+              }
+            },
+            {
+              "upTo": 5.0,
+              "cash": 0.0,
+              "credit": 0.0,
+              "rarities": {
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "grand master rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "platinum secret rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "quarter century secret rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                }
+              }
+            },
+            {
+              "upTo": 15.0,
+              "cash": 0.4,
+              "credit": 0.5,
+              "rarities": {
+                "emblazoned secret rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "emblazoned ultra rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "grand master rare": {
+                  "cash": 0.5,
+                  "credit": 0.65
+                },
+                "platinum secret rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "quarter century secret rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                }
+              }
+            },
+            {
+              "upTo": 20.0,
               "cash": 0.5,
-              "credit": 0.7
+              "credit": 0.65,
+              "rarities": {
+                "platinum secret rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "prismatic collector's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "prismatic ultimate rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "quarter century secret rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "secret pharaoh's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                },
+                "ultra pharaoh's rare": {
+                  "cash": 0.4,
+                  "credit": 0.55
+                }
+              }
+            },
+            {
+              "upTo": 50.0,
+              "cash": 0.4,
+              "credit": 0.55
             }
-          ],
-          "_n": 55
+          ]
         },
         "HP": {
-          "cash": 0.35,
-          "credit": 0.45,
-          "tiers": [
-            {
-              "upTo": 8.0,
-              "cash": 0.5,
-              "credit": 0.7
-            }
-          ],
-          "_n": 55
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
         },
         "DM": {
-          "cash": 0.25,
-          "credit": 0.35,
-          "tiers": [
-            {
-              "upTo": 8.0,
-              "cash": 0.5,
-              "credit": 0.7
+          "cash": 0.0,
+          "credit": 0.0,
+          "tiers": []
+        }
+      },
+      "_source": "binderpos-portal",
+      "_rules": [
+        "YGO $1.99 and Under",
+        "YGO $2 - $5.00",
+        "YGO $5.01 - $15.00",
+        "YGO $15.01 - $20",
+        "YGO $20.01 - $50.00",
+        "YGO $50.01 - $100.00",
+        "YGO $100.01 and Up"
+      ],
+      "rarities": {
+        "emblazoned secret rare": {
+          "cash": 0.0,
+          "credit": 0.0
+        },
+        "emblazoned ultra rare": {
+          "cash": 0.0,
+          "credit": 0.0
+        }
+      },
+      "sets": {
+        "winner's pack 2026-2027": {
+          "name": "YUgiOH winners pack 26/27. Do not delete.",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
             }
-          ],
-          "_n": 55
+          }
+        },
+        "magnificent monsters": {
+          "name": "Magnificent Monsters (Remove Sept 16)",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ultimate tournament pack 1": {
+          "name": "delete 2027 - yu-gioh tournament pack",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ots tournament pack 29": {
+          "name": "YGO Pack 29 (Delete when 33 releases)",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ots tournament pack 26": {
+          "name": "OTS 26",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ots tournament pack 27": {
+          "name": "Ygo OTS 27",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ots tournament pack 28": {
+          "name": "YGO OTS 28",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
         }
       }
     }
   ],
-  "_alerts": []
+  "_alerts": [
+    "skipped rules: Bulk Commons and Uncommons (Test) (test rule); MTG COMMON UNCOMMON (*TEST*) (test rule)"
+  ]
 }
