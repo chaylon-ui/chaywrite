@@ -76,7 +76,8 @@ export const PC = "https://www.pricecharting.com/api/product";
 // Owner 2026-09-15: the markup is ON TOP of the source price ($2,404.38 CAD
 // market + 15% = $2,765.04 -> $2,799.95); the per-run cap is a separate,
 // optional brake and is OFF unless set (it read as the markup on the page).
-export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0, compMode: "cap", compPct: 0 };
+export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0, compMode: "cap", compPct: 0, alertPct: 10 };
+export const PAGE_URL = "https://exor-binder.nevski.workers.dev/autoprice";
 /* Canadian reference price (owner 2026-09-15: "401 sells for $199.99 and has
    lots in stock, possible to check against 401 to also help price"). 401
    Games is a Shopify store (401games.myshopify.com, served at
@@ -314,7 +315,7 @@ export async function autopriceDoAlarm(cx) {
   catch (e) {
     cx.log("autoprice: tick threw: " + msg(e));
     const run = await cx.storage.get("ap:run");
-    if (run && !run.done) { run.error = msg(e); run.done = true; run.finishedAt = cx.now(); await cx.storage.put("ap:run", run); await noteRun(cx, run); }
+    if (run && !run.done) { run.error = msg(e); run.done = true; run.finishedAt = cx.now(); try { await notifyRun(cx, run, await configOf(cx)); } catch {} await cx.storage.put("ap:run", run); await noteRun(cx, run); }
     await arm(cx, nextRunAt(cx.now()), "tick threw");
   }
 }
@@ -334,8 +335,82 @@ function newRun(now, opts) {
 
 async function noteRun(cx, run) {
   const runs = (await cx.storage.get("ap:runs")) || [];
-  runs.unshift({ startedAt: run.startedAt, finishedAt: run.finishedAt, apply: run.apply, products: run.products.length, priced: run.priced, written: run.written, skipped: run.skipped, errors: run.errors.slice(0, 5), error: run.error || null, fx: run.fx || null });
+  runs.unshift({ startedAt: run.startedAt, finishedAt: run.finishedAt, apply: run.apply, nightly: !!run.nightly, products: run.products.length, priced: run.priced, written: run.written, skipped: run.skipped, errors: run.errors.slice(0, 5), error: run.error || null, fx: run.fx || null, notify: run.notify || null });
   await cx.storage.put("ap:runs", runs.slice(0, 30));
+}
+
+/* ---- ntfy digest (owner, 2026-09-15: "send a ntfy update each day showing
+   the price changes and alerting if any are drastic changes of 10% or more")
+   The worker secret AUTOPRICE_NTFY is a topic name (on ntfy.sh) or a full
+   topic URL on any ntfy server; AUTOPRICE_NTFY_TOKEN (optional) is sent as
+   a Bearer token. Every finished run sends one push: the nightly always,
+   a manual or add-triggered run only when it changed or flagged something.
+   Moves of alertPct% or more (page setting, default 10) go first, marked,
+   and lift the push to high priority. */
+
+export function pctMove(from, to) { return from > 0 && to > 0 ? Math.round(((to - from) / from) * 1000) / 10 : null; }
+const fmtMoney = (n) => "$" + Number(n).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export function buildDigest(run, cfg, opts) {
+  const o = opts || {};
+  const rows = run.rows || [];
+  const apply = !!run.apply;
+  const alertPct = Number(cfg && cfg.alertPct) || 0;
+  const changes = [];
+  for (const r of rows) {
+    if (r.applied && r.current > 0 && r.suggested > 0) changes.push({ title: r.title, from: r.current, to: r.suggested, pct: pctMove(r.current, r.suggested), by: "auto" });
+    else if (r.applied && r.suggested > 0) changes.push({ title: r.title, from: null, to: r.suggested, pct: null, by: "auto" });
+    else if (!apply && (r.action === "raise" || r.action === "lower" || r.action === "set") && r.suggested > 0) changes.push({ title: r.title, from: r.current || null, to: r.suggested, pct: pctMove(r.current, r.suggested), by: "shadow" });
+    // a price someone changed by hand (or BinderPOS) since the last run
+    if (r.lastChange && r.lastChange.by === "hand" && r.lastChange.at >= (run.startedAt || 0)) changes.push({ title: r.title, from: r.lastChange.from, to: r.lastChange.to, pct: pctMove(r.lastChange.from, r.lastChange.to), by: "hand" });
+  }
+  const drastic = changes.filter((c) => alertPct > 0 && c.pct != null && Math.abs(c.pct) >= alertPct);
+  const alerts = rows.filter((r) => r.alert).map((r) => ({ title: r.title, alert: r.alert, action: r.action, reason: r.reason }));
+  const line = (c) => (drastic.includes(c) ? "⚠ " : "") + (c.from == null ? "set " : c.to > c.from ? "↑ " : "↓ ") + (c.pct != null ? (c.pct > 0 ? "+" : "") + c.pct + "%  " : "") + c.title + ": " + (c.from == null ? "" : fmtMoney(c.from) + " → ") + fmtMoney(c.to) + (c.by === "hand" ? " (by hand)" : c.by === "shadow" ? " (not written: shadow)" : "");
+  const ordered = [...drastic, ...changes.filter((c) => !drastic.includes(c))];
+  const lines = [];
+  const MAX = 30;
+  for (const c of ordered.slice(0, MAX)) lines.push(line(c));
+  if (ordered.length > MAX) lines.push("…and " + (ordered.length - MAX) + " more on the page");
+  for (const a of alerts) lines.push("⚠ " + a.title + ": " + a.alert + (a.action === "skip" ? " (skipped: " + a.reason + ")" : ""));
+  if (run.error) lines.push("✖ run failed: " + run.error);
+  else if ((run.errors || []).length) lines.push("✖ " + run.errors.length + " error" + (run.errors.length === 1 ? "" : "s") + ": " + run.errors.slice(0, 2).join("; ").slice(0, 200));
+  const n = changes.length;
+  const title = (apply ? "Auto-pricing" : "Auto-pricing (shadow)") + ": " + (run.error ? "run failed" : n === 0 ? "no price changes" : n + " price change" + (n === 1 ? "" : "s")) + (drastic.length ? ", " + drastic.length + " of " + alertPct + "% or more" : "") + (alerts.length ? ", " + alerts.length + " 401 alert" + (alerts.length === 1 ? "" : "s") : "");
+  const counts = rows.length + " listed · " + (run.priced || 0) + " priced · " + (run.written || 0) + " written · " + (run.skipped || 0) + " skipped" + (run.fx ? " · FX " + run.fx : "");
+  const body = (lines.length ? lines.join("\n") + "\n" : "") + counts;
+  const worth = n > 0 || drastic.length > 0 || alerts.length > 0 || !!run.error || (run.errors || []).length > 0;
+  return { title, body: body.length > 3900 ? body.slice(0, 3880) + "…" : body, priority: drastic.length || run.error ? 4 : n ? 3 : 2, tags: drastic.length || run.error ? ["rotating_light"] : n ? ["moneybag"] : ["zzz"], click: o.click || PAGE_URL, changes, drastic, alerts, worth };
+}
+
+// Where to publish: "topic" -> ntfy.sh, or a full https://server/topic URL.
+export function ntfyTarget(value) {
+  const v = String(value || "").trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) { const u = new URL(v); const topic = u.pathname.replace(/\/+$/, "").split("/").pop(); return topic ? { server: u.origin, topic } : null; }
+  return { server: "https://ntfy.sh", topic: v.replace(/^\/+/, "") };
+}
+
+export async function sendNtfy(cx, msg) {
+  const t = ntfyTarget(cx.env && cx.env.AUTOPRICE_NTFY);
+  if (!t) return { ok: false, skipped: true, error: "AUTOPRICE_NTFY secret not set" };
+  const headers = { "content-type": "application/json" };
+  if (cx.env.AUTOPRICE_NTFY_TOKEN) headers.authorization = "Bearer " + String(cx.env.AUTOPRICE_NTFY_TOKEN).trim();
+  const payload = { topic: t.topic, title: msg.title, message: msg.body, priority: msg.priority || 3, tags: msg.tags || [], click: msg.click || PAGE_URL };
+  const r = await cx.fetch(t.server + "/", { method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(15000) });
+  if (!r.ok) return { ok: false, error: "ntfy HTTP " + r.status + " " + (await r.text().catch(() => "")).slice(0, 120) };
+  return { ok: true, server: t.server };
+}
+
+async function notifyRun(cx, run, cfg) {
+  if (run.notify) return;
+  const d = buildDigest(run, cfg);
+  if (!run.nightly && !d.worth) { run.notify = "skipped (nothing to report)"; return; }
+  try {
+    const r = await sendNtfy(cx, d);
+    run.notify = r.ok ? "sent" : r.skipped ? "off" : "failed: " + r.error;
+    if (!r.ok && !r.skipped) run.errors.push("ntfy: " + r.error);
+  } catch (e) { run.notify = "failed: " + msg(e); run.errors.push("ntfy: " + msg(e)); }
 }
 
 async function tick(cx) {
@@ -343,7 +418,7 @@ async function tick(cx) {
   let run = await cx.storage.get("ap:run");
   const now = cx.now();
   // the nightly alarm starts a fresh run; a manual kick wrote its own first
-  if (!run || run.done) run = newRun(now, { apply: (await configOf(cx)).mode === "apply" });
+  if (!run || run.done) { run = newRun(now, { apply: (await configOf(cx)).mode === "apply" }); run.nightly = true; }
   run.ticks++; run.tickAt = now;
   if (run.ticks === 1) {
     try {
@@ -366,6 +441,7 @@ async function tick(cx) {
       else { run.done = true; run.finishedAt = cx.now(); }
     }
   } finally {
+    if (run.done) await notifyRun(cx, run, cfg);
     await cx.storage.put("ap:run", run);
   }
   if (run.done) {
@@ -747,7 +823,7 @@ async function setListed(cx, id, on, b) {
 export async function statusOf(cx) {
   const [run, cfg, report, runs, fx] = await Promise.all([cx.storage.get("ap:run"), configOf(cx), cx.storage.get("ap:report"), cx.storage.get("ap:runs"), cx.storage.get("ap:fx")]);
   let alarmAt = null; try { alarmAt = await cx.storage.getAlarm(); } catch {}
-  return { ok: true, mode: cfg.mode, config: cfg, tokenConfigured: !!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN), pricecharting: !!(cx.env && cx.env.PRICECHARTING_TOKEN),
+  return { ok: true, mode: cfg.mode, config: cfg, tokenConfigured: !!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN), pricecharting: !!(cx.env && cx.env.PRICECHARTING_TOKEN), ntfy: !!ntfyTarget(cx.env && cx.env.AUTOPRICE_NTFY),
     fx, alarmAt, run: run ? { startedAt: run.startedAt, finishedAt: run.finishedAt || null, phase: run.phase, done: !!run.done, ticks: run.ticks, products: run.products.length, priced: run.priced, written: run.written, skipped: run.skipped, errors: run.errors.slice(-8), error: run.error || null, apply: run.apply } : null,
     lastReportAt: report ? report.at : null, runs: runs || [] };
 }
@@ -762,7 +838,7 @@ async function control(cx, b) {
   }
   if (action === "config") {
     const next = { ...cfg };
-    for (const k of ["markupPct", "minMarginPct", "maxMovePct", "compPct"]) if (b[k] != null && b[k] !== "" && Number.isFinite(Number(b[k]))) next[k] = Math.max(0, Number(b[k]));
+    for (const k of ["markupPct", "minMarginPct", "maxMovePct", "compPct", "alertPct"]) if (b[k] != null && b[k] !== "" && Number.isFinite(Number(b[k]))) next[k] = Math.max(0, Number(b[k]));
     if (b.compMode === "cap" || b.compMode === "off" || b.compMode === "skip" || b.compMode === "follow") next.compMode = b.compMode;
     await cx.storage.put("ap:config", next);
     return { ok: true, config: next };
@@ -771,6 +847,14 @@ async function control(cx, b) {
   if (action === "settings") return saveSettings(cx, b);
   if (action === "add") return setListed(cx, b.id, true, b);
   if (action === "remove") return setListed(cx, b.id, false, b);
+  if (action === "ntfy-test") {
+    // The last finished run's digest, so the owner sees the real format.
+    const [run, report] = await Promise.all([cx.storage.get("ap:run"), cx.storage.get("ap:report")]);
+    const src = run && run.done && run.rows ? run : { ...(run || {}), rows: (report && report.rows) || [], apply: !!(report && report.apply) };
+    const d = buildDigest({ ...src, nightly: true }, cfg);
+    const r = await sendNtfy(cx, { ...d, title: "Test · " + d.title });
+    return { ...r, digest: { title: d.title, body: d.body, priority: d.priority } };
+  }
   return { ok: false, error: "unknown action" };
 }
 
@@ -899,15 +983,17 @@ export async function serveAutoprice(request, env, url, staffOk) {
     const r = await stub.fetch(new Request(url.origin + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
     const text = await r.text();
     const keepQ = body.q && body.action !== "add" && body.action !== "remove";
-    const qs = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : ""].filter(Boolean).join("&");
+    let flash = "";
+    if (body.action === "ntfy-test") { try { const j = JSON.parse(text); flash = j.ok ? "Test push sent: " + (j.digest && j.digest.title) : "Test push failed: " + (j.error || "unknown"); } catch { flash = "Test push: no answer"; } }
+    const qs = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : "", flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
     if (form) return html("", 303, { location: "/autoprice" + (qs ? "?" + qs : "") });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
-  const q = (url.searchParams.get("q") || "").slice(0, 120), game = (url.searchParams.get("game") || "").slice(0, 60);
+  const q = (url.searchParams.get("q") || "").slice(0, 120), game = (url.searchParams.get("game") || "").slice(0, 60), flash = (url.searchParams.get("flash") || "").slice(0, 200);
   const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
-  return html(renderPage(status, report, { q, game, found, user: session.u, configured }));
+  return html(renderPage(status, report, { q, game, found, user: session.u, configured, flash }));
 }
 
 function renderLogin(o) {
@@ -988,9 +1074,10 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const found = v.found;
   const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
-<p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}.</p>
+<p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p>
+${v.flash ? `<p class="flash">${esc(v.flash)}</p>` : ""}
 <h2>Add products</h2>
 <form method="get" action="/autoprice" class="box">${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
 ${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (in APPLY mode that writes the prices now, not at 7:30 pm); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
@@ -998,7 +1085,8 @@ ${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th>
 <div class="ctl">
 ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}
 <form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product within the guardrails.')">${hidden("action", "mode")}${hidden("mode", s.mode === "apply" ? "shadow" : "apply")}<button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
-<form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="Follow: 401 Games' in-stock price (plus this percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged at the top of the report. Hold: the TCGplayer price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><button>Save</button></form>
+<form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="Follow: 401 Games' in-stock price (plus this percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged at the top of the report. Hold: the TCGplayer price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><label title="Price moves of at least this percent are flagged first in the ntfy digest and lift it to high priority. 0 = never flag.">Flag moves of <input type="number" step="1" name="alertPct" value="${esc(cfg.alertPct == null ? 10 : cfg.alertPct)}"> % or more</label><button>Save</button></form>
+${s.ntfy ? ctlForm("ntfy-test", "", "Send test push") : ""}
 <a href="/autoprice">refresh</a> · <a href="/autoprice/report.json">json</a> · <a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>
 </div>
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
@@ -1006,6 +1094,6 @@ ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (
 ${alerted.length ? `<div class="alert"><b>⚠ ${alerted.length} product${alerted.length === 1 ? "" : "s"} set to follow ${esc(COMP.name)} ${alerted.length === 1 ? "is" : "are"} priced from TCGplayer instead</b> (out of stock or not listed there):<ul>${alerted.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.action === "skip" ? " · <b>skipped: " + esc(r.reason) + "</b>" : r.suggested != null ? " · now " + money(r.current) + " → " + money(r.suggested) : ""}</li>`).join("")}</ul></div>` : ""}
 <div class="chips"><a href="/autoprice" class="${v.game ? "" : "on"}">All (${all.length})</a>${games.map((g) => `<a href="/autoprice?game=${encodeURIComponent(g)}" class="${v.game === g ? "on" : ""}">${esc(g)} (${all.filter((x) => x.game === g).length})</a>`).join("")}</div>
 <table class="rep"><thead><tr><th>Product</th><th>Today</th><th>Market</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
-<h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">none</td></tr>'}</tbody></table>
+<h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>ntfy</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}${r.nightly ? "" : ' <span class="muted">manual</span>'}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc(r.notify || "—")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">none</td></tr>'}</tbody></table>
 </div></body></html>`;
 }

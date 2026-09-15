@@ -326,3 +326,62 @@ test("a single item never prices from its Case row: shared UPC, SV8.5 token, SV:
   const hit = pickComp(title, "196214112568", [{ title: "Pokemon - Prismatic Evolutions Super-Premium Collection", handle: "pe-spc", available: true, variants: [{ price: "299.99", available: true }] }]);
   assert.equal(hit && hit.handle, "pe-spc");
 });
+
+import { buildDigest, ntfyTarget, pctMove, sendNtfy } from "../src/autoprice.js";
+test("ntfy digest: every change with its move, drastic ones first and flagged, 401 alerts, run counts", async () => {
+  const run = { startedAt: 1000, apply: true, priced: 4, written: 3, skipped: 1, fx: 1.3909, errors: [], rows: [
+    { title: "Chaos Rising Booster Box", current: 219.95, suggested: 229.95, action: "raise", applied: true },
+    { title: "Wilds of Eldraine Collector Box", current: 1399.95, suggested: 1199.95, action: "lower", applied: true },   // -14.3%
+    { title: "FF Collector Box", current: null, suggested: 2799.95, action: "set", applied: true },
+    { title: "EoE Play Booster Pack", current: 6.95, suggested: 6.95, action: "hold", applied: false, lastChange: { at: 2000, from: 8.95, to: 6.95, by: "hand" } },   // -22.3% by hand
+    { title: "Spider-Man Collector Box", current: 549.95, action: "skip", reason: "no match", alert: "401 Games is out of stock: priced from TCGplayer instead" },
+  ] };
+  const d = buildDigest(run, { ...DEFAULT_CONFIG, alertPct: 10 });
+  assert.equal(d.title, "Auto-pricing: 4 price changes, 2 of 10% or more, 1 401 alert");
+  assert.equal(d.priority, 4);
+  assert.deepEqual(d.tags, ["rotating_light"]);
+  assert.equal(d.click, "https://exor-binder.nevski.workers.dev/autoprice");
+  const lines = d.body.split("\n");
+  assert.equal(lines[0], "⚠ ↓ -14.3%  Wilds of Eldraine Collector Box: $1,399.95 → $1,199.95");
+  assert.equal(lines[1], "⚠ ↓ -22.3%  EoE Play Booster Pack: $8.95 → $6.95 (by hand)");
+  assert.equal(lines[2], "↑ +4.5%  Chaos Rising Booster Box: $219.95 → $229.95");
+  assert.equal(lines[3], "set FF Collector Box: $2,799.95");
+  assert.equal(lines[4], "⚠ Spider-Man Collector Box: 401 Games is out of stock: priced from TCGplayer instead (skipped: no match)");
+  assert.equal(lines[5], "5 listed · 4 priced · 3 written · 1 skipped · FX 1.3909");
+  assert.equal(d.worth, true);
+  // a quiet nightly still reports, low priority; a quiet manual run is not worth a push
+  const quiet = buildDigest({ startedAt: 1, apply: true, priced: 2, written: 0, skipped: 0, errors: [], rows: [{ title: "A", current: 10, suggested: 10, action: "hold" }] }, DEFAULT_CONFIG);
+  assert.equal(quiet.title, "Auto-pricing: no price changes");
+  assert.equal(quiet.priority, 2);
+  assert.equal(quiet.worth, false);
+  // shadow mode lists what it would have done
+  const sh = buildDigest({ startedAt: 1, apply: false, priced: 1, written: 0, skipped: 0, errors: [], rows: [{ title: "A", current: 100, suggested: 89.95, action: "lower" }] }, DEFAULT_CONFIG);
+  assert.equal(sh.title, "Auto-pricing (shadow): 1 price change, 1 of 10% or more");
+  assert.match(sh.body, /^⚠ ↓ -10%  A: \$100\.00 → \$89\.95 \(not written: shadow\)\n/);   // -10.05% rounds to -10.0
+  // a failed run says so at high priority
+  const bad = buildDigest({ startedAt: 1, apply: true, error: "tick threw", errors: [], rows: [] }, DEFAULT_CONFIG);
+  assert.equal(bad.title, "Auto-pricing: run failed");
+  assert.match(bad.body, /✖ run failed: tick threw/);
+  assert.equal(bad.priority, 4);
+  // alert threshold off
+  assert.equal(buildDigest(run, { ...DEFAULT_CONFIG, alertPct: 0 }).drastic.length, 0);
+  assert.equal(pctMove(200, 220), 10);
+  assert.equal(pctMove(null, 220), null);
+  // targets
+  assert.deepEqual(ntfyTarget("exor-prices"), { server: "https://ntfy.sh", topic: "exor-prices" });
+  assert.deepEqual(ntfyTarget("https://ntfy.example.com/exor/prices"), { server: "https://ntfy.example.com", topic: "prices" });
+  assert.equal(ntfyTarget(""), null);
+  // the publish call: JSON to the server root with the topic inside, bearer token when set
+  let got = null;
+  const cx = { env: { AUTOPRICE_NTFY: "https://ntfy.sh/exor-prices", AUTOPRICE_NTFY_TOKEN: "tk_x" }, fetch: async (u, init) => { got = { u, init }; return { ok: true, status: 200 }; } };
+  const r = await sendNtfy(cx, d);
+  assert.equal(r.ok, true);
+  assert.equal(got.u, "https://ntfy.sh/");
+  assert.equal(got.init.headers.authorization, "Bearer tk_x");
+  const sent = JSON.parse(got.init.body);
+  assert.equal(sent.topic, "exor-prices");
+  assert.equal(sent.priority, 4);
+  assert.equal(sent.title, d.title);
+  const off = await sendNtfy({ env: {}, fetch: async () => { throw new Error("must not be called"); } }, d);
+  assert.equal(off.skipped, true);
+});
