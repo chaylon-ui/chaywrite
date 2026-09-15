@@ -3,6 +3,7 @@ import { CACHE_DO, WARM_EVERY_MS, gzipText, warmWithStore } from "./binder-searc
 import { PRICE_DO, priceDoFetch, priceDoAlarm } from "./price-history.js";
 import { ENRICH_DO, enrichDoFetch, enrichDoAlarm } from "./enrich.js";
 import { HOLD_DO, holdDoFetch, holdDoAlarm } from "./hold.js";
+import { AUTOPRICE_DO, autopriceDoFetch, autopriceDoAlarm } from "./autoprice.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -52,6 +53,9 @@ export class BinderRoom {
     // And for the hold-on-arrival shadow log (src/hold.js): /_hold/* only.
     this.isHoldDo = false;
     try { this.isHoldDo = !!env.ROOM?.idFromName(HOLD_DO)?.equals?.(state.id); } catch {}
+    // And for the sealed auto-pricing job (src/autoprice.js): /_ap/* only.
+    this.isAutoDo = false;
+    try { this.isAutoDo = !!env.ROOM?.idFromName(AUTOPRICE_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -649,6 +653,19 @@ export class BinderRoom {
     };
   }
 
+  autoCx() {
+    if (!this.apMem) this.apMem = {};
+    return {
+      storage: this.state.storage,
+      env: this.env,
+      fetch: (u, i) => fetch(u, i),
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      log: (s) => console.log(s),
+      mem: this.apMem,
+    };
+  }
+
   holdCx() {
     if (!this.holdMem) this.holdMem = {};
     return {
@@ -693,6 +710,7 @@ export class BinderRoom {
     if (this.isPriceDo) { await priceDoAlarm(this.priceCx()); return; }
     if (this.isEnrichDo) { await enrichDoAlarm(this.enrichCx()); return; }
     if (this.isHoldDo) { await holdDoAlarm(this.holdCx()); return; }
+    if (this.isAutoDo) { await autopriceDoAlarm(this.autoCx()); return; }
     if (!this.isCacheDo) return;
     try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
     let r = null;
@@ -721,7 +739,11 @@ export class BinderRoom {
       if (url.pathname.startsWith("/_hold/")) return holdDoFetch(this.holdCx(), request, url);
       return new Response(null, { status: 404 });
     }
-    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/")) return new Response(null, { status: 404 });
+    if (this.isAutoDo) {
+      if (url.pathname.startsWith("/_ap/")) return autopriceDoFetch(this.autoCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_ap/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });

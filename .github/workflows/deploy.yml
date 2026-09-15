@@ -80,6 +80,21 @@ jobs:
             echo "No BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD repo secrets set - skipping (add both to enable the buylists screen)"
           fi
 
+      # PriceCharting subscription token (optional): the sealed auto-pricer
+      # (src/autoprice.js) adds PriceCharting's eBay-derived "new" price to
+      # TCGplayer's market price when it is set. Same pattern.
+      - name: Sync PRICECHARTING_TOKEN worker secret (when configured)
+        env:
+          PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$PRICECHARTING_TOKEN" ]; then
+            printf '%s' "$PRICECHARTING_TOKEN" | npx wrangler@4 secret put PRICECHARTING_TOKEN
+          else
+            echo "No PRICECHARTING_TOKEN repo secret set - skipping (the sealed auto-pricer runs on TCGplayer alone)"
+          fi
+
       # Log-only probe of the freshly deployed similar-cards endpoints. The
       # sandbox this worker is developed from has no outbound internet, so
       # this step is where the real upstream shapes and live responses become

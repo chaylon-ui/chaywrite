@@ -9,6 +9,7 @@ import { servePriceHistory } from "./price-history.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
+import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
 
@@ -234,6 +235,11 @@ export default {
       if (id) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName(HOLD_DO))
         .fetch(new Request(url.origin + "/_hold/order", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) })));
       return Response.json({ ok: true });
+    }
+    // Sealed auto-pricing (src/autoprice.js): staff page, report, controls.
+    // Opt-in by the auto-price tag; shadow mode until switched on the page.
+    if (url.pathname === "/autoprice" || url.pathname === "/autoprice/report.json" || url.pathname === "/autoprice/status" || url.pathname === "/autoprice/control") {
+      return serveAutoprice(request, env, url, staffOk);
     }
     if (url.pathname === "/hold/health") return serveHoldPage(request, env, url);
     if (url.pathname === "/hold/control" && request.method === "POST") return serveHoldControl(request, env, url, staffOk);
