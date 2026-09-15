@@ -91,6 +91,12 @@ export function categoryOf(productType) {
   return null;
 }
 
+// "Pokemon Sealed Product" -> "Pokemon": the group the report sorts and filters by.
+export function gameOf(productType) {
+  const t = String(productType || "").replace(/\s*(sealed product|sealed|singles?|single graded)\s*$/i, "").trim();
+  return t || "Other";
+}
+
 // Only sealed-looking TCGplayer products are indexed (singles are 95% of a group).
 export const SEALED_RE = /booster|\bbox\b|\bpack\b|bundle|\btin\b|collection|display|\bcase\b|\bkit\b|\bdeck\b|blister|elite trainer|starter|pre-?release|premium|\bset\b|lot\b|league|battle/i;
 
@@ -356,7 +362,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     const d = decide(p, cfg, run.fx);
     if (p.variants > 1 && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: one price per product only, set by hand"; }
     if (p.match && !p.tcgId && d.action === "skip") d.reason = p.match;
-    rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, stock: p.stock, variantId: p.variantId,
+    rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null,
       pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
@@ -376,6 +382,11 @@ async function phaseWrite(cx, run, cfg, deadline) {
     const batch = run.rows.slice(run.wi, run.wi + 10);
     const m = [];
     for (const row of batch) {
+      // Last price change, whoever made it: the price seen at the previous
+      // run vs today's (a hand edit in Shopify, or BinderPOS), and the one
+      // this run applies. ap:last:<id> is what the report shows.
+      const seen = await cx.storage.get("ap:seen:" + row.id);
+      if (seen && row.current != null && Math.abs(Number(seen.price) - row.current) > 0.004) await recordChange(cx, row.id, { at: cx.now(), from: Number(seen.price), to: row.current, by: "hand" });
       const note = { at: date, mode: apply ? "apply" : "shadow", action: row.action, reason: row.reason, current: row.current, suggested: row.suggested ?? null,
         target: row.target ?? null, floor: row.floor ?? null, floorSrc: row.floorSrc, fx: run.fx, marketUsd: row.marketUsd ?? null,
         tcg: row.tcgId ? { id: row.tcgId, name: row.tcgName, market: (row.sources.find((s) => s.name === "tcgplayer") || {}).usd ?? null, low: row.tcgLow, mid: row.tcgMid } : null,
@@ -386,9 +397,11 @@ async function phaseWrite(cx, run, cfg, deadline) {
           const r = await adminGql(cx, PRICE_SET, { pid: row.id, v: [{ id: row.variantId, price: row.suggested.toFixed(2) }] });
           const errs = (r.data.productVariantsBulkUpdate || {}).userErrors || [];
           if (errs.length) { row.writeError = errs.map((e) => e.message).join("; "); run.errors.push("price " + row.handle + ": " + row.writeError); }
-          else { note.applied = true; row.applied = true; run.written++; }
+          else { note.applied = true; row.applied = true; run.written++; await recordChange(cx, row.id, { at: cx.now(), from: row.current, to: row.suggested, by: "auto" }); }
         } catch (e) { row.writeError = msg(e); run.errors.push("price " + row.handle + ": " + msg(e)); }
       }
+      await cx.storage.put("ap:seen:" + row.id, { price: row.applied ? row.suggested : row.current, at: cx.now() });
+      row.lastChange = (await cx.storage.get("ap:last:" + row.id)) || null;
       m.push({ ownerId: row.id, namespace: "exor", key: "ap_suggest", type: "json", value: JSON.stringify(note) });
       if (row.pcIdFound && !row.pcId) m.push({ ownerId: row.id, namespace: "exor", key: "ap_pc_id", type: "number_integer", value: String(row.pcIdFound) });
       if (row.tcgId && row.match === "upc") m.push({ ownerId: row.id, namespace: "exor", key: "ap_tcg_id", type: "number_integer", value: String(row.tcgId) });
@@ -405,6 +418,53 @@ async function phaseWrite(cx, run, cfg, deadline) {
   await cx.storage.put("ap:report", { at: cx.now(), fx: run.fx, fxDate: run.fxDate, apply, rows: run.rows.map((r) => ({ ...r, sources: r.sources })) });
   run.done = true; run.finishedAt = cx.now();
   run.phase = "done";
+}
+
+async function recordChange(cx, id, change) {
+  await cx.storage.put("ap:last:" + id, change);
+  const hist = (await cx.storage.get("ap:hist:" + id)) || [];
+  hist.unshift(change);
+  await cx.storage.put("ap:hist:" + id, hist.slice(0, 20));
+}
+
+// Add-to-list search: a UPC (digits) matches the variant barcode/SKU; anything
+// else is a free-text search over the sealed product types. Marks which
+// results already carry the tag.
+const SEARCH_Q = `query($q: String!) { products(first: 25, query: $q, sortKey: TITLE) { edges { node { id title handle productType tags totalInventory variants(first: 1) { edges { node { price barcode } } } } } } }`;
+export function searchQueryFor(q) {
+  const raw = String(q || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length >= 8 && digits.length === raw.length) {
+    const core = normUpc(digits);
+    return "status:active (barcode:" + core + " OR barcode:0" + core + " OR sku:" + core + " OR sku:0" + core + ")";
+  }
+  const words = raw.replace(/["*():]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return "status:active product_type:*Sealed* " + words;
+}
+async function search(cx, q) {
+  if (!String(q || "").trim()) return { ok: true, q: "", results: [] };
+  const r = await adminGql(cx, SEARCH_Q, { q: searchQueryFor(q) });
+  const results = ((r.data.products || {}).edges || []).map((e) => {
+    const n = e.node, v = ((n.variants || {}).edges || [])[0];
+    return { id: n.id, title: n.title, handle: n.handle, type: n.productType, game: gameOf(n.productType), stock: n.totalInventory, price: v ? v.node.price : null, barcode: v ? v.node.barcode : null, listed: (n.tags || []).includes(TAG) };
+  });
+  return { ok: true, q, results };
+}
+
+const TAG_ADD = `mutation($id: ID!, $t: [String!]!) { tagsAdd(id: $id, tags: $t) { userErrors { message } } }`;
+const TAG_REMOVE = `mutation($id: ID!, $t: [String!]!) { tagsRemove(id: $id, tags: $t) { userErrors { message } } }`;
+async function setListed(cx, id, on) {
+  const pid = String(id || "");
+  if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
+  const r = await adminGql(cx, on ? TAG_ADD : TAG_REMOVE, { id: pid, t: [TAG] });
+  const errs = ((r.data.tagsAdd || r.data.tagsRemove || {}).userErrors) || [];
+  if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
+  if (!on) {
+    // drop the product from the last report so the page reflects it at once
+    const rep = await cx.storage.get("ap:report");
+    if (rep && rep.rows) { rep.rows = rep.rows.filter((x) => x.id !== pid); await cx.storage.put("ap:report", rep); }
+  }
+  return { ok: true, id: pid, listed: !!on };
 }
 
 /* ---- DO routes ---- */
@@ -432,6 +492,8 @@ async function control(cx, b) {
     return { ok: true, config: next };
   }
   if (action === "run") return kickRun(cx, { apply: cfg.mode === "apply" && b.apply === "1" });
+  if (action === "add") return setListed(cx, b.id, true);
+  if (action === "remove") return setListed(cx, b.id, false);
   return { ok: false, error: "unknown action" };
 }
 
@@ -439,6 +501,7 @@ export async function autopriceDoFetch(cx, request, url) {
   await armAlarm(cx);
   if (url.pathname === "/_ap/status") return doJson(await statusOf(cx));
   if (url.pathname === "/_ap/report") return doJson((await cx.storage.get("ap:report")) || { rows: [] });
+  if (url.pathname === "/_ap/search") { try { return doJson(await search(cx, url.searchParams.get("q"))); } catch (e) { return doJson({ ok: false, error: msg(e) }, 500); } }
   if (url.pathname === "/_ap/control" && request.method === "POST") return doJson(await control(cx, await bodyOf(request)));
   return doJson({ ok: false, error: "not found" }, 404);
 }
@@ -466,13 +529,14 @@ export async function serveAutoprice(request, env, url, staffOk) {
   if (url.pathname === "/autoprice/control" && request.method === "POST") {
     const r = await stub.fetch(new Request(url.origin + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
     const text = await r.text();
-    if (form) return new Response(null, { status: 303, headers: { location: "/autoprice?k=" + encodeURIComponent(k), "cache-control": "no-store" } });
+    if (form) return new Response(null, { status: 303, headers: { location: "/autoprice?k=" + encodeURIComponent(k) + (body.q ? "&q=" + encodeURIComponent(body.q) : "") + (body.game ? "&game=" + encodeURIComponent(body.game) : ""), "cache-control": "no-store" } });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
-  const [st, rep] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report"))]);
-  const status = await st.json(), report = await rep.json();
+  const q = (url.searchParams.get("q") || "").slice(0, 120), game = (url.searchParams.get("game") || "").slice(0, 60);
+  const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
+  const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
-  return new Response(renderPage(status, report, k), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  return new Response(renderPage(status, report, k, { q, game, found }), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
 function renderPin(wrong) {
@@ -486,31 +550,52 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&"
 const when = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", hour12: false }) : "";
 const money = (n) => n == null ? "" : "$" + Number(n).toFixed(2);
 
-function renderPage(s, rep, k) {
+function renderPage(s, rep, k, view) {
   const cfg = s.config || DEFAULT_CONFIG;
-  const rows = (rep.rows || []).slice().sort((a, b) => (a.action === "skip") - (b.action === "skip") || String(a.title).localeCompare(String(b.title)));
+  const v = view || {};
+  const ek = encodeURIComponent(k);
+  const all = (rep.rows || []).map((r) => ({ ...r, game: r.game || gameOf(r.type) }));
+  const games = [...new Set(all.map((r) => r.game))].sort((a, b) => a.localeCompare(b));
+  const rows = all.filter((r) => !v.game || r.game === v.game).sort((a, b) => a.game.localeCompare(b.game) || (a.action === "skip") - (b.action === "skip") || String(a.title).localeCompare(String(b.title)));
   const counts = {};
   for (const r of rows) counts[r.action] = (counts[r.action] || 0) + 1;
+  const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
+  const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("k", k)}${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
+  const change = (c) => c ? `${esc(when(c.at).slice(0, 16))}<div class="muted">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto-priced" : "changed by hand"}</div>` : '<span class="muted">none seen yet</span>';
   const row = (r) => `<tr class="a-${esc(r.action)}"><td><a href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener">${esc(r.title)}</a><div class="muted">${esc(r.type)} · stock ${r.stock}${r.tcgName ? " · TCG: " + esc(r.tcgName) : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div></td>
 <td>${money(r.current)}<div class="muted">cost ${money(r.cost)}</div></td>
 <td>${(r.sources || []).map((x) => esc(x.name === "tcgplayer" ? "TCG " : "PC ") + money(x.usd) + " US").join("<br>") || '<span class="muted">none</span>'}</td>
 <td>${r.marketCad != null ? money(r.marketCad) : ""}<div class="muted">${r.markupPct ? "+" + r.markupPct + "%" : ""}${r.floor ? " floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div></td>
 <td><b>${money(r.suggested)}</b></td>
-<td><span class="pill">${esc(r.action)}${r.applied ? " ✓" : ""}</span><div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div></td></tr>`;
+<td><span class="pill">${esc(r.action)}${r.applied ? " ✓" : ""}</span><div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div></td>
+<td>${change(r.lastChange)}</td>
+<td>${ctlForm("remove", hidden("id", r.id), "Remove", "sm")}</td></tr>`;
+  let groupRows = "", lastGame = null;
+  for (const r of rows) {
+    if (r.game !== lastGame) { lastGame = r.game; groupRows += `<tr class="grp"><td colspan="8">${esc(r.game)} <span class="muted">· ${rows.filter((x) => x.game === r.game).length}</span></td></tr>`; }
+    groupRows += row(r);
+  }
   const run = s.run || {};
+  const found = v.found;
+  const foundRows = found && found.results ? found.results.map((f) => `<tr><td>${esc(f.title)}<div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}a{color:#0d7a5f}.wrap{max-width:1300px;margin:0 auto}</style></head><body><div class="wrap">
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span></h1>
-<p class="muted">Only products tagged <b>auto-price</b> are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}.</p>
+<p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}.</p>
+<h2>Add products</h2>
+<form method="get" action="/autoprice" class="box">${hidden("k", k)}${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
+${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Added products are priced on the next run: press Run now, or wait for tonight.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
+<h2>Controls</h2>
 <div class="ctl">
-<form method="post" action="/autoprice/control"><input type="hidden" name="k" value="${esc(k)}"><input type="hidden" name="action" value="run"><button>Run now (${s.mode === "apply" ? "writes prices" : "shadow"})</button>${s.mode === "apply" ? '<input type="hidden" name="apply" value="1">' : ""}</form>
-<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every tagged product within the guardrails.')"><input type="hidden" name="k" value="${esc(k)}"><input type="hidden" name="action" value="mode"><input type="hidden" name="mode" value="${s.mode === "apply" ? "shadow" : "apply"}"><button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
-<form method="post" action="/autoprice/control"><input type="hidden" name="k" value="${esc(k)}"><input type="hidden" name="action" value="config"><label>Default markup % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label>Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label>Max move per run % <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><button>Save</button></form>
-<a href="/autoprice?k=${esc(encodeURIComponent(k))}">refresh</a> · <a href="/autoprice/report.json?k=${esc(encodeURIComponent(k))}">json</a>
+${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}
+<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product within the guardrails.')">${hidden("k", k)}${hidden("action", "mode")}${hidden("mode", s.mode === "apply" ? "shadow" : "apply")}<button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
+<form method="post" action="/autoprice/control">${hidden("k", k)}${hidden("action", "config")}<label>Default markup % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label>Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label>Max move per run % <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><button>Save</button></form>
+<a href="/autoprice?k=${ek}">refresh</a> · <a href="/autoprice/report.json?k=${ek}">json</a>
 </div>
-<p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " tagged, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
-<h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: tag some products auto-price and press Run now"}</span></h2>
-<table><thead><tr><th>Product</th><th>Today</th><th>Sources (USD)</th><th>Market CAD</th><th>Suggested</th><th>Action</th></tr></thead><tbody>${rows.map(row).join("") || '<tr><td colspan="6" class="muted">nothing yet</td></tr>'}</tbody></table>
-<h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Tagged</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">none</td></tr>'}</tbody></table>
+<p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
+<h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
+<div class="chips"><a href="/autoprice?k=${ek}" class="${v.game ? "" : "on"}">All (${all.length})</a>${games.map((g) => `<a href="/autoprice?k=${ek}&game=${encodeURIComponent(g)}" class="${v.game === g ? "on" : ""}">${esc(g)} (${all.filter((x) => x.game === g).length})</a>`).join("")}</div>
+<table><thead><tr><th>Product</th><th>Today</th><th>Sources (USD)</th><th>Market CAD</th><th>Suggested</th><th>Action</th><th>Last price change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
+<h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">none</td></tr>'}</tbody></table>
 </div></body></html>`;
 }

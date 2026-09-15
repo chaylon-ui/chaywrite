@@ -119,3 +119,14 @@ test("the nightly clock is 22:30 UTC, today if still ahead", () => {
   const late = nextRunAt(Date.UTC(2026, 8, 15, 22, 31, 0));
   assert.equal(new Date(late).toISOString(), "2026-09-16T22:30:00.000Z");
 });
+
+import { gameOf, searchQueryFor } from "../src/autoprice.js";
+test("game labels and the add-to-list search query", () => {
+  assert.equal(gameOf("Pokemon Sealed Product"), "Pokemon");
+  assert.equal(gameOf("One Piece Card Game Sealed Product"), "One Piece Card Game");
+  assert.equal(gameOf("MTG Single"), "MTG");
+  assert.equal(gameOf(""), "Other");
+  assert.equal(searchQueryFor("0196214154186"), "status:active (barcode:196214154186 OR barcode:0196214154186 OR sku:196214154186 OR sku:0196214154186)");
+  assert.equal(searchQueryFor("chaos rising booster"), "status:active product_type:*Sealed* chaos rising booster");
+  assert.equal(searchQueryFor(' "elite" (trainer)'), "status:active product_type:*Sealed* elite trainer");
+});
