@@ -326,7 +326,14 @@ export async function autopriceDoAlarm(cx) {
 
 export async function kickRun(cx, opts) {
   const run = await cx.storage.get("ap:run");
-  if (run && !run.done && cx.now() - (run.tickAt || 0) < 120e3) return { ok: true, started: false, running: true };
+  if (run && !run.done && cx.now() - (run.tickAt || 0) < 120e3) {
+    // A run is going: queue one more right after it (a product added mid-run
+    // is past the products phase, 2026-09-15: the Celebrations Pokemon Center
+    // ETB was tagged one second into a run and never priced). Its own key -
+    // the running tick holds a copy of ap:run and writes it back.
+    await cx.storage.put("ap:again", { apply: !!(opts && opts.apply), at: cx.now() });
+    return { ok: true, started: false, running: true, queued: true };
+  }
   await cx.storage.put("ap:run", newRun(cx.now(), opts));
   await arm(cx, cx.now() + ((opts && opts.delayMs) || 100), "kick");
   return { ok: true, started: true };
@@ -486,7 +493,12 @@ async function tick(cx) {
   if (run.done) {
     await noteRun(cx, run);
     cx.log("autoprice: run done " + JSON.stringify({ products: run.products.length, priced: run.priced, written: run.written, skipped: run.skipped, errors: run.errors.length, ticks: run.ticks }));
-    await arm(cx, nextRunAt(cx.now()), "done");
+    const again = await cx.storage.get("ap:again");
+    if (again) {
+      await cx.storage.delete("ap:again");
+      await cx.storage.put("ap:run", newRun(cx.now(), { apply: !!again.apply && cfg.mode === "apply" }));
+      await arm(cx, cx.now() + 1500, "again");
+    } else await arm(cx, nextRunAt(cx.now()), "done");
   } else {
     await arm(cx, cx.now() + 1500, "next tick");
   }
@@ -762,7 +774,11 @@ async function phaseWrite(cx, run, cfg, deadline) {
     run.wi += batch.length;
   }
   if (run.wi < run.rows.length) return;
-  await cx.storage.put("ap:report", { at: cx.now(), fx: run.fx, fxDate: run.fxDate, apply, rows: run.rows.map((r) => ({ ...r, sources: r.sources })) });
+  // Rows added while this run was past its products phase stay "pending" in
+  // the report until the queued follow-up run prices them.
+  const prev = (await cx.storage.get("ap:report")) || {};
+  const pending = (prev.rows || []).filter((r) => r.action === "pending" && !run.rows.some((x) => x.id === r.id));
+  await cx.storage.put("ap:report", { at: cx.now(), fx: run.fx, fxDate: run.fxDate, apply, rows: [...run.rows.map((r) => ({ ...r, sources: r.sources })), ...pending] });
   run.done = true; run.finishedAt = cx.now();
   run.phase = "done";
 }

@@ -444,3 +444,19 @@ test("Elite Trainer = Elite Trainer Box = ETB; 401's spelled-out series is noise
   // the earlier cases still hold with the series stripped
   assert.equal(pickComp("MTG EDGE OF ETERNITIES PLAY BOOSTER BOX", "", [{ title: "MTG - Edge of Eternities - Play Booster Box", handle: "eoe", available: true }]).handle, "eoe");
 });
+
+import { kickRun } from "../src/autoprice.js";
+test("an add during a running run queues one more run instead of being lost", async () => {
+  const store = new Map();
+  const cx = { storage: { get: async (k) => store.get(k), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); }, setAlarm: async () => {} }, now: () => 100000, log: () => {} };
+  store.set("ap:run", { startedAt: 90000, tickAt: 99000, done: false, phase: "comp" });
+  const r = await kickRun(cx, { apply: true });
+  assert.deepEqual(r, { ok: true, started: false, running: true, queued: true });
+  assert.deepEqual(store.get("ap:again"), { apply: true, at: 100000 });
+  assert.equal(store.get("ap:run").phase, "comp");   // the running run is untouched
+  // once the run is done (or stale), a kick starts a fresh one
+  store.set("ap:run", { startedAt: 90000, tickAt: 99000, done: true });
+  const s = await kickRun(cx, { apply: false });
+  assert.equal(s.started, true);
+  assert.equal(store.get("ap:run").done, false);
+});
