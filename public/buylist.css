@@ -102,8 +102,7 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
    block, so a seller cannot mistake the foil line for the plain one
    (owner, 2026-09-15). */
 .bl__pill--finish { font-size: 12px; padding: 3px 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #1d2327; background: linear-gradient(115deg, #ffe9a8 0%, #ffc6e0 30%, #bfe3ff 60%, #d2ffd8 85%, #ffe9a8 100%); border: 1px solid rgba(0, 0, 0, 0.14); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
-.bl__orow--finish > span { background: linear-gradient(90deg, #fff8e3 0%, #fffdf6 55%, #fff 100%); }
-.bl__orow--finish > span:first-child { box-shadow: inset 4px 0 0 #f0b429; }
+.bl__orow--finish > span:first-child { background: linear-gradient(90deg, #fff3cd 0%, #fffbee 70%, #fff 100%); box-shadow: inset 4px 0 0 #f0b429; }
 .bl__orow--band > .bl__band { grid-column: 1 / -1; justify-content: flex-start; min-height: 26px; padding: 4px 12px; margin-top: 4px; border-top: 2px solid #f0b429; background: #fff3cd; color: #7a4d00; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 .bl__add { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 999px; }
 .bl__nobuy { display: inline-block; font-size: 11.5px; font-weight: 700; line-height: 1.2; padding: 6px 9px; border-radius: 999px; background: var(--bl-surface-2); color: var(--bl-muted); white-space: nowrap; }
