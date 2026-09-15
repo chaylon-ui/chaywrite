@@ -14,23 +14,27 @@ name: BinderPOS portal rules sync
 # /api/buylist/rule/byId/{id}: one rule per game x price band with a
 # threshold ("price" + "priceRule" >=, >, <=, <), per-CONDITION cash /
 # store-credit percentages (buylistVariants[].variantName) and per-rarity
-# overrides (null = inherit); set-specific rules carry setName (art cards,
-# prize packs = not buying); rules whose name says "test" are skipped.
+# overrides (buylistVariantRarityRules, null = inherit); set-specific
+# rules carry setName (art cards, prize packs = not buying); rules named
+# "test" are skipped; a rule with no price condition and no set is a
+# game-wide catch-all.
 #
-# Converter: for every game the general rules are evaluated the way the
+# Converter: for every game the general rules are resolved the way the
 # portal resolves them - the matching ">=" rule with the highest threshold,
-# the matching "<=" rule with the lowest, the narrower band when both kinds
-# match - at every price band edge, and the result is written as the
-# per-condition tier ladder public/buy-rules.json already carries
-# (buyprice-reveal.js reads it unchanged; "exact": true tells it not to
-# apply the evidence-based condition lift). Set rules go in "sets".
+# the matching "<=" rule with the lowest, the narrower band when both
+# kinds match - at every cent where a rule starts or stops matching, and
+# written as the per-condition tier ladder public/buy-rules.json already
+# carries, each tier carrying its rarity overrides (buyprice-reveal.js
+# reads the card's Rarity row; "exact": true tells it not to apply the
+# evidence-based condition lift). Set rules go in "sets".
 #
 # Secrets: BINDERPOS_LOGIN_EMAIL + BINDERPOS_LOGIN_PASSWORD (repo Actions
 # secrets). Passed only to Firebase's sign-in endpoint; the token is
 # masked; nothing else is printed but the store's own rule data.
 #
-# Runs daily after the feed-based sync (09:23 UTC) so the portal's exact
-# rules are what the storefront serves for the day.
+# Runs daily after the feed-based sync (09:23 UTC, which now stands down
+# when this file is portal-sourced) so the portal's exact rules are what
+# the storefront serves for the day.
 
 on:
   schedule:
@@ -117,10 +121,9 @@ jobs:
               if "heav" in t: return "HP"
               if "damag" in t or re.search(r'\bdmg\b', t): return "DM"
               return ""
-          def pcts(v):
-              allow = v.get("allowPurchase", True) is not False
-              c = float(v.get("cashPercent") or 0) / 100.0 if allow else 0.0
-              s = float(v.get("storeCreditPercent") or 0) / 100.0 if allow else 0.0
+          def pcts(cash, credit, allow):
+              c = float(cash or 0) / 100.0 if allow else 0.0
+              s = float(credit or 0) / 100.0 if allow else 0.0
               return round(max(0.0, min(1.0, c)), 4), round(max(0.0, min(1.0, s)), 4)
           def conds_of(rule):
               conds = {}
@@ -129,17 +132,19 @@ jobs:
                   if not c: continue
                   foil = "foil" in (v.get("variantName") or "").lower()
                   if c in conds and not conds[c]["_foil"] and foil: continue   # plain condition beats its foil twin
-                  cash, credit = pcts(v)
+                  allow = v.get("allowPurchase", True) is not False
+                  cash, credit = pcts(v.get("cashPercent"), v.get("storeCreditPercent"), allow)
                   e = {"cash": cash, "credit": credit, "_foil": foil}
                   rar = {}
                   for rr in v.get("buylistVariantRarityRules") or []:
                       if rr.get("cashPercent") is None and rr.get("storeCreditPercent") is None and rr.get("allowPurchase") is not False:
                           continue   # null = inherit the condition's numbers
-                      rc, rs = pcts({"cashPercent": rr.get("cashPercent") if rr.get("cashPercent") is not None else v.get("cashPercent"),
-                                     "storeCreditPercent": rr.get("storeCreditPercent") if rr.get("storeCreditPercent") is not None else v.get("storeCreditPercent"),
-                                     "allowPurchase": rr.get("allowPurchase", True)})
+                      rallow = allow and rr.get("allowPurchase", True) is not False
+                      rc, rs = pcts(rr.get("cashPercent") if rr.get("cashPercent") is not None else v.get("cashPercent"),
+                                    rr.get("storeCreditPercent") if rr.get("storeCreditPercent") is not None else v.get("storeCreditPercent"),
+                                    rallow)
                       if (rc, rs) != (cash, credit):
-                          rar[str(rr.get("rarity") or "").lower()] = {"cash": rc, "credit": rs}
+                          rar[str(rr.get("rarity") or "").strip().lower()] = {"cash": rc, "credit": rs}
                   if rar: e["rarities"] = rar
                   conds[c] = e
               for e in conds.values(): e.pop("_foil", None)
@@ -166,12 +171,13 @@ jobs:
                   sets[g][str(r["setName"]).strip().lower()] = {"name": name, "conds": conds}
                   continue
               op = r.get("priceRule") or ""
+              t = float(r.get("price") or 0)
               if op not in ("greaterThanOrEqualTo", "greaterThan", "lessThanOrEqualTo", "lessThan"):
-                  skipped.append(f"{name} (no price condition)"); continue
-              general[g].append({"t": float(r.get("price") or 0), "op": op, "name": name, "conds": conds})
+                  op, t = "greaterThanOrEqualTo", 0.0   # game-wide catch-all (no price condition)
+              general[g].append({"t": t, "op": op, "name": name, "conds": conds})
           def hits(x, P):
               op, t = x["op"], x["t"]
-              return P >= t if op == "greaterThanOrEqualTo" else P > t if op == "greaterThan" else P <= t if op == "lessThanOrEqualTo" else P < t
+              return P >= t - 1e-9 if op == "greaterThanOrEqualTo" else P > t + 1e-9 if op == "greaterThan" else P <= t + 1e-9 if op == "lessThanOrEqualTo" else P < t - 1e-9
           def pick(rs, P):
               ge = [x for x in rs if x["op"].startswith("greater") and hits(x, P)]
               le = [x for x in rs if x["op"].startswith("less") and hits(x, P)]
@@ -184,46 +190,43 @@ jobs:
                   wb = b["t"] - (lows[-1] if lows else 0.0)
                   return b if wb < wa else a
               return a or b
+          def c2(x): return round(x + 1e-9, 2)
           games = []
           for g, rs in sorted(general.items()):
               key, match = GAME[g]
-              cuts = set()
+              # Regime starts: the cent at which a rule begins or stops matching.
+              starts = {0.01}
               for x in rs:
-                  for d in (-0.01, 0.0, 0.01):
-                      v = round(x["t"] + d, 2)
-                      if v > 0: cuts.add(v)
-              cuts = sorted(cuts)
-              segs = []   # (lo, hi or None)
-              lo = 0.0
-              for c in cuts:
-                  segs.append((lo, c)); lo = c
-              segs.append((lo, None))
+                  if x["op"] == "greaterThanOrEqualTo": starts.add(c2(x["t"]))
+                  elif x["op"] == "greaterThan": starts.add(c2(x["t"] + 0.01))
+                  elif x["op"] == "lessThanOrEqualTo": starts.add(c2(x["t"] + 0.01))
+                  else: starts.add(c2(x["t"]))
+              starts = sorted(s for s in starts if s > 0)
+              regimes = []   # (startPrice, upTo or None)
+              for i, s in enumerate(starts):
+                  nxt = starts[i + 1] if i + 1 < len(starts) else None
+                  regimes.append((s, c2(nxt - 0.01) if nxt is not None else None))
               def rates_at(P, c):
                   x = pick(rs, P)
-                  if not x: return (0.0, 0.0, None)
+                  if not x: return (0.0, 0.0, {})
                   e = x["conds"].get(c)
-                  if not e: return (0.0, 0.0, x["name"])
-                  return (e["cash"], e["credit"], x["name"])
+                  if not e: return (0.0, 0.0, {})
+                  return (e["cash"], e["credit"], e.get("rarities") or {})
               conds_out = {}
               for c in ORDER:
                   ladder = []
-                  for (a, b) in segs:
-                      P = (a + b) / 2.0 if b is not None else a + 1.0
-                      cash, credit, nm = rates_at(P, c)
-                      up = round(b - 0.01, 2) if b is not None else None
-                      if ladder and ladder[-1]["cash"] == cash and ladder[-1]["credit"] == credit:
+                  for (s, up) in regimes:
+                      cash, credit, rar = rates_at(s, c)
+                      if ladder and ladder[-1]["cash"] == cash and ladder[-1]["credit"] == credit and (ladder[-1].get("rarities") or {}) == rar:
                           ladder[-1]["upTo"] = up
                       else:
-                          ladder.append({"upTo": up, "cash": cash, "credit": credit})
+                          t = {"upTo": up, "cash": cash, "credit": credit}
+                          if rar: t["rarities"] = rar
+                          ladder.append(t)
                   base = ladder[-1]
-                  conds_out[c] = {"cash": base["cash"], "credit": base["credit"],
-                                  "tiers": [t for t in ladder if t["upTo"] is not None]}
-              # rarity overrides: attach per band from the rule that owns the band
-              rar_any = {}
-              for x in rs:
-                  for c, e in x["conds"].items():
-                      if e.get("rarities"):
-                          rar_any.setdefault(c, {}).setdefault(x["name"], e["rarities"])
+                  ce = {"cash": base["cash"], "credit": base["credit"], "tiers": [t for t in ladder if t["upTo"] is not None]}
+                  if base.get("rarities"): ce["rarities"] = base["rarities"]
+                  conds_out[c] = ce
               nm = conds_out.get("NM") or conds_out[ORDER[0]]
               entry = {
                   "key": key, "match": match,
@@ -232,7 +235,7 @@ jobs:
                   "tiers": nm["tiers"], "conds": conds_out,
                   "_source": "binderpos-portal", "_rules": [x["name"] for x in sorted(rs, key=lambda x: x["t"])],
               }
-              if rar_any: entry["_rarityOverrides"] = rar_any
+              if nm.get("rarities"): entry["rarities"] = nm["rarities"]
               if sets.get(g): entry["sets"] = sets[g]
               games.append(entry)
           for g, s in sets.items():
@@ -242,7 +245,7 @@ jobs:
                                 "buyFoils": True, "exact": True, "tiers": [], "conds": {}, "sets": s, "_source": "binderpos-portal", "_rules": []})
           if skipped: alerts.append("skipped rules: " + "; ".join(skipped))
           out = {
-              "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands; set-specific rules under sets; rules named test are skipped.",
+              "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, rarity overrides per tier; set-specific rules under sets; rules named test are skipped.",
               "_portal": True,
               "enabled": bool(games),
               "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
@@ -253,21 +256,29 @@ jobs:
           }
           with open('public/buy-rules.json', 'w') as f:
               json.dump(out, f, indent=2, ensure_ascii=False); f.write('\n')
-          # Summary + two spot checks against the owner's screenshots.
+          # Summary, rarity report, and spot checks against the owner's screenshots.
+          def fmt(t): return f"<= {t['upTo']}: {t['cash']:.2f}/{t['credit']:.2f}" + (" *" if t.get("rarities") else "")
           for gm in games:
               print(f"== {gm['key']}  rules: {len(gm['_rules'])}  sets: {len(gm.get('sets') or {})}")
               for c in ORDER:
                   e = gm["conds"].get(c)
-                  if e: print(f"   {c}: " + ", ".join(f"<= {t['upTo']}: {t['cash']:.2f}/{t['credit']:.2f}" for t in e["tiers"]) + f", above: {e['cash']:.2f}/{e['credit']:.2f}")
-          def rate(key, c, P):
+                  if e: print(f"   {c}: " + ", ".join(fmt(t) for t in e["tiers"]) + f", above: {e['cash']:.2f}/{e['credit']:.2f}" + (" *" if e.get("rarities") else ""))
+          print("== rarity overrides (* above), NM/LP only, per rule")
+          for g, rs in sorted(general.items()):
+              for x in sorted(rs, key=lambda x: x["t"]):
+                  for c in ("NM", "LP"):
+                      e = x["conds"].get(c) or {}
+                      if e.get("rarities"): print(f"   {GAME[g][0]} | {x['name']} | {c} default {e['cash']:.2f}/{e['credit']:.2f} | " + json.dumps(e["rarities"]))
+          def rate(key, c, P, rarity=None):
               gm = next((x for x in games if x["key"] == key), None)
               if not gm: return None
               e = gm["conds"].get(c) or gm
-              for t in e["tiers"]:
-                  if P <= t["upTo"]: return (t["cash"], t["credit"])
-              return (e["cash"], e["credit"])
-          print("spot check pokemon NM $1915.55 (portal widget said 55/70):", rate("pokemon", "NM", 1915.55))
+              tier = next((t for t in e["tiers"] if P <= t["upTo"]), e)
+              r = (tier.get("rarities") or {}).get(rarity) if rarity else None
+              return (r["cash"], r["credit"]) if r else (tier["cash"], tier["credit"])
+          print("spot check pokemon NM $1915.55 Secret Rare (portal widget said 55/70):", rate("pokemon", "NM", 1915.55, "secret rare"), "| default:", rate("pokemon", "NM", 1915.55))
           print("spot check pokemon NM $10.45 (owner's rule view said 50/70):", rate("pokemon", "NM", 10.45))
+          print("spot check yugioh NM $100.00 (should be the $50.01-$100 rule):", rate("yugioh", "NM", 100.00))
           print("alerts:", alerts)
           PY
 
