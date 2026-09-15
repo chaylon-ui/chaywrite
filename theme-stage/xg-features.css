@@ -1,0 +1,595 @@
+/* ============================================================
+   Exor Games — round-3 feature styles (loaded after modern-skin.css)
+   1. Sticky product photo column rides below the stuck header
+   2. Hero carousel slides (hero-modern "Slide" blocks)
+   3. Red pill condition dropdown on product cards
+   4. Click-to-expand zoom overlay (product page singles)
+   5. Stronger tilt + mobile auto-sway (no holo sparkle layer)
+   6. Sister-store search band (xg-sister-stores.js)
+   7. Search-results "search again" box hardening
+   8. Mobile header bar icons inked for the light bar
+   ============================================================ */
+
+/* theme.css pins .product-single-left at top:80px (>=768px), which slides
+   the card under the fixed header stack (~100-150px) while scrolling.
+   xg-header-offset.js publishes the live fixed-stack height as
+   --xg-fixed-bottom on <html>; ride 12px below it. */
+@media (min-width: 768px) {
+  .product-single .product-single-left {
+    top: calc(var(--xg-fixed-bottom, 68px) + 12px);
+    transition: top 0.25s ease;
+  }
+  /* Desktop-only enlargement of the card photo (mobile keeps the original
+     60% from the section custom_css; !important beats its section scoping) */
+  .product-single .product-single-left .single-left .product-single__photo {
+    width: 66% !important;
+    height: 66% !important;
+  }
+}
+
+/* ---- 2a. Hero height lock ------------------------------------------
+   The panel must never grow when the owner types a long headline - the
+   fit-text script in hero-modern.liquid shrinks the copy to fit instead.
+   Overrides modern-skin's min-height sizing (this file loads after it,
+   same specificity, so these win). */
+.xg-hero__main {
+  height: clamp(340px, 38vw, 480px);
+  min-height: 0;
+}
+@media (max-width: 989px) {
+  .xg-hero__main { height: 380px; }
+}
+
+/* ---- 2. Hero carousel ----------------------------------------------
+   Slides stack in one grid cell; the active one fades in. The panel's
+   height is the locked clamp above - slides stretch to it and long copy
+   shrinks via the fit-text script instead of growing the panel.
+   Dots bottom-left. */
+.xg-hero__main--carousel {
+  display: grid;
+  align-items: stretch; /* modern-skin's align-items:center would shrink-wrap slides */
+}
+.xg-hero__main--carousel .xg-hero__slide {
+  grid-area: 1 / 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  border-radius: inherit;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.7s ease, visibility 0s linear 0.7s;
+}
+.xg-hero__main--carousel .xg-hero__slide.is-active {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.7s ease;
+  z-index: 1;
+}
+.xg-hero__slide-link {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+.xg-hero__dots {
+  position: absolute;
+  left: 28px;
+  bottom: 20px;
+  display: flex;
+  gap: 8px;
+  z-index: 4;
+}
+.xg-hero__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease;
+}
+.xg-hero__dot.is-active {
+  background: #ffffff;
+  transform: scale(1.25);
+}
+.xg-hero__dot:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+@media (max-width: 767px) {
+  .xg-hero__main--carousel { height: 280px; }
+  .xg-hero__dots { left: 18px; bottom: 14px; }
+  /* Keep the text slide compact so wide banner slides aren't cropped to a
+     sliver of their art (the locked panel height serves every slide) */
+  .xg-hero__main--carousel .xg-hero__content { padding: 22px 18px 30px; }
+  .xg-hero__main--carousel .xg-hero__title { font-size: 22px; line-height: 1.2; }
+  .xg-hero__main--carousel .xg-hero__sub { font-size: 13px; }
+}
+
+/* ---- 3. Condition dropdown as a brand-red pill ---------------------
+   Targets the visible variant select on both card styles (list + grid).
+   Both selects sit inside .product-description; the prefix lifts every
+   rule to (0,3,1) so it beats modern-skin's
+   .product-description .custom-dropdown__small select (0,2,1) and
+   theme.css's span.custom-dropdown__small select -webkit-appearance:button.
+   The JS reads/writes the native select, so this is styling only. */
+.product-description .custom-dropdown__small::before,
+.product-description .custom-dropdown__small::after {
+  content: none; /* legacy dark strip + arrow chrome off the pill's end */
+}
+.product-description .custom-dropdown__small {
+  display: block;
+  max-width: 100%;
+}
+/* Full-width pill (capped) so every card's dropdown is the same length and
+   long condition names ellipsize instead of pushing the chevron out of the
+   card — a select's natural width is its widest option, which overflowed
+   narrow mobile cards. */
+.product-description select[data-dropdown-id="productSelect-dropdown"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center; /* Safari centers the closed value with this */
+  text-align-last: center; /* Chrome/Firefox closed-value alignment */
+  background-color: var(--xg-red, #d62c28);
+  color: #ffffff;
+  font-family: var(--xg-font-body, "Inter", sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 34px 9px 16px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 12px auto;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.product-description select[data-dropdown-id="productSelect-dropdown"]:hover {
+  background-color: var(--xg-red-hover, #b3211e);
+  color: #ffffff;
+}
+.product-description select[data-dropdown-id="productSelect-dropdown"]:focus-visible {
+  outline: 2px solid var(--xg-ink, #171b1d);
+  outline-offset: 2px;
+}
+.product-description select[data-dropdown-id="productSelect-dropdown"] option {
+  background: #ffffff;
+  color: #1c2322;
+  font-weight: 500;
+}
+/* Sold-out conditions stay listed but grayed (disabled in Liquid on theme
+   cards, by xg-card-dropdowns.js on app-rendered search cards) */
+.product-description select[data-dropdown-id="productSelect-dropdown"] option:disabled {
+  color: #aab1b6;
+}
+.grid-view-item--sold-out .product-description select[data-dropdown-id="productSelect-dropdown"],
+.product-description select[data-dropdown-id="productSelect-dropdown"]:disabled {
+  background-color: #9aa2a6;
+  color: #ffffff;
+  cursor: not-allowed;
+}
+
+/* ---- 4. Click-to-expand zoom overlay ------------------------------- */
+.xg-zoom-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(12, 15, 17, 0.84);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: zoom-out;
+  animation: xgFade 0.18s ease-out;
+}
+.xg-zoom-overlay img {
+  max-width: 94vw;
+  max-height: 92vh;
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  animation: xgPop 0.22s ease-out;
+}
+@keyframes xgFade {
+  from { opacity: 0; }
+}
+@keyframes xgPop {
+  from { transform: scale(0.88); opacity: 0.4; }
+}
+
+/* ---- 5. Tilt: stronger pivot, slight grow, mobile sway -------------- */
+/* Overrides custom.css's transform (same specificity, loaded later):
+   adds a scale slot the tilt state fills. */
+.card-float .product-single__photo {
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(var(--cz, 1));
+}
+/* Zoom affordance survives reduced motion (script removes card-float there
+   but always adds xg-zoomable next to the click handler) */
+.xg-zoomable .product-single__photo {
+  cursor: zoom-in;
+}
+.card-tilting .product-single__photo {
+  --cz: 1.045;
+}
+/* Touch devices get no hover tilt — sway the card automatically instead,
+   and sweep the foil glare across it so foils actually shimmer. */
+@media (pointer: coarse) {
+  .card-float .product-single__photo-wrapper { perspective: 700px; }
+  .card-float .product-single__photo {
+    animation: xgCardSway 5.5s ease-in-out infinite;
+  }
+  .foil-active .product-single__photo::before {
+    animation: foilHue 8s linear infinite, xgFoilSweep 5.5s ease-in-out infinite;
+  }
+}
+@keyframes xgCardSway {
+  0%, 100% { transform: rotateX(1.5deg) rotateY(-13deg); }
+  50% { transform: rotateX(-1.5deg) rotateY(13deg); }
+}
+@keyframes xgFoilSweep {
+  0%, 100% { background-position: 0 0, 25% 30%; }
+  50% { background-position: 0 0, 80% 72%; }
+}
+/* No sparkle/glitter layer on Pokémon holos: every version of it read as
+   a rendering glitch rather than foil, so the effect was pulled (the
+   product-template script still adds .poke-holo, harmless and ready if it
+   is ever wanted again). The ::before foil rainbow + glare sweep stay —
+   that is the shimmer people actually recognise as holo. */
+
+/* ---- 6. Sister-store search band -----------------------------------
+   Injected by xg-sister-stores.js at the end of the search results
+   column. Link-out cards to the other five Exor stores; the badge and
+   footnote make the separate-store, separate-shipping deal explicit. */
+.xg-sisters {
+  margin: 20px 0 14px;
+  padding: 16px 16px 12px;
+  background: var(--xg-surface, #ffffff);
+  border: 1px solid var(--xg-border, #e3e6e8);
+  border-radius: var(--xg-radius, 10px);
+}
+.xg-sisters__head { margin-bottom: 12px; }
+.xg-sisters__title {
+  display: block;
+  font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+  font-size: 19px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--xg-ink, #171b1d);
+}
+.xg-sisters__note {
+  display: block;
+  font-family: var(--xg-font-body, "Inter", sans-serif);
+  font-size: 12.5px;
+  color: #6b747b;
+  margin-top: 3px;
+}
+/* One horizontal strip: cards keep their size and the row scrolls
+   side-to-side instead of wrapping downward */
+.xg-sisters__row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 8px; /* breathing room for the scrollbar */
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: #c6ccd1 #eef0f2;
+}
+.xg-sisters__row::-webkit-scrollbar { height: 8px; }
+.xg-sisters__row::-webkit-scrollbar-track { background: #eef0f2; border-radius: 999px; }
+.xg-sisters__row::-webkit-scrollbar-thumb { background: #c6ccd1; border-radius: 999px; }
+.xg-sisters__row::-webkit-scrollbar-thumb:hover { background: #aab1b6; }
+.xg-sisters__card {
+  flex: 0 0 148px;
+  width: 148px;
+  scroll-snap-align: start;
+  text-decoration: none;
+  color: inherit;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid var(--xg-border, #e3e6e8);
+  border-radius: var(--xg-radius, 10px);
+  padding: 8px 8px 10px;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.xg-sisters__card:hover {
+  border-color: #ccd2d6;
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.12);
+  transform: translateY(-2px);
+}
+.xg-sisters__badge {
+  display: inline-block;
+  background: var(--xg-red, #d62c28);
+  color: #ffffff;
+  font-family: var(--xg-font-body, "Inter", sans-serif);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 3px 9px;
+  margin-bottom: 6px;
+}
+.xg-sisters__card img {
+  width: 100%;
+  height: 150px;
+  object-fit: contain; /* sealed boxes and cards alike, uncropped */
+  border-radius: 6px;
+  display: block;
+}
+.xg-sisters__name {
+  display: block;
+  font-family: var(--xg-font-body, "Inter", sans-serif);
+  font-size: 12.5px;
+  color: var(--xg-text, #3d454b);
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xg-sisters__price {
+  display: block;
+  font-family: var(--xg-font-body, "Inter", sans-serif);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--xg-ink, #171b1d);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.xg-sisters__go {
+  display: block;
+  font-family: var(--xg-font-body, "Inter", sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--xg-red, #d62c28);
+  margin-top: 3px;
+}
+@media (max-width: 543px) {
+  .xg-sisters__title { font-size: 17px; }
+  .xg-sisters__card { flex-basis: 128px; width: 128px; padding: 6px 6px 8px; }
+  .xg-sisters__card img { height: 118px; }
+  .xg-sisters__name { font-size: 11.5px; }
+}
+
+/* ---- 7. Search-results "search again" box hardening ----------------
+   The search app wraps/augments the results-page input with its own
+   autocomplete markup. Keep the input + Submit on ONE row no matter what
+   gets injected: any wrapper around the input becomes the flexible slot,
+   the button never wraps or slides under the app's dropdown panel. */
+.template-search .search-page-form .input-group {
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+.template-search .search-page-form .input-group > :not(.input-group__btn) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.template-search .search-page-form .input-group .search__input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.template-search .search-page-form .input-group__btn {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2; /* stays clickable above the autocomplete panel's edge */
+}
+
+/* ---- 8. Mobile header bar icons ------------------------------------
+   theme.css fills the mobile bar's hamburger / cart / account glyphs
+   with --button-text-color (white) — the ORIGINAL mobile bar was dark.
+   The redesign's bar is white (modern-skin "Mobile header bar"), so the
+   icons vanished while staying clickable. Ink them for the light bar and
+   flip the cart badge back to red-on-white. Mobile ids only — the
+   desktop header keeps theme.css's own colors. */
+.mobile-width .mobile-width-left #menu-icon svg {
+  fill: var(--xg-ink, #171b1d);
+}
+#_mobile_cart .cart-display .cart-title .cart-logo svg,
+#_mobile_user_info .userinfo-title .userinfo-toggle svg,
+#header #_mobile_search .search-toggle svg {
+  fill: var(--xg-ink, #171b1d);
+}
+#_mobile_cart .cart-display .cart-title .cart-qty {
+  background: var(--xg-red, #d62c28);
+  color: #ffffff;
+}
+
+/* ---- Reduced motion ------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .xg-hero__main--carousel .xg-hero__slide,
+  .xg-hero__main--carousel .xg-hero__slide.is-active { transition: none; }
+  .card-float .product-single__photo { animation: none; }
+  .foil-active .product-single__photo::before { animation: none; }
+  .xg-zoom-overlay,
+  .xg-zoom-overlay img { animation: none; }
+  .product-single .product-single-left { transition: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   MOBILE HEADER: three stacked rows -> one line.
+
+   Measured at 390px (run 98), the header was 305px tall before any content:
+     nav-menu   [35, 77,355, 76]  the logo row - a 52px logo and 303px of blank
+     mobLeft    [35,153, 50, 50]  the hamburger, on a row of its own
+     mobRight   [35,203,355,100]  search / account / cart, on yet another row
+   The logo block is col-sm-12 so it claims a full-width row, and the hamburger
+   and search group sit in a SEPARATE .site-header-mobile block underneath it.
+   Owner: "This is still a weird blank spot" (the space beside the logo).
+
+   Two moves: the hamburger and the search group share ONE line, and the bar
+   then moves up beside the logo instead of stacking under it. Mobile only -
+   none of this is in the cascade above 991px, where the desktop header and
+   the app's own menu row are untouched.
+   --------------------------------------------------------------------------- */
+@media (max-width: 991px) {
+  #header .site-header-mobile .row {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+  #header .site-header-mobile .mobile-width-left { flex: 0 0 auto; }
+  #header .site-header-mobile .mobile-width-right {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  /* The bar moves up beside the logo. Run 102 finally named the element that
+     can do it: HEADER-COMMON = DIV.header-top.site-header-inner. Inside it the
+     logo's wrapper and the bar ARE siblings -
+
+       DIV.page-width               [0, 77,390,76]   .row > .nav-menu > logo
+       DIV.site-header-mobile       [0,153,390,51]
+       NAV.megamenu-header          display:none below lg
+
+     - which is why gridding .site-header (run 99) and then sizing .header-top
+     as a column (run 100, "all jammed up") could never work: the bar is a
+     DESCENDANT of .header-top, so shrinking that shrank the bar too.
+
+     Column 2 carries a 60% FLOOR rather than column 1 carrying a cap. Same
+     split, but the guarantee runs the right way: whatever the logo side's
+     max-content turns out to be, the bar keeps at least 60% of the width and
+     cannot be squeezed the way it was. Dense packing costs nothing and keeps
+     the placement independent of source order. */
+  #header .header-top.site-header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(60%, 1fr);
+    grid-auto-flow: row dense;
+    align-items: center;
+  }
+  #header .header-top.site-header-inner > * { grid-column: 1 / -1; }
+  #header .header-top.site-header-inner > .page-width {
+    grid-column: 1;
+    width: auto;
+    max-width: none;
+    padding-right: 0;
+  }
+  #header .header-top.site-header-inner > .page-width .row,
+  #header .header-top.site-header-inner > .page-width .nav-menu {
+    width: auto;
+    max-width: none;
+    margin-right: 0;
+  }
+  #header .header-top.site-header-inner > .site-header-mobile {
+    grid-column: 2;
+    min-width: 0;
+  }
+  #header .header-top.site-header-inner > .site-header-mobile .page-width {
+    padding-left: 10px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   CAMERA IS A PHONE AFFORDANCE (owner, round 12: "the camera icon should only
+   show on mobile"). xg-card-scan.js injects the button beside all three search
+   inputs and styles it from its own runtime <style>; it stays INJECTED on
+   desktop because the theme clones header markup into the mobile bar, and a
+   button that was never created cannot be cloned. So it is hidden by width.
+
+   The scanner's own rule pads the input to 84px (submit 46 + camera 30 + 8) so
+   text clears both controls. With no camera on desktop that leaves a dead gap,
+   so the padding drops by the camera's 30px. Both overrides need to out-rank a
+   runtime <style>, which the cascade puts after this file: the scanner's
+   selectors are (0,2,0) and (0,3,0), so an id and an extra class carry these.
+   --------------------------------------------------------------------------- */
+@media (min-width: 992px) {
+  .xg-scan-btn { display: none !important; }
+  #header .xg-scan-host .search-header__input { padding-right: 54px !important; }
+  .template-search .search-page-form .input-group.xg-scan-host .search__input {
+    padding-right: 66px !important;
+  }
+}
+/* ---- 12. Card-corner clip in every mode (owner, 2026-09-11) ---------- */
+/* Card scans are rectangular JPGs with the scan's white ground baked into
+   the four corners, which shows as white triangles wherever the plate
+   behind is not white: the floating product photo over the page ground,
+   grid tiles in dark mode, the hover peek. Singles (product type contains
+   "Single": product-template adds .xg-single to the photo column, the
+   card snippets to the tile) are clipped to real card geometry, 3 mm on a
+   63×88 mm card ≈ 5% of width / 3.6% of height. Sealed boxes keep square
+   corners. xg-dark.css carried the dark-only version of this before. */
+.xg-single .product-single__photo img,
+.xg-single.foil-active .product-single__photo::before,
+.xg-single .product-single__thumbnail-image,
+.xg-single .grid-view-item__image,
+.xg-single img.extra-img,
+.xg-single .grid-view-item__image-container img,
+img[data-xg-corner="card"] { border-radius: 5% / 3.6%; }
+
+/* ---- 13. Footer social icons: a row, not a column (owner, 2026-09-11) - */
+/* On phones the footer's social list rendered one icon per line (probe at
+   390px: each item 240px wide, stacked 50px apart). Forced geometry: the
+   list is a centred flex row, every item is exactly its 40px chip, whatever
+   else the cascade says. */
+.site-footer .site-footer__social-icons,
+.site-footer ul.site-footer__social-icons--md-down { display: flex !important; flex-direction: row !important; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; width: 100% !important; max-width: none; margin: 0 auto !important; padding: 0 !important; float: none; text-align: center; }
+.site-footer .site-footer__social-icons > li,
+.site-footer ul.site-footer__social-icons--md-down > li { display: inline-flex !important; flex: 0 0 40px !important; width: 40px !important; max-width: 40px !important; height: 40px; float: none !important; margin: 0 !important; padding: 0 !important; }
+.site-footer .site-footer__social-icons .social-icons__link { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin: 0; border-radius: 50%; }
+
+/* ---- 14. Search results: narrow-by-game chips (2026-09-11) ------------ */
+.xg-sfilter { display: flex; align-items: center; gap: 8px; margin: 6px 0 14px; padding: 2px 0 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.xg-sfilter::-webkit-scrollbar { display: none; }
+.xg-sfilter__label { flex: 0 0 auto; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--xg-muted, #707a83); }
+.xg-sfilter__chip { flex: 0 0 auto; display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border: 1px solid var(--xg-border, #dfe3e6); border-radius: 999px; background: var(--xg-surface, #fff); color: var(--xg-ink, #171b1d); font-size: 13.5px; font-weight: 600; line-height: 1; text-decoration: none; white-space: nowrap; transition: border-color 0.15s ease, background 0.15s ease; }
+.xg-sfilter__chip:hover { border-color: var(--xg-red, #d62c28); color: var(--xg-red, #d62c28); text-decoration: none; }
+.xg-sfilter__chip.is-on { background: var(--xg-ink, #171b1d); border-color: var(--xg-ink, #171b1d); color: var(--xg-bg, #fff); }
+html[data-xg-theme="dark"] .xg-sfilter__chip.is-on { background: #eef2f4; border-color: #eef2f4; color: #111517; }
+
+/* ---- 15. Trading Cards > Sports Cards flyout (owner, 2026-09-15: "this
+   part of the sports menu looks bad") --------------------------------------
+   The qikify Smart Menu draws this tab from the app's own tree: six "…
+   Sealed Product" text headings each holding ONE image child whose caption
+   repeats the heading, two plain link lists (Hockey Card Singles, Basketball
+   Singles) dropped in between, three tiles a third wide and one two thirds
+   wide (Multi/Other), logos served at 180px or 540px. Markup read on the
+   preview theme with sports-menu-probe (run 35024968149):
+     DIV#tmenu-tabpanel-tmenu-menu-120456 > UL.tmenu_submenu_type_mega
+       > LI.tmenu_item_level_1.tmenu_col(-4 | -automatic)
+           > A.tmenu_item_link (the heading)
+           > UL.tmenu_submenu_type_automatic > LI.tmenu_item_layout_image
+               > A > DIV.tmenu_image--above > IMG + SPAN.tmenu_item_text
+   Same tree, one 3-column grid of equal tiles: heading on top, the logo in
+   a fixed 78px box, the repeated caption hidden; the two link lists become
+   tiles of the same size and go last. The tab's id is the app's menu id, so
+   the rule dies quietly if the owner rebuilds the menu. */
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; align-items: stretch; padding: 12px 14px 14px !important; margin: 0 !important; width: auto !important; }
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1 { display: flex !important; flex-direction: column; width: auto !important; max-width: none !important; min-width: 0 !important; float: none !important; margin: 0 !important; padding: 0 !important; border: 1px solid var(--xg-border, #e3e6e8); border-radius: 10px; background: var(--xg-surface, #fff); overflow: hidden; }
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1 > a.tmenu_item_link { display: block !important; padding: 9px 10px 4px !important; font-size: 12.5px !important; line-height: 1.25; font-weight: 700; text-align: center; }
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1 > ul.tmenu_submenu_type_automatic { position: static !important; display: block !important; width: auto !important; min-width: 0 !important; max-width: none !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; border: 0 !important; background: transparent !important; opacity: 1 !important; visibility: visible !important; transform: none !important; }
+#tmenu-tabpanel-tmenu-menu-120456 li.tmenu_item_level_2 { width: auto !important; max-width: none !important; float: none !important; margin: 0 !important; padding: 0 !important; }
+/* logo tiles */
+#tmenu-tabpanel-tmenu-menu-120456 li.tmenu_item_layout_image > a.tmenu_item_link { display: block !important; padding: 0 !important; }
+#tmenu-tabpanel-tmenu-menu-120456 li.tmenu_item_layout_image .tmenu_image { display: flex !important; align-items: center; justify-content: center; height: 78px; padding: 2px 12px 12px !important; margin: 0 !important; }
+#tmenu-tabpanel-tmenu-menu-120456 li.tmenu_item_layout_image .tmenu_image img { display: block !important; width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain; margin: 0 auto !important; }
+#tmenu-tabpanel-tmenu-menu-120456 li.tmenu_item_layout_image .tmenu_image .tmenu_item_text { display: none !important; }
+/* the two link lists: same tile, left-aligned, after the logos */
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1:not(:has(li.tmenu_item_layout_image)) { order: 10; }
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1:not(:has(li.tmenu_item_layout_image)) > a.tmenu_item_link { text-align: left; padding: 9px 12px 2px !important; }
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1:not(:has(li.tmenu_item_layout_image)) > ul.tmenu_submenu_type_automatic { padding: 0 12px 10px !important; }
+#tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1:not(:has(li.tmenu_item_layout_image)) li.tmenu_item_level_2 > a.tmenu_item_link { display: block !important; padding: 3px 0 !important; font-size: 12.5px !important; font-weight: 500 !important; line-height: 1.3; }
+html[data-xg-theme="dark"] #tmenu-tabpanel-tmenu-menu-120456 > ul.tmenu_submenu_type_mega > li.tmenu_item_level_1 { border-color: rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); }
+html[data-xg-theme="dark"] #tmenu-tabpanel-tmenu-menu-120456 li.tmenu_item_layout_image .tmenu_image { background: #f3f4f6; border-radius: 8px; margin: 0 10px 10px !important; }
