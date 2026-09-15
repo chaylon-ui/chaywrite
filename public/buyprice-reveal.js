@@ -106,7 +106,9 @@
   // The card's rarity, read from the description table BinderPOS writes
   // ("Rarity: Secret Rare"), lower-cased to match the rule file's keys.
   function rarityOf(product) {
-    var text = String(product.body_html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+    // Curly apostrophes fold to straight ones, as the sync's norm_r does
+    // for the rule keys ("Trainer’s Rare" -> "trainer's rare").
+    var text = String(product.body_html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&rsquo;|&#8217;|’/g, "'").replace(/\s+/g, ' ');
     var m = /Rarity:\s*([A-Za-z][A-Za-z0-9 \-\/']*?)\s*(?:$|[A-Z][A-Za-z ]{1,20}:)/.exec(text);
     return m ? m[1].trim().toLowerCase() : '';
   }
