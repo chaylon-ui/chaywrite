@@ -628,6 +628,18 @@ async function tick(cx) {
   }
 }
 
+/* A phase with work left but no time left has to hand the tick back WITHOUT
+   spinning. tick()'s loop only stops at the deadline, so a phase that returns
+   synchronously is called again immediately, and again, burning CPU until the
+   deadline. With no PriceCharting token the queue was always empty and the
+   path never ran; the moment the token went live (2026-09-15 21:02 UTC) every
+   run reached it, spun through the isolate's CPU budget and was killed
+   mid-tick - so the run was never persisted past the state kickRun wrote
+   ("running, phase fx, 0 listed"), the alarm retried into the same wall, and
+   no price was written after 20:54 UTC. Sleeping out the remainder ends the
+   tick with the run saved and the next tick armed. */
+const yieldTick = async (cx, deadline) => { const left = deadline - cx.now(); if (left > 0) await cx.sleep(left); };
+
 async function phaseFx(cx, run) {
   const cached = await cx.storage.get("ap:fx");
   const today = new Date(cx.now()).toISOString().slice(0, 10);
@@ -760,7 +772,12 @@ async function phaseIndex(cx, run) {
 async function phasePrices(cx, run, deadline) {
   if (!run.pcQueue) {
     for (const p of run.products) if (!p.category) p.match = p.graded ? "graded: PriceCharting only" : "no TCGplayer category for type " + p.type;
-    run.pcQueue = run.products.filter((p) => p.graded || p.upc || p.pcId).map((p) => p.id);
+    // PriceCharting is for GRADED cards, plus any product whose own
+    // exor.ap_pc_id says to use it. It used to take every product with a
+    // barcode, which was harmless while no token existed but would, the day
+    // one did, quietly blend an eBay-derived price into every sealed box's
+    // market average - and cost a second per product per run (2026-09-15).
+    run.pcQueue = run.products.filter((p) => p.graded || p.pcId).map((p) => p.id);
   }
   const token = cx.env && cx.env.PRICECHARTING_TOKEN;
   if (token) {
@@ -803,7 +820,7 @@ async function phasePrices(cx, run, deadline) {
       } catch (e) { run.errors.push("pricecharting " + p.handle + ": " + msg(e)); }
       await cx.sleep(PC_GAP_MS);
     }
-    if (run.pcQueue.length) return;
+    if (run.pcQueue.length) { await yieldTick(cx, deadline); return; }
   } else {
     for (const p of run.products) if (p.graded) p.pcMiss = "no PRICECHARTING_TOKEN secret";
     run.pcQueue = [];
@@ -860,7 +877,7 @@ async function phaseComp(cx, run, cfg, deadline) {
       p.comp = { price, available: !!(hit.available || v.available), handle: hit.handle, title: hit.title, barcode: v.barcode || null, at: cx.now() };
     } catch (e) { p.compMiss = msg(e); }
   }
-  if (run.compI < run.products.length) return;
+  if (run.compI < run.products.length) { await yieldTick(cx, deadline); return; }
   run.phase = "decide";
 }
 
@@ -925,7 +942,7 @@ async function phaseWrite(cx, run, cfg, deadline) {
     } catch (e) { run.errors.push("metafields: " + msg(e)); }
     run.wi += batch.length;
   }
-  if (run.wi < run.rows.length) return;
+  if (run.wi < run.rows.length) { await yieldTick(cx, deadline); return; }
   // Rows added while this run was past its products phase stay "pending" in
   // the report until the queued follow-up run prices them.
   const prev = (await cx.storage.get("ap:report")) || {};
