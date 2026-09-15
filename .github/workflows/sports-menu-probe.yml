@@ -93,13 +93,12 @@ jobs:
               const cn = (el) => el.tagName + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/).slice(0, 6).join('.') : '');
               const els = [...document.querySelectorAll('.tmenu_item--root *')].filter(e => norm(own(e)) === norm(childLabel) || norm(e.textContent) === norm(childLabel) && e.children.length <= 1);
               if (!els.length) return { found: false };
-              let panel = null;
-              for (let a = els[0]; a; a = a.parentElement) { if (/tmenu_submenu/.test(String(a.className || ''))) panel = a; if (/tmenu_item--root/.test(String(a.className || ''))) break; }
-              if (!panel) panel = els[0].closest('ul') || els[0].parentElement;
+              // the tab's own content block (Sports Cards is a tab of the Trading Cards flyout)
+              let panel = els[0].closest('.tmenu_submenu_tab_item') || els[0].closest('[class*="tmenu_submenu"]') || els[0].closest('ul') || els[0].parentElement;
               const chain = []; for (let a = panel.parentElement; a && chain.length < 7; a = a.parentElement) chain.push(cn(a));
               const html = panel.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/<iframe[\s\S]*?<\/iframe>/g, '<iframe/>').replace(/\s+/g, ' ');
               const items = [...panel.querySelectorAll('li, img, a, span, div, h1, h2, h3, h4, h5, p')].slice(0, 200).map(e => { const cs = getComputedStyle(e); return { el: cn(e).slice(0, 120), text: e.tagName === 'IMG' ? (e.getAttribute('src') || '').split('/').pop().slice(0, 50) : (own(e).trim() || '').slice(0, 40), style: (e.getAttribute('style') || '').slice(0, 120), disp: cs.display, w: cs.width, fs: cs.fontSize, fw: cs.fontWeight }; });
-              return { found: true, hitEl: cn(els[0]), chain: chain.join(' < '), panelCls: cn(panel), html: html.slice(0, 30000), htmlLen: html.length, items };
+              return { found: true, hitEl: cn(els[0]), chain: chain.join(' < '), panelCls: cn(panel), html: html.slice(0, 40000), htmlLen: html.length, items };
             }, process.env.CHILD);
             console.log('PANEL', out.found, out.hitEl, out.panelCls, 'chain:', out.chain, 'html length', out.htmlLen);
             console.log('HTML', out.html || '');
