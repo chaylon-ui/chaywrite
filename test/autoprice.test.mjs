@@ -305,3 +305,24 @@ test("the report flags follow-mode products that fell back to TCGplayer", async 
   assert.match(page, /<b>401 Games \$199\.95<\/b><div class="muted">followed · TCGplayer not used: TCG \$189\.07 US = \$262\.98 CAD<\/div>/);
   assert.match(page, /<option value="follow" selected>/);
 });
+
+import { indexRows, isCaseRow, tok as tok2 } from "../src/autoprice.js";
+test("a single item never prices from its Case row: shared UPC, SV8.5 token, SV: prefix (Prismatic Evolutions SPC, 2026-09-15)", () => {
+  const title = "POKEMON SV8.5 PRISMATIC EVOLUTIONS SUPER PREMIUM COLLECTION";
+  assert.deepEqual(tok2(title), ["sv85", "prismatic", "evolutions", "super", "premium", "collection"]);   // one set-code token (dropped by the matchers), no stray "5"
+  const single = { id: 622770, set: "SV: Prismatic Evolutions", name: "Prismatic Evolutions Super-Premium Collection", upc: "196214112568", market: 253.21 };
+  const kase = { id: 638058, set: "SV: Prismatic Evolutions", name: "Prismatic Evolutions Super-Premium Collection Case", upc: "0196214112568", market: 1219.47 };
+  const code = { id: 632695, set: "SV: Prismatic Evolutions", name: "Code Card - Prismatic Evolutions Super-Premium Collection", upc: "", market: 1.54 };
+  assert.equal(nameMatch(title, [code, kase, single]).id, 622770);
+  assert.equal(nameMatch("POKEMON SV8.5 PRISMATIC EVOLUTIONS SUPER PREMIUM COLLECTION CASE", [code, kase, single]).id, 638058);
+  // the UPC slot: the non-case row wins whatever the file order
+  assert.equal(indexRows([single, kase]).byUpc["196214112568"].id, 622770);
+  assert.equal(indexRows([kase, single]).byUpc["196214112568"].id, 622770);
+  assert.equal(isCaseRow(kase), true);
+  assert.equal(isCaseRow(single), false);
+  // the series prefix on both sides
+  assert.equal(nameMatch("POKEMON XY EVOLUTIONS BOOSTER BOX", [{ id: 1, set: "XY: Evolutions", name: "Evolutions Booster Box", market: 700 }, { id: 2, set: "XY: Evolutions", name: "Evolutions Booster Box Case", market: 4000 }]).id, 1);
+  // and 401 Games' naming of the same product now lines up
+  const hit = pickComp(title, "196214112568", [{ title: "Pokemon - Prismatic Evolutions Super-Premium Collection", handle: "pe-spc", available: true, variants: [{ price: "299.99", available: true }] }]);
+  assert.equal(hit && hit.handle, "pe-spc");
+});

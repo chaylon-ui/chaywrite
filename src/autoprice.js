@@ -167,10 +167,14 @@ export function normUpc(s) {
 // 401 Games writes "MTG - Universes Beyond: Marvel's Spider-Man - English
 // Collector Booster Box": the brand words and "English" are noise, "Japanese"
 // is not (it names a different product).
-const FILLER = new Set(["mtg", "magic", "the", "gathering", "pokemon", "tcg", "ccg", "yugioh", "yu", "gi", "oh", "of", "and", "a", "an", "edition", "english", "en", "limit", "1", "per", "customer", "sealed", "product", "new", "universes", "beyond", "marvel", "marvels", "s"]);
+// Pokemon series prefixes ("SV: Prismatic Evolutions", "XY: Evolutions",
+// our "POKEMON XY EVOLUTIONS ...") name nothing on their own.
+const FILLER = new Set(["mtg", "magic", "the", "gathering", "pokemon", "tcg", "ccg", "yugioh", "yu", "gi", "oh", "of", "and", "a", "an", "edition", "english", "en", "limit", "1", "per", "customer", "sealed", "product", "new", "universes", "beyond", "marvel", "marvels", "s", "sv", "swsh", "sm", "xy", "bw", "dp", "hgss"]);
 const SYN = { display: "box", displays: "box", boxes: "box", packs: "pack", decks: "deck", bundles: "bundle", kit: "pack", kits: "pack", "pre": "prerelease", "release": "" };
 export function tok(sx) {
-  return String(sx || "").toLowerCase().replace(/\((?:limit|pre-?order|in ?stock|coming soon)[^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean)
+  // "SV8.5" is one set code, not "sv8" and a stray "5" (2026-09-15: that
+  // stray token broke both the TCGplayer name match and the 401 match).
+  return String(sx || "").toLowerCase().replace(/\((?:limit|pre-?order|in ?stock|coming soon)[^)]*\)/g, " ").replace(/(\d)\.(\d)/g, "$1$2").replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean)
     .map((t) => (t in SYN ? SYN[t] : t)).filter((t) => t && !FILLER.has(t));
 }
 const isCode = (t) => /^[a-z]{1,4}\d{1,3}[a-z]?$/.test(t);   // ME04, SV10, OP09 ...
@@ -195,7 +199,20 @@ export function nameMatch(title, rows) {
   }
   return best ? best.row : null;
 }
-const isCaseRow = (row) => /\bcase\b/i.test(row && row.name || "");
+export const isCaseRow = (row) => /\bcase\b/i.test(row && row.name || "");
+// Lookups for one category's rows. TCGplayer puts a product's UPC on its
+// Case row too (165 shared UPCs in the Pokemon file, 2026-09-15: the
+// Prismatic Evolutions Super-Premium Collection and its Case), so a
+// non-case row always wins the UPC slot.
+export function indexRows(rows) {
+  const byUpc = {}, byId = {};
+  for (const row of rows) {
+    byId[row.id] = row;
+    const u = normUpc(row.upc);
+    if (u && (!byUpc[u] || (isCaseRow(byUpc[u]) && !isCaseRow(row)))) byUpc[u] = row;
+  }
+  return { byUpc, byId };
+}
 // A row's usable USD price: market first, then TCGplayer's mid, then low.
 export function rowPrice(row) {
   if (!row) return null;
@@ -453,8 +470,7 @@ async function phaseIndex(cx, run) {
   const rows = (data && data.rows) || [];
   run.tcgMeta = run.tcgMeta || {};
   run.tcgMeta[cat] = { rows: rows.length, builtAt: (data && data.builtAt) || null };
-  const byUpc = {}, byId = {};
-  for (const row of rows) { byId[row.id] = row; const u = normUpc(row.upc); if (u) byUpc[u] = row; }
+  const { byUpc, byId } = indexRows(rows);
   for (const p of run.products) {
     if (p.category !== cat) continue;
     let row = null;
@@ -469,6 +485,12 @@ async function phaseIndex(cx, run) {
         p.match = row ? "name (upc row was " + (isCaseRow(row) && !titleIsCase ? "a case" : "unpriced") + ": " + row.name + ")" : "name";
         row = byName;
       }
+    }
+    // Never price a single item from its Case row (2026-09-15: a Super-Premium
+    // Collection went to $1,999.95 that way). No match beats a wrong one.
+    if (row && isCaseRow(row) && !titleIsCase) {
+      p.match = "TCGplayer only matched the case (" + row.name + ", " + row.id + "): set exor.ap_tcg_id to the single item's id";
+      row = null;
     }
     if (row) {
       p.tcgId = row.id; p.tcgName = row.name; p.tcgGroup = row.g; p.tcgLow = row.low ?? null; p.tcgMid = row.mid ?? null;
