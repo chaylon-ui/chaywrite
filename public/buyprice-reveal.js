@@ -145,6 +145,11 @@
     var buyFoils = rule.buyFoils !== false;
     var RANK = { DM: 0, HP: 1, MP: 2, LP: 3, NM: 4 };
     var rows = [];
+    // $999,999.00 is the store's "email us for pricing" sentinel: a product
+    // carrying it on any variant is deliberately unpriced, so no buy estimate
+    // at all (owner 2026-09-15), not just that variant skipped.
+    var placeholder = (product.variants || []).some(function (v) { return (v.price || 0) / 100 >= 99999; });
+    if (placeholder) return [];
     (product.variants || []).forEach(function (v) {
       var sell = (v.price || 0) / 100;
       if (!(sell > 0) || sell >= 99999) return;           // placeholder pricing
