@@ -1,0 +1,51 @@
+name: ntfy-probe
+# Diagnoses the sealed auto-pricer's ntfy push (src/autoprice.js) without
+# exposing the secrets: asks ntfy for the account behind AUTOPRICE_NTFY_TOKEN
+# (tier, limits, messages used today), then publishes one test message to
+# the AUTOPRICE_NTFY topic exactly the way the worker does (JSON, Bearer).
+# Only status codes and the non-secret JSON fields are printed.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AUTOPRICE_NTFY: ${{ secrets.AUTOPRICE_NTFY }}
+      AUTOPRICE_NTFY_TOKEN: ${{ secrets.AUTOPRICE_NTFY_TOKEN }}
+    steps:
+      - name: account + publish
+        run: |
+          python3 - <<'EOF'
+          import os, json, urllib.request, urllib.error, urllib.parse
+          topic = os.environ.get("AUTOPRICE_NTFY", "").strip()
+          token = os.environ.get("AUTOPRICE_NTFY_TOKEN", "").strip()
+          print("topic set:", bool(topic), "| topic is a URL:", topic.startswith("http"), "| topic length:", len(topic))
+          print("token set:", bool(token), "| starts with tk_:", token.startswith("tk_"), "| length:", len(token), "| has whitespace inside:", any(c.isspace() for c in token))
+          if topic.startswith("http"):
+              u = urllib.parse.urlparse(topic); server = u.scheme + "://" + u.netloc; name = u.path.rstrip("/").split("/")[-1]
+          else:
+              server = "https://ntfy.sh"; name = topic.lstrip("/")
+          print("server:", server)
+          def call(method, url, data=None, auth=True):
+              req = urllib.request.Request(url, data=data, method=method)
+              if auth and token: req.add_header("Authorization", "Bearer " + token)
+              if data is not None: req.add_header("Content-Type", "application/json")
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as r: return r.status, r.read().decode()
+              except urllib.error.HTTPError as e: return e.code, e.read().decode()[:400]
+          st, body = call("GET", server + "/v1/account")
+          print("GET /v1/account ->", st)
+          if st == 200:
+              a = json.loads(body)
+              print(" username:", a.get("username"), "| role:", a.get("role"), "| tier:", json.dumps(a.get("tier")))
+              print(" limits:", json.dumps(a.get("limits")))
+              print(" stats:", json.dumps(a.get("stats")))
+          else:
+              print(" body:", body)
+          st, body = call("POST", server + "/", json.dumps({"topic": name, "title": "ntfy-probe", "message": "test from a GitHub runner with the token", "priority": 2, "tags": ["test_tube"]}).encode())
+          print("POST with token ->", st, body[:300])
+          st, body = call("POST", server + "/", json.dumps({"topic": name, "title": "ntfy-probe (anonymous)", "message": "test from a GitHub runner without the token", "priority": 2}).encode(), auth=False)
+          print("POST anonymous ->", st, body[:300])
+          EOF
