@@ -175,8 +175,12 @@ const SYN = { display: "box", displays: "box", boxes: "box", packs: "pack", deck
 export function tok(sx) {
   // "SV8.5" is one set code, not "sv8" and a stray "5" (2026-09-15: that
   // stray token broke both the TCGplayer name match and the 401 match).
-  return String(sx || "").toLowerCase().replace(/\((?:limit|pre-?order|in ?stock|coming soon)[^)]*\)/g, " ").replace(/(\d)\.(\d)/g, "$1$2").replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean)
-    .map((t) => (t in SYN ? SYN[t] : t)).filter((t) => t && !FILLER.has(t));
+  const out = String(sx || "").toLowerCase().replace(/\((?:limit|pre-?order|in ?stock|coming soon)[^)]*\)/g, " ").replace(/(\d)\.(\d)/g, "$1$2").replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean)
+    .flatMap((t) => (t === "etb" ? ["elite", "trainer"] : [t])).map((t) => (t in SYN ? SYN[t] : t)).filter((t) => t && !FILLER.has(t));
+  // "Elite Trainer" is the box (our titles), TCGplayer and 401 say "Elite
+  // Trainer Box", others "ETB": one spelling for all three (2026-09-15).
+  for (let i = 2; i < out.length; i++) if (out[i] === "box" && out[i - 1] === "trainer" && out[i - 2] === "elite") { out.splice(i, 1); i--; }
+  return out;
 }
 const isCode = (t) => /^[a-z]{1,4}\d{1,3}[a-z]?$/.test(t);   // ME04, SV10, OP09 ...
 export function setTokens(setName) { return tok(setName).filter((t) => !isCode(t)); }
@@ -647,11 +651,20 @@ async function phasePrices(cx, run, deadline) {
 // 401 Games lookup, one product at a time (two small requests each), the
 // index persisted so a long list spans ticks. Failures are per product.
 export function compQuery(title) { return tok(title).filter((t) => !isCode(t)).join(" "); }
+// 401 Games spells the Pokemon series out ("Pokemon - Scarlet and Violet -
+// Destined Rivals - Elite Trainer Box") where our titles carry the set code
+// (SV10); the series pair names nothing on its own, so it goes on both sides.
+const SERIES_PAIRS = [["scarlet", "violet"], ["sword", "shield"], ["sun", "moon"], ["mega", "evolution"], ["black", "white"], ["diamond", "pearl"], ["heartgold", "soulsilver"]];
+export function stripSeries(tokens) {
+  const out = [...tokens];
+  for (let i = 0; i < out.length - 1; i++) if (SERIES_PAIRS.some(([a, b]) => out[i] === a && out[i + 1] === b)) { out.splice(i, 2); i--; }
+  return out;
+}
 export function pickComp(title, ourUpc, results) {
-  const want = [...new Set(tok(title).filter((t) => !isCode(t)))];
+  const want = [...new Set(stripSeries(tok(title).filter((t) => !isCode(t))))];
   let best = null;
   for (const r of results || []) {
-    const got = [...new Set(tok(r.title).filter((t) => !isCode(t)))];
+    const got = [...new Set(stripSeries(tok(r.title).filter((t) => !isCode(t))))];
     if (!sameSet(want, got)) continue;
     const score = (r.available ? 2 : 0) + (ourUpc && (r.variants || []).some((v) => normUpc(v.barcode) === ourUpc) ? 4 : 0);
     if (!best || score > best.score) best = { r, score };

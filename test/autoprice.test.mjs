@@ -421,3 +421,26 @@ test("relay: a refused push stays pending on ap:digest until the GitHub relay ac
   assert.equal(o.skipped, true);
   assert.equal((await digestOp(off, null)).digest.sent, true);
 });
+
+import { stripSeries } from "../src/autoprice.js";
+test("Elite Trainer = Elite Trainer Box = ETB; 401's spelled-out series is noise (Destined Rivals ETB, 2026-09-15)", () => {
+  const title = "POKEMON SV10 DESTINED RIVALS ELITE TRAINER (LIMIT 2)";
+  assert.deepEqual(tok2(title), ["sv10", "destined", "rivals", "elite", "trainer"]);
+  assert.deepEqual(tok2("Destined Rivals Elite Trainer Box"), ["destined", "rivals", "elite", "trainer"]);
+  assert.deepEqual(tok2("Destined Rivals ETB"), ["destined", "rivals", "elite", "trainer"]);
+  const rows = [
+    { id: 624675, set: "SV10: Destined Rivals", name: "Destined Rivals Pokemon Center Elite Trainer Box (Exclusive)", market: 450.78 },
+    { id: 624676, set: "SV10: Destined Rivals", name: "Destined Rivals Elite Trainer Box", upc: "0820650859526", market: 116.69 },
+    { id: 628398, set: "SV10: Destined Rivals", name: "Destined Rivals Elite Trainer Box Case", market: 1232.41 },
+    { id: 633151, set: "SV10: Destined Rivals", name: "Code Card - Destined Rivals Elite Trainer Box", market: 0.29 },
+  ];
+  assert.equal(nameMatch(title, rows).id, 624676);   // not the Pokemon Center one, the case, or the code card
+  assert.deepEqual(stripSeries(["scarlet", "violet", "destined", "rivals", "elite", "trainer"]), ["destined", "rivals", "elite", "trainer"]);
+  const hit = pickComp(title, "196214159891", [
+    { title: "Pokemon - Scarlet and Violet - Destined Rivals - Elite Trainer Box", handle: "dr-etb", available: true, variants: [{ price: "89.95" }] },
+    { title: "Pokemon - Scarlet and Violet - Destined Rivals - Booster Bundle", handle: "dr-bb", available: true },
+  ]);
+  assert.equal(hit && hit.handle, "dr-etb");
+  // the earlier cases still hold with the series stripped
+  assert.equal(pickComp("MTG EDGE OF ETERNITIES PLAY BOOSTER BOX", "", [{ title: "MTG - Edge of Eternities - Play Booster Box", handle: "eoe", available: true }]).handle, "eoe");
+});
