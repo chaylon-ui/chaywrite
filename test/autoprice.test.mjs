@@ -575,3 +575,17 @@ test("PriceCharting search hits: number, language and set must agree", () => {
   assert.equal(pcPickGraded(parseGraded("Charizard (4/102) [Base Set Unlimited] (7.5 Graded)"), base).id, 1);
   assert.equal(pcPickGraded(parseGraded("Charmander (46/102) Beckett:8.5 [Base Set Shadowless Unlimited] Graded"), [{ id: 4, "console-name": "Pokemon Base Set", "product-name": "Charmander #46" }, { id: 5, "console-name": "Pokemon Base Set", "product-name": "Charmander [Shadowless] #46" }]).id, 5);
 });
+
+test("a promo our title names by its own set matches PriceCharting's bracketed printing (Prize Pack, 2026-09-15)", () => {
+  const g = parseGraded("Charizard VMAX (020/189) [Prize Pack Series One] Graded PSA 9");
+  assert.equal(g.number, "20");
+  const hits = [
+    { id: 836562, "console-name": "Pokemon Darkness Ablaze", "product-name": "Charizard VMAX #20" },
+    { id: 7473194, "console-name": "Pokemon Darkness Ablaze", "product-name": "Charizard VMAX [Prize Pack] #20" },
+    { id: 4175813, "console-name": "Pokemon Japanese Charizard VMAX Starter Set", "product-name": "Hop #20" },
+  ];
+  assert.equal(pcPickGraded(g, hits).id, 7473194);
+  // the plain printing still wins when our title does not name the promo
+  assert.equal(pcPickGraded(parseGraded("Charizard VMAX (020/189) [Darkness Ablaze] Graded PSA 9"), hits).id, 836562);
+  assert.deepEqual(gradeField("PSA", 9), { key: "graded-price", label: "grade 9" });
+});

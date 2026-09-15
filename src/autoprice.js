@@ -186,20 +186,25 @@ export function pcPickGraded(g, products) {
     const pnum = (/#\s*([A-Za-z]{0,5}\d{1,3}[a-z]?)/.exec(pn) || [])[1];
     if (g.number && pnum && numNorm(pnum) !== numNorm(g.number)) continue;
     if (g.number && !pnum) continue;
-    // "[1st Edition]" / "[Shadowless]" are bracketed variants of the same
-    // card on PriceCharting; they must agree with the title's set words.
-    const pv = String(pn.match(/\[[^\]]*\]/g) || []).toLowerCase();
-    const ours = (g.set + " " + g.name).toLowerCase();
-    let bad = false;
-    for (const v of ["1st", "shadowless"]) if (pv.includes(v) !== ours.includes(v)) bad = true;
-    if (bad) continue;
+    // PriceCharting keeps a printing's variant in brackets: "[1st Edition]",
+    // "[Shadowless]", "[Reverse Holo]", "[Prize Pack]". Every such word has to
+    // be one our own title asked for, or it is a different card; and those
+    // words count towards the set match, since ours may name the promo
+    // ("Prize Pack Series One") where PriceCharting files it under the set
+    // ("Pokemon Darkness Ablaze", 2026-09-15).
+    const vToks = [];
+    for (const m of pn.match(/\[[^\]]*\]/g) || []) vToks.push(...tok(m.slice(1, -1)));
+    const ourToks = new Set([...tok(g.set), ...tok(g.name)]);
+    if (vToks.some((t) => !ourToks.has(t))) continue;
     const pToks = tok(pn.replace(/#\S+/g, " ").replace(/\[[^\]]*\]/g, " "));
     const nameHit = nameToks.length ? nameToks.filter((t) => pToks.includes(t)).length / nameToks.length : 0;
     if (nameHit < 0.6) continue;
-    const cToks = tok(cn);
+    const cToks = [...tok(cn), ...vToks];
     const setHit = setToks.length ? setToks.filter((t) => cToks.includes(t)).length / setToks.length : 0.5;
     if (setToks.length && setHit === 0) continue;
-    const score = (g.number ? 4 : 0) + nameHit * 3 + setHit * 2;
+    // A candidate that also explains a bracketed word of our own title (the
+    // 1st Edition, the Shadowless, the Prize Pack) beats the plain printing.
+    const score = (g.number ? 4 : 0) + nameHit * 3 + setHit * 2 + vToks.length * 0.5;
     if (!best || score > best.score) best = { p, score };
   }
   return best ? best.p : null;
