@@ -800,7 +800,7 @@ function renderPage(s, rep, k, view) {
     if (st.markupPct != null && st.markupPct !== "") custom.push("markup " + st.markupPct + "%");
     if (st.round) custom.push("round " + (st.round === "none" ? "off" : "$" + st.round));
     if (st.comp) custom.push("401 " + ({ cap: "hold", off: "show only", skip: "skip" }[st.comp] || st.comp));
-    if (st.tcgId) custom.push("TCG id " + st.tcgId);
+    // the TCGplayer id is stored by every run, so it is not a "custom" setting here
     const summary = custom.length ? custom.join(" · ") : "page defaults";
     return `<details class="cfg"><summary title="Per-item settings: click to change">⚙ ${esc(summary)}</summary>
 <form method="post" action="/autoprice/control" class="setf">${hidden("k", k)}${hidden("action", "settings")}${hidden("id", r.id)}${v.game ? hidden("game", v.game) : ""}
