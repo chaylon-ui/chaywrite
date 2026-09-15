@@ -385,3 +385,39 @@ test("ntfy digest: every change with its move, drastic ones first and flagged, 4
   const off = await sendNtfy({ env: {}, fetch: async () => { throw new Error("must not be called"); } }, d);
   assert.equal(off.skipped, true);
 });
+
+import { publishDigest, digestOp } from "../src/autoprice.js";
+test("relay: a refused push stays pending on ap:digest until the GitHub relay acks it", async () => {
+  const store = new Map();
+  const storage = { get: async (k) => store.get(k), put: async (k, v) => { store.set(k, v); } };
+  const d = { title: "Auto-pricing: 1 price change", body: "↑ +4.5%  A: $10.00 → $10.45", priority: 3, tags: ["moneybag"], click: "https://x/autoprice" };
+  const refused = { env: { AUTOPRICE_NTFY: "exor", AUTOPRICE_NTFY_TOKEN: "tk_a" }, storage, now: () => 5000, fetch: async () => ({ ok: false, status: 429, text: async () => '{"code":42908,"http":429,"error":"limit reached: daily message quota reached"}' }) };
+  const r = await publishDigest(refused, d, { runStartedAt: 4000, kind: "nightly" });
+  assert.equal(r.ok, false);
+  assert.equal(r.relay, true);
+  assert.match(r.error, /HTTP 429/);
+  let g = await digestOp(refused, null);
+  assert.equal(g.digest.sent, false);
+  assert.equal(g.digest.title, d.title);
+  assert.equal(g.digest.runStartedAt, 4000);
+  assert.match(g.digest.lastError, /HTTP 429/);
+  // the relay sends it and acks; the run's ntfy column follows
+  store.set("ap:runs", [{ startedAt: 4000, notify: "queued for the relay (ntfy HTTP 429)" }]);
+  const a = await digestOp(refused, { op: "sent", by: "relay" });
+  assert.equal(a.digest.sent, true);
+  assert.equal(a.digest.sentBy, "relay");
+  assert.equal(store.get("ap:runs")[0].notify, "sent by relay");
+  // a second ack is a no-op
+  const again = await digestOp(refused, { op: "sent", by: "someone" });
+  assert.equal(again.digest.sentBy, "relay");
+  // a direct success is marked sent by the worker
+  const fine = { ...refused, fetch: async () => ({ ok: true, status: 200 }) };
+  const ok = await publishDigest(fine, d, { runStartedAt: 6000, kind: "nightly" });
+  assert.equal(ok.ok, true);
+  assert.equal((await digestOp(fine, null)).digest.sentBy, "worker");
+  // ntfy off: nothing left pending for the relay to send
+  const off = { ...refused, env: {} };
+  const o = await publishDigest(off, d, { runStartedAt: 7000, kind: "nightly" });
+  assert.equal(o.skipped, true);
+  assert.equal((await digestOp(off, null)).digest.sent, true);
+});

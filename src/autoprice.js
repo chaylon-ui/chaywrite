@@ -402,14 +402,49 @@ export async function sendNtfy(cx, msg) {
   return { ok: true, server: t.server };
 }
 
+/* The relay (2026-09-15): ntfy.sh limits free accounts by source IP even
+   with a token ("basis": "ip" on /v1/account), and the worker publishes
+   from Cloudflare's shared egress, which other tenants have already used
+   up (HTTP 429 "daily message quota reached"). So every digest is stored
+   as ap:digest first; the worker still tries to publish directly, and when
+   that fails the digest stays pending for .github/workflows/ntfy-relay.yml
+   (main, nightly 22:50 UTC + manual), which reads /autoprice/digest.json
+   with the same AUTOPRICE_NTFY_TOKEN as its bearer, publishes from a
+   GitHub runner and acks. A paid ntfy.sh plan makes the direct path work
+   again with no change here. */
+export async function publishDigest(cx, d, meta) {
+  const digest = { at: cx.now(), ...(meta || {}), title: d.title, body: d.body, priority: d.priority, tags: d.tags, click: d.click, sent: false, sentBy: null, sentAt: null, lastError: null };
+  await cx.storage.put("ap:digest", digest);
+  let r;
+  try { r = await sendNtfy(cx, d); } catch (e) { r = { ok: false, error: msg(e) }; }
+  if (r.ok) { digest.sent = true; digest.sentBy = "worker"; digest.sentAt = cx.now(); }
+  else if (r.skipped) { digest.sent = true; digest.sentBy = "nobody (ntfy off)"; digest.sentAt = cx.now(); }
+  else digest.lastError = r.error;
+  await cx.storage.put("ap:digest", digest);
+  return { ok: !!r.ok, skipped: !!r.skipped, relay: !r.ok && !r.skipped, error: r.error || null };
+}
+
+export async function digestOp(cx, b) {
+  const digest = (await cx.storage.get("ap:digest")) || null;
+  const op = String((b && b.op) || "get");
+  if (op === "sent" && digest && !digest.sent) {
+    digest.sent = true; digest.sentBy = String((b && b.by) || "relay").slice(0, 40); digest.sentAt = cx.now();
+    await cx.storage.put("ap:digest", digest);
+    const runs = (await cx.storage.get("ap:runs")) || [];
+    const hit = runs.find((r) => r.startedAt === digest.runStartedAt);
+    if (hit) { hit.notify = "sent by " + digest.sentBy; await cx.storage.put("ap:runs", runs); }
+    return { ok: true, digest };
+  }
+  return { ok: true, digest };
+}
+
 async function notifyRun(cx, run, cfg) {
   if (run.notify) return;
   const d = buildDigest(run, cfg);
   if (!run.nightly && !d.worth) { run.notify = "skipped (nothing to report)"; return; }
   try {
-    const r = await sendNtfy(cx, d);
-    run.notify = r.ok ? "sent" : r.skipped ? "off" : "failed: " + r.error;
-    if (!r.ok && !r.skipped) run.errors.push("ntfy: " + r.error);
+    const r = await publishDigest(cx, d, { runStartedAt: run.startedAt, kind: run.nightly ? "nightly" : "manual" });
+    run.notify = r.ok ? "sent" : r.skipped ? "off" : "queued for the relay (" + r.error + ")";
   } catch (e) { run.notify = "failed: " + msg(e); run.errors.push("ntfy: " + msg(e)); }
 }
 
@@ -852,7 +887,7 @@ async function control(cx, b) {
     const [run, report] = await Promise.all([cx.storage.get("ap:run"), cx.storage.get("ap:report")]);
     const src = run && run.done && run.rows ? run : { ...(run || {}), rows: (report && report.rows) || [], apply: !!(report && report.apply) };
     const d = buildDigest({ ...src, nightly: true }, cfg);
-    const r = await sendNtfy(cx, { ...d, title: "Test · " + d.title });
+    const r = await publishDigest(cx, { ...d, title: "Test · " + d.title }, { runStartedAt: null, kind: "test" });
     return { ...r, digest: { title: d.title, body: d.body, priority: d.priority } };
   }
   return { ok: false, error: "unknown action" };
@@ -864,6 +899,7 @@ export async function autopriceDoFetch(cx, request, url) {
   if (url.pathname === "/_ap/report") return doJson((await cx.storage.get("ap:report")) || { rows: [] });
   if (url.pathname === "/_ap/search") { try { return doJson(await search(cx, url.searchParams.get("q"))); } catch (e) { return doJson({ ok: false, error: msg(e) }, 500); } }
   if (url.pathname === "/_ap/control" && request.method === "POST") return doJson(await control(cx, await bodyOf(request)));
+  if (url.pathname === "/_ap/digest") return doJson(await digestOp(cx, request.method === "POST" ? await bodyOf(request) : null));
   if (url.pathname === "/_ap/auth" && request.method === "POST") return doJson(await authOp(cx, await bodyOf(request)));
   return doJson({ ok: false, error: "not found" }, 404);
 }
@@ -947,6 +983,16 @@ export async function serveAutoprice(request, env, url, staffOk) {
   const cookie = (val, maxAge) => SESSION_COOKIE + "=" + encodeURIComponent(val) + "; Path=/autoprice; Max-Age=" + maxAge + "; HttpOnly; Secure; SameSite=Lax";
 
   if (url.pathname === "/autoprice/logout") return html("", 303, { location: "/autoprice/login", "set-cookie": cookie("", 0) });
+  // The relay's door: bearer = AUTOPRICE_NTFY_TOKEN (a secret both the
+  // worker and the GitHub workflow hold), never the login session.
+  if (url.pathname === "/autoprice/digest.json") {
+    const bearer = String(request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    const ok = !!env.AUTOPRICE_NTFY_TOKEN && !!bearer && (await safeEqual(bearer, String(env.AUTOPRICE_NTFY_TOKEN).trim()));
+    if (!ok) return Response.json({ error: "relay token required" }, { status: 401, headers: { "cache-control": "no-store" } });
+    const init = request.method === "POST" ? { method: "POST", headers: { "content-type": "application/json" }, body: await request.text() } : {};
+    const r = await stub.fetch(new Request(url.origin + "/_ap/digest", init));
+    return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  }
   if (url.pathname === "/autoprice/login") {
     if (request.method !== "POST") return html(renderLogin({ configured }));
     let fd; try { fd = await request.formData(); } catch { fd = null; }
@@ -984,7 +1030,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
     const text = await r.text();
     const keepQ = body.q && body.action !== "add" && body.action !== "remove";
     let flash = "";
-    if (body.action === "ntfy-test") { try { const j = JSON.parse(text); flash = j.ok ? "Test push sent: " + (j.digest && j.digest.title) : "Test push failed: " + (j.error || "unknown"); } catch { flash = "Test push: no answer"; } }
+    if (body.action === "ntfy-test") { try { const j = JSON.parse(text); flash = j.ok ? "Test push sent: " + (j.digest && j.digest.title) : j.relay ? "Direct push refused (" + (j.error || "") + "). Queued for the relay: it goes out from GitHub on the nightly relay run, or now if you run the ntfy-relay workflow." : "Test push failed: " + (j.error || "unknown"); } catch { flash = "Test push: no answer"; } }
     const qs = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : "", flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
     if (form) return html("", 303, { location: "/autoprice" + (qs ? "?" + qs : "") });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -1076,7 +1122,7 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
 <style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
-<p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p>
+<p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority; when ntfy.sh refuses the worker (free plan, shared IP) the GitHub relay sends it at 22:50 UTC" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p>
 ${v.flash ? `<p class="flash">${esc(v.flash)}</p>` : ""}
 <h2>Add products</h2>
 <form method="get" action="/autoprice" class="box">${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
