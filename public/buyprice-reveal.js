@@ -5,13 +5,15 @@
    Two price sources, best first:
      1. REAL BinderPOS buylist prices via the worker /buyprice.json — only
         answers when the BINDERPOS_API_KEY worker secret is configured.
-     2. ESTIMATES: /buy-rules.json holds the store's buy percentages (cash +
-        store credit as a fraction of sell price, per game, optional price
-        tiers, bulk floor). The script reads the product's own variants from
-        /products/<handle>.js (same origin) and computes per-condition
-        estimates from today's live sell prices — so the numbers track the
-        store's daily repricing automatically. Rendered with a clear
-        estimate disclaimer.
+     2. RULES: /buy-rules.json holds the store's buy percentages (cash +
+        store credit as a fraction of sell price, per game, per condition,
+        per price band). Since 2026-09-15 the file is read straight out of
+        the BinderPOS portal's Buylist Rules every morning with the staff
+        login (binderpos-portal-sync.yml; rules._portal / rule.exact), so
+        the ladder is the store's actual rule, not a derived estimate. The
+        script reads the product's own variants from /products/<handle>.js
+        (same origin) and prices each condition from today's live sell
+        price — so the numbers track the store's daily repricing.
 
    Quiet by design: if neither source is live, the button never renders. */
 (function () {
@@ -81,8 +83,7 @@
 
   // The store's rules pay different percentages by condition (same card,
   // NM > LP > MP). buy-rules.json carries a per-condition ladder in
-  // rule.conds when the daily sync could derive one; fall back to the
-  // all-condition rule otherwise.
+  // rule.conds; fall back to the all-condition rule otherwise.
   function condOf(title) {
     var t = String(title || '').toLowerCase();
     if (/near mint|\bnm\b/.test(t)) return 'NM';
@@ -100,12 +101,15 @@
   function estimateOffers(rules, product) {
     var rule = gameRule(rules);
     if (!rule) return [];
+    // A set-specific portal rule (art cards, prize packs, promos) replaces
+    // the game's band ladder for that printing: the card's "[Set]" suffix
+    // names it. Its conditions carry flat percentages (0 = not buying).
+    var setName = (String(product.title || '').match(/\[([^\]]+)\]/) || [])[1];
+    var setRule = setName && rule.sets && rule.sets[String(setName).trim().toLowerCase()];
+    var base = setRule ? { conds: setRule.conds || {}, cash: 0, credit: 0, tiers: [] } : rule;
     var minSell = typeof rule.minSell === 'number' ? rule.minSell : 0;
-    // Evidence ceiling: rates are derived from cards the sync has actually
-    // seen stamped. Above the highest observed sell, an estimate would be
-    // pure extrapolation (a $2,600 card quoted from sub-$300 evidence), so
-    // no estimate renders at all — the card's own stamps take over the
-    // moment BinderPOS syncs them.
+    // Evidence ceiling (feed-derived rules only): above the highest observed
+    // sell an estimate would be extrapolation. Portal rules set it to 1e6.
     var maxSell = typeof rule.maxSell === 'number' ? rule.maxSell : Infinity;
     var buyFoils = rule.buyFoils !== false;
     var RANK = { DM: 0, HP: 1, MP: 2, LP: 3, NM: 4 };
@@ -116,7 +120,7 @@
       if (sell < minSell || sell > maxSell) return;        // evidence bounds
       var foil = /foil/i.test(v.title || '');
       if (foil && !buyFoils) return;
-      var r2 = condRule(rule, v.title);
+      var r2 = condRule(base, v.title);
       var rank = RANK[condOf(v.title)];
       rows.push({
         title: v.title || '', foil: foil, sell: sell,
@@ -124,20 +128,21 @@
         cashPct: pct(r2, sell, 'cash'), creditPct: pct(r2, sell, 'credit')
       });
     });
-    // A better condition never pays a lower RATE than a worse condition of
-    // the same card. Sparse per-condition data can invert the ladder (a
-    // condition with no derived data falls back to the blended rate), so
-    // lift each variant's percentages to the max across equal-or-worse
-    // conditions before pricing.
-    rows.forEach(function (r) {
-      if (r.rank < 0) return;
-      rows.forEach(function (o) {
-        if (o.rank > -1 && o.rank <= r.rank) {
-          if (o.cashPct > r.cashPct) r.cashPct = o.cashPct;
-          if (o.creditPct > r.creditPct) r.creditPct = o.creditPct;
-        }
+    // Feed-DERIVED ladders can invert (a condition with sparse data falls
+    // back to a blended rate), so a better condition is lifted to the best
+    // rate of any equal-or-worse condition. Portal rules are the store's
+    // exact numbers, so they are never adjusted (rule.exact).
+    if (!rule.exact) {
+      rows.forEach(function (r) {
+        if (r.rank < 0) return;
+        rows.forEach(function (o) {
+          if (o.rank > -1 && o.rank <= r.rank) {
+            if (o.cashPct > r.cashPct) r.cashPct = o.cashPct;
+            if (o.creditPct > r.creditPct) r.creditPct = o.creditPct;
+          }
+        });
       });
-    });
+    }
     var offers = [];
     rows.forEach(function (r) {
       var cash = r.cashPct * r.sell;
@@ -153,14 +158,14 @@
     return offers;
   }
 
-  // Source cascade: real BinderPOS prices when the key is live, else
-  // rules-based estimates from today's sell prices.
+  // Source cascade: real BinderPOS prices when the key is live, else the
+  // portal's rules (or feed-derived estimates) applied to today's sell prices.
   jget(W + '/buyprice.json?name=' + encodeURIComponent(NAME) + '&type=' + encodeURIComponent(TYPE)).then(function (real) {
     if (real && real.available) {
       // real.estimate marks rule-derived numbers (the card's own BinderPOS
       // rule stamps × today's sell prices) — shown with the disclaimer,
       // unlike keyed till quotes.
-      payload = { mode: real.estimate ? 'estimate' : 'real', name: real.name, offers: real.offers || [] };
+      payload = { mode: real.estimate ? 'estimate' : 'real', exact: !!(real.rules && real.rules._portal), name: real.name, offers: real.offers || [], disclaimer: (real.rules && real.rules.disclaimer) || '', updated: (real.rules && real.rules.updated) || '' };
       btn.hidden = false;
       return;
     }
@@ -174,10 +179,10 @@
       return Promise.resolve(p).then(function (product) {
         if (!product) return;
         var offers = estimateOffers(rules, product);
-        // Estimates come from per-game derived rules; a game with no derived
-        // data gets NO button (never guess one game's offer from another's).
+        // A game with no rules gets NO button (never guess one game's offer
+        // from another's).
         if (!offers.length) return;
-        payload = { mode: 'estimate', name: NAME, offers: offers, disclaimer: rules.disclaimer || '', updated: rules.updated || '' };
+        payload = { mode: 'estimate', exact: !!rules._portal, name: NAME, offers: offers, disclaimer: rules.disclaimer || '', updated: rules.updated || '' };
         btn.hidden = false;
       });
     });
@@ -207,10 +212,10 @@
       '</div>';
     }).join('');
     var note = isEst
-      ? esc(d.disclaimer || 'Estimate only — final offer confirmed when we check your cards.') + (d.updated ? ' <span>(rates set ' + esc(d.updated) + ')</span>' : '')
+      ? esc(d.disclaimer || 'Estimate only — final offer confirmed when we check your cards.') + (d.updated ? ' <span>(rules read ' + esc(d.updated) + ')</span>' : '')
       : 'Prices assume the listed condition on arrival and can change daily. Store credit goes further — and there’s more where this came from.';
     out.innerHTML = '<div class="xg-buy__panel">' +
-      '<p class="xg-buy__head">' + (isEst ? 'What we pay (estimate) — ' : 'What we pay — ') + esc(d.name) + '</p>' + rows +
+      '<p class="xg-buy__head">' + (isEst && !d.exact ? 'What we pay (estimate) — ' : 'What we pay — ') + esc(d.name) + '</p>' + rows +
       '<p class="xg-buy__note">' + note + '</p>' +
       '<a class="xg-buy__sell" href="/pages/sell-to-exor-games-bulk-or-create-a-list">Sell us your cards ›</a>' +
       '</div>';
