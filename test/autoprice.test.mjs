@@ -172,3 +172,28 @@ test("name fallback: set + exact kind, box = display, never a case, pack, sleeve
   assert.equal(rowPrice(ROWS[1]), null);
   assert.deepEqual(tok("MTG WILDS OF ELDRAINE COLLECTOR BOOSTER BOX (LIMIT 1)"), ["wilds", "eldraine", "collector", "booster", "box"]);
 });
+
+import { pickComp, compQuery, COMP } from "../src/autoprice.js";
+test("401 Games: exact title tokens, in stock holds the price down", () => {
+  const results = [
+    { title: "MTG - EDGE OF ETERNITIES - PLAY BOOSTER BOX", handle: "eoe-pbb", available: true, variants: [{ barcode: "195166286334" }] },
+    { title: "MTG - EDGE OF ETERNITIES - PLAY BOOSTER PACK", handle: "eoe-pbp", available: true },
+    { title: "MTG - EDGE OF ETERNITIES - COLLECTOR BOOSTER BOX", handle: "eoe-cbb", available: true },
+  ];
+  assert.equal(pickComp("MTG EDGE OF ETERNITIES PLAY BOOSTER BOX", "195166286334", results).handle, "eoe-pbb");
+  assert.equal(pickComp("MTG EDGE OF ETERNITIES SET BOOSTER BOX", "", results), null);
+  assert.equal(compQuery("POKEMON ME04 CHAOS RISING BOOSTER BOX"), "chaos rising booster box");
+  // TCG $189.07 -> $262.98 CAD +15% = $302.42 -> 309.95, but 401 has it at $199.95 in stock -> 199.95
+  const d = decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: true, handle: "eoe-pbb" } }, { ...DEFAULT_CONFIG }, FX);
+  assert.equal(d.suggested, 199.95);
+  assert.equal(d.action, "lower");
+  assert.match(d.reason, /401 Games has it at \$199.95 in stock/);
+  const off = decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: false } }, { ...DEFAULT_CONFIG }, FX);
+  assert.equal(off.suggested, 309.95);
+  assert.equal(off.comp.used, false);
+  const pct = decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: true } }, { ...DEFAULT_CONFIG, compPct: 10 }, FX);
+  assert.equal(pct.suggested, 219.95);   // 199.95 * 1.10 = 219.945 -> 219.95
+  const floorWins = decide({ price: 229.95, cost: 200, tcgMarket: 189.07, comp: { price: 199.95, available: true } }, { ...DEFAULT_CONFIG }, FX);
+  assert.equal(floorWins.suggested, 229.95);   // cost + 10% = 220 -> 229.95 beats the 401 cap
+  assert.equal(COMP.base, "https://store.401games.ca");
+});

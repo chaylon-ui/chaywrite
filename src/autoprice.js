@@ -76,7 +76,20 @@ export const PC = "https://www.pricecharting.com/api/product";
 // Owner 2026-09-15: the markup is ON TOP of the source price ($2,404.38 CAD
 // market + 15% = $2,765.04 -> $2,799.95); the per-run cap is a separate,
 // optional brake and is OFF unless set (it read as the markup on the page).
-export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0 };
+export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0, compMode: "cap", compPct: 0 };
+/* Canadian reference price (owner 2026-09-15: "401 sells for $199.99 and has
+   lots in stock, possible to check against 401 to also help price"). 401
+   Games is a Shopify store (401games.myshopify.com, served at
+   store.401games.ca; 401games.ca itself redirects every path to the home
+   page), so its public predictive search and product JSON answer like the
+   sister Exor stores do: /search/suggest.json for candidates, then
+   /products/<handle>.js for price, availability and barcode. A candidate
+   counts only when its title tokens equal ours (their "MTG - EDGE OF
+   ETERNITIES - PLAY BOOSTER BOX" = our "MTG EDGE OF ETERNITIES PLAY BOOSTER
+   BOX"), barcode agreement preferred. With compMode "cap" the target is held
+   to at most compPct% above their IN-STOCK price; out of stock, it is shown
+   but not used. */
+export const COMP = { key: "401", name: "401 Games", base: "https://store.401games.ca" };
 
 // Store product type -> TCGplayer category (tcgcsv.com/tcgplayer/categories, 2026-09-15).
 export const CATEGORIES = [
@@ -104,6 +117,7 @@ export function gameOf(productType) {
 export const SEALED_RE = /booster|\bbox\b|\bpack\b|bundle|\btin\b|collection|display|\bcase\b|\bkit\b|\bdeck\b|blister|elite trainer|starter|pre-?release|premium|\bset\b|lot\b|league|battle/i;
 
 export const round2 = (n) => Math.round(n * 100) / 100;
+const money2 = (n) => "$" + Number(n).toFixed(2);
 
 // The grid the owner described: everything ends in .95, rounded UP.
 export function autoStep(x) { return x < 50 ? 1 : x < 200 ? 5 : x < 1000 ? 10 : x < 5000 ? 50 : 100; }
@@ -197,6 +211,14 @@ export function decide(p, cfg, fx) {
   const raw = marketCad * (1 + markup / 100);
   let target = Math.max(raw, floor);
   let capped = null;
+  let comp = null;
+  if (p.comp && p.comp.price > 0) {
+    comp = { price: p.comp.price, available: !!p.comp.available, handle: p.comp.handle || null, title: p.comp.title || null, used: false };
+    if (cfg.compMode !== "off" && comp.available) {
+      const cap = comp.price * (1 + (Number(cfg.compPct) || 0) / 100);
+      if (target > cap) { target = Math.max(cap, floor); comp.used = target < raw || Math.abs(target - cap) < 0.005; }
+    }
+  }
   if (current && cfg.maxMovePct > 0) {
     const lo = current * (1 - cfg.maxMovePct / 100), hi = current * (1 + cfg.maxMovePct / 100);
     if (target > hi) { capped = "up"; target = hi; }
@@ -207,8 +229,8 @@ export function decide(p, cfg, fx) {
   const action = !current ? "set" : suggested > current ? "raise" : suggested < current ? "lower" : "hold";
   return {
     ...out, marketUsd: round2(marketUsd), marketCad: round2(marketCad), raw: round2(raw),
-    floor: round2(floor), floorSrc, capped, target: round2(target), suggested, action,
-    reason: action === "hold" ? "already at the suggested price" : capped ? "capped at " + cfg.maxMovePct + "% per run" : target === floor && raw < floor ? "floor" : "market",
+    floor: round2(floor), floorSrc, capped, comp, target: round2(target), suggested, action,
+    reason: action === "hold" ? "already at the suggested price" : capped ? "capped at " + cfg.maxMovePct + "% per run" : comp && comp.used ? COMP.name + " has it at " + money2(comp.price) + " in stock" + (Number(cfg.compPct) ? " (+" + cfg.compPct + "%)" : "") : target === floor && raw < floor ? "floor" : "market",
   };
 }
 
@@ -289,6 +311,7 @@ async function tick(cx) {
       else if (run.phase === "products") await phaseProducts(cx, run);
       else if (run.phase === "index") await phaseIndex(cx, run);
       else if (run.phase === "prices") await phasePrices(cx, run, deadline);
+      else if (run.phase === "comp") await phaseComp(cx, run, cfg, deadline);
       else if (run.phase === "decide") await phaseDecide(cx, run, cfg, deadline);
       else if (run.phase === "write") await phaseWrite(cx, run, cfg, deadline);
       else { run.done = true; run.finishedAt = cx.now(); }
@@ -452,6 +475,45 @@ async function phasePrices(cx, run, deadline) {
     }
     if (run.pcQueue.length) return;
   } else run.pcQueue = [];
+  run.phase = "comp";
+}
+
+// 401 Games lookup, one product at a time (two small requests each), the
+// index persisted so a long list spans ticks. Failures are per product.
+export function compQuery(title) { return tok(title).filter((t) => !isCode(t)).join(" "); }
+export function pickComp(title, ourUpc, results) {
+  const want = [...new Set(tok(title).filter((t) => !isCode(t)))];
+  let best = null;
+  for (const r of results || []) {
+    const got = [...new Set(tok(r.title).filter((t) => !isCode(t)))];
+    if (!sameSet(want, got)) continue;
+    const score = (r.available ? 2 : 0) + (ourUpc && (r.variants || []).some((v) => normUpc(v.barcode) === ourUpc) ? 4 : 0);
+    if (!best || score > best.score) best = { r, score };
+  }
+  return best ? best.r : null;
+}
+async function phaseComp(cx, run, cfg, deadline) {
+  if (run.compI == null) run.compI = 0;
+  if (cfg.compMode === "skip") { run.phase = "decide"; return; }
+  while (run.compI < run.products.length && cx.now() < deadline - 2500) {
+    const p = run.products[run.compI++];
+    const q = compQuery(p.title);
+    if (!q) continue;
+    try {
+      const u = COMP.base + "/search/suggest.json?q=" + encodeURIComponent(q) + "&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=last";
+      const r = await cx.fetch(u, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12000) });
+      if (!r.ok) { p.compMiss = "HTTP " + r.status; continue; }
+      const j = await r.json();
+      const hit = pickComp(p.title, p.upc, (((j.resources || {}).results || {}).products) || []);
+      if (!hit) { p.compMiss = "no title match"; continue; }
+      const pr = await cx.fetch(COMP.base + "/products/" + hit.handle + ".js", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12000) });
+      if (!pr.ok) { p.compMiss = "product HTTP " + pr.status; continue; }
+      const pj = await pr.json();
+      const v = (pj.variants || [])[0] || {};
+      p.comp = { price: Number(v.price) / 100, available: !!(pj.available || v.available), handle: pj.handle, title: pj.title, barcode: v.barcode || null, at: cx.now() };
+    } catch (e) { p.compMiss = msg(e); }
+  }
+  if (run.compI < run.products.length) return;
   run.phase = "decide";
 }
 
@@ -463,7 +525,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     if (p.match && !p.tcgId && d.action === "skip") d.reason = p.match;
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null,
-      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, ...d });
+      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, compMiss: p.compMiss || null, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
   }
   run.rows = rows;
@@ -490,6 +552,7 @@ async function phaseWrite(cx, run, cfg, deadline) {
         target: row.target ?? null, floor: row.floor ?? null, floorSrc: row.floorSrc, fx: run.fx, marketUsd: row.marketUsd ?? null,
         tcg: row.tcgId ? { id: row.tcgId, name: row.tcgName, match: row.match, market: (row.sources.find((s) => s.name === "tcgplayer") || {}).usd ?? null, priceKind: (row.sources.find((s) => s.name === "tcgplayer") || {}).kind ?? null, low: row.tcgLow, mid: row.tcgMid } : null,
         pricecharting: row.pcId ? { id: row.pcId, name: row.pcName, new: (row.sources.find((s) => s.name === "pricecharting") || {}).usd ?? null } : (row.pcMiss ? { miss: row.pcMiss } : null),
+        comp401: row.comp ? { price: row.comp.price, available: row.comp.available, handle: row.comp.handle, used: row.comp.used } : (row.compMiss ? { miss: row.compMiss } : null),
         applied: false };
       if (apply && (row.action === "raise" || row.action === "lower" || row.action === "set") && row.variantId && row.suggested > 0) {
         try {
@@ -596,7 +659,8 @@ async function control(cx, b) {
   }
   if (action === "config") {
     const next = { ...cfg };
-    for (const k of ["markupPct", "minMarginPct", "maxMovePct"]) if (b[k] != null && b[k] !== "" && Number.isFinite(Number(b[k]))) next[k] = Math.max(0, Number(b[k]));
+    for (const k of ["markupPct", "minMarginPct", "maxMovePct", "compPct"]) if (b[k] != null && b[k] !== "" && Number.isFinite(Number(b[k]))) next[k] = Math.max(0, Number(b[k]));
+    if (b.compMode === "cap" || b.compMode === "off" || b.compMode === "skip") next.compMode = b.compMode;
     await cx.storage.put("ap:config", next);
     return { ok: true, config: next };
   }
@@ -679,11 +743,12 @@ function renderPage(s, rep, k, view) {
 <td>${r.marketCad != null ? money(r.marketCad) : ""}<div class="muted">${r.markupPct ? "+" + r.markupPct + "% = " + money(r.raw) : ""}${r.floor ? " · floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div></td>
 <td><b>${money(r.suggested)}</b></td>
 <td><span class="pill">${esc(r.action)}${r.applied ? " ✓" : ""}</span><div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div></td>
+<td>${r.comp ? `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener">${money(r.comp.price)}</a><div class="muted">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</div>` : `<span class="muted">${esc(r.compMiss || "not checked")}</span>`}</td>
 <td>${change(r.lastChange)}</td>
 <td>${ctlForm("remove", hidden("id", r.id), "Remove", "sm")}</td></tr>`;
   let groupRows = "", lastGame = null;
   for (const r of rows) {
-    if (r.game !== lastGame) { lastGame = r.game; groupRows += `<tr class="grp"><td colspan="8">${esc(r.game)} <span class="muted">· ${rows.filter((x) => x.game === r.game).length}</span></td></tr>`; }
+    if (r.game !== lastGame) { lastGame = r.game; groupRows += `<tr class="grp"><td colspan="9">${esc(r.game)} <span class="muted">· ${rows.filter((x) => x.game === r.game).length}</span></td></tr>`; }
     groupRows += row(r);
   }
   const run = s.run || {};
@@ -700,13 +765,13 @@ ${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th>
 <div class="ctl">
 ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}
 <form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product within the guardrails.')">${hidden("k", k)}${hidden("action", "mode")}${hidden("mode", s.mode === "apply" ? "shadow" : "apply")}<button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
-<form method="post" action="/autoprice/control">${hidden("k", k)}${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><button>Save</button></form>
+<form method="post" action="/autoprice/control">${hidden("k", k)}${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="When 401 Games has the same product in stock, the price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><button>Save</button></form>
 <a href="/autoprice?k=${ek}">refresh</a> · <a href="/autoprice/report.json?k=${ek}">json</a>
 </div>
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
 <h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
 <div class="chips"><a href="/autoprice?k=${ek}" class="${v.game ? "" : "on"}">All (${all.length})</a>${games.map((g) => `<a href="/autoprice?k=${ek}&game=${encodeURIComponent(g)}" class="${v.game === g ? "on" : ""}">${esc(g)} (${all.filter((x) => x.game === g).length})</a>`).join("")}</div>
-<table><thead><tr><th>Product</th><th>Today</th><th>Sources (USD)</th><th>Market CAD</th><th>Suggested</th><th>Action</th><th>Last price change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
+<table><thead><tr><th>Product</th><th>Today</th><th>Sources (USD)</th><th>Market CAD</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last price change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="9" class="muted">nothing yet</td></tr>'}</tbody></table>
 <h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">none</td></tr>'}</tbody></table>
 </div></body></html>`;
 }
