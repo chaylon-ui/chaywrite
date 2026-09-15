@@ -126,6 +126,56 @@ export function normUpc(s) {
   return d.length === 13 && d[0] === "0" ? d.slice(1) : d.length === 14 ? d.slice(2) : d;
 }
 
+/* Fallback match by NAME (owner 2026-09-15: "the ones with no pricing
+   sources, is it possible to find a fallback"). TCGplayer's rows carry the
+   group (set) name and a product name shaped "Set - Kind" (Magic) or "Set
+   Kind" (Pokemon); "Display" is their word for a box. The store's title is
+   "MTG WILDS OF ELDRAINE COLLECTOR BOOSTER BOX". A row matches when every
+   set token is in the title and the KIND tokens are exactly the title's
+   remaining tokens (so "Sleeved Play Booster Pack" never stands in for
+   "Play Booster Pack", nor "Collector Booster Display (Japanese)" for the
+   English box, nor a "... Case" for a box). Used when the UPC finds nothing,
+   when it finds a Case for a non-case title (TCGplayer lists the Wilds of
+   Eldraine box UPC on the Master Case row), or when the UPC row has no
+   price and the name row has one. */
+const FILLER = new Set(["mtg", "magic", "the", "gathering", "pokemon", "tcg", "ccg", "yugioh", "yu", "gi", "oh", "of", "and", "a", "an", "edition", "english", "en", "limit", "1", "per", "customer", "sealed", "product", "new"]);
+const SYN = { display: "box", displays: "box", boxes: "box", packs: "pack", decks: "deck", bundles: "bundle", "pre": "prerelease", "release": "" };
+export function tok(sx) {
+  return String(sx || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean)
+    .map((t) => (t in SYN ? SYN[t] : t)).filter((t) => t && !FILLER.has(t));
+}
+const isCode = (t) => /^[a-z]{1,4}\d{1,3}[a-z]?$/.test(t);   // ME04, SV10, OP09 ...
+export function setTokens(setName) { return tok(setName).filter((t) => !isCode(t)); }
+export function kindTokens(name, setName) {
+  const st = new Set(setTokens(setName));
+  return tok(name).filter((t) => !st.has(t));
+}
+const sameSet = (a, b) => a.length === b.length && a.every((t) => b.includes(t));
+export function nameMatch(title, rows) {
+  const tt = tok(title).filter((t) => !isCode(t));   // "POKEMON ME04 CHAOS RISING ..." - the set code is not a kind word
+  if (!tt.length) return null;
+  let best = null;
+  for (const row of rows) {
+    const st = setTokens(row.set);
+    if (!st.length || !st.every((t) => tt.includes(t))) continue;
+    const titleKind = [...new Set(tt.filter((t) => !st.includes(t)))];
+    const kind = [...new Set(kindTokens(row.name, row.set))];
+    if (!kind.length || !sameSet(kind, titleKind)) continue;
+    const score = (row.market > 0 ? 2 : (row.mid > 0 || row.low > 0) ? 1 : 0) + st.length / 100;
+    if (!best || score > best.score) best = { row, score };
+  }
+  return best ? best.row : null;
+}
+const isCaseRow = (row) => /\bcase\b/i.test(row && row.name || "");
+// A row's usable USD price: market first, then TCGplayer's mid, then low.
+export function rowPrice(row) {
+  if (!row) return null;
+  if (row.market > 0) return { usd: row.market, kind: "market" };
+  if (row.mid > 0) return { usd: row.mid, kind: "mid" };
+  if (row.low > 0) return { usd: row.low, kind: "low" };
+  return null;
+}
+
 // One product's decision. Pure, so it is unit-tested; every number in CAD
 // unless named USD. Returns {action, reason, target, suggested, ...}.
 export function decide(p, cfg, fx) {
@@ -133,7 +183,7 @@ export function decide(p, cfg, fx) {
   const current = p.price > 0 ? p.price : null;
   const markup = Number.isFinite(p.markupPct) ? p.markupPct : cfg.markupPct;
   const srcs = [];
-  if (p.tcgMarket > 0) srcs.push({ name: "tcgplayer", usd: p.tcgMarket });
+  if (p.tcgMarket > 0) srcs.push({ name: "tcgplayer", usd: p.tcgMarket, kind: p.tcgKind || "market" });
   if (p.pcNew > 0) srcs.push({ name: "pricecharting", usd: p.pcNew });
   const out = { current, cost, fx, markupPct: markup, sources: srcs, round: p.round || "auto" };
   if (!fx) return { ...out, action: "skip", reason: "no FX rate" };
@@ -353,9 +403,24 @@ async function phaseIndex(cx, run) {
     if (p.category !== cat) continue;
     let row = null;
     if (p.tcgId) { row = byId[p.tcgId] || null; p.match = row ? "metafield" : "ap_tcg_id " + p.tcgId + " is not a sealed product in TCGplayer category " + cat; }
-    else if (p.upc && byUpc[p.upc]) { row = byUpc[p.upc]; p.tcgId = row.id; p.match = "upc"; }
-    else p.match = !data ? "TCGplayer data for category " + cat + " not available" : p.upc ? "upc " + p.upc + " not among TCGplayer's " + rows.length + " sealed products (data " + (data.builtAt || "?") + ")" : "no barcode";
-    if (row) { p.tcgName = row.name; p.tcgGroup = row.g; if (row.market > 0) p.tcgMarket = row.market; p.tcgLow = row.low ?? null; p.tcgMid = row.mid ?? null; }
+    else if (p.upc && byUpc[p.upc]) { row = byUpc[p.upc]; p.match = "upc"; }
+    // Fallbacks: a Case row for a non-case title, a UPC row with no price at
+    // all, or no UPC row - try the set + kind name match.
+    const titleIsCase = /\bcase\b/i.test(p.title || "");
+    if (p.match !== "metafield" && (!row || (isCaseRow(row) && !titleIsCase) || !rowPrice(row))) {
+      const byName = nameMatch(p.title, rows);
+      if (byName && (!row || rowPrice(byName))) {
+        p.match = row ? "name (upc row was " + (isCaseRow(row) && !titleIsCase ? "a case" : "unpriced") + ": " + row.name + ")" : "name";
+        row = byName;
+      }
+    }
+    if (row) {
+      p.tcgId = row.id; p.tcgName = row.name; p.tcgGroup = row.g; p.tcgLow = row.low ?? null; p.tcgMid = row.mid ?? null;
+      const pr = rowPrice(row);
+      if (pr) { p.tcgMarket = pr.usd; p.tcgKind = pr.kind; }
+    } else if (!p.match || p.match === "upc") {
+      p.match = !data ? "TCGplayer data for category " + cat + " not available" : p.upc ? "upc " + p.upc + " not among TCGplayer's " + rows.length + " sealed products and no name match (data " + (data.builtAt || "?") + ")" : "no barcode and no name match";
+    }
   }
 }
 
@@ -423,7 +488,7 @@ async function phaseWrite(cx, run, cfg, deadline) {
       if (seen && row.current != null && Math.abs(Number(seen.price) - row.current) > 0.004) await recordChange(cx, row.id, { at: cx.now(), from: Number(seen.price), to: row.current, by: "hand" });
       const note = { at: date, mode: apply ? "apply" : "shadow", action: row.action, reason: row.reason, current: row.current, suggested: row.suggested ?? null,
         target: row.target ?? null, floor: row.floor ?? null, floorSrc: row.floorSrc, fx: run.fx, marketUsd: row.marketUsd ?? null,
-        tcg: row.tcgId ? { id: row.tcgId, name: row.tcgName, market: (row.sources.find((s) => s.name === "tcgplayer") || {}).usd ?? null, low: row.tcgLow, mid: row.tcgMid } : null,
+        tcg: row.tcgId ? { id: row.tcgId, name: row.tcgName, match: row.match, market: (row.sources.find((s) => s.name === "tcgplayer") || {}).usd ?? null, priceKind: (row.sources.find((s) => s.name === "tcgplayer") || {}).kind ?? null, low: row.tcgLow, mid: row.tcgMid } : null,
         pricecharting: row.pcId ? { id: row.pcId, name: row.pcName, new: (row.sources.find((s) => s.name === "pricecharting") || {}).usd ?? null } : (row.pcMiss ? { miss: row.pcMiss } : null),
         applied: false };
       if (apply && (row.action === "raise" || row.action === "lower" || row.action === "set") && row.variantId && row.suggested > 0) {
@@ -438,7 +503,7 @@ async function phaseWrite(cx, run, cfg, deadline) {
       row.lastChange = (await cx.storage.get("ap:last:" + row.id)) || null;
       m.push({ ownerId: row.id, namespace: "exor", key: "ap_suggest", type: "json", value: JSON.stringify(note) });
       if (row.pcIdFound && !row.pcId) m.push({ ownerId: row.id, namespace: "exor", key: "ap_pc_id", type: "number_integer", value: String(row.pcIdFound) });
-      if (row.tcgId && row.match === "upc") m.push({ ownerId: row.id, namespace: "exor", key: "ap_tcg_id", type: "number_integer", value: String(row.tcgId) });
+      if (row.tcgId && row.match && row.match !== "metafield") m.push({ ownerId: row.id, namespace: "exor", key: "ap_tcg_id", type: "number_integer", value: String(row.tcgId) });
     }
     try {
       const r = await adminGql(cx, MF_SET, { m });
@@ -507,7 +572,7 @@ async function setListed(cx, id, on, b) {
   }
   await cx.storage.put("ap:report", rep);
   let kicked = null;
-  if (on) kicked = await kickRun(cx, { apply: false, delayMs: 3000 });
+  if (on) { const cfg = await configOf(cx); kicked = await kickRun(cx, { apply: cfg.mode === "apply", delayMs: 3000 }); }
   return { ok: true, id: pid, listed: !!on, kicked };
 }
 
@@ -607,9 +672,10 @@ function renderPage(s, rep, k, view) {
   const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
   const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("k", k)}${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
   const change = (c) => c ? `${esc(when(c.at).slice(0, 16))}<div class="muted">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto-priced" : "changed by hand"}</div>` : '<span class="muted">none seen yet</span>';
-  const row = (r) => `<tr class="a-${esc(r.action)}"><td><a href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener">${esc(r.title)}</a><div class="muted">${esc(r.type)} · stock ${r.stock}${r.tcgName ? " · TCG: " + esc(r.tcgName) : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div></td>
+  const admin = (id) => "https://admin.shopify.com/store/most-wanted-ca/products/" + String(id || "").replace(/\D/g, "");
+  const row = (r) => `<tr class="a-${esc(r.action)}"><td><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> <a class="muted" href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener" title="storefront page">site ↗</a><div class="muted">${esc(r.type)} · stock ${r.stock}${r.tcgName ? " · TCG: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (matched by " + esc(r.match) + ")" : "") : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div></td>
 <td>${money(r.current)}<div class="muted">cost ${money(r.cost)}</div></td>
-<td>${(r.sources || []).map((x) => esc(x.name === "tcgplayer" ? "TCG " : "PC ") + money(x.usd) + " US").join("<br>") || '<span class="muted">none</span>'}</td>
+<td>${(r.sources || []).map((x) => esc(x.name === "tcgplayer" ? "TCG " + (x.kind && x.kind !== "market" ? x.kind + " " : "") : "PC ") + money(x.usd) + " US").join("<br>") || '<span class="muted">none</span>'}</td>
 <td>${r.marketCad != null ? money(r.marketCad) : ""}<div class="muted">${r.markupPct ? "+" + r.markupPct + "% = " + money(r.raw) : ""}${r.floor ? " · floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div></td>
 <td><b>${money(r.suggested)}</b></td>
 <td><span class="pill">${esc(r.action)}${r.applied ? " ✓" : ""}</span><div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div></td>
@@ -622,14 +688,14 @@ function renderPage(s, rep, k, view) {
   }
   const run = s.run || {};
   const found = v.found;
-  const foundRows = found && found.results ? found.results.map((f) => `<tr><td>${esc(f.title)}<div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
+  const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
 <style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chips a{display:inline-block;padding:3px 10px;border-radius:99px;background:#e5e7eb;color:#1d2327;text-decoration:none;font-size:12.5px;font-weight:600}.chips a.on{background:#1d2327;color:#fff}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span></h1>
 <p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}.</p>
 <h2>Add products</h2>
 <form method="get" action="/autoprice" class="box">${hidden("k", k)}${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
-${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (shadow: nothing written); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
+${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (in APPLY mode that writes the prices now, not at 7:30 pm); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
 <h2>Controls</h2>
 <div class="ctl">
 ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}

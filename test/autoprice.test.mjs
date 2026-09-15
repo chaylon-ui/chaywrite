@@ -144,3 +144,31 @@ test("the shipped defaults: markup on top of market, no per-run cap", () => {
   assert.equal(d.action, "raise");
   assert.equal(d.reason, "market");
 });
+
+import { nameMatch, rowPrice, tok } from "../src/autoprice.js";
+const ROWS = [
+  { id: 1, set: "Wilds of Eldraine", name: "Wilds of Eldraine - Collector Booster Display", market: 300, mid: 320, low: 290 },
+  { id: 2, set: "Wilds of Eldraine", name: "Wilds of Eldraine - Collector Booster Display Master Case", market: null, mid: null, low: null },
+  { id: 3, set: "Wilds of Eldraine", name: "Wilds of Eldraine - Collector Booster Display (Japanese)", market: 250 },
+  { id: 4, set: "Lorwyn Eclipsed", name: "Lorwyn Eclipsed - Play Booster Pack", market: 4.68 },
+  { id: 5, set: "Lorwyn Eclipsed", name: "Lorwyn Eclipsed - Sleeved Play Booster Pack", market: 7.14 },
+  { id: 6, set: "Lorwyn Eclipsed", name: "Lorwyn Eclipsed - Play Booster Display", market: 118.18 },
+  { id: 7, set: "Kamigawa: Neon Dynasty", name: "Kamigawa: Neon Dynasty - Prerelease Pack", market: null, mid: 45, low: 40 },
+  { id: 8, set: "ME04: Chaos Rising", name: "Chaos Rising Booster Box", market: 198.98 },
+  { id: 9, set: "ME04: Chaos Rising", name: "Chaos Rising Booster Box Case", market: 1108 },
+  { id: 10, set: "Commander: Lorwyn Eclipsed", name: "Lorwyn Eclipsed Commander Deck - Blight Curse", market: 35 },
+];
+test("name fallback: set + exact kind, box = display, never a case, pack, sleeved or Japanese stand-in", () => {
+  assert.equal(nameMatch("MTG WILDS OF ELDRAINE COLLECTOR BOOSTER BOX", ROWS).id, 1);
+  assert.equal(nameMatch("MTG WILDS OF ELDRAINE COLLECTOR BOOSTER BOX (LIMIT 1)", ROWS).id, 1);
+  assert.equal(nameMatch("MTG LORWYN ECLIPSED PLAY BOOSTER PACK", ROWS).id, 4);
+  assert.equal(nameMatch("MTG LORWYN ECLIPSED PLAY BOOSTER BOX", ROWS).id, 6);
+  assert.equal(nameMatch("MTG KAMIGAWA NEON DYNASTY PRERELEASE PACK", ROWS).id, 7);
+  assert.equal(nameMatch("POKEMON ME04 CHAOS RISING BOOSTER BOX", ROWS).id, 8);
+  assert.equal(nameMatch("MTG LORWYN ECLIPSED COMMANDER DECK BLIGHT CURSE", ROWS).id, 10);
+  assert.equal(nameMatch("MTG LORWYN ECLIPSED COLLECTOR BOOSTER BOX", ROWS), null);
+  assert.equal(nameMatch("MTG WILDS OF ELDRAINE PLAY BOOSTER BOX", ROWS), null);
+  assert.deepEqual(rowPrice(ROWS[6]), { usd: 45, kind: "mid" });
+  assert.equal(rowPrice(ROWS[1]), null);
+  assert.deepEqual(tok("MTG WILDS OF ELDRAINE COLLECTOR BOOSTER BOX (LIMIT 1)"), ["wilds", "eldraine", "collector", "booster", "box"]);
+});
