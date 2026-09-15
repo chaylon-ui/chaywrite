@@ -212,7 +212,13 @@
     });
     return out;
   }
-  function finish(type) { return type && type !== "Normal" ? ' <span class="bl__pill">' + esc(type) + "</span>" : ""; }
+  // A foil (or other finish) row wears its finish loudly: the pill is a
+  // holographic badge and the whole row is tinted, and a band separates the
+  // foil block from the plain rows (owner, 2026-09-15: "make foil stand out
+  // better while they are looking here to make sure they pick the right one").
+  function finish(type) { return type && type !== "Normal" ? ' <span class="bl__pill bl__pill--finish">✦ ' + esc(type) + "</span>" : ""; }
+  function finishClass(type) { return type && type !== "Normal" ? " bl__orow--finish" : ""; }
+  function finishBand(type) { return '<div class="bl__orow bl__orow--band" role="row"><span class="bl__band" role="cell">✦ ' + esc(type) + ' versions below</span></div>'; }
 
   /* Tap a condition in the offers table to see the store's own grading
      examples — the words and photos from /pages/grading-guide — so fewer
@@ -280,11 +286,15 @@
   function renderHits(hits, start) {
     var html = hits.map(function (h, k) {
       var i = start + k;
-      var rows = offersOf(h).map(function (o, j) {
+      var offers = offersOf(h), lastFinish = null;
+      var rows = offers.map(function (o, j) {
         // BinderPOS sends, per condition, how many more copies the store will
         // take (its rule's cap minus stock). Zero used to be a grey Add with a
         // tooltip nobody on a phone could see; now it says so (owner, 2026-09-10).
-        return '<div class="bl__orow" role="row"><span class="bl__ocond" role="cell">' + condBtn(o.v.variantName) + finish(o.p.type) + '</span>' +
+        var fin = o.p.type && o.p.type !== "Normal" ? String(o.p.type) : "";
+        var band = fin && fin !== lastFinish && j > 0 ? finishBand(fin) : "";
+        lastFinish = fin;
+        return band + '<div class="bl__orow' + finishClass(o.p.type) + '" role="row"><span class="bl__ocond" role="cell">' + condBtn(o.v.variantName) + finish(o.p.type) + '</span>' +
           '<span class="bl__oprice" role="cell">' + money(o.cash) + '</span><span class="bl__oprice bl__oprice--credit" role="cell">' + money(o.credit) + '</span><span role="cell">' +
           (o.max > 0
             ? '<button type="button" class="bl__btn bl__add" data-h="' + i + '" data-o="' + j + '">Add</button>'
