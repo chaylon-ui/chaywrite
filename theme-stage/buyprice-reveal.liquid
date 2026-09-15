@@ -1,0 +1,253 @@
+{%- comment -%}
+  "What we pay" reveal — thin theme shell. Renders an anchor div on card
+  singles product pages; the UI/logic loads from the worker
+  (chaylon-ui/chaywrite: public/buyprice-reveal.js), which probes the
+  worker's /buyprice.json (BinderPOS buylist prices via BINDERPOS_API_KEY).
+  Until that key is configured the backend answers available:false and the
+  button never renders — the page looks unchanged. Singles-only guard here
+  mirrors the script's own check.
+{%- endcomment -%}
+{%- if product.type contains 'Single' -%}
+<div id="xg-buyprice" data-name="{{ product.title | escape }}" data-type="{{ product.type | escape }}" data-handle="{{ product.handle | escape }}"></div>
+<script defer src="https://exor-binder.nevski.workers.dev/buyprice-reveal.js"></script>
+{%- endif -%}
+
+{%- comment -%}
+  Game facts (2026-09-11). For board games the nightly enrichment (chaywrite
+  src/enrich.js) fills the exor.* metafields from BoardGameGeek: players,
+  play time, age, complexity, designer, mechanics. BGG's terms of use require
+  the "Powered by BGG" logo wherever that data is shown, so the panel ends
+  with the badge - the owner's uploaded logo file from the section setting,
+  a text badge until then - linking to the game's own BGG page. It renders
+  only when at least one fact exists, so untouched products look unchanged.
+  This section already sits under every product page (templates/product.json
+  "xg_buyprice"), which is why the panel lives here rather than in the 31 KB
+  product template. Placement (owner 2026-09-13): from 768px the panel is
+  moved under the photo column (the empty space beside the buy box) and the
+  BGG credit line goes under the "You May Also Like" row; on phones the panel
+  stays here, after the buy box, so it never pushes Add To Cart down. The
+  shipping/contact reassurance box moves below the Information Tabs (see the
+  layout block further down); categories, mechanics and the BGG description render in
+  the Description tab (sections/product-tab-panel.liquid) beside a
+  Classification card, like BGG's own page.
+{%- endcomment -%}
+{%- liquid
+  assign gf = product.metafields.exor
+  assign gf_show = false
+  if section.settings.show_game_facts
+    if gf.players_min.value != blank or gf.playtime_min.value != blank or gf.age_min.value != blank or gf.weight.value != blank or gf.designer.value != blank or gf.bgg_rating.value != blank or gf.bgg_description.value != blank
+      assign gf_show = true
+    endif
+  endif
+-%}
+{%- if gf_show -%}
+<section class="xg-gf" aria-labelledby="xg-gf-title">
+  <div class="xg-gf__inner">
+    <h2 class="xg-gf__title" id="xg-gf-title">Game facts</h2>
+    <dl class="xg-gf__grid">
+      {%- if gf.players_min.value != blank -%}
+        <div class="xg-gf__cell"><dt>Players</dt><dd>{{ gf.players_min.value }}{% if gf.players_max.value != blank and gf.players_max.value != gf.players_min.value %}&ndash;{{ gf.players_max.value }}{% endif %}</dd></div>
+      {%- endif -%}
+      {%- if gf.playtime_min.value != blank -%}
+        <div class="xg-gf__cell"><dt>Play time</dt><dd>{{ gf.playtime_min.value }}{% if gf.playtime_max.value != blank and gf.playtime_max.value != gf.playtime_min.value %}&ndash;{{ gf.playtime_max.value }}{% endif %} min</dd></div>
+      {%- endif -%}
+      {%- if gf.age_min.value != blank -%}
+        <div class="xg-gf__cell"><dt>Age</dt><dd>{{ gf.age_min.value }}+</dd></div>
+      {%- endif -%}
+      {%- if gf.weight.value != blank -%}
+        <div class="xg-gf__cell"><dt>Complexity</dt><dd>{{ gf.weight.value }} <span class="xg-gf__of">/ 5</span></dd></div>
+      {%- endif -%}
+      {%- if gf.designer.value != blank -%}
+        <div class="xg-gf__cell"><dt>Designer</dt><dd>{{ gf.designer.value | escape }}</dd></div>
+      {%- endif -%}
+      {%- if gf.players_best.value != blank -%}
+        <div class="xg-gf__cell"><dt>Best with</dt><dd>{{ gf.players_best.value | escape }} players{% if gf.players_recommended.value != blank %} <span class="xg-gf__of">&middot; good with {{ gf.players_recommended.value | escape }}</span>{% endif %}</dd></div>
+      {%- endif -%}
+      {%- if gf.bgg_rating.value != blank -%}
+        <div class="xg-gf__cell"><dt>BGG rating</dt><dd>{{ gf.bgg_rating.value }} <span class="xg-gf__of">/ 10{% if gf.bgg_votes.value != blank %} &middot; {{ gf.bgg_votes.value }} ratings{% endif %}</span></dd></div>
+      {%- endif -%}
+      {%- if gf.bgg_rank.value != blank -%}
+        <div class="xg-gf__cell"><dt>BGG rank</dt><dd>#{{ gf.bgg_rank.value }}{% if gf.bgg_rank.value <= 100 %} <span class="xg-gf__top">Top 100</span>{% elsif gf.bgg_rank.value <= 500 %} <span class="xg-gf__top">Top 500</span>{% endif %}</dd></div>
+      {%- endif -%}
+      {%- if gf.year.value != blank or gf.publisher.value != blank -%}
+        <div class="xg-gf__cell"><dt>Published</dt><dd>{{ gf.year.value }}{% if gf.publisher.value != blank %} <span class="xg-gf__of">{{ gf.publisher.value | escape }}</span>{% endif %}</dd></div>
+      {%- endif -%}
+      {%- if gf.language_dependence.value != blank -%}
+        <div class="xg-gf__cell"><dt>Language</dt><dd class="xg-gf__small">{{ gf.language_dependence.value | escape }}</dd></div>
+      {%- endif -%}
+    </dl>
+    {%- if gf.base_game.value != blank -%}
+      <p class="xg-gf__links"><b>Expansion for</b>
+        {%- for b in gf.base_game.value -%}{% if forloop.index > 1 %}, {% endif %} {% if b.handle != blank %}<a href="/products/{{ b.handle }}">{{ b.name | escape }}</a>{% else %}{{ b.name | escape }}{% endif %}{%- endfor -%}
+      </p>
+    {%- endif -%}
+    {%- if gf.expansions.value != blank -%}
+      <p class="xg-gf__links"><b>Expansions</b>
+        {%- for e in gf.expansions.value -%}{% if forloop.index > 1 %}, {% endif %} {% if e.handle != blank %}<a href="/products/{{ e.handle }}">{{ e.name | escape }}</a>{% else %}{{ e.name | escape }}{% endif %}{%- endfor -%}
+      </p>
+    {%- endif -%}
+    <p class="xg-gf__credit" id="xg-gf-credit">
+      <a class="xg-gf__bgg" href="{% if gf.bgg_id.value != blank %}https://boardgamegeek.com/boardgame/{{ gf.bgg_id.value }}{% else %}https://boardgamegeek.com{% endif %}" target="_blank" rel="noopener">
+        {%- if section.settings.bgg_badge != blank -%}
+          <img src="{{ section.settings.bgg_badge | image_url: width: 300 }}" alt="Powered by BGG" width="150" loading="lazy">
+        {%- else -%}
+          <span class="xg-gf__badge">Powered by <b>BGG</b></span>
+        {%- endif -%}
+      </a>
+      <span class="xg-gf__note">Game data from BoardGameGeek.</span>
+    </p>
+  </div>
+</section>
+<script>
+  (function () {
+    var gf = document.querySelector('.xg-gf');
+    if (!gf) return;
+    var col = document.querySelector('.product-single__photos');
+    var home = gf.parentNode, next = gf.nextSibling;
+    var mq = window.matchMedia('(min-width: 768px)');
+    function place() {
+      if (mq.matches && col) { col.appendChild(gf); gf.classList.add('xg-gf--col'); }
+      else { home.insertBefore(gf, next); gf.classList.remove('xg-gf--col'); }
+    }
+    place();
+    if (mq.addEventListener) mq.addEventListener('change', place); else mq.addListener(place);
+    function credit() {
+      var c = document.getElementById('xg-gf-credit');
+      var rel = document.querySelector('.xg-related');
+      var sec = rel && rel.closest('.shopify-section');
+      if (c && sec) { sec.parentNode.insertBefore(c, sec.nextSibling); c.classList.add('xg-gf__credit--foot'); }
+    }
+    function later() { credit(); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', later); else later();
+  })();
+</script>
+<style>
+  .xg-gf { margin: 18px 0 6px; padding: 0 15px; }
+  .xg-gf--col { margin: 22px 0 0; padding: 0; }
+  .xg-gf--col .xg-gf__inner { max-width: none; }
+  .xg-reassure { margin: 0 auto 26px; }
+  .xg-gf__credit--foot { justify-content: center; width: 100%; max-width: none; margin: 0 0 28px; padding: 0 15px; box-sizing: border-box; }
+  .xg-gf__inner { max-width: 1140px; margin: 0 auto; padding: 18px 20px; background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #e3e7ea); border-radius: var(--xg-radius, 14px); }
+  .xg-gf__title { margin: 0 0 12px; font-family: var(--xg-font-display, Oswald, Impact, sans-serif); font-size: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--xg-ink, #10171a); }
+  .xg-gf__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0; }
+  .xg-gf__cell { padding: 10px 12px; background: var(--xg-bg, #f1f4f6); border-radius: 10px; }
+  .xg-gf__cell dt { margin: 0; font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-muted, #8a9299); }
+  .xg-gf__cell dd { margin: 2px 0 0; font-size: 17px; font-weight: 700; line-height: 1.3; color: var(--xg-ink, #10171a); }
+  .xg-gf__of { font-size: 12px; font-weight: 600; color: var(--xg-muted, #8a9299); }
+  .xg-gf__small { font-size: 14px !important; }
+  .xg-gf__top { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: #ff5100; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; vertical-align: middle; }
+  .xg-gf__links { margin: 12px 0 0; font-size: 14px; color: var(--xg-text, #3d454b); }
+  .xg-gf__links b { color: var(--xg-ink, #10171a); margin-right: 4px; }
+  .xg-gf__links a { color: var(--xg-ink, #10171a); text-decoration: underline; }
+  .xg-gf__credit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 0; font-size: 12.5px; color: var(--xg-muted, #8a9299); }
+  .xg-gf__bgg { display: inline-flex; text-decoration: none; }
+  .xg-gf__bgg img { display: block; height: 34px; width: auto; }
+  .xg-gf__badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: #3f3a60; color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; }
+  .xg-gf__badge b { font-weight: 800; color: #ff5100; }
+</style>
+{%- endif -%}
+{%- comment -%}
+  Product page layout (owner 2026-09-14). Every product page: the shipping /
+  contact reassurance box leaves the buy column and sits below the
+  Information Tabs (the description text), so it no longer pushes the product
+  details down. Card singles additionally: from 768px the Information Tabs
+  and the "Back to ..." link move under the card photo (the empty space beside
+  the buy box, exactly like the board-game facts panel), "You May Also Like"
+  moves right under "Cards With Similar Effects" (or under the buy box when
+  that strip is absent), and the reassurance box goes below all of it. On
+  phones the tabs stay in their own section so Add To Cart is never pushed
+  down; the related row still follows the similar-effects strip. Board games
+  keep the Round 42b arrangement (facts under the photo, credit line under
+  the related row, reassurance after the tabs).
+{%- endcomment -%}
+{%- if template.name == 'product' -%}
+<script>
+  (function () {
+    var single = {% if product.type contains 'Single' %}true{% else %}false{% endif %};
+    function run() {
+      var col = document.querySelector('.product-single__photos');
+      var right = document.querySelector('.product-single-right');
+      var tab = document.querySelector('.product-tab');
+      var tabSec = tab && tab.closest('.shopify-section');
+      var rel = document.querySelector('.xg-related');
+      var relSec = rel && rel.closest('.shopify-section');
+      var ret = document.querySelector('.return-link-wrapper');
+      var box = document.querySelector('.product-single-right .reassurance-block');
+      var buy = document.getElementById('xg-buyprice');
+      var meta = document.querySelector('.product-single-right .product-single__meta');
+
+      if (single && tab && col) {
+        var tabHome = tab.parentNode, tabNext = tab.nextSibling;
+        var retHome = ret && ret.parentNode, retNext = ret && ret.nextSibling;
+        var buyHome = buy && buy.parentNode, buyNext = buy && buy.nextSibling;
+        var mq = window.matchMedia('(min-width: 768px)');
+        var place = function () {
+          if (mq.matches) {
+            // Owner 2026-09-15: "What we pay" goes under the description tabs
+            // in the photo column (it sat under everything, past the related
+            // rows) and the "Back to ..." link goes to the top of the buy
+            // column, above the title.
+            col.appendChild(tab); tab.classList.add('xg-tab--col');
+            if (buy) { col.appendChild(buy); buy.classList.add('xg-buy--col'); }
+            if (ret) {
+              if (meta) { meta.insertBefore(ret, meta.firstChild); ret.classList.add('xg-return--top'); }
+              else { col.appendChild(ret); ret.classList.add('xg-return--col'); }
+            }
+          } else {
+            tabHome.insertBefore(tab, tabNext); tab.classList.remove('xg-tab--col');
+            if (buy && buyHome) { buyHome.insertBefore(buy, buyNext); buy.classList.remove('xg-buy--col'); }
+            if (ret && retHome) { retHome.insertBefore(ret, retNext); ret.classList.remove('xg-return--col'); ret.classList.remove('xg-return--top'); }
+          }
+        };
+        place();
+        if (mq.addEventListener) mq.addEventListener('change', place); else mq.addListener(place);
+      }
+
+      if (single && rel && right) {
+        var anchor = right.querySelector('#exor-betters') || right.querySelector('.product-selection-bottom');
+        if (anchor) {
+          anchor.insertAdjacentElement('afterend', rel);
+          rel.classList.add('xg-related--col');
+          try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+        }
+      }
+
+      if (box) {
+        var after = (single && relSec) ? relSec : tabSec;
+        if (after) {
+          var wrap = document.createElement('div');
+          wrap.className = 'xg-reassure page-width';
+          wrap.appendChild(box);
+          after.parentNode.insertBefore(wrap, after.nextSibling);
+        }
+      }
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+  })();
+</script>
+<style>
+  .xg-reassure { margin: 0 auto 26px; }
+  .xg-tab--col { margin: 22px 0 0; max-width: none; }
+  .xg-return--col { margin: 14px 0 0; max-width: none; }
+  .xg-return--top { text-align: left; margin: 0 0 10px; padding: 0; max-width: none; }
+  .xg-return--top .return-link { font-size: 12px; padding: 6px 12px; }
+  .xg-buy--col { margin: 16px 0 0; }
+  .xg-buy--col .xg-buy__panel { max-width: none; }
+  .xg-related--col { margin: 6px 0 0; }
+</style>
+{%- endif -%}
+{% schema %}
+{
+  "name": "What We Pay Reveal",
+  "tag": "section",
+  "class": "xg-buyprice-section",
+  "settings": [
+    { "type": "header", "content": "Game facts (board games)" },
+    { "type": "checkbox", "id": "show_game_facts", "label": "Show BoardGameGeek game facts on board games", "default": true },
+    { "type": "image_picker", "id": "bgg_badge", "label": "Powered by BGG logo", "info": "BGG's terms require their Powered by BGG logo wherever game data is shown. Upload the official file from BoardGameGeek and pick it here; a plain text badge shows until then." }
+  ],
+  "presets": [
+    { "name": "What We Pay Reveal" }
+  ]
+}
+{% endschema %}

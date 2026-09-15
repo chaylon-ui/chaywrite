@@ -1,0 +1,593 @@
+/* ==========================================================================
+   xg-dark.css — dark mode, phase 2 (system default + manual toggle).
+   Loads last (after xg-features.css) so equal-specificity overrides win.
+
+   Scoping: every rule keys on html[data-xg-theme="dark"] — never on a media
+   query. A tiny pre-paint script in layout/theme.liquid sets that attribute
+   before first paint (stored choice in localStorage.xgTheme, else the
+   device's prefers-color-scheme), and assets/xg-theme-toggle.js owns the
+   header sun/moon button + live system-follow while no choice is stored.
+   One source of truth; no duplicated media blocks.
+
+   How it works: everything xg-* is token-driven, so flipping the modern-skin
+   tokens restyles those surfaces for free. The rest of this file re-paints
+   the LEGACY light hardcodes (theme.css / base.css / custom.css) page by
+   page, reusing each original selector (plus the html prefix) so the legacy
+   rule always loses. Already-dark surfaces (utility bar, footer, hero panel,
+   events strip, calendar band, event ticket pages, scanner overlay, deck
+   builder callout) need nothing.
+
+   Two deliberate choices:
+   - Product image plates stay WHITE (.image-inner, .extra-img): BinderPOS
+     card scans and most product shots are JPGs with a baked white ground,
+     so a dark plate would clash with the image's own background.
+   - The logo asset is only legible on white (see modern-skin "LAYER B·4"),
+     so the dark header gives the img a small white plate instead of
+     keeping the whole bar light.
+
+   Red stays #d62c28 for FILLS (white-on-red holds 5.9:1); red-as-TEXT
+   switches to #ff6a5e (6.3:1 on the dark ground — #d62c28 is only 2.9:1).
+   ========================================================================== */
+
+/* ---- 1. Tokens --------------------------------------------------- */
+    html[data-xg-theme="dark"] {
+    color-scheme: dark; /* UA form controls, scrollbars, <option> popups */
+
+    --xg-bg: #101416;
+    --xg-surface: #181d20;
+    --xg-border: #2a3236;
+    --xg-ink: #eef2f4;
+    --xg-text: #c3ccd1;
+    --xg-muted: #8a969d;
+
+    --xg-red-hover: #e4423e;            /* hover lightens on a dark ground */
+    --xg-red-soft: rgba(228, 66, 62, 0.16);
+    --xg-success: #35b578;              /* #17784a is 2.9:1 on dark */
+
+    --xg-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+    --xg-shadow-2: 0 10px 28px rgba(0, 0, 0, 0.55);
+
+    /* Legacy variables the theme still reads directly (binderVariables.css
+       defaults; modern-skin's re-tokenize block skips these). Flipping
+       --color-text-field(+text) alone darkens every form field site-wide. */
+    --color-body: #101416;
+    --color-bg: #181d20;
+    --color-text: #eef2f4;
+    --color-body-text: #c3ccd1;
+    --color-borders: #2a3236;
+    --color-text-field: #1d2327;
+    --color-text-field-text: #e6ebee;
+    --color-small-button: #232a2e;
+    --color-small-button-text: #dfe5e8;
+
+    /* Card hover-row circle buttons (quick view / wishlist / add) */
+    --product-bg-color: #232a2e;
+    --product-icon-color: #e6ebee;
+    --product-bg-hover-color: var(--xg-red);
+    --product-icon-hover-color: #ffffff;
+  }
+
+  /* ---- 2. Global ---------------------------------------------------- */
+    html[data-xg-theme="dark"] body { background-color: var(--xg-bg); color: var(--xg-text); }
+    html[data-xg-theme="dark"] p { color: inherit; }                       /* base.css pins p to #787878 */
+    html[data-xg-theme="dark"] hr { background-color: var(--xg-border); }
+    html[data-xg-theme="dark"] input,
+  html[data-xg-theme="dark"] textarea,
+  html[data-xg-theme="dark"] select { border-color: rgba(255, 255, 255, 0.16); }
+
+  /* Keep the white photo plate consistent on the hover-swap second image
+     (theme.css paints .extra-img with --color-body, which is now dark). */
+    html[data-xg-theme="dark"] .products-display .extra-img { background: #ffffff; }
+
+  /* ---- 3. Header ---------------------------------------------------- */
+    html[data-xg-theme="dark"] #header .site-header,
+  html[data-xg-theme="dark"] #header .header-top.site-header-inner,
+  html[data-xg-theme="dark"] #header .site-header-mobile { background: #161b1e; }
+    html[data-xg-theme="dark"] #header .nav-header.border-bottom { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  /* White plate under the white-ground logo asset. The plate is a spread
+     box-shadow, NOT padding: padding grew the img's box and made the mobile
+     header wrap the logo onto its own extra line (owner report, round 9) —
+     a shadow paints the same plate with zero layout difference vs light. */
+    html[data-xg-theme="dark"] #header .header__logo img {
+    background: #ffffff;
+    border-radius: 6px;
+    box-shadow: 0 0 0 10px #ffffff;
+  }
+  /* DESKTOP cart + account glyphs (owner: "the account and shopping cart
+     logos in dark mode disappear"). xg-features.css section 8 inked the
+     MOBILE ids only and said so - the desktop bar was light then, so
+     theme.css's own colours were right. The header is dark now and they are
+     black-on-black. Two different causes, both measured:
+       - account: theme.css sets
+           #_desktop_user_info .userinfo-title .userinfo-toggle svg { fill:#000 }
+         at (1,2,1), so the html prefix here lands at (1,3,2) and wins.
+       - cart: snippets/icons.liquid renders it as <symbol> + <use> with no
+         fill on the path, so it computes to the INITIAL black - nothing to
+         out-rank, just nothing set. fill inherits into the <use> shadow
+         tree, so painting the span carries the glyph with it.
+     Light mode untouched: black on the white bar is correct there. */
+    html[data-xg-theme="dark"] #_desktop_user_info .userinfo-title .userinfo-toggle svg,
+  html[data-xg-theme="dark"] #_desktop_user_info .userinfo-title .userinfo-toggle svg path { fill: #e6ebee; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-title .cart-logo,
+  html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-title .cart-logo svg,
+  html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-title .cart-logo use,
+  html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-title .cart-logo path { fill: #e6ebee; }
+  /* The qty bubble keeps brand red on white - it is a fill, not text ink */
+    html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-title .cart-qty { background: var(--xg-red, #d62c28); color: #ffffff; }
+
+  /* Mobile slide-down drawers (cart + search) */
+    html[data-xg-theme="dark"] .mobile-width #mobilecart-container,
+  html[data-xg-theme="dark"] .mobile-width #search-container { background: #181d20; }
+    html[data-xg-theme="dark"] .mobile-width #search-container .search-header__input { background: #1d2327; }
+    html[data-xg-theme="dark"] .mobile-width #search-container .search-results .thumbnail { border-color: #2a3236; }
+
+  /* Hamburger drawer (snippets/header-menu-mobile). theme.css hardcodes the
+     panel white while its links carry no color of their own, so they inherit
+     the dark body ink — pale-on-white. Paint the panel dark and set every
+     text/icon color explicitly. */
+    html[data-xg-theme="dark"] #mobile_top_menu_wrapper { background: #161b1e; }
+    html[data-xg-theme="dark"] #mobile_top_menu_wrapper a,
+  html[data-xg-theme="dark"] #mobile_top_menu_wrapper .title,
+  html[data-xg-theme="dark"] #mobile_top_menu_wrapper .inner-title { color: #eef2f4; }
+    html[data-xg-theme="dark"] #mobile_top_menu_wrapper .mobile-menu-category__submenu a { color: #c3ccd1; }
+    html[data-xg-theme="dark"] #mobile_top_menu_wrapper .mobile-menu-category__dropdown i { color: #b7c2c9; }
+  /* theme.css closer rule is (2,0,1) — two ids — so match it, not just class */
+    html[data-xg-theme="dark"] #mobile_top_menu_wrapper #top_menu_closer i { color: #eef2f4; }
+
+  /* ---- 4. Search (header omnibox, autocomplete, results page) ------- */
+  /* theme.css rule is #header #_desktop_search .search-info .search__input
+     (2,2,0) — same weight here, later source order wins. */
+    html[data-xg-theme="dark"] #header #_desktop_search .search-info .search__input,
+  html[data-xg-theme="dark"] #header #_mobile_search .search-info .search__input {
+    background: #1d2327;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #e6ebee;
+  }
+    html[data-xg-theme="dark"] #header #_desktop_search .search-info .search__input:focus,
+  html[data-xg-theme="dark"] #header #_mobile_search .search-info .search__input:focus { background: #232a2f; }
+    html[data-xg-theme="dark"] #header #_desktop_search .search-info .search__input::placeholder,
+  html[data-xg-theme="dark"] #header #_mobile_search .search-info .search__input::placeholder { color: #8a969d; opacity: 1; }
+    html[data-xg-theme="dark"] .search-header__input { background: #1d2327; border-color: #2a3236; color: #e6ebee; }
+    html[data-xg-theme="dark"] .search--focus .search-header__input { background: #232a2f; }
+    html[data-xg-theme="dark"] .search-header__input::placeholder,
+  html[data-xg-theme="dark"] .search-bar__input::placeholder { color: #8a969d; opacity: 1; }
+
+    html[data-xg-theme="dark"] .search-results { background: #181d20; border-color: #2a3236; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+    html[data-xg-theme="dark"] .search-results li:hover { background-color: #232a2f; }
+    html[data-xg-theme="dark"] .search-results li a { color: #e6ebee; }
+    html[data-xg-theme="dark"] .search-results li a:hover { color: #ffffff !important; } /* legacy #000!important */
+    html[data-xg-theme="dark"] .search-results .thumbnail img { border-color: #2a3236; }
+    html[data-xg-theme="dark"] .search-results .type { color: #8a969d; }
+    html[data-xg-theme="dark"] .search-results .in-stock { color: #35b578; }
+    html[data-xg-theme="dark"] .search-results .preorder { color: #6aa5e8; }
+
+    html[data-xg-theme="dark"] .template-search .search_page { background: #161b1e; }   /* base.css #f5f5f5 */
+    html[data-xg-theme="dark"] .template-search .search-page-form .search__input,
+  html[data-xg-theme="dark"] .template-search .template-search__search form input {
+    background: #1d2327;
+    border-color: #2a3236;
+    color: #e6ebee;
+  }
+    html[data-xg-theme="dark"] .template-search .search-page-form .search__input:focus { background: #232a2f; }
+
+  /* ---- 5. Product cards --------------------------------------------- */
+    html[data-xg-theme="dark"] .products-display .grid-view-item:hover { border-color: #39434a; }
+    html[data-xg-theme="dark"] .products-display .list__item .grid-view-item__image-wrapper { border-color: #2a3236; }
+    html[data-xg-theme="dark"] ul#products-tab .nav-item > a.nav-link:hover { border-color: #39434a !important; }
+  /* Condition pill option list (xg-features paints it light) */
+    html[data-xg-theme="dark"] .product-description .custom-dropdown__small select option { background: #1d2327; color: #e6ebee; }
+  /* Mini cards inside header dropdowns */
+    html[data-xg-theme="dark"] .grid__item--header-top .grid-view-item__title { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .grid__item--header-top .grid-view-item__meta span,
+  html[data-xg-theme="dark"] .grid__item--header-top .grid-view-item__meta s { color: #8a969d; }
+
+  /* ---- 6. Collection / grid chrome ---------------------------------- */
+    html[data-xg-theme="dark"] .pagination .pagination-block { background-color: #14181b; }
+    html[data-xg-theme="dark"] .pagination .page-view .btn,
+  html[data-xg-theme="dark"] .pagination .page-view a,
+  html[data-xg-theme="dark"] .pagination .page-view span { background-color: #1d2327; color: #c3ccd1; border-color: #2a3236; }
+    html[data-xg-theme="dark"] .pagination__text { color: #8a969d; }
+    html[data-xg-theme="dark"] .pagination__item { background-color: transparent; }
+
+    html[data-xg-theme="dark"] .filters-toolbar-wrapper { background-color: #161b1e; }
+    html[data-xg-theme="dark"] .filters-toolbar__input { background-color: #1d2327; color: #e6ebee; }
+    html[data-xg-theme="dark"] .filters-toolbar__product-count { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .collection-filters { background: #161b1e; }
+    html[data-xg-theme="dark"] .collection-filters__sort option { background-color: #1d2327; }
+    html[data-xg-theme="dark"] #SortBy { background-color: rgba(255, 255, 255, 0.08); color: #e6ebee; }
+    html[data-xg-theme="dark"] .collection .loading-overlay { background-color: rgba(10, 13, 15, 0.7); }
+
+    html[data-xg-theme="dark"] .facets__display,
+  html[data-xg-theme="dark"] .facets__header,
+  html[data-xg-theme="dark"] .mobile-facets__inner,
+  html[data-xg-theme="dark"] .mobile-facets__header,
+  html[data-xg-theme="dark"] .js .mobile-facets__submenu,
+  html[data-xg-theme="dark"] .mobile-facets__label,
+  html[data-xg-theme="dark"] .mobile-facets__footer { background-color: #181d20; }
+    html[data-xg-theme="dark"] .facet-checkbox > svg,
+  html[data-xg-theme="dark"] .mobile-facets__label > svg { background-color: #1d2327; }
+
+    html[data-xg-theme="dark"] .alert-danger,
+  html[data-xg-theme="dark"] .errors { background-color: #3a2325; color: #f0a8a5; }
+    html[data-xg-theme="dark"] .alert-warning { background-color: #3a3423; color: #ffd84d; }
+    html[data-xg-theme="dark"] .modal__content,
+  html[data-xg-theme="dark"] .modal-content { background: #181d20; color: #c3ccd1; }
+
+    html[data-xg-theme="dark"] .collection-grid-item:hover { border-color: #39434a; }
+    html[data-xg-theme="dark"] .collection-grid-item__overlay { background: #181d20; }
+    html[data-xg-theme="dark"] .shopify-section.service-block .services a:hover { border-color: #39434a; }
+    html[data-xg-theme="dark"] .snize-product:hover { border-color: #39434a !important; }
+    html[data-xg-theme="dark"] .footer-top { background-color: #14181b; }   /* dead rule; defensive */
+
+  /* ---- 7. Product page ---------------------------------------------- */
+    html[data-xg-theme="dark"] .product-single { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .product-single .product-single-left { background: #181d20; }
+    html[data-xg-theme="dark"] .product-single .product-single-left .single-left .product-single__photo { border-color: #2a3236 !important; }
+    html[data-xg-theme="dark"] .product-single .product-single__title,
+  html[data-xg-theme="dark"] .product-single .product-single-right .product-single__meta .product-single__title { color: #eef2f4; }
+    html[data-xg-theme="dark"] .product-single__price,
+  html[data-xg-theme="dark"] .product-price__price,
+  html[data-xg-theme="dark"] .product-price__sale { color: #eef2f4; }
+  /* Inline style="color: red" on the price span — brighter red for dark */
+    html[data-xg-theme="dark"] .product-single [id^="ProductPrice-"] { color: #ff6a5e !important; }
+    html[data-xg-theme="dark"] .regular-price,
+  html[data-xg-theme="dark"] #ComparePrice-product-template { color: #8a969d; }
+    html[data-xg-theme="dark"] .discount-percentage { background: #232a2f; }
+    html[data-xg-theme="dark"] .product-single__vendor,
+  html[data-xg-theme="dark"] .available-stock,
+  html[data-xg-theme="dark"] .variant-sku,
+  html[data-xg-theme="dark"] #sold-out { color: #98a3aa; }
+    html[data-xg-theme="dark"] .instock,
+  html[data-xg-theme="dark"] .outstock { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .product-single__description { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .product-single .product-form .selector-wrapper select { background-color: #1d2327; color: #c3ccd1; border-color: #2a3236; }
+    html[data-xg-theme="dark"] .block-reassurence-tab li .block-reassurance-item { background: #161b1e; }
+    html[data-xg-theme="dark"] .block-reassurence-tab li .block-reassurance-item .title { color: #eef2f4; }
+    html[data-xg-theme="dark"] .block-reassurence-tab li .block-reassurance-item .sub-title { color: #8a969d; }
+    html[data-xg-theme="dark"] .block-reassurence-tab li .block-reassurance-item:after { background: rgba(255, 255, 255, 0.15); }
+    html[data-xg-theme="dark"] #productcountdown .countdown { background: #161b1e; }
+    html[data-xg-theme="dark"] #productcountdown .countdown .data { color: #eef2f4; }
+    html[data-xg-theme="dark"] #productcountdown .countdown .text { color: #8a969d; }
+    html[data-xg-theme="dark"] #progress-bar { background: #2a3236; }
+    html[data-xg-theme="dark"] .add-to-wishlist .btn { color: #e6ebee; }
+    html[data-xg-theme="dark"] .add-to-wishlist .btn i { color: #98a3aa; }
+    html[data-xg-theme="dark"] .size-chart { color: #e6ebee; }
+    html[data-xg-theme="dark"] .thumbnails-wrapper a img { border-color: #2a3236; }
+
+    html[data-xg-theme="dark"] .product-tab { background-color: #181d20; border-color: #2a3236; }
+    html[data-xg-theme="dark"] .product-tab > div { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .product-tab #desc > h4 { color: #eef2f4; }
+    html[data-xg-theme="dark"] .product-tab blockquote { color: #a9b4ba; border-left-color: #2a3236; }
+    html[data-xg-theme="dark"] .product-tab .tab-id li a { color: #e6ebee; background: #232a2f; }
+    html[data-xg-theme="dark"] .singleproduct-section .product-tab .tab-id li a { color: #e6ebee; }
+    html[data-xg-theme="dark"] .singleproduct-section .product-tab .tab-id li a.active { color: #ffffff; border-bottom-color: var(--xg-red); }
+    html[data-xg-theme="dark"] .singleproduct-section .product-tab .tab-id:after { background: #2a3236; }
+
+  /* Condition swatches (custom.css pins these with !important) */
+    html[data-xg-theme="dark"] .custom-swatch { border-color: #3a444b !important; background: #1d2327 !important; color: #e6ebee; }
+    html[data-xg-theme="dark"] .custom-swatch .swatch-price { color: #4fc487; }
+    html[data-xg-theme="dark"] .disabled-option,
+  html[data-xg-theme="dark"] .swatch-oos { background: #20262a !important; }
+    html[data-xg-theme="dark"] .swatch-oos::after { color: #77828a; }
+  /* Out-of-stock condition swatches. The owner's screenshot showed pale grey
+     blocks, and theme.css says why - TWO rules, and the earlier fix only
+     reached one of them:
+       .product-swatch .option-swatch .custom-swatch.disabled-option
+         { opacity: 0.4 }                                          (0,4,0)
+       ...same chain...disabled-option.non-color-option
+         { background-color: #dddddd }                             (0,5,0)
+     The `background: #20262a !important` above does beat the #dddddd - an
+     important declaration outranks any non-important one whatever the
+     specificity - but nothing touched the OPACITY, so the result was a dark
+     swatch at 40% over a dark card: rgb(25,30,33) against rgb(24,29,32),
+     which is worse than the pale block it replaced. It also faded the
+     condition label and price to 40%, since opacity applies to the subtree.
+
+     Fighting the fade with a background was the wrong lever. Encode
+     "unavailable" in COLOUR at full opacity instead: one step up from the
+     card so the chip is visibly present, muted ink that still reads
+     (#8f9aa1 on #232a2f is 5.0:1), and the existing ::after marker on top.
+     Matches theme.css's own chain at (0,5,1) so it wins on specificity
+     rather than on !important - the round-12 lesson. */
+    html[data-xg-theme="dark"] .product-swatch .option-swatch .custom-swatch.disabled-option,
+  html[data-xg-theme="dark"] .quickview-swatch .option-swatch .custom-swatch.disabled-option {
+    opacity: 1;
+    background-color: #232a2f !important;
+    border-color: #333d43 !important;
+    color: #8f9aa1;
+  }
+    html[data-xg-theme="dark"] .product-swatch .option-swatch .custom-swatch.disabled-option .swatch-price,
+  html[data-xg-theme="dark"] .quickview-swatch .option-swatch .custom-swatch.disabled-option .swatch-price { color: #8f9aa1; }
+    html[data-xg-theme="dark"] .custom-swatch.active { border-color: var(--xg-red, #d62c28) !important; }
+
+    html[data-xg-theme="dark"] .product-form__item--quantity > div,
+  html[data-xg-theme="dark"] .cart-qty-btns > div { color: #c3ccd1; background: #1d2327; border-color: #2a3236; }
+    html[data-xg-theme="dark"] .product-form__item--quantity .quantity,
+  html[data-xg-theme="dark"] .cart-qty-btns .quantity { color: #e6ebee; background: #1d2327; border-color: #2a3236; }
+
+    html[data-xg-theme="dark"] .product-media-modal,
+  html[data-xg-theme="dark"] .product-popup-modal__content { background-color: #101416; }
+    html[data-xg-theme="dark"] .product-media-modal__toggle { background-color: #232a2f; color: #e6ebee; }
+    html[data-xg-theme="dark"] #qvPopupModal .qv-wrapper.loading:after { background: rgba(10, 13, 15, 0.85); }
+    html[data-xg-theme="dark"] .card-float .product-single__photo { filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.6)); }
+  /* Card scans are rectangular JPGs; a card's rounded corners expose the
+     scan's baked ground at all four corners, which reads as white triangles
+     once the plate behind goes dark (photo-ground scans show nothing).
+     Clip the floated image to real card corner geometry — 3mm on a 63×88mm
+     card ≈ 5% of width / 3.6% of height. The foil overlay paints the photo
+     div edge-to-edge, so it gets the same clip; thumbnails too. The
+     drop-shadow above follows the clipped alpha, not the JPG rectangle. */
+    html[data-xg-theme="dark"] .card-float .product-single__photo img { border-radius: 5% / 3.6%; }
+    html[data-xg-theme="dark"] .foil-active .product-single__photo::before { border-radius: 5% / 3.6%; }
+    html[data-xg-theme="dark"] .card-float .product-single__thumbnail-image { border-radius: 5% / 3.6%; }
+
+  /* ---- 8. Cart page + mini-cart ------------------------------------- */
+    html[data-xg-theme="dark"] .cart-items .cart__header { background: #161b1e; }
+    html[data-xg-theme="dark"] .template-cart .cart th,
+  html[data-xg-theme="dark"] .template-cart .cart td { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .cart .cart__meta .list-view-item__title > a { color: #e6ebee; }
+    html[data-xg-theme="dark"] .cart__price-wrapper { color: #e6ebee; }
+    html[data-xg-theme="dark"] .product_remove a { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .template-cart .cart .cart__footer { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart_top { border-bottom-color: #2a3236; }
+    html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator { background: #161b1e; }
+    html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart_calculator .cart_content_inner { background: #181d20; }
+    html[data-xg-theme="dark"] .template-cart .cart .cart_content_inner .cart_total_title span { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .cart__edit .btn { color: #e6ebee; }
+    html[data-xg-theme="dark"] .cart__subtotal { color: #eef2f4; }
+    html[data-xg-theme="dark"] .cart__shipping,
+  html[data-xg-theme="dark"] .cart__store-credit-info { border-top-color: #2a3236; }
+    html[data-xg-theme="dark"] .totals { background: #161b1e; }
+    html[data-xg-theme="dark"] .totals > * { color: #e6ebee; }
+    html[data-xg-theme="dark"] .cart-item__original-price s { color: #ff6a5e; }
+    html[data-xg-theme="dark"] .cart-notification { background-color: #181d20; }
+    html[data-xg-theme="dark"] div.cart-popup .pop-up { background: #181d20; }
+    html[data-xg-theme="dark"] div.cart-popup .pop-up .pop-btn { background: #232a2f; color: #e6ebee; border-color: #39434a; }
+
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner { background: #181d20; border-color: #2a3236; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner .product-img { border-color: #2a3236; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner .product-title { color: #e6ebee; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner .product-title:hover { color: #ffffff; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner a.remove i { color: #c3ccd1; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner a.remove:hover i { color: #ffffff; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner .cart__footer { border-top-color: #2a3236; }
+    html[data-xg-theme="dark"] #_desktop_cart .cart-dropdown-inner .cart__empty { color: #8a969d; }
+
+  /* Our DoorDash note pins a light ink; bg is --xg-red-soft (flips fine) */
+    html[data-xg-theme="dark"] .xg-delivery-note { color: #dfe5e8; }
+
+  /* ---- 9. Sidebar (mounted on /a/search + advanced search) ---------- */
+    html[data-xg-theme="dark"] #shopify-section-sidebar .left-column { border-color: #2a3236; background: #181d20; }
+    html[data-xg-theme="dark"] #shopify-section-sidebar .left-column .sidebar-title,
+  html[data-xg-theme="dark"] #shopify-section-sidebar .left-column .left-title { background: #232a2f; color: #e6ebee; }
+    html[data-xg-theme="dark"] #shopify-section-sidebar .left-column .sidebar-title a { color: #e6ebee; }
+    html[data-xg-theme="dark"] #shopify-section-sidebar .left-column .block-heading { color: #e6ebee; }
+    html[data-xg-theme="dark"] #shopify-section-sidebar .left-column .grid-view-item__image-wrapper { border-color: #2a3236; }
+    html[data-xg-theme="dark"] .sidebar-categories .link-title,
+  html[data-xg-theme="dark"] .sidebar-categories .dropdown-item { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .sidebar-categories .collapse-icon i { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .tag-filter #SortTags a { color: #c3ccd1; }
+    html[data-xg-theme="dark"] .tag-filter #SortTags a.selected { color: #ffffff; }
+    html[data-xg-theme="dark"] .tag-filter .filter-box:after { color: #c3ccd1; }
+    html[data-xg-theme="dark"] #filter-container .filter-box { border-color: #39434a; background: #1d2327; }
+    html[data-xg-theme="dark"] #filter-container .filter-size { border-color: #39434a; color: #98a3aa; }
+    html[data-xg-theme="dark"] #filter-container strong { color: #c3ccd1; }
+
+  /* ---- 10. xg sections: the few bare-hex leftovers ------------------ */
+    html[data-xg-theme="dark"] .xg-loc__prog { background: rgba(255, 255, 255, 0.08); }
+    html[data-xg-theme="dark"] a.xg-loc__card:hover { border-color: #39434a; }
+  
+  
+    html[data-xg-theme="dark"] .xg-sisters__note { color: #8a969d; }
+    html[data-xg-theme="dark"] .xg-sisters__scroller { scrollbar-color: #39434a #181d20; }
+    html[data-xg-theme="dark"] .xg-sisters__scroller::-webkit-scrollbar-track { background: #181d20; }
+    html[data-xg-theme="dark"] .xg-sisters__scroller::-webkit-scrollbar-thumb { background: #39434a; }
+    html[data-xg-theme="dark"] .xg-sisters__scroller::-webkit-scrollbar-thumb:hover { background: #4a555d; }
+    html[data-xg-theme="dark"] .xg-sisters__card { background: #181d20; }
+    html[data-xg-theme="dark"] .xg-sisters__card:hover { border-color: #39434a; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5); }
+    html[data-xg-theme="dark"] .exor-betters__row { scrollbar-color: #39434a #181d20; }
+    html[data-xg-theme="dark"] .exor-betters__row::-webkit-scrollbar-track { background: #181d20; }
+    html[data-xg-theme="dark"] .exor-betters__row::-webkit-scrollbar-thumb { background: #39434a; }
+    html[data-xg-theme="dark"] .exor-betters__card:hover { border-color: #39434a; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
+    /* "You May Also Like" strip on singles (relatedproductsblock .xg-rel__row):
+       same scrollbar as the similar-effects strip above it, so the two bars
+       match in dark mode (owner 2026-09-15: "these bars are different color"). */
+    html[data-xg-theme="dark"] .xg-rel__row { scrollbar-color: #39434a #181d20; }
+    html[data-xg-theme="dark"] .xg-rel__row::-webkit-scrollbar-track { background: #181d20; }
+    html[data-xg-theme="dark"] .xg-rel__row::-webkit-scrollbar-thumb { background: #39434a; }
+    html[data-xg-theme="dark"] .xg-rel__row::-webkit-scrollbar-thumb:hover { background: #4a555d; }
+
+  /* ---- 11. Desktop menu row (qikify "tmenu" app, NOT the theme) -----
+     Owner: "the menu is white on desktop, it should be black". Run 102 named
+     the painter: NAV.tmenu_navbar.tmenu_app, background rgb(255,255,255),
+     spanning [0,116,1440,100] - and hasTopMenu=false, so the app has replaced
+     the theme's #top-menu entirely and nothing in this repo renders that bar.
+     Its own <style> loads after this file, so these carry weight. Matches the
+     header's #161b1e rather than pure black, so the bar reads as part of the
+     header instead of a separate band; the app's red link ink already reads
+     on it. Light mode is untouched - the white bar is right there. */
+    html[data-xg-theme="dark"] nav.tmenu_navbar,
+  html[data-xg-theme="dark"] .tmenu_navbar.tmenu_app { background: #161b1e !important; }
+    html[data-xg-theme="dark"] .tmenu_navbar .tmenu_item_link { color: #ff6a5e; }
+
+  /* The dropdown PANELS are the app's markup too, and they stayed white
+     while the bar went dark. Run 108 finally named one by diffing which
+     tmenu elements become visible on hover - run 105's sweep had matched
+     four DIV.image-inner homepage product cards sitting behind the fixed
+     header and stopped there, so no panel was ever measured.
+
+       DIV.tmenu_submenu_type_tab.tmenu_submenu--desktop, position absolute,
+       800x464 at [165,166], background rgb(255,255,255), ink rgb(0,0,0),
+       hanging off LI.tmenu_item--root
+
+     Inside it a UL.tmenu_submenu_tab_control rail carries the category tabs,
+     with LI.tmenu_submenu_tab_active tinted rgba(0,0,0,.1) - a light-mode
+     tint that disappears against a dark panel, so it inverts to white.
+
+     Matched on the class PREFIX rather than those three exact classes: the
+     app rebuilds this markup on its own schedule and the prefix is the part
+     that survives. Weighted, like the bar above, because the app's own
+     <style> loads after this file. */
+    html[data-xg-theme="dark"] .tmenu_navbar div[class*="tmenu_submenu"] {
+    background-color: #181d20 !important;
+    border-color: #2a3236 !important;
+    color: #e6ebee !important;
+  }
+    html[data-xg-theme="dark"] .tmenu_navbar [class*="tmenu_submenu"] a,
+  html[data-xg-theme="dark"] .tmenu_navbar [class*="tmenu_submenu"] .tmenu_item_text { color: #e6ebee !important; }
+    html[data-xg-theme="dark"] .tmenu_navbar [class*="tmenu_submenu"] a:hover,
+  html[data-xg-theme="dark"] .tmenu_navbar [class*="tmenu_submenu"] a:hover .tmenu_item_text { color: #ff6a5e !important; }
+    html[data-xg-theme="dark"] .tmenu_navbar .tmenu_submenu_tab_active { background-color: rgba(255, 255, 255, 0.08) !important; }
+
+  /* ---- 12. Product page reassurance block ---------------------------
+     snippets/reassurance.liquid — the "TCG SINGLES SHIP PROTECTED /
+     ORDERING MORE THAN SINGLES / CONTACT US" panel the owner circled as
+     unreadable in dark. theme.css hardcodes it for a white card:
+       .reassurance-text .reassurance-title { color: #000 }   (0,2,0)
+       .reassurance-text .reassurance-desc  { color: #666 }   (0,2,0)
+       .reassurance-block { border: 1px solid #e9e9e9 }
+     Nothing here reached them — the existing rules cover
+     .block-reassurence-tab, which is a DIFFERENT element with a different
+     class spelling. Reuse theme.css's own selectors plus the html prefix so
+     the legacy rule always loses.
+     Source-derived, NOT measured: the CI probe cannot reach product pages
+     (Cloudflare challenges the runner IP), so this is the one fix this round
+     with no green run behind it.
+
+     SPECIFICITY, MEASURED THE HARD WAY: the first attempt used
+       html[...] .reassurance-text .reassurance-title            -> (0,3,1)
+     against what looked like theme.css's rule. It lost, because a grep that
+     started matching at `.reassurance-text` had TRUNCATED the real selector:
+       .reassurance-block .reassurance .reassurance-text .reassurance-title
+     is (0,4,0), and four classes beat three-classes-plus-an-element. Match
+     the whole chain instead of assuming - run 106's fragment check caught
+     this, the owner's screenshots could only say "still dark". */
+    html[data-xg-theme="dark"] .reassurance-block { border-color: #2a3236; }
+    html[data-xg-theme="dark"] .reassurance-block .reassurance .reassurance-text .reassurance-title { color: #eef2f4; }
+    html[data-xg-theme="dark"] .reassurance-block .reassurance .reassurance-text .reassurance-desc { color: #a9b4ba; }
+
+  /* ---- 13. Product page: the two blocks the owner circled -----------
+     Both are legacy light hardcodes that nothing here reached, and BOTH are
+     on a page the CI probe cannot load (Cloudflare challenges the runner on
+     /products/*), so these are source-derived and carry !important on
+     purpose: with no way to measure which legacy rule is winning, matching
+     theme.css's own selector chain is the reliable move rather than a guess
+     at specificity. Same reasoning as the .search-results hover rule above.
+
+     "Add To Wishlist" + "Grading Guide" share .wishlist-chart
+     (product-template.liquid:173 — the wishlist include and the size-chart
+     button sit in the same box), and both rendered near-black on the dark
+     panel. The Grading Guide svg is fill="currentColor", so the ink carries
+     the icon with it. */
+    html[data-xg-theme="dark"] .product-single .product-single-right .product-single__meta .wishlist-chart,
+  html[data-xg-theme="dark"] .product-single .product-single-right .product-single__meta .wishlist-chart a,
+  html[data-xg-theme="dark"] .product-single .product-single-right .product-single__meta .wishlist-chart button,
+  html[data-xg-theme="dark"] .wishlist-chart .size-chart { color: #c3ccd1 !important; }
+    html[data-xg-theme="dark"] .wishlist-chart a:hover,
+  html[data-xg-theme="dark"] .wishlist-chart button:hover { color: #eef2f4 !important; }
+
+  /* The Set/Type/Rarity/Cost grid in the DESCRIPTION tab is a plain <table>
+     inside the product's body_html (BinderPOS writes it), so it picks up
+     theme.css's table defaults - #f4f4f4 cell borders and a #f1f1f1 head,
+     both drawn for a white card. On the dark panel that is a white grid.
+
+     The white GRID is the table's own ground, not its borders: theme.css has
+     a bare `table { background-color: #fff }`. The first fix only recoloured
+     the cell borders, which is why the probe's border check passed while the
+     owner still saw a white grid - the check was asking the wrong question. */
+    html[data-xg-theme="dark"] .product-tab table { background-color: #181d20 !important; }
+    html[data-xg-theme="dark"] .product-tab table,
+  html[data-xg-theme="dark"] .product-tab th,
+  html[data-xg-theme="dark"] .product-tab td { border-color: #2a3236 !important; color: #c3ccd1; }
+    html[data-xg-theme="dark"] .product-tab thead > tr:first-child { background-color: #232a2f; color: #eef2f4; }
+
+  /* Worker-injected strips append their <style> after this link tag, so
+     equal-specificity dark fixes here need weight. Red-as-text only. */
+    html[data-xg-theme="dark"] #xg-newtoday .xg-nt__price { color: #ff6a5e !important; }
+
+  /* ---- 14. Brand red as TEXT on a dark ground -----------------------
+     Run 108 swept every visible text node on the homepage in dark and scored
+     it against the surface underneath. Two rows are real and both are the
+     same mistake: the brand red used as INK rather than as a fill.
+
+       span.product-price__price.is-bold  rgb(214,44,40) on rgb(24,29,32)  3.4:1
+       p.xg-sp__kicker                    rgb(214,44,40) on rgb(16,20,22)  3.7:1
+
+     #ff6a5e on the card ground is 6.2:1 - the same substitution the ticker
+     and new-today prices already make, so the red stays the brand's.
+
+     The card price needed WEIGHT, not a better selector. The existing
+     `.product-price__price` rule above is (0,2,1) and never had a chance,
+     because theme.css paints this one with
+
+       .products-display .grid__item .grid-view-item
+       .grid-view-item__image-container .product-description
+       .grid-view-item__meta .is-bold { color: var(--brand-secondary) }
+
+     - seven classes. Matching that by hand would be long and would break the
+     first time the theme reorders a wrapper, so this is short and important
+     instead.
+
+     Red as a FILL is deliberately untouched: buttons, the cart badge and the
+     swatch borders keep #d62c28 with white on top, which reads fine.
+
+     Four more rows the sweep flagged are NOT fixed here, because they are
+     artifacts of the scorer rather than defects. It reads backgrounds as
+     opaque, so the translucent rgba(255,255,255,.02-.08) chips on the
+     calendar, the events strip and the locations pills scored against white
+     when they actually composite to near the dark ground; and it reads
+     background-COLOR only, so the ticker's FOIL chip scored against the card
+     behind its gold gradient. The sweep is corrected in the same round. */
+    html[data-xg-theme="dark"] .grid-view-item__meta .is-bold,
+  html[data-xg-theme="dark"] .grid-view-item__meta .is-bold .money { color: #ff6a5e !important; }
+    html[data-xg-theme="dark"] .xg-sp__kicker { color: #ff6a5e !important; }
+
+  /* ---- 11b. The "Locations & FAQ" mega panel (round 26) ---------------
+     Owner screenshot, dark mode: a white panel with near-white links.
+     menu-probe run 33665931307 named the painter: the mega panel is a
+       UL.tmenu_submenu_type_mega.tmenu_submenu--desktop.tmenu_submenu
+       (800x436, position absolute, background rgb(255,255,255))
+     - a UL, so rule 11's div[class*="tmenu_submenu"] never matched it,
+     while its links DID take the #e6ebee ink from the [class*="tmenu_submenu"] a
+     rule below it: light text on the white the rule was meant to remove.
+     Same paint as the div panels, matched on the same class prefix. */
+    html[data-xg-theme="dark"] .tmenu_navbar ul[class*="tmenu_submenu"] {
+    background-color: #181d20 !important;
+    border-color: #2a3236 !important;
+    color: #e6ebee !important;
+  }
+
+  /* The panel's middle column is the owner's HTML block from the app's
+     editor (DIV.tmenu_custom_content): "Our Store:", Address, Phone Number,
+     Other Locations - every heading, paragraph and link carries an inline
+     color:#D52C28. On the dark panel that red is 3.42:1 (computed), and the
+     inline-styled links were already being turned #e6ebee by the rule above,
+     so the column was two-tone by accident. Body text goes to the panel ink;
+     the block's heading and its three 1.2em labels keep the dark-mode red
+     (#ff6a5e, 6.05:1 on #181d20); links inherit the panel's ink + hover red.
+     Weighted because the colours are inline styles, which only !important
+     outranks. */
+    html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content p,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content li,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content span,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content strong { color: #e6ebee !important; }
+    html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h1,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h2,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h3,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h4,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h5,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h6,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h4 > strong,
+  html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content p > strong[style*="font-size"] { color: #ff6a5e !important; }
+
+  /* The map column: P.tmenu_maps_address ("Google Maps location") computed
+     rgb(0,0,0) in dark, and the "Interact with map" control sits over the
+     iframe. Muted panel ink for the caption (9.22:1), panel ink on a
+     slightly lifted ground for the control. */
+    html[data-xg-theme="dark"] .tmenu_navbar .tmenu_maps_address { color: #b8c0c6 !important; }
+    html[data-xg-theme="dark"] .tmenu_navbar .tmenu_maps_toggle {
+    color: #e6ebee !important;
+    background-color: #232a2e !important;
+    border-color: #2a3236 !important;
+  }
