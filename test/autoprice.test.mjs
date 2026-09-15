@@ -460,3 +460,24 @@ test("an add during a running run queues one more run instead of being lost", as
   assert.equal(s.started, true);
   assert.equal(store.get("ap:run").done, false);
 });
+
+import { upcRow } from "../src/autoprice.js";
+test("Celebrations: '(Exclusive)' is noise, and a UPC shared by twins goes to the one the title names", () => {
+  const rows = [
+    { id: 242811, set: "Celebrations", name: "Celebrations Elite Trainer Box", upc: "0820650809439", market: 362.05 },
+    { id: 251199, set: "Celebrations", name: "Celebrations Pokemon Center Elite Trainer Box (Exclusive)", upc: "0820650809439", market: 549.81 },
+    { id: 251218, set: "Celebrations", name: "Code Card - Celebrations Elite Trainer Box", upc: "", market: 0.17 },
+    { id: 251895, set: "Celebrations", name: "Celebrations Elite Trainer Box Case", upc: "0820650828942", market: 4199.99 },
+    { id: 261802, set: "Celebrations", name: "Celebrations Pokemon Center Elite Trainer Box Case (Exclusive)", upc: "", market: 2340 },
+  ];
+  const pc = "POKEMON CELEBRATIONS POKEMON CENTER ELITE TRAINER BOX";
+  const plain = "POKEMON CELEBRATIONS ELITE TRAINER BOX";
+  assert.deepEqual(tok2("Celebrations Pokemon Center Elite Trainer Box (Exclusive)"), ["celebrations", "center", "elite", "trainer"]);
+  assert.equal(nameMatch(pc, rows).id, 251199);      // our barcode 820650809866 is on no TCGplayer row: the name finds it
+  assert.equal(nameMatch(plain, rows).id, 242811);
+  const ixc = indexRows(rows);
+  assert.equal(upcRow(ixc, "820650809439", plain).id, 242811);   // the shared UPC: each twin gets its own row
+  assert.equal(upcRow(ixc, "820650809439", pc).id, 251199);
+  assert.equal(upcRow(ixc, "820650828942", plain).id, 251895);   // a lone UPC row as before (the case check comes later)
+  assert.equal(upcRow(ixc, "000000000000", plain), null);
+});

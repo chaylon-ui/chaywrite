@@ -170,7 +170,7 @@ export function normUpc(s) {
 // is not (it names a different product).
 // Pokemon series prefixes ("SV: Prismatic Evolutions", "XY: Evolutions",
 // our "POKEMON XY EVOLUTIONS ...") name nothing on their own.
-const FILLER = new Set(["mtg", "magic", "the", "gathering", "pokemon", "tcg", "ccg", "yugioh", "yu", "gi", "oh", "of", "and", "a", "an", "edition", "english", "en", "limit", "1", "per", "customer", "sealed", "product", "new", "universes", "beyond", "marvel", "marvels", "s", "sv", "swsh", "sm", "xy", "bw", "dp", "hgss"]);
+const FILLER = new Set(["mtg", "magic", "the", "gathering", "pokemon", "tcg", "ccg", "yugioh", "yu", "gi", "oh", "of", "and", "a", "an", "edition", "english", "en", "limit", "1", "per", "customer", "sealed", "product", "new", "universes", "beyond", "marvel", "marvels", "s", "sv", "swsh", "sm", "xy", "bw", "dp", "hgss", "exclusive"]);   // "(Exclusive)" tags TCGplayer's Pokemon Center rows; "center" already tells them apart
 const SYN = { display: "box", displays: "box", boxes: "box", packs: "pack", decks: "deck", bundles: "bundle", kit: "pack", kits: "pack", "pre": "prerelease", "release": "" };
 export function tok(sx) {
   // "SV8.5" is one set code, not "sv8" and a stray "5" (2026-09-15: that
@@ -210,13 +210,24 @@ export const isCaseRow = (row) => /\bcase\b/i.test(row && row.name || "");
 // Prismatic Evolutions Super-Premium Collection and its Case), so a
 // non-case row always wins the UPC slot.
 export function indexRows(rows) {
-  const byUpc = {}, byId = {};
+  const byUpc = {}, byId = {}, upcRows = {};
   for (const row of rows) {
     byId[row.id] = row;
     const u = normUpc(row.upc);
-    if (u && (!byUpc[u] || (isCaseRow(byUpc[u]) && !isCaseRow(row)))) byUpc[u] = row;
+    if (!u) continue;
+    (upcRows[u] = upcRows[u] || []).push(row);
+    if (!byUpc[u] || (isCaseRow(byUpc[u]) && !isCaseRow(row))) byUpc[u] = row;
   }
-  return { byUpc, byId };
+  return { byUpc, byId, upcRows };
+}
+// The row for a product's UPC: when TCGplayer puts several products on one
+// UPC (the Celebrations ETB and its Pokemon Center twin both carry
+// 0820650809439), the one whose name matches the title wins; else the
+// first non-case row.
+export function upcRow(ix, upc, title) {
+  const rows = ix.upcRows[upc] || [];
+  if (rows.length > 1) { const named = nameMatch(title, rows); if (named) return named; }
+  return ix.byUpc[upc] || null;
 }
 // A row's usable USD price: market first, then TCGplayer's mid, then low.
 export function rowPrice(row) {
@@ -597,12 +608,13 @@ async function phaseIndex(cx, run) {
   const rows = (data && data.rows) || [];
   run.tcgMeta = run.tcgMeta || {};
   run.tcgMeta[cat] = { rows: rows.length, builtAt: (data && data.builtAt) || null };
-  const { byUpc, byId } = indexRows(rows);
+  const tix = indexRows(rows);
+  const { byId } = tix;
   for (const p of run.products) {
     if (p.category !== cat) continue;
     let row = null;
     if (p.tcgId) { row = byId[p.tcgId] || null; p.match = row ? "metafield" : "ap_tcg_id " + p.tcgId + " is not a sealed product in TCGplayer category " + cat; }
-    else if (p.upc && byUpc[p.upc]) { row = byUpc[p.upc]; p.match = "upc"; }
+    else if (p.upc && upcRow(tix, p.upc, p.title)) { row = upcRow(tix, p.upc, p.title); p.match = "upc"; }
     // Fallbacks: a Case row for a non-case title, a UPC row with no price at
     // all, or no UPC row - try the set + kind name match.
     const titleIsCase = /\bcase\b/i.test(p.title || "");
