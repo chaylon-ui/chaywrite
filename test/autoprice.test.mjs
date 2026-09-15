@@ -9,12 +9,14 @@ test("normal-looking numbers: rounded UP onto the .95 grid", () => {
   assert.equal(niceUp(5.13), 5.95);
   assert.equal(niceUp(9.96), 10.95);
   assert.equal(niceUp(229.95), 229.95);   // already on the grid stays put
-  assert.equal(niceUp(1200), 1224.95);
+  assert.equal(niceUp(1200), 1249.95);
+  assert.equal(niceUp(2765.04), 2799.95);   // the owner's example
+  assert.equal(niceUp(6010), 6099.95);
   assert.equal(niceUp(223.76, "1"), 223.95);
   assert.equal(niceUp(223.76, "25"), 224.95);
   assert.equal(niceUp(223.76, "none"), 223.76);
   assert.equal(niceUp(0), null);
-  assert.deepEqual([autoStep(10), autoStep(50), autoStep(199), autoStep(200), autoStep(999), autoStep(1000)], [1, 5, 5, 10, 10, 25]);
+  assert.deepEqual([autoStep(10), autoStep(50), autoStep(199), autoStep(200), autoStep(999), autoStep(1000), autoStep(5000)], [1, 5, 5, 10, 10, 50, 100]);
 });
 
 test("UPC normalisation keeps the 12-digit core", () => {
@@ -37,7 +39,8 @@ test("product types map to TCGplayer categories", () => {
   assert.equal(categoryOf("Hockey Sealed Product"), null);
 });
 
-const cfg = { ...DEFAULT_CONFIG };
+// the guardrail cases below pin the cap on; the shipped default is markup 15, cap off
+const cfg = { ...DEFAULT_CONFIG, markupPct: 0, maxMovePct: 15 };
 const FX = 1.3909;
 
 test("market x FX x markup, then the grid: Chaos Rising booster box", () => {
@@ -129,4 +132,15 @@ test("game labels and the add-to-list search query", () => {
   assert.equal(searchQueryFor("0196214154186"), "status:active (barcode:196214154186 OR barcode:0196214154186 OR sku:196214154186 OR sku:0196214154186)");
   assert.equal(searchQueryFor("chaos rising booster"), "status:active product_type:*Sealed* chaos rising booster");
   assert.equal(searchQueryFor(' "elite" (trainer)'), "status:active product_type:*Sealed* elite trainer");
+});
+
+test("the shipped defaults: markup on top of market, no per-run cap", () => {
+  // MTG Final Fantasy Collector Booster Box: TCG $1728.65 US -> $2404.38 CAD, +15% = $2765.04 -> $2799.95
+  const d = decide({ price: 899.95, cost: 459.55, tcgMarket: 1728.65 }, { ...DEFAULT_CONFIG }, FX);
+  assert.equal(d.marketCad, 2404.38);
+  assert.equal(d.raw, 2765.04);
+  assert.equal(d.capped, null);
+  assert.equal(d.suggested, 2799.95);
+  assert.equal(d.action, "raise");
+  assert.equal(d.reason, "market");
 });

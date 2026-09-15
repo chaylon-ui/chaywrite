@@ -37,7 +37,7 @@
      target   = market x FX x (1 + markup%)
      floor    = max(ap_floor, cost x (1 + minimum margin%))
      nice     = round UP to the grid ending .95 (auto: $1 under $50, $5 to
-                $200, $10 to $1000, $25 above)
+                $200, $10 to $1000, $50 to $5000, $100 above)
      guard    = at most maxMove% away from today's price per run (a bad
                 source day cannot halve a price), never below floor
    Modes: SHADOW (default) writes only ap_suggest and the report; APPLY also
@@ -73,7 +73,10 @@ export const TCG_DATA = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/
 export const BOC = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1";
 export const PC = "https://www.pricecharting.com/api/product";
 
-export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 0, minMarginPct: 10, maxMovePct: 15 };
+// Owner 2026-09-15: the markup is ON TOP of the source price ($2,404.38 CAD
+// market + 15% = $2,765.04 -> $2,799.95); the per-run cap is a separate,
+// optional brake and is OFF unless set (it read as the markup on the page).
+export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0 };
 
 // Store product type -> TCGplayer category (tcgcsv.com/tcgplayer/categories, 2026-09-15).
 export const CATEGORIES = [
@@ -103,7 +106,7 @@ export const SEALED_RE = /booster|\bbox\b|\bpack\b|bundle|\btin\b|collection|dis
 export const round2 = (n) => Math.round(n * 100) / 100;
 
 // The grid the owner described: everything ends in .95, rounded UP.
-export function autoStep(x) { return x < 50 ? 1 : x < 200 ? 5 : x < 1000 ? 10 : 25; }
+export function autoStep(x) { return x < 50 ? 1 : x < 200 ? 5 : x < 1000 ? 10 : x < 5000 ? 50 : 100; }
 export function niceUp(x, mode) {
   if (!(x > 0)) return null;
   const m = String(mode == null ? "auto" : mode).trim().toLowerCase();
@@ -590,7 +593,7 @@ function renderPage(s, rep, k, view) {
   const row = (r) => `<tr class="a-${esc(r.action)}"><td><a href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener">${esc(r.title)}</a><div class="muted">${esc(r.type)} · stock ${r.stock}${r.tcgName ? " · TCG: " + esc(r.tcgName) : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div></td>
 <td>${money(r.current)}<div class="muted">cost ${money(r.cost)}</div></td>
 <td>${(r.sources || []).map((x) => esc(x.name === "tcgplayer" ? "TCG " : "PC ") + money(x.usd) + " US").join("<br>") || '<span class="muted">none</span>'}</td>
-<td>${r.marketCad != null ? money(r.marketCad) : ""}<div class="muted">${r.markupPct ? "+" + r.markupPct + "%" : ""}${r.floor ? " floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div></td>
+<td>${r.marketCad != null ? money(r.marketCad) : ""}<div class="muted">${r.markupPct ? "+" + r.markupPct + "% = " + money(r.raw) : ""}${r.floor ? " · floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div></td>
 <td><b>${money(r.suggested)}</b></td>
 <td><span class="pill">${esc(r.action)}${r.applied ? " ✓" : ""}</span><div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div></td>
 <td>${change(r.lastChange)}</td>
@@ -614,7 +617,7 @@ ${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th>
 <div class="ctl">
 ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}
 <form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product within the guardrails.')">${hidden("k", k)}${hidden("action", "mode")}${hidden("mode", s.mode === "apply" ? "shadow" : "apply")}<button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
-<form method="post" action="/autoprice/control">${hidden("k", k)}${hidden("action", "config")}<label>Default markup % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label>Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label>Max move per run % <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><button>Save</button></form>
+<form method="post" action="/autoprice/control">${hidden("k", k)}${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><button>Save</button></form>
 <a href="/autoprice?k=${ek}">refresh</a> · <a href="/autoprice/report.json?k=${ek}">json</a>
 </div>
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
