@@ -71,33 +71,39 @@ jobs:
               return { box: [r.x, r.y, r.width, r.height], tag: hit.tagName, cls: hit.className };
             }, process.env.SUB);
             console.log('SUB', process.env.SUB, JSON.stringify(subBox));
-            if (subBox && subBox.box) { await page.mouse.move(subBox.box[0] + subBox.box[2] / 2, subBox.box[1] + subBox.box[3] / 2); await sleep(1800); }
+            if (subBox && subBox.box) {
+              await page.mouse.move(subBox.box[0] + subBox.box[2] / 2, subBox.box[1] + subBox.box[3] / 2, { steps: 12 }); await sleep(600);
+              await page.evaluate((label) => {
+                const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                const a = [...document.querySelectorAll('.tmenu_item--root a')].find(e => norm(e.textContent) === norm(label));
+                const fire = (el, t) => el && el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+                if (a) { fire(a.closest('.tmenu_item--root'), 'mouseover'); fire(a.closest('.tmenu_item--root'), 'mouseenter'); fire(a.parentElement, 'mouseover'); fire(a.parentElement, 'mouseenter'); fire(a, 'mouseover'); fire(a, 'mouseenter'); }
+              }, process.env.SUB);
+              await sleep(1200);
+            }
+            const state = await page.evaluate(() => { const r = document.querySelector('.tmenu_item--root:hover'); const open = [...document.querySelectorAll('[class*="tmenu_submenu"]')].filter(e => { const b = e.getBoundingClientRect(); return b.width > 100 && b.height > 100; }); return { hoverRoot: r ? (r.textContent || '').trim().slice(0, 30) : null, openPanels: open.map(e => [e.className.trim().split(/\s+/).slice(0, 4).join('.'), Math.round(e.getBoundingClientRect().width), Math.round(e.getBoundingClientRect().height)]).slice(0, 8) }; });
+            console.log('STATE', JSON.stringify(state));
             const clip0 = subBox && subBox.box ? { x: Math.max(0, subBox.box[0] - 20), y: Math.max(0, subBox.box[1] - 460), width: 1100, height: 900 } : { x: 0, y: 100, width: 1100, height: 850 };
             const jpg = await page.screenshot({ type: 'jpeg', quality: 55, clip: { x: clip0.x, y: clip0.y, width: Math.min(clip0.width, 1440 - clip0.x), height: Math.min(clip0.height, 1000 - clip0.y) } });
             console.log('JPEG-B64 ' + jpg.toString('base64'));
+            // The panel's markup, shown or not: CSS targets its classes either way.
             const out = await page.evaluate((childLabel) => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-              const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0'; };
+              const own = (el) => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
               const cn = (el) => el.tagName + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/).slice(0, 6).join('.') : '');
-              // the visible element holding the child label, then walk up to the largest ancestor that is still a submenu panel (class contains tmenu_submenu) and not the whole root dropdown
-              const texts = [...document.querySelectorAll('a, span, h1, h2, h3, h4, h5, p')].filter(vis).filter(e => norm(e.textContent) === norm(childLabel));
-              if (!texts.length) return { found: false };
-              let el = texts[0], panel = null;
-              for (let a = el; a; a = a.parentElement) { if (/tmenu_submenu/.test(String(a.className || ''))) panel = a; if (/tmenu_item--root/.test(String(a.className || ''))) break; }
-              if (!panel) panel = el.closest('ul') || el.parentElement;
-              const r0 = panel.getBoundingClientRect();
-              const chain = []; for (let a = panel.parentElement; a && chain.length < 6; a = a.parentElement) chain.push(cn(a));
+              const els = [...document.querySelectorAll('.tmenu_item--root *')].filter(e => norm(own(e)) === norm(childLabel) || norm(e.textContent) === norm(childLabel) && e.children.length <= 1);
+              if (!els.length) return { found: false };
+              let panel = null;
+              for (let a = els[0]; a; a = a.parentElement) { if (/tmenu_submenu/.test(String(a.className || ''))) panel = a; if (/tmenu_item--root/.test(String(a.className || ''))) break; }
+              if (!panel) panel = els[0].closest('ul') || els[0].parentElement;
+              const chain = []; for (let a = panel.parentElement; a && chain.length < 7; a = a.parentElement) chain.push(cn(a));
               const html = panel.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/<iframe[\s\S]*?<\/iframe>/g, '<iframe/>').replace(/\s+/g, ' ');
-              const rows = [];
-              for (const e of [...panel.querySelectorAll('img, a, li, h1, h2, h3, h4, h5, span, div, ul')].filter(vis).slice(0, 220)) {
-                const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
-                rows.push({ el: cn(e).slice(0, 110), box: [Math.round(r.x - r0.x), Math.round(r.y - r0.y), Math.round(r.width), Math.round(r.height)], text: (e.tagName === 'IMG' ? (e.getAttribute('src') || '').split('/').pop().slice(0, 40) : (e.children.length ? '' : (e.textContent || '').trim().slice(0, 40))), fs: cs.fontSize, fw: cs.fontWeight, disp: cs.display, w: cs.width, mw: cs.maxWidth, pad: cs.padding, mar: cs.margin });
-              }
-              return { found: true, chain: chain.join(' < '), panelCls: cn(panel), rect: [Math.round(r0.x), Math.round(r0.y), Math.round(r0.width), Math.round(r0.height)], html: html.slice(0, 20000), htmlLen: html.length, rows };
+              const items = [...panel.querySelectorAll('li, img, a, span, div, h1, h2, h3, h4, h5, p')].slice(0, 200).map(e => { const cs = getComputedStyle(e); return { el: cn(e).slice(0, 120), text: e.tagName === 'IMG' ? (e.getAttribute('src') || '').split('/').pop().slice(0, 50) : (own(e).trim() || '').slice(0, 40), style: (e.getAttribute('style') || '').slice(0, 120), disp: cs.display, w: cs.width, fs: cs.fontSize, fw: cs.fontWeight }; });
+              return { found: true, hitEl: cn(els[0]), chain: chain.join(' < '), panelCls: cn(panel), html: html.slice(0, 30000), htmlLen: html.length, items };
             }, process.env.CHILD);
-            console.log('PANEL', out.found, out.panelCls, JSON.stringify(out.rect), 'chain:', out.chain, 'html length', out.htmlLen);
+            console.log('PANEL', out.found, out.hitEl, out.panelCls, 'chain:', out.chain, 'html length', out.htmlLen);
             console.log('HTML', out.html || '');
-            for (const r of out.rows || []) console.log('ROW', JSON.stringify(r));
+            for (const r of out.items || []) console.log('ROW', JSON.stringify(r));
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
           EOF
