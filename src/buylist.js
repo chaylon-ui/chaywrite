@@ -118,7 +118,21 @@ const NAME_TO_ID = {
   "magic: the gathering": "mtg", "magic the gathering": "mtg", "pokémon": "pokemon", "pokemon": "pokemon", "yu-gi-oh!": "yugioh", "yugioh": "yugioh",
   "one piece card game": "one", "disney lorcana": "lor", "lorcana": "lor", "star wars: unlimited": "swu", "flesh and blood": "fleshAndBlood",
   "sorcery: contested realm": "scr", "riftbound": "riftbound",
+  // cards.js's own game keys (the product-page "what we pay" panel)
+  "starwars": "swu", "onepiece": "one", "lorcana": "lor", "fab": "fleshAndBlood",
 };
+// The BinderPOS game id for a game name or one of cards.js's keys.
+export function bpGameId(game) { return gameIdOf({ game }, []); }
+// One page of the search BinderPOS's own buylist app makes (no key): the
+// cards of a game matching a keyword, each with variants[] (conditions) and
+// cardBuylistTypes[] (finishes) carrying buyPrice / creditBuyPrice /
+// maxPurchaseQuantity / storeSellPrice. The product-page panel reads the
+// same source as the sell-to-us page (owner, 2026-09-15).
+export async function bpCardSearch(game, keyword, offset) {
+  const qs = new URLSearchParams({ keyword: String(keyword || "").slice(0, 80), limit: String(PAGE), offset: String(Math.max(0, offset || 0)) });
+  const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {});
+  return Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
+}
 const KNOWN_IDS = ["mtg", "pokemon", "yugioh", "one", "ones", "lor", "swu", "fleshAndBlood", "scr", "riftbound"];
 // BinderPOS's supported games as {id, name}, memoised for MEMO_TTL; [] when
 // they cannot be fetched (the tables above still cover the known names).

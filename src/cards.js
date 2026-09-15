@@ -1,3 +1,5 @@
+import { bpGameId, bpCardSearch } from "./buylist.js";
+
 const HOST = "https://most-wanted-ca.myshopify.com";
 const feedUrl = (collection, page) =>
   `${HOST}/collections/${collection}/products.json?limit=250&page=${page}`;
@@ -954,6 +956,41 @@ const BUY_TTL_S = 600;
 const BUY_HOST = "https://portal.binderpos.com/external/shopify";
 const BUY_STORE = "most-wanted-ca.myshopify.com";
 
+/* The card on BinderPOS's buylist for a product title: same name WITH its
+   treatment ("Witch-king of Angmar (Borderless)"), same "[Set]" when the
+   title carries one; failing that the plain name in that set. Exported for
+   the unit test. */
+const normText = (s) => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, " ").trim();
+export function pickBuylistCard(hits, rawTitle) {
+  const title = String(rawTitle || "");
+  const wantFull = normText(title.split("[")[0]);
+  const wantBase = normText(baseName(title));
+  const wantSet = normText((title.match(/\[([^\]]+)\]/) || [, ""])[1]);
+  const list = Array.isArray(hits) ? hits : [];
+  const byName = (want) => list.filter((h) => normText(h.cardName) === want);
+  const full = byName(wantFull);
+  if (full.length) return (wantSet && full.find((h) => normText(h.setName) === wantSet)) || (full.length === 1 ? full[0] : (wantSet ? null : full[0]));
+  const base = byName(wantBase);
+  if (base.length) return (wantSet && base.find((h) => normText(h.setName) === wantSet)) || (base.length === 1 && !wantSet ? base[0] : null);
+  return null;
+}
+// The rows of a BinderPOS card, non-foil first then foil, NM to DMG.
+const COND_ORDER = ["near mint", "lightly played", "moderately played", "heavily played", "damaged"];
+export function buylistOffers(card) {
+  const out = [];
+  for (const v of (card && card.variants) || []) {
+    for (const t of v.cardBuylistTypes || []) {
+      const buy = Number(t.buyPrice), credit = Number(t.creditBuyPrice);
+      if (!(buy > 0) && !(credit > 0)) continue;
+      const finish = String(t.type || "Normal");
+      out.push({ set: card.setName || "", condition: String(v.variantName || ""), finish, foil: finish !== "Normal", cash: buy > 0 ? buy.toFixed(2) : null, credit: credit > 0 ? credit.toFixed(2) : null, max: Number(t.maxPurchaseQuantity) || 0, sell: Number(t.storeSellPrice) || null });
+    }
+  }
+  const rank = (c) => { const i = COND_ORDER.findIndex((k) => c.toLowerCase().startsWith(k)); return i < 0 ? COND_ORDER.length : i; };
+  out.sort((a, b) => (a.finish === "Normal" ? 0 : a.finish.toLowerCase() === "foil" ? 1 : 2) - (b.finish === "Normal" ? 0 : b.finish.toLowerCase() === "foil" ? 1 : 2) || rank(a.condition) - rank(b.condition) || a.finish.localeCompare(b.finish));
+  return out;
+}
+
 export async function serveBuyPrice(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
@@ -966,13 +1003,40 @@ export async function serveBuyPrice(request, env, ctx) {
     return Response.json(out, { headers: { ...cors, "cache-control": "no-store" } });
   }
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/buyprice.json?g=" + game + "&n=" + encodeURIComponent(name.toLowerCase()), request.url).toString());
+  const cacheKey = new Request(new URL("/buyprice.json?g=" + game + "&t=" + encodeURIComponent(rawName.toLowerCase()), request.url).toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
+  // 0) The store's ACTUAL buylist, read the way the sell-to-us page reads
+  //    it: BinderPOS's public card search, no key (owner 2026-09-15: the
+  //    panel's numbers "are not fully accurate to the binderpos buylist, nor
+  //    the estimator or buylist system we built on the sell to us page").
+  //    Exact printing + set, every condition x finish, their buy prices.
+  try {
+    const bpGame = bpGameId(game);
+    let card = null;
+    const wantFull = rawName.split("[")[0].trim();
+    // Their keyword search ranks art cards and promos first; the treatment
+    // in the keyword narrows it, and three plain pages cover the rest.
+    const tries = wantFull.toLowerCase() !== name.toLowerCase() ? [[wantFull, 0], [name, 0], [name, 20], [name, 40]] : [[name, 0], [name, 20], [name, 40]];
+    for (const [kw, off] of tries) {
+      const hits = await bpCardSearch(bpGame, kw, off);
+      card = pickBuylistCard(hits, rawName);
+      if (card) break;
+      if (hits.length < 20 && kw === name) break;   // no further page for the plain name
+    }
+    if (card) {
+      out.offers = buylistOffers(card).slice(0, 24);
+      out.available = true;
+      out.source = "binderpos-buylist";
+      out.card = { id: card.id, name: card.cardName, set: card.setName || "" };
+      if (!out.offers.length) out.notBuying = true;   // on their buylist, every price 0: not buying right now
+    }
+  } catch { /* fall through */ }
+
   // 1) BinderPOS keyed buylist — real till prices, when the key exists.
   const key = env && env.BINDERPOS_API_KEY;
-  if (key) {
+  if (!out.available && key) {
     try {
       const qs = new URLSearchParams({ storeUrl: BUY_STORE, keyword: name, game, buyingEnabled: "true", limit: "40", offset: "0" });
       const r = await fetch(`${BUY_HOST}/buylist/cards/forStore?${qs}`, {

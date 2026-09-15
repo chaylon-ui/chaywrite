@@ -238,7 +238,10 @@
     }
     var isEst = d.mode === 'estimate';
     var rows = d.offers.map(function (o) {
-      var what = [o.set, !o.set && o.foil ? '' : null, o.condition].filter(Boolean).join(' · ') || o.condition || d.name;
+      // Real buylist rows: condition, then the finish when it is not the
+      // plain printing, then "at limit" when the store has all it wants.
+      var finish = o.finish ? (o.finish !== 'Normal' ? o.finish : '') : (o.foil && !/foil/i.test(o.condition || '') ? 'Foil' : '');
+      var what = [o.condition || o.set || d.name, finish, o.max === 0 && d.mode === 'real' ? 'at limit' : ''].filter(Boolean).join(' · ');
       return '<div class="xg-buy__row">' +
         '<span class="xg-buy__what">' + esc(what) + '</span>' +
         '<span class="xg-buy__nums">' +
