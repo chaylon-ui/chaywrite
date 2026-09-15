@@ -457,7 +457,12 @@ export async function serveAutoprice(request, env, url, staffOk) {
     if (/json/i.test(ct)) { body = await bodyOf(request); k = String(body.k || k); }
     else { form = true; let fd; try { fd = await request.formData(); } catch { fd = null; } body = {}; if (fd) for (const [a, b] of fd.entries()) body[a] = String(b); k = String(body.k || k); }
   }
-  if (!(await staffOk(env, url.origin, k))) return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
+  if (!(await staffOk(env, url.origin, k))) {
+    // The plain link shows a PIN screen (the showcase admin PIN, as on /staff
+    // and /pickups); the JSON and control paths stay a bare 403.
+    if (url.pathname === "/autoprice" && request.method === "GET") return new Response(renderPin(!!k), { status: k ? 403 : 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
+  }
   if (url.pathname === "/autoprice/control" && request.method === "POST") {
     const r = await stub.fetch(new Request(url.origin + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
     const text = await r.text();
@@ -468,6 +473,13 @@ export async function serveAutoprice(request, env, url, staffOk) {
   const status = await st.json(), report = await rep.json();
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
   return new Response(renderPage(status, report, k), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
+function renderPin(wrong) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font:15px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}form{background:#fff;border:1px solid #dde3e7;border-radius:14px;padding:26px 28px;width:min(360px,90vw);box-shadow:0 10px 30px rgba(0,0,0,.06)}h1{font-size:20px;margin:0 0 6px}p{margin:0 0 14px;color:#6b7780;font-size:13.5px}input{width:100%;box-sizing:border-box;font-size:22px;letter-spacing:.2em;padding:10px 12px;border:1.5px solid ${wrong ? "#d62c28" : "#c9d1d6"};border-radius:10px;text-align:center}button{margin-top:12px;width:100%;padding:11px;font-size:15px;font-weight:700;color:#fff;background:#d62c28;border:0;border-radius:10px;cursor:pointer}.err{color:#d62c28;font-weight:600}</style></head><body>
+<form method="get" action="/autoprice"><h1>Sealed auto-pricing</h1><p>${wrong ? '<span class="err">That PIN did not open it.</span> ' : ""}Enter the showcase admin PIN (the same one as the staff and pickup screens).</p>
+<input name="k" type="password" inputmode="numeric" autocomplete="off" autofocus placeholder="PIN"><button>Open</button></form></body></html>`;
 }
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
