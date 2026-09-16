@@ -4,17 +4,15 @@ name: Extract JPEG from a job log
 # host, so the base64 screenshot a "shot" job prints can only be moved out of
 # a log by a runner. This decodes it and commits the bytes under theme-stage/
 # (a path deploy.yml ignores), where raw.githubusercontent.com can serve them.
+#
+# Driven by .github/xg-extract-request.txt: line 1 = job id, line 2 = out name.
 
 on:
-  workflow_dispatch:
-    inputs:
-      job_id:
-        description: Job id whose log carries the JPEG-B64 line
-        required: true
-      out:
-        description: File name to write under theme-stage/
-        required: true
-        default: buylist-grid.jpg
+  push:
+    branches:
+      - claude/shopify-site-improvements-ztgdt8
+    paths:
+      - ".github/xg-extract-request.txt"
 
 permissions:
   contents: write
@@ -29,10 +27,11 @@ jobs:
       - name: Pull the job log and decode the JPEG
         env:
           GH_TOKEN: ${{ github.token }}
-          JOB_ID: ${{ inputs.job_id }}
-          OUT: ${{ inputs.out }}
         run: |
           set -e
+          JOB_ID=$(sed -n '1p' .github/xg-extract-request.txt | tr -d ' \r')
+          OUT=$(sed -n '2p' .github/xg-extract-request.txt | tr -d ' \r')
+          echo "job $JOB_ID -> theme-stage/$OUT"
           curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" -o job.log
           wc -c job.log
@@ -50,5 +49,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add theme-stage/
-          git commit -m "theme-stage: decoded screenshot from job ${{ inputs.job_id }}"
+          git commit -m "theme-stage: decoded screenshot from the requested job"
           git push
