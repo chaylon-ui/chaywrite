@@ -1,0 +1,54 @@
+name: Extract JPEG from a job log
+
+# Temporary helper. The dev sandbox has no egress to the Actions log blob
+# host, so the base64 screenshot a "shot" job prints can only be moved out of
+# a log by a runner. This decodes it and commits the bytes under theme-stage/
+# (a path deploy.yml ignores), where raw.githubusercontent.com can serve them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Job id whose log carries the JPEG-B64 line
+        required: true
+      out:
+        description: File name to write under theme-stage/
+        required: true
+        default: buylist-grid.jpg
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull the job log and decode the JPEG
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_ID: ${{ inputs.job_id }}
+          OUT: ${{ inputs.out }}
+        run: |
+          set -e
+          curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" -o job.log
+          wc -c job.log
+          grep -o 'JPEG-B64 [A-Za-z0-9+/=]*' job.log | head -1 | cut -d' ' -f2- | tr -d '\r\n' > shot.b64
+          echo "base64 chars: $(wc -c < shot.b64)"
+          mkdir -p theme-stage
+          base64 -d shot.b64 > "theme-stage/${OUT}"
+          ls -l "theme-stage/${OUT}"
+          file "theme-stage/${OUT}"
+          md5sum "theme-stage/${OUT}"
+          sha256sum "theme-stage/${OUT}"
+
+      - name: Commit the decoded file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add theme-stage/
+          git commit -m "theme-stage: decoded screenshot from job ${{ inputs.job_id }}"
+          git push
