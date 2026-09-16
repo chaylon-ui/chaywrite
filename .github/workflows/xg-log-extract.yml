@@ -34,9 +34,11 @@ jobs:
           echo "job $JOB_ID -> theme-stage/$OUT"
           curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" -o job.log
-          wc -c job.log
-          grep -o 'JPEG-B64 [A-Za-z0-9+/=]*' job.log | head -1 | cut -d' ' -f2- | tr -d '\r\n' > shot.b64
+          echo "log bytes: $(wc -c < job.log)"
+          # -a: Actions logs carry ANSI escapes, so grep otherwise calls it binary
+          grep -ao 'JPEG-B64 [A-Za-z0-9+/=]*' job.log | head -1 | cut -d' ' -f2- | tr -d ' \r\n' > shot.b64
           echo "base64 chars: $(wc -c < shot.b64)"
+          test -s shot.b64
           mkdir -p theme-stage
           base64 -d shot.b64 > "theme-stage/${OUT}"
           ls -l "theme-stage/${OUT}"
@@ -49,5 +51,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add theme-stage/
-          git commit -m "theme-stage: decoded screenshot from the requested job"
+          git commit -m "theme-stage: decoded screenshot from the requested job" || echo "nothing to commit"
           git push
