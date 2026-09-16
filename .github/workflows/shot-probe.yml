@@ -1,9 +1,9 @@
 name: shot-probe
-# Read-only: open a page at a given viewport, wait for it to settle, and
-# print (a) a reduced JPEG of one element as base64 - the sandbox cannot
-# download artifacts - and (b) the computed style of every selector given,
-# plus the stylesheet rules that match it, so a CSS change can be checked
-# without guessing which rule wins.
+# Read-only against the site: open a page at a given viewport, wait for it
+# to settle, and report (a) the computed style of every selector given plus
+# the stylesheet rules that match, and (b) a JPEG of one element - committed
+# to probe-shots/ (the sandbox can git pull that; it cannot download Action
+# artifacts) and also printed as base64 when save is false.
 on:
   workflow_dispatch:
     inputs:
@@ -31,8 +31,13 @@ on:
         description: Set html[data-xg-theme=dark] before the shot
         required: false
         default: "false"
+      save:
+        description: Commit the JPEG to probe-shots/ instead of printing base64
+        required: false
+        default: "true"
 
-permissions: {}
+permissions:
+  contents: write
 
 jobs:
   shot:
@@ -45,13 +50,18 @@ jobs:
       STYLES: ${{ inputs.styles }}
       RULES: ${{ inputs.rules }}
       DARK: ${{ inputs.dark }}
+      SAVE: ${{ inputs.save }}
+      SHOT: probe-shots/shot-${{ github.run_id }}.jpg
     steps:
+      - uses: actions/checkout@v4
       - name: Install puppeteer-core
         run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
       - name: Shoot
         run: |
+          mkdir -p probe-shots
           cat > shot.js <<'EOF'
           const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
           const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           (async () => {
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
@@ -114,8 +124,19 @@ jobs:
             await el.scrollIntoView().catch(() => {});
             await sleep(500);
             const jpg = await el.screenshot({ type: 'jpeg', quality: 60 });
-            console.log('JPEG-B64 ' + jpg.toString('base64'));
+            if (process.env.SAVE === 'true') { fs.writeFileSync(process.env.SHOT, jpg); console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes'); }
+            else { console.log('JPEG-B64 ' + jpg.toString('base64')); }
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
           EOF
           node shot.js
+      - name: Commit the shot
+        if: ${{ inputs.save == 'true' }}
+        run: |
+          if [ ! -f "$SHOT" ]; then echo "no shot to commit"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SHOT"
+          git commit -m "probe shot ${{ github.run_id }}: ${{ inputs.selector }} at ${{ inputs.width }}px"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
+          echo "committed $SHOT"
