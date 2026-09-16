@@ -687,3 +687,54 @@ test("APPLY is turned into STAGED once, and a later choice of apply sticks", asy
   store.set("ap:config", { mode: "shadow" });
   assert.equal((await configOf(cx)).mode, "shadow");
 });
+
+/* A graded price is only as good as the sales behind it (owner 2026-09-16:
+   "it seems to be selling for a lot more in a 9"). graded-probe 35109956695
+   on PriceCharting id 7473194, Charizard VMAX [Prize Pack] #20: loose 1287.50,
+   new (grade 8) 1063.50, graded (grade 9) 1170.00, box-only (grade 9.5)
+   1287.00, sales-volume 9 - a flat 10% a grade, and the grade 9 sits UNDER the
+   ungraded price. The plain printing, id 836562, has 1444 sales. */
+import { thinPc } from "../src/autoprice.js";
+const graded9 = { graded: { grader: "PSA", grade: 9 }, pcGrade: { label: "grade 9" } };
+
+test("a graded price built on almost no sales, or under the ungraded price, is flagged", () => {
+  // the real Prize Pack numbers: both tells fire, the ungraded one first
+  const prize = thinPc({ ...graded9, pcNew: 1170, pcLoose: 1287.5, pcVolume: 9 }, 25);
+  assert.match(prize, /at or under its ungraded \$1287\.50/);
+  assert.match(prize, /Check it by hand/);
+
+  // thin sales alone
+  const thin = thinPc({ ...graded9, pcNew: 1170, pcLoose: 900, pcVolume: 9 }, 25);
+  assert.equal(thin, "PriceCharting has only 9 recorded sales for this card, so its grade 9 price is an estimate. Check it by hand.");
+  assert.match(thinPc({ ...graded9, pcNew: 1170, pcLoose: 900, pcVolume: 1 }, 25), /only 1 recorded sale for/);
+  assert.match(thinPc({ ...graded9, pcNew: 1170, pcLoose: 900, pcVolume: 0 }, 25), /no sales volume/);
+
+  // a properly traded card passes
+  assert.equal(thinPc({ ...graded9, pcNew: 57.11, pcLoose: 42.44, pcVolume: 1444 }, 25), null);
+  // threshold off, and non-graded products are none of its business
+  assert.equal(thinPc({ ...graded9, pcNew: 1170, pcLoose: 900, pcVolume: 9 }, 0), null);
+  assert.equal(thinPc({ pcNew: 1170, pcVolume: 1 }, 25), null);
+  assert.equal(thinPc({ ...graded9, pcVolume: 1 }, 25), null);   // no price, nothing to doubt
+});
+
+test("the thin-data warning rides the row, the tab and its own banner", async () => {
+  const { renderPage } = await import("../src/autoprice.js");
+  const cfg = { ...DEFAULT_CONFIG, mode: "stage" };
+  const d = decide({ price: 3299.95, graded: { grader: "PSA", grade: 9 }, pcGrade: { label: "grade 9" }, pcNew: 1170, pcLoose: 1287.5, pcVolume: 9 }, cfg, FX);
+  assert.equal(d.thin, true);
+  assert.match(d.alert, /estimated, not sold prices/);
+  const rows = [{ id: "gid://shopify/Product/1", title: "Charizard VMAX Graded PSA 9", handle: "cz", type: "Pokemon Graded", game: "Pokemon Graded",
+    stock: 1, graded: { grader: "PSA", grade: 9 }, variantId: "gid://shopify/ProductVariant/1", settings: {}, ...d }];
+  const page = renderPage({ mode: "stage", config: cfg }, { rows, stage: true }, { configured: true });
+  assert.match(page, /1 graded card priced from a PriceCharting estimate/);
+  assert.match(page, /9 recorded sales · ungraded \$1287\.50 US/);
+  assert.match(page, /LH_Sold=1/);
+  assert.match(page, /<span class="al">⚠ 1<\/span>/);              // the game tab carries the warning
+  // a well-traded graded card gets no banner and no warning
+  const ok = decide({ price: 80, graded: { grader: "PSA", grade: 9 }, pcGrade: { label: "grade 9" }, pcNew: 57.11, pcLoose: 42.44, pcVolume: 1444 }, cfg, FX);
+  assert.equal(ok.thin, false);
+  assert.equal(ok.alert, null);
+  const clean = renderPage({ mode: "stage", config: cfg }, { rows: [{ ...rows[0], ...ok }], stage: true }, { configured: true });
+  assert.doesNotMatch(clean, /PriceCharting estimate/);
+  assert.match(clean, /1444 recorded sales/);
+});

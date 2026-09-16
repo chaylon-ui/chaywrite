@@ -79,7 +79,7 @@ export const PC = "https://www.pricecharting.com/api/product";
 // Owner 2026-09-15: the markup is ON TOP of the source price ($2,404.38 CAD
 // market + 15% = $2,765.04 -> $2,799.95); the per-run cap is a separate,
 // optional brake and is OFF unless set (it read as the markup on the page).
-export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0, compMode: "cap", compPct: 0, alertPct: 10 };
+export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0, compMode: "cap", compPct: 0, alertPct: 10, minSales: 25 };
 /* Three modes (owner 2026-09-16, after a graded Charizard VMAX went live at a
    price PriceCharting had matched to the wrong printing: "from now on prices
    don't go live until confirmed ... it should pull price and then let me edit
@@ -234,7 +234,8 @@ export function pcCandidates(g, products, chosen, limit) {
   const rows = (products || []).slice(0, 40).map((p) => {
     const cents = f ? Number(p[f.key]) : NaN;
     return { id: Number(p.id) || null, name: String(p["product-name"] || ""), console: String(p["console-name"] || ""),
-      price: cents > 0 ? cents / 100 : null, gradeLabel: f ? f.label : null, chosen: chosenId != null && String(p.id) === chosenId };
+      price: cents > 0 ? cents / 100 : null, gradeLabel: f ? f.label : null, volume: Number(p["sales-volume"]) || 0,
+      chosen: chosenId != null && String(p.id) === chosenId };
   }).filter((r) => r.id);
   // A card with no price for this grade is still worth showing (it explains
   // why it was not picked), but the priced ones come first.
@@ -247,6 +248,30 @@ export const SEALED_RE = /booster|\bbox\b|\bpack\b|bundle|\btin\b|collection|dis
 
 export const round2 = (n) => Math.round(n * 100) / 100;
 const money2 = (n) => "$" + Number(n).toFixed(2);
+
+/* Is a PriceCharting grade column worth pricing from? (Owner 2026-09-16, of a
+   Charizard VMAX [Prize Pack] PSA 9 priced at their $1,170: "it seems to be
+   selling for a lot more in a 9".) Their grade ladder for that card is nine
+   recorded sales wide and steps a flat 10% a grade - ungraded 1287.50, g8
+   1063.50, g9 1170.00, g9.5 1287.00 - which is a model, not a market. Two
+   tells, both from the same response:
+     - a thin sales-volume (the plain printing of the same card has 1444)
+     - a grade price at or BELOW the ungraded price, which no real market does
+   Either one means the number needs a human before it reaches the shop. */
+export function thinPc(p, minSales) {
+  if (!p || !p.graded || !(p.pcNew > 0)) return null;
+  const label = (p.pcGrade && p.pcGrade.label) || "that grade";
+  const vol = Number(p.pcVolume) || 0;
+  const floorSales = Number.isFinite(Number(minSales)) ? Number(minSales) : 25;
+  if (p.pcLoose > 0 && p.pcNew <= p.pcLoose) {
+    return "PriceCharting puts " + label + " at " + money2(p.pcNew) + " US, at or under its ungraded " + money2(p.pcLoose) + " - their grades for this card are estimated, not sold prices. Check it by hand.";
+  }
+  if (floorSales > 0 && vol > 0 && vol < floorSales) {
+    return "PriceCharting has only " + vol + " recorded sale" + (vol === 1 ? "" : "s") + " for this card, so its " + label + " price is an estimate. Check it by hand.";
+  }
+  if (floorSales > 0 && !vol) return "PriceCharting reports no sales volume for this card, so its " + label + " price is an estimate. Check it by hand.";
+  return null;
+}
 
 // Our margin at a selling price: profit in dollars and as a share of the
 // price (the retail convention), from the variant's unit cost. Null when
@@ -407,8 +432,11 @@ export function decide(p, cfg, fx) {
   // and default back to tcgplayer pricing").
   const follow = mode === "follow";
   const followOk = follow && !!comp && comp.available;
-  const alert = follow && !followOk ? (comp ? COMP.name + " is out of stock: priced from TCGplayer instead" : COMP.name + " does not list it: priced from TCGplayer instead") : null;
-  const out = { current, cost, fx, markupPct: markup, sources: srcs, round: p.round || "auto", marginNow: margin(current, cost), comp, alert, priceFrom: followOk ? COMP.key : "market" };
+  const thin = thinPc(p, cfg.minSales);
+  const followAlert = follow && !followOk ? (comp ? COMP.name + " is out of stock: priced from TCGplayer instead" : COMP.name + " does not list it: priced from TCGplayer instead") : null;
+  const alert = thin || followAlert;
+  const out = { current, cost, fx, markupPct: markup, sources: srcs, round: p.round || "auto", marginNow: margin(current, cost), comp, alert, thin: !!thin,
+    pcVolume: p.pcVolume ?? null, pcLoose: p.pcLoose ?? null, priceFrom: followOk ? COMP.key : "market" };
   let floor = p.floor > 0 ? p.floor : 0;
   const costFloor = cost ? round2(cost * (1 + cfg.minMarginPct / 100)) : 0;
   const floorSrc = floor > 0 && floor >= costFloor ? "ap_floor" : costFloor > 0 ? "cost+margin" : floor > 0 ? "ap_floor" : "none";
@@ -420,7 +448,7 @@ export function decide(p, cfg, fx) {
     target = Math.max(raw, floor);
     if (fx && srcs.length) { marketUsd = srcs.reduce((a, s) => a + s.usd, 0) / srcs.length; marketCad = marketUsd * fx; }   // shown, not used
   } else {
-    const skip = (reason) => ({ ...out, action: "skip", reason: alert ? alert.replace(/: priced from TCGplayer instead$/, "") + ", and " + reason : reason });
+    const skip = (reason) => ({ ...out, action: "skip", reason: followAlert ? followAlert.replace(/: priced from TCGplayer instead$/, "") + ", and " + reason : reason });
     if (!fx) return skip("no FX rate");
     if (!srcs.length) return skip(p.graded ? (p.pcMiss || "no PriceCharting price: set exor.ap_pc_id on the product") : p.tcgId || p.pcId ? "no price from the sources today" : "no match: set exor.ap_tcg_id (or ap_pc_id) on the product");
     marketUsd = srcs.reduce((a, s) => a + s.usd, 0) / srcs.length;
@@ -891,6 +919,11 @@ async function phasePrices(cx, run, deadline) {
               const cents = Number(j[f.key]);
               if (cents > 0) p.pcNew = cents / 100; else p.pcMiss = "PriceCharting has no " + f.label + " price for " + p.pcName;
               p.pcName += " · " + f.label;
+              // How much of a market is behind that number, and the ungraded
+              // price beside it. Both decide whether the grade column can be
+              // trusted (see thinPc).
+              p.pcVolume = Number(j["sales-volume"]) || 0;
+              p.pcLoose = Number(j["loose-price"]) > 0 ? Number(j["loose-price"]) / 100 : null;
             }
           } else {
             const cents = Number(j["new-price"]);
@@ -1230,7 +1263,7 @@ async function control(cx, b) {
   }
   if (action === "config") {
     const next = { ...cfg };
-    for (const k of ["markupPct", "minMarginPct", "maxMovePct", "compPct", "alertPct"]) if (b[k] != null && b[k] !== "" && Number.isFinite(Number(b[k]))) next[k] = Math.max(0, Number(b[k]));
+    for (const k of ["markupPct", "minMarginPct", "maxMovePct", "compPct", "alertPct", "minSales"]) if (b[k] != null && b[k] !== "" && Number.isFinite(Number(b[k]))) next[k] = Math.max(0, Number(b[k]));
     if (b.compMode === "cap" || b.compMode === "off" || b.compMode === "skip" || b.compMode === "follow") next.compMode = b.compMode;
     await cx.storage.put("ap:config", next);
     return { ok: true, config: next };
@@ -1446,7 +1479,11 @@ export function renderPage(s, rep, view) {
   const rows = all.filter((r) => !v.game || r.game === v.game).sort((a, b) => a.game.localeCompare(b.game) || (a.action === "skip") - (b.action === "skip") || String(a.title).localeCompare(String(b.title)));
   const counts = {};
   for (const r of rows) counts[r.action] = (counts[r.action] || 0) + 1;
-  const alerted = rows.filter((r) => r.alert);
+  // Two different warnings: a 401 follow that fell back, and a graded price
+  // PriceCharting cannot really support. They read nothing alike, so they get
+  // their own banners.
+  const alerted = rows.filter((r) => r.alert && !r.thin);
+  const thin = rows.filter((r) => r.thin);
   const waiting = rows.filter((r) => r.awaiting);
   // One tab per game (owner, 2026-09-15): the count, then in brackets how
   // many rows could not be priced or written, and a warning when a row
@@ -1522,7 +1559,7 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const pcPicker = (r) => {
     const c = r.pcCandidates || [];
     if (!c.length) return "";
-    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.chosen ? '<span class="pill">using</span>' : `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${v.game ? hidden("game", v.game) : ""}<button class="sm">use this</button></form>`}</li>`;
+    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="muted">' + esc(x.volume) + ' sales</span>' : ''}${x.chosen ? '<span class="pill">using</span>' : `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${v.game ? hidden("game", v.game) : ""}<button class="sm">use this</button></form>`}</li>`;
     return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"}><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""}</summary><ul>${c.map(line).join("")}</ul></details>`;
   };
   // The staged change itself: the suggested price in a box the owner can
@@ -1536,11 +1573,17 @@ ${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep "
   };
   const floorLine = (r) => `<div class="muted">${r.floor ? "floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div>`;
   const srcLines = (r) => (r.sources || []).map(srcLine).map(esc).join("<br>");
+  // What is behind a graded number: how many sales PriceCharting has seen and
+  // what it says the card is worth ungraded. A grade at or under the ungraded
+  // price, or a handful of sales, is an estimate rather than a market.
+  const pcDepth = (r) => r.graded && (r.pcVolume != null || r.pcLoose != null)
+    ? `<div class="muted${r.thin ? " neg" : ""}">${r.pcVolume != null ? esc(r.pcVolume) + " recorded sale" + (r.pcVolume === 1 ? "" : "s") : "sales unknown"}${r.pcLoose ? " · ungraded " + money(r.pcLoose) + " US" : ""}</div>`
+    : "";
   // Following 401 Games: their price leads the cell and TCGplayer is shown
   // as not used; otherwise the market path as before.
   const mktCell = (r) => r.priceFrom === COMP.key && r.comp
     ? `<b>${esc(COMP.name)} ${money(r.comp.price)}</b>${r.compPct ? " +" + r.compPct + "% = " + money(r.raw) : ""}<div class="muted">followed · TCGplayer not used${(r.sources || []).length ? ": " + srcLines(r).replace(/<br>/g, ", ") + (r.marketCad != null ? " = " + money(r.marketCad) + " CAD" : "") : " (no match)"}</div>${floorLine(r)}`
-    : (r.sources || []).length ? srcLines(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${floorLine(r)}` : '<span class="muted">no source</span>';
+    : (r.sources || []).length ? srcLines(r) + pcDepth(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${floorLine(r)}` : '<span class="muted">no source</span>';
   const row = (r) => `<tr class="a-${esc(r.action)}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}">
 <td class="prod"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> <a class="muted" href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener" title="storefront page">site ↗</a>
 <div class="muted">stock ${r.stock}${r.variantChosen && r.variantTitle ? " · variant: " + esc(r.variantTitle) : r.variants > 1 ? " · " + r.variants + " variants" : ""}${r.tcgName ? " · matched: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div>${r.action === "pending" ? "" : reviewLinks(r) + pcPicker(r) + settingsBlock(r)}</td>
@@ -1571,13 +1614,14 @@ ${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th>
 <div class="ctl">
 ${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : s.mode === "stage" ? "queues changes for you" : "shadow") + ")")}
 <form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product itself, with nothing waiting for you.')">${hidden("action", "mode")}<label title="Staged is the safe middle: the run works out every price and parks it here until you publish it.">Mode <select name="mode"><option value="stage"${s.mode === "stage" ? " selected" : ""}>staged — I publish each change</option><option value="shadow"${s.mode === "shadow" ? " selected" : ""}>shadow — report only</option><option value="apply"${s.mode === "apply" ? " selected" : ""}>apply — write prices automatically</option></select></label><button>Save mode</button></form>
-<details class="setbox"><summary>Settings</summary><div class="setwrap"><form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="Follow: 401 Games' in-stock price (plus this percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged at the top of the report. Hold: the TCGplayer price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><label title="Price moves of at least this percent are flagged first in the ntfy digest and lift it to high priority. 0 = never flag.">Flag moves of <input type="number" step="1" name="alertPct" value="${esc(cfg.alertPct == null ? 10 : cfg.alertPct)}"> % or more</label><button>Save</button></form>
+<details class="setbox"><summary>Settings</summary><div class="setwrap"><form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="Follow: 401 Games' in-stock price (plus this percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged at the top of the report. Hold: the TCGplayer price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><label title="Price moves of at least this percent are flagged first in the ntfy digest and lift it to high priority. 0 = never flag.">Flag moves of <input type="number" step="1" name="alertPct" value="${esc(cfg.alertPct == null ? 10 : cfg.alertPct)}"> % or more</label><label title="A graded card whose PriceCharting entry has fewer recorded sales than this is flagged: their grade ladder for a thinly traded card is estimated from the ungraded price, not from sold graded copies. 0 = never flag.">Flag graded cards under <input type="number" step="1" name="minSales" value="${esc(cfg.minSales == null ? 25 : cfg.minSales)}"> recorded sales</label><button>Save</button></form>
 ${s.ntfy ? ctlForm("ntfy-test", "", "Send test push") : ""}</div></details>
 <a href="/autoprice">refresh</a> · <a href="/autoprice/report.json">json</a> · <a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>
 </div>
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
 <h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
 ${waiting.length ? `<div class="stagebox"><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting for you</b> — none of them is live. Each row below has its suggested price in a box: correct it if the sources got it wrong, then Publish.<div class="stageact">${ctlForm("publish-all", "", "Publish all " + waiting.length + " at the suggested price", "go")}<span class="muted">${v.game ? esc(v.game) + " tab" : "every game"} · up to 25 a press</span></div></div>` : ""}
+${thin.length ? `<div class="alert"><b>⚠ ${thin.length} graded card${thin.length === 1 ? "" : "s"} priced from a PriceCharting estimate</b> — for a thinly traded card they model the grades off the ungraded price instead of sold graded copies, so treat these as a starting point and check the sold listings:<ul>${thin.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.suggested != null ? " · suggested " + money(r.suggested) : ""} · <a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a></li>`).join("")}</ul></div>` : ""}
 ${alerted.length ? `<div class="alert"><b>⚠ ${alerted.length} product${alerted.length === 1 ? "" : "s"} set to follow ${esc(COMP.name)} ${alerted.length === 1 ? "is" : "are"} priced from TCGplayer instead</b> (out of stock or not listed there):<ul>${alerted.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.action === "skip" ? " · <b>skipped: " + esc(r.reason) + "</b>" : r.suggested != null ? " · now " + money(r.current) + " → " + money(r.suggested) : ""}</li>`).join("")}</ul></div>` : ""}
 <div class="tabs">${tab(null, "All", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</div>
 <table class="rep"><thead><tr><th>Product</th><th>Today</th><th>Market</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
