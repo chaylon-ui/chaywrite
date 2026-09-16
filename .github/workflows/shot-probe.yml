@@ -1,0 +1,87 @@
+name: shot-probe
+# Read-only: open a page at a given viewport, wait for it to settle, and
+# print (a) a reduced JPEG of one element as base64 - the sandbox cannot
+# download artifacts - and (b) the computed style of every selector given,
+# so a CSS change can be checked without guessing.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Page to open
+        required: true
+        default: "https://exorgames.com/pages/sell-to-exor-games-bulk-or-create-a-list"
+      selector:
+        description: Element to photograph
+        required: true
+        default: "#video-games"
+      width:
+        description: Viewport width
+        required: false
+        default: "390"
+      styles:
+        description: Comma-separated selectors to report computed style for
+        required: false
+        default: ""
+      dark:
+        description: Set html[data-xg-theme=dark] before the shot
+        required: false
+        default: "false"
+
+permissions: {}
+
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      URL: ${{ inputs.url }}
+      SEL: ${{ inputs.selector }}
+      W: ${{ inputs.width }}
+      STYLES: ${{ inputs.styles }}
+      DARK: ${{ inputs.dark }}
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
+      - name: Shoot
+        run: |
+          cat > shot.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            const w = parseInt(process.env.W || '390', 10) || 390;
+            await page.setViewport({ width: w, height: 900, deviceScaleFactor: 2, isMobile: w < 700, hasTouch: w < 700 });
+            await page.setUserAgent(w < 700
+              ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+              : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            const target = new URL(process.env.URL);
+            const pt = target.searchParams.get('preview_theme_id');
+            if (pt) { await page.goto(target.origin + '/?preview_theme_id=' + pt, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null); }
+            const r = await page.goto(process.env.URL, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => null);
+            console.log('status', r ? r.status() : 'none', '| title', await page.title(), '| theme', await page.evaluate(() => JSON.stringify(window.Shopify && window.Shopify.theme)).catch(() => '?'));
+            if (process.env.DARK === 'true') { await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'dark')); }
+            await sleep(4000);
+            const rows = await page.evaluate((list) => {
+              const out = [];
+              for (const sel of list) {
+                const el = document.querySelector(sel);
+                if (!el) { out.push([sel, 'NOT FOUND']); continue; }
+                const cs = getComputedStyle(el), b = el.getBoundingClientRect();
+                out.push([sel, { color: cs.color, background: cs.backgroundImage !== 'none' ? cs.backgroundImage.slice(0, 120) : cs.backgroundColor, display: cs.display, padding: cs.padding, fontWeight: cs.fontWeight, w: Math.round(b.width), h: Math.round(b.height), lines: el.getClientRects().length }]);
+              }
+              return out;
+            }, (process.env.STYLES || '').split(',').map(s => s.trim()).filter(Boolean));
+            for (const [sel, v] of rows) console.log('STYLE', sel, JSON.stringify(v));
+            const el = await page.$(process.env.SEL);
+            if (!el) { console.log('SELECTOR NOT FOUND', process.env.SEL); await browser.close(); return; }
+            const box = await el.boundingBox();
+            console.log('BOX', JSON.stringify(box));
+            await el.scrollIntoView().catch(() => {});
+            await sleep(500);
+            const jpg = await el.screenshot({ type: 'jpeg', quality: 60 });
+            console.log('JPEG-B64 ' + jpg.toString('base64'));
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node shot.js
