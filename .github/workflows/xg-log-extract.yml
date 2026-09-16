@@ -35,8 +35,10 @@ jobs:
           curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" -o job.log
           echo "log bytes: $(wc -c < job.log)"
-          # -a: Actions logs carry ANSI escapes, so grep otherwise calls it binary
-          grep -ao 'JPEG-B64 [A-Za-z0-9+/=]*' job.log | head -1 | cut -d' ' -f2- | tr -d ' \r\n' > shot.b64
+          # -a: Actions logs carry ANSI escapes, so grep otherwise calls it binary.
+          # {200,}: the log also echoes the shot script's own console.log line,
+          # whose "JPEG-B64 " is followed by no base64 at all.
+          grep -ao 'JPEG-B64 [A-Za-z0-9+/=]\{200,\}' job.log | head -1 | cut -d' ' -f2- | tr -d ' \r\n' > shot.b64
           echo "base64 chars: $(wc -c < shot.b64)"
           test -s shot.b64
           mkdir -p theme-stage
