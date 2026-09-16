@@ -1,0 +1,99 @@
+name: graded-probe
+# Read-only. Two questions a graded price raises, answered from a runner
+# because the sandbox can reach neither host:
+#   1. EVERY field PriceCharting returns for a product id or a search hit -
+#      not just the grade columns we price from, so we can see whether a
+#      sales volume or a retail buy/sell number is available too.
+#   2. What an eBay listing actually says: its price, currency, condition
+#      and whether it is sold, read from the page's JSON-LD / meta tags.
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "PriceCharting product ids, one per line"
+        required: false
+        default: |
+          7473194
+          836562
+      queries:
+        description: "PriceCharting search queries, one per line (all fields of each hit)"
+        required: false
+        default: ""
+      ebay:
+        description: "eBay item URLs, one per line"
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
+      IDS: ${{ inputs.ids }}
+      QUERIES: ${{ inputs.queries }}
+      EBAY: ${{ inputs.ebay }}
+    steps:
+      - name: PriceCharting - every field
+        run: |
+          python3 - <<'EOF'
+          import os, json, time, urllib.request, urllib.parse
+          t = os.environ.get("PRICECHARTING_TOKEN", "").strip()
+          print("token set:", bool(t))
+          if not t: raise SystemExit(0)
+          def get(url):
+              req = urllib.request.Request(url, headers={"User-Agent": "ExorGradedProbe/1.0"})
+              with urllib.request.urlopen(req, timeout=30) as r: return r.status, json.loads(r.read().decode())
+          def money(v):
+              try: return "$%.2f" % (int(v) / 100)
+              except Exception: return repr(v)
+          def dump(d, label):
+              print(" ", label)
+              for k in sorted(d.keys()):
+                  v = d[k]
+                  # price-ish fields are integer cents; show both
+                  show = money(v) + "  (raw " + str(v) + ")" if k.endswith("-price") or k.endswith("-value") else repr(v)
+                  print("    %-28s %s" % (k, show))
+          for i in [x.strip() for x in os.environ.get("IDS", "").splitlines() if x.strip()]:
+              st, d = get("https://www.pricecharting.com/api/product?t=" + t + "&id=" + urllib.parse.quote(i))
+              print("== product", i, "->", st, d.get("status"), "|", d.get("console-name"), "/", d.get("product-name"))
+              dump(d, "all fields:")
+              time.sleep(1.1)
+          for q in [x.strip() for x in os.environ.get("QUERIES", "").splitlines() if x.strip()]:
+              st, j = get("https://www.pricecharting.com/api/products?t=" + t + "&q=" + urllib.parse.quote(q))
+              prods = j.get("products") or []
+              print("== search", repr(q), "->", st, j.get("status"), "|", len(prods), "hits")
+              for p in prods[:4]: dump(p, str(p.get("id")) + " | " + str(p.get("console-name")) + " / " + str(p.get("product-name")))
+              time.sleep(1.1)
+          EOF
+      - name: eBay - what the listing says
+        if: ${{ inputs.ebay != '' }}
+        run: |
+          python3 - <<'EOF'
+          import os, re, json, urllib.request, urllib.error
+          UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+          for u in [x.strip() for x in os.environ.get("EBAY", "").splitlines() if x.strip()]:
+              req = urllib.request.Request(u, headers={"User-Agent": UA, "Accept-Language": "en-CA,en;q=0.9"})
+              try:
+                  with urllib.request.urlopen(req, timeout=40) as r: st, html = r.status, r.read().decode("utf-8", "replace")
+              except urllib.error.HTTPError as e:
+                  print("==", u, "-> HTTP", e.code); continue
+              except Exception as e:
+                  print("==", u, "-> failed:", str(e)[:120]); continue
+              print("==", u, "->", st, "|", len(html), "bytes")
+              m = re.search(r"<title>([^<]{0,160})", html)
+              if m: print("   title:", m.group(1).strip())
+              for name in ("price", "priceCurrency", "availability", "itemCondition"):
+                  for mm in re.finditer(r'"' + name + r'"\s*:\s*"?([^",}]{1,40})', html):
+                      print("   %s: %s" % (name, mm.group(1).strip())); break
+              for pat, label in ((r'itemprop="price"[^>]*content="([^"]+)"', "itemprop price"),
+                                 (r'id="prcIsum"[^>]*>([^<]+)', "prcIsum"),
+                                 (r'"binPrice"\s*:\s*"?([^",}]+)', "binPrice"),
+                                 (r'Sold\s+(?:for\s+)?[A-Z]{0,3}\s*\$[\d,.]+', "sold-for text"),
+                                 (r'US\s*\$[\d,]+\.\d\d', "US $ on page"),
+                                 (r'C\s*\$[\d,]+\.\d\d', "C $ on page")):
+                  hits = re.findall(pat, html)[:3]
+                  if hits: print("   %s: %s" % (label, hits))
+          EOF
