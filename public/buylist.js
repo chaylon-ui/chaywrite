@@ -52,6 +52,10 @@
   var cart = [];            // the draft list, mirrored to BinderPOS after every change (their app does the same)
   var maxByKey = {};        // how many the store buys, per offer, from the search hit (this session only)
   var games = [], sets = [], iconBySet = {};
+  // The Riftbound buylist lives in SortSwift. #riftTrigger is the page's own
+  // Riftbound tile, so clicking it gives exactly the tile's behaviour (the
+  // modal); the URL is the fallback when this app is used on a page without it.
+  var RIFT = { id: "rift-sortswift", name: "Riftbound: League of Legends", url: "https://buylist.sortswift.com/?s=61dfa8766c5f9fa6" };
   var lastHits = [], lastQuery = null;
   var saveTimer = null, saveChain = Promise.resolve(), toastTimer = null;
 
@@ -90,6 +94,12 @@
     return api("/games").then(function (j) {
       games = Array.isArray(j.games) && j.games.length ? j.games : fallback;
     }).catch(function () { games = fallback; }).then(function () {
+      // Riftbound is bought through SortSwift, not BinderPOS (owner,
+      // 2026-09-16), so any BinderPOS entry for it is dropped and the option
+      // below takes its place: choosing it opens the same portal the
+      // Riftbound tile opens instead of searching a buylist we do not run.
+      games = games.filter(function (g) { return !/riftbound/i.test(g.id + " " + g.name); });
+      games.push({ id: RIFT.id, name: RIFT.name });
       if (!games.some(function (g) { return g.id === game; })) game = games[0].id;
       $("#bl-game").innerHTML = games.map(function (g) {
         return '<option value="' + esc(g.id) + '"' + (g.id === game ? " selected" : "") + ">" + esc(g.name) + "</option>";
@@ -142,6 +152,14 @@
   $("#bl-form").addEventListener("submit", function (e) { e.preventDefault(); search(false); });
   $("#bl-more").addEventListener("click", function () { search(true); });
   $("#bl-game").addEventListener("change", function () {
+    if ($("#bl-game").value === RIFT.id) {
+      var trigger = document.getElementById("riftTrigger");
+      if (trigger) trigger.click(); else window.open(RIFT.url, "_blank", "noopener");
+      $("#bl-game").value = game;                       // back to the game that was showing
+      $("#bl-status").innerHTML = 'Riftbound is bought through our partner portal: ' +
+        '<a class="bl__link" href="' + RIFT.url + '" target="_blank" rel="noopener">open the Riftbound buylist</a>.';
+      return;
+    }
     game = $("#bl-game").value;
     $("#bl-set").value = "";
     showPick("");
