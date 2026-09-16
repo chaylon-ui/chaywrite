@@ -51,7 +51,11 @@ jobs:
           print("GET digest ->", st)
           if st != 200:
               print(" body:", body); raise SystemExit(1)
-          d = (json.loads(body) or {}).get("digest")
+          j = json.loads(body) or {}
+          # Which mode the pricer is in: shadow (writes nothing), stage
+          # (changes wait for the owner to publish) or apply (writes them).
+          print(" autoprice mode:", j.get("mode"))
+          d = j.get("digest")
           if not d:
               print("no digest yet"); raise SystemExit(0)
           print(" kind:", d.get("kind"), "| title:", d.get("title"), "| sent:", d.get("sent"), "| by:", d.get("sentBy"), "| lastError:", d.get("lastError"))
