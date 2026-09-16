@@ -1269,11 +1269,17 @@ async function control(cx, b) {
 
 export async function autopriceDoFetch(cx, request, url) {
   await armAlarm(cx);
+  // Reading the config here is what applies the one-time APPLY -> STAGED
+  // switch, so ANY touch of the room settles the mode rather than leaving it
+  // to the next run.
+  const cfg0 = await configOf(cx);
   if (url.pathname === "/_ap/status") return doJson(await statusOf(cx));
   if (url.pathname === "/_ap/report") return doJson((await cx.storage.get("ap:report")) || { rows: [] });
   if (url.pathname === "/_ap/search") { try { return doJson(await search(cx, url.searchParams.get("q"))); } catch (e) { return doJson({ ok: false, error: msg(e) }, 500); } }
   if (url.pathname === "/_ap/control" && request.method === "POST") return doJson(await control(cx, await bodyOf(request)));
-  if (url.pathname === "/_ap/digest") return doJson(await digestOp(cx, request.method === "POST" ? await bodyOf(request) : null));
+  // The relay reads this with its own token; the mode rides along so the
+  // nightly relay log records which mode the room is actually in.
+  if (url.pathname === "/_ap/digest") return doJson({ ...(await digestOp(cx, request.method === "POST" ? await bodyOf(request) : null)), mode: cfg0.mode });
   if (url.pathname === "/_ap/auth" && request.method === "POST") return doJson(await authOp(cx, await bodyOf(request)));
   return doJson({ ok: false, error: "not found" }, 404);
 }
