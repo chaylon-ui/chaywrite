@@ -2,7 +2,8 @@ name: shot-probe
 # Read-only: open a page at a given viewport, wait for it to settle, and
 # print (a) a reduced JPEG of one element as base64 - the sandbox cannot
 # download artifacts - and (b) the computed style of every selector given,
-# so a CSS change can be checked without guessing.
+# plus the stylesheet rules that match it, so a CSS change can be checked
+# without guessing which rule wins.
 on:
   workflow_dispatch:
     inputs:
@@ -22,6 +23,10 @@ on:
         description: Comma-separated selectors to report computed style for
         required: false
         default: ""
+      rules:
+        description: One selector whose matching stylesheet rules are listed
+        required: false
+        default: ""
       dark:
         description: Set html[data-xg-theme=dark] before the shot
         required: false
@@ -38,6 +43,7 @@ jobs:
       SEL: ${{ inputs.selector }}
       W: ${{ inputs.width }}
       STYLES: ${{ inputs.styles }}
+      RULES: ${{ inputs.rules }}
       DARK: ${{ inputs.dark }}
     steps:
       - name: Install puppeteer-core
@@ -55,6 +61,8 @@ jobs:
             await page.setUserAgent(w < 700
               ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
               : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setCacheEnabled(false);
+            await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
             const target = new URL(process.env.URL);
             const pt = target.searchParams.get('preview_theme_id');
             if (pt) { await page.goto(target.origin + '/?preview_theme_id=' + pt, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null); }
@@ -68,11 +76,37 @@ jobs:
                 const el = document.querySelector(sel);
                 if (!el) { out.push([sel, 'NOT FOUND']); continue; }
                 const cs = getComputedStyle(el), b = el.getBoundingClientRect();
-                out.push([sel, { color: cs.color, background: cs.backgroundImage !== 'none' ? cs.backgroundImage.slice(0, 120) : cs.backgroundColor, display: cs.display, padding: cs.padding, fontWeight: cs.fontWeight, w: Math.round(b.width), h: Math.round(b.height), lines: el.getClientRects().length }]);
+                out.push([sel, {
+                  color: cs.color,
+                  background: cs.backgroundImage !== 'none' ? cs.backgroundImage.slice(0, 120) : cs.backgroundColor,
+                  display: cs.display, padding: cs.padding, fontWeight: cs.fontWeight,
+                  border: cs.borderWidth + ' ' + cs.borderStyle + ' ' + cs.borderColor,
+                  shadow: cs.boxShadow.slice(0, 80), deco: (cs.textDecorationLine + ' ' + cs.textDecorationColor).slice(0, 60),
+                  w: Math.round(b.width), h: Math.round(b.height), lines: el.getClientRects().length,
+                }]);
               }
               return out;
             }, (process.env.STYLES || '').split(',').map(s => s.trim()).filter(Boolean));
             for (const [sel, v] of rows) console.log('STYLE', sel, JSON.stringify(v));
+            if (process.env.RULES) {
+              const hits = await page.evaluate((sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return ['NOT FOUND'];
+                const out = [];
+                for (const sheet of document.styleSheets) {
+                  let rules; try { rules = sheet.cssRules; } catch (e) { continue; }
+                  const walk = (list) => { for (const rule of list) {
+                    if (rule.cssRules && !rule.selectorText) { walk(rule.cssRules); continue; }
+                    if (!rule.selectorText) continue;
+                    let m = false; try { m = el.matches(rule.selectorText); } catch (e) {}
+                    if (m) out.push(((sheet.href || 'inline').split('/').pop().split('?')[0] + ' | ' + rule.cssText).slice(0, 320));
+                  } };
+                  walk(rules);
+                }
+                return out.slice(0, 40);
+              }, process.env.RULES);
+              for (const h of hits) console.log('RULE', h);
+            }
             const el = await page.$(process.env.SEL);
             if (!el) { console.log('SELECTOR NOT FOUND', process.env.SEL); await browser.close(); return; }
             const box = await el.boundingBox();
