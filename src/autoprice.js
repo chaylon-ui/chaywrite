@@ -463,6 +463,16 @@ export function nextRunAt(now) {
 
 export async function configOf(cx) {
   const c = (await cx.storage.get("ap:config")) || {};
+  // One-time: APPLY becomes STAGED (owner 2026-09-16, "from now on prices
+  // don't go live until confirmed"). Done here rather than left for the next
+  // login so no nightly run can write a price in between. The flag means it
+  // happens once - choosing apply again on the page sticks.
+  if (c.mode === "apply" && !c.stagedOn) {
+    const next = { ...c, mode: "stage", stagedOn: cx.now() };
+    await cx.storage.put("ap:config", next);
+    cx.log("autoprice: APPLY -> STAGED (owner asked for confirmation before a price goes live)");
+    return { ...DEFAULT_CONFIG, ...next };
+  }
   return { ...DEFAULT_CONFIG, ...c };
 }
 

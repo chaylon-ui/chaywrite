@@ -670,3 +670,20 @@ test("staged rows wait on the page with an editable price, and publishing writes
   assert.doesNotMatch(plain, /class="stagebox"/);
   assert.doesNotMatch(plain, /name="price"/);
 });
+
+import { configOf } from "../src/autoprice.js";
+test("APPLY is turned into STAGED once, and a later choice of apply sticks", async () => {
+  const store = new Map();
+  const cx = { storage: { get: async (k) => store.get(k), put: async (k, v) => { store.set(k, v); } }, now: () => 1000, log: () => {} };
+  store.set("ap:config", { mode: "apply", markupPct: 20 });
+  const a = await configOf(cx);
+  assert.equal(a.mode, "stage");
+  assert.equal(a.markupPct, 20);                       // the rest of the settings are untouched
+  assert.equal(store.get("ap:config").stagedOn, 1000);
+  // the owner turns apply back on afterwards: it stays on
+  store.set("ap:config", { ...store.get("ap:config"), mode: "apply" });
+  assert.equal((await configOf(cx)).mode, "apply");
+  // a room that was never in apply mode is left alone
+  store.set("ap:config", { mode: "shadow" });
+  assert.equal((await configOf(cx)).mode, "shadow");
+});
