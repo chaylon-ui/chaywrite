@@ -40,10 +40,13 @@
                 $200, $10 to $1000, $50 to $5000, $100 above)
      guard    = at most maxMove% away from today's price per run (a bad
                 source day cannot halve a price), never below floor
-   Modes: SHADOW (default) writes only ap_suggest and the report; APPLY also
-   sets the variant price (productVariantsBulkUpdate). Both are switches on
-   the /autoprice page. Multi-variant products are reported but never
-   written in v1 (one price per product only).
+   Modes (the switch is on the /autoprice page): SHADOW writes only
+   ap_suggest and the report; STAGED parks every change on the page with its
+   price in an editable box and writes nothing until Publish is pressed;
+   APPLY sets the variant price itself (productVariantsBulkUpdate).
+   A product with several variants is priced once the owner says which
+   variant it is for (exor.ap_variant, chosen in the row's settings); until
+   then the row sits in review rather than guessing.
 
    Own Durable Object instance (AUTOPRICE_DO), nightly alarm at 22:30 UTC
    (19:30 Atlantic, after the TCGCSV refresh), the enrich/hold shape: a run
@@ -77,6 +80,18 @@ export const PC = "https://www.pricecharting.com/api/product";
 // market + 15% = $2,765.04 -> $2,799.95); the per-run cap is a separate,
 // optional brake and is OFF unless set (it read as the markup on the page).
 export const DEFAULT_CONFIG = { mode: "shadow", markupPct: 15, minMarginPct: 10, maxMovePct: 0, compMode: "cap", compPct: 0, alertPct: 10 };
+/* Three modes (owner 2026-09-16, after a graded Charizard VMAX went live at a
+   price PriceCharting had matched to the wrong printing: "from now on prices
+   don't go live until confirmed ... it should pull price and then let me edit
+   if needed and then make it live"):
+     shadow  nothing is written; the report is the whole output
+     stage   every change waits on the page with its price in an editable box.
+             Publish writes that number - his number, not the suggestion -
+             and Keep leaves today's price and is remembered, so the same
+             suggestion never asks twice.
+     apply   the run writes the price itself. */
+export const MODES = ["shadow", "stage", "apply"];
+export const MODE_LABEL = { shadow: "shadow · nothing is written to prices", stage: "STAGED · changes wait here until you publish them", apply: "APPLY · prices are written nightly" };
 export const PAGE_URL = "https://exor-binder.nevski.workers.dev/autoprice";
 /* Canadian reference price (owner 2026-09-15: "401 sells for $199.99 and has
    lots in stock, possible to check against 401 to also help price"). 401
@@ -208,6 +223,23 @@ export function pcPickGraded(g, products) {
     if (!best || score > best.score) best = { p, score };
   }
   return best ? best.p : null;
+}
+
+// What PriceCharting offered for a graded card, with the price for the grade
+// we actually want, so the report can show the shortlist the match came from.
+// The chosen one is marked; the rest are one click away from replacing it.
+export function pcCandidates(g, products, chosen, limit) {
+  const f = gradeField(g && g.grader, g && g.grade);
+  const chosenId = chosen ? String(chosen.id) : null;
+  const rows = (products || []).slice(0, 40).map((p) => {
+    const cents = f ? Number(p[f.key]) : NaN;
+    return { id: Number(p.id) || null, name: String(p["product-name"] || ""), console: String(p["console-name"] || ""),
+      price: cents > 0 ? cents / 100 : null, gradeLabel: f ? f.label : null, chosen: chosenId != null && String(p.id) === chosenId };
+  }).filter((r) => r.id);
+  // A card with no price for this grade is still worth showing (it explains
+  // why it was not picked), but the priced ones come first.
+  rows.sort((a, b) => (b.chosen ? 1 : 0) - (a.chosen ? 1 : 0) || (b.price != null) - (a.price != null));
+  return rows.slice(0, limit || 6);
 }
 
 // Only sealed-looking TCGplayer products are indexed (singles are 95% of a group).
@@ -524,11 +556,15 @@ export function buildDigest(run, cfg, opts) {
   if (run.error) lines.push("✖ run failed: " + run.error);
   else if ((run.errors || []).length) lines.push("✖ " + run.errors.length + " error" + (run.errors.length === 1 ? "" : "s") + ": " + run.errors.slice(0, 2).join("; ").slice(0, 200));
   const n = changes.length;
-  const title = (apply ? "Auto-pricing" : "Auto-pricing (shadow)") + ": " + (run.error ? "run failed" : n === 0 ? "no price changes" : n + " price change" + (n === 1 ? "" : "s")) + (drastic.length ? ", " + drastic.length + " of " + alertPct + "% or more" : "") + (alerts.length ? ", " + alerts.length + " 401 alert" + (alerts.length === 1 ? "" : "s") : "");
+  // Staged: the push is the ask, not the receipt - nothing went live.
+  const waiting = rows.filter((r) => r.awaiting).length;
+  if (waiting) lines.unshift("⏳ " + waiting + " price" + (waiting === 1 ? "" : "s") + " waiting for you to publish — nothing is live");
+  const mode = (cfg && cfg.mode) || (apply ? "apply" : "shadow");
+  const title = (mode === "stage" ? "Auto-pricing (staged)" : apply ? "Auto-pricing" : "Auto-pricing (shadow)") + ": " + (run.error ? "run failed" : waiting ? waiting + " waiting to publish" : n === 0 ? "no price changes" : n + " price change" + (n === 1 ? "" : "s")) + (drastic.length ? ", " + drastic.length + " of " + alertPct + "% or more" : "") + (alerts.length ? ", " + alerts.length + " 401 alert" + (alerts.length === 1 ? "" : "s") : "");
   const counts = rows.length + " listed · " + (run.priced || 0) + " priced · " + (run.written || 0) + " written · " + (run.skipped || 0) + " skipped" + (run.fx ? " · FX " + run.fx : "");
   const body = (lines.length ? lines.join("\n") + "\n" : "") + counts;
-  const worth = n > 0 || drastic.length > 0 || alerts.length > 0 || !!run.error || (run.errors || []).length > 0;
-  return { title, body: body.length > 3900 ? body.slice(0, 3880) + "…" : body, priority: drastic.length || run.error ? 4 : n ? 3 : 2, tags: drastic.length || run.error ? ["rotating_light"] : n ? ["moneybag"] : ["zzz"], click: o.click || PAGE_URL, changes, drastic, alerts, worth };
+  const worth = n > 0 || waiting > 0 || drastic.length > 0 || alerts.length > 0 || !!run.error || (run.errors || []).length > 0;
+  return { title, body: body.length > 3900 ? body.slice(0, 3880) + "…" : body, priority: drastic.length || run.error ? 4 : n || waiting ? 3 : 2, tags: drastic.length || run.error ? ["rotating_light"] : waiting ? ["hourglass"] : n ? ["moneybag"] : ["zzz"], click: o.click || PAGE_URL, changes, drastic, alerts, waiting, worth };
 }
 
 // Where to publish: "topic" -> ntfy.sh, or a full https://server/topic URL.
@@ -680,11 +716,23 @@ const PRODUCT_BY_ID_Q = `query($id: ID!) { product(id: $id) { id title handle pr
   variants(first: 10) { edges { node { id title price barcode sku inventoryQuantity inventoryItem { unitCost { amount } } } } }
   mf: metafields(first: 30, namespace: "exor") { edges { node { key value } } } } }`;
 
+// A product with several variants used to be reported and never written
+// ("one price per product only"). The owner can now say which variant the
+// auto price is for - exor.ap_variant, set from the row's settings form -
+// and that variant's price, cost and barcode are the ones this job reads.
+export function variantOf(vs, chosen) {
+  const want = String(chosen || "").trim();
+  if (!want) return null;
+  const digits = want.replace(/\D/g, "");
+  return vs.find((x) => String(x.id) === want || (digits && String(x.id).replace(/\D/g, "") === digits)) || null;
+}
+
 export function readProduct(node) {
   const vs = ((node.variants && node.variants.edges) || []).map((e) => e.node);
   const mf = {};
   for (const e of (node.mf && node.mf.edges) || []) mf[e.node.key] = e.node.value;
-  const v = vs[0] || {};
+  const picked = variantOf(vs, mf.ap_variant);
+  const v = picked || vs[0] || {};
   const num = (s) => { const n = Number(s); return Number.isFinite(n) ? n : null; };
   const cost = v.inventoryItem && v.inventoryItem.unitCost ? num(v.inventoryItem.unitCost.amount) : null;
   return {
@@ -692,6 +740,8 @@ export function readProduct(node) {
     // A graded single is never a sealed TCGplayer product: no category, so
     // phaseIndex leaves it alone and PriceCharting alone prices it.
     category: isGradedType(node.productType) ? null : categoryOf(node.productType), variants: vs.length, variantId: v.id || null, variantTitle: v.title || "",
+    variantChosen: !!picked, variantMeta: picked ? String(picked.id) : "",
+    variantList: vs.length > 1 ? vs.map((x) => ({ id: x.id, title: x.title || "", price: num(x.price), stock: Number(x.inventoryQuantity) || 0 })) : null,
     price: num(v.price), cost, upc: normUpc(v.barcode || v.sku), stock: vs.reduce((a, x) => a + (Number(x.inventoryQuantity) || 0), 0),
     floor: num(mf.ap_floor), markupPct: num(mf.ap_markup), round: mf.ap_round || "auto",
     tcgId: num(mf.ap_tcg_id), pcId: num(mf.ap_pc_id), tcgIdMeta: num(mf.ap_tcg_id),
@@ -810,6 +860,11 @@ async function phasePrices(cx, run, deadline) {
           const s = await call(PC_SEARCH + "?q=" + encodeURIComponent([g.name, g.number].filter(Boolean).join(" ")));
           await cx.sleep(PC_GAP_MS);
           const hit = s && s.status === "success" ? pcPickGraded(g, s.products) : null;
+          // Every card PriceCharting returned, with the price for THIS
+          // grade, so the report can show what the match was chosen from and
+          // the owner can switch it in one click (owner 2026-09-16: "it found
+          // the wrong price ... show me the variants it found").
+          p.pcCandidates = pcCandidates(g, (s && s.products) || [], hit);
           if (!hit) { p.pcMiss = s && s.status === "success" ? "no PriceCharting card matches " + [g.name, g.number, g.set].filter(Boolean).join(" · ") + " among " + ((s.products || []).length) : (s && s["error-message"]) || "search failed"; continue; }
           j = { ...hit, status: "success" };   // the search rows carry every price column (pc-probe 35023283289): one call per card
         } else {
@@ -900,12 +955,16 @@ async function phaseDecide(cx, run, cfg, deadline) {
   const rows = [];
   for (const p of run.products) {
     const d = decide(p, cfg, run.fx);
-    if (p.variants > 1 && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: one price per product only, set by hand"; }
+    // Several variants and none picked: the job cannot know which one the
+    // price is for, so the row asks (the form lists them). Once ap_variant
+    // names one, that variant is priced like any single-variant product.
+    if (p.variants > 1 && !p.variantChosen && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: choose which one this price is for"; }
     if (p.match && !p.tcgId && !p.graded && d.action === "skip") d.reason = p.match;   // never explain a graded skip with TCGplayer
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId,
+      variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
-      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, match: p.match, compMiss: p.compMiss || null,
-      settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId }, ...d });
+      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null,
+      settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId, variant: p.variantMeta || "" }, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
   }
   run.rows = rows;
@@ -916,8 +975,11 @@ async function phaseDecide(cx, run, cfg, deadline) {
 const MF_SET = `mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { field message } } }`;
 const PRICE_SET = `mutation($pid: ID!, $v: [ProductVariantsBulkInput!]!) { productVariantsBulkUpdate(productId: $pid, variants: $v) { userErrors { field message } } }`;
 
+export const CHANGES = new Set(["raise", "lower", "set"]);
+
 async function phaseWrite(cx, run, cfg, deadline) {
   const apply = run.apply && cfg.mode === "apply";
+  const stage = cfg.mode === "stage";
   const date = new Date(cx.now()).toISOString().slice(0, 10);
   while (run.wi < run.rows.length && cx.now() < deadline - 3000) {
     const batch = run.rows.slice(run.wi, run.wi + 10);
@@ -928,7 +990,15 @@ async function phaseWrite(cx, run, cfg, deadline) {
       // this run applies. ap:last:<id> is what the report shows.
       const seen = await cx.storage.get("ap:seen:" + row.id);
       if (seen && row.current != null && Math.abs(Number(seen.price) - row.current) > 0.004) await recordChange(cx, row.id, { at: cx.now(), from: Number(seen.price), to: row.current, by: "hand" });
-      const note = { at: date, mode: apply ? "apply" : "shadow", action: row.action, reason: row.reason, current: row.current, suggested: row.suggested ?? null,
+      // STAGED: the change waits on the page instead of going live. A
+      // suggestion the owner already declined (ap:nope) does not ask again
+      // until the number itself moves.
+      if (stage && !apply && CHANGES.has(row.action) && row.variantId && row.suggested > 0) {
+        const nope = await cx.storage.get("ap:nope:" + row.id);
+        if (nope && Math.abs(Number(nope.price) - row.suggested) < 0.005) { row.kept = { at: nope.at, price: nope.price }; }
+        else row.awaiting = true;
+      }
+      const note = { at: date, mode: apply ? "apply" : stage ? "stage" : "shadow", awaiting: !!row.awaiting, action: row.action, reason: row.reason, current: row.current, suggested: row.suggested ?? null,
         target: row.target ?? null, floor: row.floor ?? null, floorSrc: row.floorSrc, fx: run.fx, marketUsd: row.marketUsd ?? null,
         tcg: row.tcgId ? { id: row.tcgId, name: row.tcgName, match: row.match, market: (row.sources.find((s) => s.name === "tcgplayer") || {}).usd ?? null, priceKind: (row.sources.find((s) => s.name === "tcgplayer") || {}).kind ?? null, low: row.tcgLow, mid: row.tcgMid } : null,
         pricecharting: row.pcId ? { id: row.pcId, name: row.pcName, new: (row.sources.find((s) => s.name === "pricecharting") || {}).usd ?? null } : (row.pcMiss ? { miss: row.pcMiss } : null),
@@ -962,9 +1032,72 @@ async function phaseWrite(cx, run, cfg, deadline) {
   // the report until the queued follow-up run prices them.
   const prev = (await cx.storage.get("ap:report")) || {};
   const pending = (prev.rows || []).filter((r) => r.action === "pending" && !run.rows.some((x) => x.id === r.id));
-  await cx.storage.put("ap:report", { at: cx.now(), fx: run.fx, fxDate: run.fxDate, apply, rows: [...run.rows.map((r) => ({ ...r, sources: r.sources })), ...pending] });
+  await cx.storage.put("ap:report", { at: cx.now(), fx: run.fx, fxDate: run.fxDate, apply, stage, rows: [...run.rows.map((r) => ({ ...r, sources: r.sources })), ...pending] });
   run.done = true; run.finishedAt = cx.now();
   run.phase = "done";
+}
+
+/* Publish one staged price (owner 2026-09-16: "it should pull price and then
+   let me edit if needed and then make it live"). The number written is
+   whatever is in the box - the suggestion, or his own correction - so this is
+   also how a price that the sources get wrong gets fixed for good. */
+export function parsePrice(v) {
+  const n = Number(String(v == null ? "" : v).replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n > 500000) return null;   // the 999999 placeholder and fat fingers
+  return Math.round(n * 100) / 100;
+}
+
+async function publishPrice(cx, b) {
+  const pid = String((b && b.id) || "");
+  if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
+  const price = parsePrice(b && b.price);
+  if (price == null) return { ok: false, error: "a price between $0.01 and $500,000 is needed" };
+  const rep = (await cx.storage.get("ap:report")) || { rows: [] };
+  const row = (rep.rows || []).find((r) => r.id === pid);
+  const variantId = String((b && b.variantId) || (row && row.variantId) || "");
+  if (!/^gid:\/\/shopify\/ProductVariant\/\d+$/.test(variantId)) return { ok: false, error: "no variant to price: choose one in the row's settings first" };
+  try {
+    const r = await adminGql(cx, PRICE_SET, { pid, v: [{ id: variantId, price: price.toFixed(2) }] });
+    const errs = (r.data.productVariantsBulkUpdate || {}).userErrors || [];
+    if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
+  } catch (e) { return { ok: false, error: msg(e) }; }
+  const from = row && row.current != null ? row.current : null;
+  await recordChange(cx, pid, { at: cx.now(), from, to: price, by: "approved" });
+  await cx.storage.put("ap:seen:" + pid, { price, at: cx.now() });
+  await cx.storage.delete("ap:nope:" + pid);
+  if (row) {
+    row.current = price;
+    row.applied = true;
+    row.awaiting = false;
+    row.kept = null;
+    row.edited = row.suggested != null && Math.abs(row.suggested - price) > 0.005 ? row.suggested : null;
+    row.marginNow = margin(price, row.cost);
+    row.action = "hold";
+    row.reason = "published by hand" + (row.edited ? " at your price (suggested " + money2(row.edited) + ")" : "");
+    row.lastChange = { at: cx.now(), from, to: price, by: "approved" };
+    await cx.storage.put("ap:report", rep);
+  }
+  return { ok: true, id: pid, price, live: true };
+}
+
+// "Keep today's price": the suggestion is remembered as declined so the next
+// run does not queue the same number again.
+async function keepPrice(cx, b) {
+  const pid = String((b && b.id) || "");
+  if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
+  const rep = (await cx.storage.get("ap:report")) || { rows: [] };
+  const row = (rep.rows || []).find((r) => r.id === pid);
+  const price = parsePrice(b && b.suggested) ?? (row ? row.suggested : null);
+  if (price != null) await cx.storage.put("ap:nope:" + pid, { price, at: cx.now() });
+  if (row) {
+    row.awaiting = false;
+    row.kept = { at: cx.now(), price };
+    row.action = "hold";
+    row.reason = "you kept " + money2(row.current) + "; " + money2(price) + " will not be offered again";
+    await cx.storage.put("ap:report", rep);
+  }
+  return { ok: true, id: pid, kept: price };
 }
 
 async function recordChange(cx, id, change) {
@@ -1009,6 +1142,7 @@ const SETTING_FIELDS = [
   ["comp", "ap_comp", "single_line_text_field", (v) => (/^(cap|off|skip|follow)$/.test(String(v).trim()) ? String(v).trim() : null)],
   ["tcgId", "ap_tcg_id", "number_integer", (v) => (/^\d{3,9}$/.test(String(v).trim()) ? String(v).trim() : null)],
   ["pcId", "ap_pc_id", "number_integer", (v) => (/^\d{3,12}$/.test(String(v).trim()) ? String(v).trim() : null)],
+  ["variant", "ap_variant", "single_line_text_field", (v) => (/^gid:\/\/shopify\/ProductVariant\/\d+$/.test(String(v).trim()) ? String(v).trim() : null)],
 ];
 async function saveSettings(cx, b) {
   const pid = String((b && b.id) || "");
@@ -1080,7 +1214,7 @@ async function control(cx, b) {
   const cfg = await configOf(cx);
   const action = String((b && b.action) || "");
   if (action === "mode") {
-    const mode = b.mode === "apply" ? "apply" : "shadow";
+    const mode = MODES.includes(b.mode) ? b.mode : "shadow";
     await cx.storage.put("ap:config", { ...cfg, mode });
     return { ok: true, mode };
   }
@@ -1092,6 +1226,23 @@ async function control(cx, b) {
     return { ok: true, config: next };
   }
   if (action === "run") return kickRun(cx, { apply: cfg.mode === "apply" && b.apply === "1" });
+  if (action === "publish") return publishPrice(cx, b);
+  if (action === "keep") return keepPrice(cx, b);
+  if (action === "publish-all") {
+    // Every staged row the page is showing (one game's tab, or all of them),
+    // at the suggested price, newest report first. Capped per press so the
+    // request always answers; the page says how many are left.
+    const rep = (await cx.storage.get("ap:report")) || { rows: [] };
+    const game = String((b && b.game) || "");
+    const queue = (rep.rows || []).filter((r) => r.awaiting && r.suggested > 0 && (!game || r.game === game));
+    let done = 0, failed = 0;
+    const errors = [];
+    for (const r of queue.slice(0, 25)) {
+      const res = await publishPrice(cx, { id: r.id, price: r.suggested, variantId: r.variantId });
+      if (res.ok) done++; else { failed++; if (errors.length < 3) errors.push(r.title + ": " + res.error); }
+    }
+    return { ok: true, published: done, failed, left: Math.max(0, queue.length - 25), errors };
+  }
   if (action === "settings") return saveSettings(cx, b);
   if (action === "add") return setListed(cx, b.id, true, b);
   if (action === "remove") return setListed(cx, b.id, false, b);
@@ -1244,6 +1395,9 @@ export async function serveAutoprice(request, env, url, staffOk) {
     const keepQ = body.q && body.action !== "add" && body.action !== "remove";
     let flash = "";
     if (body.action === "ntfy-test") { try { const j = JSON.parse(text); flash = j.ok ? "Test push sent: " + (j.digest && j.digest.title) : j.relay ? "Direct push refused (" + (j.error || "") + "). Queued for the relay: it goes out from GitHub on the nightly relay run, or now if you run the ntfy-relay workflow." : "Test push failed: " + (j.error || "unknown"); } catch { flash = "Test push: no answer"; } }
+    if (body.action === "publish") { try { const j = JSON.parse(text); flash = j.ok ? "Live: " + String(body.title || "that product").slice(0, 60) + " is now $" + Number(j.price).toFixed(2) : "Not published: " + (j.error || "unknown"); } catch { flash = "Publish: no answer"; } }
+    if (body.action === "keep") { try { const j = JSON.parse(text); flash = j.ok ? "Kept today's price; that suggestion will not be offered again." : "Keep failed: " + (j.error || "unknown"); } catch { flash = "Keep: no answer"; } }
+    if (body.action === "publish-all") { try { const j = JSON.parse(text); flash = j.ok ? j.published + " price" + (j.published === 1 ? "" : "s") + " published" + (j.failed ? ", " + j.failed + " failed (" + j.errors.join("; ").slice(0, 120) + ")" : "") + (j.left ? ", " + j.left + " still waiting - press again" : "") : "Publish all failed: " + (j.error || "unknown"); } catch { flash = "Publish all: no answer"; } }
     const qs = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : "", flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
     if (form) return html("", 303, { location: "/autoprice" + (qs ? "?" + qs : "") });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -1277,6 +1431,7 @@ export function renderPage(s, rep, view) {
   const counts = {};
   for (const r of rows) counts[r.action] = (counts[r.action] || 0) + 1;
   const alerted = rows.filter((r) => r.alert);
+  const waiting = rows.filter((r) => r.awaiting);
   // One tab per game (owner, 2026-09-15): the count, then in brackets how
   // many rows could not be priced or written, and a warning when a row
   // carries a price alert (a 401 follow fell back, a write failed, or a
@@ -1284,12 +1439,12 @@ export function renderPage(s, rep, view) {
   const tabStats = (list) => {
     const errors = list.filter((r) => r.action === "skip" || r.action === "review" || r.writeError).length;
     const alerts = list.filter((r) => r.alert || r.writeError || (r.marginSuggested && r.marginSuggested.amount < 0)).length;
-    return { n: list.length, errors, alerts };
+    return { n: list.length, errors, alerts, wait: list.filter((r) => r.awaiting).length };
   };
   const tab = (game, label, list) => {
     const s = tabStats(list);
     const on = (game == null && !v.game) || v.game === game;
-    return `<a href="/autoprice${game == null ? "" : "?game=" + encodeURIComponent(game)}" class="${on ? "on" : ""}${s.alerts ? " warn" : ""}" title="${s.n} listed${s.errors ? ", " + s.errors + " not priced" : ""}${s.alerts ? ", " + s.alerts + " price alert" + (s.alerts === 1 ? "" : "s") : ""}">${esc(label)} <span class="n">${s.n}</span>${s.errors ? ` <span class="err">(${s.errors} error${s.errors === 1 ? "" : "s"})</span>` : ""}${s.alerts ? ` <span class="al">⚠ ${s.alerts}</span>` : ""}</a>`;
+    return `<a href="/autoprice${game == null ? "" : "?game=" + encodeURIComponent(game)}" class="${on ? "on" : ""}${s.alerts ? " warn" : ""}" title="${s.n} listed${s.wait ? ", " + s.wait + " waiting to be published" : ""}${s.errors ? ", " + s.errors + " not priced" : ""}${s.alerts ? ", " + s.alerts + " price alert" + (s.alerts === 1 ? "" : "s") : ""}">${esc(label)} <span class="n">${s.n}</span>${s.wait ? ` <span class="wt">⏳ ${s.wait}</span>` : ""}${s.errors ? ` <span class="err">(${s.errors} error${s.errors === 1 ? "" : "s"})</span>` : ""}${s.alerts ? ` <span class="al">⚠ ${s.alerts}</span>` : ""}</a>`;
   };
   const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
   const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
@@ -1312,9 +1467,18 @@ export function renderPage(s, rep, view) {
     if (st.round) custom.push("round " + (st.round === "none" ? "off" : "$" + st.round));
     if (st.comp) custom.push("401 " + ({ cap: "hold", off: "show only", skip: "skip", follow: "follow" }[st.comp] || st.comp));
     // the TCGplayer id is stored by every run, so it is not a "custom" setting here
+    if (r.variantChosen && r.variantTitle) custom.push("variant " + r.variantTitle);
     const summary = custom.length ? custom.join(" · ") : "page defaults";
-    return `<details class="cfg"><summary title="Per-item settings: click to change">⚙ ${esc(summary)}</summary>
+    const vlist = r.variantList || [];
+    // Which variant the price is for. Only shown when there is a choice to
+    // make; "not chosen" keeps the row in review rather than pricing a
+    // variant nobody picked.
+    const variantField = vlist.length > 1
+      ? `<label title="This product has ${vlist.length} variants. The auto price is written to the one you pick here.">Price which variant ${sel("variant", st.variant, [["", "not chosen — leave in review"], ...vlist.map((x) => [x.id, (x.title || "variant") + (x.price != null ? " · " + money(x.price) : "") + " · stock " + x.stock])])}</label>`
+      : "";
+    return `<details class="cfg"${vlist.length > 1 && !r.variantChosen ? " open" : ""}><summary title="Per-item settings: click to change">⚙ ${esc(summary)}</summary>
 <form method="post" action="/autoprice/control" class="setf">${hidden("action", "settings")}${hidden("id", r.id)}${v.game ? hidden("game", v.game) : ""}
+${variantField}
 <label>Floor $<input type="number" step="0.01" min="0" name="floor" value="${esc(st.floor == null ? "" : st.floor)}" placeholder="cost+${esc(cfg.minMarginPct)}%"></label>
 <label>Markup %<input type="number" step="0.5" min="0" name="markupPct" value="${esc(st.markupPct == null ? "" : st.markupPct)}" placeholder="${esc(cfg.markupPct)}"></label>
 <label>Rounding ${sel("round", st.round, [["", "auto"], ["1", "$1 steps"], ["5", "$5 steps"], ["10", "$10 steps"], ["25", "$25 steps"], ["50", "$50 steps"], ["100", "$100 steps"], ["none", "none"]])}</label>
@@ -1323,6 +1487,37 @@ export function renderPage(s, rep, view) {
 ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numeric" name="pcId" value="${esc(st.pcId == null ? "" : st.pcId)}" placeholder="auto" style="width:90px"></label>` : ""}
 <button class="sm">Save &amp; reprice</button><span class="muted">blank = page default</span></form></details>`;
   };
+  // Where to check a price by hand (owner 2026-09-16: "it should also open
+  // somehow to the TCGplayer site for manual review"). TCGplayer by matched
+  // id when there is one, else a search; PriceCharting's own page for the
+  // matched card; eBay's SOLD listings, which is what a graded price is
+  // really made of.
+  const q = (s2) => encodeURIComponent(String(s2 || "").slice(0, 120));
+  const reviewLinks = (r) => {
+    const l = [];
+    l.push(`<a href="${r.tcgId ? "https://www.tcgplayer.com/product/" + esc(r.tcgId) : "https://www.tcgplayer.com/search/all/product?q=" + q(r.title)}" target="_blank" rel="noopener">TCGplayer ↗</a>`);
+    if (r.pcName || r.graded) l.push(`<a href="https://www.pricecharting.com/search-products?type=prices&q=${q(r.pcName ? r.pcName.split(" · ")[0].replace(/^[^/]*\//, "") : r.title)}" target="_blank" rel="noopener">PriceCharting ↗</a>`);
+    l.push(`<a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a>`);
+    return `<div class="links muted">check: ${l.join(" · ")}</div>`;
+  };
+  // The cards PriceCharting offered for a graded title, the chosen one first.
+  // One click pins a different card and reprices, which is the fix when the
+  // match is wrong (the Charizard VMAX Prize Pack, 2026-09-16).
+  const pcPicker = (r) => {
+    const c = r.pcCandidates || [];
+    if (!c.length) return "";
+    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.chosen ? '<span class="pill">using</span>' : `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${v.game ? hidden("game", v.game) : ""}<button class="sm">use this</button></form>`}</li>`;
+    return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"}><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""}</summary><ul>${c.map(line).join("")}</ul></details>`;
+  };
+  // The staged change itself: the suggested price in a box the owner can
+  // type over, then Publish writes THAT number to the variant. Keep leaves
+  // today's price and remembers the refusal.
+  const publishBox = (r) => {
+    if (!r.awaiting) return r.kept ? `<div class="muted">kept ${money(r.current)}${r.kept.price ? " over " + money(r.kept.price) : ""}</div>` : "";
+    return `<div class="pub"><form method="post" action="/autoprice/control" class="pubf">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${v.game ? hidden("game", v.game) : ""}
+<label>$<input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}"></label><button class="go">Publish</button></form>
+${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep " + money(r.current), "sm")}</div>`;
+  };
   const floorLine = (r) => `<div class="muted">${r.floor ? "floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div>`;
   const srcLines = (r) => (r.sources || []).map(srcLine).map(esc).join("<br>");
   // Following 401 Games: their price leads the cell and TCGplayer is shown
@@ -1330,13 +1525,13 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const mktCell = (r) => r.priceFrom === COMP.key && r.comp
     ? `<b>${esc(COMP.name)} ${money(r.comp.price)}</b>${r.compPct ? " +" + r.compPct + "% = " + money(r.raw) : ""}<div class="muted">followed · TCGplayer not used${(r.sources || []).length ? ": " + srcLines(r).replace(/<br>/g, ", ") + (r.marketCad != null ? " = " + money(r.marketCad) + " CAD" : "") : " (no match)"}</div>${floorLine(r)}`
     : (r.sources || []).length ? srcLines(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${floorLine(r)}` : '<span class="muted">no source</span>';
-  const row = (r) => `<tr class="a-${esc(r.action)}${r.alert ? " alerted" : ""}">
+  const row = (r) => `<tr class="a-${esc(r.action)}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}">
 <td class="prod"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> <a class="muted" href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener" title="storefront page">site ↗</a>
-<div class="muted">stock ${r.stock}${r.tcgName ? " · matched: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div>${r.action === "pending" ? "" : settingsBlock(r)}</td>
+<div class="muted">stock ${r.stock}${r.variantChosen && r.variantTitle ? " · variant: " + esc(r.variantTitle) : r.variants > 1 ? " · " + r.variants + " variants" : ""}${r.tcgName ? " · matched: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div>${r.action === "pending" ? "" : reviewLinks(r) + pcPicker(r) + settingsBlock(r)}</td>
 <td class="num c-today" data-l="Today"><b>${money(r.current)}</b><div class="muted">cost ${r.cost != null ? money(r.cost) : "—"}</div>${marginLine(r.marginNow, r.current)}</td>
 <td class="mkt c-mkt" data-l="Market">${mktCell(r)}</td>
 <td class="num sug c-sug" data-l="Suggested">${r.suggested != null ? "<b>" + money(r.suggested) + "</b>" : '<span class="muted">—</span>'}${marginLine(r.marginSuggested, r.suggested)}</td>
-<td class="c-act" data-l="Action"><span class="pill">${esc(r.action)}${r.applied ? " ✓" : ""}</span>${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}<div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div></td>
+<td class="c-act" data-l="Action"><span class="pill">${r.awaiting ? "waiting" : esc(r.action)}${r.applied ? " ✓" : ""}</span>${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}<div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>${publishBox(r)}</td>
 <td class="num c-comp" data-l="${esc(COMP.name)}">${r.comp ? `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener">${money(r.comp.price)}</a><div class="muted">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</div>` : `<span class="muted" title="${esc(r.compMiss || "")}">${r.compMiss ? (/^skipped/.test(r.compMiss) ? "skipped" : "not carried") : "—"}</span>`}</td>
 <td class="c-last" data-l="Last change">${change(r.lastChange)}</td>
 <td class="rm">${ctlForm("remove", hidden("id", r.id), "×", "sm x")}</td></tr>`;
@@ -1349,23 +1544,24 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const found = v.found;
   const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}.how,.setbox{margin:0 0 10px}.how>summary,.setbox>summary{cursor:pointer;list-style:none;display:inline-block;padding:5px 12px;border:1px solid #dde3e7;border-radius:999px;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600}.how>summary::-webkit-details-marker,.setbox>summary::-webkit-details-marker{display:none}.how>summary::after,.setbox>summary::after{content:" \\25be"}.how[open]>summary::after,.setbox[open]>summary::after{content:" \\25b4"}.how>p{margin:8px 0 0}.setwrap{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.setbox{flex:1 1 100%}/* Phones (owner, 2026-09-15: the eight-column report was unreadable on a phone - headings overlapped and values broke one character per line). Each row becomes a card: title across the top, today beside suggested, then what was decided, the market working, the competitor and the last change. Other tables scroll sideways. */@media (max-width:760px){body{padding:12px 12px 28px}.wrap{max-width:none}h1{font-size:19px;line-height:1.3}h2{font-size:15px;margin:18px 0 6px}.tag{display:inline-block;margin:6px 6px 0 0}.ctl form,.box{flex-wrap:wrap;width:100%;box-sizing:border-box}.ctl form label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}input[type=search]{min-width:0;width:100%;font-size:16px}.tabs{border-bottom:0;gap:6px;margin:10px 0 12px}.tabs a{margin:0;padding:7px 12px;border:1px solid #dde3e7;border-radius:999px;font-size:13px}.tabs a.on{background:#1d2327;color:#fff;border-color:#1d2327}.tabs a.on .n{color:rgba(255,255,255,.75)}.tabs a.on .err{color:#fca5a5}.tabs a.on .al{background:rgba(255,255,255,.18);color:#fde68a}.tabs a.warn:not(.on){border-color:#f59e0b}table:not(.rep){display:block;overflow-x:auto;white-space:nowrap}table.rep,table.rep tbody{display:block;table-layout:auto;border:0;background:transparent;border-radius:0;overflow:visible}table.rep thead{display:none}table.rep tr{display:block}table.rep tr.grp{background:transparent;padding:6px 2px 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7780}table.rep tr.grp td{display:block;padding:0;border:0;background:transparent!important}table.rep tr:not(.grp){position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:#fff;border:1px solid #dde3e7;border-radius:12px;margin:0 0 10px;padding:12px 14px}table.rep tr.alerted:not(.grp){border-left:4px solid #f59e0b}table.rep tbody tr:nth-child(even):not(.grp) td{background:transparent}table.rep td{display:block;min-width:0;padding:0;border:0;white-space:normal;text-align:left;background:transparent}table.rep td[data-l]::before{content:attr(data-l);display:block;margin-bottom:1px;color:#6b7780;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}table.rep td.prod{grid-column:1/-1;order:1;padding:0 26px 8px 0;border-bottom:1px solid #eef2f4}table.rep td.c-today{order:2}table.rep td.c-sug{order:3}table.rep td.c-act{grid-column:1/-1;order:4}table.rep td.c-mkt{grid-column:1/-1;order:5;font-size:12.5px}table.rep td.c-comp{order:6}table.rep td.c-last{order:7}table.rep td.rm{position:absolute;top:8px;right:10px;order:8}table.rep tr.alerted td:first-child{box-shadow:none}td.prod .ttl{font-size:15px;line-height:1.3}td.sug b{font-size:16px}.setf label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}.alert ul{padding-left:18px}}</style></head><body><div class="wrap">
-<h1>Sealed auto-pricing <span class="tag${s.mode === "apply" ? " apply" : ""}">${s.mode === "apply" ? "APPLY · prices are written nightly" : "shadow · nothing is written to prices"}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
-<details class="how"><summary>How this works</summary><p class="muted">Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority; when ntfy.sh refuses the worker (free plan, shared IP) the GitHub relay sends it at 22:50 UTC" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p></details>
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.tag.stage{background:#dbeafe;color:#1e3a8a}.stagebox{background:#eff6ff;border:1px solid #60a5fa;color:#1e3a8a;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.stageact{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}button.go{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}button.go:hover{background:#0a6650}tr.awaiting .pill{background:#dbeafe;color:#1e3a8a}.pub{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pubf{display:flex;gap:6px;align-items:center;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 6px}.pubf input{width:92px;font-size:14px;padding:3px 5px}.pubf label{display:flex;gap:2px;align-items:center;font-weight:700;color:#1e3a8a}.links{margin-top:3px}.links a{font-size:12px}details.cands{margin-top:4px}details.cands summary{cursor:pointer;font-size:12px;color:#6b7780}details.cands ul{margin:5px 0 0;padding:0;list-style:none;font-size:12px}details.cands li{padding:3px 0;border-top:1px solid #eef2f4;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}details.cands li.on{font-weight:600}details.cands .cn{color:#6b7780}.tabs a .wt{display:inline-block;padding:0 7px;border-radius:99px;background:#dbeafe;color:#1e3a8a;font-size:12px;font-weight:700}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}.how,.setbox{margin:0 0 10px}.how>summary,.setbox>summary{cursor:pointer;list-style:none;display:inline-block;padding:5px 12px;border:1px solid #dde3e7;border-radius:999px;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600}.how>summary::-webkit-details-marker,.setbox>summary::-webkit-details-marker{display:none}.how>summary::after,.setbox>summary::after{content:" \\25be"}.how[open]>summary::after,.setbox[open]>summary::after{content:" \\25b4"}.how>p{margin:8px 0 0}.setwrap{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.setbox{flex:1 1 100%}/* Phones (owner, 2026-09-15: the eight-column report was unreadable on a phone - headings overlapped and values broke one character per line). Each row becomes a card: title across the top, today beside suggested, then what was decided, the market working, the competitor and the last change. Other tables scroll sideways. */@media (max-width:760px){body{padding:12px 12px 28px}.wrap{max-width:none}h1{font-size:19px;line-height:1.3}h2{font-size:15px;margin:18px 0 6px}.tag{display:inline-block;margin:6px 6px 0 0}.ctl form,.box{flex-wrap:wrap;width:100%;box-sizing:border-box}.ctl form label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}input[type=search]{min-width:0;width:100%;font-size:16px}.tabs{border-bottom:0;gap:6px;margin:10px 0 12px}.tabs a{margin:0;padding:7px 12px;border:1px solid #dde3e7;border-radius:999px;font-size:13px}.tabs a.on{background:#1d2327;color:#fff;border-color:#1d2327}.tabs a.on .n{color:rgba(255,255,255,.75)}.tabs a.on .err{color:#fca5a5}.tabs a.on .al{background:rgba(255,255,255,.18);color:#fde68a}.tabs a.warn:not(.on){border-color:#f59e0b}table:not(.rep){display:block;overflow-x:auto;white-space:nowrap}table.rep,table.rep tbody{display:block;table-layout:auto;border:0;background:transparent;border-radius:0;overflow:visible}table.rep thead{display:none}table.rep tr{display:block}table.rep tr.grp{background:transparent;padding:6px 2px 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7780}table.rep tr.grp td{display:block;padding:0;border:0;background:transparent!important}table.rep tr:not(.grp){position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:#fff;border:1px solid #dde3e7;border-radius:12px;margin:0 0 10px;padding:12px 14px}table.rep tr.alerted:not(.grp){border-left:4px solid #f59e0b}table.rep tbody tr:nth-child(even):not(.grp) td{background:transparent}table.rep td{display:block;min-width:0;padding:0;border:0;white-space:normal;text-align:left;background:transparent}table.rep td[data-l]::before{content:attr(data-l);display:block;margin-bottom:1px;color:#6b7780;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}table.rep td.prod{grid-column:1/-1;order:1;padding:0 26px 8px 0;border-bottom:1px solid #eef2f4}table.rep td.c-today{order:2}table.rep td.c-sug{order:3}table.rep td.c-act{grid-column:1/-1;order:4}table.rep td.c-mkt{grid-column:1/-1;order:5;font-size:12.5px}table.rep td.c-comp{order:6}table.rep td.c-last{order:7}table.rep td.rm{position:absolute;top:8px;right:10px;order:8}table.rep tr.alerted td:first-child{box-shadow:none}td.prod .ttl{font-size:15px;line-height:1.3}td.sug b{font-size:16px}.setf label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}.alert ul{padding-left:18px}.pub{gap:8px}.pubf{flex:1 1 100%;justify-content:space-between;padding:6px 8px}.pubf input{width:100%;font-size:16px}.pubf label{flex:1}button.go{padding:8px 14px}.stageact form,.stageact button{width:100%}details.cands li{gap:4px}}</style></head><body><div class="wrap">
+<h1>Sealed auto-pricing <span class="tag ${esc(s.mode)}">${esc(MODE_LABEL[s.mode] || s.mode)}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
+<details class="how"><summary>How this works</summary><p class="muted"><b>Staged</b> is the safe mode: a run works out every price, writes nothing, and parks each change here with its number in a box — correct it, then Publish, and only then does it reach the shop. <b>Keep</b> leaves today's price and that suggestion is not offered again until it moves. <b>Apply</b> writes prices itself; <b>shadow</b> writes nothing at all. Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority; when ntfy.sh refuses the worker (free plan, shared IP) the GitHub relay sends it at 22:50 UTC" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p></details>
 ${v.flash ? `<p class="flash">${esc(v.flash)}</p>` : ""}
 <h2>Add products</h2>
 <form method="get" action="/autoprice" class="box">${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
 ${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (in APPLY mode that writes the prices now, not at 7:30 pm); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
 <h2>Controls</h2>
 <div class="ctl">
-${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : "shadow") + ")")}
-<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product within the guardrails.')">${hidden("action", "mode")}${hidden("mode", s.mode === "apply" ? "shadow" : "apply")}<button>${s.mode === "apply" ? "Back to shadow" : "Switch to APPLY"}</button></form>
+${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : s.mode === "stage" ? "queues changes for you" : "shadow") + ")")}
+<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product itself, with nothing waiting for you.')">${hidden("action", "mode")}<label title="Staged is the safe middle: the run works out every price and parks it here until you publish it.">Mode <select name="mode"><option value="stage"${s.mode === "stage" ? " selected" : ""}>staged — I publish each change</option><option value="shadow"${s.mode === "shadow" ? " selected" : ""}>shadow — report only</option><option value="apply"${s.mode === "apply" ? " selected" : ""}>apply — write prices automatically</option></select></label><button>Save mode</button></form>
 <details class="setbox"><summary>Settings</summary><div class="setwrap"><form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="Follow: 401 Games' in-stock price (plus this percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged at the top of the report. Hold: the TCGplayer price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><label title="Price moves of at least this percent are flagged first in the ntfy digest and lift it to high priority. 0 = never flag.">Flag moves of <input type="number" step="1" name="alertPct" value="${esc(cfg.alertPct == null ? 10 : cfg.alertPct)}"> % or more</label><button>Save</button></form>
 ${s.ntfy ? ctlForm("ntfy-test", "", "Send test push") : ""}</div></details>
 <a href="/autoprice">refresh</a> · <a href="/autoprice/report.json">json</a> · <a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>
 </div>
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
 <h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
+${waiting.length ? `<div class="stagebox"><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting for you</b> — none of them is live. Each row below has its suggested price in a box: correct it if the sources got it wrong, then Publish.<div class="stageact">${ctlForm("publish-all", "", "Publish all " + waiting.length + " at the suggested price", "go")}<span class="muted">${v.game ? esc(v.game) + " tab" : "every game"} · up to 25 a press</span></div></div>` : ""}
 ${alerted.length ? `<div class="alert"><b>⚠ ${alerted.length} product${alerted.length === 1 ? "" : "s"} set to follow ${esc(COMP.name)} ${alerted.length === 1 ? "is" : "are"} priced from TCGplayer instead</b> (out of stock or not listed there):<ul>${alerted.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.action === "skip" ? " · <b>skipped: " + esc(r.reason) + "</b>" : r.suggested != null ? " · now " + money(r.current) + " → " + money(r.suggested) : ""}</li>`).join("")}</ul></div>` : ""}
 <div class="tabs">${tab(null, "All", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</div>
 <table class="rep"><thead><tr><th>Product</th><th>Today</th><th>Market</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>

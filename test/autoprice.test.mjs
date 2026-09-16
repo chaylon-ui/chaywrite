@@ -589,3 +589,84 @@ test("a promo our title names by its own set matches PriceCharting's bracketed p
   assert.equal(pcPickGraded(parseGraded("Charizard VMAX (020/189) [Darkness Ablaze] Graded PSA 9"), hits).id, 836562);
   assert.deepEqual(gradeField("PSA", 9), { key: "graded-price", label: "grade 9" });
 });
+
+/* Staging, the variant picker and the PriceCharting shortlist (owner
+   2026-09-16, after a graded Charizard VMAX went live at a price taken from
+   the wrong printing: "from now on prices don't go live until confirmed"). */
+import { variantOf, pcCandidates, parsePrice, MODES, MODE_LABEL } from "../src/autoprice.js";
+
+const VS = [
+  { id: "gid://shopify/ProductVariant/11", title: "PSA 9", price: "3299.95", inventoryQuantity: 1, inventoryItem: { unitCost: { amount: "1200.00" } } },
+  { id: "gid://shopify/ProductVariant/22", title: "PSA 10", price: "8999.95", inventoryQuantity: 0, inventoryItem: { unitCost: { amount: "4000.00" } } },
+];
+const node = (mf) => ({ id: "gid://shopify/Product/9", title: "Charizard VMAX (020/189) [Prize Pack Series One] Graded PSA 9", handle: "cz", productType: "Pokemon Graded",
+  variants: { edges: VS.map((n) => ({ node: n })) }, mf: { edges: Object.entries(mf || {}).map(([key, value]) => ({ node: { key, value } })) } });
+
+test("a multi-variant product prices the variant the owner picked, by gid or by number", () => {
+  assert.equal(variantOf(VS, "gid://shopify/ProductVariant/22").title, "PSA 10");
+  assert.equal(variantOf(VS, "22").title, "PSA 10");
+  assert.equal(variantOf(VS, ""), null);
+  assert.equal(variantOf(VS, "gid://shopify/ProductVariant/33"), null);
+
+  const none = readProduct(node({}));
+  assert.equal(none.variants, 2);
+  assert.equal(none.variantChosen, false);
+  assert.equal(none.price, 3299.95);                       // falls back to the first, as before
+  assert.equal(none.variantList.length, 2);
+
+  const picked = readProduct(node({ ap_variant: "gid://shopify/ProductVariant/22" }));
+  assert.equal(picked.variantChosen, true);
+  assert.equal(picked.variantId, "gid://shopify/ProductVariant/22");
+  assert.equal(picked.price, 8999.95);
+  assert.equal(picked.cost, 4000);
+  assert.equal(picked.stock, 1);                           // stock is still the whole product
+});
+
+test("the PriceCharting shortlist: the chosen card is marked, priced ones first, at our grade", () => {
+  const products = [
+    { id: 7473194, "product-name": "Charizard VMAX [Prize Pack] #20", "console-name": "Pokemon Darkness Ablaze", "graded-price": 117000 },
+    { id: 836562, "product-name": "Charizard VMAX #20", "console-name": "Pokemon Darkness Ablaze", "graded-price": 950000 },
+    { id: 999001, "product-name": "Charizard VMAX #20", "console-name": "Pokemon Japanese Rapid Strike", "graded-price": 0 },
+  ];
+  const g = { name: "Charizard VMAX", number: "020", set: "Prize Pack Series One", grader: "PSA", grade: 9 };
+  const c = pcCandidates(g, products, products[0]);
+  assert.equal(c.length, 3);
+  assert.equal(c[0].id, 7473194);
+  assert.equal(c[0].chosen, true);
+  assert.equal(c[0].price, 1170);
+  assert.equal(c[0].gradeLabel, "grade 9");
+  assert.equal(c[2].price, null);                          // no price for this grade sinks to the bottom
+  assert.equal(c[1].chosen, false);
+  assert.equal(pcCandidates(g, [], null).length, 0);
+});
+
+test("a typed price is taken as money; junk, zero and the 999999 placeholder are refused", () => {
+  assert.equal(parsePrice("3299.95"), 3299.95);
+  assert.equal(parsePrice(" $1,234.5 "), 1234.5);
+  assert.equal(parsePrice(3299.956), 3299.96);
+  assert.equal(parsePrice("0"), null);
+  assert.equal(parsePrice("-5"), null);
+  assert.equal(parsePrice("abc"), null);
+  assert.equal(parsePrice(""), null);
+  assert.equal(parsePrice("999999.00"), null);
+  assert.deepEqual(MODES, ["shadow", "stage", "apply"]);
+  assert.match(MODE_LABEL.stage, /wait/i);
+});
+
+test("staged rows wait on the page with an editable price, and publishing writes that number", async () => {
+  const { renderPage } = await import("../src/autoprice.js");
+  const d = decide({ price: 219.95, cost: 150, tcgMarket: 198.98 }, { ...DEFAULT_CONFIG }, FX);
+  const rows = [{ id: "gid://shopify/Product/1", title: "Box A", handle: "box-a", type: "MTG Sealed", stock: 2, variantId: "gid://shopify/ProductVariant/1", ...d, awaiting: true }];
+  const page = renderPage({ mode: "stage", config: { ...DEFAULT_CONFIG, mode: "stage" } }, { rows, stage: true }, { configured: true });
+  assert.match(page, /class="stagebox"><b>⏳ 1 price waiting for you<\/b>/);
+  assert.match(page, new RegExp('name="price" value="' + d.suggested.toFixed(2) + '"'));
+  assert.match(page, /<button class="go">Publish<\/button>/);
+  assert.match(page, /Keep \$219\.95/);
+  assert.match(page, /STAGED/);
+  assert.match(page, /tcgplayer\.com\/search\/all\/product\?q=Box%20A/);   // manual review link
+  assert.match(page, /LH_Sold=1/);
+  // shadow and apply keep the old shape: no box, nothing waiting
+  const plain = renderPage({ mode: "apply", config: DEFAULT_CONFIG }, { rows: [{ ...rows[0], awaiting: false }] }, { configured: true });
+  assert.doesNotMatch(plain, /class="stagebox"/);
+  assert.doesNotMatch(plain, /name="price"/);
+});
