@@ -137,6 +137,38 @@ jobs:
             await sleep(1200);
             console.log('HID', await page.evaluate(() => window.__hid));
 
+            // Say exactly what is still on top before blaming anything.
+            for (const f of page.frames()) console.log('FRAME', f.url().slice(0, 120), '| name', f.name());
+            console.log('TOPMOST', await page.evaluate(() => {
+              const out = [];
+              const vw = innerWidth, vh = innerHeight;
+              for (const [x, y] of [[vw / 2, vh / 2], [vw / 2, vh * 0.3], [vw * 0.75, vh * 0.2]]) {
+                const el = document.elementFromPoint(x, y);
+                if (!el) { out.push([x, y, 'none']); continue; }
+                const cs = getComputedStyle(el);
+                out.push([Math.round(x), Math.round(y), el.tagName + '.' + String(el.className).slice(0, 50), cs.position, cs.zIndex]);
+              }
+              return JSON.stringify(out);
+            }));
+            // Close it the way a shopper would: click the popup's own close
+            // control, in whichever frame it lives in.
+            for (const f of page.frames()) {
+              for (const sel of ['[aria-label*="lose" i]', '[class*="close" i]', '[id*="close" i]', 'button.close', '.modal__close', 'svg[class*="close" i]']) {
+                try {
+                  const h = await f.$(sel);
+                  if (!h) continue;
+                  await h.click({ delay: 20 });
+                  console.log('CLICKED', sel, 'in', f.url().slice(0, 60));
+                  await sleep(400);
+                } catch (e) { /* not clickable, next */ }
+              }
+            }
+            await sleep(800);
+            console.log('TOPMOST-AFTER', await page.evaluate(() => {
+              const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+              return el ? el.tagName + '.' + String(el.className).slice(0, 60) : 'none';
+            }));
+
             const el = await page.$('#xg-deck-results');
             if (!el) { console.log('NO RESULTS ELEMENT'); await browser.close(); return; }
             const box = await el.boundingBox();
