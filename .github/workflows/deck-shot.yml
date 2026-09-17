@@ -104,6 +104,15 @@ jobs:
             await page.evaluate(() => {
               const sweep = () => {
                 let n = 0;
+                // The newsletter popup is an app IFRAME, invisible to a
+                // querySelectorAll over the main document - which is why two
+                // earlier sweeps left it sitting in the middle of the shot
+                // (runs 35226875245, 35227066094). Drop every iframe that is
+                // not part of the Deck Builder itself.
+                for (const f of document.querySelectorAll('iframe')) {
+                  if (f.closest('#xg-deck')) continue;
+                  f.remove(); n++;
+                }
                 for (const el of document.querySelectorAll('body *')) {
                   if (el.closest('#xg-deck')) continue;
                   const cs = getComputedStyle(el);
