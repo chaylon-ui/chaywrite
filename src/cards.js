@@ -349,16 +349,39 @@ export async function serveSearch(request, env) {
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim().slice(0, 60);
   const g = String(url.searchParams.get("g") || "").slice(0, 16); // set browse scopes to the active game
+  // Set browse rides its OWN parameter and filters on the product tag that
+  // carries the set name. It used to be folded into q as "[Set Name]" and
+  // matched against the title, but Shopify tokenises that on whitespace and
+  // throws the brackets away as punctuation, so "[Wilds of Eldraine]" decayed
+  // into the loose words wilds/of/eldraine and returned "Ferocity of the Wilds
+  // [Throne of Eldraine]" — the wrong set entirely. A quoted tag term is exact,
+  // and it leaves the title free, so a set and a card name now compose.
+  const set = String(url.searchParams.get("set") || "").trim().slice(0, 60);
   const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
-  const out = { q, count: 0, cards: [] };
-  if (q.length < 2) return Response.json(out, { headers: { "cache-control": "no-store" } });
+  const out = { q, set, count: 0, cards: [] };
+  if (q.length < 2 && !set) return Response.json(out, { headers: { "cache-control": "no-store" } });
   try {
     const token = env && env.SHOPIFY_ADMIN_TOKEN;
     let prods = null;
     if (token) {
-      try { prods = await adminSearch(q, env, GAME_PTQ[g] || ""); } catch { prods = null; }
+      // A bare code scopes by SKU prefix; a real set name scopes by tag.
+      const isCode = /^[A-Z0-9]{2,6}$/.test(set);
+      try { prods = await adminSearch(q, env, GAME_PTQ[g] || "", 2, false, isCode ? "" : set, isCode ? set : ""); } catch { prods = null; }
+      // tag:"X" is a phrase-CONTAINS match, not an equality test: tag:"Wilds of
+      // Eldraine" also returns "Wilds of Eldraine: Enchanting Tales", and
+      // tag:"of Eldraine" would return Throne of Eldraine. It narrows the query
+      // cheaply and correctly, but the shopper tapped one set, so the exact one
+      // is what comes back. Sub-sets keep their own entry in the suggestions.
+      if (prods && set && !isCode) prods = prods.filter((p) => p && setNameOf(p.title || "", p.tags, p.body_html || "").toLowerCase() === set.toLowerCase());
     }
-    if (!prods) prods = await suggestSearch(q, headers);
+    // Tokenless fallback has no tag filter, so it searches the set as text and
+    // then keeps only the products that really carry it.
+    if (!prods) {
+      prods = await suggestSearch(q || set, headers);
+      // Codes are matched as text by the query above; only a real set name can
+      // be confirmed against the product, so only that is filtered.
+      if (set && !/^[A-Z0-9]{2,6}$/.test(set)) prods = prods.filter((p) => p && setNameOf(p.title || "", p.tags, p.body_html || "").toLowerCase() === set.toLowerCase());
+    }
     const built = buildCards(prods.filter(Boolean), { minPrice: 0, perLane: 199 });
     out.cards = built.cards.slice(0, 120); out.count = out.cards.length;
     out.game = built.game; out.colorNames = built.colorNames;
@@ -370,10 +393,21 @@ export async function serveSearch(request, env) {
 }
 
 /* Full-catalogue title search through the Admin API (up to 40 products). */
-async function adminSearch(q, env, ptq = "", pages = 2, codeMode = false) {
+async function adminSearch(q, env, ptq = "", pages = 2, codeMode = false, set = "", setCode = "") {
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
   const safe = q.replace(/[*"\\():]/g, " ").trim();
-  if (!safe) return null;
+  // The set goes in QUOTED, so only the quote and the escape need stripping —
+  // the spaces, colons and ampersands real set names carry ("Scarlet & Violet:
+  // Paradox Rift") have to survive or the tag stops matching.
+  const setSafe = String(set || "").replace(/["\\]/g, " ").trim();
+  // A Yu-Gi-Oh set can reach us as a bare CODE (DUPO) when the set-name
+  // directory is unreachable and the cards never got their real names. A code
+  // is not a tag, but every BinderPOS SKU starts with it, so scope by SKU
+  // prefix instead — exact either way, and it still ANDs with the card name.
+  const codeSafe = String(setCode || "").replace(/[^A-Za-z0-9]/g, "").trim();
+  if (!safe && !setSafe && !codeSafe) return null;
+  const setTerm = codeSafe ? `sku:${codeSafe}*` : (setSafe ? `tag:"${setSafe}"` : "");
+  const textTerm = safe ? (codeMode ? `sku:${safe}*` : `title:*${safe}*`) : "";
   // Two pages of 40 (the per-query cost stays at the long-proven level) so a
   // deep name like "charizard" surfaces the EXs and GXs, not just page one.
   const gql = `query($q:String!,$after:String){products(first:40,query:$q,after:$after){
@@ -394,7 +428,7 @@ async function adminSearch(q, env, ptq = "", pages = 2, codeMode = false) {
         // Collector-code lookups (One Piece "OP16-003", YGO "SDBE-EN001", ...)
         // go by SKU prefix — every BinderPOS variant SKU starts with the
         // code, while titles carry it inconsistently.
-        body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} ${codeMode ? `sku:${safe}*` : `title:*${safe}*`}`.replace(/\s+/g, " "), after } }),
+        body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} ${setTerm} ${textTerm}`.replace(/\s+/g, " ").trim(), after } }),
         signal: AbortSignal.timeout(6000),
       });
       if (r.status !== 429) break;
@@ -528,6 +562,34 @@ async function ygoSetNames(request, ctx) {
   } catch { return {}; }
 }
 
+/* The set a product belongs to, spelled exactly as its TAG spells it — that
+   string is the only thing precise enough to filter on. Every game opens its
+   description with the set ("Set: Wilds of Eldraine Type: ...", One Piece uses
+   "Set Name:"), and carries the same string as a tag, so read the description
+   and confirm it against the tags. Beats scraping the title's [brackets] twice
+   over: Yu-Gi-Oh brackets hold a card CODE, not a set, and a bracket alone is
+   not something Shopify can search on. Falls back to a tag that equals the
+   bracket, then to nothing. */
+export function setNameOf(title, tags, description) {
+  const list = (Array.isArray(tags) ? tags : []).map((t) => String(t || "").trim()).filter(Boolean);
+  // Non-greedy up to the next KNOWN field label, so set names that contain a
+  // colon of their own ("Scarlet & Violet: Paradox Rift") survive intact.
+  const m = String(description || "").match(/\bSet(?:\s+Name)?:\s*(.+?)\s+(?:Type|Card type|Card Number|Release Date|Rarity)\s*:/i);
+  if (m) {
+    const name = m[1].trim();
+    const exact = list.find((t) => t.toLowerCase() === name.toLowerCase());
+    if (exact) return exact; // the tag's own casing is what the tag filter needs
+    if (name.length > 1) return name;
+  }
+  const br = String(title || "").match(/\[([^\]]{2,60})\]/);
+  if (br) {
+    const inner = br[1].trim();
+    const exact = list.find((t) => t.toLowerCase() === inner.toLowerCase());
+    if (exact) return exact;
+  }
+  return "";
+}
+
 export async function serveSetSuggest(request, env, ctx) {
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 30);
@@ -540,31 +602,31 @@ export async function serveSetSuggest(request, env, ctx) {
   if (hit) return hit;
   const token = env && env.SHOPIFY_ADMIN_TOKEN;
   const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
-  const names = g === "yugioh" ? await ygoSetNames(request, ctx) : {};
   const found = new Map();
   try {
     if (!token) throw new Error("no token");
     const safe = q.replace(/[*"\\()[\]]/g, " ").trim();
-    const gql = `query($q:String!){products(first:100,query:$q){edges{node{title}}}}`;
+    // Match the TAG as well as the title. Yu-Gi-Oh titles bracket a card code
+    // ([SAST-EN008]) and never the set, so "savage" can only reach Savage
+    // Strike through its tag.
+    const gql = `query($q:String!){products(first:100,query:$q){edges{node{title tags description(truncateAt:200)}}}}`;
     const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
-      body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} title:*${safe}*`.replace(/\s+/g, " ") } }),
+      body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} (title:*${safe}* OR tag:*${safe}*)`.replace(/\s+/g, " ") } }),
       signal: AbortSignal.timeout(6000),
     });
     const edges = (await r.json())?.data?.products?.edges || [];
     for (const { node } of edges) {
-      const m = String((node && node.title) || "").match(/\[([^\]]{2,60})\]/);
-      if (!m) continue;
-      let name = m[1].trim();
-      // Yu-Gi-Oh style brackets carry card codes ([DUPO-EN101]) — fold those
-      // into their set-code prefix so DUPO suggests once, not per card, and
-      // translate the code to the real set name when the directory knows it.
-      const code = name.match(/^([A-Z0-9]{2,6})-[A-Z]{0,4}\d/);
-      const sq = code ? code[1] : name; // what the kiosk should SEARCH by
-      const label = code ? (names[code[1]] || code[1]) : name;
-      if (label.toLowerCase().includes(q) || sq.toLowerCase().includes(q))
-        found.set(sq.toLowerCase(), { n: label, q: sq });
+      // One entry per SET, keyed and searched by the exact tag the products
+      // carry — that string is what /search.json?set= filters on.
+      const name = setNameOf((node && node.title) || "", node && node.tags, (node && node.description) || "");
+      if (!name || !name.toLowerCase().includes(q)) continue;
+      // Only offer a set the tag filter can actually deliver: setNameOf will
+      // fall back to the description when no tag confirms it, and a chip that
+      // leads to an empty case is worse than no chip.
+      const tagged = (Array.isArray(node && node.tags) ? node.tags : []).some((t) => String(t || "").toLowerCase() === name.toLowerCase());
+      if (tagged) found.set(name.toLowerCase(), { n: name, q: name });
     }
   } catch {}
   const sets = [...found.values()].sort((a, b) => {

@@ -640,6 +640,17 @@ html.touch .tcko{display:block}
 .tkb{display:none;position:fixed;inset:0;z-index:55;background:rgba(6,6,9,.6);align-items:flex-end;justify-content:center;padding:2.5vh}
 .tkb.open{display:flex}
 .tkbox{background:rgba(20,20,25,.97);border:1px solid #2e2e38;border-radius:18px;padding:1.1rem 1.2rem;width:min(94vw,860px);display:flex;flex-direction:column;gap:.55rem;box-shadow:0 30px 70px -20px #000}
+/* The active set sits ABOVE the typed text as its own removable pill, so it
+   is visibly a filter rather than something occupying the query box — and the
+   ✕ drops the set without wiping what has been typed. Empty = no row at all. */
+.tkset:empty{display:none}
+.tkset{display:flex;justify-content:center}
+.tksetpill{display:inline-flex;align-items:center;gap:.45rem;max-width:100%;background:#1b2a1e;border:1px solid #3f6b46;border-radius:999px;color:#cfe8d2;font-size:.95rem;padding:.3rem .45rem .3rem .8rem}
+.tksetpill b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tksetx{border:none;background:#2c4432;color:#cfe8d2;border-radius:999px;width:1.5rem;height:1.5rem;line-height:1;font-size:.85rem;cursor:pointer;flex:0 0 auto}
+.tksetx:hover{background:#3f6b46}
+html.touch .tksetpill{font-size:1.25rem;padding:.45rem .6rem .45rem 1.1rem}
+html.touch .tksetx{width:2.1rem;height:2.1rem;font-size:1.1rem}
 .tkq{min-height:3.1rem;background:#0d0d12;border:1px solid #34343e;border-radius:12px;font-size:1.35rem;padding:.6rem 1rem;color:#f0ead8;letter-spacing:.04em}
 .tkq span:empty::before{content:'Type a card name…';color:#565660}
 .tkb.prod .tkq span:empty::before{content:'Type a product name…'} /* shelf tabs sell product, not cards */
@@ -834,6 +845,7 @@ html.portrait .tsteps{grid-template-columns:1fr}
     <div class="tcrow"><button class="tcbtn" id="tcCounter">🛎 Send to counter</button><button class="tcbtn" id="tcClear">Clear cart</button><button class="tcbtn" id="tcClose">Close</button></div>
   </div></div>
   <div class="tkb" id="tkb"><div class="tkbox">
+    <div class="tkset" id="tkset"></div>
     <div class="tkq"><span id="tkq"></span></div>
     <div id="tkrows"></div>
     <div class="tkres" id="tkres">Results fill the case behind this keyboard as you type.</div>
@@ -1616,6 +1628,8 @@ function MIRROR(force){if(window.REMOTE||(!force&&!REMN)||!ws||ws.readyState!==1
   cv:ZVAR||null,
   cart:cart.map(c=>({n:c.name,p:c.price,v:String(c.variantId||''),c:c.condition||''})),
   q:TQ,
+  st:TSET,
+  stl:TSETLBL,
   kb:document.getElementById('tkb').classList.contains('open'),
   chk:document.getElementById('tcheck').classList.contains('open'),
   svf:Object.assign({},SLVF),
@@ -1632,8 +1646,13 @@ function APPLYMIR(m){if(Date.now()<RGRACE)return;REM_APPLY=true;try{
  const cs=JSON.stringify(m.cart||[]);
  const local=JSON.stringify(cart.map(c=>({n:c.name,p:c.price,v:String(c.variantId||''),c:c.condition||''})));
  if(cs!==local){cart=(m.cart||[]).map(o=>({name:o.n,price:o.p,variantId:o.v,condition:o.c}));updateCart();}
- if(typeof m.q==='string'&&m.q!==TQ){TQ=m.q;renderTQ();
-  if(TQ.trim().length>=2)TKGO();else if(!TQ&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}}
+ const nst=typeof m.st==='string'?m.st:TSET;
+ if((typeof m.q==='string'&&m.q!==TQ)||nst!==TSET){
+  if(typeof m.q==='string')TQ=m.q;
+  if(nst!==TSET){TSET=nst;TSETLBL=String(m.stl||nst);}
+  renderTQ();
+  if(TSET||TQ.trim().length>=2)TKGO();
+  else if(!TQ&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}}
  document.getElementById('tkb').classList.toggle('open',!!m.kb);
  if(m.chk&&cart.length){renderTcheck();document.getElementById('tcheck').classList.add('open');}
  else if(!m.chk)document.getElementById('tcheck').classList.remove('open');
@@ -1659,6 +1678,8 @@ function EXECRC(d){if(!d)return;lastAct=Date.now();stopAttract();armAttract();
   case 'sopen':TSEARCHOPEN(null);break;
   case 'key':TKEY(String(d.k||' ').slice(0,1));break;
   case 'sclear':TSEARCHCLEAR();break;
+  case 'setgo':SETGO({n:String(d.l||d.s||''),q:String(d.s||'')});break;
+  case 'setclear':SETCLEAR();break;
   case 'sdone':TSEARCHCLOSE();break;
   case 'reset':touchReset();break;
   case 'svf':if(d.f&&typeof d.f==='object'){SLVF={size:d.f.size==='jp'?'jp':'std',fin:SLVFINS.includes(d.f.fin)?d.f.fin:'all',ct:['all','100','60'].includes(String(d.f.ct))?String(d.f.ct):'all'};
@@ -1833,7 +1854,7 @@ function renderTouchTabs(s){const box=document.getElementById('ttabs');if(!box)r
     ((SLVALL&&Array.isArray(SLVALL.CATS)&&SLVALL.CATS.length>1)?`<div class="slvbar"><div class="slvgrp" style="flex-wrap:wrap;justify-content:center">${[{k:'all',label:'ALL'},...SLVALL.CATS].map(c=>`<button class="slvchip${SHCAT===c.k?' on':''}" onclick="SHCATSET('${H(c.k)}',this)">${H(String(c.label||c.k).toUpperCase())}</button>`).join('')}</div></div>`:'')
     +`<div class="slvbar"><div class="slvgrp">${[['feed','NEWEST'],['pd','PRICE ↓'],['pa','PRICE ↑'],['az','A–Z'],['za','Z–A']].map(([v,l])=>`<button class="slvchip${SHSORT===v?' on':''}" onclick="SHSET('${v}',this)">${l}</button>`).join('')}</div></div>`):'')
   +srtbar
-  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H('“'+TQ.trim()+'” — tap to change'):H('Search for a '+IWone()+'…')}</span></button>`:'')
+  +(s.searchEnabled!==false?`<button class="tsbar${searching?' on':''}" onclick="TSEARCHOPEN(this)"><span class="tsico">🔍</span><span class="tsph">${searching?H((TQ.trim()?'“'+TQ.trim()+'”':'')+(TQ.trim()&&TSETLBL?' in ':'')+(TSETLBL||'')+' — tap to change'):H('Search for a '+IWone()+'…')}</span></button>`:'')
   +((s.setBrowse===true&&!(s.sleevesActive||s.shelfActive)&&!JPMODE)?`<button class="tsbar" onclick="SETSOPEN(this)"><span class="tsico">🗂</span><span class="tsph">Browse by set…</span></button>`:''); // JP sets aren't in the title brackets, so set browse sits out
  const sc=document.getElementById('tscroll');
  sc.addEventListener('scroll',TSCROLLUPD,{passive:true});
@@ -1858,6 +1879,10 @@ function TSWITCH(i,el){if(el&&window.TOUCH)comicBurst(el,'LET’S GO!',true);
    keyboard. Results swap into the case live via the shared search-deck path
    (tape hidden, tabs restore it); walking away or switching tabs clears it. */
 let TQ='',TKT=null,TKSEQ=0;
+/* The chosen set is a SCOPE, held apart from the typed text, so the keyboard
+   stays free for a card name while a set is active. TSET is the exact tag
+   value the worker filters on; TSETLBL is what the pill shows. */
+let TSET='',TSETLBL='';
 /* Shelf tabs (sleeves, board games, Warhammer) sell product, not cards. */
 function NONCARD(){return !!(SETTINGS.sleevesActive||SETTINGS.shelfActive);}
 /* The dealt on-screen keys are for store totems only. The website — desktop
@@ -1889,7 +1914,7 @@ function SETSOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SETS!',true);
  if(!ov){ov=document.createElement('div');ov.id='setsov';document.body.appendChild(ov);
   ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');});}
  __SETS=[...new Map((Array.isArray(CARDS)?CARDS:[])
-  .map(c=>({n:String(c.set||'').trim(),q:String(c.setq||c.set||'').trim()}))
+  .map(c=>({n:String(c.set||'').trim(),q:String(c.set||'').trim()})) // the tag is the set NAME for every game (Yu-Gi-Oh's code lives in setq and is not a tag)
   .filter(x=>x.n.length>1&&x.n!=='Dragon Shield')
   .map(x=>[x.n.toLowerCase(),x])).values()].slice(0,30);
  const roll=SETTINGS.setRoll===true; // admin option: A–Z roll instead of typing
@@ -1900,14 +1925,14 @@ function SETSOPEN(el){if(el&&window.TOUCH)comicBurst(el,'SETS!',true);
   <div class="tkr"><button class="tkk wide" onclick="SETKEY(' ')">space</button><button class="tkk wide" onclick="SETKEY('⌫')">⌫</button></div></div>`:'';
  const rail=roll?`<div class="setsrail">${[...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map(l=>`<button class="tkk setsl" onclick="SETLETTER('${l}',this)">${l}</button>`).join('')}</div>`:'';
  ov.innerHTML=`<div class="setsbox"><div class="setstitle">BROWSE BY SET</div>
-  ${roll?'<div class="setshint">Pick a letter — sets we stock appear below.</div>':`<div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="36"${kb?' readonly':''}
+  ${roll?'<div class="setshint">Pick a letter — sets we stock appear below.</div>':`<div class="setsrow"><input id="setsin" placeholder="Type a set name — e.g. Amonkhet" maxlength="60"${kb?' readonly':''}
    oninput="SETSUG(this.value)" onkeydown="if(event.key==='Enter')SETGO(this.value)"><button class="slvchip" onclick="SETGO(document.getElementById('setsin').value)">GO</button></div>`}
   ${kb}${rail}
   <div id="setsug">${__SETS.length?`<div class="setshint">Sets on this page:</div><div class="setschips">${__SETS.map((x,i)=>`<button class="slvchip" onclick="SETGO(__SETS[${i}])">${H(x.n)}</button>`).join('')}</div>`:''}</div>
   <button class="slvchip setsclose" onclick="document.getElementById('setsov').classList.remove('open')">✕ CLOSE</button></div>`;
  ov.classList.add('open');}
 function SETKEY(k){const i=document.getElementById('setsin');if(!i)return;
- if(k==='⌫')i.value=i.value.slice(0,-1);else if(i.value.length<36)i.value+=k;
+ if(k==='⌫')i.value=i.value.slice(0,-1);else if(i.value.length<60)i.value+=k;
  SETSUG(i.value);}
 /* Live set-name autocomplete: every keystroke narrows the chips ("A" lists
    A-sets, "AM" narrows to Amonkhet…) via /setsuggest.json. */
@@ -1926,31 +1951,56 @@ function SETSUG(q,prefixOnly){q=String(q||'').trim();clearTimeout(SUGT);
    :'<div class="setshint">No sets match that yet — keep typing or try another spelling.</div>';
  }).catch(()=>{if(seq===SUGSEQ){const b=document.getElementById('setsug');if(b)b.innerHTML='<div class="setshint">Could not reach the set list — try again.</div>';}});},250);}
 function SETLETTER(l,el){if(el&&window.TOUCH)comicBurst(el,l,true);SETSUG(l,true);}
-function SETGO(n){if(n&&typeof n==='object')n=n.q; // suggestion chips carry {n:label,q:search}
- n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,36);if(!n)return;
+function SETGO(n){let lbl='';
+ if(n&&typeof n==='object'){lbl=String(n.n||'');n=n.q;} // suggestion chips carry {n:label,q:tag}
+ n=String(n||'').trim().replace(/[\[\]]/g,'').slice(0,60);if(!n)return;
  const ov=document.getElementById('setsov');if(ov)ov.classList.remove('open');
- // Set CODES (Yu-Gi-Oh's DUPO etc.) match titles as "[CODE-…" — full set
- // names close their bracket.
- TQ=/^[A-Z0-9]{2,6}$/.test(n)?'['+n+'-':'['+n+']';renderTQ();TKGO();}
+ if(window.REMOTE&&!REM_APPLY)RGO({a:'setgo',s:n,l:lbl});
+ // The set no longer goes into the query box. It used to be written there as
+ // "[Set Name]" and matched against the title, which meant two things went
+ // wrong: typing a card name appended to it ("[Wilds of Eldraine]bolt", which
+ // no title can contain), and Shopify tokenised the brackets away so the set
+ // never really filtered — picking Wilds of Eldraine returned Throne of
+ // Eldraine cards. As a scope it filters on the product's set TAG, exactly.
+ TSET=n;TSETLBL=lbl||n;renderTQ();TKGO();MIRRORQ();}
+/* Drop the set, keep whatever is typed. */
+function SETCLEAR(){if(window.REMOTE&&!REM_APPLY)RGO({a:'setclear'});
+ TSET='';TSETLBL='';renderTQ();
+ if(TQ.trim().length>=2)TKGO();
+ else{TKSEQ++;clearTimeout(TKT);SETMODE=false;
+  const r=document.getElementById('tkres');if(r)r.textContent='Results fill the case behind this keyboard as you type.';
+  if(SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}}
+ MIRRORQ();}
 function TSEARCHCLOSE(){document.getElementById('tkb').classList.remove('open');}
-function TSEARCHCLEAR(){TQ='';TKSEQ++;clearTimeout(TKT);renderTQ();
+function TSEARCHCLEAR(){TQ='';TSET='';TSETLBL='';TKSEQ++;clearTimeout(TKT);renderTQ();
  document.getElementById('tkres').textContent='Results fill the case behind this keyboard as you type.';
  endSearchDeck();TSEARCHCLOSE();renderTouchTabs(SETTINGS);}
 function renderTQ(){const el=document.getElementById('tkq');if(el)el.textContent=TQ;
- const i=document.getElementById('tkqin');if(i&&i.value!==TQ)i.value=TQ;}
+ const i=document.getElementById('tkqin');if(i&&i.value!==TQ)i.value=TQ;
+ // Rebuild the pill only when it changes: renderTQ runs on every keypress and
+ // the ✕ inside it should not be swapped out from under a finger.
+ const sp=document.getElementById('tkset');
+ if(sp&&sp.dataset.set!==TSET){sp.dataset.set=TSET;
+  sp.innerHTML=TSET?`<span class="tksetpill">🗂 <b>${H(TSETLBL)}</b><button class="tksetx" onclick="SETCLEAR()" aria-label="Show every set again">✕</button></span>`:'';}}
 function TKEY(k){if(window.REMOTE&&!REM_APPLY)RGO({a:'key',k},2500);
  if(k==='⌫')TQ=TQ.slice(0,-1);else if(TQ.length<40)TQ+=k;
  renderTQ();clearTimeout(TKT);TKT=setTimeout(TKGO,350);}
 function TKGO(){const q=TQ.trim(),seq=++TKSEQ,res=document.getElementById('tkres');
- SETMODE=q.startsWith('['); // bracketed query = set browse → filter/sort chips
- if(q.length<2){if(!q&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}res.textContent='Results fill the case behind this keyboard as you type.';return;}
- res.textContent='Searching…';TRACKQ(q);
- fetch('/search.json?q='+encodeURIComponent(q)+((SETMODE&&GAME)?'&g='+encodeURIComponent(GAME):'')).then(r=>r.ok?r.json():null).then(d=>{
+ // One letter is not a search, but a set on its own is — so a lone letter is
+ // simply dropped while a set is scoped rather than blocking the browse.
+ const qq=q.length>=2?q:'';
+ SETMODE=!!TSET; // a set scope is on → colour/sort chips over the result set
+ if(!qq&&!TSET){if(!q&&SDECK){endSearchDeck();renderTouchTabs(SETTINGS);}res.textContent='Results fill the case behind this keyboard as you type.';return;}
+ const lbl=qq?(TSET?'“'+qq+'” in '+TSETLBL:'“'+qq+'”'):TSETLBL;
+ res.textContent='Searching…';TRACKQ(qq||TSET);
+ // The game scope rides WITH a set only. A plain name search stays catalogue-
+ // wide on purpose, so "charizard" typed on the MTG tab still finds the card.
+ fetch('/search.json?q='+encodeURIComponent(qq)+(TSET?'&set='+encodeURIComponent(TSET):'')+((TSET&&GAME)?'&g='+encodeURIComponent(GAME):'')).then(r=>r.ok?r.json():null).then(d=>{
   if(seq!==TKSEQ||!d)return;
   const n=Array.isArray(d.cards)?d.cards.length:0;
-  TRACKQN(q,n);
-  res.textContent=n?(n+' '+(n===1?'card':'cards')+' found'+(window.SITE?'':' — tap Done to browse')):('Nothing in stock matches “'+q+'”');
-  if(n){startSearchDeck({q,cards:d.cards,colorNames:d.colorNames});renderTouchTabs(SETTINGS);}
+  TRACKQN(qq||TSET,n);
+  res.textContent=n?(n+' '+(n===1?'card':'cards')+' found'+(window.SITE?'':' — tap Done to browse')):('Nothing in stock matches '+lbl);
+  if(n){startSearchDeck({q:qq||TSETLBL,cards:d.cards,colorNames:d.colorNames});renderTouchTabs(SETTINGS);}
  }).catch(()=>{if(seq===TKSEQ)res.textContent='Search hiccuped — keep typing to retry.';});}
 /* Send the totem's cart to the counter: the room turns it into a Shopify
    draft order (same path the phone uses) and the counter ticket pops on
