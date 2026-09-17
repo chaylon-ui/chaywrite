@@ -128,6 +128,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       "Also at our other Exor locations" on single-card pages (assets/xg-product-sisters.js). {%- endcomment -%}
   <meta name="xg-game" content="{% if product %}{{ product.type | escape }}{% elsif collection %}{{ collection.handle }} {{ collection.title | escape }}{% endif %}">
   <script src="{{ 'xg-personal.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-whatsnew.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'xg-product-sisters.js' | asset_url }}" defer="defer"></script>
 
   {{ content_for_header }}
