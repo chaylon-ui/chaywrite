@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-09-16",
+  "updated": "2026-09-17",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -2333,6 +2333,31 @@
             }
           }
         },
+        "mega evolution: 30th celebration classic collection": {
+          "name": "Pokemon 30th classic squash delete sept 30th",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
         "prize pack series six": {
           "name": "Pokemon Prize pack 6",
           "conds": {
@@ -2385,6 +2410,31 @@
         },
         "prize pack series nine": {
           "name": "Pokemon Prize Pack Series 9",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "mega evolution: 30th celebration": {
+          "name": "Pokemon 30th Celebration Squash delete sept 30th",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -3550,31 +3600,6 @@
       "sets": {
         "winner's pack 2026-2027": {
           "name": "YUgiOH winners pack 26/27. Do not delete.",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "magnificent monsters": {
-          "name": "Magnificent Monsters (Remove Sept 16)",
           "conds": {
             "NM": {
               "cash": 0.0,
