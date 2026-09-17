@@ -606,22 +606,44 @@ export async function serveSetSuggest(request, env, ctx) {
   try {
     if (!token) throw new Error("no token");
     const safe = q.replace(/[*"\\()[\]]/g, " ").trim();
-    // Match the TAG as well as the title. Yu-Gi-Oh titles bracket a card code
-    // ([SAST-EN008]) and never the set, so "savage" can only reach Savage
-    // Strike through its tag.
-    const gql = `query($q:String!){products(first:100,query:$q){edges{node{title tags description(truncateAt:200)}}}}`;
-    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+    if (!safe) throw new Error("empty");
+    // A SET LIST IS NOT A PRODUCT SEARCH. Asking for the first N products that
+    // match the text and reading their sets off them samples PRODUCTS, not
+    // sets, and the sample is what decides the answer. Typing "wilds" matched
+    // card NAMES — "Escape to the Wilds", "Ferocity of the Wilds", "Vivien,
+    // Champion of the Wilds", all from Throne of Eldraine and older — which
+    // filled the whole window, and every one of them was then discarded for
+    // belonging to a set that does not contain "wilds". Result: an empty list,
+    // while Wilds of Eldraine sat in the catalogue with 280 tagged products.
+    //
+    // So: read sets from the TAG, the only field that carries one, and sample
+    // both ends of the catalogue. A big set's own cards crowd out its sibling
+    // sets otherwise — "Wilds of Eldraine" alone hides "... Promos", "...
+    // Tokens" and "... Enchanting Tales", which are all real and all stocked.
+    const gql = (extra) => `query($q:String!){products(first:150,query:$q${extra}){edges{node{title tags description(truncateAt:200)}}}}`;
+    const ask = (extra, field) => fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
-      body: JSON.stringify({ query: gql, variables: { q: `status:active ${ptq} (title:*${safe}* OR tag:*${safe}*)`.replace(/\s+/g, " ") } }),
+      body: JSON.stringify({ query: gql(extra), variables: { q: `status:active ${ptq} ${field}:*${safe}*`.replace(/\s+/g, " ").trim() } }),
       signal: AbortSignal.timeout(6000),
-    });
-    const edges = (await r.json())?.data?.products?.edges || [];
+    }).then((r) => r.json()).then((j) => j?.data?.products?.edges || []).catch(() => []);
+    // Oldest-first and newest-first over the tag, plus one title pass so a
+    // Yu-Gi-Oh set CODE typed straight in ("SAST") still lands — the code
+    // lives in the title. Three separate windows, so none can crowd another.
+    const edges = (await Promise.all([
+      ask("", "tag"),
+      ask(",sortKey:CREATED_AT,reverse:true", "tag"),
+      ask("", "title"),
+    ])).flat();
     for (const { node } of edges) {
       // One entry per SET, keyed and searched by the exact tag the products
       // carry — that string is what /search.json?set= filters on.
       const name = setNameOf((node && node.title) || "", node && node.tags, (node && node.description) || "");
-      if (!name || !name.toLowerCase().includes(q)) continue;
+      if (!name) continue;
+      // Yu-Gi-Oh's bracket holds the set CODE, so typing "SAST" has to reach
+      // Savage Strike even though the name shares no letters with it.
+      const code = (String((node && node.title) || "").match(/\[([A-Z0-9]{2,6})-[A-Z]{0,4}\d/) || [, ""])[1].toLowerCase();
+      if (!name.toLowerCase().includes(q) && !(code && code.includes(q))) continue;
       // Only offer a set the tag filter can actually deliver: setNameOf will
       // fall back to the description when no tag confirms it, and a chip that
       // leads to an empty case is worse than no chip.
