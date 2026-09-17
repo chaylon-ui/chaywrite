@@ -1,0 +1,99 @@
+name: search-stray-probe
+# Read-only. Opens a search results page and hunts for the orphaned
+# autocomplete panel the owner reported floating in the middle of the page
+# (2026-09-17): reports every visible search-ish panel, its ancestors, its
+# computed position/offsets/z-index, and whether anything has reparented it.
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        description: Search term
+        required: false
+        default: "Rogue's Passage"
+      path:
+        description: Search path
+        required: false
+        default: "/search"
+      preview:
+        description: Use the preview theme
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      Q: ${{ inputs.q }}
+      P: ${{ inputs.path }}
+      PREVIEW: ${{ inputs.preview }}
+      SHOT: probe-shots/search-${{ github.run_id }}.jpg
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
+      - name: Probe
+        run: |
+          mkdir -p probe-shots
+          cat > probe.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
+          const T = '157462692013';
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1480, height: 900 });
+            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setCacheEnabled(false);
+            const pv = process.env.PREVIEW === 'true';
+            if (pv) await page.goto('https://exorgames.com/?preview_theme_id=' + T, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null);
+            const url = 'https://exorgames.com' + process.env.P + '?q=' + encodeURIComponent(process.env.Q) + (pv ? '&preview_theme_id=' + T : '');
+            const r = await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 }).catch(e => { console.log('NAV-ERR', String(e).slice(0,120)); return null; });
+            console.log('url', url);
+            console.log('status', r ? r.status() : 'none', '| title', await page.title());
+            await sleep 0;
+            await sleep(6000);
+
+            const out = await page.evaluate(() => {
+              const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 40 && r.height > 40 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0'; };
+              const cn = (el) => el.tagName + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0,3).join('.') : '') + (el.id ? '#' + el.id : '');
+              const chain = (el) => { const a = []; for (let n = el.parentElement; n && a.length < 7; n = n.parentElement) a.push(cn(n)); return a.join(' < '); };
+              // anything that looks like a suggestion/autocomplete panel
+              const sel = '[class*="autocomplete" i],[class*="suggest" i],[class*="predictive" i],[class*="instant" i],[id*="autocomplete" i],[id*="suggest" i],[class*="search-result" i],[class*="searchbox" i]';
+              const found = [...document.querySelectorAll(sel)].filter(vis);
+              const rows = found.map((el) => {
+                const cs = getComputedStyle(el); const b = el.getBoundingClientRect();
+                return { el: cn(el).slice(0,70), parents: chain(el).slice(0,150), pos: cs.position,
+                         box: [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)],
+                         z: cs.zIndex, inputs: el.querySelectorAll('input').length, imgs: el.querySelectorAll('img').length,
+                         text: (el.textContent||'').trim().replace(/\s+/g,' ').slice(0,60) };
+              });
+              // every visible input, to see which box the panel belongs to
+              const inputs = [...document.querySelectorAll('input[type=search], input[name=q]')].filter(vis).map((i) => {
+                const b = i.getBoundingClientRect();
+                return { el: cn(i).slice(0,60), parents: chain(i).slice(0,120), value: i.value.slice(0,30), box: [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)] };
+              });
+              return { panels: rows, inputs, searchtop: !!document.querySelector('#xg-searchtop'),
+                       decknote: !!document.querySelector('.xg-decknote, [class*="decknote"]') };
+            });
+            console.log('#xg-searchtop present:', out.searchtop, '| decknote present:', out.decknote);
+            for (const i of out.inputs) console.log('INPUT ', JSON.stringify(i));
+            for (const p2 of out.panels) console.log('PANEL ', JSON.stringify(p2));
+            const jpg = await page.screenshot({ type: 'jpeg', quality: 62, captureBeyondViewport: false });
+            fs.writeFileSync(process.env.SHOT, jpg);
+            console.log('SHOT saved', process.env.SHOT, jpg.length);
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0,300)); process.exit(0); });
+          EOF
+          sed -i 's/^            await sleep 0;$//' probe.js
+          node probe.js
+      - name: Commit the shot
+        run: |
+          if [ ! -f "$SHOT" ]; then echo "no shot"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SHOT" && git commit -m "search stray probe ${{ github.run_id }}"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
