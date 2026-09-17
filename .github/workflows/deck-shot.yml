@@ -119,13 +119,14 @@ jobs:
             const box = await el.boundingBox();
             console.log('BOX', JSON.stringify(box));
             if (!box || box.height < 40) { console.log('RESULTS EMPTY'); await browser.close(); return; }
-            // scroll the results to the top of the viewport, then clip from there
-            await page.evaluate(() => document.querySelector('#xg-deck-results').scrollIntoView({ block: 'start' }));
+            // Element screenshot, not page+clip: boundingBox() is viewport
+            // relative while page.screenshot({clip}) takes document
+            // coordinates, and mixing the two photographed the top of the
+            // page instead of the results (run 35226675747).
+            await el.scrollIntoView().catch(() => {});
             await sleep(700);
-            const b2 = await el.boundingBox();
-            console.log('BOX2', JSON.stringify(b2));
-            const h = Math.min(b2.height, parseInt(process.env.CLIP || '700', 10) || 700);
-            const jpg = await page.screenshot({ type: 'jpeg', quality: 80, clip: { x: b2.x, y: Math.max(b2.y, 0), width: b2.width, height: h } });
+            console.log('BOX2', JSON.stringify(await el.boundingBox()));
+            const jpg = await el.screenshot({ type: 'jpeg', quality: 80 });
             fs.writeFileSync(process.env.SHOT, jpg);
             console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes');
             await browser.close();
