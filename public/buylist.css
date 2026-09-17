@@ -77,6 +77,11 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 
 /* ---- results: one card per printing ------------------------------ */
 .bl__hit { display: grid; grid-template-columns: 104px minmax(0, 1fr); grid-template-areas: "img head" "img offers"; gap: 8px 16px; align-items: start; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); padding: 14px; margin-bottom: 12px; }
+/* Both, deliberately: when buylist.js has wrapped the image the wrapper is
+   the grid child and grid-area on the img is inert; if a browser is still
+   running cached JS without the wrapper, the bare img takes the slot and
+   width:100% still resolves to the column. Neither case breaks. */
+.bl__hit .bl__cardwrap { grid-area: img; align-self: start; display: block; min-width: 0; }
 .bl__hit .bl__card { grid-area: img; }
 .bl__head { grid-area: head; min-width: 0; }
 .bl__offers, .bl__none { grid-area: offers; margin: 0; }
@@ -91,7 +96,7 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
    cutout to trace, and box-shadow follows the border-radius. Only transform
    moves on hover (compositor-only); the shadow swap is on the same transition
    but never animates per frame. */
-.bl__card { width: 104px; aspect-ratio: 5 / 7; object-fit: cover; border-radius: var(--bl-card-radius); background: var(--bl-surface-2); align-self: start;
+.bl__card { display: block; width: 100%; aspect-ratio: 5 / 7; object-fit: cover; border-radius: var(--bl-card-radius); background: var(--bl-surface-2); align-self: start;
   /* NO negative spread. A real card is BLACK-bordered, so a tight dark blur
      pulled inward by -4px hid inside the card's own edge and the float was
      invisible (owner: "ITS NOT DOING THAT SUBTLE FLOAT HERE"). The shadow
@@ -100,6 +105,31 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 .bl__card[role="button"] { cursor: zoom-in; }
+/* ---- the slow float (owner, 2026-09-17: "I want it slowly moving like the
+   cards show on our site already when searching for a card") ---------------
+   Same shape as the product page's cardFloat in custom.css: a 5.5s
+   ease-in-out bob, scaled down for a thumbnail (6px against its 9px on a
+   full-size photo).
+   THE WRAPPER MOVES, NEVER THE IMAGE. That is how custom.css does it too, and
+   it is what keeps the card sharp: the img's own transform stays untouched, so
+   nothing resamples it. Transform-only, so this is compositor work with no
+   layout or paint per frame.
+   is-floating is added by buylist.js only while the row is ON SCREEN, and
+   removed when it scrolls away, so a 60-row result list never has 60 cards
+   animating at once - that was the cost worth avoiding. The negative
+   animation-delay starts each card partway through its cycle, so they are
+   out of phase immediately instead of rising in lockstep. */
+@keyframes blCardFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(var(--bl-float-lift, -6px)); }
+}
+.bl__cardwrap.is-floating {
+  animation: blCardFloat 5.5s ease-in-out infinite;
+  animation-delay: var(--bl-float-delay, 0s);
+}
+/* pointing at a card stops it and holds it up - custom.css pauses its own
+   float the same way while the card is being tilted */
+.bl__cardwrap:hover.is-floating, .bl__cardwrap:focus-within.is-floating { animation-play-state: paused; }
 /* NO scale() HERE. Owner, 2026-09-17: "when I hover over the card in the
    buylist it makes it blurrier". The first cut hovered with
    translateY(-4px) scale(1.02); scaling a composited layer resamples the
@@ -147,6 +177,7 @@ html[data-xg-theme="dark"] .bl__card[role="button"]:focus-visible,
 @keyframes blZoomPop { from { opacity: 0; transform: scale(0.97); } }
 @media (prefers-reduced-motion: reduce) {
   .bl__card { transition: none; }
+  .bl__cardwrap.is-floating { animation: none; }
   .bl__card[role="button"]:hover, .bl__card[role="button"]:focus-visible { transform: none; }
   .bl__zoom, .bl__zoom img { animation: none; }
 }
@@ -172,6 +203,21 @@ html[data-xg-theme="dark"] .bl__card[role="button"]:focus-visible,
    (owner, 2026-09-15). */
 .bl__pill--finish { font-size: 12px; padding: 3px 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #1d2327; background: linear-gradient(115deg, #ffe9a8 0%, #ffc6e0 30%, #bfe3ff 60%, #d2ffd8 85%, #ffe9a8 100%); border: 1px solid rgba(0, 0, 0, 0.14); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
 .bl__orow--finish > span:first-child { background: linear-gradient(90deg, #fff3cd 0%, #fffbee 70%, #fff 100%); box-shadow: inset 4px 0 0 #f0b429; }
+/* That gradient is hard-coded LIGHT in both themes, so its ink has to be too.
+   It was inheriting --bl-ink, which is near-white in dark mode, and the
+   condition name disappeared into the cream (owner screenshot, 2026-09-17:
+   four foil rows with invisible grades). Scoped to this cell only - the rest
+   of the row is on the normal surface and keeps the theme's colours. */
+.bl__orow--finish > span:first-child,
+.bl__orow--finish > span:first-child .bl__muted,
+html[data-xg-theme="dark"] .bl__orow--finish > span:first-child,
+html[data-xg-theme="dark"] .bl__orow--finish > span:first-child .bl__muted { color: #1d2327; }
+.bl .bl__orow--finish > span:first-child .bl__condbtn,
+html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn { color: #1d2327; text-decoration-color: rgba(29, 35, 39, 0.5); }
+.bl .bl__orow--finish > span:first-child .bl__condbtn:hover,
+.bl .bl__orow--finish > span:first-child .bl__condbtn:focus-visible,
+html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn:hover,
+html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn:focus-visible { color: #0b6b4f; text-decoration-color: currentColor; }
 .bl__orow--band > .bl__band { grid-column: 1 / -1; justify-content: flex-start; min-height: 26px; padding: 4px 12px; margin-top: 4px; border-top: 2px solid #f0b429; background: #fff3cd; color: #7a4d00; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 .bl__add { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 999px; }
 .bl__nobuy { display: inline-block; font-size: 11.5px; font-weight: 700; line-height: 1.2; padding: 6px 9px; border-radius: 999px; background: var(--bl-surface-2); color: var(--bl-muted); white-space: nowrap; }
@@ -266,7 +312,8 @@ html[data-xg-theme="dark"] .bl__card[role="button"]:focus-visible,
   .bl__bar .bl__setwrap { grid-column: 1 / 2; }
   .bl__bar .bl__btn--primary { grid-column: 2 / 3; }
   .bl__hit { grid-template-columns: 72px minmax(0, 1fr); grid-template-areas: "img head" "offers offers"; gap: 10px 12px; padding: 12px; }
-  .bl__card { width: 72px; }
+  /* the grid column carries the width now; only the float amplitude changes */
+  .bl__cardwrap { --bl-float-lift: -5px; }
   .bl__name { font-size: 16.5px; }
   .bl__offers { grid-template-columns: minmax(0, 1fr) minmax(58px, auto) minmax(58px, auto) auto; column-gap: 2px; font-size: 13.5px; }
   .bl__orow > span { padding: 6px 5px; min-height: 42px; }
@@ -286,7 +333,7 @@ html[data-xg-theme="dark"] .bl__card[role="button"]:focus-visible,
 }
 @media (max-width: 380px) {
   .bl__hit { grid-template-columns: 60px minmax(0, 1fr); }
-  .bl__card { width: 60px; }
+  .bl__cardwrap { --bl-float-lift: -4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .xg-buylist * { transition: none !important; }

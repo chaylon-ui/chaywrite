@@ -329,12 +329,51 @@
       // not already give. Real alt text too - it was alt="" (decorative), which
       // is wrong once it does something.
       var zlabel = h.cardName + (h.setName ? " (" + h.setName + ")" : "");
-      return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="' + esc(zlabel) + '" role="button" tabindex="0" aria-label="Enlarge ' + esc(zlabel) + '" loading="lazy"><div class="bl__head">' +
+      // The image sits in a wrapper because the SLOW FLOAT animates the
+      // wrapper, never the image - transforming the img itself is what made
+      // the hover blur it. A negative, staggered delay starts each card
+      // partway through the 5.5s cycle so a page of results is out of phase
+      // instead of bobbing in unison.
+      var delay = "-" + ((i % 7) * 0.79).toFixed(2) + "s";
+      return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><span class="bl__cardwrap" style="--bl-float-delay:' + delay + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="' + esc(zlabel) + '" role="button" tabindex="0" aria-label="Enlarge ' + esc(zlabel) + '" loading="lazy"></span><div class="bl__head">' +
         '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p></div>" +
         (rows ? '<div class="bl__offers" role="table"><div class="bl__orow bl__orow--head" role="row"><span role="columnheader">Condition</span><span role="columnheader">Cash</span><span role="columnheader">Credit</span><span role="columnheader"><span class="bl__sr">Add</span></span></div>' + rows + "</div>" : '<p class="bl__muted bl__none">Not currently buying this printing.</p>') +
         "</article>";
     }).join("");
     $("#bl-hits").insertAdjacentHTML("beforeend", html);
+    floatWatch();
+  }
+
+  /* ---- the slow float, only while a card is on screen -----------------
+     The animation is CSS (blCardFloat in buylist.css); this only decides
+     which cards are allowed to run it. A result list can reach sixty rows and
+     every animating element is its own compositor layer the GPU keeps working
+     on, so cards that have scrolled away are switched off. Phones are where
+     this page is used, and that is where the saving matters.
+     Anyone who has asked their system for less motion gets none: the CSS has
+     a prefers-reduced-motion rule, and this does not even observe them. */
+  var floatObs = null;
+  function floatWatch() {
+    var reduce = false;
+    try { reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    if (reduce) return;
+    var wraps = $("#bl-hits").querySelectorAll(".bl__cardwrap:not([data-floatwatch])");
+    if (!wraps.length) return;
+    if (!window.IntersectionObserver) {                 // no observer: just float them all
+      for (var j = 0; j < wraps.length; j++) { wraps[j].setAttribute("data-floatwatch", "1"); wraps[j].classList.add("is-floating"); }
+      return;
+    }
+    if (!floatObs) {
+      floatObs = new IntersectionObserver(function (entries) {
+        for (var n = 0; n < entries.length; n++) {
+          entries[n].target.classList.toggle("is-floating", entries[n].isIntersecting);
+        }
+      }, { rootMargin: "120px 0px" });                  // start just before it scrolls in
+    }
+    for (var k2 = 0; k2 < wraps.length; k2++) {
+      wraps[k2].setAttribute("data-floatwatch", "1");
+      floatObs.observe(wraps[k2]);
+    }
   }
 
   $("#bl-hits").addEventListener("click", function (e) {
