@@ -51,26 +51,31 @@ jobs:
 
             const r = await page.goto('https://exorgames.com/pages/selling-to-exor-games-buylist', { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => null);
             console.log('status', r ? r.status() : 'none', '| title', await page.title());
-            await page.waitForSelector('#bl-q, input[type=search], .bl__search input', { timeout: 30000 }).catch(() => console.log('NO SEARCH BOX'));
+            // Wait for the BUYLIST app's own field, by id. A loose
+            // 'input[type=search]' matched the theme's header search box on
+            // the first paint, so the probe typed into the wrong box and the
+            // app had not even mounted yet (run 35248942284: 0 hits).
+            await page.waitForSelector('#bl-q', { timeout: 60000 }).catch(() => console.log('NO #bl-q - buylist app never mounted'));
             await sleep(1500);
 
-            const typed = await page.evaluate((q) => {
-              const box = document.querySelector('#bl-q') || document.querySelector('.bl__search input') || document.querySelector('input[type=search]');
-              if (!box) return 'no box';
-              box.focus(); box.value = q;
-              box.dispatchEvent(new Event('input', { bubbles: true }));
-              const form = box.closest('form');
-              if (form) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-              return box.id || box.className || 'typed';
-            }, process.env.Q);
-            console.log('SEARCHBOX', typed);
-            await page.keyboard.press('Enter').catch(() => {});
+            await page.evaluate(() => {
+              const g = document.querySelector('#bl-game');
+              if (g && g.options.length) console.log(g.options.length);
+            });
+            await page.type('#bl-q', process.env.Q, { delay: 40 }).catch(e => console.log('TYPE-ERR', String(e).slice(0, 80)));
+            console.log('SEARCHBOX', await page.evaluate(() => { const b = document.querySelector('#bl-q'); return b ? b.id + ' = ' + JSON.stringify(b.value) : 'missing'; }));
+            await page.evaluate(() => {
+              const f = document.querySelector('#bl-form');
+              if (f) f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            });
+            await page.click('#bl-form button[type=submit]').catch(() => {});
 
             let hits = 0;
             for (let i = 0; i < 25; i++) {
               await sleep(1200);
               hits = await page.evaluate(() => document.querySelectorAll('.bl__hit').length);
               if (hits > 0) break;
+              if (i % 5 === 4) console.log('  waiting... status:', await page.evaluate(() => (document.querySelector('#bl-status') || {}).textContent || ''));
             }
             console.log('HITS', hits);
             await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
