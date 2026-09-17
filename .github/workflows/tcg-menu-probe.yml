@@ -1,0 +1,168 @@
+name: tcg-menu-probe
+# Read-only. Opens the qikify "Trading Cards" mega panel on the preview theme,
+# lists every tab in the left rail with the size and text length of the panel
+# it opens (an empty panel is the thing the owner circled), dumps the markup of
+# one named tab's panel, prints the shape of any tree node that carries custom
+# HTML (so a new one can be copied from it faithfully), and photographs the
+# open dropdown into probe-shots/.
+on:
+  workflow_dispatch:
+    inputs:
+      tab:
+        description: Tab whose panel markup to dump
+        required: false
+        default: "deck builder"
+      dark:
+        description: Set html[data-xg-theme=dark] first
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAB: ${{ inputs.tab }}
+      DARK: ${{ inputs.dark }}
+      SHOT: probe-shots/tcgmenu-${{ github.run_id }}.jpg
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
+      - name: Probe
+        run: |
+          mkdir -p probe-shots
+          cat > probe.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
+          const T = '157462692013';
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1440, height: 950, deviceScaleFactor: 1 });
+            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setCacheEnabled(false);
+            let ok = false;
+            for (let i = 0; i < 4 && !ok; i++) {
+              await page.goto('https://exorgames.com/?preview_theme_id=' + T, { waitUntil: 'networkidle2', timeout: 90000 }).catch(e => console.log('NAV-ERR', String(e).slice(0, 120)));
+              ok = await page.evaluate(() => !!document.querySelector('.tmenu_item--root'));
+              if (!ok) await sleep(4000);
+            }
+            console.log('theme', await page.evaluate(() => JSON.stringify(window.Shopify && window.Shopify.theme)).catch(() => '?'));
+            if (!ok) { console.log('GAVE-UP: no qikify roots'); await browser.close(); return; }
+            if (process.env.DARK === 'true') await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'dark'));
+
+            // --- the app's own tree: shapes we may copy -------------------
+            const shapes = await page.evaluate(() => {
+              const out = { layouts: {}, custom: [], roots: [] };
+              const es = window._SM && window._SM.newEntries;
+              if (!es) return { err: 'no _SM.newEntries' };
+              for (const k of Object.keys(es)) {
+                const top = es[k] && es[k].data && es[k].data.data && es[k].data.data.megamenu;
+                if (!Array.isArray(top)) continue;
+                const walk = (list, depth, path) => {
+                  for (const it of list) {
+                    const s = it.setting || {};
+                    const lay = s.item_layout || '(none)';
+                    out.layouts[lay] = (out.layouts[lay] || 0) + 1;
+                    const keys = Object.keys(s);
+                    const htmlKey = keys.find(x => /html|content|text_editor|description/i.test(x) && typeof s[x] === 'string' && s[x].length > 20);
+                    if (lay !== 'text' && lay !== 'image' || htmlKey) {
+                      out.custom.push({ path: path + ' > ' + (s.title || '(untitled)'), layout: lay, keys, node: JSON.stringify(it).slice(0, 900) });
+                    }
+                    if (depth === 0) out.roots.push({ title: s.title, submenu_type: s.submenu_type, mega_width: s.submenu_mega_width, kids: (it.menus || []).length });
+                    if (it.menus) walk(it.menus, depth + 1, path + ' > ' + (s.title || '?'));
+                  }
+                };
+                walk(top, 0, k);
+              }
+              return out;
+            });
+            console.log('LAYOUTS', JSON.stringify(shapes.layouts || shapes.err));
+            for (const r of (shapes.roots || [])) console.log('ROOT', JSON.stringify(r));
+            for (const c of (shapes.custom || []).slice(0, 14)) console.log('CUSTOM', JSON.stringify(c));
+
+            // --- open Trading Cards --------------------------------------
+            const labels = await page.evaluate(() => [...document.querySelectorAll('.tmenu_item--root')].map(e => (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)));
+            console.log('ROOTS-DOM', JSON.stringify(labels));
+            const idx = labels.findIndex(t => /trading/i.test(t));
+            if (idx < 0) { console.log('NO-TRADING-ROOT'); await browser.close(); return; }
+            const roots = await page.$$('.tmenu_item--root');
+            await roots[idx].hover(); await sleep(1500);
+
+            const panelSel = '.tmenu_item--root:nth-of-type(' + (idx + 1) + ')';
+            const tabs = await page.evaluate((n) => {
+              const root = document.querySelectorAll('.tmenu_item--root')[n];
+              const rail = root.querySelector('ul.tmenu_submenu_tab_control') || root.querySelector('[class*="tab_control"]');
+              if (!rail) return { err: 'no tab rail', html: root.innerHTML.replace(/\s+/g, ' ').slice(0, 1200) };
+              return { tabs: [...rail.children].map((li, i) => ({ i, t: (li.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30), cls: (li.className || '').slice(0, 60) })) };
+            }, idx);
+            console.log('TABS', JSON.stringify(tabs));
+
+            // hover each tab, measure the panel it opens
+            const tabEls = await page.$$('.tmenu_item--root:nth-child(' + (idx + 1) + ') ul.tmenu_submenu_tab_control > li');
+            const railEls = tabEls.length ? tabEls : await page.$$('ul.tmenu_submenu_tab_control > li');
+            for (let i = 0; i < railEls.length; i++) {
+              try { await railEls[i].hover(); } catch (e) { console.log('TAB-HOVER-ERR', i, String(e).slice(0, 80)); continue; }
+              await sleep(450);
+              const m = await page.evaluate(() => {
+                const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4; };
+                const act = [...document.querySelectorAll('[id^="tmenu-tabpanel"]')].filter(vis);
+                const p = act.sort((a, b) => { const x = a.getBoundingClientRect(), y = b.getBoundingClientRect(); return y.width * y.height - x.width * x.height; })[0];
+                if (!p) return { none: true };
+                const r = p.getBoundingClientRect();
+                return { id: p.id, w: Math.round(r.width), h: Math.round(r.height), txt: (p.textContent || '').trim().replace(/\s+/g, ' ').length, kids: p.querySelectorAll('li').length, imgs: p.querySelectorAll('img').length };
+              });
+              const label = await page.evaluate((el) => (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 28), railEls[i]);
+              console.log('PANEL', JSON.stringify({ i, tab: label, ...m }));
+            }
+
+            // --- dump the named tab's panel ------------------------------
+            const want = (process.env.TAB || '').toLowerCase();
+            let hit = -1;
+            for (let i = 0; i < railEls.length; i++) {
+              const label = await page.evaluate((el) => (el.textContent || '').trim().replace(/\s+/g, ' ').toLowerCase(), railEls[i]);
+              if (label.includes(want)) { hit = i; break; }
+            }
+            if (hit >= 0) {
+              await railEls[hit].hover(); await sleep(900);
+              const dump = await page.evaluate(() => {
+                const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4; };
+                const p = [...document.querySelectorAll('[id^="tmenu-tabpanel"]')].filter(vis).sort((a, b) => { const x = a.getBoundingClientRect(), y = b.getBoundingClientRect(); return y.width * y.height - x.width * x.height; })[0];
+                if (!p) return 'none visible';
+                const cs = getComputedStyle(p), r = p.getBoundingClientRect();
+                return JSON.stringify({ id: p.id, box: [Math.round(r.width), Math.round(r.height)], pad: cs.padding, bg: cs.backgroundColor, html: p.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/\s+/g, ' ').slice(0, 2500) });
+              });
+              console.log('DUMP', dump);
+              // and the wrapper that holds rail + panel, for the grid geometry
+              const wrap = await page.evaluate(() => {
+                const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4; };
+                const w = [...document.querySelectorAll('div[class*="tmenu_submenu_type_tab"]')].filter(vis)[0];
+                if (!w) return 'none';
+                const cs = getComputedStyle(w), r = w.getBoundingClientRect();
+                return JSON.stringify({ cls: (w.className || '').slice(0, 90), box: [Math.round(r.width), Math.round(r.height)], display: cs.display, pad: cs.padding });
+              });
+              console.log('WRAP', wrap);
+            } else { console.log('TAB NOT FOUND', want); }
+
+            // --- shoot the open dropdown ---------------------------------
+            if (hit >= 0) { await railEls[hit].hover(); await sleep(700); }
+            const shotEl = await page.$('div[class*="tmenu_submenu_type_tab"]') || roots[idx];
+            const jpg = await shotEl.screenshot({ type: 'jpeg', quality: 62 }).catch(() => null);
+            if (jpg) { fs.writeFileSync(process.env.SHOT, jpg); console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes'); }
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node probe.js
+      - name: Commit the shot
+        run: |
+          if [ ! -f "$SHOT" ]; then echo "no shot"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SHOT"
+          git commit -m "tcg menu probe ${{ github.run_id }}"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
