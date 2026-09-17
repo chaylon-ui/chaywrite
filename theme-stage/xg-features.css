@@ -619,16 +619,55 @@ html[data-xg-theme="dark"] #tmenu-tabpanel-tmenu-menu-120456 li.tmenu_item_layou
 .xgdbm__pts { margin: 0 !important; padding: 0 !important; list-style: none !important; display: flex; flex-direction: column; gap: 4px; }
 .xgdbm__pts li { margin: 0 !important; padding: 0 0 0 18px !important; position: relative; font-size: 12.5px; line-height: 1.35; font-weight: 600; color: var(--xg-ink, #171b1d); }
 .xgdbm__pts li::before { content: ""; position: absolute; left: 3px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--xg-red, #d62c28); }
-.xgdbm__cta { align-self: flex-start; display: inline-block; margin: 3px 0 0; padding: 9px 18px; border-radius: 999px; background: var(--xg-red, #d62c28); border: 0; font-size: 13px; font-weight: 700; line-height: 1; text-decoration: none !important; color: #fff !important; transition: transform 0.15s ease, filter 0.15s ease; }
-.xgdbm__cta:hover, .xgdbm__cta:focus { transform: translateY(-1px); filter: brightness(1.08); color: #fff !important; text-decoration: none !important; }
-.xgdbm__shot { display: block; width: 100%; height: 318px; margin-top: 2px; border: 1px solid var(--xg-border, #e3e6e8); border-bottom: 0; border-radius: 10px 10px 0 0; background-image: url("xg-deckbuilder-shot.jpg"); background-repeat: no-repeat; background-position: top center; background-size: 100% auto; background-color: #f4f6f7; }
+/* The CTA has to be stated loudly: the app paints every anchor inside
+   .tmenu_custom_content itself, and on the live panel it beat the plain
+   .xgdbm__cta rule - the button came out as underlined red text with no pill
+   (run 35227830275). Every visual property is !important, and the selector
+   carries the app's own wrapper so it outranks whatever ships with it. */
+.xgdbm .xgdbm__cta,
+.tmenu_navbar .xgdbm .xgdbm__cta,
+.tmenu_navbar .tmenu_custom_content .xgdbm .xgdbm__cta,
+html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content .xgdbm .xgdbm__cta {
+  align-self: flex-start;
+  display: inline-block !important;
+  width: auto !important;
+  margin: 3px 0 0 !important;
+  padding: 9px 18px !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  border-radius: 999px !important;
+  background: var(--xg-red, #d62c28) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  color: #fff !important;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.xgdbm .xgdbm__cta:hover, .xgdbm .xgdbm__cta:focus,
+.tmenu_navbar .xgdbm .xgdbm__cta:hover, .tmenu_navbar .xgdbm .xgdbm__cta:focus,
+html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content .xgdbm .xgdbm__cta:hover,
+html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content .xgdbm .xgdbm__cta:focus {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  background: var(--xg-red, #d62c28) !important;
+  color: #fff !important;
+  text-decoration: none !important;
+  border-bottom: 0 !important;
+}
+/* flex-shrink 0: the shot is a flex item, so any container that ends up
+   height-constrained would squeeze the 318px window (seen at 171px in a
+   local harness). It must keep its size or the screenshot is cropped to
+   a sliver. */
+.xgdbm__shot { display: block; flex: 0 0 318px; width: 100%; height: 318px; min-height: 318px; margin-top: 2px; border: 1px solid var(--xg-border, #e3e6e8); border-bottom: 0; border-radius: 10px 10px 0 0; background-image: url("xg-deckbuilder-shot.jpg"); background-repeat: no-repeat; background-position: top center; background-size: 100% auto; background-color: #f4f6f7; }
 /* dark: the app's own panel is #181d20, and xg-dark.css already repaints the
    custom-content text, so only the pieces with their own colour need saying */
 html[data-xg-theme="dark"] .tmenu_navbar .xgdbm .xgdbm__kicker { color: #ff6a5e !important; }
 html[data-xg-theme="dark"] .tmenu_navbar .xgdbm .xgdbm__title { color: #f2f5f7 !important; }
 html[data-xg-theme="dark"] .tmenu_navbar .xgdbm .xgdbm__copy { color: #aab4bb !important; }
 html[data-xg-theme="dark"] .tmenu_navbar .xgdbm .xgdbm__pts li { color: #e6ebee !important; }
-html[data-xg-theme="dark"] .tmenu_navbar .xgdbm .xgdbm__cta { background: #d62c28; color: #fff !important; }
 html[data-xg-theme="dark"] .tmenu_navbar .xgdbm .xgdbm__shot { border-color: rgba(255, 255, 255, 0.14); background-color: #11161a; }
 /* the app draws the same block in its mobile accordion, where the panel has
    no fixed height and the full width of the drawer */
