@@ -738,3 +738,86 @@ test("the thin-data warning rides the row, the tab and its own banner", async ()
   assert.doesNotMatch(clean, /PriceCharting estimate/);
   assert.match(clean, /1444 recorded sales/);
 });
+
+/* A hand-set price that tracks the source (owner, 2026-09-17: "price charting
+   shows $1000 for a card I think is $1500 ... I override it to $1500 and then
+   if price charting goes down to $900 (10%) the hard coded price will change
+   by -10% too"). */
+import { anchorRatio, anchorNote, readAnchor } from "../src/autoprice.js";
+
+test("his worked example: $1000 market overridden to $1500, then the source drops 10%", () => {
+  const cfg = { ...DEFAULT_CONFIG, markupPct: 15, minMarginPct: 0, maxMovePct: 0 };
+  // day 1: PriceCharting $1000 US, no anchor - the ordinary markup path
+  const plain = decide({ price: null, pcNew: 1000 }, cfg, 1);
+  assert.equal(plain.marketCad, 1000);
+  assert.equal(plain.suggested, 1199.95);                 // 1000 + 15%, rounded UP onto the grid
+
+  // he sets his own price: $1500 pegged to that $1000 basis
+  const anchor = { price: 1500, market: 1000, basis: "market", at: 1 };
+  assert.equal(anchorRatio(anchor), 1.5);
+  const day1 = decide({ price: 1500, pcNew: 1000, anchor }, cfg, 1);
+  assert.equal(day1.suggested, 1500);                     // his number exactly, not nudged onto the grid
+  assert.equal(day1.action, "hold");
+  assert.equal(day1.markupPct, null);                     // the anchor stands in for the markup
+  assert.equal(day1.reason, "already at the suggested price");   // it IS the price today
+
+  // the source falls to $900 - ten percent off, so his price follows to $1350
+  const down = decide({ price: 1500, pcNew: 900, anchor }, cfg, 1);
+  assert.equal(down.raw, 1350);
+  assert.equal(down.anchorMovePct, -10);
+  assert.equal(down.action, "lower");
+  assert.match(down.reason, /the source is 10% below that/);
+  assert.equal(down.suggested, 1349.95);                  // the NEAREST tidy number, so the -10% is kept
+
+  // and up the same way: +20% of the source is +20% of his price
+  const up = decide({ price: 1500, pcNew: 1200, anchor }, cfg, 1);
+  assert.equal(up.raw, 1800);
+  assert.equal(up.anchorMovePct, 20);
+  assert.equal(up.action, "raise");
+});
+
+test("the anchor still obeys the floor, the per-run cap and FX", () => {
+  // FX rides along: the basis is the CAD market, so a US source at 1000 with
+  // FX 1.4 is a 1400 basis
+  const anchor = { price: 2100, market: 1400, basis: "market", at: 1 };
+  const fxd = decide({ price: 2100, pcNew: 1000, anchor }, { ...DEFAULT_CONFIG, minMarginPct: 0, maxMovePct: 0 }, 1.4);
+  assert.equal(fxd.suggested, 2100);
+
+  // cost floor wins over a collapsed source
+  const floored = decide({ price: 2100, cost: 1000, pcNew: 100, anchor }, { ...DEFAULT_CONFIG, minMarginPct: 10, maxMovePct: 0 }, 1.4);
+  assert.equal(floored.floor, 1100);
+  assert.ok(floored.suggested >= 1100, "floor holds, got " + floored.suggested);
+
+  // and the per-run brake still applies
+  const capped = decide({ price: 2100, pcNew: 500, anchor }, { ...DEFAULT_CONFIG, minMarginPct: 0, maxMovePct: 20 }, 1.4);
+  assert.equal(capped.capped, "down");
+  assert.equal(capped.suggested, 1699.95);                 // 2100 - 20% = 1680, then the nearest tidy number (not 1050)
+});
+
+test("a malformed or missing anchor is ignored rather than guessed at", () => {
+  assert.equal(readAnchor(null), null);
+  assert.equal(readAnchor("not json"), null);
+  assert.equal(readAnchor('{"price":0,"market":100}'), null);
+  assert.equal(readAnchor('{"price":1500}'), null);
+  assert.deepEqual(readAnchor('{"price":1500,"market":1000,"basis":"market","at":7}'), { price: 1500, market: 1000, basis: "market", at: 7 });
+  assert.equal(anchorRatio({ price: 1500, market: 0 }), null);
+  assert.equal(anchorNote(null), "your price");
+  // with no anchor the markup path is untouched
+  const plain = decide({ price: 100, pcNew: 100 }, { ...DEFAULT_CONFIG, minMarginPct: 0 }, 1);
+  assert.equal(plain.anchor, null);
+  assert.equal(plain.markupPct, 15);
+});
+
+test("the row shows what the price is pegged to and the box offers to keep tracking", async () => {
+  const { renderPage } = await import("../src/autoprice.js");
+  const cfg = { ...DEFAULT_CONFIG, mode: "stage", minMarginPct: 0, maxMovePct: 0 };
+  const d = decide({ price: 1500, pcNew: 900, anchor: { price: 1500, market: 1000, basis: "market", at: 1 } }, cfg, 1);
+  const rows = [{ id: "gid://shopify/Product/1", title: "A card", handle: "c", type: "Pokemon Graded", game: "Pokemon Graded",
+    stock: 1, variantId: "gid://shopify/ProductVariant/1", settings: { anchor: "1500" }, ...d, awaiting: true }];
+  const page = renderPage({ mode: "stage", config: cfg }, { rows, stage: true }, { configured: true });
+  assert.match(page, /your \$1500\.00 pegged to \$1000\.00 · source -10% since → \$1350\.00/);
+  assert.match(page, /keep tracking from my price/);
+  assert.match(page, /name="anchor" value="1" checked/);
+  assert.match(page, /your price \$1500\.00 \(×1\.5 of the market\)/);   // the settings summary
+  assert.match(page, /name="markupPct"[^>]*disabled/);                     // markup is not in play
+});

@@ -273,6 +273,35 @@ export function thinPc(p, minSales) {
   return null;
 }
 
+/* A HAND-SET PRICE THAT STILL TRACKS THE SOURCE (owner, 2026-09-17: "price
+   charting shows $1000 for a card I think is $1500 ... I override it to $1500
+   and then if price charting goes down to $900 (10%) the hard coded price will
+   change by -10% too").
+
+   The override is not stored as a number but as a RATIO against whatever the
+   row is priced from, taken at the moment it is set: $1500 over a $1391.35 CAD
+   market is x1.078. Every later run multiplies that ratio by today's basis, so
+   the price keeps his premium and moves with the source by the same percent.
+   Storing the ratio rather than the number is what makes it track; storing the
+   basis it was taken against is what lets the row explain the move.
+
+   The anchor REPLACES the markup - it already carries the premium - but the
+   floor, the per-run cap and the rounding grid still apply. */
+// "your $1,500 · the market is 10% under where you set it" - the row has to say
+// why a hand-set price moved, or it is the blind pricing he was complaining of.
+export function anchorNote(a, basisNow) {
+  if (!a) return "your price";
+  const move = pctMove(a.market, basisNow);
+  const from = "your " + money2(a.price) + " (set against " + money2(a.market) + ")";
+  if (move == null || Math.abs(move) < 0.05) return from + ", the source has not moved";
+  return from + ", the source is " + Math.abs(move) + "% " + (move > 0 ? "above" : "below") + " that";
+}
+
+export function anchorRatio(a) {
+  if (!a || !(a.price > 0) || !(a.market > 0)) return null;
+  return a.price / a.market;
+}
+
 // Our margin at a selling price: profit in dollars and as a share of the
 // price (the retail convention), from the variant's unit cost. Null when
 // either number is missing, so the page can say "no cost" instead of 100%.
@@ -284,6 +313,23 @@ export function margin(price, cost) {
 
 // The grid the owner described: everything ends in .95, rounded UP.
 export function autoStep(x) { return x < 50 ? 1 : x < 200 ? 5 : x < 1000 ? 10 : x < 5000 ? 50 : 100; }
+/* An anchored price wants the NEAREST number on the grid, not the next one up.
+   Rounding up is right for a markup-derived price - never undersell the model -
+   but it blunts tracking: his $1,500 pegged to a $1,000 source should read
+   $1,349.95 when the source falls 10%, not $1,399.95 (a 3.7% overshoot that
+   would make the price stop following the percentage he asked it to follow). */
+export function niceNear(x, mode) {
+  const up = niceUp(x, mode);
+  if (up == null) return null;
+  const m = String(mode == null ? "auto" : mode).trim().toLowerCase();
+  if (m === "none" || m === "0") return up;
+  const step = m === "auto" || m === "" ? autoStep(x) : Number(m);
+  if (!(step > 0)) return up;
+  const down = round2(up - step);
+  if (!(down > 0)) return up;
+  return Math.abs(x - down) < Math.abs(up - x) ? down : up;
+}
+
 export function niceUp(x, mode) {
   if (!(x > 0)) return null;
   const m = String(mode == null ? "auto" : mode).trim().toLowerCase();
@@ -435,7 +481,11 @@ export function decide(p, cfg, fx) {
   const thin = thinPc(p, cfg.minSales);
   const followAlert = follow && !followOk ? (comp ? COMP.name + " is out of stock: priced from TCGplayer instead" : COMP.name + " does not list it: priced from TCGplayer instead") : null;
   const alert = thin || followAlert;
-  const out = { current, cost, fx, markupPct: markup, sources: srcs, round: p.round || "auto", marginNow: margin(current, cost), comp, alert, thin: !!thin,
+  // A hand-set price tracks the source by ratio and stands in for the markup.
+  const anchor = p.anchor && p.anchor.price > 0 && p.anchor.market > 0 ? p.anchor : null;
+  const ratio = anchorRatio(anchor);
+  const out = { current, cost, fx, markupPct: ratio ? null : markup, sources: srcs, round: p.round || "auto", marginNow: margin(current, cost), comp, alert, thin: !!thin,
+    anchor: anchor ? { ...anchor, ratio: Math.round(ratio * 10000) / 10000 } : null,
     pcVolume: p.pcVolume ?? null, pcLoose: p.pcLoose ?? null, priceFrom: followOk ? COMP.key : "market" };
   let floor = p.floor > 0 ? p.floor : 0;
   const costFloor = cost ? round2(cost * (1 + cfg.minMarginPct / 100)) : 0;
@@ -443,7 +493,7 @@ export function decide(p, cfg, fx) {
   floor = Math.max(floor, costFloor);
   let marketUsd = null, marketCad = null, raw, target;
   if (followOk) {
-    raw = comp.price * (1 + compPct / 100);
+    raw = ratio ? comp.price * ratio : comp.price * (1 + compPct / 100);
     comp.used = true;
     target = Math.max(raw, floor);
     if (fx && srcs.length) { marketUsd = srcs.reduce((a, s) => a + s.usd, 0) / srcs.length; marketCad = marketUsd * fx; }   // shown, not used
@@ -453,7 +503,7 @@ export function decide(p, cfg, fx) {
     if (!srcs.length) return skip(p.graded ? (p.pcMiss || "no PriceCharting price: set exor.ap_pc_id on the product") : p.tcgId || p.pcId ? "no price from the sources today" : "no match: set exor.ap_tcg_id (or ap_pc_id) on the product");
     marketUsd = srcs.reduce((a, s) => a + s.usd, 0) / srcs.length;
     marketCad = marketUsd * fx;
-    raw = marketCad * (1 + markup / 100);
+    raw = ratio ? marketCad * ratio : marketCad * (1 + markup / 100);
     target = Math.max(raw, floor);
     if (mode === "cap" && comp && comp.available) {
       const cap = comp.price * (1 + compPct / 100);
@@ -466,14 +516,19 @@ export function decide(p, cfg, fx) {
     if (target > hi) { capped = "up"; target = hi; }
     else if (target < lo) { capped = "down"; target = Math.max(lo, floor); }
   }
-  let suggested = niceUp(target, p.round);
+  let suggested = ratio ? niceNear(target, p.round) : niceUp(target, p.round);
+  // The day it is set, the anchor IS the price: the basis has not moved, so
+  // the grid must not nudge his own number. It applies again as soon as the
+  // source does move.
+  if (anchor && Math.abs(target - anchor.price) < 0.005) suggested = anchor.price;
   if (floor > 0 && suggested < floor) suggested = niceUp(floor, p.round);
   const action = !current ? "set" : suggested > current ? "raise" : suggested < current ? "lower" : "hold";
   const compNote = comp ? COMP.name + (followOk ? " at " : " has it at ") + money2(comp.price) + " in stock" + (compPct ? " (+" + compPct + "%)" : "") : "";
   return {
     ...out, marketUsd: marketUsd == null ? null : round2(marketUsd), marketCad: marketCad == null ? null : round2(marketCad), raw: round2(raw), compPct,
     floor: round2(floor), floorSrc, capped, target: round2(target), suggested, action, marginSuggested: margin(suggested, cost),
-    reason: action === "hold" ? "already at the suggested price" : capped ? "capped at " + cfg.maxMovePct + "% per run" : target === floor && raw < floor ? "floor" + (followOk ? " (" + COMP.name + " is lower)" : "") : followOk ? "following " + compNote : comp && comp.used ? compNote : "market",
+    anchorMovePct: ratio && anchor ? pctMove(anchor.market, followOk ? comp.price : marketCad) : null,
+    reason: action === "hold" ? "already at the suggested price" : capped ? "capped at " + cfg.maxMovePct + "% per run" : target === floor && raw < floor ? "floor" + (followOk ? " (" + COMP.name + " is lower)" : "") : ratio ? anchorNote(anchor, followOk ? comp.price : marketCad) : followOk ? "following " + compNote : comp && comp.used ? compNote : "market",
   };
 }
 
@@ -765,6 +820,17 @@ export function variantOf(vs, chosen) {
   return vs.find((x) => String(x.id) === want || (digits && String(x.id).replace(/\D/g, "") === digits)) || null;
 }
 
+// exor.ap_anchor: {price, market, basis, at} - the hand-set price and the
+// basis it was pegged to. Anything malformed is ignored rather than guessed at.
+export function readAnchor(raw) {
+  if (!raw) return null;
+  let a = raw;
+  if (typeof raw === "string") { try { a = JSON.parse(raw); } catch { return null; } }
+  const price = Number(a && a.price), market = Number(a && a.market);
+  if (!(price > 0) || !(market > 0)) return null;
+  return { price: round2(price), market: round2(market), basis: String((a && a.basis) || "market"), at: Number(a && a.at) || null };
+}
+
 export function readProduct(node) {
   const vs = ((node.variants && node.variants.edges) || []).map((e) => e.node);
   const mf = {};
@@ -784,6 +850,7 @@ export function readProduct(node) {
     floor: num(mf.ap_floor), markupPct: num(mf.ap_markup), round: mf.ap_round || "auto",
     tcgId: num(mf.ap_tcg_id), pcId: num(mf.ap_pc_id), tcgIdMeta: num(mf.ap_tcg_id),
     compMode: /^(cap|off|skip|follow)$/.test(String(mf.ap_comp || "")) ? String(mf.ap_comp) : null,
+    anchor: readAnchor(mf.ap_anchor),
     graded: isGradedType(node.productType) ? parseGraded(node.title) : null,
   };
 }
@@ -1007,7 +1074,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
       variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
       pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null,
-      settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId, variant: p.variantMeta || "" }, ...d });
+      settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId, variant: p.variantMeta || "", anchor: p.anchor ? String(p.anchor.price) : "" }, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
   }
   run.rows = rows;
@@ -1105,6 +1172,21 @@ async function publishPrice(cx, b) {
     const errs = (r.data.productVariantsBulkUpdate || {}).userErrors || [];
     if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
   } catch (e) { return { ok: false, error: msg(e) }; }
+  // "Keep tracking the market from this price": store the ratio of his number
+  // to whatever the row is priced from today, so later runs move it by the
+  // same percent the source moves (owner, 2026-09-17).
+  let anchored = null;
+  if (b && (b.anchor === "1" || b.anchor === true) && row) {
+    const basis = row.priceFrom === COMP.key && row.comp && row.comp.price > 0 ? row.comp.price : row.marketCad;
+    if (basis > 0) {
+      anchored = { price, market: round2(basis), basis: row.priceFrom === COMP.key ? COMP.key : "market", at: cx.now() };
+      try {
+        const r = await adminGql(cx, MF_SET, { m: [{ ownerId: pid, namespace: "exor", key: "ap_anchor", type: "json", value: JSON.stringify(anchored) }] });
+        const errs = (r.data.metafieldsSet || {}).userErrors || [];
+        if (errs.length) { anchored = null; cx.log("autoprice: anchor failed: " + errs.map((e) => e.message).join("; ")); }
+      } catch (e) { anchored = null; cx.log("autoprice: anchor failed: " + msg(e)); }
+    }
+  }
   const from = row && row.current != null ? row.current : null;
   await recordChange(cx, pid, { at: cx.now(), from, to: price, by: "approved" });
   await cx.storage.put("ap:seen:" + pid, { price, at: cx.now() });
@@ -1117,11 +1199,14 @@ async function publishPrice(cx, b) {
     row.edited = row.suggested != null && Math.abs(row.suggested - price) > 0.005 ? row.suggested : null;
     row.marginNow = margin(price, row.cost);
     row.action = "hold";
-    row.reason = "published by hand" + (row.edited ? " at your price (suggested " + money2(row.edited) + ")" : "");
+    if (anchored) row.anchor = { ...anchored, ratio: Math.round(anchorRatio(anchored) * 10000) / 10000 };
+    row.settings = { ...(row.settings || {}), anchor: anchored ? String(anchored.price) : (row.settings || {}).anchor };
+    row.reason = "published by hand" + (row.edited ? " at your price (suggested " + money2(row.edited) + ")" : "") +
+      (anchored ? " · tracking the market from here (" + money2(anchored.price) + " against " + money2(anchored.market) + ")" : "");
     row.lastChange = { at: cx.now(), from, to: price, by: "approved" };
     await cx.storage.put("ap:report", rep);
   }
-  return { ok: true, id: pid, price, live: true };
+  return { ok: true, id: pid, price, live: true, anchored: anchored ? anchored.price : null };
 }
 
 // "Keep today's price": the suggestion is remembered as declined so the next
@@ -1191,6 +1276,23 @@ async function saveSettings(cx, b) {
   const pid = String((b && b.id) || "");
   if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
   const sets = [], dels = [], saved = {};
+  // The anchor is a price, but it is STORED as that price against the basis
+  // it was set at, so it needs the row's market to peg to. Blank clears it.
+  if ("anchor" in b) {
+    const raw = String(b.anchor == null ? "" : b.anchor).trim();
+    if (raw === "") { dels.push({ ownerId: pid, namespace: "exor", key: "ap_anchor" }); saved.anchor = ""; }
+    else {
+      const price = parsePrice(raw);
+      if (price == null) return { ok: false, error: "bad anchor price: " + raw.slice(0, 40) };
+      const rep0 = await cx.storage.get("ap:report");
+      const row0 = ((rep0 && rep0.rows) || []).find((r) => r.id === pid);
+      const basis = row0 && row0.priceFrom === COMP.key && row0.comp && row0.comp.price > 0 ? row0.comp.price : row0 && row0.marketCad;
+      if (!(basis > 0)) return { ok: false, error: "no market price to anchor against yet - run the pricer first" };
+      const a = { price, market: round2(basis), basis: row0.priceFrom === COMP.key ? COMP.key : "market", at: cx.now() };
+      sets.push({ ownerId: pid, namespace: "exor", key: "ap_anchor", type: "json", value: JSON.stringify(a) });
+      saved.anchor = String(price);
+    }
+  }
   for (const [field, key, type, norm] of SETTING_FIELDS) {
     if (!(field in b)) continue;
     const raw = String(b[field] == null ? "" : b[field]).trim();
@@ -1444,7 +1546,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
     const keepQ = body.q && body.action !== "add" && body.action !== "remove";
     let flash = "";
     if (body.action === "ntfy-test") { try { const j = JSON.parse(text); flash = j.ok ? "Test push sent: " + (j.digest && j.digest.title) : j.relay ? "Direct push refused (" + (j.error || "") + "). Queued for the relay: it goes out from GitHub on the nightly relay run, or now if you run the ntfy-relay workflow." : "Test push failed: " + (j.error || "unknown"); } catch { flash = "Test push: no answer"; } }
-    if (body.action === "publish") { try { const j = JSON.parse(text); flash = j.ok ? "Live: " + String(body.title || "that product").slice(0, 60) + " is now $" + Number(j.price).toFixed(2) : "Not published: " + (j.error || "unknown"); } catch { flash = "Publish: no answer"; } }
+    if (body.action === "publish") { try { const j = JSON.parse(text); flash = j.ok ? "Live: " + String(body.title || "that product").slice(0, 60) + " is now $" + Number(j.price).toFixed(2) + (j.anchored ? " and will track the market from there" : "") : "Not published: " + (j.error || "unknown"); } catch { flash = "Publish: no answer"; } }
     if (body.action === "keep") { try { const j = JSON.parse(text); flash = j.ok ? "Kept today's price; that suggestion will not be offered again." : "Keep failed: " + (j.error || "unknown"); } catch { flash = "Keep: no answer"; } }
     if (body.action === "publish-all") { try { const j = JSON.parse(text); flash = j.ok ? j.published + " price" + (j.published === 1 ? "" : "s") + " published" + (j.failed ? ", " + j.failed + " failed (" + j.errors.join("; ").slice(0, 120) + ")" : "") + (j.left ? ", " + j.left + " still waiting - press again" : "") : "Publish all failed: " + (j.error || "unknown"); } catch { flash = "Publish all: no answer"; } }
     const qs = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : "", flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
@@ -1515,8 +1617,9 @@ export function renderPage(s, rep, view) {
     const st = r.settings || {};
     const sel = (name, cur, opts) => `<select name="${name}">${opts.map(([val, l]) => `<option value="${esc(val)}"${String(cur == null ? "" : cur) === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
     const custom = [];
+    if (r.anchor) custom.push("your price " + money(r.anchor.price) + " (×" + r.anchor.ratio + " of the market)");
     if (st.floor) custom.push("floor " + money(st.floor));
-    if (st.markupPct != null && st.markupPct !== "") custom.push("markup " + st.markupPct + "%");
+    if (st.markupPct != null && st.markupPct !== "" && !r.anchor) custom.push("markup " + st.markupPct + "%");
     if (st.round) custom.push("round " + (st.round === "none" ? "off" : "$" + st.round));
     if (st.comp) custom.push("401 " + ({ cap: "hold", off: "show only", skip: "skip", follow: "follow" }[st.comp] || st.comp));
     // the TCGplayer id is stored by every run, so it is not a "custom" setting here
@@ -1533,7 +1636,8 @@ export function renderPage(s, rep, view) {
 <form method="post" action="/autoprice/control" class="setf">${hidden("action", "settings")}${hidden("id", r.id)}${v.game ? hidden("game", v.game) : ""}
 ${variantField}
 <label>Floor $<input type="number" step="0.01" min="0" name="floor" value="${esc(st.floor == null ? "" : st.floor)}" placeholder="cost+${esc(cfg.minMarginPct)}%"></label>
-<label>Markup %<input type="number" step="0.5" min="0" name="markupPct" value="${esc(st.markupPct == null ? "" : st.markupPct)}" placeholder="${esc(cfg.markupPct)}"></label>
+<label>Markup %<input type="number" step="0.5" min="0" name="markupPct" value="${esc(st.markupPct == null ? "" : st.markupPct)}" placeholder="${esc(cfg.markupPct)}"${r.anchor ? " disabled title=\"Your own price is set, so the markup is not used\"" : ""}></label>
+<label title="Your own price for this card. It is pegged to today's market price and then moves with it: if the source falls 10%, so does this. Blank clears it and the markup takes over again.">Your price $<input type="number" step="0.01" min="0" name="anchor" value="${esc(st.anchor == null ? "" : st.anchor)}" placeholder="tracks market"></label>
 <label>Rounding ${sel("round", st.round, [["", "auto"], ["1", "$1 steps"], ["5", "$5 steps"], ["10", "$10 steps"], ["25", "$25 steps"], ["50", "$50 steps"], ["100", "$100 steps"], ["none", "none"]])}</label>
 <label>401 Games ${sel("comp", st.comp, [["", "page setting"], ["follow", "follow their price" + (cfg.compPct ? " +" + cfg.compPct + "%" : "") + " (TCGplayer only if they are out)"], ["cap", "hold to at most " + (cfg.compPct || 0) + "% above"], ["off", "show only"], ["skip", "skip"]])}</label>
 <label>TCGplayer id <input type="text" inputmode="numeric" name="tcgId" value="${esc(st.tcgId == null ? "" : st.tcgId)}" placeholder="auto" style="width:80px"></label>
@@ -1568,9 +1672,15 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const publishBox = (r) => {
     if (!r.awaiting) return r.kept ? `<div class="muted">kept ${money(r.current)}${r.kept.price ? " over " + money(r.kept.price) : ""}</div>` : "";
     return `<div class="pub"><form method="post" action="/autoprice/control" class="pubf">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${v.game ? hidden("game", v.game) : ""}
-<label>$<input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}"></label><button class="go">Publish</button></form>
+<label>$<input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}"></label><button class="go">Publish</button>
+<label class="trk" title="Peg this price to today's market and let it move with the source from here: if the source falls 10%, this price falls 10% too."><input type="checkbox" name="anchor" value="1"${r.anchor ? " checked" : ""}> keep tracking from my price</label></form>
 ${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep " + money(r.current), "sm")}</div>`;
   };
+  // A hand-set price has to show its working: what it was pegged to, and how
+  // far the source has moved since.
+  const anchorLine = (r) => r.anchor
+    ? `<div class="anch">your ${money(r.anchor.price)} pegged to ${money(r.anchor.market)}${r.anchorMovePct != null && Math.abs(r.anchorMovePct) >= 0.05 ? ` · source ${r.anchorMovePct > 0 ? "+" : ""}${r.anchorMovePct}% since` : " · source unchanged"}${r.raw != null ? ` → ${money(r.raw)}` : ""}</div>`
+    : "";
   const floorLine = (r) => `<div class="muted">${r.floor ? "floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div>`;
   const srcLines = (r) => (r.sources || []).map(srcLine).map(esc).join("<br>");
   // What is behind a graded number: how many sales PriceCharting has seen and
@@ -1582,8 +1692,8 @@ ${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep "
   // Following 401 Games: their price leads the cell and TCGplayer is shown
   // as not used; otherwise the market path as before.
   const mktCell = (r) => r.priceFrom === COMP.key && r.comp
-    ? `<b>${esc(COMP.name)} ${money(r.comp.price)}</b>${r.compPct ? " +" + r.compPct + "% = " + money(r.raw) : ""}<div class="muted">followed · TCGplayer not used${(r.sources || []).length ? ": " + srcLines(r).replace(/<br>/g, ", ") + (r.marketCad != null ? " = " + money(r.marketCad) + " CAD" : "") : " (no match)"}</div>${floorLine(r)}`
-    : (r.sources || []).length ? srcLines(r) + pcDepth(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${floorLine(r)}` : '<span class="muted">no source</span>';
+    ? `<b>${esc(COMP.name)} ${money(r.comp.price)}</b>${r.compPct && !r.anchor ? " +" + r.compPct + "% = " + money(r.raw) : ""}<div class="muted">followed · TCGplayer not used${(r.sources || []).length ? ": " + srcLines(r).replace(/<br>/g, ", ") + (r.marketCad != null ? " = " + money(r.marketCad) + " CAD" : "") : " (no match)"}</div>${anchorLine(r)}${floorLine(r)}`
+    : (r.sources || []).length ? srcLines(r) + pcDepth(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${anchorLine(r)}${floorLine(r)}` : '<span class="muted">no source</span>';
   const row = (r) => `<tr class="a-${esc(r.action)}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}">
 <td class="prod"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> <a class="muted" href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener" title="storefront page">site ↗</a>
 <div class="muted">stock ${r.stock}${r.variantChosen && r.variantTitle ? " · variant: " + esc(r.variantTitle) : r.variants > 1 ? " · " + r.variants + " variants" : ""}${r.tcgName ? " · matched: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div>${r.action === "pending" ? "" : reviewLinks(r) + pcPicker(r) + settingsBlock(r)}</td>
@@ -1603,7 +1713,7 @@ ${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep "
   const found = v.found;
   const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.tag.stage{background:#dbeafe;color:#1e3a8a}.stagebox{background:#eff6ff;border:1px solid #60a5fa;color:#1e3a8a;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.stageact{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}button.go{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}button.go:hover{background:#0a6650}tr.awaiting .pill{background:#dbeafe;color:#1e3a8a}.pub{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pubf{display:flex;gap:6px;align-items:center;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 6px}.pubf input{width:92px;font-size:14px;padding:3px 5px}.pubf label{display:flex;gap:2px;align-items:center;font-weight:700;color:#1e3a8a}.links{margin-top:3px}.links a{font-size:12px}details.cands{margin-top:4px}details.cands summary{cursor:pointer;font-size:12px;color:#6b7780}details.cands ul{margin:5px 0 0;padding:0;list-style:none;font-size:12px}details.cands li{padding:3px 0;border-top:1px solid #eef2f4;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}details.cands li.on{font-weight:600}details.cands .cn{color:#6b7780}.tabs a .wt{display:inline-block;padding:0 7px;border-radius:99px;background:#dbeafe;color:#1e3a8a;font-size:12px;font-weight:700}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}.how,.setbox{margin:0 0 10px}.how>summary,.setbox>summary{cursor:pointer;list-style:none;display:inline-block;padding:5px 12px;border:1px solid #dde3e7;border-radius:999px;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600}.how>summary::-webkit-details-marker,.setbox>summary::-webkit-details-marker{display:none}.how>summary::after,.setbox>summary::after{content:" \\25be"}.how[open]>summary::after,.setbox[open]>summary::after{content:" \\25b4"}.how>p{margin:8px 0 0}.setwrap{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.setbox{flex:1 1 100%}/* Phones (owner, 2026-09-15: the eight-column report was unreadable on a phone - headings overlapped and values broke one character per line). Each row becomes a card: title across the top, today beside suggested, then what was decided, the market working, the competitor and the last change. Other tables scroll sideways. */@media (max-width:760px){body{padding:12px 12px 28px}.wrap{max-width:none}h1{font-size:19px;line-height:1.3}h2{font-size:15px;margin:18px 0 6px}.tag{display:inline-block;margin:6px 6px 0 0}.ctl form,.box{flex-wrap:wrap;width:100%;box-sizing:border-box}.ctl form label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}input[type=search]{min-width:0;width:100%;font-size:16px}.tabs{border-bottom:0;gap:6px;margin:10px 0 12px}.tabs a{margin:0;padding:7px 12px;border:1px solid #dde3e7;border-radius:999px;font-size:13px}.tabs a.on{background:#1d2327;color:#fff;border-color:#1d2327}.tabs a.on .n{color:rgba(255,255,255,.75)}.tabs a.on .err{color:#fca5a5}.tabs a.on .al{background:rgba(255,255,255,.18);color:#fde68a}.tabs a.warn:not(.on){border-color:#f59e0b}table:not(.rep){display:block;overflow-x:auto;white-space:nowrap}table.rep,table.rep tbody{display:block;table-layout:auto;border:0;background:transparent;border-radius:0;overflow:visible}table.rep thead{display:none}table.rep tr{display:block}table.rep tr.grp{background:transparent;padding:6px 2px 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7780}table.rep tr.grp td{display:block;padding:0;border:0;background:transparent!important}table.rep tr:not(.grp){position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:#fff;border:1px solid #dde3e7;border-radius:12px;margin:0 0 10px;padding:12px 14px}table.rep tr.alerted:not(.grp){border-left:4px solid #f59e0b}table.rep tbody tr:nth-child(even):not(.grp) td{background:transparent}table.rep td{display:block;min-width:0;padding:0;border:0;white-space:normal;text-align:left;background:transparent}table.rep td[data-l]::before{content:attr(data-l);display:block;margin-bottom:1px;color:#6b7780;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}table.rep td.prod{grid-column:1/-1;order:1;padding:0 26px 8px 0;border-bottom:1px solid #eef2f4}table.rep td.c-today{order:2}table.rep td.c-sug{order:3}table.rep td.c-act{grid-column:1/-1;order:4}table.rep td.c-mkt{grid-column:1/-1;order:5;font-size:12.5px}table.rep td.c-comp{order:6}table.rep td.c-last{order:7}table.rep td.rm{position:absolute;top:8px;right:10px;order:8}table.rep tr.alerted td:first-child{box-shadow:none}td.prod .ttl{font-size:15px;line-height:1.3}td.sug b{font-size:16px}.setf label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}.alert ul{padding-left:18px}.pub{gap:8px}.pubf{flex:1 1 100%;justify-content:space-between;padding:6px 8px}.pubf input{width:100%;font-size:16px}.pubf label{flex:1}button.go{padding:8px 14px}.stageact form,.stageact button{width:100%}details.cands li{gap:4px}}</style></head><body><div class="wrap">
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.tag.stage{background:#dbeafe;color:#1e3a8a}.stagebox{background:#eff6ff;border:1px solid #60a5fa;color:#1e3a8a;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.stageact{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}button.go{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}button.go:hover{background:#0a6650}tr.awaiting .pill{background:#dbeafe;color:#1e3a8a}.pub{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pubf{display:flex;gap:6px;align-items:center;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 6px}.pubf input{width:92px;font-size:14px;padding:3px 5px}.pubf label{display:flex;gap:2px;align-items:center;font-weight:700;color:#1e3a8a}.anch{margin-top:3px;color:#1e3a8a;font-size:12px;font-weight:600}.trk{display:flex;gap:5px;align-items:center;font-size:12px;color:#4b5563;font-weight:600}.trk input{margin:0}.links{margin-top:3px}.links a{font-size:12px}details.cands{margin-top:4px}details.cands summary{cursor:pointer;font-size:12px;color:#6b7780}details.cands ul{margin:5px 0 0;padding:0;list-style:none;font-size:12px}details.cands li{padding:3px 0;border-top:1px solid #eef2f4;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}details.cands li.on{font-weight:600}details.cands .cn{color:#6b7780}.tabs a .wt{display:inline-block;padding:0 7px;border-radius:99px;background:#dbeafe;color:#1e3a8a;font-size:12px;font-weight:700}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}.how,.setbox{margin:0 0 10px}.how>summary,.setbox>summary{cursor:pointer;list-style:none;display:inline-block;padding:5px 12px;border:1px solid #dde3e7;border-radius:999px;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600}.how>summary::-webkit-details-marker,.setbox>summary::-webkit-details-marker{display:none}.how>summary::after,.setbox>summary::after{content:" \\25be"}.how[open]>summary::after,.setbox[open]>summary::after{content:" \\25b4"}.how>p{margin:8px 0 0}.setwrap{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.setbox{flex:1 1 100%}/* Phones (owner, 2026-09-15: the eight-column report was unreadable on a phone - headings overlapped and values broke one character per line). Each row becomes a card: title across the top, today beside suggested, then what was decided, the market working, the competitor and the last change. Other tables scroll sideways. */@media (max-width:760px){body{padding:12px 12px 28px}.wrap{max-width:none}h1{font-size:19px;line-height:1.3}h2{font-size:15px;margin:18px 0 6px}.tag{display:inline-block;margin:6px 6px 0 0}.ctl form,.box{flex-wrap:wrap;width:100%;box-sizing:border-box}.ctl form label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}input[type=search]{min-width:0;width:100%;font-size:16px}.tabs{border-bottom:0;gap:6px;margin:10px 0 12px}.tabs a{margin:0;padding:7px 12px;border:1px solid #dde3e7;border-radius:999px;font-size:13px}.tabs a.on{background:#1d2327;color:#fff;border-color:#1d2327}.tabs a.on .n{color:rgba(255,255,255,.75)}.tabs a.on .err{color:#fca5a5}.tabs a.on .al{background:rgba(255,255,255,.18);color:#fde68a}.tabs a.warn:not(.on){border-color:#f59e0b}table:not(.rep){display:block;overflow-x:auto;white-space:nowrap}table.rep,table.rep tbody{display:block;table-layout:auto;border:0;background:transparent;border-radius:0;overflow:visible}table.rep thead{display:none}table.rep tr{display:block}table.rep tr.grp{background:transparent;padding:6px 2px 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7780}table.rep tr.grp td{display:block;padding:0;border:0;background:transparent!important}table.rep tr:not(.grp){position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:#fff;border:1px solid #dde3e7;border-radius:12px;margin:0 0 10px;padding:12px 14px}table.rep tr.alerted:not(.grp){border-left:4px solid #f59e0b}table.rep tbody tr:nth-child(even):not(.grp) td{background:transparent}table.rep td{display:block;min-width:0;padding:0;border:0;white-space:normal;text-align:left;background:transparent}table.rep td[data-l]::before{content:attr(data-l);display:block;margin-bottom:1px;color:#6b7780;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}table.rep td.prod{grid-column:1/-1;order:1;padding:0 26px 8px 0;border-bottom:1px solid #eef2f4}table.rep td.c-today{order:2}table.rep td.c-sug{order:3}table.rep td.c-act{grid-column:1/-1;order:4}table.rep td.c-mkt{grid-column:1/-1;order:5;font-size:12.5px}table.rep td.c-comp{order:6}table.rep td.c-last{order:7}table.rep td.rm{position:absolute;top:8px;right:10px;order:8}table.rep tr.alerted td:first-child{box-shadow:none}td.prod .ttl{font-size:15px;line-height:1.3}td.sug b{font-size:16px}.setf label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}.alert ul{padding-left:18px}.pub{gap:8px}.pubf{flex:1 1 100%;justify-content:space-between;padding:6px 8px}.pubf input{width:100%;font-size:16px}.pubf label{flex:1}button.go{padding:8px 14px}.stageact form,.stageact button{width:100%}details.cands li{gap:4px}}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag ${esc(s.mode)}">${esc(MODE_LABEL[s.mode] || s.mode)}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
 <details class="how"><summary>How this works</summary><p class="muted"><b>Staged</b> is the safe mode: a run works out every price, writes nothing, and parks each change here with its number in a box — correct it, then Publish, and only then does it reach the shop. <b>Keep</b> leaves today's price and that suggestion is not offered again until it moves. <b>Apply</b> writes prices itself; <b>shadow</b> writes nothing at all. Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority; when ntfy.sh refuses the worker (free plan, shared IP) the GitHub relay sends it at 22:50 UTC" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p></details>
 ${v.flash ? `<p class="flash">${esc(v.flash)}</p>` : ""}
