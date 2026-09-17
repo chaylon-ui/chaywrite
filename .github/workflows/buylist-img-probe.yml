@@ -1,0 +1,100 @@
+name: buylist-img-probe
+# Read-only. Searches the buylist page and reports, for every card thumbnail:
+# the intrinsic (natural) pixel size the browser actually downloaded versus the
+# size it is displayed at, plus the transferred bytes per image. That is what
+# decides whether a hover/click zoom costs any new network traffic or is free
+# from pixels already in memory.
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        description: What to search for
+        required: false
+        default: "Command Tower"
+      width:
+        description: Viewport width
+        required: false
+        default: "1200"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      Q: ${{ inputs.q }}
+      W: ${{ inputs.width }}
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
+      - name: Measure the card thumbnails
+        run: |
+          cat > probe.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: parseInt(process.env.W, 10) || 1200, height: 1000 });
+            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setCacheEnabled(false);
+
+            // record transfer size for every image response
+            const bytes = new Map();
+            page.on('response', async (r) => {
+              try {
+                const ct = r.headers()['content-type'] || '';
+                if (!/^image\//.test(ct)) return;
+                const len = +(r.headers()['content-length'] || 0);
+                bytes.set(r.url(), { len, ct, status: r.status() });
+              } catch (e) {}
+            });
+
+            const r = await page.goto('https://exorgames.com/pages/selling-to-exor-games-buylist', { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => null);
+            console.log('status', r ? r.status() : 'none', '| title', await page.title());
+            await page.waitForSelector('#bl-q, input[type=search], .bl__search input', { timeout: 30000 }).catch(() => console.log('NO SEARCH BOX'));
+            await sleep(1500);
+
+            const typed = await page.evaluate((q) => {
+              const box = document.querySelector('#bl-q') || document.querySelector('.bl__search input') || document.querySelector('input[type=search]');
+              if (!box) return 'no box';
+              box.focus(); box.value = q;
+              box.dispatchEvent(new Event('input', { bubbles: true }));
+              const form = box.closest('form');
+              if (form) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+              return box.id || box.className || 'typed';
+            }, process.env.Q);
+            console.log('SEARCHBOX', typed);
+            await page.keyboard.press('Enter').catch(() => {});
+
+            let hits = 0;
+            for (let i = 0; i < 25; i++) {
+              await sleep(1200);
+              hits = await page.evaluate(() => document.querySelectorAll('.bl__hit').length);
+              if (hits > 0) break;
+            }
+            console.log('HITS', hits);
+            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+            await sleep(3000);
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await sleep(1500);
+
+            const imgs = await page.evaluate(() => [...document.querySelectorAll('img.bl__card')].map((i) => {
+              const r = i.getBoundingClientRect();
+              return { src: i.currentSrc || i.src, natW: i.naturalWidth, natH: i.naturalHeight,
+                       shownW: Math.round(r.width), shownH: Math.round(r.height), loading: i.loading, complete: i.complete };
+            }));
+            console.log('CARD IMAGES', imgs.length);
+            let totalBytes = 0, counted = 0;
+            for (const im of imgs.slice(0, 12)) {
+              const b = bytes.get(im.src);
+              if (b && b.len) { totalBytes += b.len; counted++; }
+              console.log('IMG', JSON.stringify({ ...im, src: im.src.slice(0, 110), bytes: b ? b.len : null, type: b ? b.ct : null }));
+            }
+            console.log('BYTES counted', counted, 'total', totalBytes, 'avg', counted ? Math.round(totalBytes / counted) : 0);
+            const hosts = {};
+            for (const im of imgs) { try { const h = new URL(im.src).host; hosts[h] = (hosts[h] || 0) + 1; } catch (e) {} }
+            console.log('HOSTS', JSON.stringify(hosts));
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node probe.js
