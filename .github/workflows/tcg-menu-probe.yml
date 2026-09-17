@@ -153,6 +153,25 @@ jobs:
                 return JSON.stringify({ cls: (w.className || '').slice(0, 90), box: [Math.round(r.width), Math.round(r.height)], display: cs.display, pad: cs.padding });
               });
               console.log('WRAP', wrap);
+              // Does the panel's screenshot actually load? It is a CSS
+              // background with a RELATIVE url, so this proves the url
+              // resolved against the stylesheet's own assets folder.
+              console.log('SHOTIMG', await page.evaluate(async () => {
+                const el = document.querySelector('.xgdbm__shot');
+                if (!el) return JSON.stringify({ err: 'no .xgdbm__shot in the panel' });
+                const cs = getComputedStyle(el);
+                const m = /url\("?([^")]+)"?\)/.exec(cs.backgroundImage || '');
+                const r = el.getBoundingClientRect();
+                const box = { w: Math.round(r.width), h: Math.round(r.height) };
+                if (!m) return JSON.stringify({ err: 'no background-image', bg: cs.backgroundImage, box });
+                const ok = await new Promise((res) => {
+                  const i = new Image();
+                  i.onload = () => res({ loaded: true, w: i.naturalWidth, h: i.naturalHeight });
+                  i.onerror = () => res({ loaded: false });
+                  i.src = m[1];
+                });
+                return JSON.stringify({ url: m[1], box, ...ok });
+              }));
             } else { console.log('TAB NOT FOUND', want); }
 
             // --- shoot the open dropdown ---------------------------------
@@ -171,8 +190,13 @@ jobs:
               return { x: Math.max(r.x + scrollX, 0), y: Math.max(r.y + scrollY, 0), width: Math.round(r.width), height: Math.round(r.height), scrollY };
             });
             console.log('SHOTBOX', JSON.stringify(shotBox));
+            // captureBeyondViewport (the default with a clip) resizes the
+            // viewport through Emulation.setDeviceMetricsOverride, which
+            // resets the pointer and closes the hovered menu - that is why
+            // runs 35227208383 and 35227670228 photographed the slideshow
+            // behind it. Keep the capture inside the live viewport.
             const jpg = shotBox
-              ? await page.screenshot({ type: 'jpeg', quality: 70, clip: { x: shotBox.x, y: shotBox.y, width: shotBox.width, height: shotBox.height } }).catch(e => { console.log('SHOT-ERR', String(e).slice(0, 120)); return null; })
+              ? await page.screenshot({ type: 'jpeg', quality: 70, captureBeyondViewport: false, clip: { x: shotBox.x, y: shotBox.y, width: shotBox.width, height: shotBox.height } }).catch(e => { console.log('SHOT-ERR', String(e).slice(0, 120)); return null; })
               : null;
             if (jpg) { fs.writeFileSync(process.env.SHOT, jpg); console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes'); }
             await browser.close();
