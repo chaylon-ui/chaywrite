@@ -153,6 +153,24 @@ jobs:
                 return JSON.stringify({ cls: (w.className || '').slice(0, 90), box: [Math.round(r.width), Math.round(r.height)], display: cs.display, pad: cs.padding });
               });
               console.log('WRAP', wrap);
+              // The rail item itself, for anything that has to attach to the
+              // tab rather than the panel (a badge, say).
+              console.log('RAIL', await page.evaluate((n) => {
+                const rail = document.querySelectorAll('ul.tmenu_submenu_tab_control > li');
+                const li = rail[n];
+                if (!li) return 'no rail item ' + n;
+                const cs = getComputedStyle(li), r = li.getBoundingClientRect();
+                const a = li.querySelector('a');
+                const acs = a ? getComputedStyle(a) : null;
+                return JSON.stringify({
+                  id: li.id || '(none)', cls: (li.className || '').slice(0, 70),
+                  box: [Math.round(r.width), Math.round(r.height)],
+                  display: cs.display, pos: cs.position, pad: cs.padding,
+                  aId: a ? (a.id || '(none)') : null,
+                  aDisplay: acs ? acs.display : null, aPad: acs ? acs.padding : null,
+                  html: li.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/\s+/g, ' ').slice(0, 900)
+                });
+              }, hit));
               // Does the panel's screenshot actually load? It is a CSS
               // background with a RELATIVE url, so this proves the url
               // resolved against the stylesheet's own assets folder.
