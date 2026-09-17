@@ -1,0 +1,112 @@
+name: deck-shot
+# Read-only against the site apart from typing into the Deck Builder form:
+# opens /pages/deck-builder on the preview theme, pastes a short decklist,
+# presses "Find my deck", waits for the priced results, and commits a JPEG of
+# the results area to probe-shots/ - a real picture of the tool working, for
+# the Trading Cards > Deck Builder menu panel.
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        description: Value of the game select
+        required: false
+        default: "mtg"
+      list:
+        description: Decklist, \n between lines
+        required: false
+        default: "4 Lightning Bolt\n2 Counterspell\n1 Sol Ring\n1 Wrath of God"
+      dark:
+        description: Shoot in dark mode
+        required: false
+        default: "false"
+      width:
+        description: Viewport width
+        required: false
+        default: "1100"
+
+permissions:
+  contents: write
+
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GAME: ${{ inputs.game }}
+      LIST: ${{ inputs.list }}
+      DARK: ${{ inputs.dark }}
+      W: ${{ inputs.width }}
+      SHOT: probe-shots/deck-${{ github.run_id }}.jpg
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
+      - name: Drive the Deck Builder and shoot the results
+        run: |
+          mkdir -p probe-shots
+          cat > shot.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
+          const T = '157462692013';
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            const w = parseInt(process.env.W || '1100', 10) || 1100;
+            await page.setViewport({ width: w, height: 1000, deviceScaleFactor: 2 });
+            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+            await page.setCacheEnabled(false);
+            await page.goto('https://exorgames.com/?preview_theme_id=' + T, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null);
+            const r = await page.goto('https://exorgames.com/pages/deck-builder?preview_theme_id=' + T, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => null);
+            console.log('status', r ? r.status() : 'none', '| title', await page.title());
+            await page.evaluate((d) => { document.documentElement.setAttribute('data-xg-theme', d === 'true' ? 'dark' : 'light'); try { localStorage.setItem('xgTheme', d === 'true' ? 'dark' : 'light'); } catch (e) {} }, process.env.DARK);
+            await page.waitForSelector('#xg-deck-form', { timeout: 45000 }).catch(() => console.log('NO FORM'));
+            await sleep(1500);
+
+            const list = (process.env.LIST || '').replace(/\\n/g, '\n');
+            console.log('LIST', JSON.stringify(list));
+            await page.select('#xg-deck-game', process.env.GAME || 'mtg').catch(e => console.log('SELECT-ERR', String(e).slice(0, 100)));
+            await page.evaluate((v) => {
+              const t = document.querySelector('#xg-deck-input');
+              if (!t) return;
+              t.value = v;
+              t.dispatchEvent(new Event('input', { bubbles: true }));
+            }, list);
+            await sleep(300);
+            await page.click('#xg-deck-go').catch(e => console.log('CLICK-ERR', String(e).slice(0, 100)));
+
+            // wait for real rows, not just a spinner
+            let rows = 0;
+            for (let i = 0; i < 40; i++) {
+              await sleep(1500);
+              rows = await page.evaluate(() => {
+                const r = document.querySelector('#xg-deck-results');
+                if (!r) return -1;
+                return r.querySelectorAll('img').length;
+              });
+              const txt = await page.evaluate(() => (document.querySelector('#xg-deck-results')?.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 160));
+              console.log('WAIT', i, 'imgs', rows, '|', txt);
+              if (rows > 1) break;
+            }
+            await sleep(2500);
+
+            const el = await page.$('#xg-deck-results');
+            if (!el) { console.log('NO RESULTS ELEMENT'); await browser.close(); return; }
+            const box = await el.boundingBox();
+            console.log('BOX', JSON.stringify(box));
+            if (!box || box.height < 40) { console.log('RESULTS EMPTY'); await browser.close(); return; }
+            const jpg = await page.screenshot({ type: 'jpeg', quality: 78, clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, 760) } });
+            fs.writeFileSync(process.env.SHOT, jpg);
+            console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes');
+            await browser.close();
+          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node shot.js
+      - name: Commit the shot
+        run: |
+          if [ ! -f "$SHOT" ]; then echo "no shot"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SHOT"
+          git commit -m "deck builder shot ${{ github.run_id }}"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
