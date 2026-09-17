@@ -322,7 +322,14 @@
       // desktop the offers sit beside the photo, on a phone they take the
       // card's full width so the condition column is not squeezed
       // (2026-09-11 probe at 390px: 42px for "Lightly Played Foil").
-      return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="" loading="lazy"><div class="bl__head">' +
+      // The thumbnail is the zoom control. Attributes on the <img> rather than
+      // a wrapping <button>: .bl__card is the grid item ("img" area) at three
+      // breakpoint widths, and wrapping it would mean moving grid-area and
+      // those widths onto a new element for no semantic gain the label does
+      // not already give. Real alt text too - it was alt="" (decorative), which
+      // is wrong once it does something.
+      var zlabel = h.cardName + (h.setName ? " (" + h.setName + ")" : "");
+      return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="' + esc(zlabel) + '" role="button" tabindex="0" aria-label="Enlarge ' + esc(zlabel) + '" loading="lazy"><div class="bl__head">' +
         '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p></div>" +
         (rows ? '<div class="bl__offers" role="table"><div class="bl__orow bl__orow--head" role="row"><span role="columnheader">Condition</span><span role="columnheader">Cash</span><span role="columnheader">Credit</span><span role="columnheader"><span class="bl__sr">Add</span></span></div>' + rows + "</div>" : '<p class="bl__muted bl__none">Not currently buying this printing.</p>') +
         "</article>";
@@ -331,12 +338,68 @@
   }
 
   $("#bl-hits").addEventListener("click", function (e) {
+    var card = e.target.closest("img.bl__card");
+    if (card) { openZoom(card); return; }
     var b = e.target.closest("button.bl__add");
     if (!b) return;
     var h = lastHits[+b.dataset.h];
     var o = h && offersOf(h)[+b.dataset.o];
     if (o) add(h, o, b);
   });
+  // Enter/Space on a focused thumbnail, so the zoom is reachable without a
+  // mouse. Space would otherwise scroll the page.
+  $("#bl-hits").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+    var card = e.target.closest && e.target.closest("img.bl__card");
+    if (!card) return;
+    e.preventDefault();
+    openZoom(card);
+  });
+
+  /* ---- zoom: show the full-size card the page already has --------------
+     BinderPOS serves 672x936 and the list paints it at 104px, so the rules
+     text is about a pixel a line - unreadable by arithmetic. The bytes are
+     already spent, so this opens instantly with no new request. Focus goes to
+     the overlay and comes back to the thumbnail on close. */
+  function openZoom(card) {
+    var src = card.currentSrc || card.getAttribute("src");
+    if (!src) return;
+    var label = card.getAttribute("alt") || "";
+    var prev = document.activeElement;
+    var ov = document.createElement("div");
+    ov.className = "bl__zoom";
+    ov.setAttribute("role", "dialog");
+    ov.setAttribute("aria-modal", "true");
+    ov.setAttribute("aria-label", label ? "Enlarged card: " + label : "Enlarged card");
+    ov.tabIndex = -1;
+    var big = document.createElement("img");
+    big.src = src;
+    big.alt = label;
+    ov.appendChild(big);
+    if (label) {
+      var cap = document.createElement("p");
+      cap.className = "bl__zoom-cap";
+      cap.textContent = label + " — tap anywhere or press Escape to close";
+      ov.appendChild(cap);
+    }
+    function close() {
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      document.removeEventListener("keydown", onKey, true);
+      document.documentElement.style.overflow = prevOverflow;
+      try { if (prev && prev.focus) prev.focus(); } catch (err) {}
+    }
+    function onKey(ev) {
+      if (ev.key === "Escape") { ev.preventDefault(); close(); return; }
+      // a one-element dialog: keep Tab inside it
+      if (ev.key === "Tab") { ev.preventDefault(); ov.focus(); }
+    }
+    var prevOverflow = document.documentElement.style.overflow;
+    ov.addEventListener("click", close);
+    document.addEventListener("keydown", onKey, true);
+    document.documentElement.style.overflow = "hidden";
+    document.body.appendChild(ov);
+    ov.focus();
+  }
 
   /* ---- cart ---- */
   // The card object BinderPOS's app saves, field for field.
