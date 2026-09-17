@@ -1,0 +1,51 @@
+name: asset-verify
+# Read-only. Fetches worker-served static assets and reports each one's size,
+# md5 and whether given substrings are present - so a blind deploy can be
+# checked against the local bytes without printing whole files into the log.
+on:
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: Comma-separated worker paths
+        required: true
+        default: "/buylist.css,/buylist.js"
+      expect:
+        description: Comma-separated substrings that must appear in at least one asset
+        required: false
+        default: ""
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      PATHS: ${{ inputs.paths }}
+      EXPECT: ${{ inputs.expect }}
+    steps:
+      - name: Fetch and fingerprint
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, urllib.request
+          BASE = "https://exor-binder.nevski.workers.dev"
+          paths = [p.strip() for p in os.environ["PATHS"].split(",") if p.strip()]
+          want = [w.strip() for w in os.environ.get("EXPECT", "").split(",") if w.strip()]
+          blobs = {}
+          for p in paths:
+              try:
+                  req = urllib.request.Request(BASE + p, headers={"user-agent": "ExorAssetVerify/1.0"})
+                  with urllib.request.urlopen(req, timeout=45) as r:
+                      b = r.read()
+                      ct = r.headers.get("content-type", "?")
+                  blobs[p] = b.decode("utf-8", "replace")
+                  print(f"ASSET {p} | {len(b)} bytes | md5 {hashlib.md5(b).hexdigest()} | {ct}")
+              except Exception as e:
+                  print(f"ASSET {p} | FETCH FAILED: {str(e)[:120]}")
+          missing = 0
+          for w in want:
+              hits = [p for p, t in blobs.items() if w in t]
+              if hits:
+                  print(f"FOUND   {w!r} in {', '.join(hits)}")
+              else:
+                  print(f"MISSING {w!r} in every asset fetched"); missing += 1
+          print("VERIFY", "OK" if not missing else f"{missing} EXPECTED STRING(S) MISSING")
+          PY
