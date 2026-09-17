@@ -54,7 +54,6 @@ jobs:
             const r = await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 }).catch(e => { console.log('NAV-ERR', String(e).slice(0,120)); return null; });
             console.log('url', url);
             console.log('status', r ? r.status() : 'none', '| title', await page.title());
-            await sleep 0;
             await sleep(6000);
 
             const out = await page.evaluate(() => {
@@ -88,7 +87,6 @@ jobs:
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0,300)); process.exit(0); });
           EOF
-          sed -i 's/^            await sleep 0;$//' probe.js
           node probe.js
       - name: Commit the shot
         run: |
