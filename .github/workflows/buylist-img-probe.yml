@@ -1,105 +1,92 @@
 name: buylist-img-probe
-# Read-only. Searches the buylist page and reports, for every card thumbnail:
-# the intrinsic (natural) pixel size the browser actually downloaded versus the
-# size it is displayed at, plus the transferred bytes per image. That is what
-# decides whether a hover/click zoom costs any new network traffic or is free
-# from pixels already in memory.
+# Read-only, no browser. Asks the worker's buylist search API for a card,
+# then fetches each card image and reports its real pixel dimensions and
+# transfer size. That is what decides whether a hover/click zoom on the
+# buylist costs new bytes or just re-uses pixels the page already has.
+# (Two earlier browser versions failed: the buylist app never mounted inside
+# the runner, so there was nothing to measure. HTTP needs no mount.)
 on:
   workflow_dispatch:
     inputs:
       q:
-        description: What to search for
+        description: Card name to search
         required: false
         default: "Command Tower"
-      width:
-        description: Viewport width
+      game:
+        description: Game slug
         required: false
-        default: "1200"
+        default: "mtg"
 
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     env:
       Q: ${{ inputs.q }}
-      W: ${{ inputs.width }}
+      GAME: ${{ inputs.game }}
     steps:
-      - name: Install puppeteer-core
-        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
-      - name: Measure the card thumbnails
+      - name: Search, then measure every card image
         run: |
-          cat > probe.js <<'EOF'
-          const puppeteer = require('puppeteer-core');
-          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-          (async () => {
-            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-            const page = await browser.newPage();
-            await page.setViewport({ width: parseInt(process.env.W, 10) || 1200, height: 1000 });
-            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
-            await page.setCacheEnabled(false);
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request, struct, io
+          Q = os.environ.get("Q", "Command Tower")
+          GAME = os.environ.get("GAME", "mtg")
+          BASE = "https://exor-binder.nevski.workers.dev/buylist/api/search"
+          url = BASE + "?" + urllib.parse.urlencode({"q": Q, "game": GAME})
+          req = urllib.request.Request(url, headers={"user-agent": "ExorImgProbe/1.0", "accept": "application/json"})
+          with urllib.request.urlopen(req, timeout=60) as r:
+              d = json.load(r)
+          print("SEARCH upstream", d.get("upstream"), "count", d.get("count"))
+          hits = d.get("hits") or []
+          if not hits:
+              print("NO HITS - raw:", json.dumps(d)[:400]); raise SystemExit(0)
 
-            // record transfer size for every image response
-            const bytes = new Map();
-            page.on('response', async (r) => {
-              try {
-                const ct = r.headers()['content-type'] || '';
-                if (!/^image\//.test(ct)) return;
-                const len = +(r.headers()['content-length'] || 0);
-                bytes.set(r.url(), { len, ct, status: r.status() });
-              } catch (e) {}
-            });
+          def dims(b):
+              # PNG
+              if b[:8] == b"\x89PNG\r\n\x1a\n":
+                  w, h = struct.unpack(">II", b[16:24]); return w, h, "png"
+              # GIF
+              if b[:6] in (b"GIF87a", b"GIF89a"):
+                  w, h = struct.unpack("<HH", b[6:10]); return w, h, "gif"
+              # JPEG: walk the segments to SOFn
+              if b[:2] == b"\xff\xd8":
+                  i = 2
+                  while i < len(b) - 9:
+                      if b[i] != 0xFF: i += 1; continue
+                      m = b[i+1]
+                      if m in (0xC0,0xC1,0xC2,0xC3,0xC5,0xC6,0xC7,0xC9,0xCA,0xCB,0xCD,0xCE,0xCF):
+                          h, w = struct.unpack(">HH", b[i+5:i+9]); return w, h, "jpeg"
+                      if m in (0xD8,0xD9) or 0xD0 <= m <= 0xD7: i += 2; continue
+                      seg = struct.unpack(">H", b[i+2:i+4])[0]; i += 2 + seg
+              # WEBP
+              if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+                  if b[12:16] == b"VP8X":
+                      w = int.from_bytes(b[24:27], "little") + 1; h = int.from_bytes(b[27:30], "little") + 1
+                      return w, h, "webp"
+                  return None, None, "webp"
+              return None, None, "?"
 
-            const r = await page.goto('https://exorgames.com/pages/selling-to-exor-games-buylist', { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => null);
-            console.log('status', r ? r.status() : 'none', '| title', await page.title());
-            // Wait for the BUYLIST app's own field, by id. A loose
-            // 'input[type=search]' matched the theme's header search box on
-            // the first paint, so the probe typed into the wrong box and the
-            // app had not even mounted yet (run 35248942284: 0 hits).
-            await page.waitForSelector('#bl-q', { timeout: 60000 }).catch(() => console.log('NO #bl-q - buylist app never mounted'));
-            await sleep(1500);
-
-            await page.evaluate(() => {
-              const g = document.querySelector('#bl-game');
-              if (g && g.options.length) console.log(g.options.length);
-            });
-            await page.type('#bl-q', process.env.Q, { delay: 40 }).catch(e => console.log('TYPE-ERR', String(e).slice(0, 80)));
-            console.log('SEARCHBOX', await page.evaluate(() => { const b = document.querySelector('#bl-q'); return b ? b.id + ' = ' + JSON.stringify(b.value) : 'missing'; }));
-            await page.evaluate(() => {
-              const f = document.querySelector('#bl-form');
-              if (f) f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            });
-            await page.click('#bl-form button[type=submit]').catch(() => {});
-
-            let hits = 0;
-            for (let i = 0; i < 25; i++) {
-              await sleep(1200);
-              hits = await page.evaluate(() => document.querySelectorAll('.bl__hit').length);
-              if (hits > 0) break;
-              if (i % 5 === 4) console.log('  waiting... status:', await page.evaluate(() => (document.querySelector('#bl-status') || {}).textContent || ''));
-            }
-            console.log('HITS', hits);
-            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-            await sleep(3000);
-            await page.evaluate(() => window.scrollTo(0, 0));
-            await sleep(1500);
-
-            const imgs = await page.evaluate(() => [...document.querySelectorAll('img.bl__card')].map((i) => {
-              const r = i.getBoundingClientRect();
-              return { src: i.currentSrc || i.src, natW: i.naturalWidth, natH: i.naturalHeight,
-                       shownW: Math.round(r.width), shownH: Math.round(r.height), loading: i.loading, complete: i.complete };
-            }));
-            console.log('CARD IMAGES', imgs.length);
-            let totalBytes = 0, counted = 0;
-            for (const im of imgs.slice(0, 12)) {
-              const b = bytes.get(im.src);
-              if (b && b.len) { totalBytes += b.len; counted++; }
-              console.log('IMG', JSON.stringify({ ...im, src: im.src.slice(0, 110), bytes: b ? b.len : null, type: b ? b.ct : null }));
-            }
-            console.log('BYTES counted', counted, 'total', totalBytes, 'avg', counted ? Math.round(totalBytes / counted) : 0);
-            const hosts = {};
-            for (const im of imgs) { try { const h = new URL(im.src).host; hosts[h] = (hosts[h] || 0) + 1; } catch (e) {} }
-            console.log('HOSTS', JSON.stringify(hosts));
-            await browser.close();
-          })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
-          EOF
-          node probe.js
+          seen, total, n = set(), 0, 0
+          for h in hits[:10]:
+              u = h.get("imageUrl")
+              name = (h.get("cardName") or "?")[:26]
+              st = (h.get("setName") or "?")[:26]
+              if not u:
+                  print("IMG", name, "|", st, "| NO imageUrl"); continue
+              if u in seen:
+                  print("IMG", name, "|", st, "| (same url as an earlier hit)"); continue
+              seen.add(u)
+              try:
+                  ir = urllib.request.Request(u, headers={"user-agent": "ExorImgProbe/1.0"})
+                  with urllib.request.urlopen(ir, timeout=45) as rr:
+                      raw = rr.read(200000)
+                      ct = rr.headers.get("content-type", "?")
+                      cl = rr.headers.get("content-length")
+                  w, hh, kind = dims(raw)
+                  total += int(cl or len(raw)); n += 1
+                  print("IMG", name, "|", st, "|", f"{w}x{hh}", kind, "|", (cl or str(len(raw))+"+"), "bytes |", ct, "|", u[:95])
+              except Exception as e:
+                  print("IMG", name, "| FETCH FAILED:", str(e)[:90], "|", u[:95])
+          print("MEASURED", n, "images | total", total, "bytes | avg", (total // n) if n else 0)
+          print("DISPLAYED AT 104px wide (desktop), 72px (tablet), 60px (phone); aspect 5/7")
+          PY
