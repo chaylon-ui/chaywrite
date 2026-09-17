@@ -1,0 +1,621 @@
+{% if section.settings.message %}
+<style>
+  .notification-bar {
+    background-color: {{ section.settings.color_bg }};
+  }
+
+  .notification-bar__message {
+    color: {{ section.settings.color_text }};
+  }
+
+  {% if section.settings.logo !=blank %}
+
+  .site-header__logo-image {
+    max-width: {{ section.settings.logo_max_width | escape }}px;
+  }
+
+  {% endif %}
+</style>
+
+
+{% endif %}
+
+{%- assign social_icons = false -%}
+
+{% if
+settings.social_twitter_link != blank
+or settings.social_facebook_link != blank
+or settings.social_pinterest_link != blank
+or settings.social_instagram_link != blank
+or settings.social_tumblr_link != blank
+or settings.social_snapchat_link != blank
+or settings.social_youtube_link != blank
+or settings.social_vimeo_link != blank
+or settings.social_discord_link != blank
+or settings.social_twitch_link != blank
+or settings.social_tiktok_link != blank
+or template.name == 'article'
+or template.name == 'blog'
+%}
+{%- assign social_icons = true -%}
+{% endif %}
+
+{%- assign navigation_menu_handle = section.settings.navigation_menu | default: 'main-menu' -%}
+{%- assign navigation_menu = linklists[navigation_menu_handle] -%}
+
+{% comment %}
+  Desktop header row, logo size and dark-mode plate. Owner, 2026-09-02:
+  "the logo should be beside the search as it is creating a lot of shite space
+  and please make it 33% larger. also in dark mode it should lose its white
+  background."
+{% endcomment %}
+<style>
+  /* ==========================================================================
+     DESKTOP HEADER (>= 992px): logo beside the search, logo 33% larger.
+
+     Measured on the preview at 1440px (run 113, HEADER-DESK): logo img
+     [55,68,52,52], #_desktop_search [55,120,500,40], logo wrapper
+     [55,68,688,52]. The first ancestor the logo and the search share is the
+     INNER .page-width (.nav-menu > .page-width), which modern-skin sets
+     display:block - so the logo block spans the row, the icon cluster
+     (.header-user-selection) stacks UNDER it, and 636px to the logo's right
+     is blank. The 688 is the cluster's max-content: theme.css gives the
+     search input min-width:500px. (This section's nesting is not what its
+     indentation suggests - line 183 below is a commented-out </div>, see
+     NOTES round 12b - so the structure above was measured, not read.)
+
+     The fix turns that inner .page-width into the row: logo | search ...
+     toggle / account / cart. The cluster keeps modern-skin's own flex order
+     (search first via order:-1 + margin-right:auto, then the rest) - nothing
+     is moved in the DOM and nav.megamenu-header is a sibling further out.
+
+     Nothing here reaches below 992px: the phone header is gridded by
+     xg-features.css under (max-width: 991px) and carries four CI checks
+     from round 12b. Every layout rule sits inside (min-width: 992px); only
+     the dark-mode plate removal (last rule) applies at all widths.
+
+     Specificity. This <style> renders in the body, after every linked sheet,
+     so equal specificity would already win - the margins below are so the
+     ordering is not load-bearing:
+       - modern-skin `#header .header-top .nav-menu > .page-width` (1,3,0)
+         display:block / flex:0 0 auto  ->  the same selector with
+         `.site-header-inner` added, (1,4,0).
+       - theme.css `.page-width::after` (0,1,1) clearfix would become a flex
+         item and take a gap of its own at the row's end -> content:none at
+         (1,4,1).
+       - modern-skin `#header .header-user-selection` (1,1,0) width:100%
+         -> `#header .header-top.site-header-inner .header-user-selection`
+         (1,3,0).
+       - modern-skin `#_desktop_search` (1,0,0) max-width:680 and theme.css
+         `#header #_desktop_search` (2,0,0) -> `#header .header-top
+         .header-user-selection #_desktop_search` (2,2,0).
+       - logo height: modern-skin `#header .header__logo img { max-height:
+         52px !important }` (1,1,1) plus this section's inline style attr
+         (max-height from the editor's logo_max_height: 120 in the preview's
+         served settings_data.json, 2026-09-02 - the 52 on screen is
+         modern-skin's cap, not the setting) ->
+         `#header .header-top .header__logo img` (1,2,1) !important: an
+         important declaration outranks the non-important inline style, and
+         (1,2,1) beats (1,1,1) among importants. The theme setting itself is
+         untouched and still governs below 992px.
+       - dark plate: xg-dark `html[data-xg-theme="dark"] #header
+         .header__logo img` (1,2,2) -> the same with `.header-top` added,
+         (1,3,2).
+     ========================================================================== */
+  @media (min-width: 992px) {
+    #header .header-top.site-header-inner .nav-menu > .page-width {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      flex: 1 1 auto;
+      width: 100%;
+      max-width: none;
+    }
+    #header .header-top.site-header-inner .nav-menu > .page-width::after {
+      content: none;
+    }
+    #header .header-top.site-header-inner .header-logo-section-img,
+    #header .header-top.site-header-inner .header-logo-section {
+      flex: 0 0 auto;
+      width: auto;
+      margin: 0;
+      padding: 0;
+    }
+    #header .header-top.site-header-inner .header-user-selection {
+      flex: 1 1 0%;
+      width: auto;
+    }
+    /* Search grows beside the logo to a sensible cap; theme.css's
+       min-width:500px on the input is the floor. */
+    #header .header-top .header-user-selection #_desktop_search {
+      flex: 1 1 auto;
+      max-width: 640px;
+    }
+    /* 52px x 1.33 = 69px. max-height (not height) keeps the aspect ratio
+       if the asset is ever swapped for a non-square one. */
+    #header .header-top .header__logo img {
+      max-height: 69px !important;
+      height: auto;
+      width: auto;
+    }
+  }
+
+  /* DARK MODE: no white plate behind the logo (owner: "in dark mode it
+     should lose its white background"). xg-dark.css paints it as a spread
+     box-shadow + white background (rounds 5/9/13); the PNG's own baked
+     white ground is made transparent by a separate asset step, so a bare
+     logo does not leave a white square. All widths on purpose - the plate
+     was all widths. */
+  html[data-xg-theme="dark"] #header .header-top .header__logo img {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  /* ==========================================================================
+     LANGUAGE SWITCHER (EN | FR) - 2026-09-02.
+     Sits beside the dark-mode toggle in both slots (desktop icon cluster,
+     phone bar). Tokens only (modern-skin.css light, xg-dark.css dark), so
+     dark mode re-paints it with no rule of its own. Visibility is decided in
+     Liquid (localization.available_languages.size > 1), never here.
+     ========================================================================== */
+  .xg-lang__form {
+    display: inline-flex;
+    align-self: center;
+    margin: 0;
+  }
+  .xg-lang {
+    display: inline-flex;
+    align-items: center;
+    height: 34px;
+    padding: 0 3px;
+    border: 1px solid var(--xg-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--xg-ink);
+    font-family: var(--xg-font-body);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .xg-lang__cur,
+  .xg-lang__btn {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    margin: 0;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    font: inherit;
+    color: var(--xg-muted);
+  }
+  .xg-lang__cur {
+    color: var(--xg-ink);
+    font-weight: 700;
+    background: var(--xg-red-soft);
+  }
+  .xg-lang__btn {
+    cursor: pointer;
+    transition: color var(--xg-fast) var(--xg-ease);
+  }
+  .xg-lang__btn:hover { color: var(--xg-red); }
+  .xg-lang__btn:focus-visible {
+    outline: 2px solid var(--xg-red);
+    outline-offset: 2px;
+  }
+  .xg-lang__sep {
+    padding: 0 1px;
+    color: var(--xg-border);
+  }
+  .xg-lang__form[aria-busy="true"] .xg-lang { opacity: 0.6; }
+  #header .header-user-selection .xg-lang__form { margin-right: 10px; }
+  #header .mobile-width-right .xg-lang { height: 30px; padding: 0 2px; }
+  #header .mobile-width-right .xg-lang__cur,
+  #header .mobile-width-right .xg-lang__btn { height: 24px; padding: 0 6px; }
+</style>
+{% comment %}
+  Language switcher (EN | FR), 2026-09-02. Rendered ONLY when the shop has
+  more than one published language, so it stays invisible until the owner
+  publishes French (Settings > Languages) - no template or settings change
+  needed. Every language other than the current one is a real submit button
+  (name="locale_code"), so the switch works without JavaScript; Shopify's
+  localization form supplies form_type, _method and return_to itself. The
+  small script at the end of this file only keeps the query string in
+  return_to and guards a double submit. Labels: the current language is a
+  plain span with aria-current; each button is labelled in its own language
+  (WAI practice for language switchers) and carries a lang attribute.
+{% endcomment %}
+{%- capture xg_lang_items -%}
+  {%- for xg_lang in localization.available_languages -%}
+    {%- if xg_lang.iso_code == localization.language.iso_code -%}
+      <span class="xg-lang__cur" lang="{{ xg_lang.iso_code }}" aria-current="true" title="{{ xg_lang.endonym_name | escape }}">{{ xg_lang.iso_code | upcase }}</span>
+    {%- else -%}
+      <button type="submit" class="xg-lang__btn" name="locale_code" value="{{ xg_lang.iso_code }}" lang="{{ xg_lang.iso_code }}" aria-label="{% case xg_lang.iso_code %}{% when 'fr' %}Passer au français{% when 'en' %}Switch to English{% else %}{{ xg_lang.endonym_name | escape }}{% endcase %}" title="{{ xg_lang.endonym_name | escape }}">{{ xg_lang.iso_code | upcase }}</button>
+    {%- endif -%}
+    {%- unless forloop.last -%}<span class="xg-lang__sep" aria-hidden="true">|</span>{%- endunless -%}
+  {%- endfor -%}
+{%- endcapture -%}
+<div id="header" data-section-id="{{ section.id }}" data-section-type="header-section">
+  <header class="site-header" role="banner">
+
+    {% if section.settings.show_checkout or section.settings.show_wishlist or section.settings.show_social != blank %}
+    <div class="nav-header">
+      <div class="row">
+        {% if section.settings.show_social != blank %}
+        <div class="follow-us {% if section.settings.show_checkout or section.settings.show_wishlist %}col-md-6 col-sm-6 col-xs-12{% else %}col-md-12 col-sm-12 text-center{% endif %}">
+          <div id="social-icon-container" class="social-icon-inner">
+            <div class="social-media-blocks">
+              {% if social_icons %}
+              <div class="social-icon-inner">
+                <div class="header-social">
+                  <ul class="list--inline site-footer__social-icons social-icons">
+                    {% if settings.social_facebook_link != blank %}
+                    <li class="facebook">
+                      <a class="social-icons__link" href="{{ settings.social_facebook_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Facebook' }}">
+                        <i class="bi bi-facebook" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.facebook' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_twitter_link != blank %}
+                    <li class="twitter">
+                      <a class="social-icons__link" href="{{ settings.social_twitter_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Twitter' }}">
+                        <i class="bi bi-twitter" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.twitter' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_pinterest_link != blank %}
+                    <li class="pinterest">
+                      <a class="social-icons__link" href="{{ settings.social_pinterest_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Pinterest' }}">
+                        <i class="bi bi-pinterest" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.pinterest' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_instagram_link != blank %}
+                    <li class="instagram">
+                      <a class="social-icons__link" href="{{ settings.social_instagram_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Instagram' }}">
+                        <i class="bi bi-instagram" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.instagram' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_tumblr_link != blank %}
+                    <li class="tumblr">
+                      <a class="social-icons__link" href="{{ settings.social_tumblr_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Tumblr' }}">
+                        <i class="fa fa-tumblr" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.tumblr' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_snapchat_link != blank %}
+                    <li class="snapchat">
+                      <a class="social-icons__link" href="{{ settings.social_snapchat_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Snapchat' }}">
+                        <i class="fa fa-snapchat-ghost" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.snapchat' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_youtube_link != blank %}
+                    <li class="youtube">
+                      <a class="social-icons__link" href="{{ settings.social_youtube_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'YouTube' }}">
+                        <i class="bi bi-youtube" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.youtube' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_vimeo_link != blank %}
+                    <li class="vimeo">
+                      <a class="social-icons__link" href="{{ settings.social_vimeo_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Vimeo' }}">
+                        <i class="fab fa-vimeo" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.vimeo' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_discord_link != blank %}
+                    <li class="discord">
+                      <a class="social-icons__link" href="{{ settings.social_discord_link | escape }}" title="{{ 'layout.footer.social_platform' | t: name: shop.name, platform: 'Discord' }}">
+                        <i class="bi bi-discord" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.discord' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_twitch_link != blank %}
+                    <li class="twitch">
+                      <a class="social-icons__link" href="{{ settings.social_twitch_link | escape }}" title="{{ shop.name }} on Twitch" target="_blank">
+                        <i aria-hidden="true" class="fa fa-twitch"></i>
+                        <span class="icon__-text">Twitch</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if settings.social_tiktok_link != blank %}
+                    <li class="tiktok">
+                      <a class="social-icons__link" href="{{ settings.social_tiktok_link | escape }}" title="{{ shop.name }} on TikTok" target="_blank">
+                        <i class="bi bi-tiktok" aria-hidden="true"></i>
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if template.name == 'blog' or template.name == 'article' %}
+                    <li class="rss">
+                      <a class="social-icons__link" href="{{ shop.url }}{{ blog.url }}.atom" target="_blank">
+                        <i class="far fa-rss" aria-hidden="true"></i>
+                        <span class="icon__-text">{{ 'general.social.rss' | t }}</span>
+                      </a>
+                    </li>
+                    {% endif %}
+                  </ul>
+                </div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        {% if section.settings.show_checkout or section.settings.show_wishlist %}
+        <div class="desktop-user-info {% if section.settings.show_social != blank %}col-md-6 col-sm-6 col-xs-12{% else %}col-md-12 col-sm-12 text-center{% endif %}">
+          <div class="desktop-checkout">
+            <ul>
+              {% if section.settings.show_checkout %}
+              <li><a class="checkout" href="/checkout">{{ 'cart.general.checkout-dropdown' | t }}</a></li>
+              {% endif %}
+              {% if section.settings.show_wishlist %}
+              <li><a class="wishlist" href="/pages/wishlist">{{ 'layout.wishlist.title' | t }}</a></li>
+              {% endif %}
+            </ul>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="header-top site-header-inner">
+      <div class="page-width">
+        <div class="row">
+          <!-- </div> -->
+          <div class="nav-menu">
+            <div class="page-width">
+              <div class="{% if section.settings.logo %}header-logo-section-img{% else %}header-logo-section{% endif %} col-md-2 col-sm-12">
+                {% comment %}
+                Use the uploaded logo from theme settings if enabled.
+                Site name gets precedence with H1 tag on homepage, div on other pages.
+                {% endcomment %}
+                {% if template.name == 'index' %}
+                <h1 class="h2 header__logo" itemscope itemtype="http://schema.org/Organization">
+                  {% else %}
+                  <div class="h2 header__logo" itemscope itemtype="http://schema.org/Organization">
+                    {% endif %}
+                    {% if section.settings.logo %}
+                    <a href="/" itemprop="url" class="header__logo-image">
+                      {% capture image_size %}{{ section.settings.logo_max_width }}x{% endcapture %}
+                      {% capture logo_alt %}{{ section.settings.logo.alt | default: shop.name }}{% endcapture %}
+                      <img loading="lazy" src="{{ section.settings.logo | img_url: 'large' }}" alt="{{ logo_alt | escape }}" itemprop="logo" style="max-width: {{ section.settings.logo_max_width }}px; max-height: {{ section.settings.logo_max_height }}px;">
+                    </a>
+                    {% else %}
+                    <a class="site-header__logo-link" href="/" itemprop="url">{{ shop.name }}</a>
+                    {% endif %}
+                    {% if template.name == 'index' %}
+                </h1>
+                {% else %}
+              </div>
+              {% endif %}
+            </div>
+
+            <div class="header-user-selection col-md-2 hidden-lg-down">
+              {%- if localization.available_languages.size > 1 -%}
+              {%- form 'localization', id: 'xg-lang-desk', class: 'xg-lang__form' -%}
+              <div class="xg-lang" role="group" aria-label="Language / Langue">{{ xg_lang_items }}</div>
+              {%- endform -%}
+              {%- endif -%}
+              <div id="_desktop_cart" class="hidden-lg-down">
+                <div class="cart-display">
+                  <div class="cart-title clearfix collapsed" data-target=".cart-container" data-toggle="collapse" aria-label="Cart" aria-role="button" tabindex="0">
+                    <div class="site-header__cart expand-more">
+                      <span class="cart-logo hidden-lg-down">{% include 'icons' with 'shopping-cart' %}</span>
+                      <span class="cart-logo hidden-lg-up">{% include 'icons' with 'cart' %}</span>
+                      <span class="cart-qty"></span>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="cart-container cart-dropdown-inner cart-dropdown collapse">
+                    {% include 'cart-dropdown'%}
+                  </div>
+                </div>
+              </div>
+              {% if shop.customer_accounts_enabled %}
+              <div id="_desktop_user_info" class="user_info full-width hidden-lg-down ">
+                <a href="/account" class="userinfo-title" aria-label="Account page">
+                  <span class="userinfo-toggle hidden-lg-down">{% include 'icons' with 'user-desktop' %}</span>
+                  <span class="userinfo-toggle hidden-lg-up">{% include 'icons' with 'user-mobile' %}</span>
+                </a>
+              </div>
+              {% endif %}
+              <div id="_desktop_search" class="site-header__search">
+                {% include 'search-form' %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+{% include 'header-menu' %}
+    <div class="mobile-width site-header-mobile hidden-lg-up">
+      <div class="page-width">
+        <div class="row">
+          <div class="mobile-width-left">
+            <div id="menu-icon" class="menu-icon hidden-lg-up">
+              {% include 'icons' with 'setup' %}
+            </div>
+          </div>
+          <div class="mobile-width-right">
+            {%- if localization.available_languages.size > 1 -%}
+            {%- form 'localization', id: 'xg-lang-mob', class: 'xg-lang__form' -%}
+            <div class="xg-lang" role="group" aria-label="Language / Langue">{{ xg_lang_items }}</div>
+            {%- endform -%}
+            {%- endif -%}
+            <div id="_mobile_cart"></div>
+            <div id="_mobile_user_info"></div>
+            <div id="_mobile_link_menu"></div>
+          </div>
+          {%- comment -%}
+            Search is a sibling of the two columns, not a child of the right
+            one, so it can take a full-width line of its own beneath the
+            icons. Inside .mobile-width-right it was stuck with whatever the
+            icons left over: measured at 390px it came to 70px wide with
+            padding 5px 50px 5px 10px, i.e. about 10px to type in. shop.js
+            fills this by id, so moving it does not change how it is filled.
+          {%- endcomment -%}
+          <div id="_mobile_search"></div>
+        </div>
+      </div>
+    </div>
+  </header>             
+</div>
+<script>
+  /* Language switcher (see the comment above the capture near the top of
+     this file). The native submit does the work; this only (1) keeps the
+     query string - Shopify's own hidden return_to carries the path alone, so
+     a search or a sorted collection would lose ?q= / ?sort_by= on the
+     switch - and (2) refuses a second click while the first is in flight. */
+  (function () {
+    if (window.__xgLang) return;
+    window.__xgLang = 1;
+    document.addEventListener('submit', function (e) {
+      var f = e.target;
+      if (!f || !f.classList || !f.classList.contains('xg-lang__form')) return;
+      if (f.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
+      var r = f.querySelector('input[name="return_to"]');
+      if (!r) {
+        r = document.createElement('input');
+        r.type = 'hidden';
+        r.name = 'return_to';
+        f.appendChild(r);
+      }
+      r.value = location.pathname + location.search;
+      f.setAttribute('aria-busy', 'true');
+    }, true);
+  })();
+</script>
+{% schema %}
+{
+  "name":"Header",
+  "settings":[
+     {
+        "type":"image_picker",
+        "id":"logo",
+        "label":"Theme Logo Image",
+        "info":"Size: 200px X 50px"
+     },
+     {
+        "type":"text",
+        "id":"logo_max_width",
+        "label":"Max Logo Width",
+        "default":"200",
+        "info":"Defined in pixels. Do not add the 'px' unit."
+     },
+     {
+        "type":"text",
+        "id":"logo_max_height",
+        "label":"Max Logo Height",
+        "default":"120",
+        "info":"Defined in pixels. Do not add the 'px' unit."
+     },
+     {
+        "type":"checkbox",
+        "id":"show_social",
+        "label":"Show Social Icons",
+        "default":true
+     },
+     {
+        "type":"checkbox",
+        "id":"show_checkout",
+        "label":"Show Checkout",
+        "default":true
+     },
+     {
+        "type":"checkbox",
+        "id":"show_wishlist",
+        "label":"Show Wishlist",
+        "default":true
+     },
+     {
+        "type":"header",
+        "content":"Navigation"
+     },
+     {
+        "type":"link_list",
+        "id":"navigation_menu",
+        "label":"Menu",
+        "default":"main-menu"
+     }
+  ],
+  "blocks":[
+     {
+        "type":"text_block",
+        "name":"Menu Item",
+        "settings":[
+           {
+              "type":"text",
+              "id":"menu_item",
+              "label":"Menu item",
+              "info":"Enter menu item to customize the menu dropdown."
+           },
+           {
+              "type":"checkbox",
+              "id":"blog_show_new",
+              "label":"Show New Tag",
+              "default":false
+           },
+           {
+              "type":"checkbox",
+              "id":"blog_show_sale",
+              "label":"Show Sale Tag",
+              "default":false
+           },
+           {
+              "type":"checkbox",
+              "id":"blog_show_hot",
+              "label":"Show Hot Tag",
+              "default":false
+           },
+           {
+              "type":"checkbox",
+              "id":"blog_show_collection",
+              "label":"Enable Product",
+              "default":false
+           },
+           {
+              "id":"product",
+              "type":"product",
+              "label":"Select Your Product"
+           },
+           {
+              "type":"image_picker",
+              "id":"image1",
+              "label":"Image 1"
+           },
+           {
+              "type":"url",
+              "id":"bannerlink1",
+              "label":"Link",
+              "info":"Optional"
+           },
+           {
+              "type":"image_picker",
+              "id":"image2",
+              "label":"Image 2"
+           },
+           {
+              "type":"url",
+              "id":"bannerlink2",
+              "label":"Link",
+              "info":"Optional"
+           }
+        ]
+     }
+  ]
+}
+{% endschema %}

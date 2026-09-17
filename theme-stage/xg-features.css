@@ -721,3 +721,43 @@ html[data-xg-theme="dark"] .tmenu_navbar a.tmenu_item_link[href*="/pages/deck-bu
    enough (9px, 6px sides) that "Deck Builder" still sits on one line inside the
    199px rail with the app's own 12px/25px padding intact - measured at one
    line, 40px tall, chevron at the same x as its neighbours. */
+
+/* ---- 18. Mobile search gets a line of its own (owner, 2026-09-17: "the
+   search bar on mobile is really small") ---------------------------------
+   Measured on the live preview at 390px: #_mobile_search was 70px wide and
+   its input carried padding 5px 50px 5px 10px - 60 of those 70 pixels were
+   padding, leaving roughly 10px to type in. No rule set that width. It was
+   simply the remainder after the cart (50px), the account (40px), the theme
+   toggle and the 6px gaps took their natural widths out of the 283.6px
+   .mobile-width-right row (rule in section 8 above, ours).
+   Widening it in place is not possible: the icons need about 220 of those
+   283.6px, so the most search could ever win is ~130px, still mostly
+   padding. header-top.liquid now emits #_mobile_search as a SIBLING of the
+   two columns, and this gives it the full row underneath them.
+   flex AND clear/width are all set because the parent .row's layout mode is
+   the theme's, not ours - whichever of flex or float it uses, a 100% child
+   with clear:both drops to its own line. */
+@media (max-width: 991px) {
+  #header .site-header-mobile .row { flex-wrap: wrap; }
+  #header .site-header-mobile #_mobile_search {
+    flex: 0 0 100%;
+    width: 100%;
+    clear: both;
+    order: 10;
+    margin-top: 2px;
+    padding: 0 0 6px;
+  }
+  #header .site-header-mobile #_mobile_search form,
+  #header .site-header-mobile #_mobile_search .search-header,
+  #header .site-header-mobile #_mobile_search .search__input {
+    width: 100%;
+    max-width: none;
+  }
+  /* 16px keeps iOS from zooming the page when the field is focused; 46px on
+     the right clears the magnifier that sits inside the field */
+  #header .site-header-mobile #_mobile_search .search__input {
+    height: 44px;
+    padding: 8px 46px 8px 14px;
+    font-size: 16px;
+  }
+}
