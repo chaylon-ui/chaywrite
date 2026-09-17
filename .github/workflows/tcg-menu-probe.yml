@@ -156,9 +156,24 @@ jobs:
             } else { console.log('TAB NOT FOUND', want); }
 
             // --- shoot the open dropdown ---------------------------------
-            if (hit >= 0) { await railEls[hit].hover(); await sleep(700); }
-            const shotEl = await page.$('div[class*="tmenu_submenu_type_tab"]') || roots[idx];
-            const jpg = await shotEl.screenshot({ type: 'jpeg', quality: 62 }).catch(() => null);
+            // Do NOT use elementHandle.screenshot() here: it scrolls the
+            // element into view, the pointer leaves the tab, the menu closes
+            // and what lands in the file is the page behind it (runs
+            // 35226196717, 35227208383). The page never scrolls, so at
+            // scrollY 0 a viewport clip and the element's box agree - and
+            // page.screenshot() leaves the hover alone.
+            if (hit >= 0) { await railEls[hit].hover(); await sleep(900); }
+            const shotBox = await page.evaluate(() => {
+              const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4; };
+              const w = [...document.querySelectorAll('div[class*="tmenu_submenu_type_tab"]')].filter(vis)[0];
+              if (!w) return null;
+              const r = w.getBoundingClientRect();
+              return { x: Math.max(r.x + scrollX, 0), y: Math.max(r.y + scrollY, 0), width: Math.round(r.width), height: Math.round(r.height), scrollY };
+            });
+            console.log('SHOTBOX', JSON.stringify(shotBox));
+            const jpg = shotBox
+              ? await page.screenshot({ type: 'jpeg', quality: 70, clip: { x: shotBox.x, y: shotBox.y, width: shotBox.width, height: shotBox.height } }).catch(e => { console.log('SHOT-ERR', String(e).slice(0, 120)); return null; })
+              : null;
             if (jpg) { fs.writeFileSync(process.env.SHOT, jpg); console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes'); }
             await browser.close();
           })().catch(e => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
