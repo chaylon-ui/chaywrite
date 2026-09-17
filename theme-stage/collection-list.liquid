@@ -1,0 +1,202 @@
+{% if section.settings.bandbgimg != blank %}
+{%- assign band_ov = section.settings.band_overlay | default: 60 | divided_by: 100.0 -%}
+<style>
+  #shopify-section-{{ section.id }} {
+    background-image: linear-gradient(rgba(20, 24, 26, {{ band_ov }}), rgba(20, 24, 26, {{ band_ov }})), url('{{ section.settings.bandbgimg | img_url: '2048x' }}');
+    background-size: cover;
+    background-position: center;
+    padding: 38px 0 46px;
+  }
+  @media (min-width: 990px) and (hover: hover) and (pointer: fine) {
+    #shopify-section-{{ section.id }} { background-attachment: fixed; }
+  }
+  #shopify-section-{{ section.id }} .home-title,
+  #shopify-section-{{ section.id }} .section-header__title { color: #ffffff; }
+</style>
+{% endif %}
+<div class="page-width">
+  {% if section.settings.title != blank %}
+  <div class="section-header text-center main-title">
+    {% if settings.main-seperator != blank %}
+    <div class="seperator hs-id-1f8e625a lazyload hs-lazyload" data-bgset="{{ settings.main-seperator | img_url: 'master' }}'" style=""></div>
+    {% endif %}
+    <h2 class="home-title">{{ section.settings.title }}</h2>
+    {% if settings.main-seperator != blank %}
+    <div class="seperator hs-id-1b8240fc lazyload hs-lazyload" data-bgset="{{ settings.main-seperator | img_url: 'master' }}'" style=""></div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% case section.settings.grid %}
+  {% when 2 %}
+  {%- assign grid_item_width = 'medium-up--one-half' -%}
+  {% when 3 %}
+  {%- assign grid_item_width = 'small--one-half medium-up--one-third' -%}
+  {% when 4 %}
+  {%- assign grid_item_width = 'small--one-half medium-up--one-quarter' -%}
+  {% when 5 %}
+  {%- assign grid_item_width = 'small--one-half medium-up--one-fifth' -%}
+  {% endcase %}
+
+  {%- comment -%}
+    Sealed tiles (owner, 2026-09-12: "big white squares with small logos ...
+    it doesn't scream sealed product on a scroll"). Each tile is a real
+    product shot - the owner's picked photo, else the first booster box /
+    bundle / ETB / display in the collection, else its first product with a
+    photo - with the game logo as a chip, a SEALED tag, and the game name
+    over a dark gradient. Two across on phones, section.settings.grid across
+    on larger screens.
+  {%- endcomment -%}
+  <style>
+    .xg-sealed .grid--uniform { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0; }
+    @media (min-width: 750px) { .xg-sealed .grid--uniform { grid-template-columns: repeat({{ section.settings.grid | default: 4 }}, minmax(0, 1fr)); gap: 20px; } }
+    .xg-sealed .grid__item { width: auto; float: none; padding: 0; margin: 0; }
+    .xg-st { --xg-tint: #3a4553; position: relative; display: block; aspect-ratio: 3 / 4; border-radius: 18px; overflow: hidden; background: #15181d; background: linear-gradient(180deg, color-mix(in srgb, var(--xg-tint) 62%, #101317) 0%, #171a20 58%, #0f1114 100%); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); text-decoration: none !important; color: #fff; isolation: isolate; }
+    /* Store photos are TCGplayer-sized (195px wide) on white, so the box sits on a white photo plate at close to its own size instead of being stretched over the tile. */
+    .xg-st__plate { position: absolute; left: 13%; top: 17%; width: 74%; height: 44%; display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 14px; box-shadow: 0 16px 28px rgba(0, 0, 0, .45); transition: transform .4s ease; }
+    .xg-st__img { width: 86%; height: 86%; object-fit: contain; object-position: center; }
+    .xg-st:hover .xg-st__plate { transform: translateY(-4px); }
+    .xg-st__logo { position: absolute; top: 10px; left: 10px; background: #fff; border-radius: 9px; padding: 4px 7px; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+    .xg-st__logo img { display: block; height: 18px; width: auto; max-width: 84px; object-fit: contain; }
+    .xg-st__tag { position: absolute; top: 11px; right: 10px; background: #c62828; color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; }
+    .xg-st__foot { display: block; position: absolute; left: 0; right: 0; bottom: 0; padding: 56px 14px 14px; background: linear-gradient(to top, rgba(8, 10, 12, .94) 0%, rgba(8, 10, 12, .72) 55%, rgba(8, 10, 12, 0) 100%); }
+    .xg-st__title { display: block; margin: 0; color: #fff; font-size: 19px; line-height: 1.12; font-weight: 800; letter-spacing: -.01em; text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+    .xg-st__sub { display: block; margin: 4px 0 0; color: rgba(255, 255, 255, .82); font-size: 12px; line-height: 1.3; }
+    .xg-st__cta { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; background: #fff; color: #161a1d; font-size: 12px; font-weight: 800; letter-spacing: .04em; padding: 8px 12px; border-radius: 999px; }
+    .xg-st__cta::after { content: '\2192'; }
+    @media (min-width: 990px) { .xg-st__title { font-size: 22px; } .xg-st__foot { padding: 72px 18px 18px; } .xg-st__logo img { height: 24px; max-width: 120px; } .xg-st__tag { font-size: 10px; } }
+    html[data-xg-theme="dark"] .xg-st { box-shadow: 0 12px 30px rgba(0, 0, 0, .55); }
+  </style>
+  <div class="collection-grid xg-sealed">
+    <div class="grid grid--uniform">
+      {% for block in section.blocks limit: section.blocks.size %}
+      {%- assign collection = collections[block.settings.collection] -%}
+      {%- assign art = block.settings.image -%}
+      {%- if art == blank -%}
+        {%- assign first_shot = blank -%}{%- assign first_hit = blank -%}
+        {%- for p in collection.products limit: 30 -%}
+          {%- if p.featured_image == blank -%}{%- continue -%}{%- endif -%}
+          {%- assign t = p.title | downcase -%}
+          {%- assign hit = false -%}
+          {%- if t contains 'booster box' or t contains 'elite trainer' or t contains 'booster bundle' or t contains 'collector booster' or t contains 'display' -%}{%- assign hit = true -%}{%- endif -%}
+          {%- if hit and p.available -%}{%- assign art = p.featured_image -%}{%- break -%}{%- endif -%}
+          {%- if hit and first_hit == blank -%}{%- assign first_hit = p.featured_image -%}{%- endif -%}
+          {%- if first_shot == blank -%}{%- assign first_shot = p.featured_image -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if art == blank -%}{%- assign art = first_hit -%}{%- endif -%}
+        {%- if art == blank -%}{%- assign art = first_shot -%}{%- endif -%}
+      {%- endif -%}
+      {%- assign h = collection.handle -%}{%- assign tint = '#3a4553' -%}
+      {%- if h contains 'pokemon' -%}{%- assign tint = '#c99a06' -%}{%- elsif h contains 'magic' -%}{%- assign tint = '#b8431a' -%}{%- elsif h contains 'yu-gi-oh' or h contains 'yugioh' -%}{%- assign tint = '#6d2fb5' -%}{%- elsif h contains 'lorcana' -%}{%- assign tint = '#2456c9' -%}{%- elsif h contains 'one-piece' -%}{%- assign tint = '#c8232c' -%}{%- elsif h contains 'star-wars' -%}{%- assign tint = '#b9931c' -%}{%- elsif h contains 'flesh' -%}{%- assign tint = '#9b1c1c' -%}{%- endif -%}
+      {%- assign game = collection.title | replace: 'Sealed Trading Cards', '' | replace: 'Sealed Trading Card', '' | replace: 'Sealed Product', '' | replace: 'Sealed', '' | strip -%}
+      {%- comment -%} Owner, 2026-09-17: "Remove the count of products". The subline is now only what the owner types on the block; no count, and no filler when it is empty. {%- endcomment -%}
+      {%- assign sub = block.settings.subtitle -%}
+      <div class="grid__item" {{ block.shopify_attributes }}>
+        <a class="xg-st" style="--xg-tint: {{ tint }}" href="{{ collection.url }}" aria-label="Shop {{ game | escape }} sealed">
+          {%- if art != blank -%}
+          <span class="xg-st__plate"><img class="xg-st__img" src="{{ art | image_url: width: 400 }}" srcset="{{ art | image_url: width: 400 }} 400w, {{ art | image_url: width: 600 }} 600w" sizes="(min-width: 750px) 20vw, 40vw" alt="" loading="lazy" width="400" height="400"></span>
+          {%- endif -%}
+          {%- if collection.image -%}<span class="xg-st__logo"><img src="{{ collection.image | image_url: width: 280 }}" alt="{{ game | escape }}" loading="lazy"></span>{%- endif -%}
+          <span class="xg-st__tag">Sealed</span>
+          <span class="xg-st__foot">
+            <span class="xg-st__title">{{ game }}</span>
+            {%- if sub != blank -%}<span class="xg-st__sub">{{ sub }}</span>{%- endif -%}
+            <span class="xg-st__cta">Shop sealed</span>
+          </span>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if section.blocks.size == 0 %}
+  {% include 'no-blocks' %}
+  {% endif %}
+</div>
+
+{% schema %}
+{
+"name": "Collection List",
+"class": "index-section",
+"max_blocks": 12,
+"settings": [
+{
+"type": "text",
+"id": "title",
+"label": "Heading",
+"default": "Collection List"
+},
+{
+"type": "range",
+"id": "grid",
+"label": "Collections Per Row",
+"min": 2,
+"max": 5,
+"step": 1,
+"default": 3
+},
+    {
+      "type": "header",
+      "content": "Background band"
+    },
+    {
+      "type": "image_picker",
+      "id": "bandbgimg",
+      "label": "Background image (full-width band)",
+      "info": "Shows behind the whole section, edge to edge. Wide artwork (1920px+) works best; it gets a dark overlay so titles stay readable. Leave empty for the normal background."
+    },
+    {
+      "type": "range",
+      "id": "band_overlay",
+      "label": "Background darkening",
+      "min": 0,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "default": 60
+    }
+],
+"blocks": [
+{
+"type": "featured_collection",
+"name": "Collection",
+"settings": [
+{
+"label": "Collection",
+"id": "collection",
+"type": "collection"
+},
+{
+"type": "image_picker",
+"id": "image",
+"label": "Tile photo (optional)",
+"info": "Otherwise the first booster box or bundle in the collection is shown."
+},
+{
+"type": "text",
+"id": "subtitle",
+"label": "Subline (optional)",
+"info": "Optional. Blank leaves the tile with just the game name."
+}
+]
+}
+],
+"presets": [
+{
+"name": "Collection List",
+"category": "Collection",
+"blocks": [
+{
+"type": "featured_collection"
+},
+{
+"type": "featured_collection"
+},
+{
+"type": "featured_collection"
+}
+]
+}
+]
+}
+{% endschema %}
