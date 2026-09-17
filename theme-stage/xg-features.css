@@ -678,3 +678,46 @@ html[data-xg-theme="dark"] .tmenu_navbar .xgdbm .xgdbm__shot { border-color: rgb
   .xgdbm__title { font-size: 17px; }
   .xgdbm__shot { height: 180px; }
 }
+
+/* ---- 17. "New!" badge on the Deck Builder tab (owner, 2026-09-17: "can you
+   add a New! line to the deck builder in a way that makes it stand out in the
+   list" / "like in the list of the menu beside deck builder") ---------------
+   The rail item is `li > a.tmenu_item_link > span.tmenu_item_text` plus a
+   chevron span, the anchor a flex row padded 12px 25px in a 199x42 tab (read
+   off the live menu with tcg-menu-probe, run 35234303800). The badge hangs off
+   the text span so it sits immediately after the words rather than out by the
+   chevron.
+   Keyed on the HREF, not the app's numeric menu id: a tab id like
+   tmenu-menu-852382 dies the moment the owner rebuilds the menu, whereas the
+   Deck Builder tab will always point at the Deck Builder page. Colour is
+   !important because xg-dark.css paints .tmenu_item_text (and its hover) with
+   !important, and a pseudo-element inherits that. */
+.tmenu_navbar a.tmenu_item_link[href*="/pages/deck-builder"] .tmenu_item_text { white-space: nowrap; }
+.tmenu_navbar a.tmenu_item_link[href*="/pages/deck-builder"] .tmenu_item_text::after {
+  content: "New!";
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  margin-left: 7px;
+  padding: 2px 6px 3px;
+  border-radius: 999px;
+  background: var(--xg-red, #d62c28) !important;
+  color: #fff !important;
+  font-size: 9px;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+  text-decoration: none !important;
+  white-space: nowrap;
+}
+/* the tab is red-on-dark when active, so the pill flips to white-on-red-ink
+   to stay legible against its own row rather than sitting red on red */
+html[data-xg-theme="dark"] .tmenu_navbar a.tmenu_item_link[href*="/pages/deck-builder"] .tmenu_item_text::after { background: #ff6a5e !important; color: #14181a !important; }
+/* No padding override: trimming the anchor's right padding to make room put
+   this row's chevron 25px out of line with every other tab. The badge is small
+   enough (9px, 6px sides) that "Deck Builder" still sits on one line inside the
+   199px rail with the app's own 12px/25px padding intact - measured at one
+   line, 40px tall, chevron at the same x as its neighbours. */
