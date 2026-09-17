@@ -97,22 +97,36 @@ jobs:
 
             // Kill anything floating over the page: the newsletter modal, the
             // sticky header, cookie bars. Element screenshots capture whatever
-            // overlaps the element's box, so these have to go first.
-            const hidden = await page.evaluate(() => {
-              let n = 0;
-              for (const el of document.querySelectorAll('body *')) {
-                const cs = getComputedStyle(el);
-                if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-                const r = el.getBoundingClientRect();
-                const z = parseInt(cs.zIndex, 10);
-                const floating = (cs.position === 'fixed' || cs.position === 'sticky') && r.width * r.height > 2000;
-                const overlay = cs.position === 'fixed' && z > 100;
-                if (floating || overlay) { el.style.setProperty('display', 'none', 'important'); n++; }
-              }
-              return n;
+            // overlaps the element's box. A single pass is not enough - the
+            // newsletter popup fires on a timer and came back between the hide
+            // and the shot (run 35226875245) - so this keeps sweeping until
+            // the screenshot is taken, and undims whatever the modal dimmed.
+            await page.evaluate(() => {
+              const sweep = () => {
+                let n = 0;
+                for (const el of document.querySelectorAll('body *')) {
+                  if (el.closest('#xg-deck')) continue;
+                  const cs = getComputedStyle(el);
+                  if (cs.display === 'none') continue;
+                  const r = el.getBoundingClientRect();
+                  const z = parseInt(cs.zIndex, 10);
+                  const floating = (cs.position === 'fixed' || cs.position === 'sticky') && r.width * r.height > 2000;
+                  if (floating || (cs.position === 'fixed' && z > 100)) { el.style.setProperty('display', 'none', 'important'); n++; }
+                }
+                // popups dim the page with a filter/opacity on a wrapper
+                for (const el of [document.body, document.documentElement, ...document.querySelectorAll('#MainContent, main, .xg-deck-section')]) {
+                  if (!el) continue;
+                  el.style.setProperty('filter', 'none', 'important');
+                  el.style.setProperty('opacity', '1', 'important');
+                  el.style.setProperty('overflow', 'visible', 'important');
+                }
+                window.__hid = (window.__hid || 0) + n;
+              };
+              sweep();
+              window.__sweep = setInterval(sweep, 250);
             });
-            console.log('HID', hidden, 'floating elements');
-            await sleep(600);
+            await sleep(1200);
+            console.log('HID', await page.evaluate(() => window.__hid));
 
             const el = await page.$('#xg-deck-results');
             if (!el) { console.log('NO RESULTS ELEMENT'); await browser.close(); return; }
