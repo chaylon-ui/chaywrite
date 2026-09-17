@@ -12,6 +12,10 @@ on:
         description: Tab whose panel markup to dump
         required: false
         default: "deck builder"
+      layout:
+        description: Dump only nodes with this item_layout (blank = all non-text)
+        required: false
+        default: ""
       dark:
         description: Set html[data-xg-theme=dark] first
         required: false
@@ -27,6 +31,7 @@ jobs:
     env:
       TAB: ${{ inputs.tab }}
       DARK: ${{ inputs.dark }}
+      LAYOUT: ${{ inputs.layout }}
       SHOT: probe-shots/tcgmenu-${{ github.run_id }}.jpg
     steps:
       - uses: actions/checkout@v4
@@ -57,8 +62,9 @@ jobs:
             if (process.env.DARK === 'true') await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'dark'));
 
             // --- the app's own tree: shapes we may copy -------------------
-            const shapes = await page.evaluate(() => {
+            const shapes = await page.evaluate((LAYOUT) => {
               const out = { layouts: {}, custom: [], roots: [] };
+              const WANT = LAYOUT;
               const es = window._SM && window._SM.newEntries;
               if (!es) return { err: 'no _SM.newEntries' };
               for (const k of Object.keys(es)) {
@@ -71,8 +77,8 @@ jobs:
                     out.layouts[lay] = (out.layouts[lay] || 0) + 1;
                     const keys = Object.keys(s);
                     const htmlKey = keys.find(x => /html|content|text_editor|description/i.test(x) && typeof s[x] === 'string' && s[x].length > 20);
-                    if (lay !== 'text' && lay !== 'image' || htmlKey) {
-                      out.custom.push({ path: path + ' > ' + (s.title || '(untitled)'), layout: lay, keys, node: JSON.stringify(it).slice(0, 900) });
+                    if (WANT ? lay === WANT : (lay !== 'text' && lay !== 'image' || htmlKey)) {
+                      out.custom.push({ path: path + ' > ' + (s.title || '(untitled)'), layout: lay, keys, node: JSON.stringify(it).slice(0, 3000) });
                     }
                     if (depth === 0) out.roots.push({ title: s.title, submenu_type: s.submenu_type, mega_width: s.submenu_mega_width, kids: (it.menus || []).length });
                     if (it.menus) walk(it.menus, depth + 1, path + ' > ' + (s.title || '?'));
@@ -81,7 +87,7 @@ jobs:
                 walk(top, 0, k);
               }
               return out;
-            });
+            }, process.env.LAYOUT || '');
             console.log('LAYOUTS', JSON.stringify(shapes.layouts || shapes.err));
             for (const r of (shapes.roots || [])) console.log('ROOT', JSON.stringify(r));
             for (const c of (shapes.custom || []).slice(0, 14)) console.log('CUSTOM', JSON.stringify(c));
