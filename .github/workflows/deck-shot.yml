@@ -120,7 +120,13 @@ jobs:
                   const r = el.getBoundingClientRect();
                   const z = parseInt(cs.zIndex, 10);
                   const floating = (cs.position === 'fixed' || cs.position === 'sticky') && r.width * r.height > 2000;
-                  if (floating || (cs.position === 'fixed' && z > 100)) { el.style.setProperty('display', 'none', 'important'); n++; }
+                  // The newsletter popup (Privy: DIV.needsclick) is z-index
+                  // 999999 at position STATIC, so a position-based filter
+                  // never matched it - diagnosed by elementFromPoint in run
+                  // 35227362142. Stack order is what makes something an
+                  // overlay, not its position value.
+                  const stacked = Number.isFinite(z) && z >= 1000;
+                  if (floating || stacked) { el.style.setProperty('display', 'none', 'important'); n++; }
                 }
                 // popups dim the page with a filter/opacity on a wrapper
                 for (const el of [document.body, document.documentElement, ...document.querySelectorAll('#MainContent, main, .xg-deck-section')]) {
