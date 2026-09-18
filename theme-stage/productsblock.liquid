@@ -1,0 +1,348 @@
+{% if section.settings.bandbgimg != blank %}
+{%- assign band_ov = section.settings.band_overlay | default: 60 | divided_by: 100.0 -%}
+<style>
+  #shopify-section-{{ section.id }} {
+    background-image: linear-gradient(rgba(20, 24, 26, {{ band_ov }}), rgba(20, 24, 26, {{ band_ov }})), url('{{ section.settings.bandbgimg | img_url: '2048x' }}');
+    background-size: cover;
+    background-position: center;
+    padding: 38px 0 46px;
+  }
+  @media (min-width: 990px) and (hover: hover) and (pointer: fine) {
+    #shopify-section-{{ section.id }} { background-attachment: fixed; }
+  }
+  #shopify-section-{{ section.id }} .home-title,
+  #shopify-section-{{ section.id }} .section-header__title { color: #ffffff; text-shadow: 0 1px 10px rgba(14, 17, 19, 0.65); }
+  /* The band image is owner-picked, so readability can't lean on it (or on
+     the overlay, which can be 0): inactive tabs get their own dark chip.
+     Active keeps its solid fill from the skin (:not(.active) leaves it be). */
+  #shopify-section-{{ section.id }} #product-block-carousel #products-tab .nav-item:not(.active) .nav-link {
+    color: #ffffff;
+    background: rgba(20, 24, 26, 0.55);
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+  #shopify-section-{{ section.id }} #product-block-carousel #products-tab .nav-item:not(.active) .nav-link:hover {
+    color: #ffffff;
+    background: rgba(20, 24, 26, 0.78);
+    border-color: rgba(255, 255, 255, 0.65) !important;
+  }
+  #shopify-section-{{ section.id }} .view-all-btn a.btn { color: #ffffff; border-color: rgba(255, 255, 255, 0.55); background: rgba(20, 24, 26, 0.55); }
+  #shopify-section-{{ section.id }} .view-all-btn a.btn:hover { background: rgba(20, 24, 26, 0.85); border-color: #ffffff; }
+
+  /* The "Because you browse X, it leads today." line (built by
+     assets/xg-personal.js, which inserts it just above #product-block-carousel
+     and paints it var(--xg-muted) - #707a83 light, #8a969d dark). Mid-grey is
+     fine on a page background and unreadable on someone's artwork, which is
+     what the owner reported (2026-09-18: "The text is too light to read").
+     Same answer the tabs above already use: white on its own dark chip.
+     An id beats the script's own head-injected .xg-personal rule (0,1,0)
+     on specificity, so no !important is needed. */
+  #shopify-section-{{ section.id }} .xg-personal {
+    color: #ffffff;
+    text-shadow: 0 1px 8px rgba(14, 17, 19, 0.7);
+  }
+  #shopify-section-{{ section.id }} .xg-personal > span {
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(20, 24, 26, 0.55);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+  #shopify-section-{{ section.id }} .xg-personal button {
+    color: #ffffff;
+    background: rgba(20, 24, 26, 0.55);
+    border-color: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+  #shopify-section-{{ section.id }} .xg-personal button:hover {
+    background: rgba(20, 24, 26, 0.85);
+    border-color: #ffffff;
+    color: #ffffff;
+  }
+
+  /* FROSTED TILES (owner, 2026-09-18: "the white space behind the card looks
+     out of place in dark mode/light mode. Should it be a bit more like a semi
+     transparent background blur or something so you can still see behind it").
+
+     Two different whites were doing it. The tile itself is var(--xg-surface),
+     which IS theme-aware (#fff light, #181d20 dark); the white that survived
+     into dark mode is
+
+       ... .grid-view-item__image-wrapper a .image-inner { background: #fff; }
+
+     declared in BOTH theme.css and modern-skin.css, each a hard-coded literal
+     at (0,6,1) with no dark override, so every card sat on a white plate
+     whatever the theme. The id below makes this (1,6,1), which clears both.
+     Here both whites become glass: the tile is a
+     translucent panel over the band art, and the plate behind the card goes
+     away entirely so the artwork reads through to the card's own edge.
+
+     Deliberately NOT the white-ink treatment used for the chips above: the
+     panel keeps the THEME's own lightness (pale frost in light, dark frost in
+     dark), so the tile's title and price keep their normal ink and stay
+     readable without forcing a colour per element.
+
+     Scoped to this section id, so product cards everywhere else on the site
+     are untouched. Blur is 8px and only on the tiles that exist in this one
+     carousel row; the tab chips above already blur at 3px. */
+  #shopify-section-{{ section.id }} .products-display .grid-view-item {
+    background: rgba(255, 255, 255, 0.72);
+    border-color: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #shopify-section-{{ section.id }} .products-display .grid__item .grid-view-item .grid-view-item__image-container .grid-view-item__image-wrapper a .image-inner {
+    background: transparent;
+  }
+  html[data-xg-theme="dark"] #shopify-section-{{ section.id }} .products-display .grid-view-item {
+    background: rgba(20, 24, 26, 0.62);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+</style>
+{% endif %}
+{%- assign totalproduct_limit = section.settings.totalproduct_limit -%}
+{%- assign max_rows = section.settings.max_products_rows | plus: 0 -%}
+<div class="product-block page-width">
+  {% if section.settings.title1 != blank %}
+  <div class="section-header text-center main-title">
+    {% if settings.main-seperator != blank %}
+    <div class="seperator hs-id-052a52bd lazyload hs-lazyload" data-bgset="{{ settings.main-seperator | img_url: 'master' }}'" style=""></div>
+    {% endif %}
+    <h2 class="home-title">{{ section.settings.title1 }}</h2>
+    {% if settings.main-seperator != blank %}
+    <div class="seperator hs-id-84191e54 lazyload hs-lazyload" data-bgset="{{ settings.main-seperator | img_url: 'master' }}'" style=""></div>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% assign productType = product.type | handle %}
+  {{ collections[productType].id }}
+  {% if section.blocks.size > 0 %}
+  <div id="product-block-carousel" class="logo-bar{% if section.settings.title_enable %} logo-bar--large{% endif %}">
+    <div class="logo-bar__item{% if section.settings.title_enable %} logo-bar__item--large{% endif %}" {{ block.shopify_attributes }}>
+      <ul id="products-tab" class="nav nav-tabs products-tab clearfix">
+        {% assign blockcount = 1 %}
+        {% for block in section.blocks %}
+        {% if block.settings.title != blank %}
+        <li class="nav-item {% if forloop.first %}active{% endif %}">
+          <a href="#linkproductblock{{blockcount}}-{{ section.id }}" class="nav-link " data-toggle="tab">
+            {{ block.settings.title | escape }}
+          </a>
+
+        </li>
+        {% assign blockcount = blockcount | plus: 1 %}
+        {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="tab-content">
+      {% assign blockcount = 1 %}
+      {% for block in section.blocks %}
+      {% assign viewalloption = block.settings.show_view_all %}
+      <div class="row tab_content tab-pane {% if forloop.first %}active{% endif %}" id="linkproductblock{{blockcount}}-{{ section.id }}">
+        {%- assign collection = collections[block.settings.collection] -%}
+        {% case block.settings.grid %}
+        {% when 2 %}
+        {%- assign max_height = 530 -%}
+        {%- assign grid_item_width = 'medium-up--one-half' -%}
+        {% when 3 %}
+        {%- assign max_height = 345 -%}
+        {%- assign grid_item_width = 'small--one-half medium-up--one-third' -%}
+        {% when 4 %}
+        {%- assign max_height = 250 -%}
+        {%- assign grid_item_width = 'small--one-half medium-up--one-quarter' -%}
+        {% when 5 %}
+        {%- assign max_height = 195 -%}
+        {%- assign grid_item_width = 'small--one-half medium-up--one-fifth' -%}
+        {% endcase %}
+        {% assign counter = 1 %}
+        <div class="owl-carousel owl-theme grid grid--uniform grid--view-items products-display productblock{{blockcount}}-{{ section.id }}">
+          {% for product in collection.products limit: totalproduct_limit %}
+          {% capture m %} {{ counter | modulo:max_rows }}{% endcapture %}
+
+          {% assign n = m | plus: 0 %}
+          {% if n == 1 %}
+          <div class="multilevel-item">
+            {% endif %}
+            <div class="item grid__item grid__item--{{block.id}} {{ grid_item_width }}">
+              {% include 'product-card-grid', max_height: max_height %}
+            </div>
+            {% if n == 0 and max_rows != 1 %}
+          </div>
+          {% endif %}
+
+          {% if forloop.last == true and n == 1 %}
+        </div>
+        {% endif %}
+        {% assign counter = counter | plus: 1 %}
+        {% else %}
+
+        {% for i in (1..totalproduct_limit) %}
+        <div class="grid__item .grid__item--{{block.id}} {{ grid_item_width }}">
+          <div class="grid-view-item">
+            <a href="#" class="grid-view-item__link">
+              <div class="grid-view-item__image">
+                {% capture current %}{% cycle 1, 2, 3, 4, 5, 6 %}{% endcapture %}
+                {{ 'product-' | append: current | placeholder_svg_tag: 'placeholder-svg' }}
+              </div>
+              <div class="h4 grid-view-item__title">{{ 'homepage.onboarding.product_title' | t }}</div>
+              <div class="grid-view-item__meta">
+                {% include 'product-price' %}
+              </div>
+            </a>
+          </div>
+        </div>
+        {% endfor %}
+        {% endfor %}
+      </div>
+      {% if viewalloption %}
+      <div class="view-all-btn text-center">
+        <a href="{{ collection.url }}" class="btn">
+          {{ 'collections.general.view_all' | t }}
+        </a>
+      </div>
+      {% endif %}
+    </div>
+    {% assign blockcount = blockcount | plus: 1 %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if section.blocks.size == 0 %}
+{% include 'no-blocks' %}
+{% endif %}
+</div>
+
+<script>
+  jQuery(document).ready(function () {
+    {% assign blockcount = 1 %}
+    {% for block in section.blocks %}
+    $(".productblock{{blockcount}}-{{ section.id }}").owlCarousel({
+      nav: true, // Show next and prev buttons
+      navText: [
+        '<i class=\'material-icons\' role="button" aria-label="Previous Slide"></i>',
+        '<i class=\'material-icons\' role="button" aria-label="Next Slide"></i>'
+      ],
+      dots: false,
+      onInitialized: function() {
+        updateTabIndexes();
+      },
+      onTranslated: function() {
+        updateTabIndexes();
+      },
+      rewind: true,
+      loop: false,
+      responsive: {
+        0: {
+          items: 1
+        },
+        544: {
+          items: 2
+        },
+        768: {
+          items: 3
+        },
+        992: {
+          items: 3
+        },
+        1200: {
+          items: 4
+        }
+      }
+    });
+    {% assign blockcount = blockcount | plus: 1 %}
+    {% endfor %}
+  });
+</script>
+
+
+{% schema %}
+
+{
+"name": "Products Block",
+"class": "index-section product-block",
+"max_blocks": 20,
+"settings": [
+{
+"type": "text",
+"id": "title1",
+"label": "Main Title",
+"default": "Trending Products"
+}, {
+"type": "range",
+"id": "totalproduct_limit",
+"label": "Total Products From Collection",
+"min": 8,
+"max": 20,
+"step": 1,
+"default": 12
+}, {
+"type": "select",
+"id": "max_products_rows",
+"label": "Max Products Rows",
+"default": "2",
+"options": [
+{
+"value": "1",
+"label": "1"
+}, {
+"value": "2",
+"label": "2"
+}
+]
+},
+    {
+      "type": "header",
+      "content": "Background band"
+    },
+    {
+      "type": "image_picker",
+      "id": "bandbgimg",
+      "label": "Background image (full-width band)",
+      "info": "Shows behind the whole section, edge to edge. Wide artwork (1920px+) works best; it gets a dark overlay so titles stay readable. Leave empty for the normal background."
+    },
+    {
+      "type": "range",
+      "id": "band_overlay",
+      "label": "Background darkening",
+      "min": 0,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "default": 60
+    }
+],
+"blocks": [
+{
+"type": "logo_image",
+"name": "Products Block",
+"settings": [
+{
+"type": "text",
+"id": "title",
+"label": "Product Tab Title"
+}, {
+"id": "collection",
+"type": "collection",
+"label": "Collection"
+}, {
+"type": "checkbox",
+"id": "show_view_all",
+"label": "Show 'View All' Button",
+"default": false
+}
+]
+}
+],
+"presets": [
+{
+"name": "Products Block",
+"category": "Standard Theme"
+}
+],
+"templates": ["index"]
+}
+
+{% endschema %}
