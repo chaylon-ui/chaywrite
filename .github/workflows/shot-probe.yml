@@ -35,6 +35,10 @@ on:
         description: Commit the JPEG to probe-shots/ instead of printing base64
         required: false
         default: "true"
+      hover:
+        description: Selector to hover (and hold) before measuring and shooting - opens app menus that are not in the DOM until hovered
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -51,6 +55,7 @@ jobs:
       RULES: ${{ inputs.rules }}
       DARK: ${{ inputs.dark }}
       SAVE: ${{ inputs.save }}
+      HOVER: ${{ inputs.hover }}
       SHOT: probe-shots/shot-${{ github.run_id }}.jpg
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +87,10 @@ jobs:
             else if (process.env.DARK === 'light') { await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'light')); }
             console.log('theme attr', await page.evaluate(() => document.documentElement.getAttribute('data-xg-theme')));
             await sleep(4000);
+            if (process.env.HOVER) {
+              try { await page.hover(process.env.HOVER); await sleep(1500); console.log('hovered', process.env.HOVER); }
+              catch (e) { console.log('HOVER-ERR', String(e).slice(0, 160)); }
+            }
             const rows = await page.evaluate((list) => {
               const out = [];
               for (const sel of list) {
@@ -123,7 +132,7 @@ jobs:
             if (!el) { console.log('SELECTOR NOT FOUND', process.env.SEL); await browser.close(); return; }
             const box = await el.boundingBox();
             console.log('BOX', JSON.stringify(box));
-            await el.scrollIntoView().catch(() => {});
+            if (!process.env.HOVER) await el.scrollIntoView().catch(() => {});
             await sleep(500);
             const jpg = await el.screenshot({ type: 'jpeg', quality: 60 });
             if (process.env.SAVE === 'true') { fs.writeFileSync(process.env.SHOT, jpg); console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes'); }
