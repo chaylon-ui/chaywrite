@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-09-17",
+  "updated": "2026-09-18",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -478,17 +478,37 @@
       "exact": true,
       "tiers": [
         {
-          "upTo": 1.0,
+          "upTo": 0.28,
+          "cash": 0.02,
+          "credit": 0.05
+        },
+        {
+          "upTo": 0.51,
           "cash": 0.02,
           "credit": 0.05,
           "rarities": {
             "common": {
               "cash": 0.0,
               "credit": 0.0
+            }
+          }
+        },
+        {
+          "upTo": 1.0,
+          "cash": 0.1,
+          "credit": 0.15,
+          "rarities": {
+            "mythic": {
+              "cash": 0.02,
+              "credit": 0.05
             },
-            "uncommon": {
-              "cash": 0.0,
-              "credit": 0.0
+            "rare": {
+              "cash": 0.02,
+              "credit": 0.05
+            },
+            "special": {
+              "cash": 0.02,
+              "credit": 0.05
             }
           }
         },
@@ -509,17 +529,37 @@
           "credit": 0.7,
           "tiers": [
             {
-              "upTo": 1.0,
+              "upTo": 0.28,
+              "cash": 0.02,
+              "credit": 0.05
+            },
+            {
+              "upTo": 0.51,
               "cash": 0.02,
               "credit": 0.05,
               "rarities": {
                 "common": {
                   "cash": 0.0,
                   "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 1.0,
+              "cash": 0.1,
+              "credit": 0.15,
+              "rarities": {
+                "mythic": {
+                  "cash": 0.02,
+                  "credit": 0.05
                 },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
+                "rare": {
+                  "cash": 0.02,
+                  "credit": 0.05
+                },
+                "special": {
+                  "cash": 0.02,
+                  "credit": 0.05
                 }
               }
             },
@@ -540,17 +580,37 @@
           "credit": 0.7,
           "tiers": [
             {
-              "upTo": 1.0,
+              "upTo": 0.28,
+              "cash": 0.02,
+              "credit": 0.05
+            },
+            {
+              "upTo": 0.51,
               "cash": 0.02,
               "credit": 0.05,
               "rarities": {
                 "common": {
                   "cash": 0.0,
                   "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 1.0,
+              "cash": 0.1,
+              "credit": 0.15,
+              "rarities": {
+                "mythic": {
+                  "cash": 0.02,
+                  "credit": 0.05
                 },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
+                "rare": {
+                  "cash": 0.02,
+                  "credit": 0.05
+                },
+                "special": {
+                  "cash": 0.02,
+                  "credit": 0.05
                 }
               }
             },
@@ -577,17 +637,37 @@
           "credit": 0.7,
           "tiers": [
             {
-              "upTo": 1.0,
+              "upTo": 0.28,
+              "cash": 0.02,
+              "credit": 0.05
+            },
+            {
+              "upTo": 0.51,
               "cash": 0.02,
               "credit": 0.05,
               "rarities": {
                 "common": {
                   "cash": 0.0,
                   "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 1.0,
+              "cash": 0.1,
+              "credit": 0.15,
+              "rarities": {
+                "mythic": {
+                  "cash": 0.02,
+                  "credit": 0.05
                 },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
+                "rare": {
+                  "cash": 0.02,
+                  "credit": 0.05
+                },
+                "special": {
+                  "cash": 0.02,
+                  "credit": 0.05
                 }
               }
             },
@@ -638,6 +718,10 @@
       },
       "_source": "binderpos-portal",
       "_rules": [
+        "MTG Common Under 0.29",
+        "MTG COMMON over 0.29",
+        "Bulk Uncommons 0.51 and under",
+        "Good Uncommons MTG over 0.52",
         "MTG SINGLES $1 AND UNDER",
         "MTG SINGLES $1.01 - $3",
         "MTG SINGLES $3-$20",
@@ -3751,7 +3835,5 @@
       }
     }
   ],
-  "_alerts": [
-    "skipped rules: Bulk Commons and Uncommons (Test) (test rule); MTG COMMON UNCOMMON (*TEST*) (test rule)"
-  ]
+  "_alerts": []
 }
