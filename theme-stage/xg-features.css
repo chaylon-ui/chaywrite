@@ -802,3 +802,65 @@ html[data-xg-theme="dark"] .tmenu_navbar a.tmenu_item_link[href*="/pages/deck-bu
      outer edge still reads as a margin rather than a bleed. */
   #header .header-top.site-header-inner > .page-width { padding-left: 10px; }
 }
+
+/* ---------------------------------------------------------------------------
+   20. PAGINATION: which page am I on (2026-09-18).
+
+   Owner, on a collection page five pages deep: "When scrolling through pages
+   it doesn't identify what page you're on. I am on page 5 here for example.
+   Can you make it identify in both modes (dark and light) what page I am
+   currently on".
+
+   The markup was never the problem - snippets/pagination.liquid already emits
+   `<span class="item current"><b>5</b></span>` for the current page against
+   `<a class="item link">` for the rest - and modern-skin.css already paints
+   it:
+
+     .pagination .page-view span.current,
+     .pagination .page-view .current            (0,3,1)
+       { background-color: var(--xg-charcoal); color: #fff; }
+
+   but xg-dark.css repaints EVERY pager a few lines later:
+
+     html[data-xg-theme="dark"] .pagination .page-view span   (0,3,2)
+       { background-color: #1d2327; color: #c3ccd1; border-color: #2a3236; }
+
+   Equal class count, one more element name, so in DARK MODE the blanket rule
+   outranks the highlight and the current page is painted exactly like its
+   neighbours. Measured on /collections/all-singles?page=5 (shot-probe run
+   35375338132) the two were byte-identical: both rgb(195,204,209) on
+   rgb(29,35,39), border rgb(42,50,54), weight 500.
+
+   Fixed by out-ranking it rather than by !important: adding .parts and .item
+   takes the dark selector to (0,6,1), which beats (0,3,2) on class count
+   alone, so this works wherever the file lands in the cascade (xg-features
+   loads BEFORE xg-dark, so source order would have lost).
+
+   The current page is a filled pill in each theme's own strongest ink -
+   charcoal-on-white in light, inverted to light-on-near-black in dark - so it
+   reads as "you are here" rather than as one more button to press. Bold and
+   the ring carry the same information without relying on colour alone, and
+   the cursor stops pretending it is clickable. snippets/pagination.liquid
+   also gained aria-current="page", which is what actually answers "identify
+   what page I am on" for a screen reader.
+   --------------------------------------------------------------------------- */
+.pagination .page-view .parts .item.current,
+.pagination .page-view .parts .item.current b {
+  color: #ffffff;
+  font-weight: 700;
+}
+.pagination .page-view .parts .item.current {
+  background-color: var(--xg-charcoal, #27302f);
+  border-color: var(--xg-charcoal, #27302f);
+  box-shadow: 0 0 0 2px rgba(39, 48, 47, 0.22);
+  cursor: default;
+}
+html[data-xg-theme="dark"] .pagination .page-view .parts .item.current,
+html[data-xg-theme="dark"] .pagination .page-view .parts .item.current b {
+  color: #14181b;
+}
+html[data-xg-theme="dark"] .pagination .page-view .parts .item.current {
+  background-color: #e6ebee;
+  border-color: #e6ebee;
+  box-shadow: 0 0 0 2px rgba(230, 235, 238, 0.24);
+}

@@ -1,0 +1,69 @@
+<div class="list--inline pagination page-width">
+  <div class="pagination-block">
+    <div class="pagination__text col-sm-4 col-xs-12">
+      {% assign current_first_item = paginate.current_offset | plus:1 %}
+      {% if paginate.pages == paginate.current_page %}
+      {% assign current_displayed = paginate.items | modulo:paginate.page_size %}
+      {% assign current_last_item = paginate.items %}
+      {% else %}
+      {% assign current_displayed = paginate.page_size %}
+      {% assign current_last_item = paginate.current_offset | plus:paginate.page_size %}
+      {% endif %}
+      {{ 'general.pagination.showing' | t }}
+      {{ current_first_item }}
+      {% unless current_first_item == current_last_item %}
+      -{{ current_last_item }}
+      {% endunless %}
+      {{ 'general.pagination.of' | t }}
+      {{ paginate.items }}
+      {{ 'general.pagination.items' | t }}
+    </div>
+    <div class="page-view col-sm-8 col-xs-12">
+      <div class="pag_previous">
+        {% unless paginate.previous.is_link %}
+        <div class="btn btn--secondary btn--narrow btn--disabled">
+          <i class="material-icons">&#xE314;</i>
+          <span class="icon__fallback-text">{{ 'general.pagination.previous' | t }}</span>
+        </div>
+        {% else %}
+        <a href="{{ paginate.previous.url }}" class="btn btn--secondary btn--narrow">
+          <i class="material-icons">&#xE314;</i>
+          <span class="icon__fallback-text">{{ 'general.pagination.previous' | t }}</span>
+        </a>
+        {% endunless %}
+      </div>
+      {% if paginate.pages > 1 %}
+      <div class="pagination_collection clearfix">
+        <div class="parts">
+          {% for part in paginate.parts %}
+          {% if part.is_link %}
+          <a href="{{ part.url }}" class="item link">{{ part.title }}</a>
+          {% else %}
+          {% if part.title == '&hellip;' %}
+          <span class="item dots">{{ part.title }}</span>
+          {% else %}
+          <span class="item current" aria-current="page">
+            <b>{{ part.title }}</b>
+          </span>
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      <div class="pag_next">
+        {% unless paginate.next.is_link %}
+        <div class="btn btn--secondary btn--narrow btn--disabled">
+          <i class="material-icons">&#xE315;</i>
+          <span class="icon__fallback-text">{{ 'general.pagination.next' | t }}</span>
+        </div>
+        {% else %}
+        <a href="{{ paginate.next.url }}" class="btn btn--secondary btn--narrow">
+          <i class="material-icons">&#xE315;</i>
+          <span class="icon__fallback-text">{{ 'general.pagination.next' | t }}</span>
+        </a>
+        {% endunless %}
+      </div>
+    </div>
+  </div>
+</div>
