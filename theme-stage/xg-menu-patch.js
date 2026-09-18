@@ -64,6 +64,17 @@
       '<span class="xgdbm__shot" role="img" aria-label="The Deck Builder pricing a Magic decklist: eight of eight cards in stock, each with its photo, set and price, and a running subtotal."></span>',
       '</div>'
     ].join('');
+    // Replaces the "Other Locations" paragraph of the owner's "Custom contact
+    // content" block (see step 6). Same inline colour and sizing the rest of
+    // that block uses, so the app draws it exactly like the Address and
+    // Phone Number entries above it. Mallow Games opens in a new tab like
+    // every other Mallow link on the site.
+    var VIDEO_HTML = "<p style='color:#D52C28'><strong style='font-size: 1.2em;'>Video Games</strong><br>\n" +
+      "<a href=\"https://mallowgames.com/\" target=\"_blank\" rel=\"noopener\" style='color:#D52C28'><strong>Shop at Mallow Games</strong></a>\n</p>";
+    // The paragraph as the app stores it: a <p> whose first <strong> reads
+    // "Other Locations", through its closing tag. Lazy so it stops at that
+    // paragraph's own </p> and never eats the ones before it.
+    var OTHER_RE = /<p[^>]*>\s*<strong[^>]*>\s*Other Locations\s*<\/strong>[\s\S]*?<\/p>/;
     function find(list, t) { for (var i = 0; i < list.length; i++) if (title(list[i]) === t) return i; return -1; }
     function has(list, t) {
       for (var i = 0; i < list.length; i++) {
@@ -116,6 +127,19 @@
         top[li].menus.unshift(stores);
         changed++;
       }
+      // 6. The contact block's "Other Locations" list repeats the Locations
+      //    column step 4 puts beside it. Owner, 2026-09-18: "yellow is
+      //    redundant... can you remove it and change it to 'Video Games?'
+      //    and then put a link to Mallow Games". Only html nodes whose
+      //    markup still carries that paragraph match, so a second pass
+      //    finds nothing and changes nothing.
+      walk(top, function (it) {
+        var s = it && it.setting;
+        if (!s || s.item_layout !== 'html' || typeof s.custom_html !== 'string') return;
+        if (!OTHER_RE.test(s.custom_html)) return;
+        s.custom_html = s.custom_html.replace(OTHER_RE, VIDEO_HTML);
+        changed++;
+      });
       return changed;
     }
 
