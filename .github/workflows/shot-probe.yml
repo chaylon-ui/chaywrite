@@ -28,7 +28,7 @@ on:
         required: false
         default: ""
       dark:
-        description: Set html[data-xg-theme=dark] before the shot
+        description: Force a theme before the shot - "dark" (or "true"), "light", or "false" to leave the site's own default alone
         required: false
         default: "false"
       save:
@@ -78,7 +78,9 @@ jobs:
             if (pt) { await page.goto(target.origin + '/?preview_theme_id=' + pt, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null); }
             const r = await page.goto(process.env.URL, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => null);
             console.log('status', r ? r.status() : 'none', '| title', await page.title(), '| theme', await page.evaluate(() => JSON.stringify(window.Shopify && window.Shopify.theme)).catch(() => '?'));
-            if (process.env.DARK === 'true') { await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'dark')); }
+            if (process.env.DARK === 'true' || process.env.DARK === 'dark') { await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'dark')); }
+            else if (process.env.DARK === 'light') { await page.evaluate(() => document.documentElement.setAttribute('data-xg-theme', 'light')); }
+            console.log('theme attr', await page.evaluate(() => document.documentElement.getAttribute('data-xg-theme')));
             await sleep(4000);
             const rows = await page.evaluate((list) => {
               const out = [];
