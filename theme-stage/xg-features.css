@@ -864,3 +864,27 @@ html[data-xg-theme="dark"] .pagination .page-view .parts .item.current {
   border-color: #e6ebee;
   box-shadow: 0 0 0 2px rgba(230, 235, 238, 0.24);
 }
+
+/* ---------------------------------------------------------------------------
+   21. COLLECTION BLURB HIDDEN (2026-09-18, owner: "remove this quickly",
+   with a screenshot of the "Welcome to our Magic: The Gathering Singles
+   collection!" paragraphs above the grid).
+
+   That text is `collection.description`, printed by snippets/advanced-filter
+   .liquid and sections/advanced_search.liquid into the only two places
+   .category_only_name is ever used, so hiding that wrapper takes the block
+   and its spacing without touching anything else.
+
+   DELIBERATELY CSS, NOT A CONTENT OR SETTING CHANGE. The descriptions are
+   the owner's own store data on hundreds of collections - deleting them is
+   not reversible from here. The theme's own `size_description` setting
+   (Description length, 0 = off) would drop it from the markup properly, but
+   it lives in a user-owned template JSON whose edit flow is the slow
+   hardened one; the owner can flip it in the theme editor any time and this
+   rule then does nothing.
+
+   Consequence worth knowing: the words stay in the page source, so search
+   engines still read them. If they should be gone for SEO too, the setting
+   or the collection content is the place to do it, not here.
+   --------------------------------------------------------------------------- */
+.category_only_name { display: none; }
