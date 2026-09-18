@@ -888,3 +888,111 @@ html[data-xg-theme="dark"] .pagination .page-view .parts .item.current {
    or the collection content is the place to do it, not here.
    --------------------------------------------------------------------------- */
 .category_only_name { display: none; }
+
+/* ---------------------------------------------------------------------------
+   22. BINDERPOS STORE-CREDIT WIDGET, dressed to match (2026-09-18).
+
+   Owner, with two screenshots of the black "My Store Credit" tab and the
+   white panel it opens: "can you make this visually fit the theme better?"
+
+   WHOSE DOM IS WHAT. The widget is a BinderPOS ScriptTag - not in this
+   theme, not an app-embed block. app.binderpos.com/external/shopify/
+   storeCredit/script loads portal.binderpos.com/shopify/js/credit.js plus
+   its own credit.css, and credit.js builds these in OUR page:
+
+     a#binderpos-open-credit              the tab
+     div#binderpos-credit-overlay         the scrim
+     div#binderpos-credit-iframe-container the wrapper
+     a#binderpos-credit-close-button      the X
+     iframe.binderpos-credit-iframe       the panel
+
+   Those five are in our document and ours to restyle. What is INSIDE the
+   iframe is served from portal.binderpos.com, so the white body, the navy
+   "Your store credit" heading, the teal amount and the Poppins face are
+   CROSS-ORIGIN AND CANNOT BE TOUCHED FROM HERE at all - no CSS of ours can
+   reach into another origin's document. Only BinderPOS can change those.
+
+   EVERYTHING BELOW NEEDS !important. credit.js writes a full style="..."
+   attribute onto the tab, the overlay, the container and the close button
+   (inline styles beat any stylesheet selector), so an ordinary rule would
+   be ignored. The tab's inline set is, verbatim: z-index:999999998;
+   padding:10px 15px; font-weight:400; position:fixed; font-family: Lato,
+   Open sans, sans-serif; color:white; font-size:16px;
+   background-color:#000000; top:50%; right:0; transform: rotate(-90deg)
+   translate(50%, -100%); transform-origin: right top 0px.
+
+   The tab keeps its rotation and anchoring untouched - only the paint
+   changes. rotate(-90deg) turns the element's TOP edge to face into the
+   page, which is why the radius is on the top corners: that rounds the
+   edge the shopper sees and leaves the edge against the screen square.
+
+   FAIL-SAFE BY DESIGN: if BinderPOS renames an id, these rules stop
+   matching and the widget simply goes back to looking like theirs. Nothing
+   breaks, so this is safe to leave in place.
+
+   ONLY VISIBLE TO A SIGNED-IN SHOPPER: credit.js appends the tab only when
+   __st.cid exists, which is why it cannot be photographed logged-out.
+   --------------------------------------------------------------------------- */
+a#binderpos-open-credit {
+  padding: 11px 18px !important;
+  background-color: var(--xg-red, #d62c28) !important;
+  color: #ffffff !important;
+  font-family: var(--xg-font-body, inherit) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  border-radius: 10px 10px 0 0 !important;
+  box-shadow: 0 6px 20px rgba(10, 13, 15, 0.28) !important;
+  transition: background-color 0.18s ease !important;
+}
+a#binderpos-open-credit:hover,
+a#binderpos-open-credit:focus-visible {
+  background-color: #b3211d !important;
+}
+html[data-xg-theme="dark"] a#binderpos-open-credit {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* The scrim: 0.3 black barely separated the panel from the page. Match the
+   weight the zoom overlay and the cart peek already use. */
+div#binderpos-credit-overlay {
+  background: rgba(10, 13, 15, 0.62) !important;
+  backdrop-filter: blur(2px) !important;
+  -webkit-backdrop-filter: blur(2px) !important;
+}
+
+/* The panel: their own credit.css gives it a 20px 50%-black slab shadow and
+   square corners. Round the edge that faces the page and use the theme's
+   softer shadow. (The white INSIDE the frame is theirs, see above.) */
+iframe.binderpos-credit-iframe {
+  border-radius: 14px 0 0 14px !important;
+  box-shadow: -18px 0 44px rgba(10, 13, 15, 0.42) !important;
+}
+
+/* The X: inline right:462px plus top:-48px from credit.css lands it adrift
+   of the panel, over the page, which is what the owner's screenshot shows.
+   Pin it to the panel's own top-right corner as a round button instead.
+   Fixed positioning takes it out of the container's offset parent, so it
+   does not depend on the 510px panel width staying 510px. */
+a#binderpos-credit-close-button {
+  position: fixed !important;
+  right: 14px !important;
+  left: auto !important;
+  top: 14px !important;
+  width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  background: rgba(10, 13, 15, 0.08) !important;
+  color: #0a162e !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+  z-index: 1000000000 !important;
+}
+a#binderpos-credit-close-button:hover {
+  background: rgba(10, 13, 15, 0.16) !important;
+}
