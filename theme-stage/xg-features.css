@@ -761,3 +761,44 @@ html[data-xg-theme="dark"] .tmenu_navbar a.tmenu_item_link[href*="/pages/deck-bu
     font-size: 16px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   19. PHONE LOGO: fill the column it already owns (2026-09-18).
+
+   Owner, with a phone screenshot: "Can you make the Exor logo larger on
+   Mobile to fill that square better?"
+
+   Measured at 390px on the preview (shot-probe run 35346965372): the logo
+   image renders 71x52 in a column 106 wide and a header band 104 tall - a
+   third of its own column's height, which is the "square" it was not
+   filling. The cap is modern-skin.css's
+
+     #header .header__logo img { max-height: 52px !important; }
+
+   The 69px cap in sections/header-top.liquid never applies here: it sits
+   inside @media (min-width: 992px), so it is a desktop rule only.
+
+   72px is 38% taller (about 98 wide at this asset's 1.365 ratio) and still
+   clears the band: 72 + the .nav-menu's own 12px above and below = 96,
+   under the 104 the header is already tall, so the header does not grow.
+
+   THE LOGO AND THE SEARCH SHARE ONE BUDGET. The mobile header is the grid
+   above - column 1 auto-sized to the logo, column 2 everything else - so
+   every pixel the logo gains, the bar loses. Column 2's minmax(60%, 1fr)
+   floor is what makes this safe: the bar cannot fall below 60% of the
+   viewport (234px at 390) however wide the logo column becomes, which also
+   caps the logo at about 103px tall before the grid stops giving it room.
+
+   !important and the extra .header-top class are both needed: modern-skin's
+   rule is (1,1,1) and carries !important of its own.
+   --------------------------------------------------------------------------- */
+@media (max-width: 991px) {
+  #header .header-top .header__logo img {
+    max-height: 72px !important;
+    height: auto;
+    width: auto;
+  }
+  /* The logo column's own gutter; 5px back for the logo, and the header's
+     outer edge still reads as a margin rather than a bleed. */
+  #header .header-top.site-header-inner > .page-width { padding-left: 10px; }
+}
