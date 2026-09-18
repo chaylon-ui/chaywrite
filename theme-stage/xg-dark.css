@@ -581,6 +581,21 @@
   html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content h4 > strong,
   html[data-xg-theme="dark"] .tmenu_navbar .tmenu_custom_content p > strong[style*="font-size"] { color: #ff6a5e !important; }
 
+  /* The panel's COLUMN HEADINGS - "Locations", "Policies" - are the app's
+     own level-1 links with children (tmenu_item_has_child, the anchor is
+     tmenu-disabled-link). In light mode they are red like everything else
+     in the panel; in dark they took the #e6ebee ink from rule 11's
+     [class*="tmenu_submenu"] .tmenu_item_text (0,4,1) and nothing gave
+     the red back, so they sat white beside the custom block's red "Our
+     Store:" / "Address" / "Phone Number" / "Video Games". Owner,
+     2026-09-18, circling the two: "these should match the other header
+     colors". Same #ff6a5e those headings use; hover stays the same red
+     rather than flashing a change. (0,6,4) outranks rule 11 on its own,
+     the !important is against the app's own inline paint. Level-2 links
+     under them are untouched. */
+    html[data-xg-theme="dark"] .tmenu_navbar ul.tmenu_submenu_type_mega > li.tmenu_item_level_1.tmenu_item_has_child > a.tmenu_item_link,
+  html[data-xg-theme="dark"] .tmenu_navbar ul.tmenu_submenu_type_mega > li.tmenu_item_level_1.tmenu_item_has_child > a.tmenu_item_link .tmenu_item_text { color: #ff6a5e !important; }
+
   /* The map column: P.tmenu_maps_address ("Google Maps location") computed
      rgb(0,0,0) in dark, and the "Interact with map" control sits over the
      iframe. Muted panel ink for the caption (9.22:1), panel ink on a
