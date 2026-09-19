@@ -130,6 +130,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <script src="{{ 'xg-personal.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'xg-whatsnew.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'xg-product-sisters.js' | asset_url }}" defer="defer"></script>
+  {%- comment -%} Our own store-credit tab and panel over BinderPOS's data, signed-in shoppers only (assets/xg-store-credit.js). {%- endcomment -%}
+  <script src="{{ 'xg-store-credit.js' | asset_url }}" defer="defer"></script>
 
   {{ content_for_header }}
 

@@ -996,3 +996,191 @@ a#binderpos-credit-close-button {
 a#binderpos-credit-close-button:hover {
   background: rgba(10, 13, 15, 0.16) !important;
 }
+
+/* ---------------------------------------------------------------------------
+   23. OUR OWN STORE-CREDIT TAB AND PANEL (2026-09-19), assets/xg-store-credit.js.
+
+   Section 22 dressed BinderPOS's widget; this replaces it. The script
+   draws its own tab and panel from BinderPOS's JSON, and sets
+   html.xg-credit-on only once its tab is on the page - so their tab is
+   hidden by that class and comes straight back if our script ever fails.
+   Section 22 stays for exactly that fallback.
+
+   The tab keeps BinderPOS's geometry (fixed at the right edge, mid-height,
+   rotated -90deg about its top-right corner) so nothing moves for a
+   shopper who has learned where it lives. The panel is the theme's own:
+   surface, ink and red tokens, dark and light, 480px from the right on
+   desktop and the full width on a phone.
+   --------------------------------------------------------------------------- */
+html.xg-credit-on a#binderpos-open-credit { display: none !important; }
+
+.xg-credit__tab {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 999999998;
+  margin: 0;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--xg-red, #d62c28);
+  color: #ffffff;
+  font-family: var(--xg-font-body, inherit);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(10, 13, 15, 0.28);
+  transform: rotate(-90deg) translate(50%, -100%);
+  transform-origin: right top;
+  transition: background-color 0.18s ease;
+}
+.xg-credit__tab:hover,
+.xg-credit__tab:focus-visible { background: #b3211d; }
+.xg-credit__tab:focus-visible { outline: 2px solid #ffffff; outline-offset: -4px; }
+html[data-xg-theme="dark"] .xg-credit__tab { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
+html.xg-credit-open .xg-credit__tab { visibility: hidden; }
+
+.xg-credit__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 999999999;
+  background: rgba(10, 13, 15, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.xg-credit__scrim.is-open { opacity: 1; pointer-events: auto; }
+
+.xg-credit__panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000000000;
+  width: min(480px, 100vw);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--xg-surface, #ffffff);
+  color: var(--xg-ink, #171b1d);
+  font-family: var(--xg-font-body, inherit);
+  border-radius: 14px 0 0 14px;
+  box-shadow: -18px 0 44px rgba(10, 13, 15, 0.42);
+  transform: translateX(104%);
+  transition: transform 0.22s ease;
+}
+.xg-credit__panel.is-open { transform: none; }
+.xg-credit__panel[hidden] { display: none; }
+@media (max-width: 520px) { .xg-credit__panel { border-radius: 0; } }
+
+.xg-credit__head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  background: var(--xg-surface, #ffffff);
+  border-bottom: 1px solid var(--xg-border, #e3e7ea);
+}
+.xg-credit__title {
+  margin: 0;
+  font-family: var(--xg-font-head, var(--xg-font-body, inherit));
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--xg-ink, #171b1d);
+}
+.xg-credit__close {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--xg-ink, #171b1d);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.xg-credit__close:hover { background: rgba(127, 127, 127, 0.22); }
+
+.xg-credit__body { padding: 18px 20px 28px; }
+.xg-credit__balance {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--xg-red-soft, rgba(214, 44, 40, 0.08));
+  border: 1px solid rgba(214, 44, 40, 0.18);
+}
+.xg-credit__label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--xg-muted, #707a83);
+}
+.xg-credit__amount {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--xg-red, #d62c28);
+  font-variant-numeric: tabular-nums;
+}
+html[data-xg-theme="dark"] .xg-credit__amount { color: #ff6a5e; }
+.xg-credit__how { margin: 14px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--xg-text, #3d454b); }
+.xg-credit__link { color: var(--xg-red, #d62c28); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+html[data-xg-theme="dark"] .xg-credit__link { color: #ff6a5e; }
+.xg-credit__h {
+  margin: 24px 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--xg-muted, #707a83);
+}
+.xg-credit__list { list-style: none; margin: 0; padding: 0; }
+.xg-credit__row { padding: 11px 0; border-top: 1px solid var(--xg-border, #e3e7ea); }
+.xg-credit__row:first-child { border-top: 0; }
+.xg-credit__rowtop { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.xg-credit__date { font-size: 13px; color: var(--xg-text, #3d454b); }
+.xg-credit__delta { font-weight: 800; font-variant-numeric: tabular-nums; }
+.xg-credit__delta--in { color: #0d7a5f; }
+.xg-credit__delta--out { color: var(--xg-red, #d62c28); }
+html[data-xg-theme="dark"] .xg-credit__delta--in { color: #4fd1a5; }
+html[data-xg-theme="dark"] .xg-credit__delta--out { color: #ff6a5e; }
+.xg-credit__note { margin-top: 3px; font-size: 12.5px; color: var(--xg-text, #3d454b); }
+.xg-credit__after { margin-top: 2px; font-size: 12px; color: var(--xg-muted, #707a83); }
+.xg-credit__muted { color: var(--xg-muted, #707a83); font-size: 13px; }
+.xg-credit__foot { margin: 18px 0 0; }
+.xg-credit__btn,
+.xg-credit__refresh {
+  margin: 8px 0 0;
+  padding: 8px 14px;
+  border: 1px solid var(--xg-border, #e3e7ea);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--xg-ink, #171b1d);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.xg-credit__refresh { margin: 0; padding: 3px 10px; font-size: 12px; }
+.xg-credit__btn:hover,
+.xg-credit__refresh:hover { border-color: var(--xg-red, #d62c28); color: var(--xg-red, #d62c28); }
+@media (prefers-reduced-motion: reduce) {
+  .xg-credit__panel, .xg-credit__scrim, .xg-credit__tab { transition: none; }
+}
