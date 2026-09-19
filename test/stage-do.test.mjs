@@ -34,7 +34,21 @@ test("put, list, mine, edit, mark: the life of one staged list", async () => {
   assert.equal(put.status, 200);
   assert.ok(put.body.ok && put.body.id);
   assert.equal(put.body.totals.units, 4);
+  assert.equal(put.body.number, "9P-1001");
   const id = put.body.id;
+  // numbers count up; the shopper's view carries the number
+  const put2 = await call(c, "/_stage/put", { customer: "222", paymentType: "Cash", cards: CARDS });
+  assert.equal(put2.body.number, "9P-1002");
+  assert.equal((await call(c, "/_stage/mine?customer=222")).body.records[0].number, "9P-1002");
+  // the email outcome is written on the record and shows in its history
+  const em = await call(c, "/_stage/email", { id, email: { status: "sent", to: "ada@example.test", id: "re_1" } });
+  assert.equal(em.body.record.email.status, "sent");
+  assert.equal(em.body.record.events.at(-1).action, "emailed");
+  // an edit can carry the staff note and a price; the note alone is not an "edited" event
+  const pe = await call(c, "/_stage/edit", { id, edit: [{ cardId: "202", condition: "2", type: "foil", quantity: "1", cashBuyPrice: "2.75" }], note: "foil looks off" });
+  assert.equal(pe.body.record.note, "foil looks off");
+  assert.equal(pe.body.record.cards[1].staffPriced, true);
+  assert.equal(pe.body.record.totals.cash, 7.25);
   // staff see the name (list/get), the shopper's view never carries it
   assert.equal((await call(c, "/_stage/get?id=" + id)).body.record.customerName, "Ada Lovelace");
   assert.ok(!JSON.stringify((await call(c, "/_stage/mine?customer=3957471740057")).body).includes("Lovelace"));
@@ -43,8 +57,8 @@ test("put, list, mine, edit, mark: the life of one staged list", async () => {
   assert.equal(bad.status, 400);
 
   let list = await call(c, "/_stage/list");
-  assert.equal(list.body.count, 1);
-  assert.equal(list.body.counts.staged, 1);
+  assert.equal(list.body.count, 2);
+  assert.equal(list.body.counts.staged, 2);
   assert.equal(list.body.records[0].status, "staged");
 
   const mine = await call(c, "/_stage/mine?customer=3957471740057");
@@ -67,7 +81,7 @@ test("put, list, mine, edit, mark: the life of one staged list", async () => {
   assert.equal(ok.body.record.status, "approved");
   assert.equal(ok.body.record.bp.number, "8812");
   assert.equal(ok.body.record.totals.cash, 2.8);
-  assert.deepEqual(ok.body.record.events.map((e) => e.action), ["submitted", "edited", "approved"]);
+  assert.deepEqual(ok.body.record.events.map((e) => e.action), ["submitted", "emailed", "edited", "edited", "approved"]);
 
   const again = await call(c, "/_stage/mark", { id, status: "rejected" });
   assert.equal(again.status, 409);
@@ -80,8 +94,9 @@ test("put, list, mine, edit, mark: the life of one staged list", async () => {
   assert.equal(view.decidedAt, T0 + 3600e3);
 
   const health = await call(c, "/_stage/health");
-  assert.deepEqual(health.body.counts, { approved: 1 });
-  assert.equal(health.body.oldestStaged, null);
+  assert.deepEqual(health.body.counts, { approved: 1, staged: 1 });
+  assert.equal(health.body.oldestStaged, T0);
+  assert.equal(health.body.lastNumber, "9P-1002");
 });
 
 test("reject keeps the list with a note the shopper can see", async () => {

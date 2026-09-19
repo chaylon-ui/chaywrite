@@ -182,11 +182,14 @@ jobs:
           curl -sS -o /dev/null -w '/deckstats.json bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deckstats.json?k=smoke-wrong" || true
           curl -sS -o /dev/null -w '/deck-admin no key POST: HTTP %{http_code} (expect 403)\n' --max-time 20 -X POST "https://exor-binder.nevski.workers.dev/deck-admin?op=ban&ip=203.0.113.9" || true
           curl -sS -o /dev/null -w 'deck-track route (public surface ignores ev=search): HTTP %{http_code}\n' --max-time 20 -X POST "https://exor-binder.nevski.workers.dev/deck-track?ev=search&game=probe" || true
-          echo "=== staged buylists (src/stage.js) ==="
-          curl -sS -o /dev/null -w '/buylist/staged no key: HTTP %{http_code} (expect 200, the login form)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged" || true
-          curl -sS -o /dev/null -w '/buylist/staged bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged?k=smoke-wrong" || true
-          curl -sS -o /dev/null -w '/buylist/staged.json bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged.json?k=smoke-wrong" || true
-          echo "health (counts + staging on/off + customer-name lookup probe): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist/staged/health?probe=1' || true)"
+          echo "=== 9Pocket by Exor: staged buylists (src/stage.js) ==="
+          curl -sS -o /dev/null -w '/9pocket no key: HTTP %{http_code} (expect 200, the login form)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket" || true
+          echo "login page is branded: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/9pocket' | grep -c '9Pocket by Exor' || true)"
+          curl -sS -o /dev/null -w '/9pocket bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket?k=smoke-wrong" || true
+          curl -sS -o /dev/null -w '/9pocket.json bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket.json?k=smoke-wrong" || true
+          curl -sS -o /dev/null -w '/9pocket/b/x bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/b/01700000000000-abcd?k=smoke-wrong" || true
+          curl -sS -o /dev/null -w '/buylist/staged (old address): HTTP %{http_code} -> %{redirect_url} (expect 308 to /9pocket)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged" || true
+          echo "health (counts, staging, lookup + email config, name probe): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/9pocket/health?probe=1' || true)"
           echo "mine for a made-up customer (expect count 0): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist/api/mine?customer=1234567' | head -c 200 || true)"
           echo "sell page js/css carry the status block: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.js' | grep -c 'bl-mine' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.css' | grep -c 'bl__mine' || true)"
           echo "cart tag + beacon + sid served in deck-builder.js: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'cart/update.js' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'function beacon' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'var SID' || true)"
@@ -497,6 +500,11 @@ jobs:
           # URL; AUTOPRICE_NTFY_TOKEN = optional access token for that server.
           AUTOPRICE_NTFY: ${{ secrets.AUTOPRICE_NTFY }}
           AUTOPRICE_NTFY_TOKEN: ${{ secrets.AUTOPRICE_NTFY_TOKEN }}
+          # 9Pocket's customer email (src/stage-email.js): RESEND_API_KEY from a
+          # resend.com account whose verified domain carries EMAIL_FROM
+          # (default "9Pocket by Exor <9pocket@exorgames.com>").
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
@@ -504,7 +512,7 @@ jobs:
           # worker understands (src/discord.js, src/enrich.js, src/autoprice.js) is listed
           # above; each one that is set becomes the worker secret of the same name, the rest are skipped.
           n=0
-          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN; do
+          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM; do
             val="${!name}"
             if [ -n "$val" ]; then
               printf '%s' "$val" | npx wrangler@4 secret put "$name" && n=$((n+1))

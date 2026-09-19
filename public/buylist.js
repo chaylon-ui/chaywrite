@@ -683,7 +683,7 @@
         var credit = r.paymentType === "Store Credit";
         return '<div class="bl__mine-row bl__mine-row--' + esc(r.status) + '"><span class="bl__mine-when">' + esc(when) + '</span>' +
           '<span class="bl__mine-what">' + esc(t.units || 0) + ' card' + (t.units === 1 ? '' : 's') + ' · ' + esc(money(credit ? t.credit : t.cash)) + ' ' + (credit ? 'store credit' : 'cash') + '</span>' +
-          '<span class="bl__mine-status">' + esc(label[r.status] || r.status) + (r.reference ? ' · ref ' + esc(r.reference) : '') + (r.customerNote ? ' · ' + esc(r.customerNote) : '') + '</span></div>';
+          '<span class="bl__mine-status">' + (r.number ? esc(r.number) + ' · ' : '') + esc(label[r.status] || r.status) + (r.reference ? ' · BinderPOS ref ' + esc(r.reference) : '') + (r.customerNote ? ' · ' + esc(r.customerNote) : '') + '</span></div>';
       }).join("");
       box.hidden = false;
     }).catch(function () {});

@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn, safeImage } from "../src/stage.js";
+import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn, safeImage, mergeApproval, numberOf } from "../src/stage.js";
+import { buildEmail, sendEmail } from "../src/stage-email.js";
+import { renderList, renderSheet, renderLogin } from "../src/stage-ui.js";
 
 const CARDS = [
   { cardId: 101, cardName: "Lightning Bolt", setName: "Magic 2011", game: "mtg", type: "Normal", condition: 1, conditionName: "Near Mint", quantity: "3", cashBuyPrice: 1.5, storeCreditBuyPrice: 1.95, shopifyVariantId: 9 },
@@ -64,8 +66,82 @@ test("a staff edit changes quantities or removes lines and can never add one", (
   assert.equal(out[0].cardId, 101);
   assert.equal(out[0].quantity, "2");
   assert.equal(out[0].cashBuyPrice, 1.5);   // price untouched by an edit
+  assert.ok(!out[0].staffPriced);
   // an untouched line keeps its quantity
   assert.equal(applyEdit(r, [])[0].quantity, "3");
+});
+
+test("a staff price on the worksheet marks the line and wins at approval; the rest take the day's price", () => {
+  const r = shapeRecord({ customer: "3957471740057", paymentType: "Cash", cards: CARDS }, 5);
+  // the worksheet posts every line back, prices as typed (strings, 2 dp)
+  const edited = applyEdit(r, [
+    { cardId: "101", condition: "1", type: "normal", quantity: "3", cashBuyPrice: "1.50", storeCreditBuyPrice: "1.95" },   // unchanged prices: no flag
+    { cardId: "202", condition: "2", type: "foil", quantity: "1", cashBuyPrice: "2.75", storeCreditBuyPrice: "3.5" },      // staff price
+  ]);
+  assert.ok(!edited[0].staffPriced);
+  assert.equal(edited[1].staffPriced, true);
+  assert.equal(edited[1].cashBuyPrice, 2.75);
+  assert.equal(edited[1].storeCreditBuyPrice, 3.5);
+  // a bad price is ignored, not applied
+  assert.equal(applyEdit(r, [{ cardId: "101", condition: "1", type: "normal", cashBuyPrice: "abc" }])[0].cashBuyPrice, 1.5);
+  assert.equal(applyEdit(r, [{ cardId: "101", condition: "1", type: "normal", cashBuyPrice: "-3" }])[0].cashBuyPrice, 1.5);
+  // approval: repriceCards said both lines moved; the staff line keeps its price and drops the flag
+  const day = { cards: edited.map((c) => ({ ...c, cashBuyPrice: 9, storeCreditBuyPrice: 9.9 })), changed: ["Lightning Bolt · Near Mint ($1.50 cash / $1.95 credit is now $9.00 / $9.90)", "Sol Ring · Lightly Played · Foil ($2.75 cash / $3.50 credit is now $9.00 / $9.90)"], capped: [], dropped: [] };
+  const m = mergeApproval(edited, day);
+  assert.equal(m.cards[0].cashBuyPrice, 9);
+  assert.equal(m.cards[1].cashBuyPrice, 2.75);
+  assert.equal(m.cards[1].storeCreditBuyPrice, 3.5);
+  assert.ok(!("staffPriced" in m.cards[0]) && !("staffPriced" in m.cards[1]));
+  assert.deepEqual(m.notes.changed, ["Lightning Bolt · Near Mint ($1.50 cash / $1.95 credit is now $9.00 / $9.90)"]);
+  assert.equal(m.notes.kept.length, 1);
+  assert.match(m.notes.kept[0], /^Sol Ring · Lightly Played · Foil \(\$2\.75 cash \/ \$3\.50 credit; the day's would be \$9\.00 \/ \$9\.90\)$/);
+});
+
+test("buylist numbers read 9P-<seq>", () => {
+  assert.equal(numberOf(1001), "9P-1001");
+});
+
+test("the customer email carries the number, every card, the totals, the address and the two links - and no script", async () => {
+  const r = shapeRecord({ customer: "3957471740057", customerName: "Ada Lovelace", customerEmail: "ada@example.test", paymentType: "Store Credit", cards: CARDS }, 5);
+  r.number = "9P-1001";
+  const m = buildEmail(r);
+  assert.match(m.subject, /9P-1001/);
+  for (const s of ["Hi Ada,", "9P-1001", "Lightning Bolt", "Sol Ring", "Magic 2011", "Lightly Played", "Foil", "$8.45", "Store Credit", "51 Allen Street", "ATTN: Gage Office", "C1A 2V6", "https://exorgames.com/pages/selling-policy", "https://exorgames.com/pages/how-to-sell-cards", "re-grade them", "exceeding 20%", "Buylist Number", "9Pocket by Exor"]) {
+    assert.ok(m.html.includes(s), "html has " + s);
+  }
+  for (const s of ["9P-1001", "Lightning Bolt", "3 x", "51 Allen Street", "https://exorgames.com/pages/selling-policy", "Estimated store credit total: $8.45"]) assert.ok(m.text.includes(s), "text has " + s);
+  assert.ok(!/<script/i.test(m.html));
+  // a hostile card name is escaped
+  const bad = shapeRecord({ customer: "1", paymentType: "Cash", cards: [{ ...CARDS[0], cardName: '<img src=x onerror=alert(1)>' }] }, 5);
+  assert.ok(!buildEmail(bad).html.includes("<img src=x"));
+  // no key: nothing is sent and the record learns why
+  const s = await sendEmail({}, "ada@example.test", m);
+  assert.equal(s.ok, false); assert.equal(s.status, "unconfigured");
+  const n = await sendEmail({ RESEND_API_KEY: "x" }, "not-an-address", m);
+  assert.equal(n.status, "no-address");
+});
+
+test("the staff pages: list rows link to worksheets; the worksheet has inputs only while waiting", () => {
+  const r = shapeRecord({ customer: "3957471740057", customerName: "Ada O'Brien", customerEmail: "ada@example.test", paymentType: "Cash", cards: [{ ...CARDS[0], imageUrl: "https://product-images.tcgplayer.com/1.jpg" }, CARDS[1]] }, 5);
+  r.number = "9P-1001";
+  const o = { k: "pin", on: true, emailOn: false, err: "", msg: "" };
+  const list = renderList({ records: [r], counts: { staged: 1 } }, o);
+  assert.ok(list.includes("9Pocket by Exor"));
+  assert.ok(list.includes('/9pocket/b/' + r.id + '?k=pin'));
+  assert.ok(list.includes("Ada O&#39;Brien"));
+  const sheet = renderSheet(r, o);
+  assert.ok(sheet.includes("Back to 9Pocket"));
+  assert.ok(sheet.includes('<input class="p cash"'));
+  assert.ok(sheet.includes('img class="thumb" src="https://product-images.tcgplayer.com/1.jpg"'));
+  assert.ok(sheet.includes("Approve → send to BinderPOS"));
+  assert.ok(sheet.includes("under Ada OBrien at the prices"));      // the confirm() string cannot carry a quote
+  assert.ok(sheet.includes("RESEND_API_KEY"));                      // email off: the worksheet says so
+  r.status = "approved"; r.bp = { number: "8812" };
+  const done = renderSheet(r, o);
+  assert.ok(!done.includes('<input class="p cash"'));
+  assert.ok(!done.includes("Approve → send to BinderPOS"));
+  assert.ok(done.includes("BinderPOS buylist 8812"));
+  assert.ok(renderLogin("").includes("9Pocket by Exor"));
 });
 
 test("a thumbnail is drawn only from an https image URL", () => {

@@ -253,9 +253,10 @@ export default {
     if (url.pathname.startsWith("/buylist/poc/") || url.pathname.startsWith("/buylist/api/")) {
       return serveBuylist(request, env);
     }
-    // Staged buylists (src/stage.js): the staff review page, its data and
-    // its approve / reject / edit control, behind the staff PIN.
-    if (url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname === "/buylist/staged/control" || url.pathname === "/buylist/staged/health") {
+    // 9Pocket by Exor (src/stage.js): the staff buylist list and worksheets,
+    // their data and the approve / reject / edit / email control, behind the
+    // staff PIN. /buylist/staged* was the page's first address and redirects.
+    if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, staffOk);
     }
 
