@@ -43,6 +43,7 @@
         '<div class="bl__totals"><span>Cash <b id="bl-tcash">$0.00</b></span><span>Store credit <b id="bl-tcredit">$0.00</b></span></div>' +
         '<div class="bl__actions"><button id="bl-clear" type="button" class="bl__btn" disabled>Clear list</button><button id="bl-submit" type="button" class="bl__btn bl__btn--primary" disabled>Submit buylist</button></div>' +
         '<p id="bl-msg" class="bl__msg bl__muted"></p>' +
+        '<div id="bl-mine" class="bl__mine" hidden></div>' +
       '</aside>' +
       '<div id="bl-toast" class="bl__toast" role="status" aria-live="polite"></div>' +
       '<dialog id="bl-guide" class="bl__guide" aria-labelledby="bl-guide-title"></dialog>' +
@@ -621,7 +622,11 @@
       }
       cart = [];
       renderCart();
-      var done = (j.confirmation || "Thank you, your buylist was submitted.") + (j.reply && j.reply.data != null ? " Reference " + j.reply.data + "." : "");
+      // Staged (owner, 2026-09-19): the list waits for a staff member before
+      // it reaches BinderPOS. The worker's confirmation says so, and the
+      // status block under the list shows where each sent list stands.
+      if (j.staged) loadMine();
+      var done = (j.confirmation || "Thank you, your buylist was submitted.") + (!j.staged && j.reply && j.reply.data != null ? " Reference " + j.reply.data + "." : "");
       // The worker re-prices every line from BinderPOS's current buylist at
       // submit; say so when that changed anything.
       var rp = j.repriced || {}, notes = [];
@@ -663,8 +668,30 @@
     });
   }
 
+  /* ---- staged buylists (owner, 2026-09-19): where each sent list stands ----
+     The worker keeps a sent list until a staff member approves it; only
+     then does it go to BinderPOS. /mine is that record, for this shopper. */
+  function loadMine() {
+    api("/mine").then(function (j) {
+      var box = $("#bl-mine");
+      var recs = (j && j.records) || [];
+      if (!recs.length) { box.hidden = true; box.innerHTML = ""; return; }
+      var label = { staged: "Waiting for a staff check", approved: "Approved and sent through", rejected: "Declined" };
+      box.innerHTML = '<h3 class="bl__h3">Your recent buylists</h3>' + recs.slice(0, 5).map(function (r) {
+        var when = new Date(r.ts).toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+        var t = r.totals || {};
+        var credit = r.paymentType === "Store Credit";
+        return '<div class="bl__mine-row bl__mine-row--' + esc(r.status) + '"><span class="bl__mine-when">' + esc(when) + '</span>' +
+          '<span class="bl__mine-what">' + esc(t.units || 0) + ' card' + (t.units === 1 ? '' : 's') + ' · ' + esc(money(credit ? t.credit : t.cash)) + ' ' + (credit ? 'store credit' : 'cash') + '</span>' +
+          '<span class="bl__mine-status">' + esc(label[r.status] || r.status) + (r.reference ? ' · ref ' + esc(r.reference) : '') + (r.customerNote ? ' · ' + esc(r.customerNote) : '') + '</span></div>';
+      }).join("");
+      box.hidden = false;
+    }).catch(function () {});
+  }
+
   /* ---- start: the saved draft is the cart, like their app ---- */
   loadGames().then(loadSets).then(wireTiles);
+  loadMine();
   api("/list").then(function (j) {
     cart = Array.isArray(j.list) ? j.list : [];
   }).catch(function (err) {

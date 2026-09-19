@@ -40,6 +40,7 @@
 
 import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
+import { stagingOn, stageSubmit, stageMine } from "./stage.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
 
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
@@ -92,7 +93,7 @@ const memoSet = (k, value) => { memo[k] = { at: Date.now(), value }; };
 const gameOf = (url) => String(url.searchParams.get("game") || "mtg").replace(/[^A-Za-z]/g, "").slice(0, 24) || "mtg";
 
 // The list as their app stores it: objects with a cardId, quantity a string.
-function cleanCards(v) {
+export function cleanCards(v) {
   if (!Array.isArray(v)) return null;
   const out = [];
   for (const c of v.slice(0, MAX_CARDS)) {
@@ -162,7 +163,7 @@ function gameIdOf(c, games) {
   }
   return "mtg";
 }
-async function repriceCards(env, cards) {
+export async function repriceCards(env, cards) {
   if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
   const games = await gamesList(env);
   const seen = new Set(), pairs = [];
@@ -338,6 +339,14 @@ async function route(mode, action, request, env, url, cors) {
   const customer = customerOf(mode, url);
   if (!customer) return json({ error: "customer id required" }, 400, cors);
 
+  if (action === "mine") {
+    // The shopper's staged / approved / rejected lists (src/stage.js), for
+    // the status block on the sell page. Nothing here reaches BinderPOS.
+    let records = [];
+    try { records = await stageMine(env, url, customer); } catch {}
+    return json({ customer, staging: stagingOn(env), count: records.length, records }, 200, cors);
+  }
+
   if (action === "list") {
     const r = await passthrough(LIST_URL(customer), {});
     return json({ upstream: r.status, customer, list: r.body }, 200, cors);
@@ -381,28 +390,51 @@ async function route(mode, action, request, env, url, cors) {
         cards: cards.map((c) => ({ cardId: c.cardId, cardName: c.cardName, condition: c.conditionName, type: c.type, quantity: c.quantity, cash: c.cashBuyPrice, credit: c.storeCreditBuyPrice, shopifyVariantId: c.shopifyVariantId })),
         repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
     }
-    const r = await passthrough(SUBMIT_URL(customer), { method: "POST", body: JSON.stringify({ paymentType, buylistCards: cards }) });
-    const accepted = r.status >= 200 && r.status < 300 && !(r.body && r.body.actionPass === false);
-    let cleared = null, confirmation = "";
-    if (accepted) {
-      // Tell the hold-on-arrival log which cards this buylist listed, so
-      // their arrival can be attributed when staff complete it (src/hold.js).
-      try {
-        await env.ROOM.get(env.ROOM.idFromName(HOLD_DO)).fetch(new Request(new URL("/_hold/buylist", url).toString(), {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ number: r.body && r.body.data != null ? String(r.body.data) : "", customer, paymentType,
-            cards: cards.slice(0, 100).map((c) => ({ n: c.cardName, s: c.setName, c: c.conditionName, t: c.type, q: c.quantity })) }),
-        }));
-      } catch {}
-      // clearBuylist() in their app: the draft is saved back empty.
-      const c = await passthrough(SAVE_URL(customer), { method: "POST", body: "[]" });
-      cleared = c.status;
-      const t = await passthrough(CONFIRM_URL, {}).catch(() => null);
-      if (t && typeof t.body === "string") confirmation = t.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    // Staged approval (owner, 2026-09-19): the list waits for a staff member
+    // on /buylist/staged; approve makes the call below. BUYLIST_STAGING=off
+    // restores the direct path.
+    if (stagingOn(env)) {
+      let staged;
+      try { staged = await stageSubmit(env, url, { customer, paymentType, cards, repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }); }
+      catch (e) { return json({ error: "We could not record your buylist (" + String((e && e.message) || e).slice(0, 120) + "). Nothing was sent; please try again in a minute.", accepted: false }, 502, cors); }
+      // clearBuylist() in their app: the draft is saved back empty, so the
+      // shopper starts the next list fresh. The staged copy is ours.
+      const c = await passthrough(SAVE_URL(customer), { method: "POST", body: "[]" }).catch(() => ({ status: null }));
+      return json({ accepted: true, staged: true, id: staged.id, paymentType, submitted: cards.length, totals: staged.totals, cleared: c.status,
+        confirmation: "Thank you - your buylist has been received and is waiting for a staff member to check it. You will see it marked approved here once it has been sent through, and it is paid out when we complete it.",
+        repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
     }
-    return json({ upstream: r.status, paymentType, submitted: cards.length, accepted, cleared, confirmation, reply: r.body,
+    const r = await submitToBinderPos(env, url, customer, paymentType, cards);
+    return json({ upstream: r.upstream, paymentType, submitted: cards.length, accepted: r.accepted, cleared: r.cleared, confirmation: r.confirmation, reply: r.reply,
       repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
   }
 
   return json({ error: "not found" }, 404, cors);
+}
+
+// The one call that creates a BinderPOS online buylist for a customer, used
+// by the direct path above and by staff approval in src/stage.js. The cards
+// must already be repriced (repriceCards). Tells the hold-on-arrival log
+// what was listed and clears the shopper's draft, as their own app does.
+export async function submitToBinderPos(env, url, customer, paymentType, cards) {
+  const r = await passthrough(SUBMIT_URL(customer), { method: "POST", body: JSON.stringify({ paymentType, buylistCards: cards }) });
+  const accepted = r.status >= 200 && r.status < 300 && !(r.body && r.body.actionPass === false);
+  let cleared = null, confirmation = "";
+  if (accepted) {
+    // Tell the hold-on-arrival log which cards this buylist listed, so
+    // their arrival can be attributed when staff complete it (src/hold.js).
+    try {
+      await env.ROOM.get(env.ROOM.idFromName(HOLD_DO)).fetch(new Request(new URL("/_hold/buylist", url).toString(), {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ number: r.body && r.body.data != null ? String(r.body.data) : "", customer, paymentType,
+          cards: cards.slice(0, 100).map((c) => ({ n: c.cardName, s: c.setName, c: c.conditionName, t: c.type, q: c.quantity })) }),
+      }));
+    } catch {}
+    // clearBuylist() in their app: the draft is saved back empty.
+    const c = await passthrough(SAVE_URL(customer), { method: "POST", body: "[]" });
+    cleared = c.status;
+    const t = await passthrough(CONFIRM_URL, {}).catch(() => null);
+    if (t && typeof t.body === "string") confirmation = t.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  return { upstream: r.status, accepted, cleared, confirmation, reply: r.body };
 }

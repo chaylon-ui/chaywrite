@@ -9,6 +9,7 @@ import { servePriceHistory } from "./price-history.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
+import { serveStage } from "./stage.js";
 import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
@@ -251,6 +252,11 @@ export default {
     }
     if (url.pathname.startsWith("/buylist/poc/") || url.pathname.startsWith("/buylist/api/")) {
       return serveBuylist(request, env);
+    }
+    // Staged buylists (src/stage.js): the staff review page, its data and
+    // its approve / reject / edit control, behind the staff PIN.
+    if (url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname === "/buylist/staged/control" || url.pathname === "/buylist/staged/health") {
+      return serveStage(request, env, url, staffOk);
     }
 
     // Round 32: our own read-only view of BinderPOS's online buylists

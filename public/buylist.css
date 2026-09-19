@@ -339,3 +339,16 @@ html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn
   .xg-buylist * { transition: none !important; }
 }
 .bl__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---- staged buylists: where each sent list stands (2026-09-19) ---- */
+.bl__mine { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--bl-line); }
+.bl__mine .bl__h3 { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--bl-muted); }
+.bl__mine-row { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 7px 0; border-top: 1px solid var(--bl-line); font-size: 13px; }
+.bl__mine-row:first-of-type { border-top: 0; }
+.bl__mine-when { color: var(--bl-muted); }
+.bl__mine-what { color: var(--bl-text); }
+.bl__mine-status { grid-column: 2; font-weight: 600; color: var(--bl-text); }
+.bl__mine-row--staged .bl__mine-status { color: #8a5a00; }
+.bl__mine-row--approved .bl__mine-status { color: var(--bl-accent); }
+.bl__mine-row--rejected .bl__mine-status { color: var(--bl-danger); }
+html[data-xg-theme="dark"] .bl__mine-row--staged .bl__mine-status { color: #f6c453; }

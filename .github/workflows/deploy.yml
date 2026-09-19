@@ -182,6 +182,13 @@ jobs:
           curl -sS -o /dev/null -w '/deckstats.json bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deckstats.json?k=smoke-wrong" || true
           curl -sS -o /dev/null -w '/deck-admin no key POST: HTTP %{http_code} (expect 403)\n' --max-time 20 -X POST "https://exor-binder.nevski.workers.dev/deck-admin?op=ban&ip=203.0.113.9" || true
           curl -sS -o /dev/null -w 'deck-track route (public surface ignores ev=search): HTTP %{http_code}\n' --max-time 20 -X POST "https://exor-binder.nevski.workers.dev/deck-track?ev=search&game=probe" || true
+          echo "=== staged buylists (src/stage.js) ==="
+          curl -sS -o /dev/null -w '/buylist/staged no key: HTTP %{http_code} (expect 200, the login form)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged" || true
+          curl -sS -o /dev/null -w '/buylist/staged bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged?k=smoke-wrong" || true
+          curl -sS -o /dev/null -w '/buylist/staged.json bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged.json?k=smoke-wrong" || true
+          echo "health (counts + staging on/off): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist/staged/health' || true)"
+          echo "mine for a made-up customer (expect count 0): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist/api/mine?customer=1234567' | head -c 200 || true)"
+          echo "sell page js/css carry the status block: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.js' | grep -c 'bl-mine' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.css' | grep -c 'bl__mine' || true)"
           echo "cart tag + beacon + sid served in deck-builder.js: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'cart/update.js' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'function beacon' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'var SID' || true)"
           curl -sS -o /dev/null -w 'new-today.js : %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/new-today.js" || true
           echo "cards.json nt=1 CORS + count: $(curl -sS --max-time 120 'https://exor-binder.nevski.workers.dev/cards.json?collection=new-arrivals&nt=1' -D /tmp/nt-h -o /tmp/nt-b && grep -ci 'access-control-allow-origin' /tmp/nt-h || true) / $(python3 -c 'import json;print(json.load(open("/tmp/nt-b")).get("count"))' 2>/dev/null || echo parse-fail)"
@@ -352,6 +359,8 @@ jobs:
           echo "=== parsers and the tick state machine (pure, no network) ==="
           node test/enrich-parse.test.mjs 2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           node test/enrich-tick.test.mjs  2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
+          echo "=== staged buylists: pure helpers (src/stage.js) ==="
+          node test/stage.test.mjs 2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           W="https://exor-binder.nevski.workers.dev"
           echo "=== GET /enrich/status (tokenConfigured, next alarm, last run) ==="
           curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true
