@@ -30,11 +30,14 @@ const CARDS = [
 test("put, list, mine, edit, mark: the life of one staged list", async () => {
   const now = { t: T0 };
   const c = cx(now);
-  const put = await call(c, "/_stage/put", { customer: "3957471740057", paymentType: "Cash", cards: CARDS, repriced: { changed: [], capped: ["x"], dropped: [] } });
+  const put = await call(c, "/_stage/put", { customer: "3957471740057", customerName: "Ada Lovelace", customerEmail: "ada@example.test", paymentType: "Cash", cards: CARDS, repriced: { changed: [], capped: ["x"], dropped: [] } });
   assert.equal(put.status, 200);
   assert.ok(put.body.ok && put.body.id);
   assert.equal(put.body.totals.units, 4);
   const id = put.body.id;
+  // staff see the name (list/get), the shopper's view never carries it
+  assert.equal((await call(c, "/_stage/get?id=" + id)).body.record.customerName, "Ada Lovelace");
+  assert.ok(!JSON.stringify((await call(c, "/_stage/mine?customer=3957471740057")).body).includes("Lovelace"));
 
   const bad = await call(c, "/_stage/put", { customer: "", paymentType: "Cash", cards: CARDS });
   assert.equal(bad.status, 400);

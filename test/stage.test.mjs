@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn } from "../src/stage.js";
+import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn, safeImage } from "../src/stage.js";
 
 const CARDS = [
   { cardId: 101, cardName: "Lightning Bolt", setName: "Magic 2011", game: "mtg", type: "Normal", condition: 1, conditionName: "Near Mint", quantity: "3", cashBuyPrice: 1.5, storeCreditBuyPrice: 1.95, shopifyVariantId: 9 },
@@ -25,13 +25,17 @@ test("a record needs a customer, a payment type and at least one card", () => {
   assert.equal(r.totals.units, 4);
   assert.deepEqual(r.repriced, { changed: ["x"], capped: [], dropped: [] });
   assert.deepEqual(r.events.map((e) => e.action), ["submitted"]);
+  assert.equal(r.customerName, "");
+  const named = shapeRecord({ customer: "3957471740057", customerName: "  Ada Lovelace ", customerEmail: "ada@example.test", paymentType: "Cash", cards: CARDS }, now);
+  assert.equal(named.customerName, "Ada Lovelace");
+  assert.equal(named.customerEmail, "ada@example.test");
   assert.equal(shapeRecord({ customer: "abc", paymentType: "Cash", cards: CARDS }, now), null);
   assert.equal(shapeRecord({ customer: "3957471740057", paymentType: "", cards: CARDS }, now), null);
   assert.equal(shapeRecord({ customer: "3957471740057", paymentType: "Cash", cards: [] }, now), null);
 });
 
 test("the shopper's view carries status and totals, never the staff note or the reply", () => {
-  const r = shapeRecord({ customer: "3957471740057", paymentType: "Cash", cards: CARDS }, 5);
+  const r = shapeRecord({ customer: "3957471740057", customerName: "Ada Lovelace", customerEmail: "ada@example.test", paymentType: "Cash", cards: CARDS }, 5);
   r.note = "check the foil"; r.status = "approved"; r.bp = { number: "8812", upstream: 200, cleared: 200, reply: { secret: true } };
   r.events.push({ ts: 9, action: "approved" });
   const v = mineView(r);
@@ -42,6 +46,8 @@ test("the shopper's view carries status and totals, never the staff note or the 
   assert.equal(v.cards[0].cardName, "Lightning Bolt");
   assert.ok(!("note" in v));
   assert.ok(!("bp" in v));
+  assert.ok(!("customerName" in v) && !("customerEmail" in v));
+  assert.ok(!JSON.stringify(v).includes("Lovelace"));
   assert.equal(v.customerNote, "");
   r.status = "rejected"; r.customerNote = "condition was Heavily Played";
   assert.equal(mineView(r).customerNote, "condition was Heavily Played");
@@ -60,6 +66,16 @@ test("a staff edit changes quantities or removes lines and can never add one", (
   assert.equal(out[0].cashBuyPrice, 1.5);   // price untouched by an edit
   // an untouched line keeps its quantity
   assert.equal(applyEdit(r, [])[0].quantity, "3");
+});
+
+test("a thumbnail is drawn only from an https image URL", () => {
+  assert.equal(safeImage("https://product-images.tcgplayer.com/714709.jpg"), "https://product-images.tcgplayer.com/714709.jpg");
+  assert.equal(safeImage(" https://x.example/a.png "), "https://x.example/a.png");
+  assert.equal(safeImage("http://x.example/a.png"), "");
+  assert.equal(safeImage("javascript:alert(1)"), "");
+  assert.equal(safeImage('https://x.example/a.png" onerror="alert(1)'), "");
+  assert.equal(safeImage(null), "");
+  assert.equal(safeImage("https://x.example/" + "a".repeat(500)), "");
 });
 
 test("staging is on unless the var says off", () => {
