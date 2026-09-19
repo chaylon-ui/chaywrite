@@ -109,6 +109,20 @@ test("the alarm prunes decided lists after 90 days and never a staged one", asyn
   assert.ok(c.storage.alarm > now.t);
 });
 
+test("a name can be filled in later without touching the list or its events", async () => {
+  const c = cx({ t: T0 });
+  const { body: { id } } = await call(c, "/_stage/put", { customer: "777777777", paymentType: "Cash", cards: CARDS });
+  assert.equal((await call(c, "/_stage/get?id=" + id)).body.record.customerName, "");
+  const w = await call(c, "/_stage/who", { id, customerName: "Grace Hopper", customerEmail: "grace@example.test" });
+  assert.equal(w.status, 200);
+  const rec = (await call(c, "/_stage/get?id=" + id)).body.record;
+  assert.equal(rec.customerName, "Grace Hopper");
+  assert.equal(rec.status, "staged");
+  assert.deepEqual(rec.events.map((e) => e.action), ["submitted"]);
+  assert.ok(!JSON.stringify((await call(c, "/_stage/mine?customer=777777777")).body).includes("Hopper"));
+  assert.equal((await call(c, "/_stage/who", { id: "missing", customerName: "x" })).status, 404);
+});
+
 test("unknown paths and records answer 404", async () => {
   const c = cx({ t: T0 });
   assert.equal((await call(c, "/_stage/nope")).status, 404);

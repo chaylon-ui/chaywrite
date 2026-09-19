@@ -214,6 +214,19 @@ export async function stageDoFetch(cx, request, url) {
     await cx.storage.put(key, rec);
     return doJson({ ok: true, record: rec });
   }
+  if (url.pathname === "/_stage/who" && request.method === "POST") {
+    // Backfill of the customer's name on a record that was staged before the
+    // lookup existed (or when Shopify was slow at submit). No event: nothing
+    // about the list changed.
+    const b = await bodyOf(request);
+    const key = "st:" + String(b.id || "").slice(0, 40);
+    const rec = await cx.storage.get(key);
+    if (!rec) return doJson({ ok: false, error: "no such record" }, 404);
+    rec.customerName = String(b.customerName || "").trim().slice(0, 120);
+    rec.customerEmail = String(b.customerEmail || "").trim().slice(0, 160);
+    await cx.storage.put(key, rec);
+    return doJson({ ok: true, record: rec });
+  }
   if (url.pathname === "/_stage/health") {
     const all = await listAll(cx);
     const counts = {};
@@ -317,9 +330,26 @@ export async function serveStage(request, env, url, staffOk) {
   if (url.pathname === STAFF_PAGE) {
     if (!ok) return new Response(renderLogin(k ? "That key was not accepted." : ""), { status: k ? 403 : 200, headers: { "content-type": "text/html; charset=utf-8", ...noStore } });
     const j = await doCall(env, url.origin, "/_stage/list?days=" + encodeURIComponent(url.searchParams.get("days") || "30"));
+    await backfillNames(env, url, j);
     return new Response(renderPage(j, k, env, url.searchParams.get("err") || ""), { headers: { "content-type": "text/html; charset=utf-8", ...noStore } });
   }
   return Response.json({ error: "not found" }, { status: 404, headers: noStore });
+}
+
+// Waiting lists that have no name yet (staged before the lookup shipped, or
+// Shopify did not answer at submit): look up to five per page view and keep
+// what comes back, so the page shows names without anyone resubmitting.
+async function backfillNames(env, url, j) {
+  if (!(env && env.SHOPIFY_ADMIN_TOKEN) || !j || !Array.isArray(j.records)) return;
+  const todo = j.records.filter((r) => r.status === "staged" && !r.customerName).slice(0, 5);
+  for (const r of todo) {
+    try {
+      const who = await lookupCustomer(env, r.customer);
+      if (!who.name) continue;
+      r.customerName = who.name; r.customerEmail = who.email;
+      await doCall(env, url.origin, "/_stage/who", { id: r.id, customerName: who.name, customerEmail: who.email });
+    } catch {}
+  }
 }
 
 async function control(env, url, f) {
