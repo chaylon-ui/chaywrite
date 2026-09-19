@@ -178,6 +178,14 @@
 #xg-deck .xg-deck__misslist { columns: 2; margin: 10px 0 0; padding-left: 18px; }
 #xg-deck .xg-deck__misslist a { color: var(--xg-text, #3d454b); }
 #xg-deck .xg-deck__misslist a:hover { color: var(--xg-red, #d62c28); text-decoration: underline; }
+/* "Copy what we didn't have": ghost button + one-line explainer, with a
+   pre-selected textarea fallback when the clipboard is off-limits. */
+#xg-deck .xg-deck__missbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 0; }
+#xg-deck .xg-deck__copymiss { font-size: 14px; padding: 10px 16px; white-space: nowrap; }
+#xg-deck .xg-deck__copymiss:hover:not(:disabled) { border-color: var(--xg-text, #3d454b); }
+#xg-deck .xg-deck__copymiss.is-copied { border-color: #158549; color: #158549; }
+#xg-deck .xg-deck__misshelp { flex: 1 1 260px; font-size: 12.5px; line-height: 1.45; color: #8a9299; }
+#xg-deck .xg-deck__missout { display: block; width: 100%; box-sizing: border-box; margin: 8px 0 0; min-height: 120px; resize: vertical; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 10px 12px; border: 1px solid var(--xg-border, #d7dbdf); border-radius: var(--xg-radius, 10px); background: var(--xg-surface, #fff); color: var(--xg-text, #3d454b); }
 
 /* Sister-store rows: in stock at another Exor Games location. Amber, not
    green — visually distinct from local stock, and the row links out to that

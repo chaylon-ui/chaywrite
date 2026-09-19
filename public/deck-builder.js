@@ -483,7 +483,7 @@
   function paint() {
     var lines = state.lines, map = state.map;
     var nextCheap = nextCheapOn();
-    var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addQty = 0, fillable = 0, ticked = 0, missNames = [], shorts = [];
+    var inStock = 0, partialLines = 0, atSisters = 0, totalCards = 0, filledCards = 0, shortQ = 0, subtotal = 0, addQty = 0, fillable = 0, ticked = 0, missNames = [], shorts = [], missLines = [];
     var rows = lines.map(function (ln, li) {
       totalCards += ln.qty;
       var r = effR(ln, li);
@@ -574,6 +574,9 @@
               if (sOn) { subtotal += sUnit * sTake; addQty += sTake; }
               filledCards += sTake;
               shortQ -= sTake;
+              // Copy-list: a ticked stand-in covers that many copies; an
+              // unticked one leaves the whole shortfall on the list.
+              if (remaining - (sOn ? sTake : 0) > 0) missLines.push({ qty: remaining - (sOn ? sTake : 0), name: ln.name });
               var sMeta = [sc.set, sc.foil ? 'Foil' : '', sc.condition].filter(Boolean).join(' · ');
               html += '<div class="xg-deck__row xg-deck__row--grp xg-deck__row--gend xg-deck__row--sub" role="row">' +
                 '<span class="xg-deck__pick" role="cell"><input type="checkbox" class="xg-deck__pickbox" data-k="' + sKey + '"' + (sOn ? ' checked' : '') + ' aria-label="Include ' + sTake + ' ' + esc(sc.name) + '"></span>' +
@@ -600,7 +603,7 @@
             // rest, the strip says so and links out.
             shorts.push({ name: ln.name, key: ln.name.toLowerCase() });
             var sx = state.sisterExtra[ln.name.toLowerCase()];
-            var tail;
+            var tail, missQ = remaining;
             if (sx) {
               // Name every store that has it, each its own link; count only
               // when every store's number is known (never an undercount).
@@ -610,12 +613,17 @@
                 if (typeof st.qty === 'number' && st.qty > 0) knownQ += st.qty; else allKnown = false;
               });
               var moreN = (allKnown && knownQ > 0) ? Math.min(knownQ, remaining) + ' more' : 'more';
+              // Copies a sister store is known to hold are still Exor stock,
+              // so they leave the copy list; unknown counts stay on it
+              // (over-listing beats sending a shopper away short).
+              if (allKnown && knownQ > 0) missQ = Math.max(0, remaining - knownQ);
               tail = moreN + ' in stock at: ' + sxs.map(function (st) {
                 return '<a class="xg-deck__shortsister" href="' + esc(st.url) + '" target="_blank" rel="noopener">' + esc(st.store) + ' &rsaquo;</a>';
               }).join(' &middot; ');
             } else {
               tail = remaining + ' more ' + (remaining === 1 ? 'copy isn&rsquo;t' : 'copies aren&rsquo;t') + ' in stock right now';
             }
+            if (missQ > 0) missLines.push({ qty: missQ, name: ln.name });
             html += '<div class="xg-deck__row xg-deck__row--short xg-deck__row--grp xg-deck__row--gend" role="row">' +
               '<span class="xg-deck__shortinfo" role="cell">' + esc(chunks[0].o.name || r.name || ln.name) + ': ' + filledQ + ' of your ' + ln.qty + ' are in stock above &mdash; ' + tail + simBtn + '</span>' +
               '<span class="xg-deck__stat xg-deck__stat--short" role="cell"><span class="xg-deck__pill">' + filledQ + ' of ' + ln.qty + ' available</span></span>' +
@@ -659,6 +667,7 @@
         '</div>';
       }
       missNames.push(ln.name);
+      missLines.push({ qty: ln.qty, name: ln.name });
       return '<div class="xg-deck__row xg-deck__row--miss" role="row">' +
         '<span class="xg-deck__pick" role="cell"></span>' +
         '<span class="xg-deck__qty" role="cell">' + ln.qty + '&times;</span>' +
@@ -715,6 +724,21 @@
       return '<button type="button" class="xg-deck__btn xg-deck__btn--add" id="' + id + '"' + (addQty ? '' : ' disabled') + '>' + esc(ADDALL) + ' <span class="xg-deck__dim">(' + addQty + ')</span></button>';
     }
 
+    // "Copy what we didn't have": the copies this store could not fill, as a
+    // plain "N Card Name" decklist the shopper can paste into any other
+    // shop or deck site (owner ask, 2026-09-19). Ticks are respected (an
+    // unticked in-stock card is one we HAVE), substitutes count as filled,
+    // and copies a sister store is known to hold stay off the list.
+    var missText = missLines.map(function (m) { return m.qty + ' ' + m.name; }).join('\n');
+    var missQty = missLines.reduce(function (n, m) { return n + m.qty; }, 0);
+    state.missText = missText; state.missQty = missQty; state.missLineCount = missLines.length;
+    var copyBar = missLines.length
+      ? '<div class="xg-deck__missbar">' +
+          '<button type="button" class="xg-deck__btn xg-deck__btn--ghost xg-deck__copymiss" id="xg-deck-copymiss" aria-label="Copy the cards we didn&rsquo;t have in stock as a decklist">Copy what we didn&rsquo;t have <span class="xg-deck__dim">(' + missQty + (missQty === 1 ? ' card' : ' cards') + ')</span></button>' +
+          '<span class="xg-deck__misshelp">A plain decklist of the copies we couldn&rsquo;t fill. Paste it anywhere. Cards in stock at other Exor Games stores aren&rsquo;t included.</span>' +
+        '</div>'
+      : '';
+
     var missBlock = missNames.length
       ? '<details class="xg-deck__missing"><summary>' + missNames.length + ' not in stock</summary><ul class="xg-deck__misslist">' +
           missNames.map(function (n) { return '<li><a href="/search?q=' + encodeURIComponent(n) + '" target="_blank" rel="noopener">' + esc(n) + '</a></li>'; }).join('') +
@@ -741,6 +765,7 @@
           '<span class="xg-deck__h xg-deck__h--stat" role="columnheader">Availability</span>' +
         '</div>' + rows + '</div>' +
       sisterHelp +
+      copyBar +
       missBlock +
       '<div class="xg-deck__addrow xg-deck__addrow--bottom">' + addButton('xg-deck-add2') + '</div>';
 
@@ -750,6 +775,51 @@
     });
     clearBtn.hidden = false;
     maybeFetchSisterExtra(shorts);
+  }
+
+  // Copy the unfilled copies to the clipboard as a decklist. Modern
+  // clipboard API first (https + click gesture, so it works on the live
+  // page), the old execCommand path for older Safari, and when neither is
+  // allowed the list is shown in a textarea, pre-selected, so the shopper
+  // can copy it by hand — the button never silently does nothing.
+  function copyMissing(btn) {
+    if (!state || !state.missText) return;
+    var text = state.missText + '\n';
+    var label = btn.innerHTML;
+    var count = '<span class="xg-deck__dim">(' + state.missQty + (state.missQty === 1 ? ' card' : ' cards') + ')</span>';
+    beacon('copymiss', state.missQty + ' copies / ' + state.missLineCount + ' lines');
+    function ok() {
+      btn.classList.add('is-copied');
+      btn.innerHTML = 'Copied &#10003; ' + count;
+      setTimeout(function () { if (btn.isConnected) { btn.classList.remove('is-copied'); btn.innerHTML = label; } }, 2500);
+    }
+    function showBox() {
+      var bar = btn.parentNode;
+      var box = bar && bar.parentNode ? bar.parentNode.querySelector('.xg-deck__missout') : null;
+      if (!box) {
+        box = document.createElement('textarea');
+        box.className = 'xg-deck__missout';
+        box.readOnly = true;
+        box.setAttribute('aria-label', 'Cards we didn\u2019t have in stock');
+        bar.parentNode.insertBefore(box, bar.nextSibling);
+      }
+      box.value = text;
+      box.focus(); box.select();
+      btn.innerHTML = 'Select and copy the list below ' + count;
+    }
+    function legacy() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.left = '-9999px';
+        document.body.appendChild(ta); ta.select();
+        var good = document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (good) ok(); else showBox();
+      } catch (err) { showBox(); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, legacy);
+    } else legacy();
   }
 
   // Floating card preview: clicking a thumbnail enlarges the card in a
@@ -784,6 +854,12 @@
     if (t && t.classList && t.classList.contains('xg-deck__simbtn')) {
       e.preventDefault();
       openSubs(+t.getAttribute('data-li'));
+      return;
+    }
+    var cb = t && t.closest ? t.closest('#xg-deck-copymiss') : null;
+    if (cb) {
+      e.preventDefault();
+      copyMissing(cb);
       return;
     }
     if (t && t.classList && t.classList.contains('xg-deck__subundo')) {
