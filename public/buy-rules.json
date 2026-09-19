@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-09-18",
+  "updated": "2026-09-19",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -1692,8 +1692,158 @@
             },
             {
               "upTo": 4.0,
+              "cash": 0.3,
+              "credit": 0.5,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "futuristic rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega attack rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
+            },
+            {
+              "upTo": 50.0,
               "cash": 0.5,
               "credit": 0.7,
+              "rarities": {
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.3,
+                  "credit": 0.5
+                }
+              }
+            },
+            {
+              "upTo": 249.99,
+              "cash": 0.5,
+              "credit": 0.7,
+              "rarities": {
+                "unspecified": {
+                  "cash": 0.3,
+                  "credit": 0.5
+                }
+              }
+            }
+          ],
+          "rarities": {
+            "black star promo": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "black white rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "common": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "double rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "futuristic rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "holo rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "illustration rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega attack rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "mega hyper rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "promo": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "radiant rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "rare ace": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "secret rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "shiny rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "shiny ultra rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "special illustration rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "ultra rare": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "uncommon": {
+              "cash": 0.5,
+              "credit": 0.7
+            },
+            "unspecified": {
+              "cash": 0.3,
+              "credit": 0.5
+            }
+          }
+        },
+        "MP": {
+          "cash": 0.5,
+          "credit": 0.6,
+          "tiers": [
+            {
+              "upTo": 2.0,
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            {
+              "upTo": 4.0,
+              "cash": 0.25,
+              "credit": 0.45,
               "rarities": {
                 "black white rare": {
                   "cash": 0.0,
@@ -1719,146 +1869,6 @@
             },
             {
               "upTo": 50.0,
-              "cash": 0.5,
-              "credit": 0.7,
-              "rarities": {
-                "black white rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mega hyper rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            {
-              "upTo": 249.99,
-              "cash": 0.5,
-              "credit": 0.7
-            }
-          ],
-          "rarities": {
-            "black star promo": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "black white rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "common": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "double rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "futuristic rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "holo rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "hyper rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "illustration rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "mega attack rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "mega hyper rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "promo": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "radiant rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "rare ace": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "secret rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "shiny rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "shiny ultra rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "special illustration rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "ultra rare": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "uncommon": {
-              "cash": 0.5,
-              "credit": 0.7
-            },
-            "unspecified": {
-              "cash": 0.5,
-              "credit": 0.7
-            }
-          }
-        },
-        "MP": {
-          "cash": 0.5,
-          "credit": 0.6,
-          "tiers": [
-            {
-              "upTo": 2.0,
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            {
-              "upTo": 4.0,
-              "cash": 0.4,
-              "credit": 0.6,
-              "rarities": {
-                "black white rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "futuristic rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mega attack rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mega hyper rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            {
-              "upTo": 50.0,
               "cash": 0.4,
               "credit": 0.6,
               "rarities": {
@@ -1869,6 +1879,10 @@
                 "mega hyper rare": {
                   "cash": 0.0,
                   "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.25,
+                  "credit": 0.45
                 }
               }
             },
@@ -1878,8 +1892,8 @@
               "credit": 0.7,
               "rarities": {
                 "unspecified": {
-                  "cash": 0.4,
-                  "credit": 0.6
+                  "cash": 0.25,
+                  "credit": 0.45
                 }
               }
             }
@@ -1966,8 +1980,8 @@
               "credit": 0.7
             },
             "unspecified": {
-              "cash": 0.4,
-              "credit": 0.6
+              "cash": 0.25,
+              "credit": 0.45
             }
           }
         },
@@ -2963,8 +2977,8 @@
           "tiers": [
             {
               "upTo": 2.99,
-              "cash": 0.5,
-              "credit": 0.7,
+              "cash": 0.3,
+              "credit": 0.4,
               "rarities": {
                 "common": {
                   "cash": 0.0,
