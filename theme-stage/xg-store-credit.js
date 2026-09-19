@@ -154,7 +154,7 @@
       // A refresh that failed keeps the last good numbers on screen and says
       // so, rather than replacing them with an error.
       var at = state.at ? new Date(state.at).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' }).replace(/\.$/, '') : '';
-      var foot = el('p', ID + '__muted ' + ID + '__foot', state.error ? 'Could not refresh just now; this is your balance as of ' + at + '.' : 'From BinderPOS at ' + at + '.');
+      var foot = el('p', ID + '__muted ' + ID + '__foot', state.error ? 'Could not refresh just now; this is your balance as of ' + at + '.' : 'As of ' + at + '.');
       var rf = el('button', ID + '__refresh', 'Refresh');
       rf.type = 'button';
       rf.addEventListener('click', function () { load(true); });
