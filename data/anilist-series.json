@@ -1,7 +1,7 @@
 {
  "asked": 812,
  "count": 388,
- "generated": "2026-09-18T12:19:46Z",
+ "generated": "2026-09-19T12:00:54Z",
  "series": {
   "2.5 Dimensional Seduction": {
    "author": "Yuu Hashimoto",
@@ -1217,9 +1217,9 @@
   },
   "Mobile Suit Gundam WING": {
    "author": "Hajime Yatate",
-   "demographic": "",
+   "demographic": "Shonen",
    "status": "Completed",
-   "volumes": 5
+   "volumes": 3
   },
   "Mobile Suit Gundam the Origin": {
    "author": "Yoshikazu Yasuhiko",
@@ -1312,10 +1312,10 @@
    "volumes": null
   },
   "My Hero Academia": {
-   "author": "Anri Takahashi",
-   "demographic": "",
+   "author": "Kouhei Horikoshi",
+   "demographic": "Shonen",
    "status": "Completed",
-   "volumes": 6
+   "volumes": 42
   },
   "My Isekai Life": {
    "author": "Cyorisuke Natsumi",
@@ -2026,9 +2026,9 @@
    "volumes": null
   },
   "The Villainess's Guide to": {
-   "author": "Ren Sakuma",
-   "demographic": "Shojo",
-   "status": "Ongoing",
+   "author": "Garamdal",
+   "demographic": "",
+   "status": "Cancelled",
    "volumes": null
   },
   "The Weakest Tamer Began a Journey to Pick Up Trash": {
