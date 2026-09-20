@@ -49,7 +49,7 @@ export const HOLD_MODE = "shadow";
 // cards 175 to 205 seconds later, one every ten seconds. A card that rose
 // two minutes BEFORE the order was not in the cart. So: a long window after
 // the order, and only webhook-ordering slack before it.
-export const ORDER_LEAD_MS = 600e3;   // a cart's order may come before its stock rises by this much
+export const ORDER_LEAD_MS = 1200e3;  // a cart's order may come before its stock rises by this much (was 600s; 2026-09-20 a buy cart's last card was entered 562s after the order)
 export const ORDER_LAG_MS = 60e3;     // or after them by this much
 const KEEP_MS = 30 * 86400e3;
 const INFO_TTL_MS = 7 * 86400e3;
