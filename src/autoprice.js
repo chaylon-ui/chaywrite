@@ -668,15 +668,30 @@ export function ntfyTarget(value) {
   return { server: "https://ntfy.sh", topic: v.replace(/^\/+/, "") };
 }
 
-export async function sendNtfy(cx, msg) {
-  const t = ntfyTarget(cx.env && cx.env.AUTOPRICE_NTFY);
+// One publish to the ntfy topic, the way the owner's phone actually
+// accepts it. 2026-09-20: the stored AUTOPRICE_NTFY_TOKEN is refused by
+// ntfy.sh (401 "unauthorized") while the topic itself is public and takes
+// an anonymous publish (HTTP 200) - so a refused token falls back to no
+// token instead of failing the push. Used by the digest here and by
+// 9Pocket's staff push (src/stage.js).
+export async function ntfyPublish(env, payload, fetchFn) {
+  const t = ntfyTarget(env && env.AUTOPRICE_NTFY);
   if (!t) return { ok: false, skipped: true, error: "AUTOPRICE_NTFY secret not set" };
-  const headers = { "content-type": "application/json" };
-  if (cx.env.AUTOPRICE_NTFY_TOKEN) headers.authorization = "Bearer " + String(cx.env.AUTOPRICE_NTFY_TOKEN).trim();
-  const payload = { topic: t.topic, title: msg.title, message: msg.body, priority: msg.priority || 3, tags: msg.tags || [], click: msg.click || PAGE_URL };
-  const r = await cx.fetch(t.server + "/", { method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(15000) });
-  if (!r.ok) return { ok: false, error: "ntfy HTTP " + r.status + " " + (await r.text().catch(() => "")).slice(0, 120) };
-  return { ok: true, server: t.server };
+  const f = fetchFn || fetch;
+  const token = String((env && env.AUTOPRICE_NTFY_TOKEN) || "").trim();
+  const post = async (withToken) => {
+    const headers = { "content-type": "application/json" };
+    if (withToken) headers.authorization = "Bearer " + token;
+    return f(t.server + "/", { method: "POST", headers, body: JSON.stringify({ ...payload, topic: t.topic }), signal: AbortSignal.timeout(15000) });
+  };
+  let r = await post(!!token), auth = token ? "token" : "none";
+  if (token && (r.status === 401 || r.status === 403)) { r = await post(false); auth = "none (token refused)"; }
+  if (!r.ok) return { ok: false, error: "ntfy HTTP " + r.status + " " + (await r.text().catch(() => "")).slice(0, 120), auth };
+  return { ok: true, server: t.server, auth };
+}
+
+export async function sendNtfy(cx, msg) {
+  return ntfyPublish(cx.env, { title: msg.title, message: msg.body, priority: msg.priority || 3, tags: msg.tags || [], click: msg.click || PAGE_URL }, cx.fetch);
 }
 
 /* The relay (2026-09-15): ntfy.sh limits free accounts by source IP even

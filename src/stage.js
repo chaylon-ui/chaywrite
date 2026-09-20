@@ -53,7 +53,7 @@
    staged ones are never pruned - a forgotten list should stay visible. */
 
 import { repriceCards, submitToBinderPos, cleanCards } from "./buylist.js";
-import { ntfyTarget } from "./autoprice.js";
+import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
@@ -506,62 +506,9 @@ async function emailCustomer(env, url, rec, who) {
 }
 
 async function notifyStaff(env, url, s) {
-  const t = ntfyTarget(env && env.AUTOPRICE_NTFY);
-  if (!t) return;
-  const headers = { "content-type": "application/json" };
-  if (env.AUTOPRICE_NTFY_TOKEN) headers.authorization = "Bearer " + String(env.AUTOPRICE_NTFY_TOKEN).trim();
   const body = `${s.number ? s.number + " · " : ""}${s.totals.units} card${s.totals.units === 1 ? "" : "s"} · ${money(s.totals.cash)} cash / ${money(s.totals.credit)} credit · ${s.paymentType} · ${s.customerName || "customer " + s.customer}`;
-  await fetch(t.server + "/", { method: "POST", headers, signal: AbortSignal.timeout(10000),
-    body: JSON.stringify({ topic: t.topic, title: "9Pocket: buylist to review", message: body, priority: 3, tags: ["inbox_tray"], click: url.origin + BASE + "/b/" + encodeURIComponent(s.id) }) });
+  return ntfyPublish(env, { title: "9Pocket: buylist to review", message: body, priority: 3, tags: ["inbox_tray"], click: url.origin + BASE + "/b/" + encodeURIComponent(s.id) });
 }
-
-/* ---- accounts, worker side ---- */
-
-async function usersExist(env, origin) {
-  const j = await doCall(env, origin, "/_stage/users");
-  return !!(j.ok && j.users.length);
-}
-
-// The signed-in account for a request (its cookie's session), or null.
-async function currentUser(request, env, origin) {
-  const t = parseCookies(request)[COOKIE] || "";
-  if (!/^[0-9a-f]{64}$/.test(t)) return null;
-  const s = await doCall(env, origin, "/_stage/session?token=" + t);
-  if (!s.ok) return null;
-  const u = await doCall(env, origin, "/_stage/user?email=" + encodeURIComponent(s.email));
-  if (!u.ok || !u.user || u.user.disabled) return null;
-  return publicUser(u.user);
-}
-
-async function startSession(env, origin, email) {
-  const token = newToken();
-  await doCall(env, origin, "/_stage/session/put", { token, email });
-  return token;
-}
-
-// Email + password -> a session token, or the reason not.
-async function login(env, origin, email, password) {
-  email = normEmail(email);
-  if (!validEmail(email) || !password) return { ok: false, error: "Enter your email address and password." };
-  const locked = await doCall(env, origin, "/_stage/locked?email=" + encodeURIComponent(email));
-  if (locked.locked) return { ok: false, error: "Too many attempts. Try again in 15 minutes." };
-  const u = await doCall(env, origin, "/_stage/user?email=" + encodeURIComponent(email));
-  const good = u.ok && u.user && !u.user.disabled && (await verifyPassword(password, u.user));
-  const a = await doCall(env, origin, "/_stage/attempt", { email, ok: good });
-  if (!good) return { ok: false, error: a.locked ? "Too many attempts. Try again in 15 minutes." : (u.ok && u.user && u.user.disabled ? "That account is disabled." : "That email and password were not accepted.") };
-  return { ok: true, token: await startSession(env, origin, email), user: publicUser(u.user) };
-}
-
-async function createAccount(env, origin, { email, name, password, role, perms, createdBy }) {
-  email = normEmail(email);
-  if (!validEmail(email)) return { ok: false, error: "That is not an email address." };
-  if (String(password || "").length < MIN_PASSWORD) return { ok: false, error: "The password needs at least " + MIN_PASSWORD + " characters." };
-  const h = await hashPassword(password);
-  const user = { email, name: String(name || "").trim().slice(0, 120), role: role === "admin" ? "admin" : "staff", perms: permsFrom(perms ? { perms } : {}), ...h, disabled: false, createdBy: String(createdBy || "").slice(0, 160) };
-  return doCall(env, origin, "/_stage/user/put", { user, create: true });
-}
-
-/* ---- routes ---- */
 
 // /9pocket (list), /9pocket/b/<id> (worksheet), /9pocket/email/<id>
 // (preview), /9pocket.json, /9pocket/control, /9pocket/health,
