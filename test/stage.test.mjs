@@ -1,8 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn, safeImage, mergeApproval, numberOf } from "../src/stage.js";
+import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn, safeImage, mergeApproval, numberOf, shapeAdded, mergeAdded, editNeeds } from "../src/stage.js";
 import { buildEmail, sendEmail } from "../src/stage-email.js";
-import { renderList, renderSheet, renderLogin } from "../src/stage-ui.js";
+import { renderList, renderSheet, renderLoginForm, renderSetup, renderAdmin, renderDenied } from "../src/stage-ui.js";
+
+const ADMIN = { email: "chaylon@exorgames.com", name: "Chaylon", role: "admin", perms: {} };
+const VIEWER = { email: "v@exorgames.com", name: "Viewer", role: "staff", perms: {} };
+const PRICER = { email: "p@exorgames.com", name: "Pricer", role: "staff", perms: { prices: true } };
 
 const CARDS = [
   { cardId: 101, cardName: "Lightning Bolt", setName: "Magic 2011", game: "mtg", type: "Normal", condition: 1, conditionName: "Near Mint", quantity: "3", cashBuyPrice: 1.5, storeCreditBuyPrice: 1.95, shopifyVariantId: 9 },
@@ -121,27 +125,60 @@ test("the customer email carries the number, every card, the totals, the address
   assert.equal(n.status, "no-address");
 });
 
-test("the staff pages: list rows link to worksheets; the worksheet has inputs only while waiting", () => {
+test("the staff pages: list rows link to worksheets; the worksheet's controls follow the account's permissions and the status", () => {
   const r = shapeRecord({ customer: "3957471740057", customerName: "Ada O'Brien", customerEmail: "ada@example.test", paymentType: "Cash", cards: [{ ...CARDS[0], imageUrl: "https://product-images.tcgplayer.com/1.jpg" }, CARDS[1]] }, 5);
   r.number = "9P-1001";
-  const o = { k: "pin", on: true, emailOn: false, err: "", msg: "" };
+  const o = { user: ADMIN, on: true, emailOn: false, err: "", msg: "" };
   const list = renderList({ records: [r], counts: { staged: 1 } }, o);
   assert.ok(list.includes("9Pocket by Exor"));
-  assert.ok(list.includes('/9pocket/b/' + r.id + '?k=pin'));
+  assert.ok(list.includes('href="/9pocket/b/' + r.id + '"'));
   assert.ok(list.includes("Ada O&#39;Brien"));
+  assert.ok(list.includes('href="/9pocket/admin"') && list.includes("Sign out") && list.includes("Chaylon"));
   const sheet = renderSheet(r, o);
   assert.ok(sheet.includes("Back to 9Pocket"));
-  assert.ok(sheet.includes('<input class="p cash"'));
+  assert.ok(sheet.includes('<input class="q" type="number" min="0"') && sheet.includes('<input class="p cash"'));
   assert.ok(sheet.includes('img class="thumb" src="https://product-images.tcgplayer.com/1.jpg"'));
   assert.ok(sheet.includes("Approve → send to BinderPOS"));
+  assert.ok(sheet.includes('id="addcard"') && sheet.includes("/buylist/api/search"));
   assert.ok(sheet.includes("under Ada OBrien at the prices"));      // the confirm() string cannot carry a quote
   assert.ok(sheet.includes("RESEND_API_KEY"));                      // email off: the worksheet says so
+  // a view-only account: no inputs, no add, no decide, no send
+  const view = renderSheet(r, { ...o, user: VIEWER });
+  assert.ok(!view.includes('<input class="q" type="number" min="0"') && !view.includes('<input class="p cash"') && !view.includes('id="addcard"') && !view.includes("Approve → send") && !view.includes('value="email"'));
+  assert.ok(view.includes("needs a permission an admin can give you") && !view.includes('href="/9pocket/admin"'));
+  // prices only: price inputs, quantities as text, still a Save button
+  const pr = renderSheet(r, { ...o, user: PRICER });
+  assert.ok(pr.includes('<input class="p cash"') && !pr.includes('<input class="q" type="number" min="0"') && pr.includes('id="save"') && pr.includes('data-qty="3"'));
+  // decided: read-only for everyone
   r.status = "approved"; r.bp = { number: "8812" };
   const done = renderSheet(r, o);
-  assert.ok(!done.includes('<input class="p cash"'));
-  assert.ok(!done.includes("Approve → send to BinderPOS"));
+  assert.ok(!done.includes('<input class="p cash"') && !done.includes('<input class="q" type="number" min="0"'));
+  assert.ok(!done.includes("Approve → send to BinderPOS") && !done.includes('id="addcard"'));
   assert.ok(done.includes("BinderPOS buylist 8812"));
-  assert.ok(renderLogin("").includes("9Pocket by Exor"));
+  assert.ok(renderLoginForm({ next: "/9pocket" }).includes("9Pocket by Exor") && renderLoginForm({}).includes('name="password"'));
+  const setup = renderSetup({ k: "pin", email: "chaylon@exorgames.com", err: "" });
+  assert.ok(setup.includes('value="chaylon@exorgames.com"') && setup.includes('name="password2"') && setup.includes('value="pin"'));
+  assert.ok(!renderSetup({ k: "", noPin: true, err: "x" }).includes('name="password"'));
+  const admin = renderAdmin({ ...o, users: [ADMIN, { ...VIEWER, perms: { edit: true } }] });
+  assert.ok(admin.includes("chaylon@exorgames.com") && admin.includes("v@exorgames.com") && admin.includes("Change quantities and notes") && admin.includes('value="add"'));
+  assert.ok(renderDenied({ user: VIEWER }).includes("Admins only"));
+});
+
+test("an added card is shaped, checked and merged into a matching line", () => {
+  assert.equal(shapeAdded(null), null);
+  assert.equal(shapeAdded({ cardId: 5 }), null);
+  const c = shapeAdded({ cardId: "202", cardName: " Sol Ring ", setName: "Commander Legends", game: "mtg", type: "Foil", condition: "2", conditionName: "Lightly Played", quantity: "2", imageUrl: "javascript:x", cashBuyPrice: 99 });
+  assert.equal(c.cardId, 202); assert.equal(c.condition, 2); assert.equal(c.cardName, "Sol Ring"); assert.equal(c.quantity, "2"); assert.equal(c.imageUrl, ""); assert.equal(c.cashBuyPrice, 0);
+  const m = mergeAdded(CARDS, { ...CARDS[1], quantity: "2" });
+  assert.equal(m.merged, true); assert.equal(m.cards.length, 2); assert.equal(m.cards[1].quantity, "3");
+  const n = mergeAdded(CARDS, { ...CARDS[1], condition: 1, quantity: "1" });
+  assert.equal(n.merged, false); assert.equal(n.cards.length, 3);
+  assert.equal(mergeAdded(CARDS, { ...CARDS[1], quantity: "999" }).cards[1].quantity, "999");
+  // what an edit needs
+  assert.deepEqual(editNeeds(CARDS, CARDS), { qty: false, prices: false });
+  assert.deepEqual(editNeeds(CARDS, [CARDS[0]]), { qty: true, prices: false });
+  assert.deepEqual(editNeeds(CARDS, [CARDS[0], { ...CARDS[1], cashBuyPrice: 2.5 }]), { qty: false, prices: true });
+  assert.deepEqual(editNeeds(CARDS, [{ ...CARDS[0], quantity: "1" }, CARDS[1]]), { qty: true, prices: false });
 });
 
 test("a thumbnail is drawn only from an https image URL", () => {

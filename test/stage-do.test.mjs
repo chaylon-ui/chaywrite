@@ -138,6 +138,64 @@ test("a name can be filled in later without touching the list or its events", as
   assert.equal((await call(c, "/_stage/who", { id: "missing", customerName: "x" })).status, 404);
 });
 
+test("accounts, sessions and the failed-login counter", async () => {
+  const now = { t: T0 };
+  const c = cx(now);
+  assert.deepEqual((await call(c, "/_stage/users")).body.users, []);
+  const mk = await call(c, "/_stage/user/put", { user: { email: "Chaylon@ExorGames.com", name: "C", role: "admin", perms: {}, hash: "H", salt: "S", iter: 1 }, create: true });
+  assert.equal(mk.status, 200);
+  assert.equal(mk.body.user.email, "chaylon@exorgames.com");
+  assert.ok(!("hash" in mk.body.user));
+  assert.equal((await call(c, "/_stage/user/put", { user: { email: "chaylon@exorgames.com", hash: "x" }, create: true })).status, 409);
+  assert.equal((await call(c, "/_stage/user/put", { user: { email: "nobody@x.co", name: "n" } })).status, 404);
+  const full = await call(c, "/_stage/user?email=chaylon@exorgames.com");
+  assert.equal(full.body.user.hash, "H");                       // the worker verifies with it
+  assert.ok(!JSON.stringify((await call(c, "/_stage/users")).body).includes('"hash"'));
+  // sessions
+  const tok = "ab".repeat(32);
+  assert.equal((await call(c, "/_stage/session/put", { token: "short", email: "chaylon@exorgames.com" })).status, 400);
+  assert.equal((await call(c, "/_stage/session/put", { token: tok, email: "chaylon@exorgames.com" })).status, 200);
+  assert.equal((await call(c, "/_stage/session?token=" + tok)).body.email, "chaylon@exorgames.com");
+  now.t = T0 + 31 * 86400e3;
+  assert.equal((await call(c, "/_stage/session?token=" + tok)).status, 404);   // expired and gone
+  now.t = T0;
+  await call(c, "/_stage/session/put", { token: tok, email: "chaylon@exorgames.com" });
+  // disabling drops the sessions; a merge keeps the hash
+  const dis = await call(c, "/_stage/user/put", { user: { email: "chaylon@exorgames.com", disabled: true } });
+  assert.equal(dis.body.user.disabled, true);
+  assert.equal((await call(c, "/_stage/session?token=" + tok)).status, 404);
+  assert.equal((await call(c, "/_stage/user?email=chaylon@exorgames.com")).body.user.hash, "H");
+  // failed logins: locked at the 10th within 15 minutes, cleared by a success
+  for (let i = 1; i <= 9; i++) assert.equal((await call(c, "/_stage/attempt", { email: "chaylon@exorgames.com", ok: false })).body.locked, false);
+  assert.equal((await call(c, "/_stage/attempt", { email: "chaylon@exorgames.com", ok: false })).body.locked, true);
+  assert.equal((await call(c, "/_stage/locked?email=chaylon@exorgames.com")).body.locked, true);
+  now.t = T0 + 16 * 60e3;
+  assert.equal((await call(c, "/_stage/locked?email=chaylon@exorgames.com")).body.locked, false);
+  await call(c, "/_stage/attempt", { email: "chaylon@exorgames.com", ok: true });
+  assert.equal((await call(c, "/_stage/attempt", { email: "chaylon@exorgames.com", ok: false })).body.attempts, 1);
+  // delete
+  assert.equal((await call(c, "/_stage/user/del", { email: "chaylon@exorgames.com" })).status, 200);
+  assert.equal((await call(c, "/_stage/user?email=chaylon@exorgames.com")).status, 404);
+  assert.equal((await call(c, "/_stage/health")).body.accounts, 0);
+});
+
+test("a card added by staff joins the list, merges into a matching line, and is refused once decided", async () => {
+  const c = cx({ t: T0 });
+  const { body: { id } } = await call(c, "/_stage/put", { customer: "1", paymentType: "Cash", cards: CARDS });
+  const add = await call(c, "/_stage/add", { id, card: { cardId: 303, cardName: "Counterspell", setName: "M25", game: "mtg", type: "Normal", condition: 1, conditionName: "Near Mint", quantity: "2", cashBuyPrice: 0.5, storeCreditBuyPrice: 0.65 }, by: "chaylon@exorgames.com" });
+  assert.equal(add.status, 200);
+  assert.equal(add.body.record.cards.length, 3);
+  assert.equal(add.body.record.totals.units, 6);
+  assert.equal(add.body.record.events.at(-1).action, "added Counterspell · Near Mint ×2");
+  assert.equal(add.body.record.events.at(-1).by, "chaylon@exorgames.com");
+  const again = await call(c, "/_stage/add", { id, card: { ...CARDS[1], quantity: "4" } });
+  assert.equal(again.body.merged, true);
+  assert.equal(again.body.record.cards[1].quantity, "5");
+  assert.equal((await call(c, "/_stage/add", { id, card: {} })).status, 400);
+  await call(c, "/_stage/mark", { id, status: "rejected" });
+  assert.equal((await call(c, "/_stage/add", { id, card: CARDS[0] })).status, 409);
+});
+
 test("unknown paths and records answer 404", async () => {
   const c = cx({ t: T0 });
   assert.equal((await call(c, "/_stage/nope")).status, 404);

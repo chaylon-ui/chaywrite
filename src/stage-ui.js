@@ -3,14 +3,21 @@
    list where you have to go into the buylist, save changes, edit prices,
    etc.. it should list all the buylists and then go into a new page where
    it's like a worksheet. Then can go back to main menu. Please call it
-   '9Pocket by Exor'".
+   '9Pocket by Exor'". 2026-09-20: add cards on the worksheet, sign in with
+   email + password, an admin section with permissions.
 
-   Two pages, both server-rendered by src/stage.js behind the staff PIN:
+   Pages, all server-rendered by src/stage.js:
+     /9pocket/login    email + password
+     /9pocket/setup    the first admin account (staff PIN, once)
      /9pocket          the list - every buylist, newest first, tabs by status
      /9pocket/b/<id>   the worksheet - one buylist: customer, cards with
-                       thumbnails, quantity and price inputs, save / approve /
-                       reject, the customer email, the history
-   Markup only here; every decision is made in stage.js. */
+                       thumbnails, quantity and price inputs, add a card,
+                       save / approve / reject, the customer email, history
+     /9pocket/admin    accounts and permissions (admins)
+   Markup only here; every decision is made in stage.js. What a page shows
+   follows the signed-in account's permissions (src/stage-auth.js can()). */
+
+import { PERMS, can } from "./stage-auth.js";
 
 export const BASE = "/9pocket";
 export const BRAND = "9Pocket by Exor";
@@ -21,6 +28,7 @@ const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 const when = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", hour12: false, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const qty = (c) => Math.max(0, parseInt(c && c.quantity, 10) || 0);
 const STATUS_LABEL = { staged: "Waiting", approved: "Approved", rejected: "Rejected" };
+const jsStr = (s) => String(s == null ? "" : s).replace(/['\\]/g, "");   // for text inside a confirm('...')
 
 // A card's picture: the imageUrl BinderPOS's search put on the card object
 // (their TCGplayer scan), kept only when it is an https URL. Anything else
@@ -31,9 +39,9 @@ export function safeImage(u) {
 }
 
 const CSS = `*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d2327;background:#f4f6f7}a{color:#0d7a5f}
-.bar{background:#d52c28;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}.bar .brand{font-weight:800;font-size:18px;letter-spacing:.01em;color:#fff;text-decoration:none}.bar .brand small{font-weight:500;opacity:.85;margin-left:6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase}.bar .back{color:#fff;text-decoration:none;font-weight:600;opacity:.95}.bar .back:hover{text-decoration:underline}.bar .sp{flex:1}.bar .links a{color:#fff;opacity:.9;margin-left:14px;font-size:13px}
+.bar{background:#d52c28;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}.bar .brand{font-weight:800;font-size:18px;letter-spacing:.01em;color:#fff;text-decoration:none}.bar .brand small{font-weight:500;opacity:.85;margin-left:6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase}.bar .back{color:#fff;text-decoration:none;font-weight:600;opacity:.95}.bar .back:hover{text-decoration:underline}.bar .sp{flex:1}.bar .links{display:flex;align-items:center;gap:14px;font-size:13px}.bar .links a{color:#fff;opacity:.9}.bar .who{opacity:.9}.bar form{display:inline}.bar button{padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;font:inherit;font-size:13px;cursor:pointer}
 .wrap{max-width:1140px;margin:0 auto;padding:18px 20px 40px}h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 8px;color:#374151}.muted{color:#6b7780}
-.tag{display:inline-block;padding:2px 9px;border-radius:99px;font-weight:600;font-size:12px;vertical-align:middle}.tag-staged{background:#fde68a;color:#5b4300}.tag-approved{background:#d1fae5;color:#065f46}.tag-rejected{background:#fee2e2;color:#7f1d1d}.tag-off{background:#e5e7eb;color:#374151}
+.tag{display:inline-block;padding:2px 9px;border-radius:99px;font-weight:600;font-size:12px;vertical-align:middle}.tag-staged{background:#fde68a;color:#5b4300}.tag-approved{background:#d1fae5;color:#065f46}.tag-rejected{background:#fee2e2;color:#7f1d1d}.tag-off{background:#e5e7eb;color:#374151}.tag-admin{background:#1d2327;color:#fff}.tag-staff{background:#e5e7eb;color:#374151}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 10px}.tabs button{padding:7px 12px;border-radius:99px;border:1px solid #cbd3d9;background:#fff;cursor:pointer;font:inherit;font-weight:600;color:#374151}.tabs button.on{background:#1d2327;border-color:#1d2327;color:#fff}.tabs b{margin-left:6px;opacity:.75}
 .card{margin:12px 0;background:#fff;border:1px solid #dde3e7;border-radius:12px;padding:16px}.card h3{margin:0 0 6px;font-size:15px}
 table{width:100%;border-collapse:collapse;font-size:13px;margin:4px 0;background:#fff}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600;color:#374151;white-space:nowrap}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:middle}td.n,th.n{text-align:right;white-space:nowrap}td.t{width:52px;padding:4px 6px}tr.row{cursor:pointer}tr.row:hover td{background:#f8fafb}tr.row td a{color:inherit;text-decoration:none}tr.row .ref{font-weight:700;color:#d52c28}
@@ -41,21 +49,46 @@ table{width:100%;border-collapse:collapse;font-size:13px;margin:4px 0;background
 .thumb{display:block;width:44px;height:auto;border-radius:4px;background:#eef2f4;transition:transform .12s ease}a.zoom{display:block;position:relative}a.zoom:hover .thumb,a.zoom:focus .thumb{transform:scale(4.4);transform-origin:left center;position:relative;z-index:9;box-shadow:0 10px 30px rgba(0,0,0,.4);border-radius:8px}
 input.q,input.p{padding:5px 7px;border:1px solid #cbd3d9;border-radius:6px;text-align:right;font:inherit}input.q{width:62px}input.p{width:84px}input.p.staff,input.q.changed,input.p.changed{border-color:#d52c28;background:#fff5f5}
 .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 18px;margin:8px 0}.kv div{font-size:13px}.kv div span{display:block;color:#6b7780;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.kv div b{font-size:15px}
-.act{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}button,.btn{padding:8px 14px;border-radius:8px;border:1px solid #cbd3d9;background:#fff;cursor:pointer;font:inherit;font-weight:600;color:#1d2327;text-decoration:none;display:inline-block}button.ok{background:#0d7a5f;border-color:#0d7a5f;color:#fff}button.no{background:#fff;border-color:#b42318;color:#b42318}button.save{background:#1d2327;border-color:#1d2327;color:#fff}button:disabled{opacity:.5;cursor:default}
-input.text{flex:1 1 240px;padding:8px 10px;border:1px solid #cbd3d9;border-radius:8px;font:inherit}textarea.text{width:100%;min-height:64px;padding:8px 10px;border:1px solid #cbd3d9;border-radius:8px;font:inherit}
+.act{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}button,.btn{padding:8px 14px;border-radius:8px;border:1px solid #cbd3d9;background:#fff;cursor:pointer;font:inherit;font-weight:600;color:#1d2327;text-decoration:none;display:inline-block}button.ok{background:#0d7a5f;border-color:#0d7a5f;color:#fff}button.no{background:#fff;border-color:#b42318;color:#b42318}button.save{background:#1d2327;border-color:#1d2327;color:#fff}button.sm{padding:4px 10px;font-size:12px}button:disabled{opacity:.5;cursor:default}
+input.text,select.text{flex:1 1 240px;padding:8px 10px;border:1px solid #cbd3d9;border-radius:8px;font:inherit;background:#fff}textarea.text{width:100%;min-height:64px;padding:8px 10px;border:1px solid #cbd3d9;border-radius:8px;font:inherit}label.chk{display:inline-flex;align-items:center;gap:6px;margin:4px 12px 4px 0;font-size:13px}
 .err{background:#fee2e2;color:#7f1d1d;padding:8px 12px;border-radius:8px;margin:10px 0}.okmsg{background:#d1fae5;color:#065f46;padding:8px 12px;border-radius:8px;margin:10px 0}.note{font-size:13px;color:#5b4300;background:#fff8dc;border-radius:8px;padding:8px 12px;margin:6px 0}
 .tot{display:flex;gap:22px;justify-content:flex-end;padding:10px 10px 2px;font-size:14px}.tot b{font-size:16px}.dirty{display:none;color:#b42318;font-weight:600}.is-dirty .dirty{display:inline}
 .ev{list-style:none;padding:0;margin:0}.ev li{padding:4px 0;border-top:1px solid #eef2f4;font-size:13px}.ev li:first-child{border-top:0}
-form.login{max-width:380px;margin:60px auto;background:#fff;border:1px solid #dde3e7;border-radius:12px;padding:24px}form.login input{width:100%;padding:9px 10px;border:1px solid #cbd3d9;border-radius:8px;margin:8px 0 12px;font:inherit}
+.hit{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid #eef2f4}.hit img{width:56px;border-radius:4px;background:#eef2f4}.hit .offers{flex:1}.offer{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:3px 0;font-size:13px}.offer .pr{font-weight:600;min-width:130px}.offer .max{color:#6b7780}.offer.off{opacity:.55}
+form.login{max-width:400px;margin:60px auto;background:#fff;border:1px solid #dde3e7;border-radius:12px;padding:24px}form.login input{width:100%;padding:9px 10px;border:1px solid #cbd3d9;border-radius:8px;margin:6px 0 12px;font:inherit}form.login label{font-size:13px;color:#374151;font-weight:600}
+.users td small{display:block;color:#6b7780}.users form{display:inline}.perm{display:inline-block;padding:1px 7px;border-radius:99px;background:#eef2f4;font-size:11px;margin:1px 3px 1px 0}
 @media (max-width:720px){.wrap{padding:12px}td,th{padding:6px}input.p{width:72px}}`;
 
-const shell = (title, body, k, back) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>
-<div class="bar">${back ? `<a class="back" href="${BASE}?k=${encodeURIComponent(k)}">← Back to 9Pocket</a>` : ""}<a class="brand" href="${BASE}?k=${encodeURIComponent(k)}">${BRAND}<small>buylists</small></a><span class="sp"></span><span class="links"><a href="/portal/buylists?k=${encodeURIComponent(k)}">BinderPOS's list</a><a href="/hold?k=${encodeURIComponent(k)}">Hold report</a></span></div>
+const shell = (title, body, o, back) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>
+<div class="bar">${back ? `<a class="back" href="${BASE}">← Back to 9Pocket</a>` : ""}<a class="brand" href="${BASE}">${BRAND}<small>buylists</small></a><span class="sp"></span><span class="links">${o && o.user ? `<span class="who">${esc(o.user.name || o.user.email)}${o.user.role === "admin" ? " · admin" : ""}</span>${o.user.role === "admin" ? `<a href="${BASE}/admin">Admin</a>` : ""}` : ""}<a href="/portal/buylists">BinderPOS's list</a>${o && o.user ? `<form method="post" action="${BASE}/logout"><button type="submit">Sign out</button></form>` : ""}</span></div>
 <div class="wrap">${body}</div></body></html>`;
 
-export function renderLogin(err) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${BRAND}</title><style>${CSS}</style></head><body>
-<form class="login" method="get" action="${BASE}"><h1>${BRAND}</h1><p class="muted">Staff key.</p>${err ? `<div class="err">${esc(err)}</div>` : ""}<input type="password" name="k" autofocus autocomplete="current-password"><button class="ok" type="submit">Open</button></form></body></html>`;
+const plain = (title, inner) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>${inner}</body></html>`;
+
+/* ---------------- sign in, first account ---------------- */
+
+export function renderLoginForm(o) {
+  return plain("Sign in", `<form class="login" method="post" action="${BASE}/login"><h1>${BRAND}</h1><p class="muted">Sign in with your staff account.</p>
+${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
+<input type="hidden" name="next" value="${esc(o.next || BASE)}">
+<label>Email</label><input type="email" name="email" value="${esc(o.email || "")}" autocomplete="username" autofocus required>
+<label>Password</label><input type="password" name="password" autocomplete="current-password" required>
+<button class="ok" type="submit">Sign in</button></form>`);
+}
+
+export function renderSetup(o) {
+  return plain("First account", `<form class="login" method="post" action="${BASE}/setup"><h1>${BRAND}</h1><p class="muted">No account exists yet. Create the admin account - it can then add everyone else on the Admin page.</p>
+${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}
+${o.noPin ? "" : `<input type="hidden" name="k" value="${esc(o.k || "")}">
+<label>Email (your sign-in name)</label><input type="email" name="email" value="${esc(o.email || "")}" autocomplete="username" required>
+<label>Name</label><input type="text" name="name" autocomplete="name" placeholder="shown on the buylists you work on">
+<label>Password (8+ characters)</label><input type="password" name="password" autocomplete="new-password" minlength="8" required>
+<label>Password again</label><input type="password" name="password2" autocomplete="new-password" minlength="8" required>
+<button class="ok" type="submit">Create the admin account</button>`}</form>`);
+}
+
+export function renderDenied(o) {
+  return shell("Admins only", `<h1>Admins only</h1><p class="muted">The Admin page is for admin accounts. You are signed in as ${esc(o.user ? o.user.email : "")}. <a href="${BASE}">Back to the buylists</a>.</p>`, o, true);
 }
 
 /* ---------------- the list ---------------- */
@@ -65,7 +98,7 @@ export function renderList(d, o) {
   const counts = (d && d.counts) || {};
   const waiting = counts.staged || 0;
   const row = (r) => {
-    const href = `${BASE}/b/${encodeURIComponent(r.id)}?k=${encodeURIComponent(o.k)}`;
+    const href = `${BASE}/b/${encodeURIComponent(r.id)}`;
     return `<tr class="row" data-status="${esc(r.status)}" onclick="location.href=this.dataset.href" data-href="${esc(href)}">
 <td class="ref"><a href="${esc(href)}">${esc(r.number || r.id)}</a></td><td>${esc(when(r.ts))}</td><td>${r.customerName ? esc(r.customerName) : `<span class="muted">customer ${esc(r.customer)}</span>`}${r.customerEmail ? `<br><span class="muted">${esc(r.customerEmail)}</span>` : ""}</td>
 <td>${esc(r.paymentType)}</td><td class="n">${r.totals.units}</td><td class="n">${money(r.totals.cash)}</td><td class="n">${money(r.totals.credit)}</td>
@@ -73,7 +106,7 @@ export function renderList(d, o) {
 <td class="n"><a class="btn" href="${esc(href)}">Open →</a></td></tr>`;
   };
   const body = `<h1>Buylists <span class="tag ${o.on ? "tag-staged" : "tag-off"}">${o.on ? waiting + " waiting" : "9Pocket OFF - submissions go straight to BinderPOS"}</span></h1>
-<p class="muted">Every buylist sent from the sell page, newest first. Open one to check the cards, change quantities or prices, and approve it (sends it to BinderPOS under that customer, at the prices on the worksheet) or reject it. Atlantic time. <a href="${BASE}?k=${encodeURIComponent(o.k)}">Refresh</a></p>
+<p class="muted">Every buylist sent from the sell page, newest first. Open one to check the cards, change quantities or prices, add cards, and approve it (sends it to BinderPOS under that customer, at the prices on the worksheet) or reject it. Atlantic time. <a href="${BASE}">Refresh</a></p>
 ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
 <div class="tabs" id="tabs"><button data-f="staged" class="${waiting ? "on" : ""}">Waiting<b>${waiting}</b></button><button data-f="approved">Approved<b>${counts.approved || 0}</b></button><button data-f="rejected">Rejected<b>${counts.rejected || 0}</b></button><button data-f="" class="${waiting ? "" : "on"}">All<b>${records.length}</b></button></div>
 <div class="list"><table id="list"><thead><tr><th>Ref</th><th>Submitted</th><th>Customer</th><th>Payment</th><th class="n">Cards</th><th class="n">Cash</th><th class="n">Credit</th><th>Status</th><th></th></tr></thead>
@@ -84,23 +117,25 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 (function(){var tabs=document.querySelectorAll('#tabs button'),rows=document.querySelectorAll('#list tbody tr.row');function show(f){var n=0;rows.forEach(function(tr){var on=!f||tr.dataset.status===f;tr.hidden=!on;if(on)n++;});document.getElementById('none').hidden=n>0||!rows.length;tabs.forEach(function(b){b.classList.toggle('on',b.dataset.f===f);});}
 tabs.forEach(function(b){b.addEventListener('click',function(){show(b.dataset.f);});});var first=document.querySelector('#tabs button.on');show(first?first.dataset.f:'');})();
 </script>`;
-  return shell("Buylists", body, o.k, false);
+  return shell("Buylists", body, o, false);
 }
 
 /* ---------------- the worksheet ---------------- */
 
 export function renderSheet(r, o) {
-  const editable = r.status === "staged";
-  const k = o.k;
+  const u = o.user;
+  const waiting = r.status === "staged";
+  const canEdit = waiting && can(u, "edit"), canPrices = waiting && can(u, "prices"), canAdd = waiting && can(u, "add"), canApprove = waiting && can(u, "approve"), canEmail = can(u, "email");
   const ref = r.number || r.id;
   const notes = (rp, label) => rp && ((rp.changed || []).length || (rp.capped || []).length || (rp.dropped || []).length || (rp.kept || []).length)
     ? `<div class="note"><b>${esc(label)}:</b> ${(rp.changed || []).length ? "prices changed - " + esc(rp.changed.join("; ")) + ". " : ""}${(rp.capped || []).length ? "quantities capped - " + esc(rp.capped.join("; ")) + ". " : ""}${(rp.dropped || []).length ? "left out - " + esc(rp.dropped.join("; ")) + ". " : ""}${(rp.kept || []).length ? "staff prices kept - " + esc(rp.kept.join("; ")) + "." : ""}</div>` : "";
-  const thumb = (c) => { const u = safeImage(c.imageUrl); return `<td class="t">${u ? `<a class="zoom" href="${esc(u)}" target="_blank" rel="noopener" title="Open the full image"><img class="thumb" src="${esc(u)}" alt="" loading="lazy"></a>` : ""}</td>`; };
+  const thumb = (c) => { const im = safeImage(c.imageUrl); return `<td class="t">${im ? `<a class="zoom" href="${esc(im)}" target="_blank" rel="noopener" title="Open the full image"><img class="thumb" src="${esc(im)}" alt="" loading="lazy"></a>` : ""}</td>`; };
   const key = (c) => String(c.cardId) + "|" + String(c.condition) + "|" + String(c.type || "").toLowerCase();
-  const line = (c) => `<tr data-key="${esc(key(c))}">${thumb(c)}<td><b>${esc(c.cardName)}</b><br><span class="muted">${esc(c.setName)}</span></td><td>${esc(c.conditionName || c.condition)}${c.type && c.type !== "Normal" ? "<br><span class=\"muted\">" + esc(c.type) + "</span>" : ""}</td>
-<td class="n">${editable ? `<input class="q" type="number" min="0" max="999" step="1" value="${esc(c.quantity)}" data-orig="${esc(c.quantity)}">` : esc(c.quantity)}</td>
-<td class="n">${editable ? `<input class="p cash${c.staffPriced ? " staff" : ""}" type="number" min="0" step="0.01" value="${(Number(c.cashBuyPrice) || 0).toFixed(2)}" data-orig="${(Number(c.cashBuyPrice) || 0).toFixed(2)}">` : money(c.cashBuyPrice)}</td>
-<td class="n">${editable ? `<input class="p credit${c.staffPriced ? " staff" : ""}" type="number" min="0" step="0.01" value="${(Number(c.storeCreditBuyPrice) || 0).toFixed(2)}" data-orig="${(Number(c.storeCreditBuyPrice) || 0).toFixed(2)}">` : money(c.storeCreditBuyPrice)}</td>
+  const p2 = (n) => (Number(n) || 0).toFixed(2);
+  const line = (c) => `<tr data-key="${esc(key(c))}" data-qty="${esc(c.quantity)}" data-cash="${p2(c.cashBuyPrice)}" data-credit="${p2(c.storeCreditBuyPrice)}">${thumb(c)}<td><b>${esc(c.cardName)}</b><br><span class="muted">${esc(c.setName)}</span></td><td>${esc(c.conditionName || c.condition)}${c.type && c.type !== "Normal" ? "<br><span class=\"muted\">" + esc(c.type) + "</span>" : ""}</td>
+<td class="n">${canEdit ? `<input class="q" type="number" min="0" max="999" step="1" value="${esc(c.quantity)}" data-orig="${esc(c.quantity)}">` : esc(c.quantity)}</td>
+<td class="n">${canPrices ? `<input class="p cash${c.staffPriced ? " staff" : ""}" type="number" min="0" step="0.01" value="${p2(c.cashBuyPrice)}" data-orig="${p2(c.cashBuyPrice)}">` : money(c.cashBuyPrice) + (c.staffPriced ? ' <span class="muted" title="staff price">*</span>' : "")}</td>
+<td class="n">${canPrices ? `<input class="p credit${c.staffPriced ? " staff" : ""}" type="number" min="0" step="0.01" value="${p2(c.storeCreditBuyPrice)}" data-orig="${p2(c.storeCreditBuyPrice)}">` : money(c.storeCreditBuyPrice)}</td>
 <td class="n line">${money(qty(c) * (Number(c.cashBuyPrice) || 0))} / ${money(qty(c) * (Number(c.storeCreditBuyPrice) || 0))}</td></tr>`;
   const em = r.email || null;
   const emailLine = !em ? `<span class="muted">No email has been sent for this buylist.</span>`
@@ -108,9 +143,10 @@ export function renderSheet(r, o) {
     : em.status === "unconfigured" ? `<span class="muted">Not sent: customer emails are not configured on the worker yet (RESEND_API_KEY).</span>`
     : em.status === "no-address" ? `<span class="muted">Not sent: Shopify has no email address for this customer.</span>`
     : `<span style="color:#b42318">Failed at ${esc(when(em.at))}: ${esc(em.error || "")}</span>`;
-  const hidden = (a) => `<input type="hidden" name="__form" value="1"><input type="hidden" name="k" value="${esc(k)}"><input type="hidden" name="id" value="${esc(r.id)}"><input type="hidden" name="action" value="${a}">`;
+  const hidden = (a) => `<input type="hidden" name="__form" value="1"><input type="hidden" name="id" value="${esc(r.id)}"><input type="hidden" name="action" value="${a}">`;
+  const decided = (r.events || []).filter((e) => e.action === "approved" || e.action === "rejected").pop();
   const body = `<h1>${esc(ref)} <span class="tag tag-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span> ${r.bp && r.bp.number ? `<span class="muted" style="font-size:14px;font-weight:500">· BinderPOS buylist ${esc(r.bp.number)}</span>` : ""}</h1>
-<p class="muted">Submitted ${esc(when(r.ts))} from the sell page${r.status !== "staged" ? " · decided " + esc(when(((r.events || []).filter((e) => e.action === "approved" || e.action === "rejected").pop() || {}).ts)) : ""}.</p>
+<p class="muted">Submitted ${esc(when(r.ts))} from the sell page${decided ? " · " + esc(decided.action) + " " + esc(when(decided.ts)) + (decided.by ? " by " + esc(decided.by) : "") : ""}.</p>
 ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
 <div class="card"><h3>Customer</h3><div class="kv">
 <div><span>Name</span><b>${r.customerName ? esc(r.customerName) : `<span class="muted">not on file</span>`}</b></div>
@@ -123,30 +159,76 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 </div></div>
 ${notes(r.repriced, "At submit")}${notes(r.repricedAtApproval, "At approval")}
 <div class="card" id="sheet"><h3>Cards <span class="dirty">· unsaved changes</span></h3>
-${editable ? `<p class="muted" style="margin:0 0 8px">Change a quantity or a price and <b>Save changes</b>. A quantity of 0 removes the line. A price you type is kept at approval (BinderPOS's price of the day is used for the rest); a red field is a staff price.</p>` : ""}
+${canEdit || canPrices ? `<p class="muted" style="margin:0 0 8px">${canEdit ? "Change a quantity" + (canPrices ? " or a price" : "") : "Change a price"} and <b>Save changes</b>.${canEdit ? " A quantity of 0 removes the line." : ""}${canPrices ? " A price you type is kept at approval (BinderPOS's price of the day is used for the rest); a red field is a staff price." : ""}</p>` : (waiting ? `<p class="muted" style="margin:0 0 8px">Your account can view this buylist; changing it needs a permission an admin can give you.</p>` : "")}
 <table><thead><tr><th class="t"></th><th>Card</th><th>Condition</th><th class="n">Qty</th><th class="n">Cash</th><th class="n">Credit</th><th class="n">Line cash / credit</th></tr></thead><tbody>${(r.cards || []).map(line).join("")}</tbody></table>
-${editable ? `<div class="act"><label style="flex:1 1 100%"><span class="muted">Staff note (stays here, never shown to the customer)</span><textarea class="text" id="note" placeholder="e.g. check the foil on the Sol Ring">${esc(r.note || "")}</textarea></label></div>
-<div class="act"><button class="save" type="button" id="save">Save changes</button><span class="muted" id="savemsg"></span></div>` : (r.note ? `<div class="note"><b>Staff note:</b> ${esc(r.note)}</div>` : "")}
+${canEdit ? `<div class="act"><label style="flex:1 1 100%"><span class="muted">Staff note (stays here, never shown to the customer)</span><textarea class="text" id="note" placeholder="e.g. check the foil on the Sol Ring">${esc(r.note || "")}</textarea></label></div>` : (r.note ? `<div class="note"><b>Staff note:</b> ${esc(r.note)}</div>` : "")}
+${canEdit || canPrices ? `<div class="act"><button class="save" type="button" id="save">Save changes</button><span class="muted" id="savemsg"></span></div>` : ""}
 </div>
-${editable ? `<div class="card"><h3>Decide</h3>
-<form method="post" action="${BASE}/control" class="act" onsubmit="if(document.body.classList.contains('is-dirty')){alert('Save your changes first.');return false;}return confirm('Send ${esc(ref)} to BinderPOS now? It will appear there as a new online buylist under ${esc((r.customerName || "this customer").replace(/['\\\\]/g, ""))} at the prices on this worksheet.')">${hidden("approve")}<button class="ok" type="submit">Approve → send to BinderPOS</button><span class="muted">Then complete it in the BinderPOS portal as usual - that is when the customer is paid and the stock rises.</span></form>
-<form method="post" action="${BASE}/control" class="act" onsubmit="return confirm('Reject ${esc(ref)}? Nothing is sent to BinderPOS; the customer sees it as declined with your reason.')">${hidden("reject")}<input class="text" name="note" placeholder="reason the customer will see"><button class="no" type="submit">Reject</button></form>
+${canAdd ? `<div class="card" id="addcard"><h3>Add a card</h3><p class="muted" style="margin:0 0 8px">Search BinderPOS's buylist, pick the condition and finish, and add it at today's price (you can change the price above afterwards).</p>
+<div class="act"><select class="text" id="ad-game" style="flex:0 1 220px"><option value="mtg">Magic: The Gathering</option></select><input class="text" id="ad-q" placeholder="card name" autocomplete="off"><button type="button" id="ad-go">Search</button><span class="muted" id="ad-msg"></span></div>
+<div id="ad-res"></div></div>` : ""}
+${canApprove ? `<div class="card"><h3>Decide</h3>
+<form method="post" action="${BASE}/control" class="act" onsubmit="if(document.body.classList.contains('is-dirty')){alert('Save your changes first.');return false;}return confirm('Send ${esc(jsStr(ref))} to BinderPOS now? It will appear there as a new online buylist under ${esc(jsStr(r.customerName || "this customer"))} at the prices on this worksheet.')">${hidden("approve")}<button class="ok" type="submit">Approve → send to BinderPOS</button><span class="muted">Then complete it in the BinderPOS portal as usual - that is when the customer is paid and the stock rises.</span></form>
+<form method="post" action="${BASE}/control" class="act" onsubmit="return confirm('Reject ${esc(jsStr(ref))}? Nothing is sent to BinderPOS; the customer sees it as declined with your reason.')">${hidden("reject")}<input class="text" name="note" placeholder="reason the customer will see"><button class="no" type="submit">Reject</button></form>
 </div>` : ""}
 <div class="card"><h3>Customer email</h3><p style="margin:0 0 8px">${emailLine}</p>
-<div class="act"><a class="btn" href="${BASE}/email/${encodeURIComponent(r.id)}?k=${encodeURIComponent(k)}" target="_blank" rel="noopener">Preview the email</a>
-<form method="post" action="${BASE}/control" style="display:inline" onsubmit="return confirm('${em && em.status === "sent" ? "Send the confirmation email again" : "Send the confirmation email"} to ${esc((r.customerEmail || "the customer").replace(/['\\\\]/g, ""))}?')">${hidden("email")}<button type="submit" ${o.emailOn ? "" : "disabled title=\"RESEND_API_KEY is not set on the worker\""}>${em && em.status === "sent" ? "Send again" : "Send now"}</button></form>
-${o.emailOn ? "" : `<span class="muted">Sending is off until the worker has a RESEND_API_KEY.</span>`}</div></div>
+<div class="act"><a class="btn" href="${BASE}/email/${encodeURIComponent(r.id)}" target="_blank" rel="noopener">Preview the email</a>
+${canEmail ? `<form method="post" action="${BASE}/control" style="display:inline" onsubmit="return confirm('${em && em.status === "sent" ? "Send the confirmation email again" : "Send the confirmation email"} to ${esc(jsStr(r.customerEmail || "the customer"))}?')">${hidden("email")}<button type="submit" ${o.emailOn ? "" : "disabled title=\"RESEND_API_KEY is not set on the worker\""}>${em && em.status === "sent" ? "Send again" : "Send now"}</button></form>
+${o.emailOn ? "" : `<span class="muted">Sending is off until the worker has a RESEND_API_KEY.</span>`}` : ""}</div></div>
 <div class="card"><h3>History</h3><ul class="ev">${(r.events || []).map((e) => `<li>${esc(when(e.ts))} · ${esc(e.action)}${e.by ? " · " + esc(e.by) : ""}</li>`).join("") || `<li class="muted">-</li>`}</ul></div>
-${editable ? `<script>
-(function(){var K=${JSON.stringify(k)},ID=${JSON.stringify(r.id)};var sheet=document.getElementById('sheet');var rows=sheet.querySelectorAll('tbody tr[data-key]');
-function num(v){var n=parseFloat(v);return isFinite(n)?n:0;}function money(n){return '$'+n.toFixed(2);}
-function recalc(){var units=0,cash=0,credit=0,dirty=false;rows.forEach(function(tr){var q=tr.querySelector('input.q'),c=tr.querySelector('input.cash'),s=tr.querySelector('input.credit');var n=Math.max(0,parseInt(q.value,10)||0);[q,c,s].forEach(function(i){var ch=i.value!==i.getAttribute('data-orig')&&num(i.value)!==num(i.getAttribute('data-orig'));i.classList.toggle('changed',ch);if(ch)dirty=true;});units+=n;cash+=n*num(c.value);credit+=n*num(s.value);tr.querySelector('.line').textContent=money(n*num(c.value))+' / '+money(n*num(s.value));tr.style.opacity=n?'':'.45';});
+${canEdit || canPrices || canAdd ? `<script>
+(function(){var ID=${JSON.stringify(r.id)},CTL=${JSON.stringify(BASE + "/control")},SHEET=${JSON.stringify(BASE + "/b/" + r.id)};
+function num(v){var n=parseFloat(v);return isFinite(n)?n:0;}function money(n){return '$'+n.toFixed(2);}function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function post(body,cb){fetch(CTL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(cb).catch(function(e){alert(String(e));});}
+var sheet=document.getElementById('sheet');var rows=sheet.querySelectorAll('tbody tr[data-key]');
+function val(tr,cls,attr){var i=tr.querySelector('input.'+cls);return i?i.value:tr.getAttribute('data-'+attr);}
+function recalc(){var units=0,cash=0,credit=0,dirty=false;rows.forEach(function(tr){var n=Math.max(0,parseInt(val(tr,'q','qty'),10)||0),c=num(val(tr,'cash','cash')),s=num(val(tr,'credit','credit'));tr.querySelectorAll('input').forEach(function(i){var ch=num(i.value)!==num(i.getAttribute('data-orig'));i.classList.toggle('changed',ch);if(ch)dirty=true;});units+=n;cash+=n*c;credit+=n*s;tr.querySelector('.line').textContent=money(n*c)+' / '+money(n*s);tr.style.opacity=n?'':'.45';});
 document.getElementById('t-units').textContent=units;document.getElementById('t-cash').textContent=money(cash);document.getElementById('t-credit').textContent=money(credit);document.body.classList.toggle('is-dirty',dirty);}
 sheet.addEventListener('input',recalc);recalc();
-document.getElementById('save').addEventListener('click',function(){var edit=[];rows.forEach(function(tr){var p=tr.getAttribute('data-key').split('|');edit.push({cardId:p[0],condition:p[1],type:p[2],quantity:tr.querySelector('input.q').value,cashBuyPrice:tr.querySelector('input.cash').value,storeCreditBuyPrice:tr.querySelector('input.credit').value});});
-var msg=document.getElementById('savemsg');msg.textContent='Saving…';
-fetch('${BASE}/control',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({k:K,id:ID,action:'edit',edit:edit,note:document.getElementById('note').value})}).then(function(r){return r.json()}).then(function(j){if(!j.ok){msg.textContent='';alert(j.error||'failed');return;}location.href='${BASE}/b/'+encodeURIComponent(ID)+'?k='+encodeURIComponent(K)+'&msg='+encodeURIComponent('Saved.');}).catch(function(e){msg.textContent='';alert(String(e));});});
+var save=document.getElementById('save');if(save)save.addEventListener('click',function(){var edit=[];rows.forEach(function(tr){var p=tr.getAttribute('data-key').split('|');var e={cardId:p[0],condition:p[1],type:p[2]};var q=tr.querySelector('input.q');if(q)e.quantity=q.value;var c=tr.querySelector('input.cash');if(c)e.cashBuyPrice=c.value;var s=tr.querySelector('input.credit');if(s)e.storeCreditBuyPrice=s.value;edit.push(e);});
+var body={id:ID,action:'edit',edit:edit};var note=document.getElementById('note');if(note)body.note=note.value;var msg=document.getElementById('savemsg');msg.textContent='Saving…';
+post(body,function(j){if(!j.ok){msg.textContent='';alert(j.error||'failed');return;}location.href=SHEET+'?msg='+encodeURIComponent('Saved.');});});
+var add=document.getElementById('addcard');if(add){var sel=document.getElementById('ad-game'),q=document.getElementById('ad-q'),res=document.getElementById('ad-res'),am=document.getElementById('ad-msg');
+fetch('/buylist/api/games').then(function(r){return r.json()}).then(function(j){if(j&&j.games&&j.games.length){sel.innerHTML=j.games.map(function(g){return '<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>';}).join('');}}).catch(function(){});
+function search(){var s=q.value.trim();if(s.length<2){am.textContent='Type at least 2 letters.';return;}am.textContent='Searching…';res.innerHTML='';
+fetch('/buylist/api/search?q='+encodeURIComponent(s)+'&game='+encodeURIComponent(sel.value)).then(function(r){return r.json()}).then(function(j){var hits=(j&&j.hits)||[];am.textContent=hits.length?'':'Nothing found on the buylist for that.';
+res.innerHTML=hits.map(function(h){var offers=[];(h.variants||[]).forEach(function(v){(v.cardBuylistTypes||[]).forEach(function(p){var buying=Number(p.maxPurchaseQuantity)>0&&Number(p.buyPrice)>0;offers.push('<div class="offer'+(buying?'':' off')+'"><span>'+esc(v.variantName)+(p.type&&p.type!=='Normal'?' · '+esc(p.type):'')+'</span><span class="pr">'+(buying?'$'+num(p.buyPrice).toFixed(2)+' / $'+num(p.creditBuyPrice).toFixed(2):'not buying')+'</span>'+(buying?'<span class="max">max '+esc(p.maxPurchaseQuantity)+'</span><input class="q" type="number" min="1" max="999" value="1"><button type="button" class="sm add" data-card=\\''+esc(JSON.stringify({cardId:h.id,cardName:h.cardName,setName:h.setName,game:h.game,type:p.type,condition:v.id,conditionName:v.variantName,imageUrl:h.imageUrl}))+'\\'>Add</button>':'')+'</div>');});});
+return '<div class="hit">'+(h.imageUrl?'<img src="'+esc(h.imageUrl)+'" alt="" loading="lazy">':'')+'<div class="offers"><b>'+esc(h.cardName)+'</b> <span class="muted">['+esc(h.setName)+']</span>'+offers.join('')+'</div></div>';}).join('');}).catch(function(e){am.textContent='Search failed: '+e;});}
+document.getElementById('ad-go').addEventListener('click',search);q.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();search();}});
+res.addEventListener('click',function(e){var b=e.target.closest('button.add');if(!b)return;var card=JSON.parse(b.getAttribute('data-card'));card.quantity=b.parentNode.querySelector('input.q').value;b.disabled=true;b.textContent='Adding…';
+post({id:ID,action:'add',card:card},function(j){if(!j.ok){b.disabled=false;b.textContent='Add';alert(j.error||'failed');return;}location.href=SHEET+'?msg='+encodeURIComponent(j.message||'Added.');});});}
 })();
 </script>` : ""}`;
-  return shell(ref, body, k, true);
+  return shell(ref, body, o, true);
+}
+
+/* ---------------- admin: accounts ---------------- */
+
+export function renderAdmin(o) {
+  const users = o.users || [];
+  const me = o.user;
+  const permChecks = (u, prefix) => PERMS.map((p) => `<label class="chk"><input type="checkbox" name="perm_${p.key}" ${u && u.perms && u.perms[p.key] ? "checked" : ""}> ${esc(p.label)}</label>`).join("");
+  const userRow = (u) => {
+    const self = me && u.email === me.email;
+    return `<tr><td><b>${esc(u.email)}</b><small>${esc(u.name || "")}${u.createdAt ? " · added " + esc(when(u.createdAt)) + (u.createdBy ? " by " + esc(u.createdBy) : "") : ""}</small></td>
+<td><span class="tag tag-${u.role === "admin" ? "admin" : "staff"}">${u.role === "admin" ? "admin" : "staff"}</span>${u.disabled ? ' <span class="tag tag-rejected">disabled</span>' : ""}</td>
+<td>${u.role === "admin" ? '<span class="muted">everything</span>' : PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm">${esc(p.label)}</span>`).join("") || '<span class="muted">view only</span>'}</td>
+<td class="n"><details><summary class="btn" style="cursor:pointer">Edit</summary>
+<form method="post" action="${BASE}/admin/control" style="text-align:left;margin:10px 0;display:block"><input type="hidden" name="action" value="update"><input type="hidden" name="email" value="${esc(u.email)}">
+<div class="act"><input class="text" name="name" value="${esc(u.name || "")}" placeholder="name"><select class="text" name="role" style="flex:0 1 140px" ${self ? "disabled" : ""}><option value="staff" ${u.role !== "admin" ? "selected" : ""}>staff</option><option value="admin" ${u.role === "admin" ? "selected" : ""}>admin</option></select>${self ? '<input type="hidden" name="role" value="admin">' : ""}</div>
+<div style="margin:6px 0">${permChecks(u)}</div><div class="act"><button class="save" type="submit">Save</button></div></form>
+<form method="post" action="${BASE}/admin/control" style="text-align:left;margin:10px 0;display:block"><input type="hidden" name="action" value="password"><input type="hidden" name="email" value="${esc(u.email)}"><div class="act"><input class="text" type="password" name="password" placeholder="new password (8+)" minlength="8" autocomplete="new-password" required><button type="submit">Change password</button></div></form>
+${self ? "" : `<div class="act"><form method="post" action="${BASE}/admin/control"><input type="hidden" name="action" value="${u.disabled ? "enable" : "disable"}"><input type="hidden" name="email" value="${esc(u.email)}"><button type="submit">${u.disabled ? "Enable" : "Disable"}</button></form>
+<form method="post" action="${BASE}/admin/control" onsubmit="return confirm('Delete ${esc(jsStr(u.email))}? They will be signed out and cannot sign in again.')"><input type="hidden" name="action" value="delete"><input type="hidden" name="email" value="${esc(u.email)}"><button class="no" type="submit">Delete</button></form></div>`}
+</details></td></tr>`;
+  };
+  const body = `<h1>Accounts</h1><p class="muted">Who can sign in to 9Pocket and what each account may do. Admins can do everything on a worksheet and manage accounts here; staff get the permissions ticked below.</p>
+${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
+<div class="list"><table class="users"><thead><tr><th>Account</th><th>Role</th><th>Can</th><th></th></tr></thead><tbody>${users.map(userRow).join("")}</tbody></table></div>
+<div class="card"><h3>Add an account</h3>
+<form method="post" action="${BASE}/admin/control" autocomplete="off"><input type="hidden" name="action" value="add">
+<div class="act"><input class="text" type="email" name="email" placeholder="email (their sign-in name)" required autocomplete="off"><input class="text" name="name" placeholder="name" autocomplete="off"><input class="text" type="password" name="password" placeholder="password (8+)" minlength="8" required autocomplete="new-password"><select class="text" name="role" style="flex:0 1 140px"><option value="staff">staff</option><option value="admin">admin</option></select></div>
+<div style="margin:8px 0"><span class="muted">Permissions (staff only; admins have all):</span><br>${permChecks(null)}</div>
+<div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>`;
+  return shell("Accounts", body, o, true);
 }
