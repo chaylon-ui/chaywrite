@@ -36,7 +36,13 @@
       '<aside class="bl__cart">' +
         // Phones: the panel is a bottom sheet and this bar is all that shows
         // until it is tapped (buylist.css, max-width 860px). Hidden on desktop.
-        '<div id="bl-sheetbar" class="bl__sheetbar" role="button" tabindex="0" aria-expanded="false" aria-controls="bl-lines"><span class="bl__sheettext"><b>Your buylist</b><span id="bl-sheetsum" class="bl__sheetsum bl__muted">Empty</span></span><span class="bl__chev" aria-hidden="true">&#9650;</span></div>' +
+        // Owner, 2026-09-20 (phone screenshot, the bar's right end circled):
+        // "This should have Submit buylist and view your buylist details
+        // button". View opens the sheet (the chevron lives in it now);
+        // Submit opens the sheet and runs the same submit as the button
+        // inside it, so the confirm names the payment type chosen there.
+        '<div id="bl-sheetbar" class="bl__sheetbar" role="button" tabindex="0" aria-expanded="false" aria-controls="bl-lines"><span class="bl__sheettext"><b>Your buylist</b><span id="bl-sheetsum" class="bl__sheetsum bl__muted">Empty</span></span>' +
+          '<span class="bl__sheetbtns"><button id="bl-sheetview" type="button" class="bl__btn bl__btn--sm"><span id="bl-sheetviewtxt">View</span> <span class="bl__chev" aria-hidden="true">&#9650;</span></button><button id="bl-sheetsubmit" type="button" class="bl__btn bl__btn--primary bl__btn--sm" disabled>Submit</button></span></div>' +
         '<h2 class="bl__h2">Your buylist <span id="bl-count" class="bl__muted"></span></h2>' +
         '<div id="bl-lines"><p class="bl__muted">Loading your saved list…</p></div>' +
         '<div class="bl__pay"><label><input type="radio" name="bl-pay" value="Cash" checked> Cash</label><label><input type="radio" name="bl-pay" value="Store Credit"> Store credit</label></div>' +
@@ -506,6 +512,7 @@
     $("#bl-tcredit").textContent = money(tcredit);
     $("#bl-sheetsum").textContent = n ? n + (n === 1 ? " card" : " cards") + " · " + money(tcash) + " cash · " + money(tcredit) + " credit" : "Empty — add cards from the results";
     $("#bl-submit").disabled = !cart.length;
+    $("#bl-sheetsubmit").disabled = !cart.length;
     $("#bl-clear").disabled = !cart.length;
   }
 
@@ -515,8 +522,17 @@
     var now = typeof open === "boolean" ? open : !aside.classList.contains("bl__cart--open");
     aside.classList.toggle("bl__cart--open", now);
     bar.setAttribute("aria-expanded", now ? "true" : "false");
+    $("#bl-sheetviewtxt").textContent = now ? "Close" : "View";
   }
   $("#bl-sheetbar").addEventListener("click", function () { toggleSheet(); });
+  // The bar's own buttons: the click must not also toggle the bar.
+  $("#bl-sheetview").addEventListener("click", function (e) { e.stopPropagation(); toggleSheet(); });
+  $("#bl-sheetsubmit").addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (!cart.length) return;
+    toggleSheet(true);                          // the payment choice and the lines are in view behind the confirm
+    $("#bl-submit").click();
+  });
   $("#bl-sheetbar").addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSheet(); }
   });
