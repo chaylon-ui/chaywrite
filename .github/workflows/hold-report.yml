@@ -56,9 +56,19 @@ jobs:
             http*) server="${target%/*}"; topic="${target##*/}" ;;
             *)     server="https://ntfy.sh"; topic="${target#/}" ;;
           esac
-          auth=(); [ -n "$token" ] && auth=(-H "Authorization: Bearer $token")
-          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" \
-            -H 'Title: Hold report: needs a look' -H 'Priority: 4' -H 'Tags: warning' -H "Click: $RUN_URL" \
-            --data-binary "$summary" "$server/$topic")
-          echo "ntfy push: HTTP $code"
+          case "$token" in tk_*) shape="tk_ token" ;; "") shape="none" ;; *:*) shape="user:password" ;; *) shape="other (${#token} chars)" ;; esac
+          echo "server host: $(printf '%s' "$server" | sed 's#https\?://##') · topic length ${#topic} · token: $shape"
+          push() {  # $1 = auth mode: bearer | basic | none
+            local -a auth=()
+            case "$1" in bearer) auth=(-H "Authorization: Bearer $token") ;; basic) auth=(-u "$token") ;; esac
+            curl -sS -o body.txt -w '%{http_code}' --max-time 20 "${auth[@]}" \
+              -H 'Title: Hold report: needs a look' -H 'Priority: 4' -H 'Tags: warning' -H "Click: $RUN_URL" \
+              --data-binary "$summary" "$server/$topic"
+          }
+          code=$(push "$([ -n "$token" ] && { [ "$shape" = "user:password" ] && echo basic || echo bearer; } || echo none)")
+          echo "ntfy push with token: HTTP $code · $(head -c 200 body.txt | tr -d '\n')"
+          if [ -n "$token" ] && { [ "$code" = "401" ] || [ "$code" = "403" ]; }; then
+            code=$(push none)
+            echo "ntfy push WITHOUT the token: HTTP $code · $(head -c 200 body.txt | tr -d '\n')"
+          fi
           exit 1
