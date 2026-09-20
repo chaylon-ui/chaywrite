@@ -8,6 +8,8 @@ name: ntfy-relay
 # publishes it from this runner's IP with the account token, and acks it.
 # Nightly at 22:50 UTC, after the 22:30 UTC pricing run; run it by hand to
 # push a queued test digest right away. Secrets are never printed.
+# 2026-09-20: ntfy.sh refuses the stored token (401) while the topic is
+# public, so a refused publish is retried without the token.
 on:
   schedule:
     - cron: "50 22 * * *"
@@ -63,7 +65,10 @@ jobs:
               print("already sent - nothing to do"); raise SystemExit(0)
           payload = {"topic": name, "title": d.get("title") or "Auto-pricing", "message": d.get("body") or "", "priority": d.get("priority") or 3, "tags": d.get("tags") or [], "click": d.get("click") or worker + "/autoprice"}
           st, body = call("POST", server + "/", json.dumps(payload).encode(), bearer=token)
-          print("POST ntfy ->", st, body[:200] if st != 200 else "ok")
+          print("POST ntfy with token ->", st, body[:200] if st != 200 else "ok")
+          if st in (401, 403):
+              st, body = call("POST", server + "/", json.dumps(payload).encode())
+              print("POST ntfy WITHOUT the token ->", st, body[:200] if st != 200 else "ok")
           if st != 200: raise SystemExit(1)
           st, body = call("POST", worker + "/autoprice/digest.json", json.dumps({"op": "sent", "by": "relay"}).encode(), bearer=token)
           print("ack ->", st)
