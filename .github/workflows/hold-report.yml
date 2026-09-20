@@ -6,6 +6,10 @@ on:
         description: "How many days of the shadow log to check"
         required: false
         default: "7"
+      test_alert:
+        description: "Send the ntfy alert even when the report is clean (to test the push)"
+        required: false
+        default: "false"
   schedule:
     - cron: "0 3 * * *"   # 03:00 UTC = midnight Atlantic, after the day's carts
 jobs:
@@ -32,20 +36,22 @@ jobs:
       # the script failing sends one push to the AUTOPRICE_NTFY topic (the
       # same one the auto-pricer digest and 9Pocket use) with the problem
       # lines and a link to this run, and the run is marked failed so it
-      # also shows red in Actions.
+      # also shows red in Actions. test_alert=true sends the push anyway.
       - name: Alert on ntfy only when the report found a problem
         if: always()
         env:
           OUTCOME: ${{ steps.report.outcome }}
+          TEST_ALERT: ${{ inputs.test_alert || 'false' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           AUTOPRICE_NTFY: ${{ secrets.AUTOPRICE_NTFY }}
           AUTOPRICE_NTFY_TOKEN: ${{ secrets.AUTOPRICE_NTFY_TOKEN }}
         run: |
-          if [ "$OUTCOME" = "success" ] && grep -q 'HOLD-REPORT OK' report.txt 2>/dev/null; then
-            echo "clean - no alert"; exit 0
-          fi
+          clean=false
+          if [ "$OUTCOME" = "success" ] && grep -q 'HOLD-REPORT OK' report.txt 2>/dev/null; then clean=true; fi
+          if [ "$clean" = true ] && [ "$TEST_ALERT" != "true" ]; then echo "clean - no alert"; exit 0; fi
           summary="$(grep -E 'BinderPOS carts:|PROBLEM|MISSED|HOLD-REPORT|Error|error:' report.txt 2>/dev/null | head -12)"
           [ -n "$summary" ] || summary="hold-report did not finish (outcome $OUTCOME)"
+          [ "$clean" = true ] && summary="TEST of the alert push (the report itself was clean)"$'\n'"$summary"
           echo "ALERT:"; printf '%s\n' "$summary"
           # The secrets as the worker reads them (src/autoprice.js trims both):
           # a bare topic on ntfy.sh, or a full https://server/topic URL.
@@ -71,4 +77,5 @@ jobs:
             code=$(push none)
             echo "ntfy push WITHOUT the token: HTTP $code · $(head -c 200 body.txt | tr -d '\n')"
           fi
+          [ "$clean" = true ] && exit 0
           exit 1
