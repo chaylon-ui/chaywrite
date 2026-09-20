@@ -47,16 +47,18 @@ jobs:
           summary="$(grep -E 'BinderPOS carts:|PROBLEM|MISSED|HOLD-REPORT|Error|error:' report.txt 2>/dev/null | head -12)"
           [ -n "$summary" ] || summary="hold-report did not finish (outcome $OUTCOME)"
           echo "ALERT:"; printf '%s\n' "$summary"
-          if [ -z "$AUTOPRICE_NTFY" ]; then echo "AUTOPRICE_NTFY not set - no push sent"; exit 1; fi
-          case "$AUTOPRICE_NTFY" in
-            http*) server="${AUTOPRICE_NTFY%/*}"; topic="${AUTOPRICE_NTFY##*/}" ;;
-            *)     server="https://ntfy.sh"; topic="${AUTOPRICE_NTFY#/}" ;;
+          # The secrets as the worker reads them (src/autoprice.js trims both):
+          # a bare topic on ntfy.sh, or a full https://server/topic URL.
+          target="$(printf '%s' "$AUTOPRICE_NTFY" | tr -d '[:space:]' | sed 's#/*$##')"
+          token="$(printf '%s' "$AUTOPRICE_NTFY_TOKEN" | tr -d '[:space:]')"
+          if [ -z "$target" ]; then echo "AUTOPRICE_NTFY not set - no push sent"; exit 1; fi
+          case "$target" in
+            http*) server="${target%/*}"; topic="${target##*/}" ;;
+            *)     server="https://ntfy.sh"; topic="${target#/}" ;;
           esac
-          auth=(); [ -n "$AUTOPRICE_NTFY_TOKEN" ] && auth=(-H "Authorization: Bearer $AUTOPRICE_NTFY_TOKEN")
-          body="$(node -e '
-            const [topic, summary, click] = process.argv.slice(1);
-            process.stdout.write(JSON.stringify({ topic, title: "Hold report: needs a look", message: summary, priority: 4, tags: ["warning"], click }));
-          ' "$topic" "$summary" "$RUN_URL")"
-          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" -H 'content-type: application/json' -d "$body" "$server/")
+          auth=(); [ -n "$token" ] && auth=(-H "Authorization: Bearer $token")
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" \
+            -H 'Title: Hold report: needs a look' -H 'Priority: 4' -H 'Tags: warning' -H "Click: $RUN_URL" \
+            --data-binary "$summary" "$server/$topic")
           echo "ntfy push: HTTP $code"
           exit 1
