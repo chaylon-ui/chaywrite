@@ -58,6 +58,8 @@
      ap:report     rows of the last run; ap:runs the last 30 summaries */
 
 import { adminGql, throttleWait } from "./price-history.js";
+import { currentUser } from "./stage.js";
+import { apPerms } from "./stage-auth.js";
 
 export const AUTOPRICE_DO = "autoprice";
 export const TAG = "auto-price";
@@ -1173,6 +1175,19 @@ export function parsePrice(v) {
   return Math.round(n * 100) / 100;
 }
 
+// An account's brake (src/stage-auth.js apPerms: maxDrop / maxRaise, in
+// percent of today's price): the move that would break it, or null. No
+// today's price means nothing to measure against, so no limit applies.
+export function overLimit(current, price, limits) {
+  if (!limits || !(current > 0) || !(price > 0)) return null;
+  const raw = ((price - current) / current) * 100;
+  const pct = Math.round(raw * 100) / 100;
+  if (raw < 0 && limits.maxDrop != null && -raw > Number(limits.maxDrop) + 1e-9) return { pct, limit: Number(limits.maxDrop), kind: "drop" };
+  if (raw > 0 && limits.maxRaise != null && raw > Number(limits.maxRaise) + 1e-9) return { pct, limit: Number(limits.maxRaise), kind: "raise" };
+  return null;
+}
+const limitText = (l) => `that is a ${Math.abs(l.pct)}% ${l.kind}; your account may ${l.kind} a price by at most ${l.limit}% (an admin can change that on 9Pocket › Admin)`;
+
 async function publishPrice(cx, b) {
   const pid = String((b && b.id) || "");
   if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
@@ -1182,6 +1197,10 @@ async function publishPrice(cx, b) {
   const row = (rep.rows || []).find((r) => r.id === pid);
   const variantId = String((b && b.variantId) || (row && row.variantId) || "");
   if (!/^gid:\/\/shopify\/ProductVariant\/\d+$/.test(variantId)) return { ok: false, error: "no variant to price: choose one in the row's settings first" };
+  // The account's brake, checked before anything is written.
+  const lim = overLimit(row && row.current, price, b && b.limits);
+  if (lim) return { ok: false, error: limitText(lim), overLimit: lim };
+  const who = String((b && b.who) || "").slice(0, 120);
   try {
     const r = await adminGql(cx, PRICE_SET, { pid, v: [{ id: variantId, price: price.toFixed(2) }] });
     const errs = (r.data.productVariantsBulkUpdate || {}).userErrors || [];
@@ -1203,7 +1222,7 @@ async function publishPrice(cx, b) {
     }
   }
   const from = row && row.current != null ? row.current : null;
-  await recordChange(cx, pid, { at: cx.now(), from, to: price, by: "approved" });
+  await recordChange(cx, pid, { at: cx.now(), from, to: price, by: "approved", who });
   await cx.storage.put("ap:seen:" + pid, { price, at: cx.now() });
   await cx.storage.delete("ap:nope:" + pid);
   if (row) {
@@ -1218,10 +1237,10 @@ async function publishPrice(cx, b) {
     row.settings = { ...(row.settings || {}), anchor: anchored ? String(anchored.price) : (row.settings || {}).anchor };
     row.reason = "published by hand" + (row.edited ? " at your price (suggested " + money2(row.edited) + ")" : "") +
       (anchored ? " · tracking the market from here (" + money2(anchored.price) + " against " + money2(anchored.market) + ")" : "");
-    row.lastChange = { at: cx.now(), from, to: price, by: "approved" };
+    row.lastChange = { at: cx.now(), from, to: price, by: "approved", who };
     await cx.storage.put("ap:report", rep);
   }
-  return { ok: true, id: pid, price, live: true, anchored: anchored ? anchored.price : null };
+  return { ok: true, id: pid, price, from, live: true, anchored: anchored ? anchored.price : null };
 }
 
 // "Keep today's price": the suggestion is remembered as declined so the next
@@ -1363,14 +1382,41 @@ async function setListed(cx, id, on, b) {
 /* ---- DO routes ---- */
 
 export async function statusOf(cx) {
-  const [run, cfg, report, runs, fx] = await Promise.all([cx.storage.get("ap:run"), configOf(cx), cx.storage.get("ap:report"), cx.storage.get("ap:runs"), cx.storage.get("ap:fx")]);
+  const [run, cfg, report, runs, fx, audit] = await Promise.all([cx.storage.get("ap:run"), configOf(cx), cx.storage.get("ap:report"), cx.storage.get("ap:runs"), cx.storage.get("ap:fx"), cx.storage.get("ap:audit")]);
   let alarmAt = null; try { alarmAt = await cx.storage.getAlarm(); } catch {}
   return { ok: true, mode: cfg.mode, config: cfg, tokenConfigured: !!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN), pricecharting: !!(cx.env && cx.env.PRICECHARTING_TOKEN), ntfy: !!ntfyTarget(cx.env && cx.env.AUTOPRICE_NTFY),
     fx, alarmAt, run: run ? { startedAt: run.startedAt, finishedAt: run.finishedAt || null, phase: run.phase, done: !!run.done, ticks: run.ticks, products: run.products.length, priced: run.priced, written: run.written, skipped: run.skipped, errors: run.errors.slice(-8), error: run.error || null, apply: run.apply } : null,
-    lastReportAt: report ? report.at : null, runs: runs || [] };
+    lastReportAt: report ? report.at : null, runs: runs || [], audit: (audit || []).slice(0, 40) };
+}
+
+// Who did what on the page, newest first, for the Activity table: the
+// owner can see which account published or changed what (2026-09-21).
+const AUDITED = { publish: 1, keep: 1, "publish-all": 1, mode: 1, config: 1, run: 1, settings: 1, add: 1, remove: 1 };
+async function audit(cx, b, res) {
+  const action = String((b && b.action) || "");
+  if (!AUDITED[action] || !res || !res.ok) return;
+  const e = { at: cx.now(), who: String((b && b.who) || "").slice(0, 120), action, title: String((b && b.title) || "").slice(0, 120) };
+  if (action === "publish") { e.to = res.price; e.from = res.from == null ? null : res.from; e.anchored = !!res.anchored; }
+  if (action === "keep") e.detail = "kept today's price" + (res.kept != null ? " over " + money2(res.kept) : "");
+  if (action === "publish-all") e.detail = res.published + " published" + (res.failed ? ", " + res.failed + " failed" : "") + (res.overLimit ? ", " + res.overLimit + " over their limit" : "");
+  if (action === "mode") e.detail = "mode → " + res.mode;
+  if (action === "config") e.detail = "page rules saved";
+  if (action === "run") e.detail = "run now";
+  if (action === "settings") e.detail = "per-product settings";
+  if (action === "add") e.detail = "added to the list";
+  if (action === "remove") e.detail = "removed from the list";
+  const list = (await cx.storage.get("ap:audit")) || [];
+  list.unshift(e);
+  await cx.storage.put("ap:audit", list.slice(0, 80));
 }
 
 async function control(cx, b) {
+  const res = await controlAction(cx, b);
+  try { await audit(cx, b, res); } catch (e) { cx.log("autoprice: audit failed: " + msg(e)); }
+  return res;
+}
+
+async function controlAction(cx, b) {
   const cfg = await configOf(cx);
   const action = String((b && b.action) || "");
   if (action === "mode") {
@@ -1395,13 +1441,15 @@ async function control(cx, b) {
     const rep = (await cx.storage.get("ap:report")) || { rows: [] };
     const game = String((b && b.game) || "");
     const queue = (rep.rows || []).filter((r) => r.awaiting && r.suggested > 0 && (!game || r.game === game));
-    let done = 0, failed = 0;
+    let done = 0, failed = 0, over = 0;
     const errors = [];
     for (const r of queue.slice(0, 25)) {
-      const res = await publishPrice(cx, { id: r.id, price: r.suggested, variantId: r.variantId });
-      if (res.ok) done++; else { failed++; if (errors.length < 3) errors.push(r.title + ": " + res.error); }
+      const res = await publishPrice(cx, { id: r.id, price: r.suggested, variantId: r.variantId, limits: b && b.limits, who: b && b.who });
+      if (res.ok) done++;
+      else if (res.overLimit) over++;   // left waiting for someone whose limit allows it
+      else { failed++; if (errors.length < 3) errors.push(r.title + ": " + res.error); }
     }
-    return { ok: true, published: done, failed, left: Math.max(0, queue.length - 25), errors };
+    return { ok: true, published: done, failed, overLimit: over, left: Math.max(0, queue.length - 25), errors };
   }
   if (action === "settings") return saveSettings(cx, b);
   if (action === "add") return setListed(cx, b.id, true, b);
@@ -1513,6 +1561,12 @@ export async function serveAutoprice(request, env, url, staffOk) {
   const cookie = (val, maxAge) => SESSION_COOKIE + "=" + encodeURIComponent(val) + "; Path=/autoprice; Max-Age=" + maxAge + "; HttpOnly; Secure; SameSite=Lax";
 
   if (url.pathname === "/autoprice/logout") return html("", 303, { location: "/autoprice/login", "set-cookie": cookie("", 0) });
+  // Who is asking. A 9Pocket account (src/stage.js sessions) comes first,
+  // with the auto-pricing permissions and limits an admin gave it; the
+  // shared auto-pricing login is the older door and still opens everything.
+  let account = null;
+  try { account = await currentUser(request, env, url.origin); } catch {}
+  const acctAccess = apPerms(account);
   // The relay's door: bearer = AUTOPRICE_NTFY_TOKEN (a secret both the
   // worker and the GitHub workflow hold), never the login session.
   if (url.pathname === "/autoprice/digest.json") {
@@ -1524,7 +1578,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
     return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
   if (url.pathname === "/autoprice/login") {
-    if (request.method !== "POST") return html(renderLogin({ configured }));
+    if (request.method !== "POST") return acctAccess ? html("", 303, { location: "/autoprice" }) : html(renderLogin({ configured, account }));
     let fd; try { fd = await request.formData(); } catch { fd = null; }
     const user = String((fd && fd.get("u")) || "").trim().slice(0, 80), pass = String((fd && fd.get("p")) || "").slice(0, 200);
     const ip = ipOf(request);
@@ -1540,8 +1594,10 @@ export async function serveAutoprice(request, env, url, staffOk) {
     return html("", 303, { location: "/autoprice", "set-cookie": cookie(token, SESSION_TTL_S) });
   }
 
-  const session = await verifySession(secret, cookieOf(request, SESSION_COOKIE));
-  if (!session) {
+  const session = acctAccess ? null : await verifySession(secret, cookieOf(request, SESSION_COOKIE));
+  const access = acctAccess || (session ? { name: session.u === "pin" ? "" : session.u, admin: true, view: true, publish: true, settings: true, config: true, maxDrop: null, maxRaise: null, legacy: true } : null);
+  if (!access) {
+    if (account) return html(renderLogin({ configured, account, error: "Your 9Pocket account (" + account.email + ") has no auto-pricing permission yet. Ask an admin to tick one on 9Pocket › Admin." }), 403);
     if (url.pathname === "/autoprice" && request.method === "GET") return html("", 303, { location: "/autoprice/login" });
     return Response.json({ error: "login required" }, { status: 401, headers: { "cache-control": "no-store" } });
   }
@@ -1556,15 +1612,26 @@ export async function serveAutoprice(request, env, url, staffOk) {
     else { form = true; let fd; try { fd = await request.formData(); } catch { fd = null; } body = {}; if (fd) for (const [a, b] of fd.entries()) body[a] = String(b); }
   }
   if (url.pathname === "/autoprice/control" && request.method === "POST") {
+    // Each action needs one of the account's permissions; the account's
+    // limits and name ride along so the room can refuse an over-limit
+    // publish and record who did what.
+    const need = CONTROL_NEEDS[String(body.action || "")];
+    const keepQ = body.q && body.action !== "add" && body.action !== "remove";
+    const qsBase = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : ""].filter(Boolean);
+    if (need && !access[need]) {
+      const why = "Your account may not do that (" + NEED_LABEL[need] + "). An admin can grant it on 9Pocket › Admin.";
+      if (form) return html("", 303, { location: "/autoprice?" + [...qsBase, "flash=" + encodeURIComponent(why)].join("&") });
+      return Response.json({ ok: false, error: why }, { status: 403, headers: { "cache-control": "no-store" } });
+    }
+    body = { ...body, who: access.name || (access.legacy ? "shared login" : ""), limits: { maxDrop: access.maxDrop, maxRaise: access.maxRaise } };
     const r = await stub.fetch(new Request(url.origin + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
     const text = await r.text();
-    const keepQ = body.q && body.action !== "add" && body.action !== "remove";
     let flash = "";
     if (body.action === "ntfy-test") { try { const j = JSON.parse(text); flash = j.ok ? "Test push sent: " + (j.digest && j.digest.title) : j.relay ? "Direct push refused (" + (j.error || "") + "). Queued for the relay: it goes out from GitHub on the nightly relay run, or now if you run the ntfy-relay workflow." : "Test push failed: " + (j.error || "unknown"); } catch { flash = "Test push: no answer"; } }
     if (body.action === "publish") { try { const j = JSON.parse(text); flash = j.ok ? "Live: " + String(body.title || "that product").slice(0, 60) + " is now $" + Number(j.price).toFixed(2) + (j.anchored ? " and will track the market from there" : "") : "Not published: " + (j.error || "unknown"); } catch { flash = "Publish: no answer"; } }
     if (body.action === "keep") { try { const j = JSON.parse(text); flash = j.ok ? "Kept today's price; that suggestion will not be offered again." : "Keep failed: " + (j.error || "unknown"); } catch { flash = "Keep: no answer"; } }
-    if (body.action === "publish-all") { try { const j = JSON.parse(text); flash = j.ok ? j.published + " price" + (j.published === 1 ? "" : "s") + " published" + (j.failed ? ", " + j.failed + " failed (" + j.errors.join("; ").slice(0, 120) + ")" : "") + (j.left ? ", " + j.left + " still waiting - press again" : "") : "Publish all failed: " + (j.error || "unknown"); } catch { flash = "Publish all: no answer"; } }
-    const qs = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : "", flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
+    if (body.action === "publish-all") { try { const j = JSON.parse(text); flash = j.ok ? j.published + " price" + (j.published === 1 ? "" : "s") + " published" + (j.failed ? ", " + j.failed + " failed (" + j.errors.join("; ").slice(0, 120) + ")" : "") + (j.overLimit ? ", " + j.overLimit + " left waiting: over your limit" : "") + (j.left ? ", " + j.left + " still waiting - press again" : "") : "Publish all failed: " + (j.error || "unknown"); } catch { flash = "Publish all: no answer"; } }
+    const qs = [...qsBase, flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
     if (form) return html("", 303, { location: "/autoprice" + (qs ? "?" + qs : "") });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
@@ -1572,8 +1639,12 @@ export async function serveAutoprice(request, env, url, staffOk) {
   const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
-  return html(renderPage(status, report, { q, game, found, user: session.u, configured, flash }));
+  return html(renderPage(status, report, { q, game, found, user: access.name, perms: access, configured, flash }));
 }
+
+// Which permission each control action needs (src/stage-auth.js AP_PERMS).
+const CONTROL_NEEDS = { publish: "publish", keep: "publish", "publish-all": "publish", settings: "settings", add: "settings", remove: "settings", mode: "config", config: "config", run: "config", "ntfy-test": "config" };
+const NEED_LABEL = { publish: "publish staged prices", settings: "per-product settings, add and remove", config: "page rules, mode and run now" };
 
 function renderLogin(o) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
@@ -1581,7 +1652,8 @@ function renderLogin(o) {
 <form method="post" action="/autoprice/login" autocomplete="on"><h1>Sealed auto-pricing</h1><p>${o.error ? '<span class="err">' + esc(o.error) + "</span> " : ""}${o.configured ? "Sign in with the auto-pricing username and password." : "Username and password are not set up yet (add the AUTOPRICE_USER and AUTOPRICE_PASSWORD repo secrets). Until then: any username, and the showcase admin PIN as the password."}</p>
 <label>Username</label><input name="u" type="text" autocomplete="username" autofocus>
 <label>Password</label><input name="p" type="password" autocomplete="current-password">
-<button>Sign in</button></form></body></html>`;
+<button>Sign in</button>
+<p style="margin:14px 0 0;text-align:center">${o.account ? `Signed in to 9Pocket as ${esc(o.account.email)} · <a href="/9pocket">back to 9Pocket</a>` : `Have a 9Pocket account? <a href="/9pocket/login?next=%2Fautoprice">Sign in with it</a> - it opens what an admin allowed.`}</p></form></body></html>`;
 }
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -1591,6 +1663,11 @@ const money = (n) => n == null ? "" : "$" + Number(n).toFixed(2);
 export function renderPage(s, rep, view) {
   const cfg = s.config || DEFAULT_CONFIG;
   const v = view || {};
+  // What the viewer may do (serveAutoprice: a 9Pocket account's auto-pricing
+  // permissions, or the shared login with everything). Buttons the viewer
+  // cannot press are not drawn; the room refuses them anyway.
+  const P = v.perms || { admin: true, view: true, publish: true, settings: true, config: true, maxDrop: null, maxRaise: null };
+  const limitNote = [P.maxDrop != null ? "drop at most " + P.maxDrop + "%" : "", P.maxRaise != null ? "raise at most " + P.maxRaise + "%" : ""].filter(Boolean).join(", ");
   const all = (rep.rows || []).map((r) => ({ ...r, game: r.game || gameOf(r.type) }));
   const games = [...new Set(all.map((r) => r.game))].sort((a, b) => a.localeCompare(b));
   const rows = all.filter((r) => !v.game || r.game === v.game).sort((a, b) => a.game.localeCompare(b.game) || (a.action === "skip") - (b.action === "skip") || String(a.title).localeCompare(String(b.title)));
@@ -1620,7 +1697,7 @@ export function renderPage(s, rep, view) {
   const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
   // "2026-09-15, 18:05:12" -> "2026-09-15, 18:05" (slice(0,16) cut a digit off the minute).
   const shortWhen = (ms) => esc(when(ms).replace(/:\d\d$/, ""));
-  const change = (c) => c ? `<span title="${esc(when(c.at))}">${shortWhen(c.at)}</span><div class="muted">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto" : "by hand"}</div>` : '<span class="muted">—</span>';
+  const change = (c) => c ? `<span title="${esc(when(c.at))}">${shortWhen(c.at)}</span><div class="muted">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto" : c.who ? "by " + esc(c.who) : "by hand"}</div>` : '<span class="muted">—</span>';
   const admin = (id) => "https://admin.shopify.com/store/most-wanted-ca/products/" + String(id || "").replace(/\D/g, "");
   // Owner: "add our margin to the line for each item based off its price and
   // suggested price" - profit and share of the price, under each of the two.
@@ -1640,6 +1717,7 @@ export function renderPage(s, rep, view) {
     // the TCGplayer id is stored by every run, so it is not a "custom" setting here
     if (r.variantChosen && r.variantTitle) custom.push("variant " + r.variantTitle);
     const summary = custom.length ? custom.join(" · ") : "page defaults";
+    if (!P.settings) return `<div class="muted" title="Per-item settings (your account cannot change them)">⚙ ${esc(summary)}</div>`;
     const vlist = r.variantList || [];
     // Which variant the price is for. Only shown when there is a choice to
     // make; "not chosen" keeps the row in review rather than pricing a
@@ -1678,7 +1756,7 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const pcPicker = (r) => {
     const c = r.pcCandidates || [];
     if (!c.length) return "";
-    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="muted">' + esc(x.volume) + ' sales</span>' : ''}${x.chosen ? '<span class="pill">using</span>' : `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${v.game ? hidden("game", v.game) : ""}<button class="sm">use this</button></form>`}</li>`;
+    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="muted">' + esc(x.volume) + ' sales</span>' : ''}${x.chosen ? '<span class="pill">using</span>' : P.settings ? `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${v.game ? hidden("game", v.game) : ""}<button class="sm">use this</button></form>` : ""}</li>`;
     return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"}><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""}</summary><ul>${c.map(line).join("")}</ul></details>`;
   };
   // The staged change itself: the suggested price in a box the owner can
@@ -1686,6 +1764,9 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   // today's price and remembers the refusal.
   const publishBox = (r) => {
     if (!r.awaiting) return r.kept ? `<div class="muted">kept ${money(r.current)}${r.kept.price ? " over " + money(r.kept.price) : ""}</div>` : "";
+    if (!P.publish) return '<div class="muted">waiting for someone who may publish</div>';
+    const lim = overLimit(r.current, r.suggested, P);
+    if (lim) return `<div class="muted neg" title="${esc(limitText(lim))}">${money(r.suggested)} is a ${Math.abs(lim.pct)}% ${lim.kind}: over your ${lim.limit}% limit, so an admin has to publish it</div>${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep " + money(r.current), "sm")}`;
     return `<div class="pub"><form method="post" action="/autoprice/control" class="pubf">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${v.game ? hidden("game", v.game) : ""}
 <label>$<input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}"></label><button class="go">Publish</button>
 <label class="trk" title="Peg this price to today's market and let it move with the source from here: if the source falls 10%, this price falls 10% too."><input type="checkbox" name="anchor" value="1"${r.anchor ? " checked" : ""}> keep tracking from my price</label></form>
@@ -1718,7 +1799,7 @@ ${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep "
 <td class="c-act" data-l="Action"><span class="pill">${r.awaiting ? "waiting" : esc(r.action)}${r.applied ? " ✓" : ""}</span>${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}<div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>${publishBox(r)}</td>
 <td class="num c-comp" data-l="${esc(COMP.name)}">${r.comp ? `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener">${money(r.comp.price)}</a><div class="muted">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</div>` : `<span class="muted" title="${esc(r.compMiss || "")}">${r.compMiss ? (/^skipped/.test(r.compMiss) ? "skipped" : "not carried") : "—"}</span>`}</td>
 <td class="c-last" data-l="Last change">${change(r.lastChange)}</td>
-<td class="rm">${ctlForm("remove", hidden("id", r.id), "×", "sm x")}</td></tr>`;
+<td class="rm">${P.settings ? ctlForm("remove", hidden("id", r.id), "×", "sm x") : ""}</td></tr>`;
   let groupRows = "", lastGame = null;
   for (const r of rows) {
     if (r.game !== lastGame) { lastGame = r.game; groupRows += `<tr class="grp"><td colspan="8">${esc(r.game)} <span class="muted">· ${rows.filter((x) => x.game === r.game).length}</span></td></tr>`; }
@@ -1726,30 +1807,32 @@ ${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep "
   }
   const run = s.run || {};
   const found = v.found;
-  const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
+  const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : !P.settings ? "" : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.tag.stage{background:#dbeafe;color:#1e3a8a}.stagebox{background:#eff6ff;border:1px solid #60a5fa;color:#1e3a8a;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.stageact{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}button.go{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}button.go:hover{background:#0a6650}tr.awaiting .pill{background:#dbeafe;color:#1e3a8a}.pub{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pubf{display:flex;gap:6px;align-items:center;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 6px}.pubf input{width:92px;font-size:14px;padding:3px 5px}.pubf label{display:flex;gap:2px;align-items:center;font-weight:700;color:#1e3a8a}.anch{margin-top:3px;color:#1e3a8a;font-size:12px;font-weight:600}.trk{display:flex;gap:5px;align-items:center;font-size:12px;color:#4b5563;font-weight:600}.trk input{margin:0}.links{margin-top:3px}.links a{font-size:12px}details.cands{margin-top:4px}details.cands summary{cursor:pointer;font-size:12px;color:#6b7780}details.cands ul{margin:5px 0 0;padding:0;list-style:none;font-size:12px}details.cands li{padding:3px 0;border-top:1px solid #eef2f4;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}details.cands li.on{font-weight:600}details.cands .cn{color:#6b7780}.tabs a .wt{display:inline-block;padding:0 7px;border-radius:99px;background:#dbeafe;color:#1e3a8a;font-size:12px;font-weight:700}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}.how,.setbox{margin:0 0 10px}.how>summary,.setbox>summary{cursor:pointer;list-style:none;display:inline-block;padding:5px 12px;border:1px solid #dde3e7;border-radius:999px;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600}.how>summary::-webkit-details-marker,.setbox>summary::-webkit-details-marker{display:none}.how>summary::after,.setbox>summary::after{content:" \\25be"}.how[open]>summary::after,.setbox[open]>summary::after{content:" \\25b4"}.how>p{margin:8px 0 0}.setwrap{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.setbox{flex:1 1 100%}/* Phones (owner, 2026-09-15: the eight-column report was unreadable on a phone - headings overlapped and values broke one character per line). Each row becomes a card: title across the top, today beside suggested, then what was decided, the market working, the competitor and the last change. Other tables scroll sideways. */@media (max-width:760px){body{padding:12px 12px 28px}.wrap{max-width:none}h1{font-size:19px;line-height:1.3}h2{font-size:15px;margin:18px 0 6px}.tag{display:inline-block;margin:6px 6px 0 0}.ctl form,.box{flex-wrap:wrap;width:100%;box-sizing:border-box}.ctl form label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}input[type=search]{min-width:0;width:100%;font-size:16px}.tabs{border-bottom:0;gap:6px;margin:10px 0 12px}.tabs a{margin:0;padding:7px 12px;border:1px solid #dde3e7;border-radius:999px;font-size:13px}.tabs a.on{background:#1d2327;color:#fff;border-color:#1d2327}.tabs a.on .n{color:rgba(255,255,255,.75)}.tabs a.on .err{color:#fca5a5}.tabs a.on .al{background:rgba(255,255,255,.18);color:#fde68a}.tabs a.warn:not(.on){border-color:#f59e0b}table:not(.rep){display:block;overflow-x:auto;white-space:nowrap}table.rep,table.rep tbody{display:block;table-layout:auto;border:0;background:transparent;border-radius:0;overflow:visible}table.rep thead{display:none}table.rep tr{display:block}table.rep tr.grp{background:transparent;padding:6px 2px 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7780}table.rep tr.grp td{display:block;padding:0;border:0;background:transparent!important}table.rep tr:not(.grp){position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:#fff;border:1px solid #dde3e7;border-radius:12px;margin:0 0 10px;padding:12px 14px}table.rep tr.alerted:not(.grp){border-left:4px solid #f59e0b}table.rep tbody tr:nth-child(even):not(.grp) td{background:transparent}table.rep td{display:block;min-width:0;padding:0;border:0;white-space:normal;text-align:left;background:transparent}table.rep td[data-l]::before{content:attr(data-l);display:block;margin-bottom:1px;color:#6b7780;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}table.rep td.prod{grid-column:1/-1;order:1;padding:0 26px 8px 0;border-bottom:1px solid #eef2f4}table.rep td.c-today{order:2}table.rep td.c-sug{order:3}table.rep td.c-act{grid-column:1/-1;order:4}table.rep td.c-mkt{grid-column:1/-1;order:5;font-size:12.5px}table.rep td.c-comp{order:6}table.rep td.c-last{order:7}table.rep td.rm{position:absolute;top:8px;right:10px;order:8}table.rep tr.alerted td:first-child{box-shadow:none}td.prod .ttl{font-size:15px;line-height:1.3}td.sug b{font-size:16px}.setf label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}.alert ul{padding-left:18px}.pub{gap:8px}.pubf{flex:1 1 100%;justify-content:space-between;padding:6px 8px}.pubf input{width:100%;font-size:16px}.pubf label{flex:1}button.go{padding:8px 14px}.stageact form,.stageact button{width:100%}details.cands li{gap:4px}}</style></head><body><div class="wrap">
+<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.tag.stage{background:#dbeafe;color:#1e3a8a}.stagebox{background:#eff6ff;border:1px solid #60a5fa;color:#1e3a8a;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.stageact{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}button.go{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}button.go:hover{background:#0a6650}tr.awaiting .pill{background:#dbeafe;color:#1e3a8a}.pub{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pubf{display:flex;gap:6px;align-items:center;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 6px}.pubf input{width:92px;font-size:14px;padding:3px 5px}.pubf label{display:flex;gap:2px;align-items:center;font-weight:700;color:#1e3a8a}.anch{margin-top:3px;color:#1e3a8a;font-size:12px;font-weight:600}.trk{display:flex;gap:5px;align-items:center;font-size:12px;color:#4b5563;font-weight:600}.trk input{margin:0}.links{margin-top:3px}.links a{font-size:12px}details.cands{margin-top:4px}details.cands summary{cursor:pointer;font-size:12px;color:#6b7780}details.cands ul{margin:5px 0 0;padding:0;list-style:none;font-size:12px}details.cands li{padding:3px 0;border-top:1px solid #eef2f4;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}details.cands li.on{font-weight:600}details.cands .cn{color:#6b7780}.tabs a .wt{display:inline-block;padding:0 7px;border-radius:99px;background:#dbeafe;color:#1e3a8a;font-size:12px;font-weight:700}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}.flash.bad{background:#fee2e2;border-color:#dc2626;color:#7f1d1d}.who{margin:4px 0 10px;font-size:13px;color:#4b5563}.muted.neg{color:#b91c1c;font-weight:600}button.lnk{border:0;background:transparent;color:#0d7a5f;font:inherit;padding:0;cursor:pointer;text-decoration:underline}.ctl form.inl{display:inline;border:0;background:transparent;padding:0}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}.how,.setbox{margin:0 0 10px}.how>summary,.setbox>summary{cursor:pointer;list-style:none;display:inline-block;padding:5px 12px;border:1px solid #dde3e7;border-radius:999px;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600}.how>summary::-webkit-details-marker,.setbox>summary::-webkit-details-marker{display:none}.how>summary::after,.setbox>summary::after{content:" \\25be"}.how[open]>summary::after,.setbox[open]>summary::after{content:" \\25b4"}.how>p{margin:8px 0 0}.setwrap{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.setbox{flex:1 1 100%}/* Phones (owner, 2026-09-15: the eight-column report was unreadable on a phone - headings overlapped and values broke one character per line). Each row becomes a card: title across the top, today beside suggested, then what was decided, the market working, the competitor and the last change. Other tables scroll sideways. */@media (max-width:760px){body{padding:12px 12px 28px}.wrap{max-width:none}h1{font-size:19px;line-height:1.3}h2{font-size:15px;margin:18px 0 6px}.tag{display:inline-block;margin:6px 6px 0 0}.ctl form,.box{flex-wrap:wrap;width:100%;box-sizing:border-box}.ctl form label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}input[type=search]{min-width:0;width:100%;font-size:16px}.tabs{border-bottom:0;gap:6px;margin:10px 0 12px}.tabs a{margin:0;padding:7px 12px;border:1px solid #dde3e7;border-radius:999px;font-size:13px}.tabs a.on{background:#1d2327;color:#fff;border-color:#1d2327}.tabs a.on .n{color:rgba(255,255,255,.75)}.tabs a.on .err{color:#fca5a5}.tabs a.on .al{background:rgba(255,255,255,.18);color:#fde68a}.tabs a.warn:not(.on){border-color:#f59e0b}table:not(.rep){display:block;overflow-x:auto;white-space:nowrap}table.rep,table.rep tbody{display:block;table-layout:auto;border:0;background:transparent;border-radius:0;overflow:visible}table.rep thead{display:none}table.rep tr{display:block}table.rep tr.grp{background:transparent;padding:6px 2px 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7780}table.rep tr.grp td{display:block;padding:0;border:0;background:transparent!important}table.rep tr:not(.grp){position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:#fff;border:1px solid #dde3e7;border-radius:12px;margin:0 0 10px;padding:12px 14px}table.rep tr.alerted:not(.grp){border-left:4px solid #f59e0b}table.rep tbody tr:nth-child(even):not(.grp) td{background:transparent}table.rep td{display:block;min-width:0;padding:0;border:0;white-space:normal;text-align:left;background:transparent}table.rep td[data-l]::before{content:attr(data-l);display:block;margin-bottom:1px;color:#6b7780;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}table.rep td.prod{grid-column:1/-1;order:1;padding:0 26px 8px 0;border-bottom:1px solid #eef2f4}table.rep td.c-today{order:2}table.rep td.c-sug{order:3}table.rep td.c-act{grid-column:1/-1;order:4}table.rep td.c-mkt{grid-column:1/-1;order:5;font-size:12.5px}table.rep td.c-comp{order:6}table.rep td.c-last{order:7}table.rep td.rm{position:absolute;top:8px;right:10px;order:8}table.rep tr.alerted td:first-child{box-shadow:none}td.prod .ttl{font-size:15px;line-height:1.3}td.sug b{font-size:16px}.setf label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}.alert ul{padding-left:18px}.pub{gap:8px}.pubf{flex:1 1 100%;justify-content:space-between;padding:6px 8px}.pubf input{width:100%;font-size:16px}.pubf label{flex:1}button.go{padding:8px 14px}.stageact form,.stageact button{width:100%}details.cands li{gap:4px}}</style></head><body><div class="wrap">
 <h1>Sealed auto-pricing <span class="tag ${esc(s.mode)}">${esc(MODE_LABEL[s.mode] || s.mode)}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
 <details class="how"><summary>How this works</summary><p class="muted"><b>Staged</b> is the safe mode: a run works out every price, writes nothing, and parks each change here with its number in a box — correct it, then Publish, and only then does it reach the shop. <b>Keep</b> leaves today's price and that suggestion is not offered again until it moves. <b>Apply</b> writes prices itself; <b>shadow</b> writes nothing at all. Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority; when ntfy.sh refuses the worker (free plan, shared IP) the GitHub relay sends it at 22:50 UTC" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}.</p></details>
-${v.flash ? `<p class="flash">${esc(v.flash)}</p>` : ""}
-<h2>Add products</h2>
+${v.flash ? `<p class="flash${/may not|Not published|over your limit|failed/i.test(v.flash) ? " bad" : ""}">${esc(v.flash)}</p>` : ""}
+${v.perms && !P.legacy ? `<p class="who">Signed in as <b>${esc(P.name || P.email || "")}</b>${P.admin ? " · admin: everything" : " · may " + [P.publish ? "publish" : "", P.settings ? "change product settings" : "", P.config ? "change page rules" : ""].filter(Boolean).join(", ").replace(/^$/, "view only") + (limitNote ? " · " + limitNote : "")}${P.admin ? ' · <a href="/9pocket/admin">accounts and permissions</a>' : ""}</p>` : ""}
+${P.settings ? `<h2>Add products</h2>
 <form method="get" action="/autoprice" class="box">${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
-${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (in APPLY mode that writes the prices now, not at 7:30 pm); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}
+${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (in APPLY mode that writes the prices now, not at 7:30 pm); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}` : ""}
 <h2>Controls</h2>
 <div class="ctl">
-${ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : s.mode === "stage" ? "queues changes for you" : "shadow") + ")")}
-<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product itself, with nothing waiting for you.')">${hidden("action", "mode")}<label title="Staged is the safe middle: the run works out every price and parks it here until you publish it.">Mode <select name="mode"><option value="stage"${s.mode === "stage" ? " selected" : ""}>staged — I publish each change</option><option value="shadow"${s.mode === "shadow" ? " selected" : ""}>shadow — report only</option><option value="apply"${s.mode === "apply" ? " selected" : ""}>apply — write prices automatically</option></select></label><button>Save mode</button></form>
+${P.config ? ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : s.mode === "stage" ? "queues changes for you" : "shadow") + ")") : `<span class="box muted">Mode: ${esc(MODE_LABEL[s.mode] || s.mode)} · runs nightly at 19:30 Atlantic</span>`}
+${P.config ? `<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product itself, with nothing waiting for you.')">${hidden("action", "mode")}<label title="Staged is the safe middle: the run works out every price and parks it here until you publish it.">Mode <select name="mode"><option value="stage"${s.mode === "stage" ? " selected" : ""}>staged — I publish each change</option><option value="shadow"${s.mode === "shadow" ? " selected" : ""}>shadow — report only</option><option value="apply"${s.mode === "apply" ? " selected" : ""}>apply — write prices automatically</option></select></label><button>Save mode</button></form>
 <details class="setbox"><summary>Settings</summary><div class="setwrap"><form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="Follow: 401 Games' in-stock price (plus this percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged at the top of the report. Hold: the TCGplayer price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><label title="Price moves of at least this percent are flagged first in the ntfy digest and lift it to high priority. 0 = never flag.">Flag moves of <input type="number" step="1" name="alertPct" value="${esc(cfg.alertPct == null ? 10 : cfg.alertPct)}"> % or more</label><label title="A graded card whose PriceCharting entry has fewer recorded sales than this is flagged: their grade ladder for a thinly traded card is estimated from the ungraded price, not from sold graded copies. 0 = never flag.">Flag graded cards under <input type="number" step="1" name="minSales" value="${esc(cfg.minSales == null ? 25 : cfg.minSales)}"> recorded sales</label><button>Save</button></form>
-${s.ntfy ? ctlForm("ntfy-test", "", "Send test push") : ""}</div></details>
-<a href="/autoprice">refresh</a> · <a href="/autoprice/report.json">json</a> · <a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>
+${s.ntfy ? ctlForm("ntfy-test", "", "Send test push") : ""}</div></details>` : ""}
+<a href="/autoprice">refresh</a> · <a href="/autoprice/report.json">json</a> · ${v.perms && !P.legacy ? `<a href="/9pocket">9Pocket</a> · <form method="post" action="/9pocket/logout" class="inl"><button class="lnk">sign out${v.user ? " (" + esc(v.user) + ")" : ""}</button></form>` : `<a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>`}
 </div>
 <p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
 <h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
-${waiting.length ? `<div class="stagebox"><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting for you</b> — none of them is live. Each row below has its suggested price in a box: correct it if the sources got it wrong, then Publish.<div class="stageact">${ctlForm("publish-all", "", "Publish all " + waiting.length + " at the suggested price", "go")}<span class="muted">${v.game ? esc(v.game) + " tab" : "every game"} · up to 25 a press</span></div></div>` : ""}
+${waiting.length ? `<div class="stagebox"><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting${P.publish ? " for you" : ""}</b> — none of them is live. ${P.publish ? `Each row below has its suggested price in a box: correct it if the sources got it wrong, then Publish.<div class="stageact">${ctlForm("publish-all", "", "Publish all " + waiting.length + " at the suggested price", "go")}<span class="muted">${v.game ? esc(v.game) + " tab" : "every game"} · up to 25 a press${limitNote ? " · moves over your limit (" + esc(limitNote) + ") are left waiting" : ""}</span></div>` : "Your account cannot publish; someone with that permission will."}</div>` : ""}
 ${thin.length ? `<div class="alert"><b>⚠ ${thin.length} graded card${thin.length === 1 ? "" : "s"} priced from a PriceCharting estimate</b> — for a thinly traded card they model the grades off the ungraded price instead of sold graded copies, so treat these as a starting point and check the sold listings:<ul>${thin.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.suggested != null ? " · suggested " + money(r.suggested) : ""} · <a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a></li>`).join("")}</ul></div>` : ""}
 ${alerted.length ? `<div class="alert"><b>⚠ ${alerted.length} product${alerted.length === 1 ? "" : "s"} set to follow ${esc(COMP.name)} ${alerted.length === 1 ? "is" : "are"} priced from TCGplayer instead</b> (out of stock or not listed there):<ul>${alerted.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.action === "skip" ? " · <b>skipped: " + esc(r.reason) + "</b>" : r.suggested != null ? " · now " + money(r.current) + " → " + money(r.suggested) : ""}</li>`).join("")}</ul></div>` : ""}
 <div class="tabs">${tab(null, "All", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</div>
 <table class="rep"><thead><tr><th>Product</th><th>Today</th><th>Market</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
+${(s.audit || []).length ? `<h2>Activity</h2><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Product</th></tr></thead><tbody>${s.audit.map((e) => `<tr><td>${shortWhen(e.at)}</td><td>${esc(e.who || "—")}</td><td>${e.action === "publish" ? "published " + (e.from != null ? money(e.from) + " → " : "") + money(e.to) + (e.anchored ? " (tracking from there)" : "") : esc(e.detail || e.action)}</td><td>${esc(e.title || "")}</td></tr>`).join("")}</tbody></table>` : ""}
 <h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>ntfy</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}${r.nightly ? "" : ' <span class="muted">manual</span>'}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc(r.notify || "—")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">none</td></tr>'}</tbody></table>
 </div></body></html>`;
 }

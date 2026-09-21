@@ -31,6 +31,26 @@ export const PERMS = [
   { key: "email", label: "Send the customer email" },
 ];
 
+// The sealed auto-pricer (/autoprice) is opened by the same accounts.
+// Owner, 2026-09-21: "create users with permissions like being able to
+// approve auto changes and limiting the percentage they can drop a price".
+// Any auto-pricing permission opens the page read-only; each one below
+// unlocks a set of actions. Admins have all of them and no limits.
+export const AP_PERMS = [
+  { key: "ap_view", label: "Open the auto-pricing page (read only)" },
+  { key: "ap_publish", label: "Publish staged prices (approve auto changes) and keep" },
+  { key: "ap_settings", label: "Per-product settings; add and remove products" },
+  { key: "ap_config", label: "Page rules, mode, run now, test push" },
+];
+export const ALL_PERMS = [...PERMS, ...AP_PERMS];
+
+// Per-account brakes on what a publish may do to a price, in percent of
+// today's price. Blank means no limit. Admins are never limited.
+export const LIMITS = [
+  { key: "apMaxDropPct", label: "Biggest price drop they may publish", max: 100 },
+  { key: "apMaxRaisePct", label: "Biggest price raise they may publish", max: 1000 },
+];
+
 export const normEmail = (e) => String(e || "").trim().toLowerCase().slice(0, 160);
 export const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normEmail(e));
 
@@ -94,9 +114,36 @@ export function can(user, perm) {
 // a JSON list/object.
 export function permsFrom(f) {
   const out = {};
-  for (const p of PERMS) {
+  for (const p of ALL_PERMS) {
     const v = f && (f["perm_" + p.key] != null ? f["perm_" + p.key] : (Array.isArray(f.perms) ? f.perms.includes(p.key) : f.perms && f.perms[p.key]));
     out[p.key] = v === true || v === "on" || v === "1" || v === "true";
   }
   return out;
+}
+
+// The limits object from a form's number fields (apMaxDropPct=10 ...) or a
+// JSON object; blank, missing or nonsense -> null (no limit).
+export function limitsFrom(f) {
+  const out = {};
+  const src = f && f.limits && typeof f.limits === "object" ? f.limits : f || {};
+  for (const l of LIMITS) {
+    const raw = src[l.key];
+    const n = raw === "" || raw == null ? NaN : Number(raw);
+    out[l.key] = Number.isFinite(n) && n >= 0 ? Math.min(l.max, Math.round(n * 10) / 10) : null;
+  }
+  return out;
+}
+
+// What an account may do on the auto-pricer, for src/autoprice.js: null when
+// it may not even open the page. Admins get everything and no limits.
+export function apPerms(user) {
+  if (!user || user.disabled) return null;
+  const admin = user.role === "admin";
+  const has = (k) => admin || !!(user.perms && user.perms[k]);
+  const lim = admin ? {} : limitsFrom(user.limits || {});
+  const publish = has("ap_publish"), settings = has("ap_settings"), config = has("ap_config");
+  const view = has("ap_view") || publish || settings || config;
+  if (!view) return null;
+  return { name: user.name || user.email, email: user.email, admin, view, publish, settings, config,
+    maxDrop: lim.apMaxDropPct == null ? null : lim.apMaxDropPct, maxRaise: lim.apMaxRaisePct == null ? null : lim.apMaxRaisePct };
 }

@@ -159,8 +159,13 @@ test("the staff pages: list rows link to worksheets; the worksheet's controls fo
   const setup = renderSetup({ k: "pin", email: "chaylon@exorgames.com", err: "" });
   assert.ok(setup.includes('value="chaylon@exorgames.com"') && setup.includes('name="password2"') && setup.includes('value="pin"'));
   assert.ok(!renderSetup({ k: "", noPin: true, err: "x" }).includes('name="password"'));
-  const admin = renderAdmin({ ...o, users: [ADMIN, { ...VIEWER, perms: { edit: true } }] });
+  const admin = renderAdmin({ ...o, users: [ADMIN, { ...VIEWER, perms: { edit: true, ap_publish: true }, limits: { apMaxDropPct: 10 } }] });
   assert.ok(admin.includes("chaylon@exorgames.com") && admin.includes("v@exorgames.com") && admin.includes("Change quantities and notes") && admin.includes('value="add"'));
+  // the auto-pricing group: its checkboxes, the two limit fields with the saved value, and the chips
+  assert.ok(admin.includes('name="perm_ap_publish" checked') && admin.includes('name="perm_ap_config" >'));
+  assert.ok(admin.includes('name="apMaxDropPct" min="0" max="100" step="0.5" value="10"') && admin.includes('name="apMaxRaisePct" min="0" max="1000" step="0.5" value=""'));
+  assert.ok(admin.includes("drop ≤ 10%") && admin.includes('class="perm ap"') && admin.includes('href="/autoprice"'));
+  assert.ok(!list.includes('href="/autoprice"') || ADMIN.role === "admin");   // the bar links the auto-pricer for accounts that may open it
   assert.ok(renderDenied({ user: VIEWER }).includes("Admins only"));
 });
 

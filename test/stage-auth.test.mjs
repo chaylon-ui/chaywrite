@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, normEmail, validEmail, COOKIE } from "../src/stage-auth.js";
+import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, apPerms, normEmail, validEmail, COOKIE } from "../src/stage-auth.js";
 
 test("a password verifies against its own hash and nothing else; the hash is never the password", async () => {
   const h = await hashPassword("correct horse battery");
@@ -42,9 +42,29 @@ test("public users carry no hash; admins can do everything, staff only what they
 });
 
 test("permissions come from form checkboxes or a list", () => {
-  assert.deepEqual(permsFrom({ perm_edit: "on", perm_prices: "on" }), { edit: true, prices: true, add: false, approve: false, email: false });
-  assert.deepEqual(permsFrom({ perms: ["add", "email"] }), { edit: false, prices: false, add: true, approve: false, email: true });
-  assert.deepEqual(permsFrom({}), { edit: false, prices: false, add: false, approve: false, email: false });
+  const none = { edit: false, prices: false, add: false, approve: false, email: false, ap_view: false, ap_publish: false, ap_settings: false, ap_config: false };
+  assert.deepEqual(permsFrom({ perm_edit: "on", perm_prices: "on" }), { ...none, edit: true, prices: true });
+  assert.deepEqual(permsFrom({ perms: ["add", "email", "ap_publish"] }), { ...none, add: true, email: true, ap_publish: true });
+  assert.deepEqual(permsFrom({}), none);
+});
+
+test("auto-pricing limits: percent fields, blank or nonsense means no limit, clamped", () => {
+  assert.deepEqual(limitsFrom({ apMaxDropPct: "10", apMaxRaisePct: "" }), { apMaxDropPct: 10, apMaxRaisePct: null });
+  assert.deepEqual(limitsFrom({ apMaxDropPct: "abc", apMaxRaisePct: "-5" }), { apMaxDropPct: null, apMaxRaisePct: null });
+  assert.deepEqual(limitsFrom({ apMaxDropPct: "250", apMaxRaisePct: "12.34" }), { apMaxDropPct: 100, apMaxRaisePct: 12.3 });
+  assert.deepEqual(limitsFrom({ limits: { apMaxDropPct: 7.5 } }), { apMaxDropPct: 7.5, apMaxRaisePct: null });
+  assert.deepEqual(limitsFrom(null), { apMaxDropPct: null, apMaxRaisePct: null });
+});
+
+test("what an account may do on the auto-pricer: admins everything and unlimited; staff by permission, with their brakes; nothing means no entry", () => {
+  const admin = apPerms({ email: "a@x.test", name: "Ada", role: "admin", limits: { apMaxDropPct: 5 } });
+  assert.deepEqual(admin, { name: "Ada", email: "a@x.test", admin: true, view: true, publish: true, settings: true, config: true, maxDrop: null, maxRaise: null });
+  const staff = apPerms({ email: "s@x.test", role: "staff", perms: { ap_publish: true }, limits: { apMaxDropPct: 10, apMaxRaisePct: null } });
+  assert.deepEqual(staff, { name: "s@x.test", email: "s@x.test", admin: false, view: true, publish: true, settings: false, config: false, maxDrop: 10, maxRaise: null });
+  assert.equal(apPerms({ email: "v@x.test", role: "staff", perms: { edit: true, prices: true } }), null);   // buylist-only account: no entry
+  assert.equal(apPerms({ email: "d@x.test", role: "admin", disabled: true }), null);
+  assert.equal(apPerms(null), null);
+  assert.equal(apPerms({ email: "r@x.test", role: "staff", perms: { ap_view: true } }).publish, false);
 });
 
 test("emails are normalised and checked", () => {

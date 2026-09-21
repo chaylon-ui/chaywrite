@@ -17,7 +17,7 @@
    Markup only here; every decision is made in stage.js. What a page shows
    follows the signed-in account's permissions (src/stage-auth.js can()). */
 
-import { PERMS, can } from "./stage-auth.js";
+import { PERMS, AP_PERMS, LIMITS, can, apPerms } from "./stage-auth.js";
 
 export const BASE = "/9pocket";
 export const BRAND = "9Pocket by Exor";
@@ -56,11 +56,11 @@ input.text,select.text{flex:1 1 240px;padding:8px 10px;border:1px solid #cbd3d9;
 .ev{list-style:none;padding:0;margin:0}.ev li{padding:4px 0;border-top:1px solid #eef2f4;font-size:13px}.ev li:first-child{border-top:0}
 .hit{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid #eef2f4}.hit img{width:56px;border-radius:4px;background:#eef2f4}.hit .offers{flex:1}.offer{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:3px 0;font-size:13px}.offer .pr{font-weight:600;min-width:130px}.offer .max{color:#6b7780}.offer.off{opacity:.55}
 form.login{max-width:400px;margin:60px auto;background:#fff;border:1px solid #dde3e7;border-radius:12px;padding:24px}form.login input{width:100%;padding:9px 10px;border:1px solid #cbd3d9;border-radius:8px;margin:6px 0 12px;font:inherit}form.login label{font-size:13px;color:#374151;font-weight:600}
-.users td small{display:block;color:#6b7780}.users form{display:inline}.perm{display:inline-block;padding:1px 7px;border-radius:99px;background:#eef2f4;font-size:11px;margin:1px 3px 1px 0}
+.users td small{display:block;color:#6b7780}.users form{display:inline}.perm{display:inline-block;padding:1px 7px;border-radius:99px;background:#eef2f4;font-size:11px;margin:1px 3px 1px 0}.perm.ap{background:#dbeafe;color:#1e3a8a}.perm.lim{background:#fef3c7;color:#78350f}.pg{margin:6px 0;padding:8px 10px;background:#f8fafb;border-radius:8px}.pg b{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#374151}.pg input.p{width:70px;text-align:right}
 @media (max-width:720px){.wrap{padding:12px}td,th{padding:6px}input.p{width:72px}}`;
 
 const shell = (title, body, o, back) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>
-<div class="bar">${back ? `<a class="back" href="${BASE}">← Back to 9Pocket</a>` : ""}<a class="brand" href="${BASE}">${BRAND}<small>buylists</small></a><span class="sp"></span><span class="links">${o && o.user ? `<span class="who">${esc(o.user.name || o.user.email)}${o.user.role === "admin" ? " · admin" : ""}</span>${o.user.role === "admin" ? `<a href="${BASE}/admin">Admin</a>` : ""}` : ""}<a href="/portal/buylists">BinderPOS's list</a>${o && o.user ? `<form method="post" action="${BASE}/logout"><button type="submit">Sign out</button></form>` : ""}</span></div>
+<div class="bar">${back ? `<a class="back" href="${BASE}">← Back to 9Pocket</a>` : ""}<a class="brand" href="${BASE}">${BRAND}<small>buylists</small></a><span class="sp"></span><span class="links">${o && o.user ? `<span class="who">${esc(o.user.name || o.user.email)}${o.user.role === "admin" ? " · admin" : ""}</span>${o.user.role === "admin" ? `<a href="${BASE}/admin">Admin</a>` : ""}${apPerms(o.user) ? `<a href="/autoprice">Auto-pricing</a>` : ""}` : ""}<a href="/portal/buylists">BinderPOS's list</a>${o && o.user ? `<form method="post" action="${BASE}/logout"><button type="submit">Sign out</button></form>` : ""}</span></div>
 <div class="wrap">${body}</div></body></html>`;
 
 const plain = (title, inner) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>${inner}</body></html>`;
@@ -207,12 +207,16 @@ post({id:ID,action:'add',card:card},function(j){if(!j.ok){b.disabled=false;b.tex
 export function renderAdmin(o) {
   const users = o.users || [];
   const me = o.user;
-  const permChecks = (u, prefix) => PERMS.map((p) => `<label class="chk"><input type="checkbox" name="perm_${p.key}" ${u && u.perms && u.perms[p.key] ? "checked" : ""}> ${esc(p.label)}</label>`).join("");
+  const checks = (list, u) => list.map((p) => `<label class="chk"><input type="checkbox" name="perm_${p.key}" ${u && u.perms && u.perms[p.key] ? "checked" : ""}> ${esc(p.label)}</label>`).join("");
+  const limitFields = (u) => LIMITS.map((l) => { const val = u && u.limits && u.limits[l.key] != null ? u.limits[l.key] : ""; return `<label class="chk">${esc(l.label)} <input type="number" class="p" name="${l.key}" min="0" max="${l.max}" step="0.5" value="${esc(val)}" placeholder="no limit"> %</label>`; }).join("");
+  // Two groups: the buylist worksheet, then the auto-pricer with its brakes.
+  const permChecks = (u) => `<div class="pg"><b>9Pocket buylists</b><br>${checks(PERMS, u)}</div><div class="pg"><b>Auto-pricing</b> <span class="muted">(any of these opens /autoprice)</span><br>${checks(AP_PERMS, u)}<br>${limitFields(u)}<span class="muted">Limits are in percent of today's price; blank = no limit. Admins are never limited.</span></div>`;
+  const limitChips = (u) => LIMITS.filter((l) => u.limits && u.limits[l.key] != null).map((l) => `<span class="perm lim">${l.key === "apMaxDropPct" ? "drop" : "raise"} ≤ ${esc(u.limits[l.key])}%</span>`).join("");
   const userRow = (u) => {
     const self = me && u.email === me.email;
     return `<tr><td><b>${esc(u.email)}</b><small>${esc(u.name || "")}${u.createdAt ? " · added " + esc(when(u.createdAt)) + (u.createdBy ? " by " + esc(u.createdBy) : "") : ""}</small></td>
 <td><span class="tag tag-${u.role === "admin" ? "admin" : "staff"}">${u.role === "admin" ? "admin" : "staff"}</span>${u.disabled ? ' <span class="tag tag-rejected">disabled</span>' : ""}</td>
-<td>${u.role === "admin" ? '<span class="muted">everything</span>' : PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm">${esc(p.label)}</span>`).join("") || '<span class="muted">view only</span>'}</td>
+<td>${u.role === "admin" ? '<span class="muted">everything</span>' : (PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm">${esc(p.label)}</span>`).join("") || '<span class="muted">buylists: view only</span>') + (AP_PERMS.some((p) => u.perms && u.perms[p.key]) ? "<br>" + AP_PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm ap">${esc(p.label)}</span>`).join("") + limitChips(u) : "")}</td>
 <td class="n"><details><summary class="btn" style="cursor:pointer">Edit</summary>
 <form method="post" action="${BASE}/admin/control" style="text-align:left;margin:10px 0;display:block"><input type="hidden" name="action" value="update"><input type="hidden" name="email" value="${esc(u.email)}">
 <div class="act"><input class="text" name="name" value="${esc(u.name || "")}" placeholder="name"><select class="text" name="role" style="flex:0 1 140px" ${self ? "disabled" : ""}><option value="staff" ${u.role !== "admin" ? "selected" : ""}>staff</option><option value="admin" ${u.role === "admin" ? "selected" : ""}>admin</option></select>${self ? '<input type="hidden" name="role" value="admin">' : ""}</div>
@@ -222,13 +226,13 @@ ${self ? "" : `<div class="act"><form method="post" action="${BASE}/admin/contro
 <form method="post" action="${BASE}/admin/control" onsubmit="return confirm('Delete ${esc(jsStr(u.email))}? They will be signed out and cannot sign in again.')"><input type="hidden" name="action" value="delete"><input type="hidden" name="email" value="${esc(u.email)}"><button class="no" type="submit">Delete</button></form></div>`}
 </details></td></tr>`;
   };
-  const body = `<h1>Accounts</h1><p class="muted">Who can sign in to 9Pocket and what each account may do. Admins can do everything on a worksheet and manage accounts here; staff get the permissions ticked below.</p>
+  const body = `<h1>Accounts</h1><p class="muted">Who can sign in to 9Pocket and the <a href="/autoprice">auto-pricer</a>, and what each account may do. Admins can do everything and manage accounts here; staff get the permissions ticked below, and on the auto-pricer they may only publish price moves inside their limits.</p>
 ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
 <div class="list"><table class="users"><thead><tr><th>Account</th><th>Role</th><th>Can</th><th></th></tr></thead><tbody>${users.map(userRow).join("")}</tbody></table></div>
 <div class="card"><h3>Add an account</h3>
 <form method="post" action="${BASE}/admin/control" autocomplete="off"><input type="hidden" name="action" value="add">
 <div class="act"><input class="text" type="email" name="email" placeholder="email (their sign-in name)" required autocomplete="off"><input class="text" name="name" placeholder="name" autocomplete="off"><input class="text" type="password" name="password" placeholder="password (8+)" minlength="8" required autocomplete="new-password"><select class="text" name="role" style="flex:0 1 140px"><option value="staff">staff</option><option value="admin">admin</option></select></div>
-<div style="margin:8px 0"><span class="muted">Permissions (staff only; admins have all):</span><br>${permChecks(null)}</div>
+<div style="margin:8px 0"><span class="muted">Permissions (staff only; admins have all):</span>${permChecks(null)}</div>
 <div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>`;
   return shell("Accounts", body, o, true);
 }

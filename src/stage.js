@@ -56,7 +56,7 @@ import { repriceCards, submitToBinderPos, cleanCards } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, safeImage } from "./stage-ui.js";
-import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
+import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
 export { safeImage };
 
 export const STAGE_DO = "buylist-stage";
@@ -510,6 +510,57 @@ async function notifyStaff(env, url, s) {
   return ntfyPublish(env, { title: "9Pocket: buylist to review", message: body, priority: 3, tags: ["inbox_tray"], click: url.origin + BASE + "/b/" + encodeURIComponent(s.id) });
 }
 
+/* ---- accounts, worker side ---- */
+
+async function usersExist(env, origin) {
+  const j = await doCall(env, origin, "/_stage/users");
+  return !!(j.ok && j.users.length);
+}
+
+// The signed-in account for a request (its cookie's session), or null. Also
+// used by the auto-pricer (src/autoprice.js), which reads the account's
+// auto-pricing permissions from it.
+export async function currentUser(request, env, origin) {
+  if (!env || !env.ROOM) return null;
+  const t = parseCookies(request)[COOKIE] || "";
+  if (!/^[0-9a-f]{64}$/.test(t)) return null;
+  const s = await doCall(env, origin, "/_stage/session?token=" + t);
+  if (!s.ok) return null;
+  const u = await doCall(env, origin, "/_stage/user?email=" + encodeURIComponent(s.email));
+  if (!u.ok || !u.user || u.user.disabled) return null;
+  return publicUser(u.user);
+}
+
+async function startSession(env, origin, email) {
+  const token = newToken();
+  await doCall(env, origin, "/_stage/session/put", { token, email });
+  return token;
+}
+
+// Email + password -> a session token, or the reason not.
+async function login(env, origin, email, password) {
+  email = normEmail(email);
+  if (!validEmail(email) || !password) return { ok: false, error: "Enter your email address and password." };
+  const locked = await doCall(env, origin, "/_stage/locked?email=" + encodeURIComponent(email));
+  if (locked.locked) return { ok: false, error: "Too many attempts. Try again in 15 minutes." };
+  const u = await doCall(env, origin, "/_stage/user?email=" + encodeURIComponent(email));
+  const good = u.ok && u.user && !u.user.disabled && (await verifyPassword(password, u.user));
+  const a = await doCall(env, origin, "/_stage/attempt", { email, ok: good });
+  if (!good) return { ok: false, error: a.locked ? "Too many attempts. Try again in 15 minutes." : (u.ok && u.user && u.user.disabled ? "That account is disabled." : "That email and password were not accepted.") };
+  return { ok: true, token: await startSession(env, origin, email), user: publicUser(u.user) };
+}
+
+async function createAccount(env, origin, { email, name, password, role, perms, limits, createdBy }) {
+  email = normEmail(email);
+  if (!validEmail(email)) return { ok: false, error: "That is not an email address." };
+  if (String(password || "").length < MIN_PASSWORD) return { ok: false, error: "The password needs at least " + MIN_PASSWORD + " characters." };
+  const h = await hashPassword(password);
+  const user = { email, name: String(name || "").trim().slice(0, 120), role: role === "admin" ? "admin" : "staff", perms: permsFrom(perms ? { perms } : {}), limits: limitsFrom(limits || {}), ...h, disabled: false, createdBy: String(createdBy || "").slice(0, 160) };
+  return doCall(env, origin, "/_stage/user/put", { user, create: true });
+}
+
+/* ---- routes ---- */
+
 // /9pocket (list), /9pocket/b/<id> (worksheet), /9pocket/email/<id>
 // (preview), /9pocket.json, /9pocket/control, /9pocket/health,
 // /9pocket/login|logout|setup, /9pocket/admin(+/control); the old
@@ -540,7 +591,9 @@ export async function serveStage(request, env, url, staffOk) {
   const k = String((form && form.k) || url.searchParams.get("k") || "");
   const pinOk = k ? await staffOk(env, origin, k) : false;
   const q = (o) => { const s = new URLSearchParams(); for (const [a, b] of Object.entries(o)) if (b) s.set(a, b); const t = s.toString(); return t ? "?" + t : ""; };
-  const nextOf = () => { const n = String((form && form.next) || url.searchParams.get("next") || ""); return n.startsWith(BASE) && !n.startsWith(BASE + "/login") ? n : BASE; };
+  // Where to land after signing in: a 9Pocket page, or the auto-pricer
+  // (its login page sends 9Pocket accounts here).
+  const nextOf = () => { const n = String((form && form.next) || url.searchParams.get("next") || ""); return (n.startsWith(BASE) && !n.startsWith(BASE + "/login")) || /^\/autoprice(\?|$)/.test(n) ? n : BASE; };
 
   // ---- sign in / out / first account ----
   if (p === BASE + "/login") {
@@ -726,13 +779,13 @@ async function adminControl(env, origin, f, admin) {
   const action = String(f.action || "");
   const email = normEmail(f.email);
   if (action === "add") {
-    const r = await createAccount(env, origin, { email: f.email, name: f.name, password: f.password, role: f.role, perms: permsFrom(f), createdBy: admin.email });
+    const r = await createAccount(env, origin, { email: f.email, name: f.name, password: f.password, role: f.role, perms: permsFrom(f), limits: limitsFrom(f), createdBy: admin.email });
     return r.ok ? { ok: true, message: "Account created for " + email + "." } : { ok: false, error: r.error };
   }
   if (!validEmail(email)) return { ok: false, error: "Which account? The email is missing." };
   const self = email === admin.email;
   if (action === "update") {
-    const user = { email, name: String(f.name || "").trim().slice(0, 120), role: f.role === "admin" ? "admin" : "staff", perms: permsFrom(f) };
+    const user = { email, name: String(f.name || "").trim().slice(0, 120), role: f.role === "admin" ? "admin" : "staff", perms: permsFrom(f), limits: limitsFrom(f) };
     if (self && user.role !== "admin") return { ok: false, error: "You cannot take admin away from your own account." };
     const r = await doCall(env, origin, "/_stage/user/put", { user });
     return r.ok ? { ok: true, message: "Saved " + email + "." } : { ok: false, error: r.error };

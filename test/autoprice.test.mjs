@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { niceUp, autoStep, decide, margin, categoryOf, normUpc, readProduct, nextRunAt, DEFAULT_CONFIG } from "../src/autoprice.js";
+import { niceUp, autoStep, decide, margin, categoryOf, normUpc, readProduct, nextRunAt, DEFAULT_CONFIG, overLimit, renderPage } from "../src/autoprice.js";
 
 test("margin: profit and share of the selling price, from unit cost", () => {
   assert.deepEqual(margin(219.95, 150), { amount: 69.95, pct: 31.8 });
@@ -820,4 +820,35 @@ test("the row shows what the price is pegged to and the box offers to keep track
   assert.match(page, /name="anchor" value="1" checked/);
   assert.match(page, /your price \$1500\.00 \(×1\.5 of the market\)/);   // the settings summary
   assert.match(page, /name="markupPct"[^>]*disabled/);                     // markup is not in play
+});
+
+test("an account's brake: a drop or raise past its percent is refused, inside it or with no limit it is not", () => {
+  assert.deepEqual(overLimit(100, 85, { maxDrop: 10, maxRaise: null }), { pct: -15, limit: 10, kind: "drop" });
+  assert.equal(overLimit(100, 90, { maxDrop: 10, maxRaise: null }), null);          // exactly the limit is allowed
+  assert.equal(overLimit(100, 150, { maxDrop: 10, maxRaise: null }), null);         // no raise limit
+  assert.deepEqual(overLimit(100, 150, { maxDrop: null, maxRaise: 25 }), { pct: 50, limit: 25, kind: "raise" });
+  assert.equal(overLimit(100, 85, null), null);                                     // admins and the shared login carry no limits
+  assert.equal(overLimit(null, 85, { maxDrop: 10 }), null);                         // nothing to measure against
+  assert.equal(overLimit(100, 100, { maxDrop: 0, maxRaise: 0 }), null);
+  assert.deepEqual(overLimit(100, 99.95, { maxDrop: 0 }), { pct: -0.05, limit: 0, kind: "drop" });   // 0 = no drop at all
+});
+
+test("the page draws only what the viewer may press", () => {
+  const status = { mode: "stage", config: DEFAULT_CONFIG, run: null, runs: [], audit: [{ at: 1_760_000_000_000, who: "Ada", action: "publish", from: 100, to: 90, title: "Box A" }] };
+  const rows = [{ id: "gid://shopify/Product/1", title: "Box A", handle: "box-a", type: "Sealed", game: "Magic", current: 100, suggested: 80, awaiting: true, action: "lower", reason: "market", stock: 2, variants: 1 },
+    { id: "gid://shopify/Product/2", title: "Box B", handle: "box-b", type: "Sealed", game: "Magic", current: 100, suggested: 95, awaiting: true, action: "lower", reason: "market", stock: 2, variants: 1 }];
+  const full = renderPage(status, { rows }, { user: "Ada", perms: { name: "Ada", admin: true, view: true, publish: true, settings: true, config: true, maxDrop: null, maxRaise: null } });
+  assert.ok(full.includes("Run now") && full.includes('value="publish-all"') && full.includes('value="remove"') && full.includes("Add products") && full.includes("admin: everything"));
+  assert.ok(full.includes("<h2>Activity</h2>") && full.includes("published $100.00 → $90.00") && full.includes('action="/9pocket/logout"'));
+  const staff = renderPage(status, { rows }, { user: "Sam", perms: { name: "Sam", admin: false, view: true, publish: true, settings: false, config: false, maxDrop: 10, maxRaise: null } });
+  assert.ok(!staff.includes("Run now") && !staff.includes('value="mode"') && !staff.includes('value="remove"') && !staff.includes("Add products") && !staff.includes('value="config"'));
+  assert.ok(staff.includes("may publish · drop at most 10%") && staff.includes('value="publish-all"'));
+  assert.ok(staff.includes("$80.00 is a 20% drop: over your 10% limit") && !staff.includes('value="gid://shopify/Product/1"><input type="hidden" name="title"'));   // Box A: no Publish form
+  assert.ok(staff.includes('name="price" value="95"'));   // Box B: inside the limit, the box is there
+  const viewer = renderPage(status, { rows }, { user: "Vee", perms: { name: "Vee", admin: false, view: true, publish: false, settings: false, config: false, maxDrop: null, maxRaise: null } });
+  assert.ok(!viewer.includes('value="publish"') && !viewer.includes('value="publish-all"') && !viewer.includes('value="keep"') && viewer.includes("may view only"));
+  assert.ok(viewer.includes("Your account cannot publish"));
+  const legacy = renderPage(status, { rows }, { user: "gage", perms: { name: "gage", admin: true, view: true, publish: true, settings: true, config: true, legacy: true } });
+  assert.ok(legacy.includes('href="/autoprice/logout"') && !legacy.includes("Signed in as"));
+  assert.ok(renderPage(status, { rows }, {}).includes("Run now"));   // no view: everything, as before
 });

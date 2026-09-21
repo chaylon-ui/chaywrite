@@ -367,7 +367,7 @@ jobs:
           node test/enrich-parse.test.mjs 2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           node test/enrich-tick.test.mjs  2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           echo "=== 9Pocket: pure helpers (src/stage.js), the DO (in-memory storage), accounts (src/stage-auth.js) ==="
-          for t in test/stage.test.mjs test/stage-do.test.mjs test/stage-auth.test.mjs; do echo "-- $t"; node $t 2>&1 | grep -E '^# (pass|fail)|^not ok' || true; done
+          for t in test/stage.test.mjs test/stage-do.test.mjs test/stage-auth.test.mjs test/autoprice.test.mjs test/autoprice-access.test.mjs; do echo "-- $t"; node $t 2>&1 | grep -E '^# (pass|fail)|^not ok' || true; done
           W="https://exor-binder.nevski.workers.dev"
           echo "=== GET /enrich/status (tokenConfigured, next alarm, last run) ==="
           curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true
