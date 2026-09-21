@@ -39,6 +39,10 @@ on:
         description: Selector to hover (and hold) before measuring and shooting - opens app menus that are not in the DOM until hovered
         required: false
         default: ""
+      scroll:
+        description: Scroll the window down by this many px before measuring and shooting (the sticky header only exists after a scroll); the element is then NOT scrolled into view
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -56,6 +60,7 @@ jobs:
       DARK: ${{ inputs.dark }}
       SAVE: ${{ inputs.save }}
       HOVER: ${{ inputs.hover }}
+      SCROLL: ${{ inputs.scroll }}
       SHOT: probe-shots/shot-${{ github.run_id }}.jpg
     steps:
       - uses: actions/checkout@v4
@@ -91,6 +96,17 @@ jobs:
               try { await page.hover(process.env.HOVER); await sleep(1500); console.log('hovered', process.env.HOVER); }
               catch (e) { console.log('HOVER-ERR', String(e).slice(0, 160)); }
             }
+            const scrollY = parseInt(process.env.SCROLL || '', 10);
+            if (scrollY > 0) {
+              // Real wheel-like scrolling in steps, so scroll listeners that
+              // compare successive positions (sticky headers) see it happen.
+              await page.evaluate(async (y) => { const step = 80; for (let at = 0; at < y; at += step) { window.scrollTo(0, Math.min(y, at + step)); await new Promise(r => setTimeout(r, 40)); } }, scrollY);
+              await sleep(1500);
+              console.log('scrolled to', await page.evaluate(() => window.scrollY), '| header classes', await page.evaluate(() => {
+                const pick = (sel) => { const el = document.querySelector(sel); return el ? sel + ' [' + el.className + '] style=' + (el.getAttribute('style') || '') : sel + ' NOT FOUND'; };
+                return ['#header', '#header .site-header', '#header .header-top', '#header .nav-menu', '#header .site-header-mobile'].map(pick).join(' || ');
+              }));
+            }
             const rows = await page.evaluate((list) => {
               const out = [];
               for (const sel of list) {
@@ -100,10 +116,10 @@ jobs:
                 out.push([sel, {
                   color: cs.color,
                   background: cs.backgroundImage !== 'none' ? cs.backgroundImage.slice(0, 120) : cs.backgroundColor,
-                  display: cs.display, padding: cs.padding, fontWeight: cs.fontWeight,
+                  display: cs.display, visibility: cs.visibility, opacity: cs.opacity, position: cs.position, overflow: cs.overflow, padding: cs.padding, fontWeight: cs.fontWeight,
                   border: cs.borderWidth + ' ' + cs.borderStyle + ' ' + cs.borderColor,
                   shadow: cs.boxShadow.slice(0, 80), deco: (cs.textDecorationLine + ' ' + cs.textDecorationColor).slice(0, 60),
-                  w: Math.round(b.width), h: Math.round(b.height), lines: el.getClientRects().length,
+                  x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), lines: el.getClientRects().length,
                 }]);
               }
               return out;
@@ -132,7 +148,7 @@ jobs:
             if (!el) { console.log('SELECTOR NOT FOUND', process.env.SEL); await browser.close(); return; }
             const box = await el.boundingBox();
             console.log('BOX', JSON.stringify(box));
-            if (!process.env.HOVER) await el.scrollIntoView().catch(() => {});
+            if (!process.env.HOVER && !(scrollY > 0)) await el.scrollIntoView().catch(() => {});
             await sleep(500);
             const jpg = await el.screenshot({ type: 'jpeg', quality: 60 });
             if (process.env.SAVE === 'true') { fs.writeFileSync(process.env.SHOT, jpg); console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes'); }
