@@ -1184,3 +1184,40 @@ html[data-xg-theme="dark"] .xg-credit__delta--out { color: #ff6a5e; }
 @media (prefers-reduced-motion: reduce) {
   .xg-credit__panel, .xg-credit__scrim, .xg-credit__tab { transition: none; }
 }
+
+/* ---- 24. The pinned mobile bar keeps the logo, and the hamburger reads as
+   a button (owner, 2026-09-21: "When I scroll down a bit the nav bar at the
+   top loses the exor logo .. also I am wondering if there is anything else
+   we can do to encourage people to click on the hamburger menu? Right now
+   navigation is a little subliminal to new users").
+   MEASURED (shot-probe 35548295159, 390px, scrolled 600): the theme adds
+   .fixed-header to .site-header-mobile only - that bar goes position:fixed
+   at y=0, full width - while the logo's .nav-menu stays in the flow (y=-408).
+   So: a small logo copy inside the bar (sections/header-top.liquid), shown
+   only while the bar is pinned; and #menu-icon becomes a red pill that says
+   MENU, with its own three bars drawn in CSS (the theme's <use> glyph is
+   sized for a 40px square and does not scale cleanly). Phone and tablet
+   only - the desktop header has no hamburger. ---------------------------- */
+@media (max-width: 991px) {
+  #header .site-header-mobile .mobile-width-left { display: flex; align-items: center; gap: 10px; }
+  #header .site-header-mobile .xg-bar-logo { display: none; line-height: 0; flex: 0 0 auto; }
+  #header .site-header-mobile .xg-bar-logo img { display: block; height: 34px; width: auto; }
+  #header .site-header-mobile.fixed-header .xg-bar-logo { display: block; }
+  /* the hamburger: theme.css sizes #menu-icon 40x40 at (1,2,0); (2,2,0) here */
+  #header .mobile-width .mobile-width-left #menu-icon {
+    display: inline-flex; align-items: center; gap: 8px;
+    width: auto; height: 36px; padding: 0 13px 0 11px; border-radius: 999px;
+    background: var(--xg-red, #d62c28); color: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  }
+  #header .mobile-width .mobile-width-left #menu-icon svg { display: none; }
+  #header .mobile-width .mobile-width-left #menu-icon::before {
+    content: ""; display: block; width: 18px; height: 14px;
+    background: linear-gradient(#fff 0 2px, transparent 2px 6px, #fff 6px 8px, transparent 8px 12px, #fff 12px 14px);
+  }
+  #header .mobile-width .mobile-width-left #menu-icon::after {
+    content: "Menu"; font-family: var(--xg-font-body, inherit); font-weight: 800; font-size: 12px; line-height: 1;
+    letter-spacing: 0.1em; text-transform: uppercase; color: #fff;
+  }
+  #header .mobile-width .mobile-width-left #menu-icon:active { transform: translateY(1px); }
+}

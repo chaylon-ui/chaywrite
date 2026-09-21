@@ -449,6 +449,18 @@ or template.name == 'blog'
             <div id="menu-icon" class="menu-icon hidden-lg-up">
               {% include 'icons' with 'setup' %}
             </div>
+            {%- comment -%}
+              Owner, 2026-09-21 (phone, scrolled): "the nav bar at the top
+              loses the exor logo". The theme pins only THIS bar on scroll
+              (class fixed-header) and the logo sits beside it in .nav-menu,
+              so it scrolls away. A small copy of the logo lives in the bar
+              and xg-features.css (section 24) shows it only while the bar is
+              pinned - at the top of the page the big logo beside the bar is
+              the one on screen.
+            {%- endcomment -%}
+            {% if section.settings.logo %}
+            <a class="xg-bar-logo" href="/" aria-label="{{ shop.name | escape }} home"><img src="{{ section.settings.logo | img_url: '160x' }}" alt="" loading="lazy" width="80" height="34"></a>
+            {% endif %}
           </div>
           <div class="mobile-width-right">
             {%- if localization.available_languages.size > 1 -%}
