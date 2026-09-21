@@ -735,7 +735,7 @@
     var copyBar = missLines.length
       ? '<div class="xg-deck__missbar">' +
           '<button type="button" class="xg-deck__btn xg-deck__btn--ghost xg-deck__copymiss" id="xg-deck-copymiss" aria-label="Copy the cards we didn&rsquo;t have in stock as a decklist">Copy what we didn&rsquo;t have <span class="xg-deck__dim">(' + missQty + (missQty === 1 ? ' card' : ' cards') + ')</span></button>' +
-          '<span class="xg-deck__misshelp">A plain decklist of the copies we couldn&rsquo;t fill. Paste it anywhere. Cards in stock at other Exor Games stores aren&rsquo;t included.</span>' +
+          '<span class="xg-deck__misshelp">A plain decklist of the copies we couldn&rsquo;t fill. Paste it anywhere.</span>' +
         '</div>'
       : '';
 
