@@ -330,3 +330,52 @@
 html[data-xg-theme="dark"] #xg-deck .xg-deck__input { background: #1d2327; color: #e6ebee; }
 html[data-xg-theme="dark"] #xg-deck .xg-deck__input:focus { background: #1d2327; }
 html[data-xg-theme="dark"] #xg-deck .xg-deck__input::placeholder { color: #8a969d; opacity: 1; }
+
+/* Dark mode, the results list. Everything below the form kept light-mode
+   greys and tints (row hover #fafbfc, sister amber #fffaf0, short-row
+   #fffcf2, substitute green #f4fbf7, header row, pills, progress bar,
+   thumb plates) while the theme's tokens turned the text light, so a
+   hovered row's prices and a sister-store row's name went white-on-cream
+   (owner screenshot, 2026-09-21). The tints become translucent washes of
+   the same hue over the dark surface, and every hard-coded ink gets a
+   lifted twin that reads on it. */
+html[data-xg-theme="dark"] #xg-deck .xg-deck__hrow { background: #1d2327; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row { border-bottom-color: var(--xg-border, #2a3236); }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row:hover { background: #1f2529; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row--grp { box-shadow: inset 3px 0 0 0 #3a444a; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row--grp:not(.xg-deck__row--gend) { border-bottom-color: #22282c; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__sumbar { background: #2a3236; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__thumb { background: #2a3236; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__meta,
+html[data-xg-theme="dark"] #xg-deck .xg-deck__hint,
+html[data-xg-theme="dark"] #xg-deck .xg-deck__misshelp,
+html[data-xg-theme="dark"] #xg-deck .xg-deck__sisterhelp { color: #98a4ab; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__stat--ok .xg-deck__pill { background: rgba(53, 181, 120, 0.18); color: #4fcf8b; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__copymiss.is-copied { border-color: #4fcf8b; color: #4fcf8b; }
+/* partial-fill info strip (amber) */
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row--short { background: rgba(255, 196, 64, 0.08); }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row--short:hover { background: rgba(255, 196, 64, 0.13); }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__shortinfo { color: #d9b866; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__stat--short .xg-deck__pill { background: rgba(255, 196, 64, 0.18); color: #e8c76e; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__shortnote,
+html[data-xg-theme="dark"] #xg-deck .xg-deck__matchnote { color: #e8c76e; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__shortsister { color: #f0c15a; }
+/* sister-store rows (amber) */
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row--sister { background: rgba(255, 176, 48, 0.09); }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row--sister:hover { background: rgba(255, 176, 48, 0.14); }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__sisterlabel,
+html[data-xg-theme="dark"] #xg-deck .xg-deck__sisternote { color: #f0c15a; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__stat--sister a { background: #c98a1c; color: #14110a; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__stat--sister a:hover { background: #dca02e; }
+/* substitute rows (green) */
+html[data-xg-theme="dark"] #xg-deck .xg-deck__row--sub { background: rgba(53, 181, 120, 0.10); }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__subnote,
+html[data-xg-theme="dark"] #xg-deck .xg-deck__substat { color: #4fcf8b; }
+html[data-xg-theme="dark"] #xg-deck .xg-deck__subundo { border-color: #3a444a; }
+/* similar-cards picker overlay */
+html[data-xg-theme="dark"] .xg-deck-subs__panel { background: var(--xg-surface, #181d20); color: var(--xg-ink, #eef2f4); }
+html[data-xg-theme="dark"] .xg-deck-subs__close { background: #2a3236; color: #c3ccd1; }
+html[data-xg-theme="dark"] .xg-deck-subs__close:hover { background: #343e44; }
+html[data-xg-theme="dark"] .xg-deck-subs__card img, html[data-xg-theme="dark"] .xg-deck-subs__noimg { background: #2a3236; }
+html[data-xg-theme="dark"] .xg-deck-subs__dim { color: #98a4ab; }
+html[data-xg-theme="dark"] .xg-deck-subs__missp { color: #f0a29f; background: rgba(228, 66, 62, 0.16); border-color: rgba(228, 66, 62, 0.4); }
