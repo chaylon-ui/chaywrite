@@ -51,6 +51,10 @@ on:
         description: Selector to click after the page settled (before measuring and shooting); reports the hash, the scroll over time, page errors and any BinderPOS overlay
         required: false
         default: ""
+      eval:
+        description: JavaScript (a function body or expression) evaluated in the page after it settled, and again after `click` if set; its JSON result is printed
+        required: false
+        default: ""
       scroll:
         description: Scroll the window down by this many px before measuring and shooting (the sticky header only exists after a scroll); the element is then NOT scrolled into view
         required: false
@@ -93,6 +97,7 @@ jobs:
       SAVE: ${{ inputs.save }}
       HOVER: ${{ inputs.hover }}
       CLICK: ${{ inputs.click }}
+      EVAL: ${{ inputs.eval }}
       SCROLL: ${{ inputs.scroll }}
       TEXT: ${{ inputs.text }}
       TEXTMAX: ${{ inputs.textmax }}
@@ -163,6 +168,12 @@ jobs:
               try { await page.hover(process.env.HOVER); await sleep(1500); console.log('hovered', process.env.HOVER); }
               catch (e) { console.log('HOVER-ERR', String(e).slice(0, 160)); }
             }
+            const runEval = async (tag) => {
+              if (!process.env.EVAL) return;
+              try { console.log('EVAL ' + tag, JSON.stringify(await page.evaluate(process.env.EVAL))); }
+              catch (e) { console.log('EVAL-ERR ' + tag, String(e).slice(0, 300)); }
+            };
+            await runEval('before');
             if (process.env.CLICK) {
               const overlay = () => page.evaluate(() => {
                 const vis = (el) => { const cs = getComputedStyle(el), b = el.getBoundingClientRect(); return cs.display !== 'none' && cs.visibility !== 'hidden' && b.width > 0 && b.height > 0; };
@@ -179,6 +190,7 @@ jobs:
               }
               catch (e) { console.log('CLICK-ERR', String(e).slice(0, 160)); }
               console.log('after click', JSON.stringify(await overlay()));
+              await runEval('after');
             }
             const scrollY = parseInt(process.env.SCROLL || '', 10);
             if (scrollY > 0) {
