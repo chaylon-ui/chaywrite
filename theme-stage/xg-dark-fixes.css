@@ -1,0 +1,168 @@
+/* xg-dark-fixes.css - dark-mode corrections found by the round-28 site
+   audit (chaywrite site-audit run 33704796585: every reachable page of the
+   preview theme, light and dark, text contrast measured against each
+   element's own computed ground). Its own small file so a fix never means
+   re-typing the 39KB xg-dark.css through the API. Same palette as that
+   file: page #101416, surface #181d20, border #2a3236, ink #e6ebee, muted
+   #b8c0c6, red-as-text #ff6a5e (6.05:1 on #181d20, computed). Every rule
+   is gated on html[data-xg-theme="dark"]; light mode is untouched. Weighted
+   because the colours they replace come from theme.css and from app CSS
+   that loads after this file. */
+
+/* 1. Blog listing (sections/blog.liquid): titles, bylines, dates and
+   excerpts computed rgb(0,0,0) on the #101416 page - 1.13:1, ten elements
+   below 3:1 on /blogs/news. */
+html[data-xg-theme="dark"] .blog--list-view .article__title a { color: #e6ebee !important; }
+html[data-xg-theme="dark"] .blog--list-view .article__title a:hover { color: #ff6a5e !important; }
+html[data-xg-theme="dark"] .blog--list-view .article__author,
+html[data-xg-theme="dark"] .blog--list-view .article__date,
+html[data-xg-theme="dark"] .blog--list-view .blog-details,
+html[data-xg-theme="dark"] .blog--list-view .blog-details a { color: #b8c0c6 !important; }
+html[data-xg-theme="dark"] .blog--list-view .blog_description,
+html[data-xg-theme="dark"] .blog--list-view .article__tags { color: #c3ccd1 !important; }
+html[data-xg-theme="dark"] .blog--list-view .article__tags a { color: #ff6a5e !important; }
+
+/* 2. Login (sections/customers-login.liquid): the .card-block stayed white
+   while its H1 took the light ink - 1.13:1. The card goes to the surface
+   tone; headings, labels, fields and links follow. */
+html[data-xg-theme="dark"] .login-page .card-block { background-color: #181d20 !important; border-color: #2a3236 !important; color: #e6ebee !important; }
+html[data-xg-theme="dark"] .login-page h1,
+html[data-xg-theme="dark"] .login-page h2 { color: #e6ebee !important; }
+html[data-xg-theme="dark"] .login-page label,
+html[data-xg-theme="dark"] .login-page p,
+html[data-xg-theme="dark"] .login-page span { color: #b8c0c6 !important; }
+html[data-xg-theme="dark"] .login-page input:not([type="submit"]) { background-color: #101416 !important; color: #e6ebee !important; border-color: #2a3236 !important; }
+html[data-xg-theme="dark"] .login-page a,
+html[data-xg-theme="dark"] .login-page .text-link { color: #ff6a5e !important; }
+
+/* 3. Sezzle widget on product pages: its own CSS paints "or 5 payments of
+   $x" rgb(0,0,0) - 1.13:1 on the dark page. */
+html[data-xg-theme="dark"] .sezzle-button-text,
+html[data-xg-theme="dark"] .sezzle-payment-amount,
+html[data-xg-theme="dark"] .sezzle-checkout-button-wrapper { color: #e6ebee !important; }
+
+
+/* 4. CloudSearch filter panel (app markup on collection pages, found by the
+   second audit run once /collections/all rendered): value labels computed
+   rgb(85,85,85) on the dark page - 2.48:1 - and the selected sort option
+   rgb(8,8,8). The panel is transparent over the page, so only ink moves. */
+html[data-xg-theme="dark"] .cloud-search-filter-value__name,
+html[data-xg-theme="dark"] .cloud-search-filter-value__count,
+html[data-xg-theme="dark"] .cloud-search-filter__title,
+html[data-xg-theme="dark"] .cloud-search-filter-value label { color: #c3ccd1 !important; }
+
+/* 5. Two more from the third audit run. The Wishlist Hero login prompt
+   ("Log in to your account to add items to your wishlist") sits in
+   div.nm-wishlist-login-modal, which stays white while the text inherits
+   the light ink - 1.63:1 on every page. And the lite filter bar's product
+   count on /collections/all computed rgb(51,34,51) on the dark bar -
+   1.17:1 (theme.css paints .collection-product-count for a white bar). */
+html[data-xg-theme="dark"] .nm-wishlist-login-modal,
+html[data-xg-theme="dark"] .nm-modal-container > div:not([class]) { background-color: #181d20 !important; color: #e6ebee !important; }
+html[data-xg-theme="dark"] .nm-wishlist-login-modal span,
+html[data-xg-theme="dark"] .nm-wishlist-login-modal p,
+html[data-xg-theme="dark"] .nm-wishlist-login-modal h1,
+html[data-xg-theme="dark"] .nm-wishlist-login-modal h2,
+html[data-xg-theme="dark"] .nm-wishlist-login-modal h3 { color: #e6ebee !important; }
+html[data-xg-theme="dark"] .nm-wishlist-login-modal a { color: #ff6a5e !important; }
+html[data-xg-theme="dark"] .collection-product-count { color: #b8c0c6 !important; }
+
+/* ---- 6. Footer newsletter (BOTH themes) -------------------------------
+   Owner screenshot 2026-09-03: an oversized pill with SUBSCRIBE dropped
+   inside it and dead space under it.
+
+   Three passes, each corrected by measurement rather than by guessing:
+
+   1. First attempt invented its own heights, radii and colours. It lost:
+      the probe showed the field still at radius 0px / height 40 /
+      margin 0 0 15px and the group at radius 999px with 4px padding and a
+      translucent border. A deliberate pill wrapper already exists and is
+      fine - the job is to work with it.
+   2. Second attempt kept the pill and killed the field's margin-bottom of
+      15px, which was pushing .input-group__btn onto a second line INSIDE
+      the pill. Desktop then measured input y6455 and button y6455 - same
+      row, fixed.
+   3. But at 390px the layout rules still did nothing while the colour
+      rules worked. The difference was the SCOPE: colours were on
+      .block_newsletter, layout on .site-footer__newsletter. At phone
+      width the desktop block is display:none and a clone inside
+      #_mobile_newsletter renders instead, and that clone carries
+      .block_newsletter but not the .site-footer__newsletter wrapper. So
+      every rule here is scoped on .block_newsletter, the one class both
+      copies demonstrably have.
+
+   Not in a dark block: the layout was wrong in both themes. (This file has
+   outgrown its name; fold it into a general xg-fixes.css next time.) */
+.block_newsletter .footer-heading {
+  color: var(--xg-inverse-text, #f4f6f6) !important;
+  margin: 0 0 6px;
+}
+.block_newsletter .description,
+.block_newsletter .description p,
+.block_newsletter .block-newsletter-label {
+  color: #b8c0c6 !important;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.block_newsletter .description a { color: #ff6a5e !important; }
+
+.block_newsletter .input-group {
+  align-items: center !important;
+  max-width: 380px;
+}
+.block_newsletter .input-group__field {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #f2f5f6 !important;
+}
+.block_newsletter .input-group__field::placeholder { color: #8e979d !important; }
+
+/* flex-grow rather than a width, so the button keeps its natural size
+   beside the field on a wide row and fills the line when the pill wraps -
+   no media query, which matters because the mobile copy is a clone whose
+   width the query would have to guess at. */
+.block_newsletter .input-group__btn {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  margin: 0 !important;
+  text-align: center;
+}
+.block_newsletter .input-group__btn .btn.newsletter__submit {
+  width: 100% !important;
+  margin: 0 !important;
+}
+.block_newsletter { margin-bottom: 0 !important; }
+/* ---- Round 41 site audit (2026-09-12), loaded on every page after modern-skin.css ----
+   1. Phones: the hero picture is shown whole. The slide images are 1.8:1 and the hero box on a
+      390px phone is about 1.3:1, so object-fit: cover cut 29% off the sides (owner: "the hero
+      image not getting cut off on mobile"). Contain keeps the full picture; the hero's own dark
+      gradient fills the bands above and below; the parallax shift is off so the bands stay even.
+   2. Desktop blog list (/blogs/news): the list's negative side margins reached 15px past the
+      viewport and gave the page a sideways scroll.
+   3. Phone search results: a wishlist app modal is laid out 415px wide and gave the page a
+      sideways scroll. Clipping the root's horizontal overflow removes it without turning the
+      root into a scroll container (position: sticky keeps working). */
+@media (max-width: 579px) {
+  .xg-hero__bg { object-fit: contain !important; object-position: center !important; }
+  .xg-hero__main[data-parallax] .xg-hero__bg { transform: none !important; will-change: auto; }
+}
+.blog--list-view { margin-left: 0 !important; margin-right: 0 !important; }
+html { overflow-x: clip; }
+/* ...and the body's own overflow-x: hidden (theme.css) must become clip too.
+   Once the root is no longer `visible`, the body's overflow stops being
+   propagated to the viewport and stays on the body, which makes the BODY a
+   scroll container - and a scroll container as tall as its content is one
+   inside which position: sticky can never engage. That is why the sell
+   page's buylist panel (.bl__cart) did not follow the shopper down the
+   results (owner, 2026-09-22: "IT SHOULD FOLLOW ME DOWN") and why theme.css's
+   own sticky product-photo column sat still. Measured on the live preview
+   (shot-probe 35785175997): body "hidden auto", every other ancestor
+   visible. clip keeps the sideways-scroll fixes above without creating a
+   scroll container. */
+html body { overflow-x: clip; overflow-y: visible; }
