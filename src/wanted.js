@@ -380,5 +380,5 @@ export async function wantedCards(env) {
   if (have) return have;
   const state = await readJson(env, STATE_KEY);
   const lastTry = await readJson(env, LAST_TRY_KEY);
-  return { source: MOVERS_URL, asOf: null, building: true, progress: state ? { startedAt: state.startedAt, tried: state.tried, found: state.hits.length, queued: state.queue.length, backoffUntil: state.backoffUntil || 0, probe: state.probe.slice(-8) } : null, lastTry, count: 0, hits: [] };
+  return { source: MOVERS_URL, asOf: null, building: true, progress: state ? { startedAt: state.startedAt, tried: state.tried, found: state.hits.length, queued: state.queue.length, backoffUntil: state.backoffUntil || 0, sources: state.sources || null, probe: state.probe.slice(-8) } : null, lastTry, count: 0, hits: [] };
 }
