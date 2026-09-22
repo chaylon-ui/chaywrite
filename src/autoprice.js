@@ -1525,7 +1525,10 @@ export async function autopriceDoFetch(cx, request, url) {
   if (url.pathname === "/_ap/control" && request.method === "POST") return doJson(await control(cx, await bodyOf(request)));
   // The relay reads this with its own token; the mode rides along so the
   // nightly relay log records which mode the room is actually in.
-  if (url.pathname === "/_ap/digest") return doJson({ ...(await digestOp(cx, request.method === "POST" ? await bodyOf(request) : null)), mode: cfg0.mode });
+  // emailTo: how many addresses the email channel would use right now (the
+  // count only - the deploy smoke prints this, and a digest stored before
+  // the email channel existed must not read as "no key").
+  if (url.pathname === "/_ap/digest") return doJson({ ...(await digestOp(cx, request.method === "POST" ? await bodyOf(request) : null)), mode: cfg0.mode, emailTo: digestEmailTo(cx.env).length });
   if (url.pathname === "/_ap/auth" && request.method === "POST") return doJson(await authOp(cx, await bodyOf(request)));
   return doJson({ ok: false, error: "not found" }, 404);
 }

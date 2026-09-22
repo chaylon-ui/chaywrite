@@ -579,7 +579,8 @@ jobs:
               if (!d) return console.log("digest.json: no digest stored yet (" + JSON.stringify(j).slice(0, 160) + ")");
               const e = d.email;
               console.log("last digest: kind=" + (d.kind || "?") + " sent=" + !!d.sent + " by=" + (d.sentBy || "-") + " ntfyError=" + (d.lastError || "none"));
-              console.log("email channel: " + (e ? e.status + " to " + (e.to || []).length + " address(es)" + (e.error ? " - " + e.error : "") : "off (no RESEND_API_KEY, or no usable AUTOPRICE_EMAIL_TO)"));
+              console.log("email channel now: " + (j.emailTo ? "on, " + j.emailTo + " recipient(s)" : "off (no RESEND_API_KEY, or no usable AUTOPRICE_EMAIL_TO)"));
+              console.log("that digest by email: " + (e ? e.status + " to " + (e.to || []).length + " address(es)" + (e.error ? " - " + e.error : "") : "not attempted (digest stored before the email channel, or the channel was off)"));
             });
           ' || true
       - name: Smoke-test learn-to-play outbound links (log-only)
