@@ -144,7 +144,8 @@ test("the staff pages: list rows link to worksheets; the worksheet's controls fo
   assert.ok(sheet.includes('value="payment"') && sheet.includes('<option value="Store Credit"') && !sheet.includes('<option value="Store Credit" selected'));
   assert.equal((sheet.match(/name="notify"/g) || []).length, 2);
   assert.ok(!sheet.includes('name="notify" value="1" checked') && sheet.includes("not</b> emailed about a decision unless"));
-  assert.ok(sheet.includes('class="hits"'));
+  assert.ok(sheet.includes('class="hits"') && sheet.includes('id="ad-more"') && sheet.includes("&offset='+offset"));
+  assert.ok(sheet.includes('<span class="fin">✦ Foil</span>'));   // the foil line wears the holographic pill
   assert.ok(sheet.includes("under Ada OBrien at the prices"));      // the confirm() string cannot carry a quote
   assert.ok(sheet.includes("RESEND_API_KEY"));                      // email off: the worksheet says so
   // a view-only account: no inputs, no add, no decide, no send

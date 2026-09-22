@@ -852,8 +852,18 @@ async function control(env, url, f, user) {
       repricedAtApproval: merged.notes,
     });
     if (!j.ok) return { ok: false, error: j.error };
+    // The worksheet's prices into the pending BinderPOS buylist (owner,
+    // 2026-09-22, after 9P-1005 arrived there at BinderPOS's own prices):
+    // src/stage-sync.js, verified by a re-read; STAGE_BP_SYNC=off disables it.
+    let sync = null;
+    if (String((env && env.STAGE_BP_SYNC) || "") !== "off" && j.record.bp && j.record.bp.number) {
+      try { sync = await pushBuylistPrices(env, j.record, { confirm: j.record.bp.number }); }
+      catch (e) { sync = { ok: false, error: String((e && e.message) || e).slice(0, 200) }; }
+      try { await doCall(env, url.origin, "/_stage/bpsync", { id, result: sync, by: who }); } catch {}
+    }
+    const syncNote = !sync ? "" : sync.ok && sync.saved ? " Worksheet prices saved in BinderPOS" + (sync.verified ? "." : " (could not be verified - check them there).") : sync.ok ? "" : " BinderPOS still has its own prices: " + (sync.error || "the save failed") + " - fix them there by hand.";
     const m = notify ? await emailDecision(env, url, j.record, "approved", who) : { ok: true };
-    return { ok: true, id, status: "approved", reference: j.record.bp && j.record.bp.number, repriced: merged.notes, message: "Approved and sent to BinderPOS" + (j.record.bp && j.record.bp.number ? " as buylist " + j.record.bp.number : "") + "." + mailNote(m) };
+    return { ok: true, id, status: "approved", reference: j.record.bp && j.record.bp.number, repriced: merged.notes, bpSync: sync, message: "Approved and sent to BinderPOS" + (j.record.bp && j.record.bp.number ? " as buylist " + j.record.bp.number : "") + "." + syncNote + mailNote(m) };
   }
   return { ok: false, error: "action must be approve, reject, edit, add, payment or email" };
 }
