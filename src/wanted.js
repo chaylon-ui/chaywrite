@@ -23,8 +23,8 @@ export const WANTED_N = 10;
 export const TTL_MS = 48 * 3600 * 1000;        // a good list is kept two days (a failed refresh keeps yesterday's)
 export const REFRESH_MS = 23 * 3600 * 1000;    // the cron rebuilds after this: once a day (owner, 2026-09-22)
 export const RETRY_MS = 3600 * 1000;           // and retries an hour after a build that found nothing
-const KV_KEY = "wanted:mtg:standard:v2";
-const ATTEMPT_KEY = "wanted:mtg:standard:attempt";
+const KV_KEY = "wanted:mtg:standard:v3";        // v3: buyable printings only (2026-09-22)
+const ATTEMPT_KEY = "wanted:mtg:standard:attempt3";
 const LAST_TRY_KEY = "wanted:mtg:standard:lasttry";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 const memo = { at: 0, value: null };
@@ -221,7 +221,7 @@ async function readCached(env) {
   try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
   return null;
 }
-const STATE_KEY = "wanted:mtg:standard:state";
+const STATE_KEY = "wanted:mtg:standard:state3";
 const STATE_TTL = 6 * 3600 * 1000;
 const readJson = async (env, key) => { try { const t = await kvGet(env, key); return t ? JSON.parse(t) : null; } catch { return null; } };
 
