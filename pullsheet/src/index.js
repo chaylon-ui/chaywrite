@@ -270,6 +270,7 @@ async function api(req, env, pathname, me, ctxWait) {
       const since = String(b.since || '').slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return json({ error: 'since must be YYYY-MM-DD' }, 400);
       const r = await Q.backfill(env, shopQuery, { since, excludePos: b.excludePos !== false, cursor: b.cursor || null });
+      if (!r.seen && r.errors && r.errors.length) return json({ ...r, error: 'Shopify: ' + r.errors.join(' | ') }, 502);
       return json(r);
     }
     if (parts[2] === 'refresh' && req.method === 'POST') {
@@ -1339,6 +1340,14 @@ async function showQueue(quiet){
     const d=new Date(Date.now()-14*86400000).toISOString().slice(0,10);
     const bf=el('<div class="ordbox"><div style="font-weight:700;margin-bottom:6px">Import unfulfilled orders</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label style="font-size:13px">Placed since <input type="date" id="bfSince" value="'+d+'" style="padding:7px;border:1px solid var(--line);border-radius:8px;font:inherit"></label><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="bfNoPos" checked> Skip POS orders</label><button id="bfGo" class="primary">Import</button><span id="bfMsg" style="font-size:12px;color:var(--mut)"></span></div><div style="font-size:11px;color:var(--mut);margin-top:6px">New orders arrive on their own through the Shopify hooks; this catches up on older ones.</div></div>');
     $('#bfGo',bf).onclick=()=>runBackfill(bf); v.appendChild(bf);
+    const hs=el('<div style="font-size:12px;color:var(--mut);margin:-6px 0 12px 2px" id="hookStatus">Checking Shopify hooks…</div>'); v.appendChild(hs);
+    fetch('/api/hooks',{headers:H}).then(r=>r.json()).then(hj=>{
+      const reg=(hj.registered||[]).length, miss=(hj.missing||[]);
+      hs.innerHTML = miss.length
+        ? '<span style="color:var(--accent);font-weight:700">Shopify hooks: '+reg+'/4 registered</span> · missing '+esc(miss.join(', '))+(hj.errors&&hj.errors.length?' · '+esc(hj.errors.join(' | ')):'')+' <button id="hookFix" style="font-size:11px;padding:3px 8px;margin-left:6px">Register now</button>'
+        : 'Shopify hooks: 4/4 registered at '+esc(hj.callback||'');
+      const fx=$('#hookFix',hs); if(fx) fx.onclick=async()=>{ fx.disabled=true; fx.textContent='Registering…'; try{ const r=await fetch('/api/hooks',{method:'POST',headers:H}); const j=await r.json(); hs.textContent='Registered '+(j.created||[]).length+', still missing '+(j.missing||[]).filter(t=>!(j.created||[]).includes(t)).length+((j.failed||[]).length?' · '+(j.failed||[]).join(' | '):''); }catch(e){ hs.textContent='Could not register hooks.'; } };
+    }).catch(()=>{ hs.textContent='Could not check Shopify hooks.'; });
   }
   const sb=el('<div class="search"><input id="qsearch" placeholder="Filter by order #, customer or city"><button id="qall">Select all shown</button><button id="qnone">Clear</button></div>');
   v.appendChild(sb);

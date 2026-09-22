@@ -72,9 +72,10 @@ export async function searchUnfulfilled(env, shopQuery, { since, excludePos = tr
   if (excludePos) parts.push('-source_name:pos');
   const r = await shopQuery(env, `query($q:String!,$c:String){ orders(first:25, query:$q, after:$c, sortKey:CREATED_AT){ pageInfo { hasNextPage endCursor } edges { node { ${ORDER_FIELDS} } } } }`, { q: parts.join(' AND '), c: cursor });
   const conn = r && r.data && r.data.orders;
-  if (!conn) return { orders: [], cursor: null };
+  const errors = ((r && r.errors) || []).map((e) => e.message);
+  if (!conn) return { orders: [], cursor: null, errors: errors.length ? errors : ['Shopify returned no orders data'] };
   const orders = conn.edges.map((e) => e.node);
-  return { orders, cursor: conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null };
+  return { orders, cursor: conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null, errors };
 }
 
 /* ───────────────────── queue records ───────────────────── */
@@ -137,7 +138,7 @@ export async function refreshOrder(env, shopQuery, gid) {
 }
 
 export async function backfill(env, shopQuery, opts) {
-  const { orders, cursor } = await searchUnfulfilled(env, shopQuery, opts);
+  const { orders, cursor, errors } = await searchUnfulfilled(env, shopQuery, opts);
   let kept = 0, skipped = 0;
   for (const o of orders) {
     // the search already returned the full order; walk extra line-item pages only when needed
@@ -145,7 +146,7 @@ export async function backfill(env, shopQuery, opts) {
     const rec = toRecord(full);
     if (rec) { await putRecord(env, rec); kept++; } else skipped++;
   }
-  return { kept, skipped, seen: orders.length, cursor };
+  return { kept, skipped, seen: orders.length, cursor, errors: errors || [] };
 }
 
 // The queue as the screen shows it: metadata only (one list op), plus which
