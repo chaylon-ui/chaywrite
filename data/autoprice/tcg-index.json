@@ -1,22 +1,22 @@
 {
- "builtAt": "2026-09-20T23:13:10Z",
+ "builtAt": "2026-09-22T00:03:58Z",
  "categories": {
   "3": {
    "groups": 220,
-   "rows": 5076,
-   "priced": 3429,
-   "withUpc": 936
+   "rows": 5079,
+   "priced": 3434,
+   "withUpc": 939
   },
   "1": {
    "groups": 456,
    "rows": 3928,
-   "priced": 2896,
-   "withUpc": 1033
+   "priced": 2902,
+   "withUpc": 1032
   },
   "2": {
    "groups": 658,
    "rows": 1504,
-   "priced": 1003,
+   "priced": 1004,
    "withUpc": 427
   },
   "71": {
@@ -28,37 +28,37 @@
   "68": {
    "groups": 87,
    "rows": 1501,
-   "priced": 1230,
+   "priced": 1241,
    "withUpc": 0
   },
   "79": {
    "groups": 33,
    "rows": 202,
-   "priced": 198,
+   "priced": 197,
    "withUpc": 0
   },
   "62": {
    "groups": 105,
    "rows": 312,
-   "priced": 259,
+   "priced": 260,
    "withUpc": 0
   },
   "63": {
    "groups": 103,
    "rows": 1758,
-   "priced": 1618,
+   "priced": 1617,
    "withUpc": 0
   },
   "80": {
    "groups": 52,
    "rows": 735,
-   "priced": 647,
+   "priced": 646,
    "withUpc": 0
   },
   "27": {
    "groups": 107,
    "rows": 2054,
-   "priced": 1594,
+   "priced": 1593,
    "withUpc": 0
   },
   "24": {
@@ -70,19 +70,19 @@
   "74": {
    "groups": 52,
    "rows": 144,
-   "priced": 96,
+   "priced": 94,
    "withUpc": 0
   },
   "86": {
    "groups": 28,
    "rows": 364,
-   "priced": 316,
+   "priced": 315,
    "withUpc": 0
   },
   "81": {
    "groups": 82,
-   "rows": 513,
-   "priced": 467,
+   "rows": 514,
+   "priced": 466,
    "withUpc": 0
   },
   "89": {
@@ -94,7 +94,7 @@
   "72": {
    "groups": 20,
    "rows": 540,
-   "priced": 187,
+   "priced": 189,
    "withUpc": 0
   },
   "66": {
@@ -130,19 +130,19 @@
   "20": {
    "groups": 176,
    "rows": 1199,
-   "priced": 733,
+   "priced": 732,
    "withUpc": 558
   },
   "16": {
    "groups": 272,
    "rows": 1162,
-   "priced": 738,
+   "priced": 741,
    "withUpc": 254
   },
   "77": {
    "groups": 8,
    "rows": 210,
-   "priced": 105,
+   "priced": 106,
    "withUpc": 0
   },
   "73": {
