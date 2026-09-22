@@ -1746,7 +1746,12 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const reviewLinks = (r) => {
     const l = [];
     l.push(`<a href="${r.tcgId ? "https://www.tcgplayer.com/product/" + esc(r.tcgId) : "https://www.tcgplayer.com/search/all/product?q=" + q(r.title)}" target="_blank" rel="noopener">TCGplayer ↗</a>`);
-    if (r.pcName || r.graded) l.push(`<a href="https://www.pricecharting.com/search-products?type=prices&q=${q(r.pcName ? r.pcName.split(" · ")[0].replace(/^[^/]*\//, "") : r.title)}" target="_blank" rel="noopener">PriceCharting ↗</a>`);
+    // The matched card's own page when there is an id (pricecharting.com/game/<id>
+    // redirects to it, probe 35736867710): its sales table carries the DATE
+    // of every sold copy per grade, which the API does not (owner 2026-09-22:
+    // "warn if the date of the sold slab is old"). A search otherwise.
+    if (r.pcId) l.push(`<a href="https://www.pricecharting.com/game/${esc(String(r.pcId).replace(/\D/g, ""))}" target="_blank" rel="noopener" title="PriceCharting's page for the matched card: sale dates per grade are under its price table">PriceCharting sales ↗</a>`);
+    else if (r.pcName || r.graded) l.push(`<a href="https://www.pricecharting.com/search-products?type=prices&q=${q(r.pcName ? r.pcName.split(" · ")[0].replace(/^[^/]*\//, "") : r.title)}" target="_blank" rel="noopener">PriceCharting ↗</a>`);
     l.push(`<a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a>`);
     return `<div class="links muted">check: ${l.join(" · ")}</div>`;
   };
