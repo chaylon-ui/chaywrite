@@ -41,11 +41,13 @@ const LI_FIELDS = `name sku quantity unfulfilledQuantity variantTitle variant { 
   discountedUnitPriceSet { shopMoney { amount currencyCode } }
   image { url(transform: { maxWidth: 96, maxHeight: 134 }) }
   product { productType }`;
+// No customer{} here: the app has no read_customers scope and Shopify errors
+// on the field (seen 2026-09-22). Names come from the addresses instead.
 const ORDER_FIELDS = `id name createdAt cancelledAt displayFulfillmentStatus tags sourceName
-  customer { displayName }
   currentTotalPriceSet { shopMoney { amount currencyCode } }
   shippingLine { title }
   shippingAddress { name city provinceCode }
+  billingAddress { name }
   lineItems(first: 250) { pageInfo { hasNextPage endCursor } edges { node { ${LI_FIELDS} } } }`;
 
 // shopQuery(env, query, variables) -> raw GraphQL JSON ({data, errors}); provided by index.js
@@ -71,7 +73,7 @@ export async function searchUnfulfilled(env, shopQuery, { since, excludePos = tr
   if (excludePos) parts.push('-source_name:pos');
   const r = await shopQuery(env, `query($q:String!,$c:String){ orders(first:25, query:$q, after:$c, sortKey:CREATED_AT){ pageInfo { hasNextPage endCursor } edges { node { ${ORDER_FIELDS} } } } }`, { q: parts.join(' AND '), c: cursor });
   const conn = r && r.data && r.data.orders;
-  const errors = ((r && r.errors) || []).map((e) => e.message);
+  const errors = [...new Set(((r && r.errors) || []).map((e) => e.message))];
   if (!conn) return { orders: [], cursor: null, errors: errors.length ? errors : ['Shopify returned no orders data'] };
   const orders = conn.edges.map((e) => e.node);
   return { orders, cursor: conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null, errors };
@@ -109,7 +111,7 @@ export function toRecord(o) {
   const fo = null;
   return {
     num: orderNum(o.id), gid: o.id, name: o.name, createdAt: o.createdAt || '',
-    customer: (o.customer && o.customer.displayName) || (o.shippingAddress && o.shippingAddress.name) || '',
+    customer: (o.shippingAddress && o.shippingAddress.name) || (o.billingAddress && o.billingAddress.name) || (o.customer && o.customer.displayName) || '',
     total: money ? money.amount : null, currency: money ? money.currencyCode : '',
     shipping: ship, local: /pickup|in[\s-]?store/i.test(ship),
     city: [o.shippingAddress && o.shippingAddress.city, o.shippingAddress && o.shippingAddress.provinceCode].filter(Boolean).join(' '),
@@ -141,14 +143,14 @@ export async function refreshOrder(env, shopQuery, gid) {
 
 export async function backfill(env, shopQuery, opts) {
   const { orders, cursor, errors } = await searchUnfulfilled(env, shopQuery, opts);
-  let kept = 0, skipped = 0;
+  let kept = 0, skipped = 0; const records = [];
   for (const o of orders) {
     // the search already returned the full order; walk extra line-item pages only when needed
     const full = (o.lineItems && o.lineItems.pageInfo && o.lineItems.pageInfo.hasNextPage) ? await fetchOrder(env, shopQuery, o.id) : o;
     const rec = toRecord(full);
-    if (rec) { await putRecord(env, rec); kept++; } else skipped++;
+    if (rec) { await putRecord(env, rec); kept++; records.push(rec); } else skipped++;
   }
-  return { kept, skipped, seen: orders.length, cursor, errors: errors || [] };
+  return { kept, skipped, seen: orders.length, cursor, errors: errors || [], records };
 }
 
 // Self-filling queue: called by the cron trigger and by the first read of an
@@ -163,12 +165,14 @@ export async function syncQueue(env, shopQuery, { maxPages = 6, refreshStale = 2
   const since = new Date(now - SYNC_DAYS * 86400e3).toISOString().slice(0, 10);
   let cursor = (st.since === since && st.cursor) ? st.cursor : null;
   await env.JOBS.put('sys:queueSync', JSON.stringify({ ...st, running: new Date(now).toISOString() }));
-  let kept = 0, seen = 0, pages = 0, errors = [];
+  let kept = 0, seen = 0, pages = 0, errors = []; const records = [];
   try {
     do {
       const r = await backfill(env, shopQuery, { since, excludePos: true, cursor });
       kept += r.kept; seen += r.seen; cursor = r.cursor; pages++;
-      if (r.errors && r.errors.length) { errors = r.errors; break; }
+      records.push(...(r.records || []));
+      for (const m of r.errors || []) if (!errors.includes(m)) errors.push(m);
+      if (!r.seen && r.errors && r.errors.length) break;   // a page with no data at all: stop, report
     } while (cursor && pages < (inline ? 1 : maxPages));
   } catch (e) { errors.push(String(e && e.message || e)); }
   let refreshed = 0, dropped = 0;
@@ -181,13 +185,20 @@ export async function syncQueue(env, shopQuery, { maxPages = 6, refreshStale = 2
   }
   const rec = { since, cursor: cursor || '', at: new Date().toISOString(), kept, seen, refreshed, dropped, errors, running: '' };
   await env.JOBS.put('sys:queueSync', JSON.stringify(rec));
-  return rec;
+  return { ...rec, records };
 }
 
 // The queue as the screen shows it: metadata only (one list op), plus which
 // orders already sit on an ACTIVE sheet (from job metadata, no body reads).
-export async function listQueue(env) {
+export async function listQueue(env, extra) {
   const [q, jobs] = await Promise.all([env.JOBS.list({ prefix: QUEUE_PREFIX }), env.JOBS.list({ prefix: 'job:' })]);
+  const seen = new Set(q.keys.map((k) => k.name));
+  for (const rec of extra || []) {
+    const name = QUEUE_PREFIX + rec.num;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    q.keys.push({ name, metadata: { name: rec.name, createdAt: rec.createdAt, customer: String(rec.customer || '').slice(0, 40), itemQty: rec.itemQty, local: rec.local, pulled: (rec.tags || []).some((t) => String(t).toLowerCase() === PULL_TAG.toLowerCase()), source: rec.source, updatedAt: rec.updatedAt } });
+  }
   const onSheet = {};
   for (const k of jobs.keys) {
     const m = k.metadata || {};

@@ -267,7 +267,7 @@ async function api(req, env, pathname, me, ctxWait) {
         // nothing queued and no recent sync: fetch the first page now so the screen is not empty,
         // and let the rest of the walk + stale sweep run after the response
         sync = await Q.syncQueue(env, shopQuery, { inline: true });
-        rows = await Q.listQueue(env);
+        rows = await Q.listQueue(env, sync.records);
         if (typeof ctxWait === 'function') ctxWait(Q.syncQueue(env, shopQuery).catch(() => {}));
       }
       const hooksAt = await env.JOBS.get('sys:hooksAt');
@@ -276,7 +276,7 @@ async function api(req, env, pathname, me, ctxWait) {
         await env.JOBS.put('sys:hooksAt', new Date().toISOString());
         if (typeof ctxWait === 'function') ctxWait(ensureHooks(env, origin).catch(() => {}));
       }
-      return json({ rows, hooksAt: hooksAt || '', syncAt: (sync && sync.at) || '', syncErrors: (sync && sync.errors) || [], syncDays: Q.SYNC_DAYS });
+      return json({ rows, hooksAt: hooksAt || '', syncAt: (sync && sync.at) || '', syncErrors: [...new Set((sync && sync.errors) || [])], syncDays: Q.SYNC_DAYS });
     }
     if (parts[2] === 'backfill' && req.method === 'POST') {
       if (!isAdmin(me)) return json({ error: 'Admins only' }, 403);
