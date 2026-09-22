@@ -28,9 +28,9 @@ const LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/logo2.png?v
 export const MALLOW_URL = "https://mallowgames.com/sell-your-games/";
 // The PNG carries transparent bands above and below the strip (rows ~250-460
 // of 724); the CDN crops the middle out so no dead space rides along.
-export const MALLOW_BANNER = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/90A38806-3E70-440D-9CA9-E869B6C38946.png?v=1790106076&width=1200&height=139&crop=center";
+export const MALLOW_BANNER = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/90A38806-3E70-440D-9CA9-E869B6C38946.png?v=1790106076&width=1200&height=172&crop=center";
 const MALLOW_ALT = "Selling video games? Get cash or Exor Games store credit at Mallow Games - start selling";
-const mallowHtml = () => `<tr><td style="padding:4px 28px 22px"><a href="${MALLOW_URL}" style="display:block;text-decoration:none"><img src="${MALLOW_BANNER}" alt="${MALLOW_ALT}" width="544" height="63" style="display:block;width:100%;max-width:544px;height:auto;border:0"></a></td></tr>`;
+const mallowHtml = () => `<tr><td style="padding:4px 28px 22px"><a href="${MALLOW_URL}" style="display:block;text-decoration:none"><img src="${MALLOW_BANNER}" alt="${MALLOW_ALT}" width="544" height="78" style="display:block;width:100%;max-width:544px;height:auto;border:0"></a></td></tr>`;
 const mallowText = () => `Selling video games too? Mallow Games, our sister shop, buys them for cash or Exor Games store credit: ${MALLOW_URL}`;
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
