@@ -18,6 +18,32 @@
   // can open its "Select Game" overlay (owner, 2026-09-22: "these buttons
   // are still triggering the BinderPOS popup"). preventDefault keeps the
   // hash unchanged too. Signed in, wireTiles() below adds the game pick.
+  function fixedBottom() {
+    var v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--xg-fixed-bottom")) || 0;
+    if (!v) {
+      var hdr = document.querySelector(".fixed-header, #header .site-header, #header");
+      if (hdr && /fixed|sticky/.test(getComputedStyle(hdr).position)) v = hdr.getBoundingClientRect().bottom;
+    }
+    return Math.max(0, v);
+  }
+  function landOn(el) {
+    var GAP = 16, html = document.documentElement;
+    var hdr = document.querySelector("#header .site-header, #header");
+    var guess = fixedBottom() || (hdr ? hdr.getBoundingClientRect().height : 0);
+    var prev = html.style.scrollBehavior;
+    html.style.scrollBehavior = "auto";
+    el.style.scrollMarginTop = (guess + GAP) + "px";
+    try { el.scrollIntoView({ block: "start" }); } catch (err) { el.scrollIntoView(true); }
+    var tries = 0;
+    (function settle() {
+      if (++tries > 6) { html.style.scrollBehavior = prev; return; }
+      setTimeout(function () {
+        var want = fixedBottom() + GAP, have = el.getBoundingClientRect().top;
+        if (Math.abs(have - want) > 6 && (window.pageYOffset > 0 || have > want)) window.scrollBy(0, have - want);
+        settle();
+      }, 120);
+    })();
+  }
   (function guardTiles() {
     var tiles = Array.prototype.slice.call(document.querySelectorAll('a[href="#buylist"]'));
     if (!tiles.length) return;
@@ -26,13 +52,14 @@
       if (!a || tiles.indexOf(a) < 0) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       // Land with the section's top just under the fixed header, not behind
-      // it (owner, 2026-09-22: "it scrolls down too low"): the theme's
-      // xg-header-offset.js publishes the fixed bars' bottom edge as
-      // --xg-fixed-bottom on <html>.
-      var fixed = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--xg-fixed-bottom")) || 0;
-      if (!fixed) { var hdr = document.querySelector("#header .site-header, #header"); if (hdr && /fixed|sticky/.test(getComputedStyle(hdr).position)) fixed = hdr.getBoundingClientRect().bottom; }
-      var top = root.getBoundingClientRect().top + (window.pageYOffset || document.documentElement.scrollTop) - fixed - 16;
-      try { window.scrollTo({ top: Math.max(0, top), behavior: "smooth" }); } catch (err) { window.scrollTo(0, Math.max(0, top)); }
+      // it (owner, 2026-09-22: "it scrolls down too low"). The theme's
+      // header only becomes fixed AFTER the page scrolls (.fixed-header),
+      // and xg-header-offset.js publishes its bottom edge as
+      // --xg-fixed-bottom on <html> once it has, so: jump first with the
+      // best guess, then re-measure a few times and nudge into place.
+      // Instant scrolling on purpose - the live page cut a smooth scrollTo
+      // short at 39px (probe 2026-09-22), and nudges need settled positions.
+      landOn(root);
       var cart = root.querySelector(".bl__cart"); if (cart) cart.scrollTop = 0;
       if (typeof window.__xgTilePick === "function") window.__xgTilePick(a);
     }, true);
