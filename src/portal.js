@@ -93,6 +93,9 @@ const post = (env, path, body) => call(env, path, { method: "POST", headers: { "
 export async function portalPost(env, path, body) {
   return post(env, path, body);
 }
+export async function portalGet(env, path) {
+  return get(env, path);
+}
 
 async function gql(env, query, variables) {
   const j = await post(env, "/graphql", { query, variables });

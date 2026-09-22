@@ -55,6 +55,7 @@
 import { repriceCards, submitToBinderPos, cleanCards } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, buildDecisionEmail, sendEmail, emailConfigured } from "./stage-email.js";
+import { dryRunPlan } from "./stage-sync.js";
 import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
 export { safeImage };
@@ -690,6 +691,17 @@ export async function serveStage(request, env, url, staffOk) {
     const j = await doCall(env, origin, "/_stage/list?days=" + encodeURIComponent(url.searchParams.get("days") || "90"));
     await backfillNames(env, url, j);
     return html(renderList(j, opts));
+  }
+  // Dry run of the BinderPOS price carry-over (src/stage-sync.js): what
+  // would be saved for this buylist, nothing sent. A signed-in account or
+  // the staff key (the deploy smoke) may read it.
+  const dr = p.match(new RegExp("^" + BASE + "/b/([A-Za-z0-9-]{1,40})/bp-plan\\.json$"));
+  if (dr) {
+    if (!user && !pinOk) return Response.json({ error: "sign in or staff key required" }, { status: 403, headers: noStore });
+    const g = await doCall(env, origin, "/_stage/get?id=" + encodeURIComponent(dr[1]));
+    if (!g.ok) return Response.json({ ok: false, error: "no such buylist" }, { status: 404, headers: noStore });
+    const out = await dryRunPlan(env, g.record);
+    return Response.json(out, { status: out.ok ? 200 : 400, headers: noStore });
   }
   const m = p.match(new RegExp("^" + BASE + "/(b|email)/([A-Za-z0-9-]{1,40})$"));
   if (m) {

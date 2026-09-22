@@ -194,6 +194,31 @@ jobs:
           curl -sS -o /dev/null -w '/9pocket/control no session: HTTP %{http_code} (expect 403)\n' --max-time 20 -X POST -H 'content-type: application/json' -d '{"id":"x","action":"approve"}' "https://exor-binder.nevski.workers.dev/9pocket/control" || true
           curl -sS -o /dev/null -w '/buylist/staged (old address): HTTP %{http_code} -> %{redirect_url} (expect 308 to /9pocket)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/buylist/staged" || true
           echo "health (counts, accounts, staging, lookup + email config, name probe): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/9pocket/health?probe=1' || true)"
+          # DRY RUN of the BinderPOS price carry-over (src/stage-sync.js): the
+          # newest approved 9Pocket buylist's plan - what /api/buylist/save
+          # would receive - printed, nothing sent. Customer fields are redacted
+          # by the worker; names of cards are fine.
+          node <<'EOF2'
+          const fs = require('fs');
+          const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+          const K = m ? m[1] : '';
+          const W = 'https://exor-binder.nevski.workers.dev';
+          (async () => {
+            if (!K) { console.log('bp-plan: no DEFAULT_PIN; skipped'); return; }
+            const li = await fetch(W + '/9pocket.json?k=' + K + '&status=approved&days=90').then((r) => r.json()).catch((e) => ({ error: String(e) }));
+            const recs = (li.records || []).filter((r) => r.bp && r.bp.number).sort((a, b) => b.ts - a.ts);
+            console.log('bp-plan: approved with a BinderPOS number:', recs.length, li.error ? '| error ' + li.error : '');
+            if (!recs.length) return;
+            const r = recs[0];
+            const j = await fetch(W + '/9pocket/b/' + encodeURIComponent(r.id) + '/bp-plan.json?k=' + K).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+            if (!j.ok) { console.log('bp-plan', r.number, 'failed:', j.error); return; }
+            console.log('bp-plan', j.number, '-> BinderPOS', j.bpId, '| paid', j.paymentType, '| their lines', j.theirLines, 'final', j.finalLines, 'approved', j.approved, 'completed', j.completed, '| matched', j.matched, 'changes', j.changes, '| detail keys:', j.detailKeys.join(','));
+            for (const l of j.lines) console.log('  line', l.id, l.name, '[' + l.set + ']', l.condition, l.finish || '', '| BP qty', l.bpQty, 'cash', l.bpCash, 'credit', l.bpCredit, '| ours qty', l.ourQty, 'cash', l.ourCash, 'credit', l.ourCredit, l.staffPriced ? '(staff price)' : '', l.change ? '<- WOULD CHANGE' : 'same');
+            for (const l of j.unmatchedOurs) console.log('  unmatched on our side:', JSON.stringify(l));
+            for (const l of j.unmatchedTheirs) console.log('  unmatched on their side:', JSON.stringify(l));
+            console.log('  payload (redacted):', JSON.stringify(j.payload).slice(0, 3000));
+          })().catch((e) => console.log('bp-plan error:', e.message));
+          EOF2
           echo "mine for a made-up customer (expect count 0): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist/api/mine?customer=1234567' | head -c 200 || true)"
           echo "sell page js/css carry the status block: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.js' | grep -c 'bl-mine' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.css' | grep -c 'bl__mine' || true)"
           echo "cart tag + beacon + sid served in deck-builder.js: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'cart/update.js' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'function beacon' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'var SID' || true)"
