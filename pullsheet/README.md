@@ -20,13 +20,14 @@ from the Shopify orders page, lives in chayesl at
 ## Making this deployable (phase 1)
 
 1. (Done 2026-09-22: live source diffed against `src/index.js`, identical.)
-2. Dashboard -> KV -> the namespace bound as `JOBS` -> copy its id into
-   `wrangler.toml`.
+2. (Nothing to paste: the KV namespace is named `pullsheet-jobs` and the
+   workflow resolves its id by name at deploy time.)
 3. Confirm the worker's secrets exist in the dashboard: `API_TOKEN`, `SHOP`,
    `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SESSION_SECRET`, `ESL_KEY`.
    `keep_vars = true` means a deploy never touches them.
-4. Run the "Deploy exor-pullsheet" workflow by hand (Actions tab). It refuses to
-   run while the KV id placeholder is present, and smoke-tests the sign-in page.
+4. Run the "Deploy exor-pullsheet" workflow by hand (Actions tab). It fails
+   early if no `pullsheet-jobs` namespace is found, and smoke-tests the
+   sign-in page after deploying.
 5. Once one manual deploy is green, switch the workflow's trigger to
    `push` on `pullsheet/**` so pushes deploy like exor-binder.
 

@@ -1,12 +1,8 @@
 # Exor Pull Sheet — the tablet pick/pack app (exor-pullsheet.nevski.workers.dev).
 #
-# STATUS: recovered source, NOT yet wired to deploy. Before the first deploy from
-# here, do both of these (see README.md):
-#   1. Confirm src/index.js matches what is deployed (download the live source
-#      from the Cloudflare dashboard and diff it against src/index.js).
-#   2. Paste the JOBS KV namespace id below (dashboard -> Workers & Pages ->
-#      KV -> the namespace bound to exor-pullsheet as JOBS).
-# The deploy workflow refuses to run while the placeholder is still here.
+# Source confirmed identical to the live worker on 2026-09-22.
+# The JOBS binding points at the KV namespace named "pullsheet-jobs"; the deploy
+# workflow looks its id up by name and substitutes the placeholder below.
 
 name = "exor-pullsheet"
 main = "src/index.js"
