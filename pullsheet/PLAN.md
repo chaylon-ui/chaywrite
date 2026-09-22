@@ -39,11 +39,31 @@ plumbing with a live queue fed by Shopify, and let Shopify hold the "done" state
 4. **Fulfill on pack, hold on quarantine, drop the tags.**
 5. **Scan, offline queue, print agent, Access login.**
 
-## Decisions needed from the owner before phase 2
+## Owner decisions (2026-09-22)
 
-- Are online orders ever fulfilled from more than one of the six stores? This
-  decides whether the queue is per location (fulfillment orders carry the
-  assigned location either way).
-- Is there a Wi-Fi label printer or a PC near the packing bench (print agent)?
-- Keep PIN login behind Cloudflare Access, or switch to Access only?
-- Wave rules: manual only, or auto-wave (time / size / per game)?
+- **One store ships everything.** Online orders are fulfilled from a single
+  location, so the queue is one list. No per-location split; the assigned
+  fulfillment location is still recorded per order for the day that changes.
+- **Network label printer at the packing bench.** Phase 5 adds a print agent
+  that drives it from the worker; no browser print dialog on the tablet.
+  (Printer make/model still to be confirmed before phase 5.)
+- **Keep PINs, add Cloudflare Access in front.** Access gates the URL (a tablet
+  enrols once); staff still pick their name and PIN, so every tap is attributed.
+- **Manual waves only.** Orders land in a live queue; a lead ticks the ones to
+  pull and makes a sheet. No scheduled or size-triggered sheets.
+
+## Phase 2 scope (next)
+
+1. Webhook intake: the worker registers ORDERS_PAID / ORDERS_UPDATED /
+   ORDERS_CANCELLED webhooks on itself (same self-registration pattern as
+   exor-binder's INVENTORY_LEVELS_UPDATE), verifies the HMAC with the app's
+   client secret, and keeps a `queue:` entry per unfulfilled order with
+   unfulfilled quantities, customer, shipping method, assigned location.
+2. Backfill: an admin button imports unfulfilled orders since a chosen date
+   (the store reports ~4,900 "unfulfilled" orders; most are old kiosk/POS
+   orders that will never ship, so intake needs a start date, not "all").
+3. Queue screen: live list of queued orders (age, items, shipping/pickup,
+   already-on-a-sheet flag); tick orders, "Make pull sheet" builds the same
+   job the userscript builds today, server-side (SKU parse, game/set/collector
+   grouping, rarity + image enrichment cached in KV).
+4. The userscript keeps working through phase 2; it is retired in phase 3.
