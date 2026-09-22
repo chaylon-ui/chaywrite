@@ -10,8 +10,8 @@ name: shot-probe
 # type, and the head of a JSON body), and with `grep` every match of a regex
 # in the bodies of those responses, scripts included (to find an API path
 # inside an app bundle). With `click` it clicks a selector after the page
-# settled and reports the hash, the scroll position and any BinderPOS
-# overlay that opened (its modal ids and visible "Select Game" text).
+# settled and reports the hash, the scroll position over the next seconds,
+# page errors, and any BinderPOS overlay that opened.
 on:
   workflow_dispatch:
     inputs:
@@ -48,7 +48,7 @@ on:
         required: false
         default: ""
       click:
-        description: Selector to click after the page settled (before measuring and shooting); reports the hash, the scroll and any BinderPOS overlay
+        description: Selector to click after the page settled (before measuring and shooting); reports the hash, the scroll over time, page errors and any BinderPOS overlay
         required: false
         default: ""
       scroll:
@@ -114,6 +114,8 @@ jobs:
           (async () => {
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
             const page = await browser.newPage();
+            page.on('pageerror', (e) => console.log('PAGEERROR', String(e && e.message || e).slice(0, 300)));
+            page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('CONSOLE-' + m.type().toUpperCase(), m.text().slice(0, 300)); });
             const w = parseInt(process.env.W || '390', 10) || 390;
             await page.setViewport({ width: w, height: 900, deviceScaleFactor: 2, isMobile: w < 700, hasTouch: w < 700 });
             await page.setUserAgent(w < 700
@@ -166,10 +168,15 @@ jobs:
                 const vis = (el) => { const cs = getComputedStyle(el), b = el.getBoundingClientRect(); return cs.display !== 'none' && cs.visibility !== 'hidden' && b.width > 0 && b.height > 0; };
                 const ids = [...document.querySelectorAll('[id*="binderpos"], [class*="binderpos"]')].filter(vis).slice(0, 12).map((e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).slice(0, 3).join('.') : ''));
                 const selectGame = [...document.querySelectorAll('h1,h2,h3,div,span,p')].some((e) => /select game/i.test(e.textContent || '') && vis(e) && (e.textContent || '').trim().length < 40);
-                return { hash: location.hash, scrollY: Math.round(window.scrollY), visibleBinderpos: ids, selectGameVisible: selectGame };
+                const bl = document.querySelector('.xg-buylist');
+                return { hash: location.hash, scrollY: Math.round(window.scrollY), fixedBottom: getComputedStyle(document.documentElement).getPropertyValue('--xg-fixed-bottom').trim(), bodyPadTop: getComputedStyle(document.body).paddingTop, buylistTop: bl ? Math.round(bl.getBoundingClientRect().top + window.scrollY) : null, tilePick: typeof window.__xgTilePick, visibleBinderpos: ids, selectGameVisible: selectGame };
               });
               console.log('before click', JSON.stringify(await overlay()));
-              try { await page.click(process.env.CLICK); await sleep(2500); console.log('clicked', process.env.CLICK); }
+              try {
+                await page.click(process.env.CLICK);
+                for (const ms of [300, 700, 1500, 2500]) { await sleep(ms === 300 ? 300 : ms - [0, 300, 700, 1500][[300, 700, 1500, 2500].indexOf(ms)]); console.log('after ' + ms + 'ms: scrollY', await page.evaluate(() => Math.round(window.scrollY)), 'hash', await page.evaluate(() => location.hash)); }
+                console.log('clicked', process.env.CLICK);
+              }
               catch (e) { console.log('CLICK-ERR', String(e).slice(0, 160)); }
               console.log('after click', JSON.stringify(await overlay()));
             }
