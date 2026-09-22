@@ -9,7 +9,9 @@ name: shot-probe
 # `net` every network response whose URL contains the given text (status,
 # type, and the head of a JSON body), and with `grep` every match of a regex
 # in the bodies of those responses, scripts included (to find an API path
-# inside an app bundle).
+# inside an app bundle). With `click` it clicks a selector after the page
+# settled and reports the hash, the scroll position and any BinderPOS
+# overlay that opened (its modal ids and visible "Select Game" text).
 on:
   workflow_dispatch:
     inputs:
@@ -43,6 +45,10 @@ on:
         default: "true"
       hover:
         description: Selector to hover (and hold) before measuring and shooting - opens app menus that are not in the DOM until hovered
+        required: false
+        default: ""
+      click:
+        description: Selector to click after the page settled (before measuring and shooting); reports the hash, the scroll and any BinderPOS overlay
         required: false
         default: ""
       scroll:
@@ -86,6 +92,7 @@ jobs:
       DARK: ${{ inputs.dark }}
       SAVE: ${{ inputs.save }}
       HOVER: ${{ inputs.hover }}
+      CLICK: ${{ inputs.click }}
       SCROLL: ${{ inputs.scroll }}
       TEXT: ${{ inputs.text }}
       TEXTMAX: ${{ inputs.textmax }}
@@ -154,6 +161,18 @@ jobs:
               try { await page.hover(process.env.HOVER); await sleep(1500); console.log('hovered', process.env.HOVER); }
               catch (e) { console.log('HOVER-ERR', String(e).slice(0, 160)); }
             }
+            if (process.env.CLICK) {
+              const overlay = () => page.evaluate(() => {
+                const vis = (el) => { const cs = getComputedStyle(el), b = el.getBoundingClientRect(); return cs.display !== 'none' && cs.visibility !== 'hidden' && b.width > 0 && b.height > 0; };
+                const ids = [...document.querySelectorAll('[id*="binderpos"], [class*="binderpos"]')].filter(vis).slice(0, 12).map((e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).slice(0, 3).join('.') : ''));
+                const selectGame = [...document.querySelectorAll('h1,h2,h3,div,span,p')].some((e) => /select game/i.test(e.textContent || '') && vis(e) && (e.textContent || '').trim().length < 40);
+                return { hash: location.hash, scrollY: Math.round(window.scrollY), visibleBinderpos: ids, selectGameVisible: selectGame };
+              });
+              console.log('before click', JSON.stringify(await overlay()));
+              try { await page.click(process.env.CLICK); await sleep(2500); console.log('clicked', process.env.CLICK); }
+              catch (e) { console.log('CLICK-ERR', String(e).slice(0, 160)); }
+              console.log('after click', JSON.stringify(await overlay()));
+            }
             const scrollY = parseInt(process.env.SCROLL || '', 10);
             if (scrollY > 0) {
               // Real wheel-like scrolling in steps, so scroll listeners that
@@ -218,7 +237,7 @@ jobs:
             if (!el) { console.log('SELECTOR NOT FOUND', process.env.SEL); await browser.close(); return; }
             const box = await el.boundingBox();
             console.log('BOX', JSON.stringify(box));
-            if (!process.env.HOVER && !(scrollY > 0)) await el.scrollIntoView().catch(() => {});
+            if (!process.env.HOVER && !process.env.CLICK && !(scrollY > 0)) await el.scrollIntoView().catch(() => {});
             await sleep(500);
             const jpg = await el.screenshot({ type: 'jpeg', quality: 60 });
             if (process.env.SAVE === 'true') { fs.writeFileSync(process.env.SHOT, jpg); console.log('SHOT saved', process.env.SHOT, jpg.length, 'bytes'); }
