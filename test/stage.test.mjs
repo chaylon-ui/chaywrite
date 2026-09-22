@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn, safeImage, mergeApproval, numberOf, shapeAdded, mergeAdded, editNeeds } from "../src/stage.js";
+import { totalsOf, shapeRecord, mineView, applyEdit, lockUnpaidPrice, stagingOn, safeImage, mergeApproval, numberOf, shapeAdded, mergeAdded, editNeeds } from "../src/stage.js";
 import { buildEmail, buildDecisionEmail, instructionsPayload, sendEmail } from "../src/stage-email.js";
 import { renderList, renderSheet, renderLoginForm, renderSetup, renderAdmin, renderDenied } from "../src/stage-ui.js";
 
@@ -101,6 +101,16 @@ test("a staff price on the worksheet marks the line and wins at approval; the re
   assert.match(m.notes.kept[0], /^Sol Ring · Lightly Played · Foil \(\$2\.75 cash \/ \$3\.50 credit; the day's would be \$9\.00 \/ \$9\.90\)$/);
 });
 
+test("an edit can only carry the price the list pays: cash on a Cash list, credit on a Store Credit list", () => {
+  const e = [{ cardId: "101", condition: "1", type: "normal", quantity: "2", cashBuyPrice: "1.00", storeCreditBuyPrice: "9.99" }, null];
+  assert.deepEqual(lockUnpaidPrice({ paymentType: "Cash" }, e), [{ cardId: "101", condition: "1", type: "normal", quantity: "2", cashBuyPrice: "1.00" }, null]);
+  assert.deepEqual(lockUnpaidPrice({ paymentType: "Store Credit" }, e), [{ cardId: "101", condition: "1", type: "normal", quantity: "2", storeCreditBuyPrice: "9.99" }, null]);
+  const r = shapeRecord({ customer: "1", paymentType: "Store Credit", cards: CARDS }, 1);
+  const after = applyEdit(r, lockUnpaidPrice(r, e));
+  assert.equal(after[0].cashBuyPrice, 1.5); assert.equal(after[0].storeCreditBuyPrice, 9.99); assert.equal(after[0].quantity, "2");
+  assert.deepEqual(lockUnpaidPrice(r, "junk"), []);
+});
+
 test("buylist numbers read 9P-<seq>", () => {
   assert.equal(numberOf(1001), "9P-1001");
 });
@@ -160,7 +170,11 @@ test("the staff pages: list rows link to worksheets; the worksheet's controls fo
   // the paid-as price column is marked, the other dimmed: Cash here, Credit on a Store Credit list
   assert.ok(sheet.includes('<th class="n pay">Cash<small>paid</small></th><th class="n dim">Credit</th>') && sheet.includes("paid as <b>Cash</b>: the <b>Cash</b> column"));
   const sc = renderSheet({ ...r, paymentType: "Store Credit" }, o);
-  assert.ok(sc.includes('<th class="n dim">Cash</th><th class="n pay">Credit<small>paid</small></th>') && sc.includes('<td class="n dim"><input class="p cash"') && sc.includes("the <b>Credit</b> column is what BinderPOS shows"));
+  assert.ok(sc.includes('<th class="n dim">Cash</th><th class="n pay">Credit<small>paid</small></th>') && sc.includes("the <b>Credit</b> column is what BinderPOS shows"));
+  // only the paid-as column takes a price: the other is locked text (owner, 2026-09-22)
+  assert.ok(sc.includes('<input class="p credit"') && !sc.includes('<input class="p cash"') && sc.includes('title="Locked: this list is paid as Store Credit') && sc.includes("$1.50</td>"));
+  assert.ok(sheet.includes('<input class="p cash"') && !sheet.includes('<input class="p credit"') && sheet.includes('title="Locked: this list is paid as Cash'));
+  assert.ok(sc.includes("the <b>Cash</b> column is locked") && sheet.includes("the <b>Credit</b> column is locked"));
   // prices only: price inputs, quantities as text, still a Save button
   const pr = renderSheet(r, { ...o, user: PRICER });
   assert.ok(pr.includes('<input class="p cash"') && !pr.includes('<input class="q" type="number" min="0"') && pr.includes('id="save"') && pr.includes('data-qty="3"'));

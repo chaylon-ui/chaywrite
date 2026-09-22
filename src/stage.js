@@ -164,6 +164,17 @@ const lineLabel = (c) => String(c.cardName || c.cardId) + " · " + String(c.cond
 
 // What an edit changes, for the permission check: quantities/removals need
 // "edit", prices need "prices".
+// Drop the price that the list's payment type does not pay from each edit
+// entry: cash on a Store Credit list, credit on a Cash list.
+export function lockUnpaidPrice(rec, edit) {
+  const credit = String((rec && rec.paymentType) || "").toLowerCase().includes("credit");
+  return (Array.isArray(edit) ? edit : []).map((e) => {
+    if (!e || typeof e !== "object") return e;
+    const { cashBuyPrice, storeCreditBuyPrice, ...rest } = e;
+    return credit ? { ...rest, storeCreditBuyPrice } : { ...rest, cashBuyPrice };
+  });
+}
+
 export function editNeeds(before, after) {
   const orig = new Map((before || []).map((c) => [lineKey(c), c]));
   let qty = (after || []).length !== (before || []).length, prices = false;
@@ -858,6 +869,10 @@ async function control(env, url, f, user) {
     if (typeof edit === "string") { try { edit = JSON.parse(edit); } catch { edit = null; } }
     const g = await doCall(env, url.origin, "/_stage/get?id=" + encodeURIComponent(id));
     if (!g.ok) return { ok: false, error: g.error };
+    // Only the paid-as price column can change (owner, 2026-09-22: a cash
+    // price typed on a Store Credit list looked like a lost save). The
+    // worksheet locks the other column; a hand-built request is trimmed too.
+    edit = lockUnpaidPrice(g.record, edit);
     const needs = editNeeds(g.record.cards, applyEdit(g.record, edit));
     const noteChanged = typeof f.note === "string" && f.note !== (g.record.note || "");
     if ((needs.qty || noteChanged) && !can(user, "edit")) return deny("change quantities or notes");
