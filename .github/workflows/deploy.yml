@@ -225,6 +225,7 @@ jobs:
             console.log('  payload (redacted):', JSON.stringify(j.payload).slice(0, 3000));
           })().catch((e) => console.log('bp-plan error:', e.message));
           EOF2
+          echo "cards we need most (movers -> BinderPOS hits; count, first names, missed, error): $(curl -sS --max-time 60 'https://exor-binder.nevski.workers.dev/buylist/api/wanted' | python3 -c 'import sys,json;j=json.load(sys.stdin);print(j.get("count"), [h.get("cardName")+" ["+str(h.get("setName"))+"]" for h in j.get("hits",[])][:4], "missed", j.get("missed"), "error", j.get("error"), "asOf", j.get("asOf"))' 2>&1 || true)"
           echo "mine for a made-up customer (expect count 0): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist/api/mine?customer=1234567' | head -c 200 || true)"
           echo "sell page js/css carry the status block: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.js' | grep -c 'bl-mine' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/buylist.css' | grep -c 'bl__mine' || true)"
           echo "cart tag + beacon + sid served in deck-builder.js: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'cart/update.js' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'function beacon' || true) / $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/deck-builder.js' | grep -c 'var SID' || true)"
@@ -398,7 +399,7 @@ jobs:
           node test/enrich-parse.test.mjs 2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           node test/enrich-tick.test.mjs  2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           echo "=== 9Pocket: pure helpers (src/stage.js), the DO (in-memory storage), accounts (src/stage-auth.js) ==="
-          for t in test/stage.test.mjs test/stage-do.test.mjs test/stage-auth.test.mjs test/stage-sync.test.mjs test/autoprice.test.mjs test/autoprice-access.test.mjs test/hold.test.mjs test/hold-live.test.mjs test/page-edit.test.mjs; do echo "-- $t"; node $t 2>&1 | grep -E '^# (pass|fail)|^not ok' || true; done
+          for t in test/stage.test.mjs test/stage-do.test.mjs test/stage-auth.test.mjs test/stage-sync.test.mjs test/autoprice.test.mjs test/autoprice-access.test.mjs test/hold.test.mjs test/hold-live.test.mjs test/page-edit.test.mjs test/wanted.test.mjs; do echo "-- $t"; node $t 2>&1 | grep -E '^# (pass|fail)|^not ok' || true; done
           W="https://exor-binder.nevski.workers.dev"
           echo "=== GET /enrich/status (tokenConfigured, next alarm, last run) ==="
           curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true

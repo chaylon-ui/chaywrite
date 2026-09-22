@@ -42,6 +42,7 @@ import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
 import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf } from "./stage.js";
 import { instructionsPayload, buildEmail, sendEmail } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
+import { wantedCards } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
 
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
@@ -341,6 +342,13 @@ async function route(mode, action, request, env, url, cors) {
     if (game === "mtg") { try { symbols = await scryfallSymbols(); } catch { symbols = {}; } }
     const sets = names.map((name) => { const icon = symbolFor(symbols, name); return icon ? { name, icon } : { name }; });
     return json({ game, count: sets.length, withIcon: sets.filter((s) => s.icon).length, sets }, 200, cacheable);
+  }
+
+  // The sell page's first view (owner, 2026-09-22): the ten cards the store
+  // most wants right now, as ordinary search hits. src/wanted.js.
+  if (action === "wanted") {
+    const v = await wantedCards(env, { search: (name) => bpCardSearch("mtg", name, 0) });
+    return json(v, 200, { ...cors, "cache-control": v.count ? "public, max-age=600" : "no-store" });
   }
 
   if (action === "search") {

@@ -822,8 +822,27 @@
     }).catch(function () {});
   }
 
+  /* ---- first view: the cards we need most (owner, 2026-09-22) ------------
+     Before any search the results area shows the ten cards the store most
+     wants right now - this week's biggest paper Standard price risers on
+     MTGGoldfish, each resolved by the worker to its BinderPOS buylist entry
+     (src/wanted.js) - drawn as ordinary result cards with the usual
+     condition rows and Add buttons. The first real search replaces them. */
+  function loadWanted() {
+    if (lastQuery || lastHits.length) return;           // the shopper searched already
+    api("/wanted").then(function (j) {
+      var hits = Array.isArray(j.hits) ? j.hits : [];
+      if (!hits.length || lastQuery || lastHits.length) return;
+      lastHits = hits;
+      $("#bl-hits").innerHTML = '<div class="bl__wanted"><h3 class="bl__wantedtitle"><span class="bl__flame" aria-hidden="true"></span>Cards we need most right now</h3>' +
+        '<p class="bl__muted">This week\'s biggest movers in Standard, with what we pay today. Search above for anything else you are selling.</p></div>';
+      renderHits(hits, 0);
+      setStatus("");
+    }).catch(function () {});
+  }
+
   /* ---- start: the saved draft is the cart, like their app ---- */
-  loadGames().then(loadSets).then(wireTiles);
+  loadGames().then(loadSets).then(wireTiles).then(loadWanted);
   loadMine();
   api("/list").then(function (j) {
     cart = Array.isArray(j.list) ? j.list : [];

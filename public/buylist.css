@@ -379,3 +379,10 @@ html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.
 .bl__mine-row--approved .bl__mine-status { color: var(--bl-accent); }
 .bl__mine-row--rejected .bl__mine-status { color: var(--bl-danger); }
 html[data-xg-theme="dark"] .bl__mine-row--staged .bl__mine-status { color: #f6c453; }
+/* First view (owner, 2026-09-22): "Cards we need most right now" - the
+   heading above the ten featured result cards. The cards themselves are the
+   ordinary .bl__hit articles. */
+.bl__wanted { margin: 2px 0 14px; padding: 12px 16px; border: 1.5px solid var(--bl-accent); border-radius: var(--bl-radius); background: linear-gradient(90deg, var(--bl-accent-soft) 0, transparent 70%), var(--bl-surface); }
+.bl__wantedtitle { margin: 0 0 4px; font-size: 17px; font-weight: 800; color: var(--bl-ink); display: flex; align-items: center; gap: 8px; }
+.bl__wanted .bl__muted { margin: 0; font-size: 13px; }
+.bl__flame { display: inline-block; width: 12px; height: 16px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 50% 70%, #ffd166 0 30%, var(--bl-accent) 31% 100%); transform: rotate(-8deg); }
