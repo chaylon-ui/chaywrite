@@ -3,7 +3,10 @@ name: shot-probe
 # to settle, and report (a) the computed style of every selector given plus
 # the stylesheet rules that match, and (b) a JPEG of one element - committed
 # to probe-shots/ (the sandbox can git pull that; it cannot download Action
-# artifacts) and also printed as base64 when save is false.
+# artifacts) and also printed as base64 when save is false. With `text` it
+# also prints an element's visible text, and with `net` every network
+# response whose URL contains the given text (status, type, and the head of
+# a JSON body) - for finding where a page gets a number from.
 on:
   workflow_dispatch:
     inputs:
@@ -43,6 +46,14 @@ on:
         description: Scroll the window down by this many px before measuring and shooting (the sticky header only exists after a scroll); the element is then NOT scrolled into view
         required: false
         default: ""
+      text:
+        description: Selector whose visible text is printed (first 4000 chars)
+        required: false
+        default: ""
+      net:
+        description: Print every network response whose URL contains this text (status, content-type, head of a JSON body)
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -61,6 +72,8 @@ jobs:
       SAVE: ${{ inputs.save }}
       HOVER: ${{ inputs.hover }}
       SCROLL: ${{ inputs.scroll }}
+      TEXT: ${{ inputs.text }}
+      NET: ${{ inputs.net }}
       SHOT: probe-shots/shot-${{ github.run_id }}.jpg
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +96,21 @@ jobs:
               : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
             await page.setCacheEnabled(false);
             await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
+            if (process.env.NET) {
+              const needle = process.env.NET;
+              page.on('response', async (res) => {
+                try {
+                  const u = res.url();
+                  if (!u.includes(needle)) return;
+                  const ct = String(res.headers()['content-type'] || '');
+                  let head = '';
+                  if (/json|javascript|text/i.test(ct) && res.status() < 300 && res.request().resourceType() !== 'script' && res.request().resourceType() !== 'stylesheet') {
+                    try { head = (await res.text()).replace(/\s+/g, ' ').slice(0, 700); } catch (e) { head = '(body unavailable)'; }
+                  }
+                  console.log('NET', res.status(), res.request().resourceType(), ct.split(';')[0], u.slice(0, 200), head ? '| ' + head : '');
+                } catch (e) {}
+              });
+            }
             const target = new URL(process.env.URL);
             const pt = target.searchParams.get('preview_theme_id');
             if (pt) { await page.goto(target.origin + '/?preview_theme_id=' + pt, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null); }
@@ -106,6 +134,10 @@ jobs:
                 const pick = (sel) => { const el = document.querySelector(sel); return el ? sel + ' [' + el.className + '] style=' + (el.getAttribute('style') || '') : sel + ' NOT FOUND'; };
                 return ['#header', '#header .site-header', '#header .header-top', '#header .nav-menu', '#header .site-header-mobile'].map(pick).join(' || ');
               }));
+            }
+            if (process.env.TEXT) {
+              const t = await page.evaluate((sel) => { const el = document.querySelector(sel); return el ? el.innerText.replace(/\n{3,}/g, '\n\n').slice(0, 4000) : 'NOT FOUND'; }, process.env.TEXT).catch((e) => 'TEXT-ERR ' + String(e).slice(0, 160));
+              console.log('TEXT-BEGIN ' + process.env.TEXT); console.log(t); console.log('TEXT-END');
             }
             const rows = await page.evaluate((list) => {
               const out = [];
