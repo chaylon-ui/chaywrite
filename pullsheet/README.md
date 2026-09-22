@@ -10,8 +10,8 @@ pack per order, print labels, and flash ESL shelf tags via ChayESL.
 as `public/dl-e9f1d28ef9f8ad65.js` on 2026-07-08 (commit 6a7b2c8) and deleted
 the same day ("Remove temp worker download copy"). It is byte-identical to that
 file (md5 `6aa2e79a11ce7809e1c2255636a68ab5`). Nothing newer exists in any repo,
-so **the live worker may have moved on since July.** Do not deploy from here
-until that is checked.
+and on 2026-09-22 the owner pasted the live worker source: it is identical to
+that copy apart from a trailing newline. The source here is authoritative.
 
 The other half of the system, the Tampermonkey userscript that builds sheets
 from the Shopify orders page, lives in chayesl at
@@ -19,9 +19,7 @@ from the Shopify orders page, lives in chayesl at
 
 ## Making this deployable (phase 1)
 
-1. Cloudflare dashboard -> Workers & Pages -> exor-pullsheet -> download the
-   live source (Edit code, or `npx wrangler download` locally). Diff it against
-   `src/index.js`; commit the live version here if it differs.
+1. (Done 2026-09-22: live source diffed against `src/index.js`, identical.)
 2. Dashboard -> KV -> the namespace bound as `JOBS` -> copy its id into
    `wrangler.toml`.
 3. Confirm the worker's secrets exist in the dashboard: `API_TOKEN`, `SHOP`,
@@ -49,20 +47,32 @@ rotated regardless of anything else:
 After rotating, the userscript needs the new values until it is retired in
 phase 2 (it auto-updates from esl.exorgames.com).
 
-## Known defects in this copy (fix in phase 1b, after the source check)
+## Defects fixed on this branch (phase 1b)
 
-- Line items use `quantity`; edited or partly fulfilled orders re-pull items the
-  customer no longer gets. Use `unfulfilledQuantity`.
-- `POST /api/jobs/:id/pack` tags EVERY order in the sheet PACKED + PRINTED when
-  one order is packed. Tag only that order.
-- Sheet-level `state.found` and per-order `state.orders[name].found` are never
-  reconciled; picking from order pages leaves the sheet at 0 pulled.
+Verified with a local harness (mock KV + mocked Shopify) before pushing.
+
+- `POST /api/jobs/:id/pack` now tags only the packed order PACKED + PRINTED.
+  It used to tag every order in the sheet.
+- Per-order picking now lifts the sheet-level `state.found` for that card, so
+  picking from the order pages no longer leaves the sheet at "0 pulled".
+- `/auth` locks a name + IP for 15 minutes after 5 wrong PINs (KV TTL key);
+  the sign-in page shows the lockout message.
+- The client four-eye check now matches the server (every picker, not just
+  `startedBy`), and admins reach the server's override prompt instead of a
+  dead-end alert.
+- `GET /api/jobs` answers archived sheets from KV metadata (no body read), and
+  the metadata now carries the game badges.
+- Userscript v0.29.0 (chayesl branch `claude/pullsheet-userscript-v0.29`):
+  lines use `unfulfilledQuantity` instead of `quantity`, so edited or partly
+  fulfilled orders are not re-pulled; the dead `TAG_AFTER_PRINT` setting is gone.
+
+## Still open (later phases)
+
 - Every patch is a whole-job read-modify-write in KV (no compare-and-set), so
-  two tablets on one sheet overwrite each other.
-- `GET /api/jobs` and `/api/stats` read every job body ever stored.
-- `/auth` has no rate limit; PINs default to 1234.
-- Client four-eye check only tests `startedBy`; the server tests every picker.
-- `TAG_AFTER_PRINT` in the userscript is declared but never read.
+  two tablets on one sheet can overwrite each other. Phase 3 (Durable Object).
+- `/api/stats` still reads every job body (admin-only, rare).
+- PINs default to 1234 for seeded staff; set real PINs in Staff & settings.
+- The userscript still embeds the three secrets until phase 2 retires it.
 
 ## Where this is going (phases 2-5)
 

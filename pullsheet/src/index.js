@@ -18,6 +18,8 @@ const QTAG = 'quarantine1';
 const PULL_TAG = 'PULLSHEET';
 const PACK_TAG = 'PACKED';
 const PRINT_TAG = 'PRINTED';
+const AUTH_MAX_FAILS = 5;        // wrong PINs per name+IP before a lockout
+const AUTH_LOCK_SECS = 15 * 60;  // lockout length (KV TTL)
 const LOGO = 'data:image/png;base64,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';
 
 export default {
@@ -30,15 +32,22 @@ export default {
         const b = await req.json().catch(() => ({}));
         const name = String(b.name || '').trim();
         const pin = String(b.pin || '');
+        const ip = req.headers.get('CF-Connecting-IP') || '';
+        const lockKey = 'sys:authfail:' + name.toLowerCase() + '|' + ip;
+        let fails = 0;
+        try { fails = parseInt((await env.JOBS.get(lockKey)) || '0', 10) || 0; } catch (_) {}
+        if (fails >= AUTH_MAX_FAILS) return json({ error: 'Too many wrong PINs. Try again in 15 minutes.' }, 429);
         const users = await getUsers(env);
         const rec = users[name];
         if (rec && rec.h === (await pinHash(pin, env))) {
+          try { if (fails) await env.JOBS.delete(lockKey); } catch (_) {}
           const sess = await makeSession(env, name);
           return new Response(JSON.stringify({ ok: true, name, admin: isAdmin(name) }), { headers: {
             'Content-Type': 'application/json',
             'Set-Cookie': 'xgps=' + encodeURIComponent(sess) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + (30 * 24 * 3600),
           } });
         }
+        try { await env.JOBS.put(lockKey, String(fails + 1), { expirationTtl: AUTH_LOCK_SECS }); } catch (_) {}
         return json({ error: 'Wrong name or PIN' }, 401);
       }
       if (pathname === '/logout' && req.method === 'POST') {
@@ -257,8 +266,11 @@ async function api(req, env, pathname, me) {
     const list = await env.JOBS.list({ prefix: 'job:' });
     const jobs = await Promise.all(list.keys.map(async (k) => {
       const jid = k.name.slice(4);
+      const m = k.metadata || {};
+      // Archived sheets answer from the metadata written on save: no body read per job.
+      if (m.archived) return { id: jid, createdAt: m.createdAt, status: m.status, total: m.total || 0, pulled: m.pulled || 0, short: m.short || 0, quarantined: m.quarantined || 0, orders: m.orders || 0, packed: m.packed || 0, orderNames: m.orderNames || [], orderStats: [], workedBy: m.workedBy || [], archived: true, games: m.games || [] };
       const job = await env.JOBS.get(k.name, 'json');
-      if (!job) return { id: jid, ...(k.metadata || {}) };
+      if (!job) return { id: jid, ...m };
       const cards = allCards(job);
       const found = job.state.found || {}, q = job.state.quarantined || {};
       let pulled = 0, short = 0;
@@ -370,8 +382,8 @@ async function api(req, env, pathname, me) {
       if (!order) return json({ error: 'missing order' }, 400);
       const os = orderState(job, order);
       switch (body.op) {
-        case 'found': if (!body.cid) return json({ error: 'missing cid' }, 400); { const v = Math.max(0, +body.value || 0); os.found[body.cid] = v; recordPick(os, body.cid, v, me || body.employee || ''); } break;
-        case 'allFound': cardsForOrder(job, order).forEach((x) => { if (!os.refunded[x.cid]) { os.found[x.cid] = x.need; recordPick(os, x.cid, x.need, me || body.employee || ''); } }); break;
+        case 'found': if (!body.cid) return json({ error: 'missing cid' }, 400); { const v = Math.max(0, +body.value || 0); os.found[body.cid] = v; recordPick(os, body.cid, v, me || body.employee || ''); syncSheetFound(job, body.cid); } break;
+        case 'allFound': cardsForOrder(job, order).forEach((x) => { if (!os.refunded[x.cid]) { os.found[x.cid] = x.need; recordPick(os, x.cid, x.need, me || body.employee || ''); syncSheetFound(job, x.cid); } }); break;
         case 'note': if (!body.cid) return json({ error: 'missing cid' }, 400); os.notes[body.cid] = String(body.value || ''); break;
         case 'refund': if (!body.cid) return json({ error: 'missing cid' }, 400); os.refunded[body.cid] = body.value !== false; break;
         case 'orderNote': os.note = String(body.value || ''); break;
@@ -428,16 +440,14 @@ async function api(req, env, pathname, me) {
           os.verifyOverride = { by: verifier, at: new Date().toISOString() };
         }
       }
+      let tagWarning = '';
       if (packed) {
-        // Finalizing tags every order in the pull sheet: PACKED + PRINTED
-        const warnings = [];
-        for (const o of job.orders || []) {
-          if (!o.gid) continue;
-          const res = await tagOrder(env, o.gid, [PACK_TAG, PRINT_TAG], true);
+        // Finalizing tags THIS order PACKED + PRINTED (only this order, never the whole sheet)
+        if (og.gid) {
+          const res = await tagOrder(env, og.gid, [PACK_TAG, PRINT_TAG], true);
           const ue = ((res && res.data && res.data.tagsAdd) || {}).userErrors || [];
-          if (ue.length) warnings.push(o.name + ': ' + ue.map((e) => e.message).join(', '));
+          if (ue.length) tagWarning = og.name + ': ' + ue.map((e) => e.message).join(', ');
         }
-        if (warnings.length && !(job.orders || []).some((o) => o.gid)) return json({ error: warnings.join(' | ') }, 502);
       } else if (og.gid) {
         // Un-finalizing just removes PACKED from this order (PRINTED stays)
         await tagOrder(env, og.gid, PACK_TAG, false);
@@ -447,7 +457,7 @@ async function api(req, env, pathname, me) {
       else { os.packedAt = ''; os.packedBy = ''; }
       stampOrder(os, verifier);
       await put(env, id, job);
-      return json({ ok: true });
+      return json(tagWarning ? { ok: true, warning: tagWarning } : { ok: true });
     }
 
     // POST /api/jobs/:id/ofill  → mark every non-refunded card in an order as found
@@ -457,7 +467,7 @@ async function api(req, env, pathname, me) {
       const og = (job.orders || []).find((o) => o.name === order);
       if (!og) return json({ error: 'unknown order' }, 404);
       const os = orderState(job, order);
-      for (const x of cardsForOrder(job, order)) { if (!os.refunded[x.cid]) { os.found[x.cid] = x.need; recordPick(os, x.cid, x.need, me || body.employee || ''); } }
+      for (const x of cardsForOrder(job, order)) { if (!os.refunded[x.cid]) { os.found[x.cid] = x.need; recordPick(os, x.cid, x.need, me || body.employee || ''); syncSheetFound(job, x.cid); } }
       stampOrder(os, me || body.employee || '');
       await put(env, id, job);
       return json({ ok: true });
@@ -655,6 +665,17 @@ function recordPick(os, cid, qty, who) {
     delete os.picks[cid];
   }
 }
+// The sheet-level pick count for a card is never less than what its orders have
+// placed: picking from the order pages used to leave the sheet at "0 pulled".
+function syncSheetFound(job, cid) {
+  const c = allCards(job).find((x) => x.cid === cid);
+  if (!c) return;
+  job.state.found = job.state.found || {};
+  let placed = 0;
+  for (const os of Object.values(job.state.orders || {})) placed += +((os && os.found && os.found[cid]) || 0);
+  const cur = +job.state.found[cid] || 0;
+  job.state.found[cid] = Math.min(+c.qty || 0, Math.max(cur, placed));
+}
 function orderRemaining(job, orderName) {
   const os = orderState(job, orderName);
   const q = job.state.quarantined || {};
@@ -687,6 +708,7 @@ async function put(env, id, job) {
       orderNames: (job.orders || []).map((o) => o.name).slice(0, 60),
       workedBy: job.state.workedBy,
       archived: !!job.state.archived,
+      games: gameCategories(job),
     },
   });
 }
@@ -815,7 +837,8 @@ const LOGIN_HTML = `<!doctype html><html lang="en"><head>
     try{
       var r=await fetch('/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:who,pin:pin.value})});
       if(r.ok){ location.replace('/'); return; }
-      err.textContent='Incorrect PIN.';
+      var j=null; try{ j=await r.json(); }catch(e){}
+      err.textContent=(r.status===429 && j && j.error) ? j.error : 'Incorrect PIN.';
     }catch(e){ err.textContent='Something went wrong. Try again.'; }
     go.disabled=false; go.textContent='Sign in'; pin.value=''; pin.focus();
   }
@@ -1196,6 +1219,7 @@ async function showJob(id){
 
 /* ─────────────────── Per-order packing view ─────────────────── */
 function ostate(name){ const s=current.state; s.orders=s.orders||{}; if(!s.orders[name]) s.orders[name]={found:{},notes:{},refunded:{},note:'',status:'open',workedBy:[],lastSavedBy:'',lastSavedAt:''}; const os=s.orders[name]; if(!os.picks)os.picks={}; if(!os.mistakes)os.mistakes={}; return os; }
+function orderPickers(os){ const s=new Set(); if(os.startedBy) s.add(os.startedBy); Object.values(os.picks||{}).forEach(p=>{ if(p&&p.by) s.add(p.by); }); return [...s]; }
 function fmtDur(ms){ if(ms==null) return '—'; const s=Math.round(ms/1000); if(s<60) return s+'s'; const m=Math.round(s/60); if(m<60) return m+' min'; const h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
 function jobCardsForOrder(name){ const out=[]; jobCards().forEach(c=>{ const oo=(c.orders||[]).find(o=>o.name===name); if(oo) out.push({card:c, need:oo.qty}); }); return out; }
 function orderRemainingLocal(name){ const os=ostate(name); const q=current.state.quarantined||{}; return jobCardsForOrder(name).filter(x=>!(((+os.found[x.card.cid]||0)>=x.need)||os.refunded[x.card.cid]||q[x.card.cid])).length; }
@@ -1290,7 +1314,7 @@ function renderOrder(){
   footBtn.onclick=()=>{
     if(os.status==='packed'){ oPack(name, false); return; }
     if(orderRemainingLocal(name)>0) return;
-    if(os.startedBy && os.startedBy===who){ alert('Four-eye check: this order was picked by '+os.startedBy+'. A different person must sign in to verify and pack it.'); return; }
+    if(!IS_ADMIN && orderPickers(os).includes(who)){ alert('Four-eye check: you picked this order. A different person must sign in to verify and pack it.'); return; }
     const qc=orderQuarantinedCards(name);
     if(qc.length){ quarantinePackWarning(name, qc); return; }
     oPack(name, true);
@@ -1304,8 +1328,8 @@ function renderOrder(){
 function refreshOrderFoot(){ if(!footBtn||!currentOrder) return; const os=ostate(currentOrder); const hint=document.getElementById('fhint');
   if(os.status==='packed'){ footBtn.textContent='Unpack'; footBtn.disabled=false; footBtn.className=''; footBtn.style.opacity='1'; if(hint) hint.textContent='Packed ✓ by '+esc(os.packedBy||os.lastSavedBy||'—'); return; }
   const rem=orderRemainingLocal(currentOrder);
-  const sameEye = os.startedBy && who && os.startedBy===who;
-  if(rem<=0 && sameEye){ footBtn.textContent='Finalize · PACKED'; footBtn.disabled=true; footBtn.className=''; footBtn.style.opacity='.5'; if(hint) hint.innerHTML='4-eye: picked by '+esc(os.startedBy)+' — needs a different person to verify'; return; }
+  const sameEye = !!who && orderPickers(os).includes(who);
+  if(rem<=0 && sameEye && !IS_ADMIN){ footBtn.textContent='Finalize · PACKED'; footBtn.disabled=true; footBtn.className=''; footBtn.style.opacity='.5'; if(hint) hint.innerHTML='4-eye: you picked this order — needs a different person to verify'; return; }
   footBtn.textContent='Finalize · PACKED'; footBtn.disabled=rem>0; footBtn.className=rem>0?'':'primary'; footBtn.style.opacity=rem>0?'.5':'1';
   const qn = orderQuarantinedCards(currentOrder).length;
   if(hint) hint.textContent= rem>0?(rem+' item'+(rem>1?'s':'')+' left'):(qn?('ready · '+qn+' in quarantine'):'ready to verify & pack'); }
