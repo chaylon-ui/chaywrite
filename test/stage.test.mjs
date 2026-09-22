@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { totalsOf, shapeRecord, mineView, applyEdit, stagingOn, safeImage, mergeApproval, numberOf, shapeAdded, mergeAdded, editNeeds } from "../src/stage.js";
-import { buildEmail, sendEmail } from "../src/stage-email.js";
+import { buildEmail, buildDecisionEmail, instructionsPayload, sendEmail } from "../src/stage-email.js";
 import { renderList, renderSheet, renderLoginForm, renderSetup, renderAdmin, renderDenied } from "../src/stage-ui.js";
 
 const ADMIN = { email: "chaylon@exorgames.com", name: "Chaylon", role: "admin", perms: {} };
@@ -139,7 +139,12 @@ test("the staff pages: list rows link to worksheets; the worksheet's controls fo
   assert.ok(sheet.includes('<input class="q" type="number" min="0"') && sheet.includes('<input class="p cash"'));
   assert.ok(sheet.includes('img class="thumb" src="https://product-images.tcgplayer.com/1.jpg"'));
   assert.ok(sheet.includes("Approve → send to BinderPOS"));
-  assert.ok(sheet.includes('id="addcard"') && sheet.includes("/buylist/api/search"));
+  assert.ok(sheet.includes('id="addcard"') && sheet.includes("/buylist/api/search") && sheet.includes('id="ad-set"') && sheet.includes("/buylist/api/sets?game=") && sheet.includes("&set="));
+  // paid-as can be changed while it waits (edit permission); the decision forms carry the opt-in email box, off by default
+  assert.ok(sheet.includes('value="payment"') && sheet.includes('<option value="Store Credit"') && !sheet.includes('<option value="Store Credit" selected'));
+  assert.equal((sheet.match(/name="notify"/g) || []).length, 2);
+  assert.ok(!sheet.includes('name="notify" value="1" checked') && sheet.includes("not</b> emailed about a decision unless"));
+  assert.ok(sheet.includes('class="hits"'));
   assert.ok(sheet.includes("under Ada OBrien at the prices"));      // the confirm() string cannot carry a quote
   assert.ok(sheet.includes("RESEND_API_KEY"));                      // email off: the worksheet says so
   // a view-only account: no inputs, no add, no decide, no send
@@ -149,9 +154,10 @@ test("the staff pages: list rows link to worksheets; the worksheet's controls fo
   // prices only: price inputs, quantities as text, still a Save button
   const pr = renderSheet(r, { ...o, user: PRICER });
   assert.ok(pr.includes('<input class="p cash"') && !pr.includes('<input class="q" type="number" min="0"') && pr.includes('id="save"') && pr.includes('data-qty="3"'));
-  // decided: read-only for everyone
-  r.status = "approved"; r.bp = { number: "8812" };
+  // decided: read-only for everyone, and no paid-as change
+  r.status = "approved"; r.bp = { number: "8812" }; r.decisionEmail = { status: "sent", kind: "approved", to: "ada@example.test", at: 1_760_000_000_000 };
   const done = renderSheet(r, o);
+  assert.ok(!done.includes('value="payment"') && done.includes("Decision email (approved) sent to <b>ada@example.test</b>"));
   assert.ok(!done.includes('<input class="p cash"') && !done.includes('<input class="q" type="number" min="0"'));
   assert.ok(!done.includes("Approve → send to BinderPOS") && !done.includes('id="addcard"'));
   assert.ok(done.includes("BinderPOS buylist 8812"));
@@ -201,4 +207,27 @@ test("staging is on unless the var says off", () => {
   assert.equal(stagingOn({ BUYLIST_STAGING: "on" }), true);
   assert.equal(stagingOn({ BUYLIST_STAGING: "OFF " }), false);
   assert.equal(stagingOn(undefined), true);
+});
+
+test("the decision emails and the popup payload carry the number, the list and the reason; the logo sits in every header", () => {
+  const r = shapeRecord({ customer: "1", customerName: "Ada Lovelace", customerEmail: "ada@example.test", paymentType: "Cash", cards: CARDS }, 5);
+  r.number = "9P-1007"; r.bp = { number: "908738" };
+  const a = buildDecisionEmail(r, "approved");
+  assert.match(a.subject, /9P-1007 has been approved/);
+  for (const x of ["Hi Ada,", "908738", "Lightning Bolt", "Sol Ring", "Cash total: $6.50", "51 Allen Street", "logo2.png"]) assert.ok(a.html.includes(x) || a.text.includes(x), x);
+  assert.ok(a.text.includes("Cash total: $6.50") && a.text.includes("51 Allen Street"));
+  r.customerNote = "The Sol Ring is a proxy <b>";
+  const d = buildDecisionEmail(r, "rejected");
+  assert.match(d.subject, /About your buylist 9P-1007/);
+  assert.ok(d.html.includes("could not accept") && d.html.includes("The Sol Ring is a proxy &lt;b&gt;") && !d.html.includes("Cash total"));
+  assert.ok(d.text.includes("Reason: The Sol Ring is a proxy"));
+  assert.ok(buildEmail(r).html.includes("logo2.png"));
+  const ins = instructionsPayload();
+  assert.ok(ins.nextStep.startsWith("What's the next step?") && ins.sections.length === 7 && ins.sections[1].address === true);
+  assert.deepEqual(ins.address.slice(0, 2), ["Exor Games", "ATTN: Gage Office"]);
+  assert.ok(ins.sections[2].p[0].includes("{SELL_POLICY}") && ins.links.SELL_POLICY.startsWith("https://exorgames.com/"));
+  // the bar carries the logo instead of the word Exor
+  const list = renderList({ records: [], counts: {} }, { user: ADMIN, on: true, emailOn: false, err: "", msg: "" });
+  assert.ok(list.includes('<img class="logo" src="https://cdn.shopify.com/') && list.includes('aria-label="9Pocket by Exor"'));
+  assert.ok(renderLoginForm({}).includes('<img class="logo"'));
 });

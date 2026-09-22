@@ -202,3 +202,23 @@ test("unknown paths and records answer 404", async () => {
   assert.equal((await call(c, "/_stage/get?id=missing")).status, 404);
   assert.equal((await call(c, "/_stage/mark", { id: "missing", status: "approved" })).status, 404);
 });
+
+test("paid-as can change while a list waits; a decision email is kept beside the confirmation", async () => {
+  const c = cx({ t: T0 });
+  const put = await call(c, "/_stage/put", { customer: "5", paymentType: "Cash", cards: CARDS });
+  const id = put.body.id;
+  const bad = await call(c, "/_stage/payment", { id, paymentType: "Cheque", by: "x@x" });
+  assert.equal(bad.status, 400);
+  const ok = await call(c, "/_stage/payment", { id, paymentType: "Store Credit", by: "sam@x" });
+  assert.equal(ok.body.record.paymentType, "Store Credit");
+  assert.equal(ok.body.record.events.pop().action, "paid as Store Credit");
+  const same = await call(c, "/_stage/payment", { id, paymentType: "Store Credit", by: "sam@x" });
+  assert.equal(same.body.record.events.filter((e) => e.action === "paid as Store Credit").length, 1);   // no event when nothing changed
+  await call(c, "/_stage/email", { id, email: { status: "sent", to: "a@b.c", id: "re_1" } });
+  const dec = await call(c, "/_stage/email", { id, email: { status: "sent", to: "a@b.c", id: "re_2", kind: "approved" }, by: "sam@x" });
+  assert.equal(dec.body.record.email.id, "re_1");                       // the confirmation is untouched
+  assert.equal(dec.body.record.decisionEmail.kind, "approved");
+  assert.equal(dec.body.record.events.pop().action, "emailed (approved)");
+  await call(c, "/_stage/mark", { id, status: "rejected", by: "sam@x" });
+  assert.equal((await call(c, "/_stage/payment", { id, paymentType: "Cash" })).status, 409);
+});

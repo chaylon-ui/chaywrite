@@ -228,6 +228,20 @@ html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.
 .bl__guide-body li b { color: var(--bl-ink); }
 .bl__guide-note { font-size: 12px; margin: 12px 0 0; }
 .bl__guide-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; }
+/* The "what happens next" popup at submission: the store's instructions,
+   the buylist number on top, the address set off as a block. */
+.bl__done { width: min(94vw, 560px); }
+.bl__done-head { padding: 18px 20px 14px; background: var(--bl-accent); color: var(--bl-accent-ink); }
+.bl__done-kicker { display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; }
+.bl__done-head h3 { margin: 2px 0 0; font-size: 22px; line-height: 1.2; color: inherit; }
+.bl__done-sum { margin: 6px 0 0; font-size: 14px; opacity: 0.95; }
+.bl__done .bl__guide-body { max-height: 62vh; overflow: auto; }
+.bl__done-next { margin: 0 0 6px; padding: 12px 14px; border-radius: 10px; background: var(--bl-accent-soft); color: var(--bl-ink); font-size: 14.5px; line-height: 1.5; }
+.bl__done-notes { margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(240, 180, 41, 0.14); color: var(--bl-ink); font-size: 13.5px; line-height: 1.5; }
+.bl__done h4 { margin: 18px 0 6px; font-size: 15px; color: var(--bl-accent); }
+.bl__done .bl__guide-body p { margin: 0 0 8px; font-size: 14px; line-height: 1.55; }
+.bl__done-addr { display: inline-block; margin: 4px 0 6px; padding: 6px 14px; border-left: 4px solid var(--bl-accent); font-style: normal; font-size: 15px; line-height: 1.5; color: var(--bl-ink); }
+.bl__done .bl__guide-actions .bl__btn--primary { padding: 10px 22px; border-radius: 999px; }
 .bl__guide-actions .bl__btn { height: 42px; border-radius: 999px; }
 .bl__link { color: var(--bl-accent); font-weight: 700; }
 .bl__more { display: flex; margin: 8px auto 0; border-radius: 999px; }

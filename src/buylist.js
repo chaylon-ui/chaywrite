@@ -40,7 +40,8 @@
 
 import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
-import { stagingOn, stageSubmit, stageMine } from "./stage.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
+import { stagingOn, stageSubmit, stageMine } from "./stage.js";
+import { instructionsPayload } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
 
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
@@ -402,6 +403,7 @@ async function route(mode, action, request, env, url, cors) {
       const c = await passthrough(SAVE_URL(customer), { method: "POST", body: "[]" }).catch(() => ({ status: null }));
       return json({ accepted: true, staged: true, id: staged.id, paymentType, submitted: cards.length, totals: staged.totals, cleared: c.status,
         confirmation: "Thank you - your buylist has been received and is waiting for a staff member to check it. You will see it marked approved here once it has been sent through, and it is paid out when we complete it.",
+        number: staged.number, instructions: instructionsPayload(),
         repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
     }
     const r = await submitToBinderPos(env, url, customer, paymentType, cards);

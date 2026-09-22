@@ -21,6 +21,7 @@ const HOW_TO_SELL = "https://exorgames.com/pages/how-to-sell-cards";
 const STATUS_PAGE = "https://exorgames.com/pages/selling-to-exor-games-buylist";
 const REPLY_TO = "customerservice@exorgames.com";
 export const EMAIL_FROM_DEFAULT = "9Pocket by Exor <9pocket@exorgames.com>";
+const LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/logo2.png?v=1789388474";   // the store's mark, the theme header's own file
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
@@ -41,6 +42,14 @@ const SECTIONS = [
   { h: "Thank you again", p: ["Thank you again for choosing Exor Games. We appreciate your understanding and cooperation throughout this process. Should you have any further inquiries, please don't hesitate to reach out to us. We're here to assist you!"] },
 ];
 const NEXT_STEP = "What's the next step? Bring in, or mail your cards to us! Once received, we will verify and approve your cards against the list you just submitted and apply the store credit or send you an etransfer, PayPal or cash (in-store only).";
+
+// The same instructions for the sell page's popup at submission (owner,
+// 2026-09-22: "the instructions should show in a popup on the website at
+// submission like BinderPOS does"). Paragraphs keep their {SELL_POLICY} /
+// {HOW_TO_SELL} tokens; the page swaps them for links after escaping.
+export function instructionsPayload() {
+  return { nextStep: NEXT_STEP, sections: SECTIONS.map((s) => ({ h: s.h, p: s.p.slice(), address: !!s.address })), address: ADDRESS.slice(), links: { SELL_POLICY, HOW_TO_SELL } };
+}
 
 function linkify(p, html) {
   const a = (url, text) => html ? `<a href="${url}" style="color:${RED};font-weight:600;text-decoration:underline">${esc(text)}</a>` : `${text} (${url})`;
@@ -72,7 +81,7 @@ export function buildEmail(rec) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
 <tr><td style="background:${RED};padding:22px 28px;color:#ffffff">
-  <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">${esc(BRAND)}</div>
+  <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">9Pocket by <img src="${LOGO}" alt="Exor Games" width="44" height="32" style="vertical-align:middle;height:32px;width:auto;margin-left:2px"></div>
   <div style="font-size:26px;font-weight:700;line-height:1.2;margin-top:4px">We have your buylist</div>
   <div style="font-size:15px;margin-top:6px;opacity:.95">Buylist Number <strong style="font-size:17px">${esc(ref)}</strong></div>
 </td></tr>
@@ -108,6 +117,64 @@ export function buildEmail(rec) {
     `Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · ${REPLY_TO}`,
   ].join("\n");
 
+  return { subject, html, text };
+}
+
+// The email staff can choose to send when a list is approved or rejected
+// (owner, 2026-09-22: staff ENABLE the customer getting an email at this
+// stage). Same look as the confirmation; the list at the prices it was
+// decided at, and for a rejection the reason the customer was given.
+export function buildDecisionEmail(rec, kind) {
+  const approved = kind === "approved";
+  const ref = rec.number || rec.id;
+  const first = String(rec.customerName || "").trim().split(/\s+/)[0] || "";
+  const credit = rec.paymentType === "Store Credit";
+  const cards = Array.isArray(rec.cards) ? rec.cards : [];
+  const t = rec.totals || { cash: 0, credit: 0, units: 0, lines: cards.length };
+  const total = credit ? t.credit : t.cash;
+  const each = (c) => credit ? c.storeCreditBuyPrice : c.cashBuyPrice;
+  const reason = String(rec.customerNote || "").trim();
+  const subject = approved ? `Your buylist ${ref} has been approved (${BRAND})` : `About your buylist ${ref} (${BRAND})`;
+  const headline = approved ? "Your buylist is approved" : "We could not accept this buylist";
+  const lead = approved
+    ? `We have checked your list and sent it through. ${credit ? "The store credit" : "Your payment"} is applied once we have your cards in hand and have verified them${rec.bp && rec.bp.number ? " (store reference " + esc(rec.bp.number) + ")" : ""}.`
+    : `We looked at your list and could not accept it as submitted.${reason ? " Reason: <strong>" + esc(reason) + "</strong>." : ""} You are welcome to submit a new list from our sell page.`;
+  const rows = cards.map((c, i) => `<tr style="background:${i % 2 ? PAPER : "#ffffff"}"><td style="padding:8px 10px;border-bottom:1px solid ${RULE};text-align:right;white-space:nowrap">${qty(c)} ×</td><td style="padding:8px 10px;border-bottom:1px solid ${RULE}"><strong>${esc(c.cardName)}</strong><br><span style="color:${MUTED};font-size:12px">${esc(c.setName)} · ${esc(c.conditionName || c.condition)}${c.type && c.type !== "Normal" ? " · " + esc(c.type) : ""}</span></td><td style="padding:8px 10px;border-bottom:1px solid ${RULE};text-align:right;white-space:nowrap">${money(each(c))}</td><td style="padding:8px 10px;border-bottom:1px solid ${RULE};text-align:right;white-space:nowrap"><strong>${money(qty(c) * (Number(each(c)) || 0))}</strong></td></tr>`).join("");
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:${PAPER};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${INK};font-size:15px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:${approved ? "#0d7a5f" : RED};padding:22px 28px;color:#ffffff">
+  <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">9Pocket by <img src="${LOGO}" alt="Exor Games" width="44" height="32" style="vertical-align:middle;height:32px;width:auto;margin-left:2px"></div>
+  <div style="font-size:26px;font-weight:700;line-height:1.2;margin-top:4px">${headline}</div>
+  <div style="font-size:15px;margin-top:6px;opacity:.95">Buylist Number <strong style="font-size:17px">${esc(ref)}</strong></div>
+</td></tr>
+<tr><td style="padding:26px 28px 8px">
+  <p style="margin:0 0 14px;font-size:16px">${first ? "Hi " + esc(first) + "," : "Hello,"}</p>
+  <p style="margin:0 0 14px;line-height:1.55">${lead}</p>
+  ${approved ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:6px 0"><tr>
+    <td style="padding:0 8px 0 0"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Cards</div><div style="font-size:20px;font-weight:700">${t.units}</div></td>
+    <td style="padding:0 8px"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Paid as</div><div style="font-size:20px;font-weight:700">${esc(rec.paymentType)}</div></td>
+    <td style="padding:0 0 0 8px;text-align:right"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Total</div><div style="font-size:20px;font-weight:700;color:${RED}">${money(total)}</div></td>
+  </tr></table>` : ""}
+</td></tr>
+<tr><td style="padding:6px 28px 0">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">
+  <thead><tr style="color:${MUTED};font-size:12px;text-transform:uppercase;letter-spacing:.06em"><th style="text-align:right;padding:6px 10px;border-bottom:2px solid ${RULE}">Qty</th><th style="text-align:left;padding:6px 10px;border-bottom:2px solid ${RULE}">Card</th><th style="text-align:right;padding:6px 10px;border-bottom:2px solid ${RULE}">Each</th><th style="text-align:right;padding:6px 10px;border-bottom:2px solid ${RULE}">Line</th></tr></thead>
+  <tbody>${rows}</tbody>
+  ${approved ? `<tfoot><tr><td colspan="3" style="padding:10px;text-align:right;font-weight:700">${credit ? "Store credit" : "Cash"} total</td><td style="padding:10px;text-align:right;font-weight:700;color:${RED};white-space:nowrap">${money(total)}</td></tr></tfoot>` : ""}
+  </table>
+</td></tr>
+<tr><td style="padding:16px 28px 26px">${approved ? `<h2 style="margin:10px 0 8px;font-size:17px;line-height:1.3;color:${RED}">Bring or mail your cards to us</h2><p style="margin:0 0 10px;line-height:1.55">If they are not with us yet: visit the shop, or mail them with the Buylist Number and your name to</p><table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 4px"><tr><td style="border-left:4px solid ${RED};padding:6px 14px;font-size:15px;line-height:1.5"><strong>${ADDRESS[0]}</strong><br>${ADDRESS.slice(1).map(esc).join("<br>")}</td></tr></table>` : ""}<p style="margin:14px 0 0;line-height:1.55">Questions? Reply to this email or write to <a href="mailto:${REPLY_TO}" style="color:${RED}">${REPLY_TO}</a>.</p></td></tr>
+<tr><td style="background:${PAPER};padding:16px 28px;font-size:12px;color:${MUTED};line-height:1.6">Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · <a href="mailto:${REPLY_TO}" style="color:${MUTED}">${REPLY_TO}</a></td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [
+    `${BRAND} - ${headline.toLowerCase()}`, `Buylist Number: ${ref}`, "",
+    first ? `Hi ${first},` : "Hello,", "", lead.replace(/<[^>]+>/g, ""), "",
+    ...cards.map((c) => `${qty(c)} x ${c.cardName} [${c.setName}] ${c.conditionName || c.condition}${c.type && c.type !== "Normal" ? " " + c.type : ""} @ ${money(each(c))} = ${money(qty(c) * (Number(each(c)) || 0))}`),
+    ...(approved ? [`${credit ? "Store credit" : "Cash"} total: ${money(total)}`, "", "Bring or mail your cards to us:", ...ADDRESS] : []),
+    "", `Questions? ${REPLY_TO}`,
+  ].join("\n");
   return { subject, html, text };
 }
 

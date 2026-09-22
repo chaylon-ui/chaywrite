@@ -54,7 +54,7 @@
 
 import { repriceCards, submitToBinderPos, cleanCards } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
-import { buildEmail, sendEmail, emailConfigured } from "./stage-email.js";
+import { buildEmail, buildDecisionEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
 export { safeImage };
@@ -65,6 +65,7 @@ const PRUNE_EVERY_MS = 24 * 3600e3;
 const MAX_LIST = 300;
 const MINE_MAX = 20;
 const STATUSES = ["staged", "approved", "rejected"];
+export const PAYMENT_TYPES = ["Cash", "Store Credit"];
 const SEQ_START = 1000;                      // the first buylist is 9P-1001
 const LEGACY = "/buylist/staged";            // the page's first address; redirects
 const FIRST_ADMIN_EMAIL = "chaylon@exorgames.com";   // pre-filled on the setup page (owner, 2026-09-20)
@@ -311,6 +312,24 @@ export async function stageDoFetch(cx, request, url) {
     await cx.storage.put(key, rec);
     return doJson({ ok: true, record: rec });
   }
+  if (p === "/_stage/payment" && post) {
+    // Cash <-> Store Credit while the list waits (owner, 2026-09-22: "a
+    // secondary way that if the customer changed their mind we could update
+    // it there"). Approval sends whatever is on the record.
+    const b = await bodyOf(request);
+    const key = "st:" + String(b.id || "").slice(0, 40);
+    const rec = await cx.storage.get(key);
+    if (!rec) return doJson({ ok: false, error: "no such record" }, 404);
+    if (rec.status !== "staged") return doJson({ ok: false, error: "already " + rec.status }, 409);
+    const pt = String(b.paymentType || "");
+    if (!PAYMENT_TYPES.includes(pt)) return doJson({ ok: false, error: "paymentType must be Cash or Store Credit" }, 400);
+    if (pt !== rec.paymentType) {
+      rec.paymentType = pt;
+      rec.events = (rec.events || []).concat([{ ts: cx.now(), action: "paid as " + pt, by: by(b) }]).slice(-30);
+      await cx.storage.put(key, rec);
+    }
+    return doJson({ ok: true, record: rec });
+  }
   if (p === "/_stage/add" && post) {
     // A card staff added on the worksheet, already checked against the day's
     // buylist by the worker (addCard below).
@@ -348,8 +367,11 @@ export async function stageDoFetch(cx, request, url) {
     const rec = await cx.storage.get(key);
     if (!rec) return doJson({ ok: false, error: "no such record" }, 404);
     const e = b.email && typeof b.email === "object" ? b.email : {};
-    rec.email = { status: String(e.status || "failed").slice(0, 20), at: cx.now(), to: String(e.to || "").slice(0, 160), id: String(e.id || "").slice(0, 64), error: String(e.error || "").slice(0, 200) };
-    rec.events = (rec.events || []).concat([{ ts: cx.now(), action: rec.email.status === "sent" ? "emailed" : "email " + rec.email.status, by: by(b) }]).slice(-30);
+    const entry = { status: String(e.status || "failed").slice(0, 20), at: cx.now(), to: String(e.to || "").slice(0, 160), id: String(e.id || "").slice(0, 64), error: String(e.error || "").slice(0, 200), kind: String(e.kind || "confirmation").slice(0, 20) };
+    // The confirmation is the record's email; a decision email (approved /
+    // rejected, sent only when staff asked) is kept beside it.
+    if (entry.kind === "confirmation") rec.email = entry; else rec.decisionEmail = entry;
+    rec.events = (rec.events || []).concat([{ ts: cx.now(), action: (entry.status === "sent" ? "emailed" : "email " + entry.status) + (entry.kind === "confirmation" ? "" : " (" + entry.kind + ")"), by: by(b) }]).slice(-30);
     await cx.storage.put(key, rec);
     return doJson({ ok: true, record: rec });
   }
@@ -502,6 +524,18 @@ async function emailCustomer(env, url, rec, who) {
   try { out = await sendEmail(env, rec.customerEmail, buildEmail(rec)); }
   catch (e) { out = { ok: false, status: "failed", error: String((e && e.message) || e).slice(0, 160) }; }
   try { await doCall(env, url.origin, "/_stage/email", { id: rec.id, email: { ...out, to: rec.customerEmail || "" }, by: who || "" }); } catch {}
+  return out;
+}
+
+// The approve / reject email, only when the staff member ticked the box.
+// Never throws; the outcome is written on the record beside the confirmation.
+async function emailDecision(env, url, rec, kind, who) {
+  if (!rec) return { ok: false, status: "failed", error: "no record" };
+  if (!rec.customerEmail) { try { await backfillNames(env, url, { records: [rec] }); } catch {} }
+  let out;
+  try { out = await sendEmail(env, rec.customerEmail, buildDecisionEmail(rec, kind)); }
+  catch (e) { out = { ok: false, status: "failed", error: String((e && e.message) || e).slice(0, 160) }; }
+  try { await doCall(env, url.origin, "/_stage/email", { id: rec.id, email: { ...out, to: rec.customerEmail || "", kind }, by: who || "" }); } catch {}
   return out;
 }
 
@@ -708,6 +742,15 @@ async function control(env, url, f, user) {
   const who = user.email;
   const deny = (what) => ({ ok: false, status: 403, error: "Your account cannot " + what + ". Ask an admin." });
   if (!id) return { ok: false, error: "id required" };
+  // Staff ENABLE the customer's email at this stage (owner, 2026-09-22):
+  // nothing goes out at approve / reject unless the box was ticked.
+  const notify = f.notify === true || f.notify === "1" || f.notify === "on" || f.notify === "true";
+  const mailNote = (r) => !notify ? "" : r.ok ? " Email sent to the customer." : " The customer email was not sent (" + (r.error || r.status) + ").";
+  if (action === "payment") {
+    if (!can(user, "edit")) return deny("change how the customer is paid");
+    const j = await doCall(env, url.origin, "/_stage/payment", { id, paymentType: String(f.paymentType || ""), by: who });
+    return j.ok ? { ok: true, id, paymentType: j.record.paymentType, message: "Paid as " + j.record.paymentType + "." } : { ok: false, error: j.error };
+  }
   if (action === "reject") {
     if (!can(user, "approve")) return deny("approve or reject");
     // The form's one field is the reason the customer sees; the staff note
@@ -715,7 +758,9 @@ async function control(env, url, f, user) {
     const body = { id, status: "rejected", customerNote: String(f.customerNote || f.note || ""), by: who };
     if (typeof f.staffNote === "string") body.note = f.staffNote;
     const j = await doCall(env, url.origin, "/_stage/mark", body);
-    return j.ok ? { ok: true, id, status: "rejected", message: "Rejected. Nothing was sent to BinderPOS." } : { ok: false, error: j.error };
+    if (!j.ok) return { ok: false, error: j.error };
+    const m = notify ? await emailDecision(env, url, j.record, "rejected", who) : { ok: true };
+    return { ok: true, id, status: "rejected", message: "Rejected. Nothing was sent to BinderPOS." + mailNote(m) };
   }
   if (action === "edit") {
     let edit = f.edit;
@@ -769,9 +814,11 @@ async function control(env, url, f, user) {
       bp: { number: r.reply && r.reply.data != null ? String(r.reply.data) : "", upstream: r.upstream, cleared: r.cleared },
       repricedAtApproval: merged.notes,
     });
-    return j.ok ? { ok: true, id, status: "approved", reference: j.record.bp && j.record.bp.number, repriced: merged.notes, message: "Approved and sent to BinderPOS" + (j.record.bp && j.record.bp.number ? " as buylist " + j.record.bp.number : "") + "." } : { ok: false, error: j.error };
+    if (!j.ok) return { ok: false, error: j.error };
+    const m = notify ? await emailDecision(env, url, j.record, "approved", who) : { ok: true };
+    return { ok: true, id, status: "approved", reference: j.record.bp && j.record.bp.number, repriced: merged.notes, message: "Approved and sent to BinderPOS" + (j.record.bp && j.record.bp.number ? " as buylist " + j.record.bp.number : "") + "." + mailNote(m) };
   }
-  return { ok: false, error: "action must be approve, reject, edit, add or email" };
+  return { ok: false, error: "action must be approve, reject, edit, add, payment or email" };
 }
 
 // /9pocket/admin/control: accounts. Admin only (checked by the caller).

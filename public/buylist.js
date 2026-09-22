@@ -53,6 +53,7 @@
       '</aside>' +
       '<div id="bl-toast" class="bl__toast" role="status" aria-live="polite"></div>' +
       '<dialog id="bl-guide" class="bl__guide" aria-labelledby="bl-guide-title"></dialog>' +
+      '<dialog id="bl-done" class="bl__guide bl__done" aria-labelledby="bl-done-title"></dialog>' +
     '</div>';
 
   var $ = function (s) { return root.querySelector(s); };
@@ -651,10 +652,48 @@
       if (rp.dropped && rp.dropped.length) notes.push("Left out: " + rp.dropped.join("; ") + ".");
       setMsg(done + (notes.length ? " " + notes.join(" ") : ""));
       toast("Buylist submitted");
+      if (j.instructions) showDone(j, notes);
     }).catch(function (err) {
       setMsg("Submit failed: " + err.message);
       $("#bl-submit").disabled = false;
     });
+  });
+
+  /* ---- what happens next: the store's instructions in a popup at submission
+     (owner, 2026-09-22: "the instructions should show in a popup on the
+     website at submission like BinderPOS does"). The worker sends the same
+     text the confirmation email carries; links come from named tokens so
+     nothing from the network is written as HTML. ---- */
+  function showDone(j, notes) {
+    var ins = j.instructions || {}, d = $("#bl-done");
+    if (!d) return;
+    var links = ins.links || {};
+    function para(p) {
+      return esc(p)
+        .replace("{SELL_POLICY}", '<a href="' + esc(links.SELL_POLICY || "#") + '" target="_blank" rel="noopener">Exor Games Selling Policy</a>')
+        .replace("{HOW_TO_SELL}", '<a href="' + esc(links.HOW_TO_SELL || "#") + '" target="_blank" rel="noopener">How to Sell Cards</a>');
+    }
+    var sections = (ins.sections || []).map(function (s) {
+      return "<h4>" + esc(s.h) + "</h4>" + (s.p || []).map(function (p) { return "<p>" + para(p) + "</p>"; }).join("") +
+        (s.address && ins.address ? '<address class="bl__done-addr"><b>' + esc(ins.address[0]) + "</b><br>" + ins.address.slice(1).map(esc).join("<br>") + "</address>" : "");
+    }).join("");
+    var t = j.totals || {}, credit = j.paymentType === "Store Credit";
+    d.innerHTML = '<div class="bl__done-head"><span class="bl__done-kicker">Buylist received</span><h3 id="bl-done-title">' + (j.number ? "Buylist Number " + esc(j.number) : "Thank you") + "</h3>" +
+      (t.units != null ? '<p class="bl__done-sum">' + esc(t.units) + " card" + (t.units === 1 ? "" : "s") + " · " + esc(j.paymentType || "") + " · estimated " + money(credit ? t.credit : t.cash) + "</p>" : "") + "</div>" +
+      '<div class="bl__guide-body">' + (ins.nextStep ? '<p class="bl__done-next">' + esc(ins.nextStep) + "</p>" : "") +
+      (notes && notes.length ? '<p class="bl__done-notes">' + notes.map(esc).join(" ") + "</p>" : "") +
+      sections +
+      '<p class="bl__guide-note bl__muted">A copy of these instructions has been emailed to the address on your account.</p>' +
+      '<div class="bl__guide-actions"><span></span><button type="button" class="bl__btn bl__btn--primary" data-close-done>Got it</button></div></div>';
+    if (typeof d.showModal === "function") { if (!d.open) d.showModal(); } else d.setAttribute("open", "");
+    // Focus lands on the button for the keyboard, but the text must open at
+    // its top, not scrolled down to where the button sits.
+    d.querySelector("[data-close-done]").focus({ preventScroll: true });
+    var body = d.querySelector(".bl__guide-body"); if (body) body.scrollTop = 0; d.scrollTop = 0;
+  }
+  $("#bl-done").addEventListener("click", function (e) {
+    var d = $("#bl-done");
+    if (e.target.closest("[data-close-done]") || e.target === d) { if (typeof d.close === "function") d.close(); else d.removeAttribute("open"); }
   });
 
   /* ---- the sell page's game tiles link to #buylist; one that names a game picks it ---- */
