@@ -1,0 +1,45 @@
+name: Deploy exor-pullsheet
+
+# Manual only for the first deploy. Once one run is green, switch to `push`
+# on pullsheet/** so pushes deploy like exor-binder.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pullsheet
+    steps:
+      - uses: actions/checkout@v4
+
+      # The dashboard shows the KV namespace by name ("pullsheet-jobs"), and
+      # wrangler needs its id. Look the id up by name at deploy time so nobody
+      # has to paste it into wrangler.toml.
+      - name: Resolve the JOBS KV namespace id (pullsheet-jobs)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          id=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces?per_page=100" \
+            | jq -r '.result[] | select(.title=="pullsheet-jobs") | .id')
+          if [ -z "$id" ]; then echo "No KV namespace named pullsheet-jobs on this account"; exit 1; fi
+          sed -i "s/REPLACE_WITH_JOBS_KV_NAMESPACE_ID/$id/" wrangler.toml
+          grep -A2 kv_namespaces wrangler.toml | sed "s/$id/<resolved>/"
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: pullsheet
+
+      # Smoke test: the root must answer with the sign-in page.
+      - name: Smoke-test
+        run: |
+          sleep 5
+          body=$(curl -sS https://exor-pullsheet.nevski.workers.dev/)
+          echo "$body" | head -c 400; echo
+          echo "$body" | grep -q "Pull Sheet" || { echo "sign-in page not served"; exit 1; }
