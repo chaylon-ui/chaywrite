@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { totalsOf, shapeRecord, mineView, applyEdit, lockUnpaidPrice, stagingOn, safeImage, mergeApproval, numberOf, shapeAdded, mergeAdded, editNeeds } from "../src/stage.js";
 import { buildEmail, buildDecisionEmail, instructionsPayload, sendEmail } from "../src/stage-email.js";
-import { renderList, renderSheet, renderLoginForm, renderSetup, renderAdmin, renderDenied } from "../src/stage-ui.js";
+import { renderList, renderSheet, renderLoginForm, renderSetup, renderAdmin, renderDenied, renderHeld } from "../src/stage-ui.js";
 
 const ADMIN = { email: "chaylon@exorgames.com", name: "Chaylon", role: "admin", perms: {} };
 const VIEWER = { email: "v@exorgames.com", name: "Viewer", role: "staff", perms: {} };
@@ -254,4 +254,29 @@ test("the decision emails and the popup payload carry the number, the list and t
   const list = renderList({ records: [], counts: {} }, { user: ADMIN, on: true, emailOn: false, err: "", msg: "" });
   assert.ok(list.includes('<img class="logo" src="https://cdn.shopify.com/') && list.includes('aria-label="9Pocket by Exor"'));
   assert.ok(renderLoginForm({}).includes('<img class="logo"'));
+});
+
+test("the Held stock page: the switch is an admin's, releasing needs the permission, the counter box finds held cards", () => {
+  const T = 1_760_000_000_000;
+  const d = { ok: true, generatedAt: T, settings: { on: false, trial: null, since: 0, by: "", lastPoll: 0, lastError: "" }, counts: { held: 3, arrivals: 1, old24: 0, old72: 0, releasedToday: 2, notHeld: 1 },
+    open: [{ key: "hl:1-cart:5", kind: "cart", ref: "5", ts: T - 900e3, customer: "", till: "Truro", who: "jordan@exorgames.com", paid: { cash: 186, credit: 0, total: 186 }, link: "https://portal.binderpos.com/#/pointOfSale/carts/5", held: 3, status: "waiting",
+      lines: [{ title: "Lightning Bolt [Fourth Edition]", variantTitle: "Near Mint", sku: "B1", qty: 2, held: 2, released: 0, damaged: 0, remaining: 0, status: "held", image: "https://images.binderpos.com/a.jpg" }, { title: "Roronoa Zoro (OP12-020) [Legacy of the Master]", variantTitle: "Near Mint Foil", qty: 1, held: 1, released: 0, damaged: 0, remaining: 0, status: "held" }, { title: "Jinx", condition: "", qty: 3, held: 0, status: "no-product", note: "no Shopify product named Jinx" }] }],
+    done: [], notHeld: [{ key: "k", ref: "5", kind: "cart", ts: T - 900e3, title: "Jinx", condition: "", qty: 3, held: 0, status: "no-product", note: "no Shopify product named Jinx" }], history: [{ ts: T - 800e3, by: "hold", action: "arrival", text: "POS cart 5: held 3, 1 could not be held" }], matches: null };
+  const o = { user: ADMIN, on: true, emailOn: true, err: "", msg: "", q: "" };
+  const page = renderHeld(d, o);
+  assert.ok(page.includes("Hold on arrival: OFF") && page.includes('value="on"') && page.includes('name="trial"') && page.includes("Switch ON"));
+  assert.ok(page.includes("Release all 3") && page.includes('value="release-all"') && (page.match(/value="damaged"/g) || []).length === 2 && page.includes('value="release"'));
+  assert.ok(page.includes('<span class="fin">✦ Foil</span>') && page.includes("no Shopify product named Jinx") && page.includes("POS cart 5: held 3"));
+  assert.ok(page.includes('href="/9pocket/held"') && page.includes('name="q"'));
+  // on, in a trial
+  const on = renderHeld({ ...d, settings: { ...d.settings, on: true, trial: 2, since: T, by: "chaylon@exorgames.com", lastPoll: T } }, o);
+  assert.ok(on.includes("Hold on arrival: ON · trial, 2 left") && on.includes("Switch OFF") && on.includes('value="check"') && on.includes("Trial: 2 more arrivals"));
+  // matches for the counter
+  const m = renderHeld({ ...d, matches: [{ key: "hl:1-cart:5", line: 1, ref: "5", kind: "cart", title: "Roronoa Zoro (OP12-020) [Legacy of the Master]", variantTitle: "Near Mint Foil", held: 1, ts: T - 900e3 }] }, { ...o, q: "zoro" });
+  assert.ok(m.includes("Found 1 held line for") && m.includes('value="1"'));
+  // a viewer: no switch, no release forms, no Held stock link; a release-only account: forms but no switch
+  const v = renderHeld(d, { ...o, user: VIEWER });
+  assert.ok(!v.includes("Switch ON") && !v.includes('value="release"') && !v.includes('href="/9pocket/held"') && v.includes("Held stock"));
+  const r = renderHeld(d, { ...o, user: { ...VIEWER, perms: { release: true } } });
+  assert.ok(!r.includes("Switch ON") && r.includes('value="release"') && r.includes('href="/9pocket/held"'));
 });

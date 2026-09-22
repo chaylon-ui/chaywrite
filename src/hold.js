@@ -42,6 +42,8 @@
    /hold/shadow (staff PIN) renders the log; /hold/shadow.json is the data;
    /hold/health is counts only. Nothing here changes inventory. */
 
+import { liveFetch, pollLive, liveOnRise, liveHealth, liveBusy, POLL_MS } from "./hold-live.js";
+
 export const HOLD_DO = "buylist-hold";
 export const HOLD_MODE = "shadow";
 // Measured on the first real cart (32640862, 2026-09-08, confirmed against
@@ -110,6 +112,12 @@ export function attribute(rec, orders, buylists) {
 
 export async function holdDoFetch(cx, request, url) {
   if (url.pathname === "/_hold/control" && request.method === "POST") return doJson(await control(cx, await bodyOf(request), url.origin));
+  // Stage 2, the live hold (src/hold-live.js): answered whatever the
+  // shadow log's pause state, its own switch decides what runs.
+  if (url.pathname.startsWith("/_hold/live/")) {
+    const r = await liveFetch(cx, url, request.method === "POST" ? await bodyOf(request) : null);
+    if (r) return doJson(r, r.ok === false ? 400 : 200);
+  }
   const st = await stateOf(cx);
   if (url.pathname === "/_hold/status") return doJson(await statusOf(cx, url, st));
   if (url.pathname === "/_hold/health") return doJson(await healthOf(cx, st));
@@ -147,6 +155,9 @@ async function control(cx, b, origin) {
     return { ok: true, resumed: true };
   }
   if (action === "remove") {
+    // The live hold's records share this storage: never wipe them.
+    const lh = await liveHealth(cx);
+    if (lh.on || lh.open) return { ok: false, error: "the live hold is " + (lh.on ? "on" : "still holding " + lh.held + " cards") + " - switch it off and release everything on /9pocket/held first" };
     let orderHook = "not checked";
     try { orderHook = await dropOrderHook(cx); } catch (e) { orderHook = "failed: " + ((e && e.message) || e); }
     await cx.storage.deleteAll();
@@ -176,9 +187,19 @@ async function dropOrderHook(cx) {
 export async function holdDoAlarm(cx) {
   const st = await stateOf(cx);
   if (st.removed) return;
-  try { await ensureHooks(cx); } catch (e) { cx.log("hold: hooks: " + ((e && e.message) || e)); }
-  try { await prune(cx); } catch (e) { cx.log("hold: prune: " + ((e && e.message) || e)); }
-  try { await cx.storage.setAlarm(cx.now() + HOOKS_EVERY_MS); } catch {}
+  const now = cx.now();
+  const houseAt = (await cx.storage.get("hold:houseAt")) || 0;
+  if (now - houseAt >= HOOKS_EVERY_MS - 60e3) {
+    try { await ensureHooks(cx); } catch (e) { cx.log("hold: hooks: " + ((e && e.message) || e)); }
+    try { await prune(cx); } catch (e) { cx.log("hold: prune: " + ((e && e.message) || e)); }
+    await cx.storage.put("hold:houseAt", now);
+  }
+  // The live hold looks at BinderPOS every two minutes while it is on (or
+  // while a hold is still waiting for stock to arrive); otherwise the
+  // alarm only keeps the housekeeping going.
+  let busy = false;
+  try { await pollLive(cx); busy = await liveBusy(cx); } catch (e) { cx.log("hold: live: " + ((e && e.message) || e)); }
+  try { await cx.storage.setAlarm(now + (busy ? POLL_MS : HOOKS_EVERY_MS)); } catch {}
 }
 
 async function armAlarm(cx) {
@@ -209,6 +230,8 @@ async function onInventory(cx, b) {
   const now = cx.now();
   const prev = await cx.storage.get("hv:" + item);
   await cx.storage.put("hv:" + item, available);
+  // live hold: a line waiting for this card's stock can be held now
+  if (typeof prev === "number" && available > prev) { try { await liveOnRise(cx, item, available); } catch (e) { cx.log("hold: live rise: " + ((e && e.message) || e)); } }
   if (typeof prev !== "number") {
     // First sight of this item: no baseline, so a rise cannot be measured.
     // If a buy cart or a submitted buylist is in the window it is still
@@ -404,7 +427,7 @@ const modeOf = (st) => (st.removed ? "removed" : st.paused ? "paused" : HOLD_MOD
 
 async function healthOf(cx, st) {
   const hooks = (await cx.storage.get("hold:hooks")) || null;
-  return { ok: true, mode: modeOf(st), counters: (await cx.storage.get("hold:counters")) || {}, hooks: hooks && { at: hooks.at, orders: !!hooks.orders, inventory: !!hooks.inventory, errors: hooks.errors || [] } };
+  return { ok: true, mode: modeOf(st), live: await liveHealth(cx), counters: (await cx.storage.get("hold:counters")) || {}, hooks: hooks && { at: hooks.at, orders: !!hooks.orders, inventory: !!hooks.inventory, errors: hooks.errors || [] } };
 }
 
 async function statusOf(cx, url, st) {

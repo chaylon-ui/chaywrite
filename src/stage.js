@@ -56,7 +56,8 @@ import { repriceCards, submitToBinderPos, cleanCards, conditionsFor } from "./bu
 import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, buildDecisionEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
-import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, safeImage } from "./stage-ui.js";
+import { HOLD_DO } from "./hold.js";
+import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
 export { safeImage };
 
@@ -733,6 +734,40 @@ export async function serveStage(request, env, url, staffOk) {
     }
     const j = await doCall(env, origin, "/_stage/users");
     return html(renderAdmin({ ...opts, users: j.ok ? j.users : [] }));
+  }
+  // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
+  // an admin's; releasing needs the "release" permission or an admin.
+  if (p === BASE + "/held" || p === BASE + "/held.json" || p === BASE + "/held/control") {
+    const stub = env.ROOM.get(env.ROOM.idFromName(HOLD_DO));
+    const hold = async (path, body) => { const r = await stub.fetch(new Request(origin + path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {})); try { return await r.json(); } catch { return { ok: false, error: "hold DO: HTTP " + r.status }; } };
+    if (p === BASE + "/held.json") {
+      if (!user && !pinOk) return Response.json({ error: "sign in or staff key required" }, { status: 403, headers: noStore });
+      return Response.json(await hold("/_hold/live/status"), { headers: noStore });
+    }
+    if (!user) return toLogin();
+    if (p === BASE + "/held/control" && request.method === "POST") {
+      const action = String((form && form.action) || "");
+      const by = user.email;
+      let result;
+      if (action === "on" || action === "off") {
+        if (user.role !== "admin") result = { ok: false, error: "Only an admin can switch the hold on or off." };
+        else result = await hold("/_hold/live/set", { on: action === "on", trial: form.trial, by });
+        if (result.ok) result.message = action === "on" ? ("Hold on arrival is ON" + (result.trial ? " for the next " + result.trial + " arrival" + (result.trial > 1 ? "s" : "") : "") + ". Every buy cart and completed buylist from now on is held.") : "Hold on arrival is OFF. Nothing was released; what is held stays held until you release it.";
+      } else if (action === "check") {
+        if (user.role !== "admin") result = { ok: false, error: "Only an admin can run a check." };
+        else { const r = await hold("/_hold/live/poll"); result = r.ok ? { ok: true, message: "Checked BinderPOS: " + r.carts + " new cart" + (r.carts === 1 ? "" : "s") + ", " + r.buylists + " completed buylist" + (r.buylists === 1 ? "" : "s") + (r.waiting ? ", " + r.waiting + " line" + (r.waiting === 1 ? "" : "s") + " still waiting" : "") + (r.errors && r.errors.length ? ". " + r.errors.join(" · ") : ".") } : r; }
+      } else if (action === "release" || action === "release-all" || action === "damaged") {
+        if (!can(user, "release")) result = { ok: false, error: "Your account cannot release held stock. Ask an admin." };
+        else {
+          const r = await hold("/_hold/live/release", { key: form.key, line: action === "release-all" ? null : form.line, n: form.n, to: action === "damaged" ? "damaged" : "available", by });
+          result = r.ok ? { ok: true, message: action === "damaged" ? "Marked " + r.moved + " damaged (kept off the shelf)." : "Released " + r.moved + "." + (r.status === "done" ? " That arrival is done." : "") } : { ok: false, error: r.error || (r.errors || []).join("; ") || "failed" };
+        }
+      } else result = { ok: false, error: "unknown action" };
+      if (form && form.json) return Response.json(result, { status: result.ok ? 200 : 400, headers: noStore });
+      return redirect(BASE + "/held" + q(result.ok ? { msg: result.message, q: form.q } : { err: result.error || "failed", q: form.q }));
+    }
+    const d = await hold("/_hold/live/status" + (url.searchParams.get("q") ? "?q=" + encodeURIComponent(url.searchParams.get("q")) : ""));
+    return html(renderHeld(d, { ...opts, q: url.searchParams.get("q") || "" }));
   }
   if (p === BASE) {
     if (!user) return (await usersExist(env, origin)) ? toLogin() : redirect(BASE + "/setup" + q({ k: pinOk ? k : "" }));

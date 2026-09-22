@@ -29,6 +29,7 @@ export const PERMS = [
   { key: "add", label: "Add cards to a buylist" },
   { key: "approve", label: "Approve and reject" },
   { key: "email", label: "Send the customer email" },
+  { key: "release", label: "Release held stock (hold on arrival)" },
 ];
 
 // The sealed auto-pricer (/autoprice) is opened by the same accounts.

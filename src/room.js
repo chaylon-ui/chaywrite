@@ -3,6 +3,7 @@ import { CACHE_DO, WARM_EVERY_MS, gzipText, warmWithStore } from "./binder-searc
 import { PRICE_DO, priceDoFetch, priceDoAlarm } from "./price-history.js";
 import { ENRICH_DO, enrichDoFetch, enrichDoAlarm } from "./enrich.js";
 import { HOLD_DO, holdDoFetch, holdDoAlarm } from "./hold.js";
+import { buyCartsBetween, completedBuylists, buylistLines } from "./portal.js";
 import { STAGE_DO, stageDoFetch, stageDoAlarm } from "./stage.js";
 import { AUTOPRICE_DO, autopriceDoFetch, autopriceDoAlarm } from "./autoprice.js";
 
@@ -681,6 +682,12 @@ export class BinderRoom {
       storage: this.state.storage,
       env: this.env,
       adminGql: (q, v) => this.adminGql(q, v),
+      // the live stage's arrivals (src/hold-live.js) come from the portal
+      portal: {
+        buyCartsBetween: (a, b) => buyCartsBetween(this.env, a, b),
+        completedBuylists: (since) => completedBuylists(this.env, since),
+        buylistLines: (id) => buylistLines(this.env, id),
+      },
       now: () => Date.now(),
       log: (s) => console.log(s),
       mem: this.holdMem,

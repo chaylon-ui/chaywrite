@@ -42,7 +42,7 @@ test("public users carry no hash; admins can do everything, staff only what they
 });
 
 test("permissions come from form checkboxes or a list", () => {
-  const none = { edit: false, prices: false, add: false, approve: false, email: false, ap_view: false, ap_publish: false, ap_settings: false, ap_config: false };
+  const none = { edit: false, prices: false, add: false, approve: false, email: false, ap_view: false, ap_publish: false, ap_settings: false, ap_config: false, release: false };
   assert.deepEqual(permsFrom({ perm_edit: "on", perm_prices: "on" }), { ...none, edit: true, prices: true });
   assert.deepEqual(permsFrom({ perms: ["add", "email", "ap_publish"] }), { ...none, add: true, email: true, ap_publish: true });
   assert.deepEqual(permsFrom({}), none);

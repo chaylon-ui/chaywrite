@@ -569,6 +569,35 @@ async function dayCarts(env, day) {
   return rec;
 }
 
+/* Readers for the live hold on arrival (src/hold-live.js): the buy carts
+   submitted in a window (same queue, timeout and back-off as the page),
+   the buylists BinderPOS completed since a moment, and one buylist's
+   lines as staff finalised them. */
+export async function buyCartsBetween(env, startMs, endMs) {
+  if (Date.now() - cartsFailAt < 60e3) throw new Error("BinderPOS carts backed off after a failure");
+  const iso = (ms) => new Date(ms).toISOString();
+  try {
+    return await (cartsChain = cartsChain.catch(() => {}).then(() => fetchWindow(env, iso(startMs), iso(endMs))));
+  } catch (e) { cartsFailAt = Date.now(); throw e; }
+}
+export async function completedBuylists(env, sinceMs) {
+  const r = await listBuylists(env, { status: "completed", take: 50, since: new Date(sinceMs).toISOString() });
+  return r.rows;
+}
+export async function buylistLines(env, id) {
+  const d = await get(env, "/api/buylist/byId/" + encodeURIComponent(String(id)) + "/details");
+  const fin = Array.isArray(d.finalBuylistDetails) ? d.finalBuylistDetails : [];
+  const raw = Array.isArray(d.shopifyCustomerBuylistDetails) ? d.shopifyCustomerBuylistDetails : [];
+  const c = d.shopifyCustomer || {};
+  return {
+    id: str(d.id), paymentType: str(d.paymentType), completed: d.completedDate || null,
+    customer: [c.firstName, c.lastName].filter(Boolean).join(" ").trim() || str(c.email),
+    approvedNotes: str(d.approvedNotes),
+    final: fin.length > 0,
+    lines: (fin.length ? fin : raw).map(normalizeLine).map((l) => ({ name: l.name, set: l.set, condition: l.condition, finish: l.finish, qty: l.qty, image: l.image, cash: l.cash, credit: l.credit })),
+  };
+}
+
 const cartSummary = (c) => Object.assign({}, c, { lines: undefined, tenders: undefined });
 
 export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
