@@ -190,16 +190,49 @@ export function buildDecisionEmail(rec, kind) {
   return { subject, html, text };
 }
 
-// Resend's send call. Returns what the record keeps: never the key.
-export async function sendEmail(env, to, msg) {
+/* ---- a staff notice (the auto-pricing digest, 2026-09-22) ----------------
+   The same paper as the customer mail, but the body is the digest's own
+   short lines, one per price move, keeping the marks the ntfy push uses
+   (⚠ flagged, ↑ up, ↓ down, ⏳ waiting, ✖ failed) and colouring them. It
+   is internal mail: no reply-to, no shop address, no unsubscribe. */
+const MARK = { "⚠": "#b45309", "✖": "#b91c1c", "⏳": "#1e3a8a", "↑": "#14532d", "↓": "#b91c1c" };
+
+export function buildNoticeEmail(n) {
+  const subject = String(n.subject || "Exor Games");
+  const lines = (n.lines || []).map((l) => String(l == null ? "" : l)).filter((l) => l !== "");
+  const colour = (l) => MARK[[...l.trimStart()][0]] || INK;
+  const row = (l, i) => `<tr><td style="padding:7px 10px;border-bottom:1px solid ${RULE};background:${i % 2 ? PAPER : "#ffffff"};color:${colour(l)};font-size:14px;line-height:1.4">${esc(l)}</td></tr>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:${PAPER};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${INK};font-size:15px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:${INK};padding:16px 28px"><img src="${LOGO}" width="132" alt="${esc(BRAND)}" style="display:block;border:0;height:auto"></td></tr>
+<tr><td style="padding:22px 28px 6px"><h1 style="margin:0;font-size:19px;line-height:1.3;color:${INK}">${esc(n.heading || subject)}</h1>${n.sub ? `<p style="margin:6px 0 0;color:${MUTED};font-size:13px">${esc(n.sub)}</p>` : ""}</td></tr>
+<tr><td style="padding:12px 18px 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${RULE};border-radius:10px;overflow:hidden">${lines.map(row).join("")}</table></td></tr>
+${n.click ? `<tr><td style="padding:16px 28px 26px"><a href="${esc(n.click)}" style="display:inline-block;background:${RED};color:#ffffff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:8px">${esc(n.clickLabel || "Open the page")}</a></td></tr>` : ""}
+<tr><td style="background:${PAPER};padding:14px 28px;font-size:12px;color:${MUTED};line-height:1.6">${esc(n.foot || "Sent by the Exor Games worker. Staff notice - customers never see this.")}</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [n.heading || subject, ...(n.sub ? ["", n.sub] : []), "", ...lines, ...(n.click ? ["", (n.clickLabel || "Open the page") + ": " + n.click] : [])].join("\n");
+  return { subject, html, text };
+}
+
+/* Resend's send call. Returns what the record keeps: never the key.
+   `to` is one address or a list of them (staff notices go to a few).
+   opts: { replyTo: null } drops the customer reply-to for internal mail,
+   { fetchFn } injects fetch for the tests. */
+export async function sendEmail(env, to, msg, opts) {
+  const o = opts || {};
   if (!emailConfigured(env)) return { ok: false, status: "unconfigured", error: "RESEND_API_KEY is not set on the worker" };
-  const addr = String(to || "").trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) return { ok: false, status: "no-address", error: "no email address for this customer" };
+  const list = (Array.isArray(to) ? to : [to]).map((a) => String(a || "").trim()).filter(Boolean);
+  const bad = list.filter((a) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a));
+  if (!list.length || bad.length) return { ok: false, status: "no-address", error: list.length ? "not an email address: " + bad.join(", ").slice(0, 120) : "no email address for this customer" };
+  const replyTo = o.replyTo === undefined ? REPLY_TO : o.replyTo;
+  const f = o.fetchFn || fetch;
   try {
-    const r = await fetch("https://api.resend.com/emails", {
+    const r = await f("https://api.resend.com/emails", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bearer " + String(env.RESEND_API_KEY).trim() },
-      body: JSON.stringify({ from: emailFrom(env), to: [addr], reply_to: REPLY_TO, subject: msg.subject, html: msg.html, text: msg.text }),
+      body: JSON.stringify({ from: emailFrom(env), to: list, ...(replyTo ? { reply_to: replyTo } : {}), subject: msg.subject, html: msg.html, text: msg.text }),
       signal: AbortSignal.timeout(15000),
     });
     const j = await r.json().catch(() => null);

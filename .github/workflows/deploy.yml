@@ -537,9 +537,12 @@ jobs:
           AUTOPRICE_NTFY_TOKEN: ${{ secrets.AUTOPRICE_NTFY_TOKEN }}
           # 9Pocket's customer email (src/stage-email.js): RESEND_API_KEY from a
           # resend.com account whose verified domain carries EMAIL_FROM
-          # (default "9Pocket by Exor <9pocket@exorgames.com>").
+          # (default "9Pocket by Exor <9pocket@exorgames.com>"). The same key
+          # emails the auto-pricing digest (src/autoprice.js); AUTOPRICE_EMAIL_TO
+          # is who gets that one (comma-separated; default: the store's admin).
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          AUTOPRICE_EMAIL_TO: ${{ secrets.AUTOPRICE_EMAIL_TO }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
@@ -547,7 +550,7 @@ jobs:
           # worker understands (src/discord.js, src/enrich.js, src/autoprice.js) is listed
           # above; each one that is set becomes the worker secret of the same name, the rest are skipped.
           n=0
-          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM; do
+          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM AUTOPRICE_EMAIL_TO; do
             val="${!name}"
             if [ -n "$val" ]; then
               printf '%s' "$val" | npx wrangler@4 secret put "$name" && n=$((n+1))
@@ -558,6 +561,27 @@ jobs:
           else
             echo "Synced $n optional secret(s) to the worker"
           fi
+      - name: Smoke-test the auto-pricing digest's delivery (log-only)
+        env:
+          # Same bearer the ntfy relay uses; the digest record says how the
+          # last run's digest went out (email, ntfy, or still pending). Only
+          # the delivery fields are printed - never the digest body, which
+          # lists products and prices.
+          RELAY_TOKEN: ${{ secrets.AUTOPRICE_NTFY_TOKEN }}
+        run: |
+          if [ -z "$RELAY_TOKEN" ]; then echo "No AUTOPRICE_NTFY_TOKEN - skipping (the digest record needs that bearer)"; exit 0; fi
+          curl -sS --max-time 20 -H "authorization: Bearer $RELAY_TOKEN" \
+            "https://exor-binder.nevski.workers.dev/autoprice/digest.json" \
+          | node -e '
+            let t = ""; process.stdin.on("data", (d) => (t += d)).on("end", () => {
+              let j = null; try { j = JSON.parse(t); } catch { return console.log("digest.json: no JSON (" + t.slice(0, 120) + ")"); }
+              const d = j && j.digest;
+              if (!d) return console.log("digest.json: no digest stored yet (" + JSON.stringify(j).slice(0, 160) + ")");
+              const e = d.email;
+              console.log("last digest: kind=" + (d.kind || "?") + " sent=" + !!d.sent + " by=" + (d.sentBy || "-") + " ntfyError=" + (d.lastError || "none"));
+              console.log("email channel: " + (e ? e.status + " to " + (e.to || []).length + " address(es)" + (e.error ? " - " + e.error : "") : "off (no RESEND_API_KEY, or no usable AUTOPRICE_EMAIL_TO)"));
+            });
+          ' || true
       - name: Smoke-test learn-to-play outbound links (log-only)
         run: |
           # The learn hub's "official rules" links (templates/page.learn.json on the

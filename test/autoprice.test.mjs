@@ -852,3 +852,90 @@ test("the page draws only what the viewer may press", () => {
   assert.ok(legacy.includes('href="/autoprice/logout"') && !legacy.includes("Signed in as"));
   assert.ok(renderPage(status, { rows }, {}).includes("Run now"));   // no view: everything, as before
 });
+
+/* ---- the digest by email (2026-09-22) ---------------------------------- */
+import { digestEmailTo, sendDigestEmail, DIGEST_EMAIL_DEFAULT } from "../src/autoprice.js";
+
+const DIG = { title: "Auto-pricing: 2 price changes, 1 of 10% or more", body: "⚠ -14.3%  Wilds of Eldraine Collector Box: $1,399.95 → $1,199.95\n↑ +4.5%  Chaos Rising Booster Box: $219.95 → $229.95\n5 listed · 4 priced · 3 written · 1 skipped", priority: 4, tags: ["rotating_light"], click: "https://x/autoprice" };
+const KEY = { RESEND_API_KEY: "re_test" };
+
+test("digest email: who gets it - nobody without the key, the admin by default, the secret's list when set", () => {
+  assert.deepEqual(digestEmailTo({}), []);                                   // no Resend key: the email channel is off
+  assert.deepEqual(digestEmailTo({ AUTOPRICE_EMAIL_TO: "a@b.ca" }), []);     // ...even with a recipient named
+  assert.deepEqual(digestEmailTo(KEY), [DIGEST_EMAIL_DEFAULT]);
+  assert.deepEqual(digestEmailTo({ ...KEY, AUTOPRICE_EMAIL_TO: "a@exorgames.com, b@exorgames.com" }), ["a@exorgames.com", "b@exorgames.com"]);
+  assert.deepEqual(digestEmailTo({ ...KEY, AUTOPRICE_EMAIL_TO: "a@exorgames.com a@exorgames.com" }), ["a@exorgames.com"]);   // deduped
+  assert.deepEqual(digestEmailTo({ ...KEY, AUTOPRICE_EMAIL_TO: "not-an-address" }), []);                                    // junk is not mailed
+  assert.equal(digestEmailTo({ ...KEY, AUTOPRICE_EMAIL_TO: "a@x.ca,b@x.ca,c@x.ca,d@x.ca,e@x.ca,f@x.ca" }).length, 5);       // capped
+});
+
+test("digest email: the run's lines reach Resend as one staff mail, no customer reply-to", async () => {
+  let got = null;
+  const cx = { env: { ...KEY, AUTOPRICE_EMAIL_TO: "prices@exorgames.com" }, now: () => 1790035200000, fetch: async (u, init) => { got = { u, init }; return { ok: true, status: 200, json: async () => ({ id: "re_123" }) }; } };
+  const r = await sendDigestEmail(cx, DIG, { kind: "nightly" });
+  assert.equal(r.ok, true);
+  assert.equal(r.status, "sent");
+  assert.deepEqual(r.to, ["prices@exorgames.com"]);
+  assert.equal(got.u, "https://api.resend.com/emails");
+  const body = JSON.parse(got.init.body);
+  assert.deepEqual(body.to, ["prices@exorgames.com"]);
+  assert.equal(body.reply_to, undefined);                       // internal mail: replies do not go to customer service
+  assert.equal(body.subject, DIG.title);
+  assert.match(body.text, /Wilds of Eldraine Collector Box: \$1,399\.95 → \$1,199\.95/);
+  assert.match(body.text, /Nightly run · 2026-09-22/);
+  assert.match(body.html, /Open auto-pricing/);
+  assert.match(body.html, /#b45309/);                           // the flagged line keeps its colour
+  assert.ok(!body.html.includes("re_test"), "the key never reaches the body");
+  assert.equal(got.init.headers.authorization, "Bearer re_test");
+  // no key: nothing is sent and the caller is told why
+  const off = await sendDigestEmail({ env: {}, now: () => 1, fetch: async () => { throw new Error("must not be called"); } }, DIG, {});
+  assert.equal(off.skipped, true);
+  assert.match(off.error, /RESEND_API_KEY/);
+});
+
+test("publishDigest: email carries the digest when ntfy is refused, and settles it so the relay stays quiet", async () => {
+  const store = new Map();
+  const storage = { get: async (k) => store.get(k), put: async (k, v) => { store.set(k, v); } };
+  const calls = [];
+  const cx = {
+    env: { ...KEY, AUTOPRICE_NTFY: "exor" }, storage, now: () => 9000,
+    fetch: async (u) => {
+      calls.push(String(u));
+      if (String(u).includes("resend.com")) return { ok: true, status: 200, json: async () => ({ id: "re_9" }) };
+      return { ok: false, status: 429, text: async () => "limit reached: daily message quota reached" };
+    },
+  };
+  const r = await publishDigest(cx, DIG, { runStartedAt: 8000, kind: "nightly" });
+  assert.equal(r.ok, true);
+  assert.equal(r.emailed, true);
+  assert.equal(r.ntfyOk, false);
+  assert.equal(r.relay, false);                                  // the email already delivered it
+  const g = (await digestOp(cx, null)).digest;
+  assert.equal(g.sent, true);
+  assert.equal(g.sentBy, "email");
+  assert.equal(g.email.status, "sent");
+  assert.deepEqual(g.email.to, [DIGEST_EMAIL_DEFAULT]);
+  assert.match(g.lastError, /HTTP 429/);                         // the ntfy failure is still on the record
+  assert.ok(calls.some((u) => u.includes("resend.com")) && calls.some((u) => u.includes("ntfy.sh")), "both channels are tried");
+});
+
+test("publishDigest: both channels good, and a failed email leaves the ntfy relay path alone", async () => {
+  const store = new Map();
+  const storage = { get: async (k) => store.get(k), put: async (k, v) => { store.set(k, v); } };
+  const both = { env: { ...KEY, AUTOPRICE_NTFY: "exor" }, storage, now: () => 10, fetch: async () => ({ ok: true, status: 200, json: async () => ({ id: "re_1" }), text: async () => "" }) };
+  const r = await publishDigest(both, DIG, { runStartedAt: 10, kind: "nightly" });
+  assert.equal(r.ok, true);
+  assert.equal((await digestOp(both, null)).digest.sentBy, "worker + email");
+
+  const sad = { env: { ...KEY, AUTOPRICE_NTFY: "exor" }, storage, now: () => 20,
+    fetch: async (u) => String(u).includes("resend.com")
+      ? { ok: false, status: 422, json: async () => ({ message: "domain is not verified" }) }
+      : { ok: false, status: 429, text: async () => "quota" } };
+  const r2 = await publishDigest(sad, DIG, { runStartedAt: 20, kind: "nightly" });
+  assert.equal(r2.ok, false);
+  assert.equal(r2.relay, true);                                  // nothing got through: the GitHub relay still has it
+  assert.match(r2.emailError, /422|not verified/);
+  const g2 = (await digestOp(sad, null)).digest;
+  assert.equal(g2.sent, false);
+  assert.equal(g2.email.status, "failed");
+});
