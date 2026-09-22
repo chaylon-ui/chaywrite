@@ -10,6 +10,7 @@ import { serveEnrich } from "./enrich.js";
 import { serveBuylist } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
 import { serveStage } from "./stage.js";
+import { servePageEdit } from "./page-edit.js";
 import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
@@ -242,6 +243,9 @@ export default {
     if (url.pathname === "/autoprice" || url.pathname === "/autoprice/login" || url.pathname === "/autoprice/logout" || url.pathname === "/autoprice/report.json" || url.pathname === "/autoprice/status" || url.pathname === "/autoprice/control" || url.pathname === "/autoprice/digest.json") {
       return serveAutoprice(request, env, url, staffOk);
     }
+    // One-span edit of a Shopify page body (src/page-edit.js): staff key,
+    // dry unless told otherwise, verified by a re-read. Owner-asked edits only.
+    if (url.pathname === "/admin/page-edit.json") return servePageEdit(request, env, url, staffOk, null);
     if (url.pathname === "/hold/health") return serveHoldPage(request, env, url);
     if (url.pathname === "/hold/control" && request.method === "POST") return serveHoldControl(request, env, url, staffOk);
     if (url.pathname === "/hold/shadow" || url.pathname === "/hold/shadow.json") {
