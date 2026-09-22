@@ -20,8 +20,12 @@ export const MOVERS_URL = "https://www.mtggoldfish.com/movers/paper/standard";
 export const MORE_URLS = { weekly: "https://www.mtggoldfish.com/movers-details/paper/standard/winners/wow", daily: "https://www.mtggoldfish.com/movers-details/paper/standard/winners/dod" };
 export const MAX_TRIED = 60;
 export const WANTED_N = 10;
-export const TTL_MS = 12 * 3600 * 1000;
-const KV_KEY = "wanted:mtg:standard:v1";
+export const TTL_MS = 48 * 3600 * 1000;        // a good list is kept two days (a failed refresh keeps yesterday's)
+export const REFRESH_MS = 23 * 3600 * 1000;    // the cron rebuilds after this: once a day (owner, 2026-09-22)
+export const RETRY_MS = 3600 * 1000;           // and retries an hour after a build that found nothing
+const KV_KEY = "wanted:mtg:standard:v2";
+const ATTEMPT_KEY = "wanted:mtg:standard:attempt";
+const LAST_TRY_KEY = "wanted:mtg:standard:lasttry";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 const memo = { at: 0, value: null };
 
@@ -131,15 +135,24 @@ export async function fetchMovers(fetchFn, url) {
   return await r.text();
 }
 
+// One lookup's answer in a common shape: a plain array of hits (tests, the
+// old bpCardSearch) or {status, hits, bodyType} (bpCardSearchRaw).
+const normalise = (r) => Array.isArray(r) ? { hits: r, status: null, bodyType: "array", error: null }
+  : r && Array.isArray(r.hits) ? { hits: r.hits, status: r.status == null ? null : r.status, bodyType: r.bodyType || null, error: r.error || null }
+  : { hits: [], status: null, bodyType: typeof r, error: null };
+
 // Build the list: movers page -> candidates -> BinderPOS hits, until N are
 // found. opts.search(name) returns BinderPOS hits for a name (injected by
 // src/buylist.js, and by tests). The store's buylist does not carry every
 // riser (2026-09-22: all ten weekly winners were Reality Fracture cards the
 // buylist had none of), so after the front page's weekly and daily winners
 // the walk continues down the 50-row View More lists, weekly then daily,
-// and stops at N hits or MAX_TRIED names.
+// and stops at N hits or MAX_TRIED names. Lookups run ONE AT A TIME with
+// opts.delayMs between them: five at once, sixty in ten seconds, had
+// BinderPOS answering empty for names its search finds when asked politely
+// (2026-09-22, probe 35783810177: "Roaming Throne" 0 in the burst, 6 alone).
 export async function buildWanted(opts) {
-  const n = opts.n || WANTED_N;
+  const n = opts.n || WANTED_N, delayMs = opts.delayMs == null ? 350 : opts.delayMs;
   const html = await fetchMovers(opts.fetchFn);
   const parsed = parseMovers(html);
   const front = pickWanted(parsed, 1000);
@@ -158,40 +171,54 @@ export async function buildWanted(opts) {
       for (const c of rows) { const k = letters(c.name); if (k && !seen.has(k)) { seen.add(k); queue.push(c); } }
       if (!queue.length) continue;
     }
-    const batch = queue.splice(0, Math.min(5, n - hits.length, MAX_TRIED - tried));
-    tried += batch.length;
-    const found = await Promise.all(batch.map((c) => opts.search(c.name).then((r) => ({ hits: Array.isArray(r) ? r : [], error: null })).catch((e) => ({ hits: [], error: String((e && e.message) || e).slice(0, 160) }))));
-    batch.forEach((c, k) => {
-      if (hits.length >= n) return;
-      const hit = matchHit(c, found[k].hits);
-      // What each lookup saw, for the deploy smoke and /wanted readers.
-      probe.push({ name: c.name, got: found[k].hits.length, first: found[k].hits[0] ? String(found[k].hits[0].cardName) : null, error: found[k].error, matched: hit ? hit.setName : null });
-      if (hit) hits.push({ ...hit, wanted: { price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: hits.length + 1 } });
-      else missed.push(c.name);
-    });
+    const c = queue.shift();
+    if (tried > 0 && delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    tried++;
+    const got = await opts.search(c.name).then(normalise).catch((e) => ({ hits: [], status: null, bodyType: "error", error: String((e && e.message) || e).slice(0, 160) }));
+    const hit = matchHit(c, got.hits);
+    // What each lookup saw, for the deploy smoke and /wanted readers.
+    probe.push({ name: c.name, status: got.status, got: got.hits.length, bodyType: got.bodyType, first: got.hits[0] ? String(got.hits[0].cardName) : null, error: got.error, matched: hit ? hit.setName : null });
+    if (hit) hits.push({ ...hit, wanted: { price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: hits.length + 1 } });
+    else missed.push(c.name);
   }
   return { source: MOVERS_URL, pages, asOf: new Date().toISOString(), tried, picked: front.slice(0, n).map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), missed: missed.slice(0, 60), probe, count: hits.length, hits };
 }
 
-// Cached wrapper for the route: memo (this isolate) -> Durable Object KV ->
-// build. A build failure answers with the last good list when there is one.
-export async function wantedCards(env, opts) {
+async function readCached(env) {
   if (memo.value && Date.now() - memo.at < 3600 * 1000) return memo.value;
   const cached = await kvGet(env, KV_KEY);
-  if (cached) {
-    try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
+  if (!cached) return null;
+  try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
+  return null;
+}
+
+// The cron's job (src/index.js scheduled, every 5 min): rebuild the list
+// once a day (when the cached one is older than REFRESH_MS, or missing), at
+// most once per RETRY_MS. A build that finds nothing is recorded (LAST_TRY_KEY, shown to
+// /wanted readers) but never replaces a good list.
+export async function refreshWanted(env, opts) {
+  const have = await readCached(env);
+  if (have && Date.now() - Date.parse(have.asOf) < REFRESH_MS) return { skipped: "fresh", asOf: have.asOf, count: have.count };
+  if (await kvGet(env, ATTEMPT_KEY)) return { skipped: "tried within the hour" };
+  await kvPut(env, ATTEMPT_KEY, new Date().toISOString(), RETRY_MS);
+  let v;
+  try { v = await buildWanted(opts); }
+  catch (e) { v = { source: MOVERS_URL, asOf: new Date().toISOString(), error: String((e && e.message) || e).slice(0, 200), tried: 0, probe: [], count: 0, hits: [] }; }
+  if (v.count > 0) {
+    await kvPut(env, KV_KEY, JSON.stringify(v), TTL_MS);
+    memo.at = Date.now(); memo.value = v;
+  } else {
+    await kvPut(env, LAST_TRY_KEY, JSON.stringify({ asOf: v.asOf, error: v.error || null, tried: v.tried, missed: (v.missed || []).slice(0, 12), probe: (v.probe || []).slice(0, 12) }), TTL_MS);
   }
-  try {
-    const v = await buildWanted(opts);
-    // An empty list is never remembered (2026-09-22: the first live build
-    // parsed ten movers and matched none, and a 12 h cache of that would
-    // have hidden the fix): only a list with cards is cached.
-    if (v.count > 0) {
-      await kvPut(env, KV_KEY, JSON.stringify(v), TTL_MS);
-      memo.at = Date.now(); memo.value = v;
-    }
-    return v;
-  } catch (e) {
-    return { source: MOVERS_URL, asOf: null, error: String((e && e.message) || e).slice(0, 200), count: 0, hits: [] };
-  }
+  return v;
+}
+
+// What the route serves: the cached list, or an empty answer that says the
+// cron has yet to build one (with the last attempt's notes when there was one).
+export async function wantedCards(env) {
+  const have = await readCached(env);
+  if (have) return have;
+  let lastTry = null;
+  try { const t = await kvGet(env, LAST_TRY_KEY); if (t) lastTry = JSON.parse(t); } catch { lastTry = null; }
+  return { source: MOVERS_URL, asOf: null, building: true, lastTry, count: 0, hits: [] };
 }

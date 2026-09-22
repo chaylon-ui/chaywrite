@@ -42,7 +42,7 @@ import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
 import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf } from "./stage.js";
 import { instructionsPayload, buildEmail, sendEmail } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
-import { wantedCards } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
+import { wantedCards, refreshWanted } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
 
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
@@ -136,6 +136,18 @@ export async function bpCardSearch(game, keyword, offset) {
   const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {});
   return Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
 }
+// The same search with the upstream status and body shape kept, for
+// src/wanted.js's lookups and their probe notes.
+export async function bpCardSearchRaw(game, keyword) {
+  const qs = new URLSearchParams({ keyword: String(keyword || "").slice(0, 80), limit: String(PAGE), offset: "0" });
+  const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {});
+  const hits = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
+  const bodyType = Array.isArray(r.body) ? "array" : typeof r.body === "string" ? "text:" + r.body.slice(0, 80) : "object:" + Object.keys(r.body || {}).slice(0, 5).join(",");
+  return { status: r.status, hits, bodyType };
+}
+// The cron's entry point (src/index.js scheduled): rebuild the sell page's
+// "cards we need most" list when it is due.
+export function refreshWantedCards(env) { return refreshWanted(env, { search: (name) => bpCardSearchRaw("mtg", name) }); }
 const KNOWN_IDS = ["mtg", "pokemon", "yugioh", "one", "ones", "lor", "swu", "fleshAndBlood", "scr", "riftbound"];
 // BinderPOS's supported games as {id, name}, memoised for MEMO_TTL; [] when
 // they cannot be fetched (the tables above still cover the known names).
@@ -347,7 +359,7 @@ async function route(mode, action, request, env, url, cors) {
   // The sell page's first view (owner, 2026-09-22): the ten cards the store
   // most wants right now, as ordinary search hits. src/wanted.js.
   if (action === "wanted") {
-    const v = await wantedCards(env, { search: (name) => bpCardSearch("mtg", name, 0) });
+    const v = await wantedCards(env);          // built by the cron (refreshWantedCards), never here
     return json(v, 200, { ...cors, "cache-control": v.count ? "public, max-age=600" : "no-store" });
   }
 

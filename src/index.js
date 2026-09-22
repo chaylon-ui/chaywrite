@@ -7,7 +7,7 @@ import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO 
 import { serveIcs } from "./ics.js";
 import { servePriceHistory } from "./price-history.js";
 import { serveEnrich } from "./enrich.js";
-import { serveBuylist } from "./buylist.js";
+import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
 import { serveStage } from "./stage.js";
 import { servePageEdit } from "./page-edit.js";
@@ -428,6 +428,10 @@ export default {
     // Shelf drops to Discord (quiet unless a DISCORD_WEBHOOK_* secret is set).
     try { const d = await discordTick(env); if (d && (d.posted || d.errors)) console.log("discord: " + JSON.stringify(d)); }
     catch (e) { console.log("discord: failed: " + ((e && e.message) || e)); }
+    // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
+    // day, one polite BinderPOS lookup at a time, off the request path.
+    try { const w = await refreshWantedCards(env); if (w && !w.skipped) console.log("wanted: " + JSON.stringify({ count: w.count, tried: w.tried, error: w.error || null })); }
+    catch (e) { console.log("wanted: failed: " + ((e && e.message) || e)); }
   },
 };
 
