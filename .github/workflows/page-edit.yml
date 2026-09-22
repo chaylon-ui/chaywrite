@@ -1,12 +1,14 @@
 name: page-edit
-# Edit ONE span of a Shopify page body without hand-copying the body:
-# the runner reads the page with the Admin token, finds the span between
-# `find_start` and `find_end` (literal text, inclusive; exactly one match
-# or it stops), swaps in the replacement (base64, so YAML quoting cannot
-# mangle it), prints md5s and the diff, and - unless dry - saves it and
-# re-reads the page to prove the stored body is byte-identical to what it
-# meant to save. Page bodies are the owner's content: run this only for a
-# change the owner asked for in so many words.
+# Edit ONE span of a Shopify page body without hand-copying the body. The
+# worker (src/page-edit.js, /admin/page-edit.json, staff key) reads the
+# page with its Admin token, finds the span between `find_start` and
+# `find_end` (literal text, inclusive; exactly one match or it stops), swaps
+# in the replacement (base64, so YAML quoting cannot mangle it), reports
+# what was removed and inserted with fingerprints, and - unless dry - saves
+# and re-reads the page to prove the stored body is what it meant to save.
+# Page bodies are the owner's content: run this only for a change the owner
+# asked for in so many words. The staff key is the checkout's DEFAULT_PIN
+# (src/config.js on the worker branch), never printed.
 on:
   workflow_dispatch:
     inputs:
@@ -31,10 +33,11 @@ jobs:
   edit:
     runs-on: ubuntu-latest
     steps:
-      - name: Edit the page
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/shopify-site-improvements-ztgdt8
+      - name: Edit the page through the worker
         env:
-          SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
-          SHOP: most-wanted-ca.myshopify.com
           PAGE_ID: ${{ inputs.page_id }}
           FIND_START: ${{ inputs.find_start }}
           FIND_END: ${{ inputs.find_end }}
@@ -42,40 +45,24 @@ jobs:
           DRY: ${{ inputs.dry }}
         run: |
           node <<'EOF'
-          const crypto = require('crypto');
-          const md5 = (s) => crypto.createHash('md5').update(s, 'utf8').digest('hex');
-          const gql = async (query, variables) => {
-            const r = await fetch(`https://${process.env.SHOP}/admin/api/2025-01/graphql.json`, { method: 'POST', headers: { 'content-type': 'application/json', 'X-Shopify-Access-Token': process.env.SHOPIFY_ADMIN_TOKEN }, body: JSON.stringify({ query, variables }) });
-            const j = await r.json();
-            if (!r.ok || j.errors) throw new Error('HTTP ' + r.status + ' ' + JSON.stringify(j.errors || j).slice(0, 300));
-            return j.data;
-          };
+          const fs = require('fs');
+          const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+          const K = m ? m[1] : '';
+          const W = 'https://exor-binder.nevski.workers.dev';
           (async () => {
-            if (!process.env.SHOPIFY_ADMIN_TOKEN) { console.log('no SHOPIFY_ADMIN_TOKEN secret; stopped'); process.exit(1); }
-            const id = 'gid://shopify/Page/' + String(process.env.PAGE_ID).replace(/\D/g, '');
-            const p = (await gql('query($id:ID!){page(id:$id){id title handle updatedAt body}}', { id })).page;
-            if (!p) { console.log('no such page', id); process.exit(1); }
-            const body = p.body || '';
-            console.log('page:', p.title, '/pages/' + p.handle, '| updatedAt', p.updatedAt, '| body', body.length, 'chars, md5', md5(body));
-            const fs = process.env.FIND_START, fe = process.env.FIND_END || '';
-            const count = body.split(fs).length - 1;
-            if (count !== 1) { console.log('find_start occurs', count, 'times; need exactly 1 - stopped'); process.exit(1); }
-            const a = body.indexOf(fs);
-            let b;
-            if (fe) { const e = body.indexOf(fe, a + fs.length); if (e < 0) { console.log('find_end not found after find_start - stopped'); process.exit(1); } if (body.indexOf(fe, e + fe.length) >= 0 && body.split(fe).length - 1 > 1) console.log('note: find_end occurs more than once; the first after find_start is used'); b = e + fe.length; }
-            else b = a + fs.length;
-            const removed = body.slice(a, b);
-            const replacement = Buffer.from(process.env.REPLACE_B64, 'base64').toString('utf8');
-            const next = body.slice(0, a) + replacement + body.slice(b);
-            console.log('--- removed (' + removed.length + ' chars) ---'); console.log(removed.slice(0, 3000));
-            console.log('--- inserted (' + replacement.length + ' chars) ---'); console.log(replacement.slice(0, 3000));
-            console.log('--- new body', next.length, 'chars, md5', md5(next), '| untouched before/after:', a, '/', body.length - b, 'chars');
-            if (String(process.env.DRY) !== 'false') { console.log('DRY RUN: nothing saved'); return; }
-            const u = (await gql('mutation($id:ID!,$body:String!){pageUpdate(id:$id,page:{body:$body}){page{id updatedAt} userErrors{field message code}}}', { id, body: next })).pageUpdate;
-            if (u.userErrors && u.userErrors.length) { console.log('SAVE REFUSED:', JSON.stringify(u.userErrors)); process.exit(1); }
-            const again = (await gql('query($id:ID!){page(id:$id){updatedAt body}}', { id })).page;
-            const ok = (again.body || '') === next;
-            console.log('saved; updatedAt', again.updatedAt, '| re-read md5', md5(again.body || ''), ok ? '= expected: VERIFIED' : '!= expected ' + md5(next) + ': MISMATCH');
-            if (!ok) process.exit(1);
+            if (!K) { console.log('no DEFAULT_PIN in src/config.js; stopped'); process.exit(1); }
+            const body = { k: K, page_id: process.env.PAGE_ID, find_start: process.env.FIND_START, find_end: process.env.FIND_END || '', replace_b64: process.env.REPLACE_B64, dry: String(process.env.DRY) !== 'false' };
+            const r = await fetch(W + '/admin/page-edit.json', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+            const j = await r.json().catch(() => ({ ok: false, error: 'no JSON, HTTP ' + r.status }));
+            if (r.status === 403) { console.log('the staff PIN in src/config.js is not the live one (changed in /admin?) - stopped'); process.exit(1); }
+            console.log('HTTP', r.status, '| ok', j.ok, '| dry', j.dry, j.error ? '| error ' + j.error : '');
+            if (j.page) console.log('page:', j.page.title, '/pages/' + j.page.handle, '| updatedAt', j.page.updatedAt);
+            if (j.before) console.log('body before:', j.before.length, 'chars, hash', j.before.hash, '| untouched before/after the span:', j.untouched.before, '/', j.untouched.after, 'chars');
+            if (j.removed != null) { console.log('--- removed (' + j.removed.length + ' chars) ---'); console.log(j.removed); }
+            if (j.inserted != null) { console.log('--- inserted (' + j.inserted.length + ' chars) ---'); console.log(j.inserted); }
+            if (j.next) console.log('body after:', j.next.length, 'chars, hash', j.next.hash);
+            if (j.dry) console.log('DRY RUN: nothing saved');
+            else console.log('saved:', j.saved, '| verified by re-read:', j.verified, '| updatedAt', j.after && j.after.updatedAt, '| re-read hash', j.after && j.after.hash);
+            if (!j.ok) process.exit(1);
           })().catch((e) => { console.log('error:', e.message); process.exit(1); });
           EOF
