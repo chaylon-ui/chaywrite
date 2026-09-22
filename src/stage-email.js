@@ -22,6 +22,14 @@ const STATUS_PAGE = "https://exorgames.com/pages/selling-to-exor-games-buylist";
 const REPLY_TO = "customerservice@exorgames.com";
 export const EMAIL_FROM_DEFAULT = "9Pocket by Exor <9pocket@exorgames.com>";
 const LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/logo2.png?v=1789388474";   // the store's mark, the theme header's own file
+// Owner, 2026-09-22: "an ad for Mallow Games to also sell their video games
+// using this graphic inside the email" - the banner the owner uploaded to
+// Shopify Files (2172x724, transparent margins); the CDN serves it resized.
+export const MALLOW_URL = "https://mallowgames.com/sell-your-games/";
+export const MALLOW_BANNER = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/90A38806-3E70-440D-9CA9-E869B6C38946.png?v=1790106076&width=1200";
+const MALLOW_ALT = "Selling video games? Get cash or Exor Games store credit at Mallow Games - start selling";
+const mallowHtml = () => `<tr><td style="padding:4px 28px 22px"><a href="${MALLOW_URL}" style="display:block;text-decoration:none"><img src="${MALLOW_BANNER}" alt="${MALLOW_ALT}" width="544" style="display:block;width:100%;max-width:544px;height:auto;border:0"></a></td></tr>`;
+const mallowText = () => `Selling video games too? Mallow Games, our sister shop, buys them for cash or Exor Games store credit: ${MALLOW_URL}`;
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
@@ -103,6 +111,7 @@ export function buildEmail(rec) {
   <p style="margin:8px 0 0;font-size:12px;color:${MUTED};line-height:1.5">Prices are today's buylist estimate for the conditions you chose. Nothing is paid until we have your cards in hand and have verified them. You can see this list's status any time on <a href="${STATUS_PAGE}" style="color:${RED}">our sell page</a> while signed in.</p>
 </td></tr>
 <tr><td style="padding:10px 28px 26px">${SECTIONS.map(section).join("")}</td></tr>
+${mallowHtml()}
 <tr><td style="background:${PAPER};padding:16px 28px;font-size:12px;color:${MUTED};line-height:1.6">Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · <a href="mailto:${REPLY_TO}" style="color:${MUTED}">${REPLY_TO}</a><br>You are receiving this because a buylist was submitted from your Exor Games account. Reply to this email if that was not you.</td></tr>
 </table></td></tr></table></body></html>`;
 
@@ -114,6 +123,7 @@ export function buildEmail(rec) {
     `Estimated ${credit ? "store credit" : "cash"} total: ${money(total)}`, "",
     `Prices are today's buylist estimate; nothing is paid until we have verified your cards. Status: ${STATUS_PAGE}`, "",
     ...SECTIONS.flatMap((s) => [s.h.toUpperCase(), ...s.p.map((p) => linkify(p, false)), ...(s.address ? ["", ...ADDRESS] : []), ""]),
+    mallowText(), "",
     `Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · ${REPLY_TO}`,
   ].join("\n");
 

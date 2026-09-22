@@ -40,8 +40,8 @@
 
 import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
-import { stagingOn, stageSubmit, stageMine } from "./stage.js";
-import { instructionsPayload } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
+import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf } from "./stage.js";
+import { instructionsPayload, buildEmail, sendEmail } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
 
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
@@ -427,7 +427,21 @@ async function route(mode, action, request, env, url, cors) {
         repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
     }
     const r = await submitToBinderPos(env, url, customer, paymentType, cards);
+    // Owner, 2026-09-22 (staging off): the customer still gets our email
+    // with the list and the instructions, and the sell page still shows the
+    // instructions popup, under BinderPOS's own reference number.
+    let email = null, number = "";
+    if (r.accepted) {
+      number = r.reply && r.reply.data != null ? String(r.reply.data) : "";
+      try {
+        const who = await lookupCustomer(env, customer);
+        const rec = { id: "bp-" + (number || Date.now()), number, ts: Date.now(), customer, customerName: who.name, customerEmail: who.email, paymentType, cards, totals: totalsOf(cards), repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } };
+        const out = await sendEmail(env, who.email, buildEmail(rec));
+        email = { status: out.status, error: out.error, to: who.email ? who.email.replace(/^(.).*(@.*)$/, "$1***$2") : "" };
+      } catch (e) { email = { status: "failed", error: String((e && e.message) || e).slice(0, 160) }; }
+    }
     return json({ upstream: r.upstream, paymentType, submitted: cards.length, accepted: r.accepted, cleared: r.cleared, confirmation: r.confirmation, reply: r.reply,
+      number, instructions: r.accepted ? instructionsPayload() : undefined, email,
       repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
   }
 

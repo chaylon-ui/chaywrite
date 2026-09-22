@@ -683,7 +683,7 @@
       '<div class="bl__guide-body">' + (ins.nextStep ? '<p class="bl__done-next">' + esc(ins.nextStep) + "</p>" : "") +
       (notes && notes.length ? '<p class="bl__done-notes">' + notes.map(esc).join(" ") + "</p>" : "") +
       sections +
-      '<p class="bl__guide-note bl__muted">A copy of these instructions has been emailed to the address on your account.</p>' +
+      (j.email && j.email.status && j.email.status !== "sent" ? "" : '<p class="bl__guide-note bl__muted">A copy of these instructions has been emailed to the address on your account.</p>') +
       '<div class="bl__guide-actions"><span></span><button type="button" class="bl__btn bl__btn--primary" data-close-done>Got it</button></div></div>';
     if (typeof d.showModal === "function") { if (!d.open) d.showModal(); } else d.setAttribute("open", "");
     // Focus lands on the button for the keyboard, but the text must open at
@@ -710,17 +710,25 @@
     return null;
   }
   function wireTiles() {
-    Array.prototype.forEach.call(document.querySelectorAll('a[href="#buylist"]'), function (a) {
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('a[href="#buylist"]'));
+    if (!tiles.length) return;
+    // Capture phase, on the document: the click is ours before BinderPOS's
+    // own buylist script (bound to the same #buylist links) can open its
+    // overlay (owner, 2026-09-22: "these buttons are still triggering the
+    // BinderPOS popup"). preventDefault also keeps the hash unchanged, so a
+    // hashchange trigger stays quiet; we scroll to our own section instead.
+    document.addEventListener("click", function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href="#buylist"]') : null;
+      if (!a || tiles.indexOf(a) < 0) return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       var img = a.querySelector("img");
       var src = ((img && img.getAttribute("src")) || "").toLowerCase();
       var hit = TILE_KEYS.filter(function (p) { return src.indexOf(p[0]) >= 0; })[0];
-      if (!hit) return;
-      a.addEventListener("click", function () {
-        var id = gameFor(hit[1]);
-        if (id && id !== game) { $("#bl-game").value = id; $("#bl-game").dispatchEvent(new Event("change")); }
-        setTimeout(function () { $("#bl-q").focus(); }, 300);
-      });
-    });
+      var id = hit ? gameFor(hit[1]) : null;
+      if (id && id !== game) { $("#bl-game").value = id; $("#bl-game").dispatchEvent(new Event("change")); }
+      try { root.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (err) { root.scrollIntoView(); }
+      setTimeout(function () { var q = $("#bl-q"); if (q) { try { q.focus({ preventScroll: true }); } catch (err) { q.focus(); } } }, 350);
+    }, true);
   }
 
   /* ---- staged buylists (owner, 2026-09-19): where each sent list stands ----
