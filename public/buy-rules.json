@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-09-21",
+  "updated": "2026-09-22",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -729,6 +729,56 @@
         "MTG SINGLES $100+"
       ],
       "sets": {
+        "edge of eternities art series": {
+          "name": "Edge of Eternities Art Cards",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "final fantasy art series": {
+          "name": "MTG Final Fantasy Art Series",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
         "marvel super heroes art series": {
           "name": "marvel superheros art cards never delete",
           "conds": {
@@ -870,58 +920,8 @@
             }
           }
         },
-        "final fantasy art series": {
-          "name": "MTG Final Fantasy Art Series",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
         "lorwyn eclipsed art series": {
           "name": "Lorwyn art cards",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "edge of eternities art series": {
-          "name": "Edge of Eternities Art Cards",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -1249,8 +1249,8 @@
       "_rules": [
         "One Piece (Under $3.00)",
         "One Piece (Over $3.01)",
-        "One Piece (Over $10)",
-        "One Piece $3 - $10"
+        "One Piece $3 - $10",
+        "One Piece (Over $10)"
       ],
       "rarities": {
         "treasure rare": {
@@ -2381,8 +2381,8 @@
         }
       },
       "sets": {
-        "prize pack series seven": {
-          "name": "Pokemon prize pack 7",
+        "prize pack series five": {
+          "name": "pokemon prize pack 5",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2406,8 +2406,8 @@
             }
           }
         },
-        "prize pack series eight": {
-          "name": "Pokemon Prize Pack Series 8",
+        "prize pack series three": {
+          "name": "prize pack 3 (pokemon)",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2431,8 +2431,8 @@
             }
           }
         },
-        "mega evolution: 30th celebration classic collection": {
-          "name": "Pokemon 30th classic squash delete sept 30th",
+        "prize pack series four": {
+          "name": "prize pack 4 (pokemon)",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2481,8 +2481,8 @@
             }
           }
         },
-        "prize pack series five": {
-          "name": "pokemon prize pack 5",
+        "mega evolution: 30th celebration classic collection": {
+          "name": "Pokemon 30th classic squash delete sept 30th",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2506,62 +2506,90 @@
             }
           }
         },
-        "prize pack series nine": {
-          "name": "Pokemon Prize Pack Series 9",
+        "prize pack series one": {
+          "name": "Prizepack",
           "conds": {
             "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "mega evolution: 30th celebration": {
-          "name": "Pokemon 30th Celebration Squash delete sept 30th",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "world championships 2018": {
-          "name": "World Champs Pokemon",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
+              "cash": 0.3,
+              "credit": 0.4,
+              "rarities": {
+                "black star promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "black white rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "double rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "holo rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "illustration rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "mega hyper rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "promo": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "radiant rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "rare ace": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "secret rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "shiny rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "shiny ultra rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "special illustration rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "ultra rare": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "unspecified": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
             },
             "LP": {
               "cash": 0.0,
@@ -2709,8 +2737,8 @@
             }
           }
         },
-        "prize pack series four": {
-          "name": "prize pack 4 (pokemon)",
+        "prize pack series eight": {
+          "name": "Pokemon Prize Pack Series 8",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2734,8 +2762,58 @@
             }
           }
         },
-        "prize pack series three": {
-          "name": "prize pack 3 (pokemon)",
+        "world championships 2018": {
+          "name": "World Champs Pokemon",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series seven": {
+          "name": "Pokemon prize pack 7",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "mega evolution: 30th celebration": {
+          "name": "Pokemon 30th Celebration Squash delete sept 30th",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2784,90 +2862,12 @@
             }
           }
         },
-        "prize pack series one": {
-          "name": "Prizepack",
+        "prize pack series nine": {
+          "name": "Pokemon Prize Pack Series 9",
           "conds": {
             "NM": {
-              "cash": 0.3,
-              "credit": 0.4,
-              "rarities": {
-                "black star promo": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "black white rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "double rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "holo rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "hyper rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "illustration rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mega hyper rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "promo": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "radiant rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare ace": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "secret rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "shiny rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "shiny ultra rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special illustration rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "ultra rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "unspecified": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
+              "cash": 0.0,
+              "credit": 0.0
             },
             "LP": {
               "cash": 0.0,
@@ -3696,58 +3696,8 @@
         }
       },
       "sets": {
-        "winner's pack 2026-2027": {
-          "name": "YUgiOH winners pack 26/27. Do not delete.",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
         "ultimate tournament pack 1": {
           "name": "delete 2027 - yu-gioh tournament pack",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "ots tournament pack 29": {
-          "name": "YGO Pack 29 (Delete when 33 releases)",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -3796,8 +3746,8 @@
             }
           }
         },
-        "ots tournament pack 27": {
-          "name": "Ygo OTS 27",
+        "ots tournament pack 28": {
+          "name": "YGO OTS 28",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -3821,8 +3771,58 @@
             }
           }
         },
-        "ots tournament pack 28": {
-          "name": "YGO OTS 28",
+        "winner's pack 2026-2027": {
+          "name": "YUgiOH winners pack 26/27. Do not delete.",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ots tournament pack 29": {
+          "name": "YGO Pack 29 (Delete when 33 releases)",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ots tournament pack 27": {
+          "name": "Ygo OTS 27",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -3849,5 +3849,7 @@
       }
     }
   ],
-  "_alerts": []
+  "_alerts": [
+    "skipped rules: Aerodactyl 01/62 (card-specific)"
+  ]
 }
