@@ -6,6 +6,14 @@ compatibility_date = "2025-06-01"
 # Secrets (SHOPIFY_ADMIN_TOKEN) always persist — never redefine them here.
 keep_vars = true
 
+# Owner, 2026-09-22: "For now can you turn off the 9Pocket part of the
+# buylist so it goes right to binderpos as normal". "off" = the sell page's
+# submit goes straight to BinderPOS's online buylist (src/buylist.js), no
+# staff check; the 9Pocket pages stay reachable for the lists already made.
+# Delete this line (or set it to "on") to bring the staff check back.
+[vars]
+BUYLIST_STAGING = "off"
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
