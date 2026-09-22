@@ -125,9 +125,10 @@ test("the customer email carries the number, every card, the totals, the address
   }
   for (const s of ["9P-1001", "Lightning Bolt", "3 x", "51 Allen Street", "https://exorgames.com/pages/selling-policy", "Estimated store credit total: $8.45"]) assert.ok(m.text.includes(s), "text has " + s);
   assert.ok(!/<script/i.test(m.html));
-  // the Mallow Games banner (owner, 2026-09-22) sits above the footer, linked, in html and text
-  assert.ok(m.html.includes('href="https://mallowgames.com/sell-your-games/"') && m.html.includes("90A38806-3E70-440D-9CA9-E869B6C38946.png") && m.html.indexOf("mallowgames.com") < m.html.lastIndexOf("51 Allen Street"));
-  assert.ok(m.text.includes("Mallow Games") && m.text.includes("https://mallowgames.com/sell-your-games/"));
+  // the Mallow Games banner (owner, 2026-09-22; moved: "put the selling video games? banner near the top of the email") sits right under the red header, before the greeting, linked, in html and text
+  assert.ok(m.html.includes('href="https://mallowgames.com/sell-your-games/"') && m.html.includes("90A38806-3E70-440D-9CA9-E869B6C38946.png"));
+  assert.ok(m.html.indexOf("mallowgames.com") < m.html.indexOf("What's the next step") && m.html.indexOf("mallowgames.com") > m.html.indexOf("9Pocket by"));
+  assert.ok(m.text.includes("https://mallowgames.com/sell-your-games/") && m.text.indexOf("Mallow Games") < m.text.indexOf("What's the next step"));
   // a hostile card name is escaped
   const bad = shapeRecord({ customer: "1", paymentType: "Cash", cards: [{ ...CARDS[0], cardName: '<img src=x onerror=alert(1)>' }] }, 5);
   assert.ok(!buildEmail(bad).html.includes("<img src=x"));

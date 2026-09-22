@@ -147,7 +147,7 @@ export async function buildWanted(opts) {
   const seen = new Set(front.map((c) => letters(c.name)));
   const queue = front.slice();
   const more = [MORE_URLS.weekly, MORE_URLS.daily];
-  const hits = [], missed = [], pages = [MOVERS_URL];
+  const hits = [], missed = [], probe = [], pages = [MOVERS_URL];
   let tried = 0;
   while (hits.length < n && tried < MAX_TRIED) {
     if (!queue.length) {
@@ -160,15 +160,17 @@ export async function buildWanted(opts) {
     }
     const batch = queue.splice(0, Math.min(5, n - hits.length, MAX_TRIED - tried));
     tried += batch.length;
-    const found = await Promise.all(batch.map((c) => opts.search(c.name).catch(() => [])));
+    const found = await Promise.all(batch.map((c) => opts.search(c.name).then((r) => ({ hits: Array.isArray(r) ? r : [], error: null })).catch((e) => ({ hits: [], error: String((e && e.message) || e).slice(0, 160) }))));
     batch.forEach((c, k) => {
       if (hits.length >= n) return;
-      const hit = matchHit(c, found[k]);
+      const hit = matchHit(c, found[k].hits);
+      // What each lookup saw, for the deploy smoke and /wanted readers.
+      probe.push({ name: c.name, got: found[k].hits.length, first: found[k].hits[0] ? String(found[k].hits[0].cardName) : null, error: found[k].error, matched: hit ? hit.setName : null });
       if (hit) hits.push({ ...hit, wanted: { price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: hits.length + 1 } });
       else missed.push(c.name);
     });
   }
-  return { source: MOVERS_URL, pages, asOf: new Date().toISOString(), tried, picked: front.slice(0, n).map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), missed: missed.slice(0, 60), count: hits.length, hits };
+  return { source: MOVERS_URL, pages, asOf: new Date().toISOString(), tried, picked: front.slice(0, n).map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), missed: missed.slice(0, 60), probe, count: hits.length, hits };
 }
 
 // Cached wrapper for the route: memo (this isolate) -> Durable Object KV ->
