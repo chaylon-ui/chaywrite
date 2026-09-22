@@ -695,12 +695,20 @@
     }
     function draw() {
       var pay = payChosen(), credit = pay === "Store Credit", n = totalQty(), t = totalsOfCart();
-      d.innerHTML = '<div class="bl__done-head bl__confirm-head"><span class="bl__done-kicker">One last check</span><h3 id="bl-confirm-title">Submit for <b>' + (credit ? "store credit" : "cash") + "</b>?</h3>" +
+      // The upsell (owner, 2026-09-22: "a quick upsell to try to convert
+      // from cash to store credit by earning more on that reminder popup").
+      var more = t.credit - t.cash, pct = t.cash > 0 ? Math.round(more / t.cash * 100) : 0;
+      var gain = more > 0.005 ? money(more) + (pct > 0 ? " (+" + pct + "%)" : "") : "";
+      d.innerHTML = '<div class="bl__done-head bl__confirm-head' + (credit ? " bl__confirm-head--credit" : "") + '"><span class="bl__done-kicker">One last check</span><h3 id="bl-confirm-title">Submit for <b>' + (credit ? "store credit" : "cash") + "</b>?</h3>" +
         '<p class="bl__done-sum">' + esc(n) + " card" + (n === 1 ? "" : "s") + " · estimated <b>" + money(credit ? t.credit : t.cash) + "</b> in " + (credit ? "Exor Games store credit" : "cash") + "</p></div>" +
-        '<div class="bl__guide-body"><p class="bl__confirm-note">You are asking to be paid in <b>' + (credit ? "store credit" : "cash") + "</b>. " +
-        (credit ? "Store credit is added to your Exor Games account once we have checked your cards; it pays more than cash (" + money(t.cash) + ")." : "Cash is paid once we have checked your cards; store credit would be " + money(t.credit) + ".") + "</p>" +
+        '<div class="bl__guide-body">' +
+        (credit
+          ? '<p class="bl__confirm-note">You are asking to be paid in <b>store credit</b>, added to your Exor Games account once we have checked your cards.' + (gain ? ' Good call: that is <b class="bl__confirm-gain">' + gain + " more</b> than cash (" + money(t.cash) + ")." : "") + "</p>"
+          : '<p class="bl__confirm-note">You are asking to be paid in <b>cash</b>, paid once we have checked your cards.</p>' +
+            (gain ? '<div class="bl__upsell"><span class="bl__upsell-kicker">Earn more</span><p class="bl__upsell-text">Take <b>store credit</b> instead and get <b class="bl__confirm-gain">' + money(t.credit) + "</b> for the same cards: <b>" + gain + " more</b>, spendable on anything at Exor Games.</p>" +
+              '<button type="button" class="bl__btn bl__btn--upsell" data-act="switch">Switch to store credit and earn ' + money(more) + " more</button></div>" : "")) +
         '<div class="bl__guide-actions bl__confirm-actions"><button type="button" class="bl__btn" data-act="back">Go back</button>' +
-        '<button type="button" class="bl__btn" data-act="switch">Switch to ' + (credit ? "cash" : "store credit") + "</button>" +
+        (credit || !gain ? '<button type="button" class="bl__btn" data-act="switch">Switch to ' + (credit ? "cash" : "store credit") + "</button>" : "") +
         '<button type="button" class="bl__btn bl__btn--primary" data-act="yes">Yes, submit for ' + (credit ? "store credit" : "cash") + "</button></div></div>";
     }
     d.onclick = function (e) {
@@ -728,6 +736,24 @@
   $("#bl-submit").addEventListener("click", function () {
     if (!cart.length) return;
     askToConfirm(doSubmit);
+  });
+  // Store credit picked in the panel (owner, 2026-09-22: "make it seem super
+  // charged because of it with a temporary pop"): the toggle and the credit
+  // total flash, and a "+$x more" burst rises off the total and fades.
+  function chargeUp() {
+    var pay = $(".bl__pay"), tot = $("#bl-tcredit");
+    if (!pay || !tot) return;
+    var t = totalsOfCart(), more = t.credit - t.cash;
+    [pay, tot].forEach(function (el, i) { var c = i ? "bl__tot--charged" : "bl__pay--charged"; el.classList.remove(c); void el.offsetWidth; el.classList.add(c); });
+    var old = root.querySelector(".bl__burst"); if (old) old.remove();
+    if (more > 0.005) {
+      var b = document.createElement("span"); b.className = "bl__burst"; b.textContent = "+" + money(more) + " more";
+      tot.parentNode.appendChild(b);
+      setTimeout(function () { if (b.parentNode) b.parentNode.removeChild(b); }, 1800);
+    }
+  }
+  root.addEventListener("change", function (e) {
+    if (e.target && e.target.name === "bl-pay" && e.target.value === "Store Credit") chargeUp();
   });
   function doSubmit(pay) {
     if (!cart.length) return;
