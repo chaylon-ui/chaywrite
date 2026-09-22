@@ -5,9 +5,11 @@ name: shot-probe
 # to probe-shots/ (the sandbox can git pull that; it cannot download Action
 # artifacts) and also printed as base64 when save is false. With `text` it
 # also prints an element's visible text (up to `textmax` chars), with `ids`
-# every element id matching a pattern (to find a table on a long page), and
-# with `net` every network response whose URL contains the given text
-# (status, type, and the head of a JSON body).
+# every element id matching a pattern (to find a table on a long page), with
+# `net` every network response whose URL contains the given text (status,
+# type, and the head of a JSON body), and with `grep` every match of a regex
+# in the bodies of those responses, scripts included (to find an API path
+# inside an app bundle).
 on:
   workflow_dispatch:
     inputs:
@@ -63,6 +65,10 @@ on:
         description: Print every network response whose URL contains this text (status, content-type, head of a JSON body)
         required: false
         default: ""
+      grep:
+        description: Regex; every match in the bodies of the `net` responses (scripts too) is printed with 80 chars of context, up to 120 matches
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -85,6 +91,7 @@ jobs:
       TEXTMAX: ${{ inputs.textmax }}
       IDS: ${{ inputs.ids }}
       NET: ${{ inputs.net }}
+      GREP: ${{ inputs.grep }}
       SHOT: probe-shots/shot-${{ github.run_id }}.jpg
     steps:
       - uses: actions/checkout@v4
@@ -107,18 +114,30 @@ jobs:
               : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
             await page.setCacheEnabled(false);
             await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
+            let grepLeft = 120;
             if (process.env.NET) {
               const needle = process.env.NET;
+              const grep = process.env.GREP ? new RegExp(process.env.GREP, 'g') : null;
               page.on('response', async (res) => {
                 try {
                   const u = res.url();
                   if (!u.includes(needle)) return;
                   const ct = String(res.headers()['content-type'] || '');
+                  const kind = res.request().resourceType();
                   let head = '';
-                  if (/json|javascript|text/i.test(ct) && res.status() < 300 && res.request().resourceType() !== 'script' && res.request().resourceType() !== 'stylesheet') {
+                  if (/json|javascript|text/i.test(ct) && res.status() < 300 && kind !== 'script' && kind !== 'stylesheet') {
                     try { head = (await res.text()).replace(/\s+/g, ' ').slice(0, 700); } catch (e) { head = '(body unavailable)'; }
                   }
-                  console.log('NET', res.status(), res.request().resourceType(), ct.split(';')[0], u.slice(0, 200), head ? '| ' + head : '');
+                  console.log('NET', res.status(), kind, ct.split(';')[0], u.slice(0, 200), head ? '| ' + head : '');
+                  if (grep && res.status() < 300 && /json|javascript|text|html/i.test(ct)) {
+                    let body = ''; try { body = await res.text(); } catch (e) { return; }
+                    let m; grep.lastIndex = 0;
+                    while (grepLeft > 0 && (m = grep.exec(body))) {
+                      grepLeft--;
+                      console.log('GREP', u.split('/').pop().slice(0, 40), '@' + m.index, JSON.stringify(body.slice(Math.max(0, m.index - 80), m.index + m[0].length + 80)));
+                      if (m[0].length === 0) grep.lastIndex++;
+                    }
+                  }
                 } catch (e) {}
               });
             }
