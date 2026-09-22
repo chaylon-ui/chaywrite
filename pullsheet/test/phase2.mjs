@@ -180,8 +180,11 @@ ok(/previewQueueOrder/.test(page3) && /class="qnum"/.test(page3), 'queue rows ha
 // ---- ready for pickup ----
 body = JSON.stringify({ id: 105 }); await call('/hook/order', 'POST', body, { 'X-Shopify-Hmac-SHA256': await sign(body) }); await Promise.all(waits.splice(0));
 ok(!store.has('queue:105'), 'an order marked Ready for pickup is not queued (already pulled)');
+// a ready-for-pickup order that was imported earlier (fresh record) is cleared by Sync now, not left for the 2h sweep
+ORDERS[105].fulfillments = []; await Q.putRecord(env, Q.toRecord(ORDERS[105])); ORDERS[105].fulfillments = [{ status: 'SUCCESS', displayStatus: 'READY_FOR_PICKUP' }];
+ok(store.has('queue:105'), 'setup: #105 sits in the queue from before it was marked ready');
 r = await j(await call('/api/queue/sync', 'POST', {}, { Cookie: staff }));
-ok(!store.has('queue:105') && store.has('queue:101'), 'sync also leaves the ready-for-pickup order out');
+ok(!store.has('queue:105') && store.has('queue:101') && r.body.dropped >= 1, 'Sync now re-reads fresh records too and drops the ready-for-pickup order');
 // scope rejects fulfillments: query falls back without the field and still works
 rejectFulfillments = true;
 body = JSON.stringify({ id: 102 }); ORDERS[102].displayFulfillmentStatus = 'PARTIALLY_FULFILLED';

@@ -294,7 +294,10 @@ async function api(req, env, pathname, me, ctxWait) {
       return json({ ...rec, sheet });
     }
     if (parts[2] === 'sync' && req.method === 'POST') {
-      return json(await Q.syncQueue(env, shopQuery, { inline: false }));
+      // Sync now: walk the window and re-read every queued order (up to 80), so a
+      // change on the Shopify side shows within one press instead of one sweep.
+      const r = await Q.syncQueue(env, shopQuery, { inline: false, force: true });
+      return json(r.records ? { ...r, records: undefined } : r);
     }
     if (parts[2] === 'refresh' && req.method === 'POST') {
       const b = await req.json().catch(() => ({}));

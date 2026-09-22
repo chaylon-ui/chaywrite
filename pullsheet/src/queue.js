@@ -172,7 +172,7 @@ export async function backfill(env, shopQuery, opts) {
 // pages (continuing a stored cursor across runs), then re-reads the stalest
 // records so orders fulfilled while a webhook was missed still drop out.
 export const SYNC_DAYS = 14;
-export async function syncQueue(env, shopQuery, { maxPages = 6, refreshStale = 20, inline = false } = {}) {
+export async function syncQueue(env, shopQuery, { maxPages = 6, refreshStale = 20, inline = false, force = false } = {}) {
   const now = Date.now();
   let st = {}; try { st = (await env.JOBS.get('sys:queueSync', 'json')) || {}; } catch (_) {}
   if (st.running && now - Date.parse(st.running) < 120e3 && !inline) return { skipped: 'running' };
@@ -191,10 +191,10 @@ export async function syncQueue(env, shopQuery, { maxPages = 6, refreshStale = 2
   } catch (e) { errors.push(String(e && e.message || e)); }
   let refreshed = 0, dropped = 0;
   if (!cursor && !inline) {
-    // sweep: stalest records first, only those not touched for 2h
+    // sweep: stalest records first, only those not touched for 2h (force = every record, e.g. Sync now)
     const list = await env.JOBS.list({ prefix: QUEUE_PREFIX });
     const stale = list.keys.map((k) => ({ num: k.name.slice(QUEUE_PREFIX.length), at: Date.parse((k.metadata || {}).updatedAt || '') || 0 }))
-      .filter((x) => now - x.at > 2 * 3600e3).sort((a, b) => a.at - b.at).slice(0, refreshStale);
+      .filter((x) => force || now - x.at > 2 * 3600e3).sort((a, b) => a.at - b.at).slice(0, force ? 80 : refreshStale);
     for (const x of stale) { try { const r = await refreshOrder(env, shopQuery, orderGid(x.num)); refreshed++; if (!r.kept) dropped++; } catch (_) {} }
   }
   const rec = { since, cursor: cursor || '', at: new Date().toISOString(), kept, seen, refreshed, dropped, errors, running: '' };
