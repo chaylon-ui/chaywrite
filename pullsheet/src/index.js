@@ -287,6 +287,12 @@ async function api(req, env, pathname, me, ctxWait) {
       if (!r.seen && r.errors && r.errors.length) return json({ ...r, error: 'Shopify: ' + r.errors.join(' | ') }, 502);
       return json(r);
     }
+    if (parts[2] && /^\d+$/.test(parts[2]) && req.method === 'GET') {
+      const rec = await Q.getRecord(env, parts[2]);
+      if (!rec) return json({ error: 'not in the queue' }, 404);
+      const sheet = ((await Q.listQueue(env)).find((r) => r.num === parts[2]) || {}).sheet || '';
+      return json({ ...rec, sheet });
+    }
     if (parts[2] === 'sync' && req.method === 'POST') {
       return json(await Q.syncQueue(env, shopQuery, { inline: false }));
     }
@@ -1379,8 +1385,9 @@ async function showQueue(quiet){
     if(!shown.length) list.appendChild(el('<div class="empty">'+(q?'Nothing matches that filter.':'Nothing waiting. Paid online orders show up here within a minute'+(IS_ADMIN?', or use Import above for older ones.':'.'))+'</div>'));
     shown.forEach(r=>{
       const blocked=!!r.sheet, on=qSel.has(r.num);
-      const row=el('<label class="card" style="cursor:pointer;align-items:center'+(blocked?';opacity:.55':'')+'"><input type="checkbox" '+(on?'checked':'')+(blocked?' disabled':'')+' style="width:22px;height:22px"><div class="cbody"><div><span class="nm">'+esc(r.name)+'</span><span class="cn">'+esc(r.customer||'')+'</span><span class="stat">'+(blocked?'<span class="sshort">on sheet #'+esc(r.sheet)+'</span>':(r.pulled?'<span class="sneed">pulled before</span>':''))+'</span></div><div class="sub">'+esc(ago(r.createdAt))+' ago · '+(r.itemQty||0)+' item'+(r.itemQty===1?'':'s')+' · '+(r.local?'<b style="color:var(--accent)">PICKUP</b>':'ship')+(r.source&&r.source!=='web'?' · '+esc(r.source):'')+'</div></div></label>');
+      const row=el('<label class="card" style="cursor:pointer;align-items:center'+(blocked?';opacity:.55':'')+'"><input type="checkbox" '+(on?'checked':'')+(blocked?' disabled':'')+' style="width:22px;height:22px"><div class="cbody"><div><button class="qnum" type="button" style="font-weight:800;color:var(--accent);border:1px solid #f0cfc7;background:#fff6f0;border-radius:14px;padding:3px 12px;font-size:14px">'+esc(r.name)+'</button><span class="cn">'+esc(r.customer||'')+'</span><span class="stat">'+(blocked?'<span class="sshort">on sheet #'+esc(r.sheet)+'</span>':(r.pulled?'<span class="sneed">pulled before</span>':''))+'</span></div><div class="sub">'+esc(ago(r.createdAt))+' ago · '+(r.itemQty||0)+' item'+(r.itemQty===1?'':'s')+' · '+(r.local?'<b style="color:var(--accent)">PICKUP</b>':'ship')+(r.source&&r.source!=='web'?' · '+esc(r.source):'')+'</div></div></label>');
       row.querySelector('input').onchange=(e)=>{ if(e.target.checked) qSel.add(r.num); else qSel.delete(r.num); refreshQueueFoot(); };
+      row.querySelector('.qnum').onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); previewQueueOrder(r, ()=>{ if(!blocked){ qSel.add(r.num); paint(); refreshQueueFoot(); } }); };
       list.appendChild(row);
     });
     $('#qall').onclick=()=>{ shown.forEach(r=>{ if(!r.sheet) qSel.add(r.num); }); paint(); refreshQueueFoot(); };
@@ -1392,6 +1399,27 @@ async function showQueue(quiet){
   footBtn=el('<button class="primary">Make pull sheet</button>');
   footBtn.onclick=makeSheet; foot.appendChild(footBtn); document.body.appendChild(foot);
   refreshQueueFoot(); window.scrollTo(0,y);
+}
+async function previewQueueOrder(r, onSelect){
+  const m=el('<div class="modal"><div class="sheetcard" style="width:min(560px,96vw);max-height:88vh;display:flex;flex-direction:column"><h2 style="margin:0 0 4px">Order '+esc(r.name)+'</h2><div id="pvBody" class="empty">Loading…</div></div></div>');
+  m.onclick=(e)=>{ if(e.target===m) m.remove(); }; document.body.appendChild(m);
+  let o; try{ const rr=await fetch('/api/queue/'+encodeURIComponent(r.num),{headers:H}); o=await rr.json(); }catch(e){ o={error:'Could not load the order.'}; }
+  const body=$('#pvBody',m); body.className='';
+  if(!o||o.error){ body.innerHTML='<div class="empty">'+esc((o&&o.error)||'Not found')+'</div>'; return; }
+  const num=gidNum(o.gid); const shopUrl=(num&&STORE)?('https://admin.shopify.com/store/'+STORE+'/orders/'+num):'';
+  const head='<div style="font-size:13px;color:#555;margin-bottom:10px"><b>'+esc(o.customer||'')+'</b>'+(o.city?' · '+esc(o.city):'')+(o.createdAt?' · '+esc(ago(o.createdAt))+' ago':'')
+    +' · <span style="'+(o.local?'color:var(--accent);font-weight:800':'')+'">'+(o.local?'LOCAL PICKUP':esc(o.shipping||'Shipping'))+'</span>'
+    +(o.total!=null?' · '+esc(money(o.total,o.currency)):'')+' · '+(o.itemQty||0)+' item'+(o.itemQty===1?'':'s')
+    +(o.sheet?' · <span class="sshort">on sheet #'+esc(o.sheet)+'</span>':'')+((o.tags||[]).some(t=>String(t).toLowerCase()==='pullsheet')?' · <span class="sneed">pulled before</span>':'')+'</div>';
+  const lines=(o.lines||[]).map(l=>{ const fin=finOf(l.cond); return '<div class="card" style="margin-bottom:6px;padding:8px">'+(l.img?'<img class="th" src="'+esc(l.img)+'">':'<span class="th" style="display:block;background:#f3f3f1"></span>')
+    +'<div class="cbody"><div><span class="nm">'+esc(l.name)+'</span><span class="stat">'+(l.qty>1?'<span class="sneed">× '+l.qty+'</span>':'')+'</span></div>'
+    +'<div class="sub">'+(l.sku?'<span class="sku">'+esc(l.sku)+'</span> · ':'')+(l.price?'<span class="prc">'+esc(money(l.price,l.currency))+'</span> · ':'')+esc(l.pt||'')+'</div>'
+    +'<div class="cond">'+esc(condBase(l.cond))+(fin?'<span class="fin fin-'+fin.cls+'">'+fin.t+'</span>':'')+'</div></div></div>'; }).join('');
+  body.innerHTML=head+'<div style="overflow:auto;max-height:52vh">'+(lines||'<div class="empty">No items left to pull.</div>')+'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">'+(shopUrl?'<a class="listbtn" href="'+shopUrl+'" target="_blank" rel="noopener" style="padding:8px 14px">Open in Shopify ↗</a>':'')+'<span class="sp" style="flex:1"></span><button id="pvClose">Close</button>'+(o.sheet?'':'<button id="pvPick" class="primary">Select for pull sheet</button>')+'</div>';
+  $('#pvClose',body).onclick=()=>m.remove();
+  const pk=$('#pvPick',body); if(pk) pk.onclick=()=>{ m.remove(); if(onSelect) onSelect(); };
+  m.querySelectorAll('.th').forEach(t=>{ if(t.src) t.onclick=(e)=>{ e.stopPropagation(); openImg(t.src); }; });
 }
 function refreshQueueFoot(){ if(!footBtn) return; const n=qSel.size; footBtn.textContent='Make pull sheet'+(n?' ('+n+')':''); footBtn.disabled=!n; footBtn.style.opacity=n?'1':'.5'; const h=$('#qhint'); if(h) h.textContent=n?n+' order'+(n>1?'s':'')+' selected':'Tick the orders to pull'; }
 async function runBackfill(box){
