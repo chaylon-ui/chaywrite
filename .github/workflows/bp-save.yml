@@ -1,0 +1,58 @@
+name: bp-save
+# Pushes the prices on ONE 9Pocket worksheet into the pending BinderPOS
+# buylist it was approved to (src/stage-sync.js pushBuylistPrices on the
+# worker: read, plan, POST /api/buylist/save, read back, verify). Manual
+# only; the BinderPOS number has to be typed as `confirm`. Prints the plan
+# lines and the verification; customer fields never leave the worker.
+on:
+  workflow_dispatch:
+    inputs:
+      number:
+        description: The 9Pocket buylist number (e.g. 9P-1004)
+        required: true
+      confirm:
+        description: Its BinderPOS buylist number, typed back to confirm (e.g. 908738)
+        required: true
+      dry:
+        description: "true = only print the plan (bp-plan.json), save nothing"
+        required: false
+        default: "false"
+
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/shopify-site-improvements-ztgdt8
+      - name: Push the prices
+        env:
+          NUMBER: ${{ inputs.number }}
+          CONFIRM: ${{ inputs.confirm }}
+          DRY: ${{ inputs.dry }}
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+          const K = m ? m[1] : '';
+          const W = 'https://exor-binder.nevski.workers.dev';
+          (async () => {
+            if (!K) { console.log('no DEFAULT_PIN in src/config.js; stopped'); return; }
+            const number = String(process.env.NUMBER || '').trim(), confirm = String(process.env.CONFIRM || '').trim(), dry = String(process.env.DRY) === 'true';
+            const li = await fetch(W + '/9pocket.json?k=' + K + '&status=approved&days=365').then((r) => r.json());
+            const rec = (li.records || []).find((r) => r.number === number);
+            if (!rec) { console.log('no approved 9Pocket buylist named', number, '(approved with a number:', (li.records || []).map((r) => r.number).join(' '), ')'); process.exit(1); }
+            console.log(number, '->', rec.id, '| BinderPOS', rec.bp && rec.bp.number, '| paid', rec.paymentType, '| lines', rec.totals && rec.totals.lines);
+            const plan = await fetch(W + '/9pocket/b/' + encodeURIComponent(rec.id) + '/bp-plan.json?k=' + K).then((r) => r.json());
+            if (!plan.ok) { console.log('plan failed:', plan.error); process.exit(1); }
+            console.log('plan: their lines', plan.theirLines, '| approved', plan.approved, 'completed', plan.completed, '| matched', plan.matched, 'changes', plan.changes, '| unmatched ours', plan.unmatchedOurs.length, 'theirs', plan.unmatchedTheirs.length);
+            for (const l of plan.lines) console.log('  line', l.id, l.name, '[' + l.set + ']', l.condition, l.finish || '', '| BP', l.bpQty, l.bpCash, l.bpCredit, '| ours', l.ourQty, l.ourCash, l.ourCredit, l.change ? '<- WOULD CHANGE' : 'same');
+            if (dry) { console.log('dry run only; nothing saved'); return; }
+            const r = await fetch(W + '/9pocket/b/' + encodeURIComponent(rec.id) + '/bp-save.json?k=' + K, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm }) });
+            const j = await r.json();
+            console.log('save: HTTP', r.status, '| ok', j.ok, '| saved', j.saved, '| verified', j.verified, '| changes', j.changes, '|', j.message || j.error || '', '| reply keys', JSON.stringify(j.reply || null));
+            for (const c of j.checks || []) console.log('  check', c.id, c.name, c.condition, c.finish || '', '| wanted', JSON.stringify(c.wanted), '| now', JSON.stringify(c.now), c.good ? 'OK' : 'MISMATCH');
+            if (!j.ok || (j.saved && j.verified === false)) process.exit(1);
+          })().catch((e) => { console.log('error:', e.message); process.exit(1); });
+          EOF
