@@ -1,0 +1,427 @@
+{%- comment -%}
+  "This week at Exor" — upcoming store events as a horizontal slider near
+  the top of the homepage. Data comes from the same public BinderPOS feed
+  the calendar widget uses (portal.binderpos.com identifies the store by
+  the request's Origin, so this must stay a browser-side fetch), over a
+  narrow today→+N-days window instead of the widget's four-month one.
+  The store often runs several events in a single day, so the slider is
+  filled with EVERY event from today through `ahead_days` days ahead
+  (scroll sideways, arrows on desktop) rather than a fixed card count;
+  if that window happens to be empty, the next few events inside the
+  wider fallback window show instead. The section ships hidden and only
+  reveals itself once real upcoming events render; any fetch failure
+  leaves the homepage exactly as it was.
+  Ticketed events link straight to their Shopify ticket product (feed
+  "handle"); everything else goes to the events page.
+  Every card also carries a quiet "Add to calendar" link: the worker's /ics
+  builds a one-event .ics from the card's own fields (Atlantic wall time
+  converted to UTC there), so a phone drops the event into its calendar.
+{%- endcomment -%}
+{%- assign evurl = section.settings.events_url | default: '/pages/events' -%}
+<section class="xg-evs" id="xg-evs" hidden
+  data-events-url="{{ evurl }}"
+  data-ahead="{{ section.settings.ahead_days | default: 3 }}"
+  data-days="{{ section.settings.days | default: 14 }}">
+  {%- if section.settings.bg_image -%}
+    {%- comment -%} Oversized photo layer that drifts sideways as the event
+        slider scrolls (horizontal parallax); the shade keeps the neon-dark
+        wash on top so the cards stay readable over any photo. {%- endcomment -%}
+    <div class="xg-evs__bg" id="xg-evs-bg" aria-hidden="true"
+      style="background-image: url('{{ section.settings.bg_image | img_url: '2048x' }}');"></div>
+    <div class="xg-evs__shade" aria-hidden="true"></div>
+  {%- endif -%}
+  <div class="xg-container">
+    <div class="xg-evs__head">
+      <div>
+        {%- if section.settings.kicker != blank -%}
+          <p class="xg-evs__kicker">{{ section.settings.kicker | escape }}</p>
+        {%- endif -%}
+        <h2 class="xg-evs__title">{{ section.settings.heading | escape }}</h2>
+      </div>
+      <div class="xg-evs__side">
+        <button type="button" class="xg-evs__nav" id="xg-evs-prev" aria-label="Scroll to earlier events" hidden>&lsaquo;</button>
+        <button type="button" class="xg-evs__nav" id="xg-evs-next" aria-label="Scroll to later events" hidden>&rsaquo;</button>
+        <a class="xg-evs__all" href="{{ evurl }}">Full calendar &rsaquo;</a>
+      </div>
+    </div>
+    <div class="xg-evs__grid" id="xg-evs-grid"></div>
+  </div>
+</section>
+
+<style>
+  /* Neon-on-black band: exor-red + exor-yellow glow over near-black, so the
+     strip reads as its own section against the light page while matching
+     the dark footer and calendar bands. */
+  .xg-evs[hidden] { display: none !important; }
+  .xg-evs {
+    position: relative;
+    overflow: hidden; /* clips the oversized parallax photo layer */
+    background:
+      radial-gradient(760px 300px at 8% -20%, rgba(214, 44, 40, 0.17), transparent 62%),
+      radial-gradient(700px 300px at 96% 130%, rgba(255, 216, 0, 0.09), transparent 60%),
+      linear-gradient(180deg, #0b0e10, #0e1114 55%, #0a0d0f);
+    padding: 26px 0 22px;
+  }
+  .xg-evs::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    z-index: 2;
+    background: linear-gradient(90deg, #d62c28, #ff8a2e 42%, #ffd800 72%, transparent);
+    opacity: 0.9;
+  }
+  /* Owner-picked background photo: 30% wider than the band and pre-shifted
+     left so a sideways drift in either direction never uncovers an edge.
+     The shade re-paints the neon-dark wash OVER the photo (the section's
+     own gradient background sits under it, so it alone can't dim this). */
+  .xg-evs__bg {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -15%;
+    width: 130%;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    will-change: transform;
+  }
+  .xg-evs__shade {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      radial-gradient(760px 300px at 8% -20%, rgba(214, 44, 40, 0.17), transparent 62%),
+      radial-gradient(700px 300px at 96% 130%, rgba(255, 216, 0, 0.09), transparent 60%),
+      linear-gradient(180deg, rgba(11, 14, 16, 0.9), rgba(14, 17, 20, 0.84) 55%, rgba(10, 13, 15, 0.92));
+  }
+  .xg-evs .xg-container { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .xg-evs__bg { transform: none !important; will-change: auto; }
+  }
+  .xg-evs__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 0 0 14px; }
+  .xg-evs__kicker {
+    font-family: var(--xg-font-body, "Inter", sans-serif);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+    color: #ffd84d; margin: 0 0 4px;
+    text-shadow: 0 0 14px rgba(255, 216, 0, 0.45);
+  }
+  .xg-evs__title {
+    font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+    font-size: clamp(20px, 2.4vw, 27px); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.02em; color: #fff; margin: 0;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55), 0 0 24px rgba(214, 44, 40, 0.3);
+  }
+  .xg-evs__side { display: flex; align-items: center; gap: 10px; padding-bottom: 3px; }
+  .xg-evs__nav {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06);
+    color: #e8edef; font-size: 20px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0 0 3px;
+    transition: border-color 130ms ease, color 130ms ease, transform 130ms ease, box-shadow 130ms ease;
+  }
+  .xg-evs__nav:hover {
+    border-color: rgba(214, 44, 40, 0.8); color: #ff6a5e; transform: translateY(-1px);
+    box-shadow: 0 0 14px rgba(214, 44, 40, 0.35);
+  }
+  .xg-evs__nav[hidden] { display: none; }
+  .xg-evs__all {
+    font-family: var(--xg-font-body, "Inter", sans-serif); font-size: 13.5px; font-weight: 600;
+    color: #b7c2c9; text-decoration: none; white-space: nowrap;
+  }
+  .xg-evs__all:hover { color: #ffd84d; text-shadow: 0 0 12px rgba(255, 216, 0, 0.4); }
+  .xg-evs__grid {
+    display: flex; gap: 12px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity; scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    padding-bottom: 8px;
+  }
+  .xg-evs__card {
+    flex: 0 0 250px; scroll-snap-align: start;
+    display: block; position: relative; text-decoration: none;
+    background: linear-gradient(180deg, #15191c, #101417);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: var(--xg-radius-lg, 14px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    padding: 14px 16px 15px;
+    transition: transform 130ms ease, box-shadow 130ms ease, border-color 130ms ease;
+  }
+  .xg-evs__card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(214, 44, 40, 0.65);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45), 0 0 20px rgba(214, 44, 40, 0.22);
+  }
+  .xg-evs__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+  .xg-evs__chip {
+    display: inline-block; padding: 4px 10px; border-radius: 999px;
+    font-family: var(--xg-font-body, "Inter", sans-serif);
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.08); color: #cfd8dd;
+  }
+  .xg-evs__card.is-today .xg-evs__chip {
+    background: var(--xg-red, #d62c28); color: #fff;
+    box-shadow: 0 0 14px rgba(214, 44, 40, 0.55);
+  }
+  .xg-evs__price {
+    font-family: var(--xg-font-body, "Inter", sans-serif);
+    font-size: 12.5px; font-weight: 700; color: #ffd84d;
+  }
+  .xg-evs__row { display: flex; align-items: flex-start; gap: 10px; }
+  .xg-evs__icon {
+    width: 40px; height: 40px; flex: 0 0 40px; object-fit: contain;
+    border-radius: 8px; background: rgba(255, 255, 255, 0.09); padding: 3px;
+  }
+  .xg-evs__name {
+    font-family: var(--xg-font-body, "Inter", sans-serif);
+    font-size: 14.5px; font-weight: 700; line-height: 1.3;
+    color: #fff; margin: 0 0 4px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .xg-evs__meta {
+    font-family: var(--xg-font-body, "Inter", sans-serif);
+    font-size: 12.5px; color: #8fa0a8; margin: 0;
+  }
+  /* The card is a <div> whose title link is stretched over it (a second
+     link cannot nest inside a link), so the whole card still opens the
+     event; keyboard focus on the title lights the card's border. */
+  .xg-evs__go { color: inherit; text-decoration: none; }
+  .xg-evs__go::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: inherit; }
+  .xg-evs__go:focus { outline: none; }
+  .xg-evs__card:focus-within { border-color: rgba(214, 44, 40, 0.65); }
+  /* the shopper's own game (xg-personal.js): marked, not moved */
+  .xg-evs__card.is-mine { box-shadow: inset 0 0 0 1.5px rgba(214, 44, 40, 0.55); }
+  /* "Add to calendar": a quiet second control under the event, raised
+     above the stretched title link so its own href takes the click. The
+     band is always dark, so the ink comes from the inverse (dark-chrome)
+     tokens and the accent yellow, with the same literal fallbacks;
+     xg-dark.css retunes them through the variables. */
+  .xg-evs__cal {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; gap: 6px;
+    margin: 12px 0 0; padding: 9px 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: var(--xg-font-body, "Inter", sans-serif);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.2;
+    color: var(--xg-inverse-muted, #b9c2c1);
+    text-decoration: none;
+    transition: color var(--xg-fast, 150ms) ease;
+  }
+  .xg-evs__cal svg { width: 14px; height: 14px; flex: 0 0 14px; }
+  .xg-evs__cal:hover { color: var(--xg-accent, #ffd800); }
+  .xg-evs__cal:focus-visible { outline: 2px solid var(--xg-accent, #ffd800); outline-offset: 2px; border-radius: 4px; }
+  @media (max-width: 767px) {
+    .xg-evs__card { flex-basis: 236px; }
+    .xg-evs__nav { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .xg-evs__card, .xg-evs__nav { transition: none; }
+    .xg-evs__card:hover, .xg-evs__nav:hover { transform: none; }
+  }
+</style>
+
+<script>
+  (function () {
+    var root = document.getElementById('xg-evs');
+    var grid = document.getElementById('xg-evs-grid');
+    if (!root || !grid || !window.fetch) return;
+    var EVURL = root.getAttribute('data-events-url') || '/pages/events';
+    var AHEAD = parseInt(root.getAttribute('data-ahead'), 10) || 3;
+    var DAYS = parseInt(root.getAttribute('data-days'), 10) || 14;
+    if (DAYS < AHEAD + 1) DAYS = AHEAD + 1;
+    var CAP = 14;
+    var WDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    var MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    // The feed's date is midnight UTC with a stray [GMT] suffix; the event's
+    // real day is the string's own Y-M-D, so never round-trip it through a
+    // local Date (UTC-3 here would shift it a day back).
+    function dayOf(e) { return String(e.date).slice(0, 10); }
+    function fmtTime(t) {
+      var m = /^([0-9]{1,2}):([0-9]{2})/.exec(String(t || ''));
+      if (!m) return '';
+      var h = parseInt(m[1], 10);
+      return (h % 12 || 12) + ':' + m[2] + ' ' + (h >= 12 ? 'PM' : 'AM');
+    }
+    function shortGame(g) {
+      return String(g).replace(/:? *the gathering/i, '').replace(/ *card game/i, '').replace(/ *tcg/i, '').trim().slice(0, 24);
+    }
+    var ICS = 'https://exor-binder.nevski.workers.dev/ics';
+    var CAL_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<rect x="1.5" y="2.5" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+      '<path d="M1.5 6.5h13M5 1v3M11 1v3M8 8.5v4M6 10.5h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    function abs(h) { try { return new URL(h, location.href).href; } catch (err) { return h; } }
+    function hhmm(t) {
+      var m = /^([0-9]{1,2}):([0-9]{2})/.exec(String(t || ''));
+      return m ? pad(parseInt(m[1], 10)) + ':' + m[2] : '';
+    }
+    // The worker builds the .ics from these fields alone (no feed call on
+    // its side): t = title · short game, s = the event's Atlantic wall-clock
+    // start (the feed's date is the event's own day, its time is store
+    // local), loc = the store, d = game + ticket price, u = where the card
+    // goes. The feed has no end time, so the worker's 3-hour default
+    // applies. The rare event the feed lists WITHOUT a time (all-day in
+    // BinderPOS) is pinned to 18:00, the store's usual evening slot,
+    // rather than landing at midnight.
+    function calHref(e, href, price) {
+      var day = dayOf(e);
+      if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day)) return '';
+      var start = day + 'T' + (hhmm(e.time) || '18:00');
+      var title = String(e.title).trim() + (e.game ? ' · ' + shortGame(e.game) : '');
+      var desc = [];
+      if (e.game) desc.push(String(e.game));
+      if (price) desc.push('Ticket ' + price);
+      return ICS + '?t=' + encodeURIComponent(title.slice(0, 300)) +
+        '&s=' + encodeURIComponent(start) +
+        '&loc=' + encodeURIComponent(e.city ? 'Exor Games ' + String(e.city).trim().slice(0, 80) : 'Exor Games') +
+        (desc.length ? '&d=' + encodeURIComponent(desc.join(' · ').slice(0, 300)) : '') +
+        '&u=' + encodeURIComponent(abs(href).slice(0, 300));
+    }
+
+    var now = new Date();
+    var todayIso = iso(now);
+    var tomorrowIso = iso(new Date(now.getTime() + 864e5));
+    var aheadIso = iso(new Date(now.getTime() + AHEAD * 864e5));
+    var endIso = iso(new Date(now.getTime() + DAYS * 864e5));
+
+    function card(e, multiCity) {
+      var day = dayOf(e);
+      var p = day.split('-');
+      var dt = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+      var isToday = day === todayIso;
+      var chip = isToday ? 'Today' : day === tomorrowIso ? 'Tomorrow'
+        : WDAYS[dt.getDay()] + ' ' + MONTHS[dt.getMonth()] + ' ' + dt.getDate();
+      var href = (e.ticketed || e.isTicketed) && e.handle ? '/products/' + encodeURIComponent(e.handle) : EVURL;
+      var meta = [];
+      var tm = fmtTime(e.time);
+      if (tm) meta.push(tm);
+      if (e.game) meta.push(shortGame(e.game));
+      if (multiCity && e.city) meta.push(e.city);
+      var price = '';
+      if (typeof e.ticketPrice === 'number' && e.ticketPrice > 0.009) {
+        price = '$' + (Math.round(e.ticketPrice * 100) / 100).toFixed(2).replace(/[.]00$/, '');
+      }
+      var cal = calHref(e, href, price);
+      // A <div> card with the title link stretched over it by CSS (a link
+      // cannot nest inside a link): the whole card still opens the event
+      // and "Add to calendar" is a real second link, above the stretch.
+      return '<div class="xg-evs__card' + (isToday ? ' is-today' : '') + (e.__mine ? ' is-mine' : '') + '">' +
+        '<div class="xg-evs__top"><span class="xg-evs__chip">' + esc(chip) + '</span>' +
+          (price ? '<span class="xg-evs__price">' + esc(price) + '</span>' : '') + '</div>' +
+        '<div class="xg-evs__row">' +
+          (e.calendarIcon ? '<img class="xg-evs__icon" src="' + esc(e.calendarIcon) + '" alt="" loading="lazy">' : '') +
+          '<div><h3 class="xg-evs__name"><a class="xg-evs__go" href="' + esc(href) + '">' + esc(e.title) + '</a></h3>' +
+          '<p class="xg-evs__meta">' + esc(meta.join(' · ')) + '</p></div>' +
+        '</div>' +
+        (cal ? '<a class="xg-evs__cal" href="' + esc(cal) + '" title="Add this event to your phone calendar">' + CAL_SVG + '<span>Add to calendar</span></a>' : '') +
+        '</div>';
+    }
+
+    var prev = document.getElementById('xg-evs-prev');
+    var next = document.getElementById('xg-evs-next');
+    function syncNav() {
+      var over = grid.scrollWidth > grid.clientWidth + 4;
+      if (prev) prev.hidden = !over;
+      if (next) next.hidden = !over;
+    }
+    function slide(dir) {
+      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      grid.scrollBy({ left: dir * Math.max(200, grid.clientWidth * 0.8), behavior: reduce ? 'auto' : 'smooth' });
+    }
+    if (prev) prev.addEventListener('click', function () { slide(-1); });
+    if (next) next.addEventListener('click', function () { slide(1); });
+    // The calendar link sits beside (not inside) the stretched title link,
+    // so its click never reaches that link; keep it from bubbling further.
+    grid.addEventListener('click', function (ev) {
+      var a = ev.target && ev.target.closest && ev.target.closest('.xg-evs__cal');
+      if (a) ev.stopPropagation();
+    });
+
+    // Horizontal parallax: the background photo trails the slider at a
+    // quarter of its scroll speed, clamped to the layer's 15% overhang.
+    var bg = document.getElementById('xg-evs-bg');
+    if (bg && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      var braf = 0;
+      var applyPar = function () {
+        braf = 0;
+        var max = root.clientWidth * 0.14;
+        var s = grid.scrollLeft * 0.25;
+        if (s > max) s = max;
+        bg.style.transform = 'translate3d(' + (-s).toFixed(1) + 'px, 0, 0)';
+      };
+      grid.addEventListener('scroll', function () {
+        if (!braf) braf = requestAnimationFrame(applyPar);
+      }, { passive: true });
+    }
+
+    try {
+      var ctl = ('AbortController' in window) ? new AbortController() : null;
+      var tmo = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) {} }, 7000) : null;
+      fetch('https://portal.binderpos.com/api/events/forStore?startDate=' + todayIso + '&endDate=' + endIso, {
+        headers: { 'content-type': 'application/json' },
+        signal: ctl ? ctl.signal : undefined
+      }).then(function (r) {
+        if (!r.ok) throw new Error('http ' + r.status);
+        return r.json();
+      }).then(function (arr) {
+        if (tmo) clearTimeout(tmo);
+        if (!Array.isArray(arr)) return;
+        var evs = arr.filter(function (e) {
+          return e && e.title && e.date && !e.isDisabled && !e.disabled && dayOf(e) >= todayIso;
+        });
+        evs.sort(function (a, b) {
+          var ka = dayOf(a) + ' ' + String(a.time || '99');
+          var kb = dayOf(b) + ' ' + String(b.time || '99');
+          return ka < kb ? -1 : ka > kb ? 1 : 0;
+        });
+        // Everything through AHEAD days out fills the slider; an empty
+        // window falls back to the next few events further ahead.
+        var win = evs.filter(function (e) { return dayOf(e) <= aheadIso; });
+        evs = (win.length ? win : evs.slice(0, 6)).slice(0, CAP);
+        if (!evs.length) return;
+        // Personalised: the game this shopper browses leads the strip
+        // (assets/xg-personal.js keeps it in localStorage as xgGame).
+        try {
+          var pref = JSON.parse(localStorage.getItem('xgGame') || 'null');
+          var PREF = { pokemon: /pok[eé]mon/i, mtg: /magic|\bmtg\b/i, yugioh: /yu-?gi-?oh/i, lorcana: /lorcana/i, onepiece: /one[- ]?piece/i, fab: /flesh/i, swu: /star[- ]?wars/i, riftbound: /riftbound/i };
+          var pre = pref && PREF[pref.k];
+          // The strip stays in DATE ORDER (owner, 2026-09-22, seeing Friday's
+          // prereleases ahead of today's Warhammer night: "why are these
+          // events showing today?" - the shopper's game used to lead the
+          // strip). The shopper's game is now only marked, never moved.
+          if (pre) evs.forEach(function (e) { if (pre.test(String(e.game || '') + ' ' + String(e.title || ''))) e.__mine = true; });
+        } catch (err) {}
+        var cities = {};
+        evs.forEach(function (e) { if (e.city) cities[e.city] = 1; });
+        var multiCity = Object.keys(cities).length > 1;
+        grid.innerHTML = evs.map(function (e) { return card(e, multiCity); }).join('');
+        root.hidden = false;
+        syncNav();
+        window.addEventListener('resize', syncNav, { passive: true });
+      }).catch(function () { if (tmo) clearTimeout(tmo); });
+    } catch (err) {}
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Events Strip",
+  "tag": "section",
+  "class": "xg-evs-section",
+  "settings": [
+    { "type": "image_picker", "id": "bg_image", "label": "Background image", "info": "Optional. Drifts sideways as you scroll through the events (subtle parallax); the dark neon wash stays on top so the cards keep their contrast." },
+    { "type": "text", "id": "kicker", "label": "Kicker", "default": "In store events" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "This week at Exor" },
+    { "type": "url", "id": "events_url", "label": "Events page", "info": "Where the Full calendar link and non-ticketed cards go. Defaults to /pages/events." },
+    { "type": "range", "id": "ahead_days", "label": "Days ahead in the slider", "info": "Every event from today through this many days ahead becomes a card; scroll sideways through them.", "min": 1, "max": 7, "step": 1, "default": 3 },
+    { "type": "range", "id": "days", "label": "Fallback look ahead (days)", "info": "If the slider window has no events, the next few events within this window show instead.", "min": 7, "max": 30, "step": 1, "default": 14 }
+  ],
+  "presets": [
+    { "name": "Events Strip", "category": "Modern sections" }
+  ],
+  "templates": ["index"]
+}
+{% endschema %}
