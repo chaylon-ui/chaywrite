@@ -1,0 +1,81 @@
+name: page-edit
+# Edit ONE span of a Shopify page body without hand-copying the body:
+# the runner reads the page with the Admin token, finds the span between
+# `find_start` and `find_end` (literal text, inclusive; exactly one match
+# or it stops), swaps in the replacement (base64, so YAML quoting cannot
+# mangle it), prints md5s and the diff, and - unless dry - saves it and
+# re-reads the page to prove the stored body is byte-identical to what it
+# meant to save. Page bodies are the owner's content: run this only for a
+# change the owner asked for in so many words.
+on:
+  workflow_dispatch:
+    inputs:
+      page_id:
+        description: "numeric Shopify page id (e.g. 99314368685)"
+        required: true
+      find_start:
+        description: "start of the span to replace (literal text)"
+        required: true
+      find_end:
+        description: "end of the span (literal text, inclusive); blank = replace find_start alone"
+        required: false
+        default: ""
+      replace_b64:
+        description: "the replacement, base64-encoded (utf-8)"
+        required: true
+      dry:
+        description: "true = show what would change, save nothing"
+        required: false
+        default: "true"
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Edit the page
+        env:
+          SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+          SHOP: most-wanted-ca.myshopify.com
+          PAGE_ID: ${{ inputs.page_id }}
+          FIND_START: ${{ inputs.find_start }}
+          FIND_END: ${{ inputs.find_end }}
+          REPLACE_B64: ${{ inputs.replace_b64 }}
+          DRY: ${{ inputs.dry }}
+        run: |
+          node <<'EOF'
+          const crypto = require('crypto');
+          const md5 = (s) => crypto.createHash('md5').update(s, 'utf8').digest('hex');
+          const gql = async (query, variables) => {
+            const r = await fetch(`https://${process.env.SHOP}/admin/api/2025-01/graphql.json`, { method: 'POST', headers: { 'content-type': 'application/json', 'X-Shopify-Access-Token': process.env.SHOPIFY_ADMIN_TOKEN }, body: JSON.stringify({ query, variables }) });
+            const j = await r.json();
+            if (!r.ok || j.errors) throw new Error('HTTP ' + r.status + ' ' + JSON.stringify(j.errors || j).slice(0, 300));
+            return j.data;
+          };
+          (async () => {
+            if (!process.env.SHOPIFY_ADMIN_TOKEN) { console.log('no SHOPIFY_ADMIN_TOKEN secret; stopped'); process.exit(1); }
+            const id = 'gid://shopify/Page/' + String(process.env.PAGE_ID).replace(/\D/g, '');
+            const p = (await gql('query($id:ID!){page(id:$id){id title handle updatedAt body}}', { id })).page;
+            if (!p) { console.log('no such page', id); process.exit(1); }
+            const body = p.body || '';
+            console.log('page:', p.title, '/pages/' + p.handle, '| updatedAt', p.updatedAt, '| body', body.length, 'chars, md5', md5(body));
+            const fs = process.env.FIND_START, fe = process.env.FIND_END || '';
+            const count = body.split(fs).length - 1;
+            if (count !== 1) { console.log('find_start occurs', count, 'times; need exactly 1 - stopped'); process.exit(1); }
+            const a = body.indexOf(fs);
+            let b;
+            if (fe) { const e = body.indexOf(fe, a + fs.length); if (e < 0) { console.log('find_end not found after find_start - stopped'); process.exit(1); } if (body.indexOf(fe, e + fe.length) >= 0 && body.split(fe).length - 1 > 1) console.log('note: find_end occurs more than once; the first after find_start is used'); b = e + fe.length; }
+            else b = a + fs.length;
+            const removed = body.slice(a, b);
+            const replacement = Buffer.from(process.env.REPLACE_B64, 'base64').toString('utf8');
+            const next = body.slice(0, a) + replacement + body.slice(b);
+            console.log('--- removed (' + removed.length + ' chars) ---'); console.log(removed.slice(0, 3000));
+            console.log('--- inserted (' + replacement.length + ' chars) ---'); console.log(replacement.slice(0, 3000));
+            console.log('--- new body', next.length, 'chars, md5', md5(next), '| untouched before/after:', a, '/', body.length - b, 'chars');
+            if (String(process.env.DRY) !== 'false') { console.log('DRY RUN: nothing saved'); return; }
+            const u = (await gql('mutation($id:ID!,$body:String!){pageUpdate(id:$id,page:{body:$body}){page{id updatedAt} userErrors{field message code}}}', { id, body: next })).pageUpdate;
+            if (u.userErrors && u.userErrors.length) { console.log('SAVE REFUSED:', JSON.stringify(u.userErrors)); process.exit(1); }
+            const again = (await gql('query($id:ID!){page(id:$id){updatedAt body}}', { id })).page;
+            const ok = (again.body || '') === next;
+            console.log('saved; updatedAt', again.updatedAt, '| re-read md5', md5(again.body || ''), ok ? '= expected: VERIFIED' : '!= expected ' + md5(next) + ': MISMATCH');
+            if (!ok) process.exit(1);
+          })().catch((e) => { console.log('error:', e.message); process.exit(1); });
+          EOF
