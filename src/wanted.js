@@ -119,9 +119,13 @@ const bestCash = (hit) => {
 // same set when the movers' set slug words all appear in the hit's set name
 // ("reality-fracture" / "Reality Fracture"; "lost-caverns-of-ixalan" / "The
 // Lost Caverns of Ixalan"), else the exact-name hit the store pays most for.
+// Only a printing the store is BUYING counts (an offer with a price and
+// room for more copies): a hit with no such offer draws "Not currently
+// buying this printing" on the page (owner's phone, 2026-09-22: Lyra).
+const buyable = (hit) => (hit.variants || []).some((v) => (v.cardBuylistTypes || []).some((p) => (Number(p.buyPrice) > 0 || Number(p.creditBuyPrice) > 0) && (p.maxPurchaseQuantity == null || Number(p.maxPurchaseQuantity) > 0)));
 export function matchHit(entry, hits) {
   const want = letters(entry.name);
-  const exact = (hits || []).filter((h) => letters(h.cardName) === want);
+  const exact = (hits || []).filter((h) => letters(h.cardName) === want && buyable(h));
   if (!exact.length) return null;
   const words = String(entry.setSlug || "").split("-").map(letters).filter((w) => w.length > 2);
   const sameSet = words.length ? exact.filter((h) => { const s = letters(h.setName); return words.every((w) => s.includes(w)); }) : [];

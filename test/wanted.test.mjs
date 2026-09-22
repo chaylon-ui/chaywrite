@@ -39,6 +39,12 @@ test("matchHit wants the exact name from the movers' set, else the exact name th
   assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "" }, hits).setName, "Secret Lair Drop");
   assert.equal(matchHit({ name: "Not There", setSlug: "" }, hits), null);
   assert.equal(matchHit({ name: "GHALTA, stampede tyrant" }, [hit("Ghalta, Stampede Tyrant", "X", 1)]).setName, "X");   // case and punctuation do not matter
+  // a printing with no offer the store will take is not a match (the page would say "Not currently buying this printing")
+  const dead = { cardName: "Lyra, Tolarian Archangel", setName: "Reality Fracture", variants: [{ variantName: "Near Mint", cardBuylistTypes: [{ type: "Normal", buyPrice: 0, creditBuyPrice: 0 }] }] };
+  const capped = { cardName: "Lyra, Tolarian Archangel", setName: "Reality Fracture", variants: [{ variantName: "Near Mint", cardBuylistTypes: [{ type: "Normal", buyPrice: 4, creditBuyPrice: 5, maxPurchaseQuantity: 0 }] }] };
+  const none = { cardName: "Lyra, Tolarian Archangel", setName: "Reality Fracture", variants: [] };
+  assert.equal(matchHit({ name: "Lyra, Tolarian Archangel" }, [dead, capped, none]), null);
+  assert.equal(matchHit({ name: "Lyra, Tolarian Archangel" }, [dead, hit("Lyra, Tolarian Archangel", "Other", 2)]).setName, "Other");
 });
 
 const morePage = (names) => `<h1>Top Weekly Winners</h1>${table("Top Weekly Winners", names.map((nm, i) => row(nm, "some-set", String(i), "SET", "3.00", "+1.00", "+10%", "increase")))}`;
