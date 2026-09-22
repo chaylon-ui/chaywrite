@@ -12,6 +12,23 @@
   var root = document.querySelector(".xg-buylist");
   if (!root || root.getAttribute("data-mounted")) return;
   var CUSTOMER = root.getAttribute("data-customer") || "";
+  // The game tiles above the section are ours from the first moment, signed
+  // in or not: a capture-phase listener on the document takes the click
+  // before BinderPOS's own buylist script (bound to the same #buylist links)
+  // can open its "Select Game" overlay (owner, 2026-09-22: "these buttons
+  // are still triggering the BinderPOS popup"). preventDefault keeps the
+  // hash unchanged too. Signed in, wireTiles() below adds the game pick.
+  (function guardTiles() {
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('a[href="#buylist"]'));
+    if (!tiles.length) return;
+    document.addEventListener("click", function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href="#buylist"]') : null;
+      if (!a || tiles.indexOf(a) < 0) return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      try { root.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (err) { root.scrollIntoView(); }
+      if (typeof window.__xgTilePick === "function") window.__xgTilePick(a);
+    }, true);
+  })();
   if (!CUSTOMER) return;                       // logged out: the page shows its own prompt
   root.setAttribute("data-mounted", "1");
   var W = (root.getAttribute("data-worker") || "").replace(/\/+$/, "");
@@ -710,25 +727,16 @@
     return null;
   }
   function wireTiles() {
-    var tiles = Array.prototype.slice.call(document.querySelectorAll('a[href="#buylist"]'));
-    if (!tiles.length) return;
-    // Capture phase, on the document: the click is ours before BinderPOS's
-    // own buylist script (bound to the same #buylist links) can open its
-    // overlay (owner, 2026-09-22: "these buttons are still triggering the
-    // BinderPOS popup"). preventDefault also keeps the hash unchanged, so a
-    // hashchange trigger stays quiet; we scroll to our own section instead.
-    document.addEventListener("click", function (e) {
-      var a = e.target && e.target.closest ? e.target.closest('a[href="#buylist"]') : null;
-      if (!a || tiles.indexOf(a) < 0) return;
-      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    // The click itself is taken by guardTiles() at the top; this adds the
+    // game pick once the game list is known.
+    window.__xgTilePick = function (a) {
       var img = a.querySelector("img");
       var src = ((img && img.getAttribute("src")) || "").toLowerCase();
       var hit = TILE_KEYS.filter(function (p) { return src.indexOf(p[0]) >= 0; })[0];
       var id = hit ? gameFor(hit[1]) : null;
       if (id && id !== game) { $("#bl-game").value = id; $("#bl-game").dispatchEvent(new Event("change")); }
-      try { root.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (err) { root.scrollIntoView(); }
       setTimeout(function () { var q = $("#bl-q"); if (q) { try { q.focus({ preventScroll: true }); } catch (err) { q.focus(); } } }, 350);
-    }, true);
+    };
   }
 
   /* ---- staged buylists (owner, 2026-09-19): where each sent list stands ----
