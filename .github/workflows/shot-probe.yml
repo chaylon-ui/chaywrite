@@ -4,9 +4,10 @@ name: shot-probe
 # the stylesheet rules that match, and (b) a JPEG of one element - committed
 # to probe-shots/ (the sandbox can git pull that; it cannot download Action
 # artifacts) and also printed as base64 when save is false. With `text` it
-# also prints an element's visible text, and with `net` every network
-# response whose URL contains the given text (status, type, and the head of
-# a JSON body) - for finding where a page gets a number from.
+# also prints an element's visible text (up to `textmax` chars), with `ids`
+# every element id matching a pattern (to find a table on a long page), and
+# with `net` every network response whose URL contains the given text
+# (status, type, and the head of a JSON body).
 on:
   workflow_dispatch:
     inputs:
@@ -47,7 +48,15 @@ on:
         required: false
         default: ""
       text:
-        description: Selector whose visible text is printed (first 4000 chars)
+        description: Selector whose visible text is printed
+        required: false
+        default: ""
+      textmax:
+        description: How many characters of that text to print
+        required: false
+        default: "4000"
+      ids:
+        description: Regex; every element id matching it is listed with its tag and text length
         required: false
         default: ""
       net:
@@ -73,6 +82,8 @@ jobs:
       HOVER: ${{ inputs.hover }}
       SCROLL: ${{ inputs.scroll }}
       TEXT: ${{ inputs.text }}
+      TEXTMAX: ${{ inputs.textmax }}
+      IDS: ${{ inputs.ids }}
       NET: ${{ inputs.net }}
       SHOT: probe-shots/shot-${{ github.run_id }}.jpg
     steps:
@@ -135,8 +146,16 @@ jobs:
                 return ['#header', '#header .site-header', '#header .header-top', '#header .nav-menu', '#header .site-header-mobile'].map(pick).join(' || ');
               }));
             }
+            if (process.env.IDS) {
+              const list = await page.evaluate((pat) => {
+                const re = new RegExp(pat, 'i');
+                return [...document.querySelectorAll('[id]')].filter((e) => re.test(e.id)).slice(0, 200).map((e) => e.tagName.toLowerCase() + '#' + e.id + ' (' + (e.innerText || '').length + ' chars)');
+              }, process.env.IDS).catch((e) => ['IDS-ERR ' + String(e).slice(0, 160)]);
+              console.log('IDS ' + list.length); for (const x of list) console.log('ID', x);
+            }
             if (process.env.TEXT) {
-              const t = await page.evaluate((sel) => { const el = document.querySelector(sel); return el ? el.innerText.replace(/\n{3,}/g, '\n\n').slice(0, 4000) : 'NOT FOUND'; }, process.env.TEXT).catch((e) => 'TEXT-ERR ' + String(e).slice(0, 160));
+              const max = parseInt(process.env.TEXTMAX || '4000', 10) || 4000;
+              const t = await page.evaluate((sel, max) => { const el = document.querySelector(sel); return el ? el.innerText.replace(/\n{3,}/g, '\n\n').slice(0, max) : 'NOT FOUND'; }, process.env.TEXT, max).catch((e) => 'TEXT-ERR ' + String(e).slice(0, 160));
               console.log('TEXT-BEGIN ' + process.env.TEXT); console.log(t); console.log('TEXT-END');
             }
             const rows = await page.evaluate((list) => {
