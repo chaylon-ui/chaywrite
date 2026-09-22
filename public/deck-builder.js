@@ -959,7 +959,12 @@
         items.forEach(function (it) {
           var cap = typeof it.stock === 'number' ? Math.max(0, it.stock - (have[it.id] || 0)) : it.quantity;
           var q = Math.min(it.quantity, cap);
-          if (q > 0) send.push({ id: it.id, quantity: q });
+          /* _deck marks the LINE as a Deck Builder pick (a leading underscore
+             keeps it off the checkout). The cart attribute below outlives a
+             removed line - order #205473 (2026-09-22) carried "Deck Builder:
+             1 card, $4.95" while the only thing bought was a sealed preorder
+             - so the sales tally trusts this line property, not the cart. */
+          if (q > 0) send.push({ id: it.id, quantity: q, properties: { _deck: '1' } });
         });
         if (!send.length) { window.location.href = '/cart'; return; }   // all copies already in the cart
         addToCartSend(send, buttons);
@@ -973,7 +978,7 @@
          Add each on its own so the rest still land. */
       var added = 0;
       return runLimited(items, 3, function (it) {
-        return postCart({ id: it.id, quantity: it.quantity }).then(function (rr) { if (rr.ok) added++; });
+        return postCart({ id: it.id, quantity: it.quantity, properties: it.properties }).then(function (rr) { if (rr.ok) added++; });
       }).then(function () {
         if (added > 0) { trackCart(); window.location.href = '/cart'; }
         else {

@@ -4,6 +4,7 @@ import { PRICE_DO, priceDoFetch, priceDoAlarm } from "./price-history.js";
 import { ENRICH_DO, enrichDoFetch, enrichDoAlarm } from "./enrich.js";
 import { HOLD_DO, holdDoFetch, holdDoAlarm } from "./hold.js";
 import { buyCartsBetween, completedBuylists, buylistLines } from "./portal.js";
+import { deckSaleOf } from "./deck-sales.js";
 import { STAGE_DO, stageDoFetch, stageDoAlarm } from "./stage.js";
 import { AUTOPRICE_DO, autopriceDoFetch, autopriceDoAlarm } from "./autoprice.js";
 
@@ -1019,29 +1020,26 @@ export class BinderRoom {
         // 15 min, capped pages per refresh so a busy order feed can't run
         // away. Needs the Admin token to be allowed to read orders.
         const nowMs = Date.now();
-        let ds = (await this.state.storage.get("dsales")) || { list: [], scanAt: 0, startAt: nowMs - 3 * 864e5 };
+        // dsales2 (2026-09-22): the rule moved to src/deck-sales.js (line
+        // property _deck, or attribute + a single); the old list, which held
+        // #205473's sealed-only cart, is left behind and the last 30 days
+        // are rescanned a few pages per refresh.
+        let ds = (await this.state.storage.get("dsales2")) || { list: [], scanAt: 0, startAt: nowMs - 30 * 864e5 };
         if (nowMs - (ds.scanAt || 0) > 15 * 60e3) {
           const sinceMs = Math.max(ds.startAt, (ds.scanAt || ds.startAt) - 3600e3);
           const since = new Date(sinceMs).toISOString();
           let cursor = null, pages = 0, sawAny = false, denied = false;
-          const q = `query($q:String!,$after:String){orders(first:50,query:$q,after:$after,reverse:false){nodes{name createdAt displayFinancialStatus totalPriceSet{shopMoney{amount}}customAttributes{key value}lineItems(first:40){nodes{title quantity}}}pageInfo{hasNextPage endCursor}}}`;
+          const q = `query($q:String!,$after:String){orders(first:50,query:$q,after:$after,reverse:false){nodes{name createdAt displayFinancialStatus totalPriceSet{shopMoney{amount}}customAttributes{key value}lineItems(first:40){nodes{title quantity customAttributes{key value}product{productType}originalTotalSet{shopMoney{amount}}}}}pageInfo{hasNextPage endCursor}}}`;
           for (;;) {
             const d = await this.adminGql(q, { q: "created_at:>='" + since + "'", after: cursor });
             const o = d && d.orders;
             if (!o) { denied = !sawAny; break; }
             sawAny = true;
             for (const nd of o.nodes || []) {
-              const tag = (nd.customAttributes || []).find((a) => a && a.key === "Deck Builder");
-              if (!tag) continue;
+              const sale = deckSaleOf(nd);
+              if (!sale) continue;
               if (ds.list.some((x) => x.name === nd.name)) continue;
-              ds.list.unshift({
-                name: nd.name,
-                at: nd.createdAt,
-                status: nd.displayFinancialStatus || "",
-                cents: Math.round(parseFloat((nd.totalPriceSet && nd.totalPriceSet.shopMoney && nd.totalPriceSet.shopMoney.amount) || "0") * 100),
-                tag: String(tag.value || "").slice(0, 90),
-                items: ((nd.lineItems && nd.lineItems.nodes) || []).slice(0, 40).map((li) => ({ t: String(li.title || "").slice(0, 90), q: li.quantity | 0 })),
-              });
+              ds.list.unshift(sale);
             }
             pages++;
             if (!o.pageInfo || !o.pageInfo.hasNextPage || pages >= 6) break;
@@ -1051,7 +1049,7 @@ export class BinderRoom {
           if (!denied) ds.scanAt = nowMs;
           ds.list.sort((a, b) => (a.at < b.at ? 1 : -1));
           ds.list = ds.list.slice(0, 200);
-          await this.state.storage.put("dsales", ds);
+          await this.state.storage.put("dsales2", ds);
         }
         const cents = ds.list.reduce((a, x) => a + (x.cents || 0), 0);
         return Response.json({
