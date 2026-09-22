@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRow, parseMovers, pickWanted, matchHit, buildWanted } from "../src/wanted.js";
+import { parseRow, parseRows, parseMovers, pickWanted, matchHit, buildWanted, MOVERS_URL, MORE_URLS } from "../src/wanted.js";
 
 // One row exactly as MTGGoldfish served it on 2026-09-22 (probe 35782007459),
 // whitespace collapsed; a second with an apostrophe entity in the name.
@@ -41,15 +41,42 @@ test("matchHit wants the exact name from the movers' set, else the exact name th
   assert.equal(matchHit({ name: "GHALTA, stampede tyrant" }, [hit("Ghalta, Stampede Tyrant", "X", 1)]).setName, "X");   // case and punctuation do not matter
 });
 
-test("buildWanted: movers page -> picked names -> BinderPOS hits in rank order, with the mover's numbers attached; misses listed", async () => {
+const morePage = (names) => `<h1>Top Weekly Winners</h1>${table("Top Weekly Winners", names.map((nm, i) => row(nm, "some-set", String(i), "SET", "3.00", "+1.00", "+10%", "increase")))}`;
+test("parseRows reads every card row of a View More page", () => {
+  assert.deepEqual(parseRows(morePage(["A", "B", "C"])).map((c) => c.name), ["A", "B", "C"]);
+  assert.deepEqual(parseRows(""), []);
+});
+
+test("buildWanted: front-page winners first, in rank order, with the mover's numbers attached; misses listed", async () => {
   const asked = [];
   const search = async (name) => { asked.push(name); return name === "Omnipresence" ? [] : [hit(name, "Reality Fracture", 5), hit(name, "Other", 2)]; };
-  const v = await buildWanted({ fetchFn: async () => new Response(page, { status: 200 }), search, n: 10 });
+  const fetchFn = async (url) => new Response(url === MOVERS_URL ? page : morePage([]), { status: 200 });
+  const v = await buildWanted({ fetchFn, search, n: 10 });
   assert.equal(v.count, 3);
   assert.deepEqual(v.hits.map((h) => [h.cardName, h.setName, h.wanted.rank, h.wanted.pct]), [["Samut, Tyrant of Naktamun", "Reality Fracture", 1, 178], ["Gideon's Memorial", "Reality Fracture", 2, 19], ["Starting Town", "Reality Fracture", 3, 7]]);   // its slug (final-fantasy) matches neither hit, so the better offer wins
   assert.deepEqual(v.missed, ["Omnipresence"]);
   assert.deepEqual(asked, ["Samut, Tyrant of Naktamun", "Omnipresence", "Gideon's Memorial", "Starting Town"]);
+  assert.deepEqual(v.pages, [MOVERS_URL, MORE_URLS.weekly, MORE_URLS.daily]);   // both View More pages were tried and were empty
   assert.equal(v.picked.length, 4);
   await assert.rejects(buildWanted({ fetchFn: async () => new Response("nope", { status: 403 }), search }), /HTTP 403/);
   await assert.rejects(buildWanted({ fetchFn: async () => new Response("<html></html>", { status: 200 }), search }), /no movers rows/);
+});
+
+test("buildWanted walks the View More lists when the front page's winners are not on the buylist, and stops at n", async () => {
+  const asked = [];
+  const onBuylist = new Set(["Weekly 3", "Weekly 7", "Daily 1"]);
+  const search = async (name) => { asked.push(name); return onBuylist.has(name) ? [hit(name, "Some Set", 4)] : []; };
+  const weekly = Array.from({ length: 12 }, (_, i) => "Weekly " + i), daily = ["Daily 0", "Daily 1"];
+  const fetchFn = async (url) => new Response(url === MOVERS_URL ? page : url === MORE_URLS.weekly ? morePage(weekly) : morePage(daily), { status: 200 });
+  const v = await buildWanted({ fetchFn, search, n: 2 });
+  assert.deepEqual(v.hits.map((h) => h.cardName), ["Weekly 3", "Weekly 7"]);
+  assert.equal(v.count, 2);
+  assert.deepEqual(v.pages, [MOVERS_URL, MORE_URLS.weekly]);                    // the daily list was never needed
+  assert.ok(!asked.includes("Daily 1"));
+  assert.ok(asked.length <= 4 + 10);                                              // front page (4) + at most two batches of five
+  // nothing anywhere: every name tried, count 0, no throw
+  const none = await buildWanted({ fetchFn, search: async () => [], n: 10 });
+  assert.equal(none.count, 0);
+  assert.deepEqual(none.pages, [MOVERS_URL, MORE_URLS.weekly, MORE_URLS.daily]);
+  assert.equal(none.tried, 4 + 12 + 2);
 });

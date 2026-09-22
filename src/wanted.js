@@ -16,6 +16,9 @@
 import { kvGet, kvPut } from "./portal.js";
 
 export const MOVERS_URL = "https://www.mtggoldfish.com/movers/paper/standard";
+// The "View More" pages behind the movers tables: 50 rows each, same markup.
+export const MORE_URLS = { weekly: "https://www.mtggoldfish.com/movers-details/paper/standard/winners/wow", daily: "https://www.mtggoldfish.com/movers-details/paper/standard/winners/dod" };
+export const MAX_TRIED = 60;
 export const WANTED_N = 10;
 export const TTL_MS = 12 * 3600 * 1000;
 const KV_KEY = "wanted:mtg:standard:v1";
@@ -78,6 +81,16 @@ export function parseMovers(html) {
   return out;
 }
 
+// Every card row of every movers table on a page, in order (the View More
+// pages hold one table of 50: probe 35782918711).
+export function parseRows(html) {
+  const out = [];
+  for (const t of String(html || "").matchAll(/<table[^>]*table-movers[^>]*>([\s\S]*?)<\/table>/g)) {
+    for (const r of t[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) { const row = parseRow(r[1]); if (row) out.push(row); }
+  }
+  return out;
+}
+
 // The N cards to feature: weekly winners in order, then daily winners for
 // any gap, one line per card name.
 export function pickWanted(parsed, n) {
@@ -112,30 +125,50 @@ export function matchHit(entry, hits) {
   return pool.slice().sort((a, b) => bestCash(b) - bestCash(a))[0];
 }
 
-export async function fetchMovers(fetchFn) {
-  const r = await (fetchFn || fetch)(MOVERS_URL, { headers: { "user-agent": UA, accept: "text/html,application/xhtml+xml", "accept-language": "en-CA,en;q=0.9" }, signal: AbortSignal.timeout(15000) });
+export async function fetchMovers(fetchFn, url) {
+  const r = await (fetchFn || fetch)(url || MOVERS_URL, { headers: { "user-agent": UA, accept: "text/html,application/xhtml+xml", "accept-language": "en-CA,en;q=0.9" }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error("movers page HTTP " + r.status);
   return await r.text();
 }
 
-// Build the list: movers page -> pick -> BinderPOS hits. opts.search(name)
-// returns BinderPOS hits for a name (injected by src/buylist.js, and by tests).
+// Build the list: movers page -> candidates -> BinderPOS hits, until N are
+// found. opts.search(name) returns BinderPOS hits for a name (injected by
+// src/buylist.js, and by tests). The store's buylist does not carry every
+// riser (2026-09-22: all ten weekly winners were Reality Fracture cards the
+// buylist had none of), so after the front page's weekly and daily winners
+// the walk continues down the 50-row View More lists, weekly then daily,
+// and stops at N hits or MAX_TRIED names.
 export async function buildWanted(opts) {
+  const n = opts.n || WANTED_N;
   const html = await fetchMovers(opts.fetchFn);
   const parsed = parseMovers(html);
-  const picked = pickWanted(parsed, opts.n);
-  if (!picked.length) throw new Error("no movers rows parsed (" + html.length + " bytes)");
-  const hits = [], missed = [];
-  for (let i = 0; i < picked.length; i += 5) {
-    const batch = picked.slice(i, i + 5);
+  const front = pickWanted(parsed, 1000);
+  if (!front.length) throw new Error("no movers rows parsed (" + html.length + " bytes)");
+  const seen = new Set(front.map((c) => letters(c.name)));
+  const queue = front.slice();
+  const more = [MORE_URLS.weekly, MORE_URLS.daily];
+  const hits = [], missed = [], pages = [MOVERS_URL];
+  let tried = 0;
+  while (hits.length < n && tried < MAX_TRIED) {
+    if (!queue.length) {
+      const url = more.shift();
+      if (!url) break;
+      let rows = [];
+      try { rows = parseRows(await fetchMovers(opts.fetchFn, url)); pages.push(url); } catch { rows = []; }
+      for (const c of rows) { const k = letters(c.name); if (k && !seen.has(k)) { seen.add(k); queue.push(c); } }
+      if (!queue.length) continue;
+    }
+    const batch = queue.splice(0, Math.min(5, n - hits.length, MAX_TRIED - tried));
+    tried += batch.length;
     const found = await Promise.all(batch.map((c) => opts.search(c.name).catch(() => [])));
     batch.forEach((c, k) => {
+      if (hits.length >= n) return;
       const hit = matchHit(c, found[k]);
       if (hit) hits.push({ ...hit, wanted: { price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: hits.length + 1 } });
       else missed.push(c.name);
     });
   }
-  return { source: MOVERS_URL, asOf: new Date().toISOString(), picked: picked.map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), missed, count: hits.length, hits };
+  return { source: MOVERS_URL, pages, asOf: new Date().toISOString(), tried, picked: front.slice(0, n).map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), missed: missed.slice(0, 60), count: hits.length, hits };
 }
 
 // Cached wrapper for the route: memo (this isolate) -> Durable Object KV ->
@@ -144,12 +177,17 @@ export async function wantedCards(env, opts) {
   if (memo.value && Date.now() - memo.at < 3600 * 1000) return memo.value;
   const cached = await kvGet(env, KV_KEY);
   if (cached) {
-    try { const v = JSON.parse(cached); memo.at = Date.now(); memo.value = v; return v; } catch { /* rebuild */ }
+    try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
   }
   try {
     const v = await buildWanted(opts);
-    await kvPut(env, KV_KEY, JSON.stringify(v), TTL_MS);
-    memo.at = Date.now(); memo.value = v;
+    // An empty list is never remembered (2026-09-22: the first live build
+    // parsed ten movers and matched none, and a 12 h cache of that would
+    // have hidden the fix): only a list with cards is cached.
+    if (v.count > 0) {
+      await kvPut(env, KV_KEY, JSON.stringify(v), TTL_MS);
+      memo.at = Date.now(); memo.value = v;
+    }
     return v;
   } catch (e) {
     return { source: MOVERS_URL, asOf: null, error: String((e && e.message) || e).slice(0, 200), count: 0, hits: [] };
