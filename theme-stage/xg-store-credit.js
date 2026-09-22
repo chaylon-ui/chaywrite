@@ -37,6 +37,7 @@
   'use strict';
   try {
     var ID = 'xg-credit';
+    var SHOW_HISTORY = false;   // the History list under the balance (owner, 2026-09-22: off)
     if (document.getElementById(ID + '-tab')) return;
     var cid = (window.__st && window.__st.cid != null) ? String(window.__st.cid).replace(/\D/g, '') : '';
     if (!cid) return;
@@ -89,7 +90,11 @@
       render();
       var ctl = window.AbortController ? new AbortController() : null;
       var timer = ctl ? setTimeout(function () { ctl.abort(); }, 12000) : null;
-      fetch(base() + '/history/forMe' + q(), { headers: { accept: 'application/json' }, signal: ctl ? ctl.signal : undefined })
+      // Owner, 2026-09-22: "Turn off store credit history in the 'my store
+      // credit' window" - the balance-only endpoint is asked and no History
+      // block is drawn. Set SHOW_HISTORY to true (and the endpoint follows)
+      // to bring it back.
+      fetch(base() + (SHOW_HISTORY ? '/history/forMe' : '/forMe') + q(), { headers: { accept: 'application/json' }, signal: ctl ? ctl.signal : undefined })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (j) {
           if (!j || typeof j.credit !== 'number') throw new Error('unexpected reply');
@@ -127,10 +132,10 @@
       how.appendChild(document.createTextNode('.'));
       body.appendChild(how);
 
-      var h = el('h3', ID + '__h', 'History');
-      body.appendChild(h);
-      if (!d.history.length) { body.appendChild(el('p', ID + '__muted', 'No store-credit activity yet.')); }
+      if (!SHOW_HISTORY) { /* history off: balance only */ }
+      else if (!d.history.length) { body.appendChild(el('h3', ID + '__h', 'History')); body.appendChild(el('p', ID + '__muted', 'No store-credit activity yet.')); }
       else {
+        body.appendChild(el('h3', ID + '__h', 'History'));
         var list = el('ul', ID + '__list');
         var rows = d.history.slice().sort(function (x, y) {
           return String(y.readableUpdatedDate || '').localeCompare(String(x.readableUpdatedDate || ''));
