@@ -753,7 +753,28 @@
 
   /* ---- the sell page's game tiles link to #buylist; one that names a game picks it ---- */
   // image file name fragment -> BinderPOS game ids to try, then words to look for
-  var TILE_KEYS = [["pokemon", ["pokemon"]], ["lorcana", ["lor", "lorcana"]], ["one_piece", ["one", "onepiece"]], ["star_wars", ["swu", "starwars"]], ["ygo", ["yugioh", "ygo"]], ["mtg", ["mtg"]], ["magic", ["mtg"]]];
+  // Which game a tile means. Matched on the tile's own words (title, alt,
+  // aria-label, text) first - the picture's FILE NAME is not trusted: the
+  // Magic tile's art is stored in Shopify Files as "Pokemon_2.png" (owner,
+  // 2026-09-22: "when I click Magic it does pokemon"). The file name is only
+  // a fallback for a tile with no words at all.
+  var TILE_TEXT = [["magic", ["mtg"]], ["mtg", ["mtg"]], ["pokemon", ["pokemon"]], ["lorcana", ["lor", "lorcana"]], ["onepiece", ["one", "onepiece"]], ["starwars", ["swu", "starwars"]], ["yugioh", ["yugioh", "ygo"]]];
+  var TILE_SRC = [["pokemon", ["pokemon"]], ["lorcana", ["lor", "lorcana"]], ["one_piece", ["one", "onepiece"]], ["star_wars", ["swu", "starwars"]], ["ygo", ["yugioh", "ygo"]], ["mtg", ["mtg"]], ["magic", ["mtg"]]];
+  function tileWords(a) {
+    var img = a.querySelector("img");
+    var raw = [a.getAttribute("title"), a.getAttribute("aria-label"), img && img.getAttribute("alt"), a.textContent].filter(Boolean).join(" ");
+    try { raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (err) { /* old browsers: accents stay */ }
+    return raw.toLowerCase().replace(/[^a-z]/g, "");
+  }
+  function tileKeys(a) {
+    var words = tileWords(a);
+    var hit = TILE_TEXT.filter(function (p) { return words.indexOf(p[0]) >= 0; })[0];
+    if (hit) return hit[1];
+    var img = a.querySelector("img");
+    var src = ((img && img.getAttribute("src")) || "").toLowerCase();
+    hit = TILE_SRC.filter(function (p) { return src.indexOf(p[0]) >= 0; })[0];
+    return hit ? hit[1] : null;
+  }
   function gameFor(keys) {
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
@@ -768,10 +789,8 @@
     // The click itself is taken by guardTiles() at the top; this adds the
     // game pick once the game list is known.
     window.__xgTilePick = function (a) {
-      var img = a.querySelector("img");
-      var src = ((img && img.getAttribute("src")) || "").toLowerCase();
-      var hit = TILE_KEYS.filter(function (p) { return src.indexOf(p[0]) >= 0; })[0];
-      var id = hit ? gameFor(hit[1]) : null;
+      var keys = tileKeys(a);
+      var id = keys ? gameFor(keys) : null;
       if (id && id !== game) { $("#bl-game").value = id; $("#bl-game").dispatchEvent(new Event("change")); }
       setTimeout(function () { var q = $("#bl-q"); if (q) { try { q.focus({ preventScroll: true }); } catch (err) { q.focus(); } } }, 350);
     };
@@ -780,7 +799,12 @@
   /* ---- staged buylists (owner, 2026-09-19): where each sent list stands ----
      The worker keeps a sent list until a staff member approves it; only
      then does it go to BinderPOS. /mine is that record, for this shopper. */
+  // Off (owner, 2026-09-22: "disable 'your recent buylists', I dont want
+  // them to have that"): the box is never filled or shown. Flip SHOW_MINE
+  // to bring it back - the /mine endpoint still answers.
+  var SHOW_MINE = false;
   function loadMine() {
+    if (!SHOW_MINE) { var off = $("#bl-mine"); if (off) { off.hidden = true; off.innerHTML = ""; } return; }
     api("/mine").then(function (j) {
       var box = $("#bl-mine");
       var recs = (j && j.records) || [];
