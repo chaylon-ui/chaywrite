@@ -23,8 +23,8 @@ export const WANTED_N = 10;
 export const TTL_MS = 48 * 3600 * 1000;        // a good list is kept two days (a failed refresh keeps yesterday's)
 export const REFRESH_MS = 23 * 3600 * 1000;    // the cron rebuilds after this: once a day (owner, 2026-09-22)
 export const RETRY_MS = 3600 * 1000;           // and retries an hour after a build that found nothing
-const KV_KEY = "wanted:mtg:standard:v3";        // v3: buyable printings only (2026-09-22)
-const ATTEMPT_KEY = "wanted:mtg:standard:attempt3";
+const KV_KEY = "wanted:mtg:standard:v4";        // v4: internal demand first (2026-09-22)
+const ATTEMPT_KEY = "wanted:mtg:standard:attempt4";
 const LAST_TRY_KEY = "wanted:mtg:standard:lasttry";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 const memo = { at: 0, value: null };
@@ -139,6 +139,108 @@ export async function fetchMovers(fetchFn, url) {
   return await r.text();
 }
 
+/* INTERNAL DEMAND (owner, 2026-09-22: "Is there an internal way to see what
+   cards we need most? Either by what we sell the most of or need the most
+   that people search for on our site but we are out of stock" - "Let's do
+   it"). Two signals the worker already has:
+     1. The Deck Builder's miss tally (src/room.js dmiss:<day>, 60 days;
+        /deck-admin?op=overview -> miss.mtg = top 30 names with counts):
+        cards shoppers pasted into a decklist that we could not supply.
+     2. Shopify orders of the last SALES_DAYS days (Admin GraphQL, needs
+        read_orders on SHOPIFY_ADMIN_TOKEN): units sold per Magic single
+        (productType "MTG ..."), with the product's stock NOW - a seller
+        that is out or nearly out is a card we need again.
+   Ranked by misses x 3 + units; a sold card counts only when its stock is
+   at LOW_STOCK or below. These go ahead of the MTGGoldfish movers, which
+   remain the fallback when the internal list is thin. */
+export const SALES_DAYS = 30;
+export const LOW_STOCK = 2;
+export const MIN_MISSES = 2;
+const ORDERS_Q = `query($q:String!,$after:String){orders(first:50,query:$q,after:$after,sortKey:CREATED_AT,reverse:true){nodes{lineItems(first:40){nodes{title quantity product{productType totalInventory}}}}pageInfo{hasNextPage endCursor}}}`;
+const slugify = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+async function adminGql(env, query, variables) {
+  const token = env && env.SHOPIFY_ADMIN_TOKEN;
+  if (!token) throw new Error("no SHOPIFY_ADMIN_TOKEN");
+  const shop = (env && env.SHOPIFY_SHOP) || "most-wanted-ca.myshopify.com";
+  const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, { method: "POST", headers: { "content-type": "application/json", "X-Shopify-Access-Token": token }, body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(20000) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error("admin HTTP " + r.status);
+  if (j && j.errors && j.errors.length) throw new Error(String(j.errors[0].message || "graphql error").slice(0, 160));
+  return j && j.data;
+}
+const defaultIo = (env) => ({
+  overview: async () => {
+    const r = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request("https://default.internal/deck-admin?op=overview&me="));
+    return r.ok ? r.json() : null;
+  },
+  orders: (vars) => adminGql(env, ORDERS_Q, vars),
+});
+
+// Orders -> per-name sales of Magic singles: {name -> {units, sets:{set:units}, inv}}
+export function tallySales(orders) {
+  const out = {};
+  for (const o of orders || []) for (const li of ((o.lineItems && o.lineItems.nodes) || [])) {
+    const pt = String((li.product && li.product.productType) || "");
+    if (!/^mtg\b/i.test(pt)) continue;
+    const m = String(li.title || "").match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
+    if (!m) continue;
+    const name = m[1].replace(/\s*\((?:Borderless|Showcase|Extended Art|Foil Etched|Retro Frame|Promo Pack|Prerelease)[^)]*\)\s*$/i, "").trim(), set = m[2].trim();
+    const q = Math.max(0, li.quantity | 0);
+    const inv = li.product && li.product.totalInventory != null ? Number(li.product.totalInventory) : null;
+    const t = (out[name] = out[name] || { units: 0, sets: {}, inv: null });
+    t.units += q;
+    t.sets[set] = (t.sets[set] || 0) + q;
+    if (inv != null) t.inv = t.inv == null ? inv : Math.min(t.inv, inv);
+  }
+  return out;
+}
+
+// The ranked internal candidate list plus notes on what each source gave.
+export async function internalCandidates(env, io) {
+  io = io || defaultIo(env);
+  const notes = { misses: 0, orders: 0, sold: 0, ordersError: null, missesError: null };
+  const misses = {};
+  try {
+    const ov = await io.overview();
+    for (const x of ((ov && ov.miss && ov.miss.mtg) || [])) if (x && x.name && Number(x.c) >= MIN_MISSES) misses[x.name] = Number(x.c);
+    notes.misses = Object.keys(misses).length;
+  } catch (e) { notes.missesError = String((e && e.message) || e).slice(0, 120); }
+  let sales = {};
+  try {
+    const since = new Date(Date.now() - SALES_DAYS * 864e5).toISOString();
+    const orders = [];
+    let after = null;
+    for (let page = 0; page < 10; page++) {
+      const d = await io.orders({ q: "created_at:>='" + since + "'", after });
+      const o = d && d.orders;
+      if (!o) { if (page === 0) throw new Error("orders not readable (token scope?)"); break; }
+      orders.push(...(o.nodes || []));
+      if (!o.pageInfo || !o.pageInfo.hasNextPage) break;
+      after = o.pageInfo.endCursor;
+    }
+    notes.orders = orders.length;
+    sales = tallySales(orders);
+    notes.sold = Object.keys(sales).length;
+  } catch (e) { notes.ordersError = String((e && e.message) || e).slice(0, 120); }
+  const names = new Set([...Object.keys(misses), ...Object.keys(sales)]);
+  const out = [];
+  for (const name of names) {
+    const m = misses[name] || 0, t = sales[name];
+    const units = t ? t.units : 0, inv = t ? t.inv : null;
+    const low = inv != null && inv <= LOW_STOCK;
+    if (!m && !(units >= 2 && low)) continue;      // a seller we still have plenty of is not a need
+    const topSet = t ? Object.keys(t.sets).sort((a, b) => t.sets[b] - t.sets[a])[0] : "";
+    const why = [];
+    if (m) why.push("asked for " + m + " time" + (m === 1 ? "" : "s") + " by deck builders");
+    if (units) why.push("sold " + units + " in the last " + SALES_DAYS + " days");
+    if (inv != null) why.push(inv <= 0 ? "out of stock" : inv + " left");
+    out.push({ name, setSlug: slugify(topSet), setCode: "", price: null, change: null, pct: null, source: "internal", misses: m, units, inv, why: why.join(" · ").replace(/^./, (c) => c.toUpperCase()) });
+  }
+  out.sort((a, b) => (b.misses * 3 + b.units) - (a.misses * 3 + a.units));
+  return { candidates: out.slice(0, 40), notes };
+}
+
 // One lookup's answer in a common shape: a plain array of hits (tests, the
 // old bpCardSearch) or {status, hits, bodyType} (bpCardSearchRaw).
 const normalise = (r) => Array.isArray(r) ? { hits: r, status: null, bodyType: "array", error: null }
@@ -157,12 +259,20 @@ export const BACKOFF_MS = 10 * 60 * 1000;
 
 export async function startWanted(opts) {
   const n = opts.n || WANTED_N;
-  const html = await fetchMovers(opts.fetchFn);
-  const parsed = parseMovers(html);
-  const front = pickWanted(parsed, 1000);
-  if (!front.length) throw new Error("no movers rows parsed (" + html.length + " bytes)");
-  return { startedAt: new Date().toISOString(), n, queue: front.slice(), more: [MORE_URLS.weekly, MORE_URLS.daily], seen: front.map((c) => letters(c.name)),
-    hits: [], missed: [], probe: [], tried: 0, pages: [MOVERS_URL], front: front.slice(0, n).map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), backoffUntil: 0 };
+  let internal = { candidates: [], notes: null };
+  if (opts.candidates) { try { internal = await opts.candidates(); } catch (e) { internal = { candidates: [], notes: { error: String((e && e.message) || e).slice(0, 120) } }; } }
+  let front = [], moversError = null;
+  try { const html = await fetchMovers(opts.fetchFn); front = pickWanted(parseMovers(html), 1000); if (!front.length) moversError = "no movers rows parsed (" + html.length + " bytes)"; }
+  catch (e) { moversError = String((e && e.message) || e).slice(0, 120); }
+  const seen = new Set(), queue = [];
+  for (const c of [...internal.candidates, ...front]) { const k = letters(c.name); if (k && !seen.has(k)) { seen.add(k); queue.push(c); } }
+  if (!queue.length) throw new Error(moversError || "no candidates");
+  const pages = [];
+  if (internal.candidates.length) pages.push("internal");
+  if (front.length) pages.push(MOVERS_URL);
+  return { startedAt: new Date().toISOString(), n, queue, more: [MORE_URLS.weekly, MORE_URLS.daily], seen: [...seen],
+    hits: [], missed: [], probe: [], tried: 0, pages, sources: { internal: internal.candidates.length, movers: front.length, notes: internal.notes, moversError },
+    front: queue.slice(0, n).map((c) => ({ name: c.name, source: c.source || "movers", setCode: c.setCode, price: c.price, change: c.change, pct: c.pct, why: c.why || null })), backoffUntil: 0 };
 }
 
 // Up to `budget` lookups; returns {state, done}. A 429 puts the name back,
@@ -193,7 +303,7 @@ export async function stepWanted(state, opts) {
     state.tried++;
     const hit = matchHit(c, got.hits);
     state.probe.push({ name: c.name, status: got.status, got: got.hits.length, bodyType: got.bodyType, first: got.hits[0] ? String(got.hits[0].cardName) : null, error: got.error, matched: hit ? hit.setName : null });
-    if (hit) state.hits.push({ ...hit, wanted: { price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: state.hits.length + 1 } });
+    if (hit) state.hits.push({ ...hit, wanted: { source: c.source || "movers", why: c.why || null, misses: c.misses || 0, units: c.units || 0, inv: c.inv == null ? null : c.inv, price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: state.hits.length + 1 } });
     else state.missed.push(c.name);
   }
   const exhausted = !state.queue.length && !state.more.length;
@@ -201,7 +311,7 @@ export async function stepWanted(state, opts) {
   return { state, done };
 }
 
-export const resultOf = (state) => ({ source: MOVERS_URL, pages: state.pages, asOf: new Date().toISOString(), startedAt: state.startedAt, tried: state.tried, picked: state.front, missed: state.missed.slice(0, 60), probe: state.probe.slice(-60), count: state.hits.length, hits: state.hits });
+export const resultOf = (state) => ({ source: MOVERS_URL, pages: state.pages, sources: state.sources || null, asOf: new Date().toISOString(), startedAt: state.startedAt, tried: state.tried, picked: state.front, missed: state.missed.slice(0, 60), probe: state.probe.slice(-60), count: state.hits.length, internal: state.hits.filter((h) => h.wanted && h.wanted.source === "internal").length, hits: state.hits });
 
 // The whole build in one go (tests, and anything with time to spare).
 export async function buildWanted(opts) {
@@ -221,7 +331,7 @@ async function readCached(env) {
   try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
   return null;
 }
-const STATE_KEY = "wanted:mtg:standard:state3";
+const STATE_KEY = "wanted:mtg:standard:state4";
 const STATE_TTL = 6 * 3600 * 1000;
 const readJson = async (env, key) => { try { const t = await kvGet(env, key); return t ? JSON.parse(t) : null; } catch { return null; } };
 

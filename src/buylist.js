@@ -42,7 +42,7 @@ import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
 import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf } from "./stage.js";
 import { instructionsPayload, buildEmail, sendEmail } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
-import { wantedCards, refreshWanted } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
+import { wantedCards, refreshWanted, internalCandidates } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
 
 const PORTAL = "https://portal.binderpos.com";
 const STORE_ID = "a648e57a-678f-45eb-bae0-f8deb7940192";   // from BinderPOS's bootstrap for this shop
@@ -147,7 +147,7 @@ export async function bpCardSearchRaw(game, keyword) {
 }
 // The cron's entry point (src/index.js scheduled): rebuild the sell page's
 // "cards we need most" list when it is due.
-export function refreshWantedCards(env) { return refreshWanted(env, { search: (name) => bpCardSearchRaw("mtg", name) }); }
+export function refreshWantedCards(env) { return refreshWanted(env, { search: (name) => bpCardSearchRaw("mtg", name), candidates: () => internalCandidates(env) }); }
 const KNOWN_IDS = ["mtg", "pokemon", "yugioh", "one", "ones", "lor", "swu", "fleshAndBlood", "scr", "riftbound"];
 // BinderPOS's supported games as {id, name}, memoised for MEMO_TTL; [] when
 // they cannot be fetched (the tables above still cover the known names).

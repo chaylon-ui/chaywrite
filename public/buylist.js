@@ -400,7 +400,8 @@
       // instead of bobbing in unison.
       var delay = "-" + ((i % 7) * 0.79).toFixed(2) + "s";
       return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><span class="bl__cardwrap" style="--bl-float-delay:' + delay + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="' + esc(zlabel) + '" role="button" tabindex="0" aria-label="Enlarge ' + esc(zlabel) + '" loading="lazy"></span><div class="bl__head">' +
-        '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p></div>" +
+        '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p>" +
+        (h.wanted && h.wanted.why ? '<p class="bl__why">' + esc(h.wanted.why) + "</p>" : "") + "</div>" +
         (rows ? '<div class="bl__offers" role="table"><div class="bl__orow bl__orow--head" role="row"><span role="columnheader">Condition</span><span role="columnheader">Cash</span><span role="columnheader">Credit</span><span role="columnheader"><span class="bl__sr">Add</span></span></div>' + rows + "</div>" : '<p class="bl__muted bl__none">Not currently buying this printing.</p>') +
         "</article>";
     }).join("");
@@ -927,8 +928,9 @@
       var hits = Array.isArray(j.hits) ? j.hits : [];
       if (!hits.length || lastQuery || lastHits.length) return;
       lastHits = hits;
+      var internal = Number(j.internal) || 0;
       $("#bl-hits").innerHTML = '<div class="bl__wanted"><h3 class="bl__wantedtitle"><span class="bl__flame" aria-hidden="true"></span>Cards we need most right now</h3>' +
-        '<p class="bl__muted">This week\'s biggest movers in Standard, with what we pay today. Search above for anything else you are selling.</p></div>';
+        '<p class="bl__muted">' + (internal ? "What our customers are buying and asking for that we are short of, with what we pay today." : "This week\'s biggest movers in Standard, with what we pay today.") + " Search above for anything else you are selling.</p></div>";
       renderHits(hits, 0);
       setStatus("");
     }).catch(function () {});
