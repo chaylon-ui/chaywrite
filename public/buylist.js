@@ -25,7 +25,15 @@
       var a = e.target && e.target.closest ? e.target.closest('a[href="#buylist"]') : null;
       if (!a || tiles.indexOf(a) < 0) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-      try { root.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (err) { root.scrollIntoView(); }
+      // Land with the section's top just under the fixed header, not behind
+      // it (owner, 2026-09-22: "it scrolls down too low"): the theme's
+      // xg-header-offset.js publishes the fixed bars' bottom edge as
+      // --xg-fixed-bottom on <html>.
+      var fixed = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--xg-fixed-bottom")) || 0;
+      if (!fixed) { var hdr = document.querySelector("#header .site-header, #header"); if (hdr && /fixed|sticky/.test(getComputedStyle(hdr).position)) fixed = hdr.getBoundingClientRect().bottom; }
+      var top = root.getBoundingClientRect().top + (window.pageYOffset || document.documentElement.scrollTop) - fixed - 16;
+      try { window.scrollTo({ top: Math.max(0, top), behavior: "smooth" }); } catch (err) { window.scrollTo(0, Math.max(0, top)); }
+      var cart = root.querySelector(".bl__cart"); if (cart) cart.scrollTop = 0;
       if (typeof window.__xgTilePick === "function") window.__xgTilePick(a);
     }, true);
   })();
