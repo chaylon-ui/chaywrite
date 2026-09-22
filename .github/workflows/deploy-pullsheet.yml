@@ -1,0 +1,38 @@
+name: Deploy exor-pullsheet
+
+# Manual only for now. Switch to `push` on pullsheet/** once the source in
+# pullsheet/src/index.js is confirmed to match the live worker and the JOBS
+# KV namespace id is filled in (pullsheet/wrangler.toml).
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pullsheet
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to deploy with the placeholder KV id
+        run: |
+          if grep -q REPLACE_WITH_JOBS_KV_NAMESPACE_ID wrangler.toml; then
+            echo "pullsheet/wrangler.toml still has the placeholder JOBS KV id - fill it in first."
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: pullsheet
+
+      # Smoke test: the root must answer with the sign-in page.
+      - name: Smoke-test
+        run: |
+          sleep 5
+          body=$(curl -sS https://exor-pullsheet.nevski.workers.dev/)
+          echo "$body" | head -c 400; echo
+          echo "$body" | grep -q "Pull Sheet" || { echo "sign-in page not served"; exit 1; }
