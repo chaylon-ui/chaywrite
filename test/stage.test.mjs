@@ -146,12 +146,21 @@ test("the staff pages: list rows link to worksheets; the worksheet's controls fo
   assert.ok(!sheet.includes('name="notify" value="1" checked') && sheet.includes("not</b> emailed about a decision unless"));
   assert.ok(sheet.includes('class="hits"') && sheet.includes('id="ad-more"') && sheet.includes("&offset='+offset"));
   assert.ok(sheet.includes('<span class="fin">✦ Foil</span>'));   // the foil line wears the holographic pill
+  // regrade under each condition: a count box only where the line has more than one copy, never the line's own condition
+  assert.equal((sheet.match(/class="rg-open"/g) || []).length, 2);
+  assert.ok(sheet.includes('>regrade some</a>') && sheet.includes('max="3"') && sheet.includes(">regrade</a>"));
+  assert.ok(sheet.includes("action:'regrade'") && !sheet.includes('<option value="Near Mint">Near Mint</option><option value="Lightly Played">Lightly Played</option><option value="Moderately Played">Moderately Played</option><option value="Heavily Played">Heavily Played</option><option value="Damaged">Damaged</option></select> <button type="button" class="sm rg-go">Move</button></span></div></td>\n<td class="n"><input class="q" type="number" min="0" max="999" step="1" value="3"'));
   assert.ok(sheet.includes("under Ada OBrien at the prices"));      // the confirm() string cannot carry a quote
   assert.ok(sheet.includes("RESEND_API_KEY"));                      // email off: the worksheet says so
   // a view-only account: no inputs, no add, no decide, no send
   const view = renderSheet(r, { ...o, user: VIEWER });
   assert.ok(!view.includes('<input class="q" type="number" min="0"') && !view.includes('<input class="p cash"') && !view.includes('id="addcard"') && !view.includes("Approve → send") && !view.includes('value="email"'));
   assert.ok(view.includes("needs a permission an admin can give you") && !view.includes('href="/9pocket/admin"'));
+  assert.ok(!view.includes('class="rg-open"'));
+  // the paid-as price column is marked, the other dimmed: Cash here, Credit on a Store Credit list
+  assert.ok(sheet.includes('<th class="n pay">Cash<small>paid</small></th><th class="n dim">Credit</th>') && sheet.includes("paid as <b>Cash</b>: the <b>Cash</b> column"));
+  const sc = renderSheet({ ...r, paymentType: "Store Credit" }, o);
+  assert.ok(sc.includes('<th class="n dim">Cash</th><th class="n pay">Credit<small>paid</small></th>') && sc.includes('<td class="n dim"><input class="p cash"') && sc.includes("the <b>Credit</b> column is what BinderPOS shows"));
   // prices only: price inputs, quantities as text, still a Save button
   const pr = renderSheet(r, { ...o, user: PRICER });
   assert.ok(pr.includes('<input class="p cash"') && !pr.includes('<input class="q" type="number" min="0"') && pr.includes('id="save"') && pr.includes('data-qty="3"'));

@@ -222,3 +222,30 @@ test("paid-as can change while a list waits; a decision email is kept beside the
   await call(c, "/_stage/mark", { id, status: "rejected", by: "sam@x" });
   assert.equal((await call(c, "/_stage/payment", { id, paymentType: "Cash" })).status, 409);
 });
+
+test("regrade: some copies move to another condition as a new line, or join the line that already has it", async () => {
+  const now = { t: T0 };
+  const c = cx(now);
+  const { body: { id } } = await call(c, "/_stage/put", { customer: "777", paymentType: "Cash", cards: CARDS });
+  const key = "101|1|normal";
+  // 1 of the 3 Near Mint Bolts is really Lightly Played: a second Bolt line at the LP price
+  const lp = { ...CARDS[0], condition: 2, conditionName: "Lightly Played", cashBuyPrice: 1.1, storeCreditBuyPrice: 1.43 };
+  const r1 = await call(c, "/_stage/regrade", { id, key, take: 1, card: lp, by: "staff@x" });
+  assert.equal(r1.status, 200);
+  assert.equal(r1.body.merged, false);
+  const bolts = r1.body.record.cards.filter((x) => x.cardId === 101).map((x) => [x.conditionName, x.quantity, x.cashBuyPrice]);
+  assert.deepEqual(bolts, [["Near Mint", "2", 1.5], ["Lightly Played", "1", 1.1]]);
+  assert.equal(r1.body.record.totals.units, 4);
+  assert.equal(r1.body.record.totals.cash, 2 * 1.5 + 1.1 + 2);
+  assert.match(r1.body.record.events.at(-1).action, /^regraded 1 × .*Lightning Bolt.* → Lightly Played$/);
+  // asking for more than the line has moves what it has; the line goes when it reaches 0, and the copies join the LP line
+  const r2 = await call(c, "/_stage/regrade", { id, key, take: 9, card: lp, by: "staff@x" });
+  assert.equal(r2.body.merged, true);
+  assert.equal(r2.body.take, 2);
+  assert.deepEqual(r2.body.record.cards.filter((x) => x.cardId === 101).map((x) => [x.conditionName, x.quantity]), [["Lightly Played", "3"]]);
+  // the same condition, a missing line, and a decided list are refused
+  assert.equal((await call(c, "/_stage/regrade", { id, key: "101|2|normal", take: 1, card: lp })).status, 400);
+  assert.equal((await call(c, "/_stage/regrade", { id, key, take: 1, card: lp })).status, 404);
+  await call(c, "/_stage/mark", { id, status: "rejected" });
+  assert.equal((await call(c, "/_stage/regrade", { id, key: "101|2|normal", take: 1, card: { ...lp, condition: 1, conditionName: "Near Mint" } })).status, 409);
+});

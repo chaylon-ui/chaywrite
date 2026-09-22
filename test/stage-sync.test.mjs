@@ -75,3 +75,33 @@ test("the real save: refuses without the right confirm or once BinderPOS has app
   const no = await pushBuylistPrices(env, rec, { confirm: "908738" });
   assert.equal(no.ok, false); assert.match(no.error, /already has this buylist approved/); assert.equal(calls.length, 1);
 });
+
+test("conditionsFor: BinderPOS's conditions for one card, each with the offer per finish", async () => {
+  const { conditionsFor } = await import("../src/buylist.js");
+  const saved = globalThis.fetch;
+  const posted = [];
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes("identitytoolkit")) return new Response(JSON.stringify({ idToken: "t", refreshToken: "r", expiresIn: "3600" }), { status: 200 });
+    if (u.endsWith("/supportedGames")) return new Response(JSON.stringify([{ gameId: "mtg", gameName: "Magic: The Gathering" }]), { status: 200 });
+    if (u.endsWith("/api/buylists/cards/allPrices")) {
+      posted.push(JSON.parse(init.body));
+      return new Response(JSON.stringify([{ id: 101, variants: [
+        { id: 1768, variantName: "Near Mint", cardBuylistTypes: [{ type: "Normal", legacyType: "Normal", buyPrice: 1.5, creditBuyPrice: 1.95, maxPurchaseQuantity: 8, productVariantId: 501 }, { type: "Foil", buyPrice: 4, creditBuyPrice: 5.2, maxPurchaseQuantity: 0, canPurchaseOverstock: true, overStockBuyPrice: 2, creditOverstockBuyPrice: 2.6 }] },
+        { id: 1769, variantName: "Lightly Played", cardBuylistTypes: [{ type: "Normal", buyPrice: 1.1, creditBuyPrice: 1.43, maxPurchaseQuantity: 8 }] },
+      ] }]), { status: 200 });
+    }
+    return new Response("nope", { status: 404 });
+  };
+  try {
+    const env = { BINDERPOS_LOGIN_EMAIL: "s@x", BINDERPOS_LOGIN_PASSWORD: "p" };
+    const conds = await conditionsFor(env, { cardId: "101", game: "mtg", type: "Normal" });
+    assert.deepEqual(posted[0], [{ game: "mtg", ids: [101] }]);
+    assert.deepEqual(conds.map((c) => [c.id, c.name]), [[1768, "Near Mint"], [1769, "Lightly Played"]]);
+    assert.equal(conds[0].offers.normal.buy, 1.5); assert.equal(conds[0].offers.normal.productVariantId, 501);
+    assert.equal(conds[0].offers.foil.max, 0); assert.equal(conds[0].offers.foil.overstock, true); assert.equal(conds[0].offers.foil.overBuy, 2);
+    assert.equal(conds[1].offers.foil, undefined);
+    assert.deepEqual(await conditionsFor(env, { cardId: "999", game: "mtg" }), []);
+    await assert.rejects(conditionsFor({}, { cardId: "101" }), /not configured/);
+  } finally { globalThis.fetch = saved; }
+});

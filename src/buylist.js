@@ -164,6 +164,26 @@ function gameIdOf(c, games) {
   }
   return "mtg";
 }
+// The conditions BinderPOS lists for one card, each with today's offer per
+// finish: what a regrade on the 9Pocket worksheet chooses from (src/stage.js
+// regradeLine). Same allPrices call repriceCards makes, for one card.
+export async function conditionsFor(env, card) {
+  if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
+  const games = await gamesList(env);
+  const game = gameIdOf(card, games);
+  const res = await portalPost(env, "/api/buylists/cards/allPrices", [{ game, ids: [Number(card.cardId)] }]);
+  const hit = (Array.isArray(res) ? res : []).find((c) => String(c.id) === String(card.cardId));
+  if (!hit) return [];
+  return (hit.variants || []).map((v) => {
+    const offers = {};
+    for (const t of v.cardBuylistTypes || []) {
+      const entry = { buy: Number(t.buyPrice), credit: Number(t.creditBuyPrice), max: Number(t.maxPurchaseQuantity) || 0, overstock: !!t.canPurchaseOverstock, overBuy: t.overStockBuyPrice, overCredit: t.creditOverstockBuyPrice, productVariantId: t.productVariantId, type: t.type };
+      for (const f of [t.type, t.legacyType]) if (f) offers[normType(f)] = entry;
+    }
+    return { id: v.id, name: String(v.variantName || ""), offers };
+  });
+}
+
 export async function repriceCards(env, cards) {
   if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
   const games = await gamesList(env);

@@ -52,7 +52,7 @@
    Approved and rejected records are pruned after KEEP_MS by the alarm;
    staged ones are never pruned - a forgotten list should stay visible. */
 
-import { repriceCards, submitToBinderPos, cleanCards } from "./buylist.js";
+import { repriceCards, submitToBinderPos, cleanCards, conditionsFor } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, buildDecisionEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
@@ -324,6 +324,31 @@ export async function stageDoFetch(cx, request, url) {
     rec.events = (rec.events || []).concat([{ ts: cx.now(), action: r.ok && r.saved ? "prices pushed to BinderPOS" + (r.verified ? "" : " (unverified)") : r.ok ? "BinderPOS prices already matched" : "BinderPOS price push failed", by: by(b) }]).slice(-30);
     await cx.storage.put(key, rec);
     return doJson({ ok: true, record: rec });
+  }
+  if (p === "/_stage/regrade" && post) {
+    // Staff re-graded some copies of a line (owner, 2026-09-22: "if there is
+    // more than one qty per card, I need to be able to edit each qty
+    // condition"): `take` copies leave the line at `key` and join (or start)
+    // the line for `card`, which the worker has already priced for its new
+    // condition. Taking every copy removes the source line.
+    const b = await bodyOf(request);
+    const key = "st:" + String(b.id || "").slice(0, 40);
+    const rec = await cx.storage.get(key);
+    if (!rec) return doJson({ ok: false, error: "no such record" }, 404);
+    if (rec.status !== "staged") return doJson({ ok: false, error: "already " + rec.status }, 409);
+    const src = (rec.cards || []).find((c) => lineKey(c) === String(b.key || ""));
+    if (!src) return doJson({ ok: false, error: "no such line" }, 404);
+    const card = b.card && typeof b.card === "object" && b.card.cardId != null ? b.card : null;
+    if (!card) return doJson({ ok: false, error: "card required" }, 400);
+    if (lineKey(card) === lineKey(src)) return doJson({ ok: false, error: "that is the condition it already has" }, 400);
+    const have = Math.max(0, parseInt(src.quantity, 10) || 0);
+    const take = Math.max(1, Math.min(have, parseInt(b.take, 10) || 1));
+    const rest = (rec.cards || []).map((c) => c === src ? { ...c, quantity: String(have - take) } : c).filter((c) => (parseInt(c.quantity, 10) || 0) > 0);
+    const m = mergeAdded(rest, { ...card, quantity: String(take) });
+    rec.cards = m.cards; rec.totals = totalsOf(m.cards);
+    rec.events = (rec.events || []).concat([{ ts: cx.now(), action: "regraded " + take + " × " + lineLabel(src) + " → " + String(card.conditionName || card.condition), by: by(b) }]).slice(-30);
+    await cx.storage.put(key, rec);
+    return doJson({ ok: true, record: rec, merged: m.merged, take });
   }
   if (p === "/_stage/payment" && post) {
     // Cash <-> Store Credit while the list waits (owner, 2026-09-22: "a
@@ -773,6 +798,35 @@ export async function addCard(env, url, rec, raw, who) {
   return { ok: true, id: rec.id, totals: j.record.totals, merged: j.merged, capped: rp.capped, message: (j.merged ? "Added to the existing line: " : "Added ") + lineLabel(priced) + " ×" + priced.quantity + " at " + money(priced.cashBuyPrice) + " / " + money(priced.storeCreditBuyPrice) + (rp.capped.length ? " (quantity capped at what the store takes)" : "") + "." };
 }
 
+// Move `take` copies of a worksheet line to another condition, at today's
+// BinderPOS price for that condition and the line's finish. The condition is
+// named (the worksheet offers the store's names); BinderPOS's own variant id
+// and price come from its buylist for that card.
+export async function regradeLine(env, url, rec, f, who) {
+  const src = (rec.cards || []).find((c) => lineKey(c) === String(f.key || ""));
+  if (!src) return { ok: false, error: "no such line on this buylist" };
+  const want = String(f.conditionName || "").trim().toLowerCase();
+  if (!want) return { ok: false, error: "which condition?" };
+  const have = Math.max(0, parseInt(src.quantity, 10) || 0);
+  const take = Math.max(1, Math.min(have, parseInt(f.take, 10) || 1));
+  let conds;
+  try { conds = await conditionsFor(env, src); }
+  catch (e) { return { ok: false, error: "could not read BinderPOS's conditions for that card: " + String((e && e.message) || e).slice(0, 160) }; }
+  const v = conds.find((x) => x.name.trim().toLowerCase() === want);
+  if (!v) return { ok: false, error: "BinderPOS has no \"" + String(f.conditionName) + "\" for " + String(src.cardName) + " (it offers: " + (conds.map((x) => x.name).join(", ") || "nothing") + ")" };
+  const o = v.offers[String(src.type || "Normal").toLowerCase().replace(/[^a-z0-9]+/g, "")];
+  if (!o || !Number.isFinite(o.buy)) return { ok: false, error: "BinderPOS is not buying " + String(src.cardName) + " in " + v.name + (src.type && src.type !== "Normal" ? " " + src.type : "") + " right now" };
+  let buy = o.buy, credit = o.credit;
+  if (!(o.max > 0)) {
+    if (o.overstock && (o.overBuy != null || o.overCredit != null)) { buy = o.overBuy != null ? Number(o.overBuy) : buy; credit = o.overCredit != null ? Number(o.overCredit) : credit; }
+    else return { ok: false, error: "BinderPOS has all it wants of " + String(src.cardName) + " in " + v.name + " right now" };
+  }
+  const card = { ...src, condition: v.id, conditionName: v.name, cashBuyPrice: buy, storeCreditBuyPrice: credit, quantity: String(take), staffPriced: false, shopifyVariantId: o.productVariantId || src.shopifyVariantId };
+  const j = await doCall(env, url.origin, "/_stage/regrade", { id: rec.id, key: String(f.key || ""), take, card, by: who });
+  if (!j.ok) return { ok: false, error: j.error };
+  return { ok: true, id: rec.id, totals: j.record.totals, take, message: (j.merged ? "Moved " : "Regraded ") + take + " × " + lineLabel(src) + " to " + v.name + " at " + money(buy) + " / " + money(credit) + (j.merged ? " (joined the existing line)" : "") + "." };
+}
+
 async function control(env, url, f, user) {
   const id = String(f.id || "").slice(0, 40);
   const action = String(f.action || "");
@@ -812,6 +866,13 @@ async function control(env, url, f, user) {
     if (typeof f.note === "string") body.note = f.note;
     const j = await doCall(env, url.origin, "/_stage/edit", body);
     return j.ok ? { ok: true, id, totals: j.record.totals, message: "Saved." } : { ok: false, error: j.error };
+  }
+  if (action === "regrade") {
+    if (!can(user, "edit")) return deny("change conditions");
+    const g = await doCall(env, url.origin, "/_stage/get?id=" + encodeURIComponent(id));
+    if (!g.ok) return { ok: false, error: g.error };
+    if (g.record.status !== "staged") return { ok: false, error: "already " + g.record.status };
+    return regradeLine(env, url, g.record, f, who);
   }
   if (action === "add") {
     if (!can(user, "add")) return deny("add cards");
@@ -865,7 +926,7 @@ async function control(env, url, f, user) {
     const m = notify ? await emailDecision(env, url, j.record, "approved", who) : { ok: true };
     return { ok: true, id, status: "approved", reference: j.record.bp && j.record.bp.number, repriced: merged.notes, bpSync: sync, message: "Approved and sent to BinderPOS" + (j.record.bp && j.record.bp.number ? " as buylist " + j.record.bp.number : "") + "." + syncNote + mailNote(m) };
   }
-  return { ok: false, error: "action must be approve, reject, edit, add, payment or email" };
+  return { ok: false, error: "action must be approve, reject, edit, add, regrade, payment or email" };
 }
 
 // /9pocket/admin/control: accounts. Admin only (checked by the caller).
