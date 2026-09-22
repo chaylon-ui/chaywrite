@@ -1,0 +1,23 @@
+{% comment %}
+  New Today strip — today's genuine card arrivals (the webhook-verified
+  restock feed the in-store TVs run on), rendered by the exor-binder worker.
+  This section is only a shell: the worker serves the script, styles and
+  data, so updates ship via git push, never a theme upload. When there are
+  no arrivals to show (or the worker is unreachable) the script removes the
+  mount entirely — the homepage never shows a bare heading.
+{% endcomment %}
+<div id="xg-newtoday"
+  {% if section.settings.title != blank %}data-title="{{ section.settings.title | escape }}"{% endif %}
+  {% if section.settings.subtitle != blank %}data-sub="{{ section.settings.subtitle | escape }}"{% endif %}></div>
+<script defer src="https://exor-binder.nevski.workers.dev/new-today.js"></script>
+
+{% schema %}
+{
+  "name": "New Today strip",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "New today" },
+    { "type": "text", "id": "subtitle", "label": "Subheading", "default": "Fresh Singles Just In!" }
+  ],
+  "presets": [{ "name": "New Today strip" }]
+}
+{% endschema %}

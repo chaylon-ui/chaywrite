@@ -109,6 +109,7 @@
       '<div id="bl-toast" class="bl__toast" role="status" aria-live="polite"></div>' +
       '<dialog id="bl-guide" class="bl__guide" aria-labelledby="bl-guide-title"></dialog>' +
       '<dialog id="bl-done" class="bl__guide bl__done" aria-labelledby="bl-done-title"></dialog>' +
+      '<dialog id="bl-confirm" class="bl__guide bl__confirm" aria-labelledby="bl-confirm-title"></dialog>' +
     '</div>';
 
   var $ = function (s) { return root.querySelector(s); };
@@ -677,11 +678,59 @@
   });
 
   /* ---- submit ---- */
+  // One last check before anything is sent (owner, 2026-09-22: "it should
+  // ask them one more time to confirm that they want to submit it as store
+  // credit/cash again just to be clear"): an in-page dialog that names the
+  // payment type and the total in so many words, with a one-tap switch to
+  // the other type. The browser's own confirm() used to do this, and a
+  // browser that suppresses those dialogs would have sent nothing - or, on
+  // some phones, shown a box nobody reads.
+  function payChosen() { return (root.querySelector('input[name="bl-pay"]:checked') || {}).value || "Cash"; }
+  function askToConfirm(onYes) {
+    var d = $("#bl-confirm");
+    if (!d || typeof d.showModal !== "function") {
+      var p = payChosen(), n = totalQty();
+      if (confirm("Submit " + n + " card" + (n === 1 ? "" : "s") + " for " + p.toLowerCase() + "? This sends your buylist to the store.")) onYes(p);
+      return;
+    }
+    function draw() {
+      var pay = payChosen(), credit = pay === "Store Credit", n = totalQty(), t = totalsOfCart();
+      d.innerHTML = '<div class="bl__done-head bl__confirm-head"><span class="bl__done-kicker">One last check</span><h3 id="bl-confirm-title">Submit for <b>' + (credit ? "store credit" : "cash") + "</b>?</h3>" +
+        '<p class="bl__done-sum">' + esc(n) + " card" + (n === 1 ? "" : "s") + " · estimated <b>" + money(credit ? t.credit : t.cash) + "</b> in " + (credit ? "Exor Games store credit" : "cash") + "</p></div>" +
+        '<div class="bl__guide-body"><p class="bl__confirm-note">You are asking to be paid in <b>' + (credit ? "store credit" : "cash") + "</b>. " +
+        (credit ? "Store credit is added to your Exor Games account once we have checked your cards; it pays more than cash (" + money(t.cash) + ")." : "Cash is paid once we have checked your cards; store credit would be " + money(t.credit) + ".") + "</p>" +
+        '<div class="bl__guide-actions bl__confirm-actions"><button type="button" class="bl__btn" data-act="back">Go back</button>' +
+        '<button type="button" class="bl__btn" data-act="switch">Switch to ' + (credit ? "cash" : "store credit") + "</button>" +
+        '<button type="button" class="bl__btn bl__btn--primary" data-act="yes">Yes, submit for ' + (credit ? "store credit" : "cash") + "</button></div></div>";
+    }
+    d.onclick = function (e) {
+      var b = e.target && e.target.closest ? e.target.closest("[data-act]") : null;
+      if (!b) { if (e.target === d) d.close(); return; }
+      var act = b.getAttribute("data-act");
+      if (act === "back") { d.close(); return; }
+      if (act === "switch") {
+        var other = payChosen() === "Store Credit" ? "Cash" : "Store Credit";
+        var radio = root.querySelector('input[name="bl-pay"][value="' + other + '"]');
+        if (radio) { radio.checked = true; radio.dispatchEvent(new Event("change", { bubbles: true })); }
+        draw(); return;
+      }
+      if (act === "yes") { var p = payChosen(); d.close(); onYes(p); }
+    };
+    draw();
+    d.showModal();
+    var yes = d.querySelector('[data-act="yes"]'); if (yes) { try { yes.focus({ preventScroll: true }); } catch (err) { yes.focus(); } }
+  }
+  function totalsOfCart() {
+    var cash = 0, credit = 0;
+    cart.forEach(function (c) { var q = qty(c); cash += q * (Number(c.cashBuyPrice) || 0); credit += q * (Number(c.storeCreditBuyPrice) || 0); });
+    return { cash: cash, credit: credit };
+  }
   $("#bl-submit").addEventListener("click", function () {
     if (!cart.length) return;
-    var pay = (root.querySelector('input[name="bl-pay"]:checked') || {}).value || "Cash";
-    var n = totalQty();
-    if (!confirm("Submit " + n + " card" + (n === 1 ? "" : "s") + " for " + pay.toLowerCase() + "? This sends your buylist to the store.")) return;
+    askToConfirm(doSubmit);
+  });
+  function doSubmit(pay) {
+    if (!cart.length) return;
     $("#bl-submit").disabled = true;
     setMsg("Submitting…");
     flushSave().then(function () {
@@ -712,7 +761,7 @@
       setMsg("Submit failed: " + err.message);
       $("#bl-submit").disabled = false;
     });
-  });
+  }
 
   /* ---- what happens next: the store's instructions in a popup at submission
      (owner, 2026-09-22: "the instructions should show in a popup on the

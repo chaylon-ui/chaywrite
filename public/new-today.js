@@ -19,7 +19,7 @@
 
   function attr(n, d) { var v = root.getAttribute(n); return (v == null || v === '') ? d : v; }
   var TITLE = attr('data-title', 'New today');
-  var SUB = attr('data-sub', 'Fresh singles on the shelf.');
+  var SUB = attr('data-sub', 'Fresh Singles Just In!');
   var COLLECTION = attr('data-collection', 'new-arrivals');
   var MAX = Math.max(4, Math.min(24, +attr('data-max', '16') || 16));
 

@@ -386,3 +386,11 @@ html[data-xg-theme="dark"] .bl__mine-row--staged .bl__mine-status { color: #f6c4
 .bl__wantedtitle { margin: 0 0 4px; font-size: 17px; font-weight: 800; color: var(--bl-ink); display: flex; align-items: center; gap: 8px; }
 .bl__wanted .bl__muted { margin: 0; font-size: 13px; }
 .bl__flame { display: inline-block; width: 12px; height: 16px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 50% 70%, #ffd166 0 30%, var(--bl-accent) 31% 100%); transform: rotate(-8deg); }
+/* The submit confirmation (owner, 2026-09-22): payment type and total in
+   so many words, with a switch to the other type. */
+.bl__confirm { width: min(94vw, 480px); }
+.bl__confirm-head h3 b { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.bl__confirm-note { margin: 0; font-size: 14.5px; line-height: 1.55; }
+.bl__confirm-note b { color: var(--bl-ink); }
+.bl__confirm-actions { flex-wrap: wrap; justify-content: flex-end; }
+.bl__confirm-actions .bl__btn--primary { flex: 1 1 100%; padding: 12px 16px; font-size: 15px; }

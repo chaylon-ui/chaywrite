@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRow, parseRows, parseMovers, pickWanted, matchHit, buildWanted, MOVERS_URL, MORE_URLS } from "../src/wanted.js";
+import { parseRow, parseRows, parseMovers, pickWanted, matchHit, buildWanted, startWanted, stepWanted, resultOf, MOVERS_URL, MORE_URLS } from "../src/wanted.js";
 
 // One row exactly as MTGGoldfish served it on 2026-09-22 (probe 35782007459),
 // whitespace collapsed; a second with an apostrophe entity in the name.
@@ -84,9 +84,34 @@ test("buildWanted walks the View More lists when the front page's winners are no
 
 test("buildWanted keeps a lookup's status and body shape, and a thrown lookup, in its probe notes", async () => {
   const fetchFn = async (url) => new Response(url === MOVERS_URL ? page : morePage([]), { status: 200 });
-  const answers = { "Samut, Tyrant of Naktamun": { status: 200, hits: [hit("Samut, Tyrant of Naktamun", "Reality Fracture", 9)], bodyType: "array" }, "Omnipresence": { status: 429, hits: [], bodyType: "text:Too Many Requests" } };
+  const answers = { "Samut, Tyrant of Naktamun": { status: 200, hits: [hit("Samut, Tyrant of Naktamun", "Reality Fracture", 9)], bodyType: "array" }, "Omnipresence": { status: 502, hits: [], bodyType: "text:Bad Gateway" } };
   const search = async (name) => { if (name === "Gideon's Memorial") throw new Error("boom"); return answers[name] || { status: 200, hits: [], bodyType: "array" }; };
   const v = await buildWanted({ fetchFn, search, n: 10, delayMs: 0 });
   assert.equal(v.count, 1);
-  assert.deepEqual(v.probe.map((p) => [p.name, p.status, p.got, p.bodyType, p.error]), [["Samut, Tyrant of Naktamun", 200, 1, "array", null], ["Omnipresence", 429, 0, "text:Too Many Requests", null], ["Gideon's Memorial", null, 0, "error", "boom"], ["Starting Town", 200, 0, "array", null]]);
+  assert.deepEqual(v.probe.map((p) => [p.name, p.status, p.got, p.bodyType, p.error]), [["Samut, Tyrant of Naktamun", 200, 1, "array", null], ["Omnipresence", 502, 0, "text:Bad Gateway", null], ["Gideon's Memorial", null, 0, "error", "boom"], ["Starting Town", 200, 0, "array", null]]);
+});
+
+test("stepWanted does a few lookups per tick, keeps its place, and backs off on a 429 without losing the name", async () => {
+  const weekly = Array.from({ length: 12 }, (_, i) => "Weekly " + i);
+  const fetchFn = async (url) => new Response(url === MOVERS_URL ? page : url === MORE_URLS.weekly ? morePage(weekly) : morePage([]), { status: 200 });
+  const asked = [];
+  let limitNext = false;
+  const search = async (name) => { asked.push(name); if (limitNext) { limitNext = false; return { status: 429, hits: [], bodyType: "text:error code: 1015" }; } return name === "Weekly 2" || name === "Weekly 5" ? { status: 200, hits: [hit(name, "S", 3)], bodyType: "array" } : { status: 200, hits: [], bodyType: "array" }; };
+  let state = await startWanted({ fetchFn, search, n: 2 });
+  let r = await stepWanted(state, { fetchFn, search, budget: 3, delayMs: 0 });
+  assert.equal(r.done, false); assert.equal(r.state.tried, 3); assert.deepEqual(asked, ["Samut, Tyrant of Naktamun", "Omnipresence", "Gideon's Memorial"]);
+  limitNext = true;                                               // the next lookup is rate limited
+  r = await stepWanted(JSON.parse(JSON.stringify(r.state)), { fetchFn, search, budget: 3, delayMs: 0 });   // state survives a JSON round trip
+  assert.equal(r.done, false); assert.equal(r.state.tried, 3); assert.ok(r.state.backoffUntil > Date.now());
+  assert.equal(r.state.queue[0].name, "Starting Town");            // put back for the next tick
+  assert.equal(r.state.probe.at(-1).status, 429);
+  r.state.backoffUntil = 0;
+  r = await stepWanted(r.state, { fetchFn, search, budget: 5, delayMs: 0 });   // Starting Town, then the View More page: Weekly 0..3
+  assert.equal(r.state.tried, 8); assert.equal(r.state.hits.length, 1); assert.equal(r.done, false);
+  r = await stepWanted(r.state, { fetchFn, search, budget: 5, delayMs: 0 });   // Weekly 4, 5 -> two hits, done
+  assert.equal(r.done, true);
+  const v = resultOf(r.state);
+  assert.deepEqual(v.hits.map((h) => [h.cardName, h.wanted.rank]), [["Weekly 2", 1], ["Weekly 5", 2]]);
+  assert.equal(v.tried, 10);
+  assert.deepEqual(v.pages, [MOVERS_URL, MORE_URLS.weekly]);
 });

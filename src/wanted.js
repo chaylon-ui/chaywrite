@@ -141,47 +141,73 @@ const normalise = (r) => Array.isArray(r) ? { hits: r, status: null, bodyType: "
   : r && Array.isArray(r.hits) ? { hits: r.hits, status: r.status == null ? null : r.status, bodyType: r.bodyType || null, error: r.error || null }
   : { hits: [], status: null, bodyType: typeof r, error: null };
 
-// Build the list: movers page -> candidates -> BinderPOS hits, until N are
-// found. opts.search(name) returns BinderPOS hits for a name (injected by
-// src/buylist.js, and by tests). The store's buylist does not carry every
-// riser (2026-09-22: all ten weekly winners were Reality Fracture cards the
-// buylist had none of), so after the front page's weekly and daily winners
-// the walk continues down the 50-row View More lists, weekly then daily,
-// and stops at N hits or MAX_TRIED names. Lookups run ONE AT A TIME with
-// opts.delayMs between them: five at once, sixty in ten seconds, had
-// BinderPOS answering empty for names its search finds when asked politely
-// (2026-09-22, probe 35783810177: "Roaming Throne" 0 in the burst, 6 alone).
-export async function buildWanted(opts) {
-  const n = opts.n || WANTED_N, delayMs = opts.delayMs == null ? 350 : opts.delayMs;
+/* The build is a small state machine so it can run a few lookups per cron
+   tick: BinderPOS's portal sits behind Cloudflare rate limiting and answered
+   HTTP 429 "error code: 1015" from the ninth lookup of a run even at 350 ms
+   apart (2026-09-22, lastTry probe), so a list needs several ticks' worth of
+   polite calls. State: {startedAt, n, queue, more, seen, hits, missed, probe,
+   tried, pages, front, backoffUntil}. */
+export const BUDGET = 5;          // lookups per tick
+export const STEP_DELAY_MS = 2000;
+export const BACKOFF_MS = 10 * 60 * 1000;
+
+export async function startWanted(opts) {
+  const n = opts.n || WANTED_N;
   const html = await fetchMovers(opts.fetchFn);
   const parsed = parseMovers(html);
   const front = pickWanted(parsed, 1000);
   if (!front.length) throw new Error("no movers rows parsed (" + html.length + " bytes)");
-  const seen = new Set(front.map((c) => letters(c.name)));
-  const queue = front.slice();
-  const more = [MORE_URLS.weekly, MORE_URLS.daily];
-  const hits = [], missed = [], probe = [], pages = [MOVERS_URL];
-  let tried = 0;
-  while (hits.length < n && tried < MAX_TRIED) {
-    if (!queue.length) {
-      const url = more.shift();
+  return { startedAt: new Date().toISOString(), n, queue: front.slice(), more: [MORE_URLS.weekly, MORE_URLS.daily], seen: front.map((c) => letters(c.name)),
+    hits: [], missed: [], probe: [], tried: 0, pages: [MOVERS_URL], front: front.slice(0, n).map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), backoffUntil: 0 };
+}
+
+// Up to `budget` lookups; returns {state, done}. A 429 puts the name back,
+// sets backoffUntil and ends the step.
+export async function stepWanted(state, opts) {
+  const budget = opts.budget || BUDGET, delayMs = opts.delayMs == null ? STEP_DELAY_MS : opts.delayMs;
+  const seen = new Set(state.seen);
+  let did = 0;
+  while (state.hits.length < state.n && state.tried < MAX_TRIED && did < budget) {
+    if (!state.queue.length) {
+      const url = state.more.shift();
       if (!url) break;
       let rows = [];
-      try { rows = parseRows(await fetchMovers(opts.fetchFn, url)); pages.push(url); } catch { rows = []; }
-      for (const c of rows) { const k = letters(c.name); if (k && !seen.has(k)) { seen.add(k); queue.push(c); } }
-      if (!queue.length) continue;
+      try { rows = parseRows(await fetchMovers(opts.fetchFn, url)); state.pages.push(url); } catch { rows = []; }
+      for (const c of rows) { const k = letters(c.name); if (k && !seen.has(k)) { seen.add(k); state.seen.push(k); state.queue.push(c); } }
+      if (!state.queue.length) continue;
     }
-    const c = queue.shift();
-    if (tried > 0 && delayMs) await new Promise((r) => setTimeout(r, delayMs));
-    tried++;
+    const c = state.queue.shift();
+    if (did > 0 && delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    did++;
     const got = await opts.search(c.name).then(normalise).catch((e) => ({ hits: [], status: null, bodyType: "error", error: String((e && e.message) || e).slice(0, 160) }));
+    if (got.status === 429) {
+      state.queue.unshift(c);
+      state.backoffUntil = Date.now() + BACKOFF_MS;
+      state.probe.push({ name: c.name, status: 429, got: 0, bodyType: got.bodyType, first: null, error: "rate limited; backing off", matched: null });
+      break;
+    }
+    state.tried++;
     const hit = matchHit(c, got.hits);
-    // What each lookup saw, for the deploy smoke and /wanted readers.
-    probe.push({ name: c.name, status: got.status, got: got.hits.length, bodyType: got.bodyType, first: got.hits[0] ? String(got.hits[0].cardName) : null, error: got.error, matched: hit ? hit.setName : null });
-    if (hit) hits.push({ ...hit, wanted: { price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: hits.length + 1 } });
-    else missed.push(c.name);
+    state.probe.push({ name: c.name, status: got.status, got: got.hits.length, bodyType: got.bodyType, first: got.hits[0] ? String(got.hits[0].cardName) : null, error: got.error, matched: hit ? hit.setName : null });
+    if (hit) state.hits.push({ ...hit, wanted: { price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: state.hits.length + 1 } });
+    else state.missed.push(c.name);
   }
-  return { source: MOVERS_URL, pages, asOf: new Date().toISOString(), tried, picked: front.slice(0, n).map((c) => ({ name: c.name, setCode: c.setCode, price: c.price, change: c.change, pct: c.pct })), missed: missed.slice(0, 60), probe, count: hits.length, hits };
+  const exhausted = !state.queue.length && !state.more.length;
+  const done = state.hits.length >= state.n || state.tried >= MAX_TRIED || exhausted;
+  return { state, done };
+}
+
+export const resultOf = (state) => ({ source: MOVERS_URL, pages: state.pages, asOf: new Date().toISOString(), startedAt: state.startedAt, tried: state.tried, picked: state.front, missed: state.missed.slice(0, 60), probe: state.probe.slice(-60), count: state.hits.length, hits: state.hits });
+
+// The whole build in one go (tests, and anything with time to spare).
+export async function buildWanted(opts) {
+  let state = await startWanted(opts);
+  for (let i = 0; i < 100; i++) {
+    const r = await stepWanted(state, { ...opts, budget: opts.budget || 1000 });
+    state = r.state;
+    if (r.done || state.backoffUntil > Date.now()) break;
+  }
+  return resultOf(state);
 }
 
 async function readCached(env) {
@@ -191,19 +217,38 @@ async function readCached(env) {
   try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
   return null;
 }
+const STATE_KEY = "wanted:mtg:standard:state";
+const STATE_TTL = 6 * 3600 * 1000;
+const readJson = async (env, key) => { try { const t = await kvGet(env, key); return t ? JSON.parse(t) : null; } catch { return null; } };
 
-// The cron's job (src/index.js scheduled, every 5 min): rebuild the list
-// once a day (when the cached one is older than REFRESH_MS, or missing), at
-// most once per RETRY_MS. A build that finds nothing is recorded (LAST_TRY_KEY, shown to
+// The cron's job (src/index.js scheduled, every 5 min): once a day (when the
+// cached list is older than REFRESH_MS, or missing) start a build, then
+// advance it BUDGET lookups per tick until it is done; at most one start per
+// RETRY_MS. A build that finds nothing is recorded (LAST_TRY_KEY, shown to
 // /wanted readers) but never replaces a good list.
 export async function refreshWanted(env, opts) {
-  const have = await readCached(env);
-  if (have && Date.now() - Date.parse(have.asOf) < REFRESH_MS) return { skipped: "fresh", asOf: have.asOf, count: have.count };
-  if (await kvGet(env, ATTEMPT_KEY)) return { skipped: "tried within the hour" };
-  await kvPut(env, ATTEMPT_KEY, new Date().toISOString(), RETRY_MS);
-  let v;
-  try { v = await buildWanted(opts); }
-  catch (e) { v = { source: MOVERS_URL, asOf: new Date().toISOString(), error: String((e && e.message) || e).slice(0, 200), tried: 0, probe: [], count: 0, hits: [] }; }
+  let state = await readJson(env, STATE_KEY);
+  if (!state) {
+    const have = await readCached(env);
+    if (have && Date.now() - Date.parse(have.asOf) < REFRESH_MS) return { skipped: "fresh", asOf: have.asOf, count: have.count };
+    if (await kvGet(env, ATTEMPT_KEY)) return { skipped: "tried within the hour" };
+    await kvPut(env, ATTEMPT_KEY, new Date().toISOString(), RETRY_MS);
+    try { state = await startWanted(opts); }
+    catch (e) {
+      const v = { source: MOVERS_URL, asOf: new Date().toISOString(), error: String((e && e.message) || e).slice(0, 200), tried: 0, probe: [], count: 0, hits: [] };
+      await kvPut(env, LAST_TRY_KEY, JSON.stringify(v), TTL_MS);
+      return v;
+    }
+  }
+  if (state.backoffUntil > Date.now()) return { skipped: "backing off until " + new Date(state.backoffUntil).toISOString(), tried: state.tried, count: state.hits.length };
+  const r = await stepWanted(state, opts);
+  state = r.state;
+  if (!r.done) {
+    await kvPut(env, STATE_KEY, JSON.stringify(state), STATE_TTL);
+    return { progress: true, tried: state.tried, count: state.hits.length, queued: state.queue.length, backoff: state.backoffUntil > Date.now() };
+  }
+  await kvPut(env, STATE_KEY, "", 1);   // done: the state expires at once
+  const v = resultOf(state);
   if (v.count > 0) {
     await kvPut(env, KV_KEY, JSON.stringify(v), TTL_MS);
     memo.at = Date.now(); memo.value = v;
@@ -214,11 +259,12 @@ export async function refreshWanted(env, opts) {
 }
 
 // What the route serves: the cached list, or an empty answer that says the
-// cron has yet to build one (with the last attempt's notes when there was one).
+// cron has yet to build one (with the build's progress and the last
+// attempt's notes when there are any).
 export async function wantedCards(env) {
   const have = await readCached(env);
   if (have) return have;
-  let lastTry = null;
-  try { const t = await kvGet(env, LAST_TRY_KEY); if (t) lastTry = JSON.parse(t); } catch { lastTry = null; }
-  return { source: MOVERS_URL, asOf: null, building: true, lastTry, count: 0, hits: [] };
+  const state = await readJson(env, STATE_KEY);
+  const lastTry = await readJson(env, LAST_TRY_KEY);
+  return { source: MOVERS_URL, asOf: null, building: true, progress: state ? { startedAt: state.startedAt, tried: state.tried, found: state.hits.length, queued: state.queue.length, backoffUntil: state.backoffUntil || 0, probe: state.probe.slice(-8) } : null, lastTry, count: 0, hits: [] };
 }
