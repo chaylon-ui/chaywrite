@@ -744,13 +744,31 @@
     var pay = $(".bl__pay"), tot = $("#bl-tcredit");
     if (!pay || !tot) return;
     var t = totalsOfCart(), more = t.credit - t.cash;
-    [pay, tot].forEach(function (el, i) { var c = i ? "bl__tot--charged" : "bl__pay--charged"; el.classList.remove(c); void el.offsetWidth; el.classList.add(c); });
+    [pay, tot].forEach(function (el, i) { var c = i ? "bl__tot--charged" : "bl__pay--charged"; el.classList.remove(c); void el.offsetWidth; el.classList.add(c); setTimeout(function () { el.classList.remove(c); }, 1250); });
     var old = root.querySelector(".bl__burst"); if (old) old.remove();
     if (more > 0.005) {
       var b = document.createElement("span"); b.className = "bl__burst"; b.textContent = "+" + money(more) + " more";
       tot.parentNode.appendChild(b);
       setTimeout(function () { if (b.parentNode) b.parentNode.removeChild(b); }, 1800);
     }
+    // Ultra (owner, 2026-09-22: "rainbow effects and fireworks minimalized to
+    // that area ... come from behind the number and then a little text that
+    // says maximizing payout with store credit"): a rainbow ring and two
+    // rounds of sparks burst from behind the credit total, and a caption
+    // shows for a moment. All inside the totals row; nothing moves.
+    var totals = $(".bl__totals");
+    ["bl__fx", "bl__fx-text"].forEach(function (c) { var x = root.querySelector("." + c); if (x && x.parentNode) x.parentNode.removeChild(x); });
+    var fx = document.createElement("span"); fx.className = "bl__fx"; fx.setAttribute("aria-hidden", "true");
+    var COLORS = ["#ffd166", "#ff6a5e", "#2fbf95", "#6ec6ff", "#c77dff", "#ffffff"], html = '<span class="bl__fx-rainbow"></span>';
+    for (var i = 0; i < 28; i++) {
+      var ang = (i / 28) * Math.PI * 2 + (Math.random() - 0.5) * 0.5, dist = 38 + Math.random() * 60, delay = i % 2 ? 0.45 : 0;
+      html += '<i class="bl__spark" style="--dx:' + (Math.cos(ang) * dist).toFixed(1) + "px;--dy:" + (Math.sin(ang) * dist).toFixed(1) + "px;--c:" + COLORS[i % COLORS.length] + ";--d:" + delay + 's"></i>';
+    }
+    fx.innerHTML = html;
+    tot.insertBefore(fx, tot.firstChild);        // inside the number, painted behind its digits
+    var cap = document.createElement("span"); cap.className = "bl__fx-text"; cap.innerHTML = "<b>Maximizing payout with store credit</b>";
+    if (totals) totals.appendChild(cap);
+    setTimeout(function () { [fx, cap].forEach(function (x) { if (x.parentNode) x.parentNode.removeChild(x); }); }, 2800);
   }
   root.addEventListener("change", function (e) {
     if (e.target && e.target.name === "bl-pay" && e.target.value === "Store Credit") chargeUp();
