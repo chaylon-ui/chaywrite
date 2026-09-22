@@ -55,7 +55,7 @@
 import { repriceCards, submitToBinderPos, cleanCards } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, buildDecisionEmail, sendEmail, emailConfigured } from "./stage-email.js";
-import { dryRunPlan } from "./stage-sync.js";
+import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
 export { safeImage };
@@ -310,6 +310,18 @@ export async function stageDoFetch(cx, request, url) {
     rec.cards = cards; rec.totals = totalsOf(cards);
     if (typeof b.note === "string") rec.note = b.note.slice(0, 500);
     if (changed) rec.events = (rec.events || []).concat([{ ts: cx.now(), action: "edited", by: by(b) }]).slice(-30);
+    await cx.storage.put(key, rec);
+    return doJson({ ok: true, record: rec });
+  }
+  if (p === "/_stage/bpsync" && post) {
+    // What happened when the worksheet's prices were pushed to BinderPOS.
+    const b = await bodyOf(request);
+    const key = "st:" + String(b.id || "").slice(0, 40);
+    const rec = await cx.storage.get(key);
+    if (!rec) return doJson({ ok: false, error: "no such record" }, 404);
+    const r = b.result && typeof b.result === "object" ? b.result : {};
+    rec.bpSync = { at: cx.now(), by: by(b), ok: !!r.ok, saved: !!r.saved, verified: r.verified == null ? null : !!r.verified, changes: Number(r.changes) || 0, matched: Number(r.matched) || 0, error: String(r.error || "").slice(0, 200), message: String(r.message || "").slice(0, 200) };
+    rec.events = (rec.events || []).concat([{ ts: cx.now(), action: r.ok && r.saved ? "prices pushed to BinderPOS" + (r.verified ? "" : " (unverified)") : r.ok ? "BinderPOS prices already matched" : "BinderPOS price push failed", by: by(b) }]).slice(-30);
     await cx.storage.put(key, rec);
     return doJson({ ok: true, record: rec });
   }
@@ -701,6 +713,19 @@ export async function serveStage(request, env, url, staffOk) {
     const g = await doCall(env, origin, "/_stage/get?id=" + encodeURIComponent(dr[1]));
     if (!g.ok) return Response.json({ ok: false, error: "no such buylist" }, { status: 404, headers: noStore });
     const out = await dryRunPlan(env, g.record);
+    return Response.json(out, { status: out.ok ? 200 : 400, headers: noStore });
+  }
+  const sv = p.match(new RegExp("^" + BASE + "/b/([A-Za-z0-9-]{1,40})/bp-save\\.json$"));
+  if (sv) {
+    // The real save (src/stage-sync.js pushBuylistPrices): admin account or
+    // the staff key, POST only, and the BinderPOS number typed back as
+    // confirm. The outcome is written on the record.
+    if (request.method !== "POST") return Response.json({ error: "POST" }, { status: 405, headers: noStore });
+    if (!(user && user.role === "admin") && !pinOk) return Response.json({ error: "admin sign-in or staff key required" }, { status: 403, headers: noStore });
+    const g = await doCall(env, origin, "/_stage/get?id=" + encodeURIComponent(sv[1]));
+    if (!g.ok) return Response.json({ ok: false, error: "no such buylist" }, { status: 404, headers: noStore });
+    const out = await pushBuylistPrices(env, g.record, { confirm: (form && form.confirm) || url.searchParams.get("confirm") || "" });
+    try { await doCall(env, origin, "/_stage/bpsync", { id: g.record.id, result: out, by: user ? user.email : "staff key" }); } catch {}
     return Response.json(out, { status: out.ok ? 200 : 400, headers: noStore });
   }
   const m = p.match(new RegExp("^" + BASE + "/(b|email)/([A-Za-z0-9-]{1,40})$"));

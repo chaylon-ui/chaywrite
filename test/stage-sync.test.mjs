@@ -47,3 +47,31 @@ test("the plan: matched lines with both prices, the changes counted, unmatched o
   assert.equal(red.ShopifyCustomer, "<present>"); assert.equal(red.customerEmail, "<present>"); assert.equal(red.notes, "<present>");
   assert.equal(red.shopifyCustomerBuylistDetails.length, 3);
 });
+
+test("the real save: refuses without the right confirm or once BinderPOS has approved; posts the plan payload and verifies the re-read", async () => {
+  const { pushBuylistPrices } = await import("../src/stage-sync.js");
+  const rec = { id: "x", number: "9P-1004", paymentType: "Cash", bp: { number: "908738" }, cards: OURS.slice(0, 2) };
+  // portal stubs are reached through the module's imports, so drive them with a fake fetch on api.binderpos.com
+  const calls = [];
+  const before = JSON.parse(JSON.stringify(DETAILS));
+  const after = JSON.parse(JSON.stringify(DETAILS)); after.shopifyCustomerBuylistDetails[0].cashBuyPrice = 2; after.shopifyCustomerBuylistDetails[0].storeCreditBuyPrice = 2;
+  let reads = 0;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes("identitytoolkit")) return new Response(JSON.stringify({ idToken: "t", refreshToken: "r", expiresIn: "3600" }), { status: 200 });
+    if (u.endsWith("/details")) { reads++; return new Response(JSON.stringify(reads === 1 ? before : after), { status: 200 }); }
+    if (u.endsWith("/api/buylist/save")) { calls.push(JSON.parse(init.body)); return new Response(JSON.stringify({ id: 908738 }), { status: 200 }); }
+    return new Response("nope", { status: 404 });
+  };
+  const env = { BINDERPOS_LOGIN_EMAIL: "s@x", BINDERPOS_LOGIN_PASSWORD: "p" };
+  assert.match((await pushBuylistPrices(env, rec, { confirm: "1" })).error, /confirm must be/);
+  const r = await pushBuylistPrices(env, rec, { confirm: "908738" });
+  assert.equal(r.ok, true); assert.equal(r.saved, true); assert.equal(r.verified, true); assert.equal(r.changes, 1);
+  assert.equal(calls.length, 1); assert.ok(!("cards" in calls[0])); assert.equal(calls[0].shopifyCustomerBuylistDetails[0].cashBuyPrice, 2);
+  assert.equal(calls[0].ShopifyCustomer.email, "a@b.c");   // the real payload keeps the customer block
+  assert.deepEqual(r.checks[0].now, { qty: 1, cash: 2, credit: 2 });
+  // approved in BinderPOS: refused before any save
+  reads = 0; before.approved = true;
+  const no = await pushBuylistPrices(env, rec, { confirm: "908738" });
+  assert.equal(no.ok, false); assert.match(no.error, /already has this buylist approved/); assert.equal(calls.length, 1);
+});

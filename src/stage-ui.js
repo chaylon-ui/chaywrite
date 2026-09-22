@@ -164,6 +164,7 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 <div><span>Store credit total</span><b id="t-credit">${money(r.totals.credit)}</b></div>
 </div></div>
 ${notes(r.repriced, "At submit")}${notes(r.repricedAtApproval, "At approval")}
+${r.bpSync ? `<div class="${r.bpSync.ok && (r.bpSync.verified !== false) ? "okmsg" : "err"}"><b>BinderPOS prices:</b> ${esc(r.bpSync.message || r.bpSync.error || "")} <span class="muted">(${esc(when(r.bpSync.at))}${r.bpSync.by ? " · " + esc(r.bpSync.by) : ""})</span></div>` : ""}
 <div class="card" id="sheet"><h3>Cards <span class="dirty">· unsaved changes</span></h3>
 ${canEdit || canPrices ? `<p class="muted" style="margin:0 0 8px">${canEdit ? "Change a quantity" + (canPrices ? " or a price" : "") : "Change a price"} and <b>Save changes</b>.${canEdit ? " A quantity of 0 removes the line." : ""}${canPrices ? " A price you type is kept at approval (BinderPOS's price of the day is used for the rest); a red field is a staff price." : ""}</p>` : (waiting ? `<p class="muted" style="margin:0 0 8px">Your account can view this buylist; changing it needs a permission an admin can give you.</p>` : "")}
 <table><thead><tr><th class="t"></th><th>Card</th><th>Condition</th><th class="n">Qty</th><th class="n">Cash</th><th class="n">Credit</th><th class="n">Line cash / credit</th></tr></thead><tbody>${(r.cards || []).map(line).join("")}</tbody></table>

@@ -15,7 +15,7 @@
    plan; the save itself comes in a later step, after the owner has seen
    one plan for a real buylist. */
 
-import { portalGet } from "./portal.js";
+import { portalGet, portalPost } from "./portal.js";
 
 const str = (v) => (v == null ? "" : String(v));
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
@@ -89,4 +89,39 @@ export async function dryRunPlan(env, rec) {
   return { ok: true, dryRun: true, bpId, number: rec.number, paymentType: rec.paymentType, detailKeys: Object.keys(details || {}), theirLines: (details && details.shopifyCustomerBuylistDetails || []).length,
     finalLines: (details && details.finalBuylistDetails || []).length, approved: details && details.approved, completed: details && details.completed,
     ...plan, payload: redactDetails(plan.payload) };
+}
+
+// The real thing: read, plan, POST /api/buylist/save with the plan's payload,
+// read again and check every changed line now carries the worksheet's
+// prices. Only for a buylist that is still pending in BinderPOS. Returns what
+// the record keeps; never throws.
+export async function pushBuylistPrices(env, rec, opts) {
+  const o = opts || {};
+  const bpId = rec && rec.bp && rec.bp.number ? String(rec.bp.number) : "";
+  if (!bpId) return { ok: false, error: "this buylist has no BinderPOS number yet" };
+  if (o.confirm != null && String(o.confirm) !== bpId) return { ok: false, error: "confirm must be the BinderPOS number " + bpId };
+  let details;
+  try { details = await portalGet(env, "/api/buylist/byId/" + encodeURIComponent(bpId) + "/details"); }
+  catch (e) { return { ok: false, error: "read failed: " + String((e && e.message) || e).slice(0, 200) }; }
+  if (details && (details.approved || details.completed)) return { ok: false, error: "BinderPOS already has this buylist " + (details.completed ? "completed" : "approved") + "; prices can only be saved while it is pending", bpId };
+  const plan = planBuylistPrices(details, rec.cards, rec.paymentType);
+  const summary = { bpId, matched: plan.matched, changes: plan.changes, unmatchedOurs: plan.unmatchedOurs.length, unmatchedTheirs: plan.unmatchedTheirs.length };
+  if (!plan.changes) return { ok: true, saved: false, ...summary, message: "BinderPOS already has these prices; nothing to save" };
+  let reply;
+  try { reply = await portalPost(env, "/api/buylist/save", plan.payload); }
+  catch (e) { return { ok: false, error: "save failed: " + String((e && e.message) || e).slice(0, 200), ...summary }; }
+  // Verify: read it back and compare the lines that were meant to change.
+  let after;
+  try { after = await portalGet(env, "/api/buylist/byId/" + encodeURIComponent(bpId) + "/details"); }
+  catch (e) { return { ok: true, saved: true, verified: false, error: "saved, but the re-read failed: " + String((e && e.message) || e).slice(0, 200), ...summary }; }
+  const theirs = Array.isArray(after && after.shopifyCustomerBuylistDetails) ? after.shopifyCustomerBuylistDetails : [];
+  const checks = plan.lines.filter((l) => l.change).map((l) => {
+    const now = theirs.find((x) => str(x.id) === l.id) || null;
+    const cash = now ? num(now.cashBuyPrice) : null, credit = now ? num(now.storeCreditBuyPrice) : null, qty = now ? num(now.quantity) : null;
+    const good = !!now && (l.ourCash == null || cash === l.ourCash) && (l.ourCredit == null || credit === l.ourCredit) && qty === l.ourQty;
+    return { id: l.id, name: l.name, condition: l.condition, finish: l.finish, wanted: { qty: l.ourQty, cash: l.ourCash, credit: l.ourCredit }, now: now ? { qty, cash, credit } : null, good };
+  });
+  const verified = checks.every((c) => c.good);
+  return { ok: true, saved: true, verified, checks, reply: typeof reply === "object" && reply ? Object.keys(reply).slice(0, 12) : String(reply).slice(0, 80), ...summary,
+    message: verified ? "Saved: BinderPOS now shows the worksheet prices on " + checks.length + " line" + (checks.length === 1 ? "" : "s") + "." : "Saved, but the re-read does not show every price - see checks." };
 }
