@@ -200,25 +200,15 @@ html[data-xg-theme="dark"] .bl__card[role="button"]:focus-visible,
 .bl__pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--bl-accent-soft); color: var(--bl-accent); line-height: 1.4; vertical-align: middle; white-space: nowrap; }
 /* Foil rows: a holographic badge, a tinted row and a band above the foil
    block, so a seller cannot mistake the foil line for the plain one
-   (owner, 2026-09-15). */
-.bl__pill--finish { font-size: 12px; padding: 3px 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #1d2327; background: linear-gradient(115deg, #ffe9a8 0%, #ffc6e0 30%, #bfe3ff 60%, #d2ffd8 85%, #ffe9a8 100%); border: 1px solid rgba(0, 0, 0, 0.14); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
-.bl__orow--finish > span:first-child { background: linear-gradient(90deg, #fff3cd 0%, #fffbee 70%, #fff 100%); box-shadow: inset 4px 0 0 #f0b429; }
-/* That gradient is hard-coded LIGHT in both themes, so its ink has to be too.
-   It was inheriting --bl-ink, which is near-white in dark mode, and the
-   condition name disappeared into the cream (owner screenshot, 2026-09-17:
-   four foil rows with invisible grades). Scoped to this cell only - the rest
-   of the row is on the normal surface and keeps the theme's colours. */
-.bl__orow--finish > span:first-child,
-.bl__orow--finish > span:first-child .bl__muted,
-html[data-xg-theme="dark"] .bl__orow--finish > span:first-child,
-html[data-xg-theme="dark"] .bl__orow--finish > span:first-child .bl__muted { color: #1d2327; }
-.bl .bl__orow--finish > span:first-child .bl__condbtn,
-html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn { color: #1d2327; text-decoration-color: rgba(29, 35, 39, 0.5); }
-.bl .bl__orow--finish > span:first-child .bl__condbtn:hover,
-.bl .bl__orow--finish > span:first-child .bl__condbtn:focus-visible,
-html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn:hover,
-html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn:focus-visible { color: #0b6b4f; text-decoration-color: currentColor; }
-.bl__orow--band > .bl__band { grid-column: 1 / -1; justify-content: flex-start; min-height: 26px; padding: 4px 12px; margin-top: 4px; border-top: 2px solid #f0b429; background: #fff3cd; color: #7a4d00; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+   (owner, 2026-09-15). The tint is a translucent amber wash over whatever
+   the surface is, so it reads the same in both themes and the text keeps
+   the theme's ink (the earlier hard-coded cream looked pasted-on in dark
+   mode - owner screenshot, 2026-09-22 - and needed its own dark ink). */
+.bl__pill--finish { font-size: 12px; padding: 3px 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #1d2327; background: linear-gradient(115deg, #ffe9a8 0%, #ffc6e0 30%, #bfe3ff 60%, #d2ffd8 85%, #ffe9a8 100%); border: 1px solid rgba(0, 0, 0, 0.14); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.bl__orow--finish > span { background: rgba(240, 180, 41, 0.06); }
+.bl__orow--finish > span:first-child { background: linear-gradient(90deg, rgba(240, 180, 41, 0.2) 0%, rgba(240, 180, 41, 0.06) 100%); box-shadow: inset 4px 0 0 #f0b429; }
+.bl__orow--band > .bl__band { grid-column: 1 / -1; justify-content: flex-start; min-height: 26px; padding: 4px 12px; margin-top: 4px; border-top: 2px solid #f0b429; background: rgba(240, 180, 41, 0.14); color: #7a4d00; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.bl--dark .bl__orow--band > .bl__band { color: #f6c453; }
 .bl__add { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 999px; }
 .bl__nobuy { display: inline-block; font-size: 11.5px; font-weight: 700; line-height: 1.2; padding: 6px 9px; border-radius: 999px; background: var(--bl-surface-2); color: var(--bl-muted); white-space: nowrap; }
 /* Condition guide: a condition in the offers grid opens the store's own
@@ -247,12 +237,21 @@ html[data-xg-theme="dark"] .bl .bl__orow--finish > span:first-child .bl__condbtn
    lines scroll, the title, payment choice, totals and buttons stay put.
    --xg-fixed-bottom is the header's bottom edge (xg-header-offset.js),
    --xg-tick-h the ticker pinned to the bottom of the screen (xg-ticker.js). */
-.bl__cart { position: sticky; top: calc(var(--xg-fixed-bottom, 0px) + 14px); max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 28px); display: flex; flex-direction: column; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); padding: 18px; }
+/* Owner, 2026-09-22: "make it stand out a bit more from the card list so
+   it looks more like a card area that they submitted the cards to". The
+   panel is drawn as a tray: an accent-coloured frame, a tinted top, a
+   heading with a subline saying what the area is, and the lines inside a
+   dashed well - the place cards land when Add is pressed. */
+.bl__cart { position: sticky; top: calc(var(--xg-fixed-bottom, 0px) + 14px); max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 28px); display: flex; flex-direction: column; background: linear-gradient(180deg, var(--bl-accent-soft) 0, transparent 120px), var(--bl-surface); border: 2px solid var(--bl-accent); border-radius: var(--bl-radius); box-shadow: 0 0 0 4px var(--bl-accent-soft), var(--bl-shadow); padding: 18px; }
 .bl__cart > * { flex: 0 0 auto; }
-.bl__cart > #bl-lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -8px; padding: 0 8px; }
-.bl__h2 { margin: 0 0 12px; font-size: 18px; font-weight: 700; color: var(--bl-ink); display: flex; justify-content: space-between; align-items: baseline; }
-.bl__h2 span { font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--bl-accent-soft); color: var(--bl-accent); }
-.bl__h2 span:empty { display: none; }
+.bl__cart > #bl-lines { flex: 1 1 auto; min-height: 96px; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 8px 10px; border: 1.5px dashed var(--bl-line-strong); border-radius: 12px; background: var(--bl-surface-2); }
+.bl__cart > #bl-lines > .bl__muted:only-child { margin: 0; padding: 18px 6px; text-align: center; }
+.bl__h2 { margin: 0 0 10px; font-size: 18px; font-weight: 700; color: var(--bl-ink); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
+.bl__h2 #bl-count { font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--bl-accent-soft); color: var(--bl-accent); }
+.bl__h2 #bl-count:empty { display: none; }
+.bl__h2 small { flex: 1 0 100%; margin-top: 2px; font-size: 12.5px; font-weight: 500; color: var(--bl-muted); }
+.bl__h2 .bl__tray { display: inline-block; width: 20px; height: 16px; margin-right: 8px; vertical-align: -2px; border: 2px solid var(--bl-accent); border-top: 0; border-radius: 0 0 6px 6px; position: relative; }
+.bl__h2 .bl__tray::before { content: ""; position: absolute; left: 3px; right: 3px; top: -6px; height: 8px; border: 2px solid var(--bl-accent); border-bottom: 0; border-radius: 3px 3px 0 0; }
 /* one heading per card, its conditions beneath it */
 .bl__group { border-top: 1px solid var(--bl-line); padding: 10px 0 6px; }
 .bl__group:first-child { border-top: 0; padding-top: 0; }

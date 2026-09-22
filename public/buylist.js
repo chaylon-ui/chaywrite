@@ -43,7 +43,7 @@
         // inside it, so the confirm names the payment type chosen there.
         '<div id="bl-sheetbar" class="bl__sheetbar" role="button" tabindex="0" aria-expanded="false" aria-controls="bl-lines"><span class="bl__sheettext"><b>Your buylist</b><span id="bl-sheetsum" class="bl__sheetsum bl__muted">Empty</span></span>' +
           '<span class="bl__sheetbtns"><button id="bl-sheetview" type="button" class="bl__btn bl__btn--sm"><span id="bl-sheetviewtxt">View</span> <span class="bl__chev" aria-hidden="true">&#9650;</span></button><button id="bl-sheetsubmit" type="button" class="bl__btn bl__btn--primary bl__btn--sm" disabled>Submit</button></span></div>' +
-        '<h2 class="bl__h2">Your buylist <span id="bl-count" class="bl__muted"></span></h2>' +
+        '<h2 class="bl__h2"><span class="bl__tray" aria-hidden="true"></span>Your buylist <span id="bl-count" class="bl__muted"></span><small>The cards you are sending to Exor Games</small></h2>' +
         '<div id="bl-lines"><p class="bl__muted">Loading your saved list…</p></div>' +
         '<div class="bl__pay"><label><input type="radio" name="bl-pay" value="Cash" checked> Cash</label><label><input type="radio" name="bl-pay" value="Store Credit"> Store credit</label></div>' +
         '<div class="bl__totals"><span>Cash <b id="bl-tcash">$0.00</b></span><span>Store credit <b id="bl-tcredit">$0.00</b></span></div>' +
