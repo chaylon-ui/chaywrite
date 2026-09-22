@@ -46,7 +46,6 @@ const ORDER_FIELDS = `id name createdAt cancelledAt displayFulfillmentStatus tag
   currentTotalPriceSet { shopMoney { amount currencyCode } }
   shippingLine { title }
   shippingAddress { name city provinceCode }
-  fulfillmentOrders(first: 5) { edges { node { status assignedLocation { name location { id } } } } }
   lineItems(first: 250) { pageInfo { hasNextPage endCursor } edges { node { ${LI_FIELDS} } } }`;
 
 // shopQuery(env, query, variables) -> raw GraphQL JSON ({data, errors}); provided by index.js
@@ -104,7 +103,10 @@ export function toRecord(o) {
   if (!lines.length) return null;
   const ship = (o.shippingLine && o.shippingLine.title) || '';
   const money = o.currentTotalPriceSet && o.currentTotalPriceSet.shopMoney;
-  const fo = ((o.fulfillmentOrders && o.fulfillmentOrders.edges) || []).map((e) => e.node).find((n) => n && n.assignedLocation);
+  // fulfillmentOrders (assigned location) is deliberately not requested: it needs a
+  // fulfillment-orders scope the app may lack, and a scope error there blanks the
+  // whole query. One store ships everything (owner, 2026-09-22), so it is not needed.
+  const fo = null;
   return {
     num: orderNum(o.id), gid: o.id, name: o.name, createdAt: o.createdAt || '',
     customer: (o.customer && o.customer.displayName) || (o.shippingAddress && o.shippingAddress.name) || '',
