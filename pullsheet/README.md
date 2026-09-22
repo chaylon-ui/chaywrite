@@ -67,6 +67,31 @@ Verified with a local harness (mock KV + mocked Shopify) before pushing.
   lines use `unfulfilledQuantity` instead of `quantity`, so edited or partly
   fulfilled orders are not re-pulled; the dead `TAG_AFTER_PRINT` setting is gone.
 
+## Phase 2 (on this branch): the live order queue
+
+- `POST /hook/order` receives Shopify ORDERS_PAID / UPDATED / CANCELLED /
+  FULFILLED webhooks. The signature is checked with the app's client secret,
+  then the order is re-read with the worker's own token; a compact record is
+  kept under `queue:<order number>` while anything is left to ship (cancelled,
+  fulfilled and POS orders drop out). The worker registers the four hooks on
+  itself the first time the queue is read, and re-checks every 12 hours
+  (Staff & settings shows nothing yet; `GET /api/hooks` as admin lists them).
+- **Queue** button in the top bar: the waiting orders, oldest first, with age,
+  items, pickup/ship, "pulled before" and "on sheet #" flags. Tick orders,
+  **Make pull sheet** builds the job server-side from unfulfilled quantities
+  (`src/queue.js` is the userscript's grouping ported: game -> set ->
+  collector, Yu-Gi-Oh by frame type, Pokémon alphabetical) and tags the
+  orders PULLSHEET. Orders already on an active sheet cannot be picked twice.
+- Admins get **Import unfulfilled orders** (placed since a date, POS skipped
+  by default) to catch up on orders placed before the hooks existed.
+- Rarity, mana and Yu-Gi-Oh set/frame lookups are cached in KV (`enr:*`).
+  After a sheet is built the app calls `POST /api/jobs/:id/enrich` in small
+  passes until nothing is missing; sheets built from the userscript are not
+  touched by it.
+- The userscript keeps working unchanged alongside the queue.
+
+Verified by `scratchpad/phase2.mjs`-style harness (30 checks) before pushing.
+
 ## Still open (later phases)
 
 - Every patch is a whole-job read-modify-write in KV (no compare-and-set), so

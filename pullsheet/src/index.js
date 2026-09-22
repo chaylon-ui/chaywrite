@@ -12,6 +12,8 @@
  * Edit STAFF below to your roster.
  */
 
+import * as Q from './queue.js';
+
 const STAFF = ['Gage', 'Sydney', 'Beth', 'Sinnis', 'Dresmond', 'Josh', 'Jeff', 'Brandon', 'Sebastian', 'Chaylon', 'Catlin'];
 const ADMIN_NAMES = ['Chaylon', 'Catlin'];
 const QTAG = 'quarantine1';
@@ -23,10 +25,22 @@ const AUTH_LOCK_SECS = 15 * 60;  // lockout length (KV TTL)
 const LOGO = 'data:image/png;base64,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';
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const { pathname } = url;
     try {
+      // ── Shopify order webhooks (paid / updated / cancelled / fulfilled) ──
+      // The body is a hint: after the signature check the order is re-read
+      // with the worker's own token and its queue record kept or dropped.
+      if (pathname === '/hook/order' && req.method === 'POST') {
+        const raw = await req.text();
+        const ok = await Q.verifyHmac(raw, req.headers.get('X-Shopify-Hmac-SHA256') || '', env.SHOPIFY_CLIENT_SECRET);
+        if (!ok) return json({ error: 'bad signature' }, 401);
+        let b = {}; try { b = JSON.parse(raw); } catch (_) {}
+        const num = Q.orderNum(b.admin_graphql_api_id || b.id);
+        if (num) ctx.waitUntil(Q.refreshOrder(env, shopQuery, Q.orderGid(num)).catch(() => {}));
+        return json({ ok: true });
+      }
       // ── per-user login (username + 4-digit PIN) ──
       if (pathname === '/auth' && req.method === 'POST') {
         const b = await req.json().catch(() => ({}));
@@ -75,7 +89,7 @@ export default {
         const bearer = auth === `Bearer ${env.API_TOKEN}`;
         const me = await sessionUser(getCookie(req, 'xgps'), env);
         if (!bearer && !me) return json({ error: 'unauthorized' }, 401);
-        return api(req, env, pathname, me);
+        return api(req, env, pathname, me, (p) => ctx.waitUntil(p));
       }
       return new Response('Not found', { status: 404 });
     } catch (e) {
@@ -144,7 +158,7 @@ async function serveLogin(env) {
 }
 
 /* ───────────────────────── API ───────────────────────── */
-async function api(req, env, pathname, me) {
+async function api(req, env, pathname, me, ctxWait) {
   const parts = pathname.split('/').filter(Boolean); // ['api','jobs', ...]
   const id = parts[2];
 
@@ -235,6 +249,66 @@ async function api(req, env, pathname, me) {
       .map((e) => ({ name: e.name, picks: e.picks, packed: e.packed, totalPickMs: e.pickMs || 0, avgPickMs: e.pickN ? Math.round(e.pickMs / e.pickN) : null, mistakes: e.mistakes }))
       .sort((a, b) => (b.picks - a.picks) || (b.packed - a.packed));
     return json({ people, recent: recent.slice(0, 50) });
+  }
+
+  // ── the live order queue (phase 2) ──
+  if (parts[1] === 'queue') {
+    if (!parts[2] && req.method === 'GET') {
+      const origin = new URL(req.url).origin;
+      const rows = await Q.listQueue(env);
+      const hooksAt = await env.JOBS.get('sys:hooksAt');
+      // keep the Shopify hooks pointed here (at most every 12h, off the request path)
+      if (!hooksAt || Date.now() - Date.parse(hooksAt) > 43200e3) {
+        await env.JOBS.put('sys:hooksAt', new Date().toISOString());
+        if (typeof ctxWait === 'function') ctxWait(ensureHooks(env, origin).catch(() => {}));
+      }
+      return json({ rows, hooksAt: hooksAt || '' });
+    }
+    if (parts[2] === 'backfill' && req.method === 'POST') {
+      if (!isAdmin(me)) return json({ error: 'Admins only' }, 403);
+      const b = await req.json().catch(() => ({}));
+      const since = String(b.since || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return json({ error: 'since must be YYYY-MM-DD' }, 400);
+      const r = await Q.backfill(env, shopQuery, { since, excludePos: b.excludePos !== false, cursor: b.cursor || null });
+      return json(r);
+    }
+    if (parts[2] === 'refresh' && req.method === 'POST') {
+      const b = await req.json().catch(() => ({}));
+      const num = Q.orderNum(b.num || b.gid);
+      if (!num) return json({ error: 'missing order' }, 400);
+      return json(await Q.refreshOrder(env, shopQuery, Q.orderGid(num)));
+    }
+    if (parts[2] === 'sheet' && req.method === 'POST') {
+      const b = await req.json().catch(() => ({}));
+      const nums = [...new Set((Array.isArray(b.nums) ? b.nums : []).map((x) => Q.orderNum(x)).filter(Boolean))].slice(0, 100);
+      if (!nums.length) return json({ error: 'pick at least one order' }, 400);
+      const records = (await Promise.all(nums.map((n) => Q.getRecord(env, n)))).filter(Boolean);
+      if (!records.length) return json({ error: 'those orders are no longer in the queue' }, 409);
+      // never double-book an order that already sits on an active sheet
+      const active = new Set((await Q.listQueue(env)).filter((r) => r.sheet).map((r) => r.num));
+      const fresh = records.filter((r) => !active.has(r.num));
+      if (!fresh.length) return json({ error: 'every selected order is already on an active sheet' }, 409);
+      const built = await Q.buildJob(env, fresh);
+      const jobId = await newId(env);
+      const createdAt = new Date().toISOString();
+      const job = { id: jobId, createdAt, v: 2, orders: built.orders, games: built.games, sealed: built.sealed, total: built.total,
+        state: { status: 'open', found: {}, cardNotes: {}, note: '', quarantined: {}, workedBy: [], archived: false, lastSavedBy: me || b.employee || '', lastSavedAt: createdAt } };
+      await put(env, jobId, job);
+      const warnings = [];
+      for (const o of fresh) {
+        try { const res = await tagOrder(env, o.gid, [PULL_TAG], true); const ue = ((res && res.data && res.data.tagsAdd) || {}).userErrors || []; if (ue.length) warnings.push(o.name + ': ' + ue.map((e) => e.message).join(', ')); }
+        catch (e) { warnings.push(o.name + ': tag failed'); }
+        o.tags = [...new Set([...(o.tags || []), PULL_TAG])]; await Q.putRecord(env, o);
+      }
+      return json({ id: jobId, orders: fresh.length, skipped: records.length - fresh.length, enrichPending: built.enrichPending, warnings });
+    }
+    return json({ error: 'unknown queue op' }, 404);
+  }
+  if (parts[1] === 'hooks') {
+    if (!isAdmin(me)) return json({ error: 'Admins only' }, 403);
+    const origin = new URL(req.url).origin;
+    if (req.method === 'POST') { const r = await ensureHooks(env, origin); await env.JOBS.put('sys:hooksAt', new Date().toISOString()); return json(r); }
+    return json(await listHooks(env, origin));
   }
 
   if (parts[1] !== 'jobs') return json({ error: 'unknown route' }, 404);
@@ -471,6 +545,17 @@ async function api(req, env, pathname, me) {
       stampOrder(os, me || body.employee || '');
       await put(env, id, job);
       return json({ ok: true });
+    }
+
+    // POST /api/jobs/:id/enrich  → top up rarity / mana / set names for a v2 sheet (small batches)
+    if (parts[3] === 'enrich' && req.method === 'POST') {
+      if (job.v !== 2) return json({ remaining: 0, note: 'not a queue-built sheet' });
+      const rows = Q.jobRows(job);
+      const remaining = await Q.enrichPass(env, rows);
+      const model = Q.regroup(rows);
+      job.games = model.games; job.sealed = model.sealed;
+      await put(env, id, job);
+      return json({ remaining });
     }
 
     // POST /api/jobs/:id/flash  -> blink the ESL shelf tags for this sheet (or one order)
@@ -751,6 +836,26 @@ async function tagOrder(env, gid, tags, add) {
     body: JSON.stringify({ query: mutation, variables: { id: gid, tags: arr } }),
   });
   return r.json();
+}
+
+// Keep Shopify's order webhooks pointed at this worker (same idea as
+// exor-binder's INVENTORY_LEVELS_UPDATE self-registration in chaywrite/src/room.js).
+async function listHooks(env, origin) {
+  const cb = origin + '/hook/order';
+  const r = await shopQuery(env, `{ webhookSubscriptions(first:50, topics:[${Q.HOOK_TOPICS.join(',')}]) { edges { node { id topic endpoint { ... on WebhookHttpEndpoint { callbackUrl } } } } } }`);
+  const subs = ((r && r.data && r.data.webhookSubscriptions && r.data.webhookSubscriptions.edges) || []).map((e) => e.node);
+  const have = subs.filter((n) => n.endpoint && n.endpoint.callbackUrl === cb).map((n) => n.topic);
+  return { callback: cb, registered: have, missing: Q.HOOK_TOPICS.filter((t) => !have.includes(t)), errors: (r && r.errors) ? r.errors.map((e) => e.message) : [] };
+}
+async function ensureHooks(env, origin) {
+  const st = await listHooks(env, origin);
+  const created = [], failed = [];
+  for (const topic of st.missing) {
+    const r = await shopQuery(env, `mutation($cb:URL!){ webhookSubscriptionCreate(topic:${topic}, webhookSubscription:{callbackUrl:$cb, format:JSON}) { userErrors { message } } }`, { cb: st.callback });
+    const ue = (r && r.data && r.data.webhookSubscriptionCreate && r.data.webhookSubscriptionCreate.userErrors) || [];
+    if (ue.length || (r && r.errors)) failed.push(topic + ': ' + [...ue.map((e) => e.message), ...((r && r.errors) || []).map((e) => e.message)].join(', ')); else created.push(topic);
+  }
+  return { ...st, created, failed };
 }
 
 /* ───────────────────────── utils ───────────────────────── */
@@ -1036,6 +1141,7 @@ const APP_HTML = `<!doctype html><html lang="en"><head>
 <div class="top">
   <a href="#/" class="logo"><img src="__LOGO__" alt="Exor Pull Sheet"></a>
   <a href="#/" class="listbtn">Pullsheet List</a>
+  <a href="#/queue" class="listbtn">Queue</a>
   <span id="crumb" class="who"></span>
   <span class="sp"></span>
   <span class="who">Staff: <b id="whoName">—</b></span>
@@ -1105,6 +1211,7 @@ async function route(){
     return showJob(rest);
   }
   if (id === 'history') return showList('history');
+  if (id === 'queue') return showQueue();
   return showList('active');
 }
 window.addEventListener('hashchange', route);
@@ -1215,6 +1322,70 @@ async function showJob(id){
   if (current.error){ v.innerHTML='<div class="empty">'+esc(current.error)+'</div>'; return; }
   $('#crumb').innerHTML='';
   render();
+  if(pendingEnrich===id){ pendingEnrich=null; runEnrich(id); }
+}
+
+/* ─────────────────── Order queue (phase 2) ─────────────────── */
+let qSel=new Set(), pendingEnrich=null;
+function ago(iso){ const t=Date.parse(iso||''); if(isNaN(t)) return ''; const m=Math.round((Date.now()-t)/60000); if(m<60) return m+' min'; const h=Math.round(m/60); if(h<48) return h+' h'; return Math.round(h/24)+' d'; }
+async function showQueue(quiet){
+  document.querySelectorAll('.foot').forEach(f=>f.remove()); footBtn=null;
+  $('#crumb').textContent=''; current=null; currentOrder=null;
+  const v=$('#view'); if(!quiet) v.innerHTML='<div class="empty">Loading…</div>';
+  let rows=[]; try{ const r=await fetch('/api/queue',{headers:H}); const j=await r.json(); rows=j.rows||[]; }catch(e){ v.innerHTML='<div class="empty">Could not load the queue.</div>'; return; }
+  const y=window.scrollY; v.innerHTML='';
+  v.appendChild(el('<h1 class="jtitle">Order queue <span class="code">'+rows.length+' waiting</span></h1>'));
+  if(IS_ADMIN){
+    const d=new Date(Date.now()-14*86400000).toISOString().slice(0,10);
+    const bf=el('<div class="ordbox"><div style="font-weight:700;margin-bottom:6px">Import unfulfilled orders</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label style="font-size:13px">Placed since <input type="date" id="bfSince" value="'+d+'" style="padding:7px;border:1px solid var(--line);border-radius:8px;font:inherit"></label><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="bfNoPos" checked> Skip POS orders</label><button id="bfGo" class="primary">Import</button><span id="bfMsg" style="font-size:12px;color:var(--mut)"></span></div><div style="font-size:11px;color:var(--mut);margin-top:6px">New orders arrive on their own through the Shopify hooks; this catches up on older ones.</div></div>');
+    $('#bfGo',bf).onclick=()=>runBackfill(bf); v.appendChild(bf);
+  }
+  const sb=el('<div class="search"><input id="qsearch" placeholder="Filter by order #, customer or city"><button id="qall">Select all shown</button><button id="qnone">Clear</button></div>');
+  v.appendChild(sb);
+  const list=el('<div id="qlist"></div>'); v.appendChild(list);
+  const paint=()=>{
+    const q=($('#qsearch').value||'').trim().toLowerCase(); list.innerHTML='';
+    const shown=rows.filter(r=>!q||[r.name,r.customer,r.city].join(' ').toLowerCase().includes(q));
+    if(!shown.length) list.appendChild(el('<div class="empty">Nothing waiting'+(q?' that matches':'')+'. Import older orders above, or wait for new ones.</div>'));
+    shown.forEach(r=>{
+      const blocked=!!r.sheet, on=qSel.has(r.num);
+      const row=el('<label class="card" style="cursor:pointer;align-items:center'+(blocked?';opacity:.55':'')+'"><input type="checkbox" '+(on?'checked':'')+(blocked?' disabled':'')+' style="width:22px;height:22px"><div class="cbody"><div><span class="nm">'+esc(r.name)+'</span><span class="cn">'+esc(r.customer||'')+'</span><span class="stat">'+(blocked?'<span class="sshort">on sheet #'+esc(r.sheet)+'</span>':(r.pulled?'<span class="sneed">pulled before</span>':''))+'</span></div><div class="sub">'+esc(ago(r.createdAt))+' ago · '+(r.itemQty||0)+' item'+(r.itemQty===1?'':'s')+' · '+(r.local?'<b style="color:var(--accent)">PICKUP</b>':'ship')+(r.source&&r.source!=='web'?' · '+esc(r.source):'')+'</div></div></label>');
+      row.querySelector('input').onchange=(e)=>{ if(e.target.checked) qSel.add(r.num); else qSel.delete(r.num); refreshQueueFoot(); };
+      list.appendChild(row);
+    });
+    $('#qall').onclick=()=>{ shown.forEach(r=>{ if(!r.sheet) qSel.add(r.num); }); paint(); refreshQueueFoot(); };
+    $('#qnone').onclick=()=>{ qSel.clear(); paint(); refreshQueueFoot(); };
+  };
+  $('#qsearch',sb).addEventListener('input',paint);
+  paint();
+  const foot=el('<div class="foot"><span class="fhint" id="qhint"></span><span class="sp"></span></div>');
+  footBtn=el('<button class="primary">Make pull sheet</button>');
+  footBtn.onclick=makeSheet; foot.appendChild(footBtn); document.body.appendChild(foot);
+  refreshQueueFoot(); window.scrollTo(0,y);
+}
+function refreshQueueFoot(){ if(!footBtn) return; const n=qSel.size; footBtn.textContent='Make pull sheet'+(n?' ('+n+')':''); footBtn.disabled=!n; footBtn.style.opacity=n?'1':'.5'; const h=$('#qhint'); if(h) h.textContent=n?n+' order'+(n>1?'s':'')+' selected':'Tick the orders to pull'; }
+async function runBackfill(box){
+  const since=$('#bfSince',box).value, excludePos=$('#bfNoPos',box).checked, btn=$('#bfGo',box), msg=$('#bfMsg',box);
+  btn.disabled=true; let cursor=null, kept=0, seen=0, pages=0;
+  try{
+    do{ msg.textContent='Importing… '+seen+' checked, '+kept+' queued'; const r=await fetch('/api/queue/backfill',{method:'POST',headers:H,body:JSON.stringify({since,excludePos,cursor})}); const j=await r.json(); if(j.error){ msg.textContent=j.error; break; } kept+=j.kept||0; seen+=j.seen||0; cursor=j.cursor||null; pages++; }while(cursor && pages<40);
+    msg.textContent='Done: '+kept+' queued of '+seen+' checked'+(cursor?' (more remain, run again)':'');
+  }catch(e){ msg.textContent='Import failed.'; }
+  btn.disabled=false; showQueue(true);
+}
+async function makeSheet(){
+  const nums=[...qSel]; if(!nums.length||!footBtn) return;
+  footBtn.disabled=true; footBtn.textContent='Building…';
+  try{ const r=await fetch('/api/queue/sheet',{method:'POST',headers:H,body:JSON.stringify({nums,employee:who})}); const j=await r.json();
+    if(j.error){ alert(j.error); footBtn.disabled=false; refreshQueueFoot(); return; }
+    qSel.clear(); if(j.enrichPending) pendingEnrich=j.id; location.hash='#/job/'+j.id;
+  }catch(e){ alert('Could not build the sheet.'); footBtn.disabled=false; refreshQueueFoot(); }
+}
+async function runEnrich(id){
+  const chip=el('<button class="synchip">Looking up rarities…</button>'); document.body.appendChild(chip);
+  try{ for(let i=0;i<40;i++){ const r=await fetch('/api/jobs/'+id+'/enrich',{method:'POST',headers:H,body:'{}'}); const j=await r.json(); if(j.error||!j.remaining) break; chip.textContent='Looking up rarities… '+j.remaining+' left'; } }catch(e){}
+  chip.remove();
+  if(current && current.id===id && !currentOrder){ try{ const rr=await fetch('/api/jobs/'+id,{headers:H}); const jj=await rr.json(); if(jj&&jj.id===id){ const y=window.scrollY; current=jj; render(); window.scrollTo(0,y); } }catch(e){} }
 }
 
 /* ─────────────────── Per-order packing view ─────────────────── */
@@ -2012,6 +2183,7 @@ async function pollList(){
   if(document.hidden) return;
   if(Date.now()-lastActivity > IDLE_MS) return; // idle: stop polling so an open tab doesn't burn KV ops
   const h=location.hash.replace(/^#\\/?/,'');
+  if(h==='queue'){ const qs=document.getElementById('qsearch'); if(qSel.size||(qs&&(qs.value||'').trim())||document.querySelector('.modal')) return; showQueue(true); return; }
   if(!(h===''||h==='history')) return;
   if(document.querySelector('.modal')) return;
   const sb=document.getElementById('osearch');
