@@ -19,3 +19,9 @@ SHOPIFY_API = "2026-04"
 [[kv_namespaces]]
 binding = "JOBS"
 id = "REPLACE_WITH_JOBS_KV_NAMESPACE_ID"
+
+# Every 10 minutes: sync the order queue with Shopify (last 14 days of
+# unfulfilled online orders in, fulfilled ones out) so a missed webhook
+# never leaves the queue stale. Handler: scheduled() in src/index.js.
+[triggers]
+crons = ["*/10 * * * *"]

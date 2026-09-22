@@ -149,6 +149,39 @@ export async function backfill(env, shopQuery, opts) {
   return { kept, skipped, seen: orders.length, cursor, errors: errors || [] };
 }
 
+// Self-filling queue: called by the cron trigger and by the first read of an
+// empty queue. Walks unfulfilled online orders from the last SYNC_DAYS in
+// pages (continuing a stored cursor across runs), then re-reads the stalest
+// records so orders fulfilled while a webhook was missed still drop out.
+export const SYNC_DAYS = 14;
+export async function syncQueue(env, shopQuery, { maxPages = 6, refreshStale = 20, inline = false } = {}) {
+  const now = Date.now();
+  let st = {}; try { st = (await env.JOBS.get('sys:queueSync', 'json')) || {}; } catch (_) {}
+  if (st.running && now - Date.parse(st.running) < 120e3 && !inline) return { skipped: 'running' };
+  const since = new Date(now - SYNC_DAYS * 86400e3).toISOString().slice(0, 10);
+  let cursor = (st.since === since && st.cursor) ? st.cursor : null;
+  await env.JOBS.put('sys:queueSync', JSON.stringify({ ...st, running: new Date(now).toISOString() }));
+  let kept = 0, seen = 0, pages = 0, errors = [];
+  try {
+    do {
+      const r = await backfill(env, shopQuery, { since, excludePos: true, cursor });
+      kept += r.kept; seen += r.seen; cursor = r.cursor; pages++;
+      if (r.errors && r.errors.length) { errors = r.errors; break; }
+    } while (cursor && pages < (inline ? 1 : maxPages));
+  } catch (e) { errors.push(String(e && e.message || e)); }
+  let refreshed = 0, dropped = 0;
+  if (!cursor && !inline) {
+    // sweep: stalest records first, only those not touched for 2h
+    const list = await env.JOBS.list({ prefix: QUEUE_PREFIX });
+    const stale = list.keys.map((k) => ({ num: k.name.slice(QUEUE_PREFIX.length), at: Date.parse((k.metadata || {}).updatedAt || '') || 0 }))
+      .filter((x) => now - x.at > 2 * 3600e3).sort((a, b) => a.at - b.at).slice(0, refreshStale);
+    for (const x of stale) { try { const r = await refreshOrder(env, shopQuery, orderGid(x.num)); refreshed++; if (!r.kept) dropped++; } catch (_) {} }
+  }
+  const rec = { since, cursor: cursor || '', at: new Date().toISOString(), kept, seen, refreshed, dropped, errors, running: '' };
+  await env.JOBS.put('sys:queueSync', JSON.stringify(rec));
+  return rec;
+}
+
 // The queue as the screen shows it: metadata only (one list op), plus which
 // orders already sit on an ACTIVE sheet (from job metadata, no body reads).
 export async function listQueue(env) {

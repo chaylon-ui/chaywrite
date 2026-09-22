@@ -96,6 +96,11 @@ export default {
       return json({ error: String(e && e.message || e) }, 500);
     }
   },
+  // Cron (wrangler.toml [triggers]): keep the queue in step with Shopify even
+  // if a webhook is missed. Webhooks stay the fast path.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(Q.syncQueue(env, shopQuery).catch(() => {}));
+  },
 };
 
 /* ───────────────────── PIN session (signed cookie) ───────────────────── */
@@ -255,14 +260,23 @@ async function api(req, env, pathname, me, ctxWait) {
   if (parts[1] === 'queue') {
     if (!parts[2] && req.method === 'GET') {
       const origin = new URL(req.url).origin;
-      const rows = await Q.listQueue(env);
+      let rows = await Q.listQueue(env);
+      let sync = null; try { sync = await env.JOBS.get('sys:queueSync', 'json'); } catch (_) {}
+      const syncAge = sync && sync.at ? Date.now() - Date.parse(sync.at) : Infinity;
+      if (!rows.length && syncAge > 10 * 60e3) {
+        // nothing queued and no recent sync: fetch the first page now so the screen is not empty,
+        // and let the rest of the walk + stale sweep run after the response
+        sync = await Q.syncQueue(env, shopQuery, { inline: true });
+        rows = await Q.listQueue(env);
+        if (typeof ctxWait === 'function') ctxWait(Q.syncQueue(env, shopQuery).catch(() => {}));
+      }
       const hooksAt = await env.JOBS.get('sys:hooksAt');
       // keep the Shopify hooks pointed here (at most every 12h, off the request path)
       if (!hooksAt || Date.now() - Date.parse(hooksAt) > 43200e3) {
         await env.JOBS.put('sys:hooksAt', new Date().toISOString());
         if (typeof ctxWait === 'function') ctxWait(ensureHooks(env, origin).catch(() => {}));
       }
-      return json({ rows, hooksAt: hooksAt || '' });
+      return json({ rows, hooksAt: hooksAt || '', syncAt: (sync && sync.at) || '', syncErrors: (sync && sync.errors) || [], syncDays: Q.SYNC_DAYS });
     }
     if (parts[2] === 'backfill' && req.method === 'POST') {
       if (!isAdmin(me)) return json({ error: 'Admins only' }, 403);
@@ -272,6 +286,9 @@ async function api(req, env, pathname, me, ctxWait) {
       const r = await Q.backfill(env, shopQuery, { since, excludePos: b.excludePos !== false, cursor: b.cursor || null });
       if (!r.seen && r.errors && r.errors.length) return json({ ...r, error: 'Shopify: ' + r.errors.join(' | ') }, 502);
       return json(r);
+    }
+    if (parts[2] === 'sync' && req.method === 'POST') {
+      return json(await Q.syncQueue(env, shopQuery, { inline: false }));
     }
     if (parts[2] === 'refresh' && req.method === 'POST') {
       const b = await req.json().catch(() => ({}));
@@ -1333,9 +1350,13 @@ async function showQueue(quiet){
   document.querySelectorAll('.foot').forEach(f=>f.remove()); footBtn=null;
   $('#crumb').textContent=''; current=null; currentOrder=null;
   const v=$('#view'); if(!quiet) v.innerHTML='<div class="empty">Loading…</div>';
-  let rows=[]; try{ const r=await fetch('/api/queue',{headers:H}); const j=await r.json(); rows=j.rows||[]; }catch(e){ v.innerHTML='<div class="empty">Could not load the queue.</div>'; return; }
+  let rows=[], qj={}; try{ const r=await fetch('/api/queue',{headers:H}); qj=await r.json(); rows=qj.rows||[]; }catch(e){ v.innerHTML='<div class="empty">Could not load the queue.</div>'; return; }
   const y=window.scrollY; v.innerHTML='';
   v.appendChild(el('<h1 class="jtitle">Order queue <span class="code">'+rows.length+' waiting</span></h1>'));
+  const syncTxt = qj.syncAt ? ('Synced with Shopify '+ago(qj.syncAt)+' ago · unfulfilled online orders from the last '+(qj.syncDays||14)+' days, plus new ones as they are paid') : 'Syncing with Shopify…';
+  v.appendChild(el('<div style="font-size:12px;color:var(--mut);margin:-6px 0 10px 2px">'+esc(syncTxt)+((qj.syncErrors&&qj.syncErrors.length)?' · <span style="color:var(--accent)">'+esc(qj.syncErrors.join(' | '))+'</span>':'')+(IS_ADMIN?' <button id="syncNow" style="font-size:11px;padding:3px 8px;margin-left:6px">Sync now</button>':'')+'</div>'));
+  const sn=$('#syncNow'); if(sn) sn.onclick=async()=>{ sn.disabled=true; sn.textContent='Syncing…'; try{ await fetch('/api/queue/sync',{method:'POST',headers:H}); }catch(e){} showQueue(true); };
+  if(!rows.length && !qj.syncAt) setTimeout(()=>{ if(location.hash.replace(/^#\\/?/,'')==='queue') showQueue(true); }, 6000);
   if(IS_ADMIN){
     const d=new Date(Date.now()-14*86400000).toISOString().slice(0,10);
     const bf=el('<div class="ordbox"><div style="font-weight:700;margin-bottom:6px">Import unfulfilled orders</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label style="font-size:13px">Placed since <input type="date" id="bfSince" value="'+d+'" style="padding:7px;border:1px solid var(--line);border-radius:8px;font:inherit"></label><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="bfNoPos" checked> Skip POS orders</label><button id="bfGo" class="primary">Import</button><span id="bfMsg" style="font-size:12px;color:var(--mut)"></span></div><div style="font-size:11px;color:var(--mut);margin-top:6px">New orders arrive on their own through the Shopify hooks; this catches up on older ones.</div></div>');
@@ -1355,7 +1376,7 @@ async function showQueue(quiet){
   const paint=()=>{
     const q=($('#qsearch').value||'').trim().toLowerCase(); list.innerHTML='';
     const shown=rows.filter(r=>!q||[r.name,r.customer,r.city].join(' ').toLowerCase().includes(q));
-    if(!shown.length) list.appendChild(el('<div class="empty">Nothing waiting'+(q?' that matches':'')+'. Import older orders above, or wait for new ones.</div>'));
+    if(!shown.length) list.appendChild(el('<div class="empty">'+(q?'Nothing matches that filter.':'Nothing waiting. Paid online orders show up here within a minute'+(IS_ADMIN?', or use Import above for older ones.':'.'))+'</div>'));
     shown.forEach(r=>{
       const blocked=!!r.sheet, on=qSel.has(r.num);
       const row=el('<label class="card" style="cursor:pointer;align-items:center'+(blocked?';opacity:.55':'')+'"><input type="checkbox" '+(on?'checked':'')+(blocked?' disabled':'')+' style="width:22px;height:22px"><div class="cbody"><div><span class="nm">'+esc(r.name)+'</span><span class="cn">'+esc(r.customer||'')+'</span><span class="stat">'+(blocked?'<span class="sshort">on sheet #'+esc(r.sheet)+'</span>':(r.pulled?'<span class="sneed">pulled before</span>':''))+'</span></div><div class="sub">'+esc(ago(r.createdAt))+' ago · '+(r.itemQty||0)+' item'+(r.itemQty===1?'':'s')+' · '+(r.local?'<b style="color:var(--accent)">PICKUP</b>':'ship')+(r.source&&r.source!=='web'?' · '+esc(r.source):'')+'</div></div></label>');

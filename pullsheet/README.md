@@ -82,7 +82,11 @@ Verified with a local harness (mock KV + mocked Shopify) before pushing.
   (`src/queue.js` is the userscript's grouping ported: game -> set ->
   collector, Yu-Gi-Oh by frame type, Pokémon alphabetical) and tags the
   orders PULLSHEET. Orders already on an active sheet cannot be picked twice.
-- Admins get **Import unfulfilled orders** (placed since a date, POS skipped
+- The queue fills itself: a cron every 10 minutes (and the first read of an
+  empty queue) syncs unfulfilled online orders from the last 14 days in and
+  sweeps stale records so orders fulfilled during a missed webhook drop out.
+  The screen shows when it last synced; admins get a **Sync now** button.
+- Admins also get **Import unfulfilled orders** (placed since a date, POS skipped
   by default) to catch up on orders placed before the hooks existed.
 - Rarity, mana and Yu-Gi-Oh set/frame lookups are cached in KV (`enr:*`).
   After a sheet is built the app calls `POST /api/jobs/:id/enrich` in small
