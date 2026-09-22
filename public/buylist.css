@@ -259,6 +259,16 @@ html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.
 .bl__cart { position: sticky; top: calc(var(--xg-fixed-bottom, 0px) + 14px); max-height: calc(100vh - var(--xg-fixed-bottom, 0px) - var(--xg-tick-h, 0px) - 28px); display: flex; flex-direction: column; background: linear-gradient(180deg, var(--bl-accent-soft) 0, transparent 120px), var(--bl-surface); border: 2px solid var(--bl-accent); border-radius: var(--bl-radius); box-shadow: 0 0 0 4px var(--bl-accent-soft), var(--bl-shadow); padding: 18px; }
 .bl__cart > * { flex: 0 0 auto; }
 .bl__cart > #bl-lines { flex: 1 1 auto; min-height: 96px; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 8px 10px; border: 1.5px dashed var(--bl-line-strong); border-radius: 12px; background: var(--bl-surface-2); }
+/* Desktop (owner, 2026-09-22: "on desktop, this should scroll down"): the
+   panel is pinned to the viewport, and once the recent-buylists block made
+   it taller than the screen its bottom was clipped with no way to reach it.
+   Now the panel scrolls as a whole when it is taller than the viewport, and
+   the card list keeps a scroll of its own only past 42vh, so totals, the
+   buttons and the recent lists are always reachable. */
+@media (min-width: 861px) {
+  .bl__cart { overflow-y: auto; overscroll-behavior: auto; scrollbar-gutter: stable; }
+  .bl__cart > #bl-lines { flex: 0 0 auto; max-height: 42vh; overscroll-behavior: auto; }   /* the wheel carries on down the panel past the end of the list */
+}
 .bl__cart > #bl-lines > .bl__muted:only-child { margin: 0; padding: 18px 6px; text-align: center; }
 .bl__h2 { margin: 0 0 10px; font-size: 18px; font-weight: 700; color: var(--bl-ink); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
 .bl__h2 #bl-count { font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--bl-accent-soft); color: var(--bl-accent); }
