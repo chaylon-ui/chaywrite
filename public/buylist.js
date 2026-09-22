@@ -47,10 +47,12 @@
   (function guardTiles() {
     var tiles = Array.prototype.slice.call(document.querySelectorAll('a[href="#buylist"]'));
     if (!tiles.length) return;
+    var diag = window.__xgTileGuard = { armed: tiles.length, fired: 0, from: null, to: null };
     document.addEventListener("click", function (e) {
       var a = e.target && e.target.closest ? e.target.closest('a[href="#buylist"]') : null;
       if (!a || tiles.indexOf(a) < 0) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      diag.fired++; diag.from = window.pageYOffset;
       // Land with the section's top just under the fixed header, not behind
       // it (owner, 2026-09-22: "it scrolls down too low"). The theme's
       // header only becomes fixed AFTER the page scrolls (.fixed-header),
@@ -60,6 +62,7 @@
       // Instant scrolling on purpose - the live page cut a smooth scrollTo
       // short at 39px (probe 2026-09-22), and nudges need settled positions.
       landOn(root);
+      diag.to = window.pageYOffset;
       var cart = root.querySelector(".bl__cart"); if (cart) cart.scrollTop = 0;
       if (typeof window.__xgTilePick === "function") window.__xgTilePick(a);
     }, true);
