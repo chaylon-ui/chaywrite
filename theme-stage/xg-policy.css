@@ -1,0 +1,537 @@
+/* ============================================================
+   Exor Games - policy + plain-page frame. Loads after xg-features.css
+   and before xg-dark.css, so dark's equal-specificity overrides win.
+
+   Two families share one frame here:
+     A. the default page section (sections/page.liquid) - class hooks
+        .xg-page__hero and .xg-page__body.xg-prose - used by
+        /pages/pre-order-policy, /pages/selling-policy,
+        /pages/grading-guide, /pages/definitions and every other plain
+        page;
+     B. Shopify's own /policies/* pages (refund, privacy, shipping,
+        terms), which Shopify renders inside the layout with FIXED markup
+          .shopify-policy__container > .shopify-policy__title > h1
+                                     + .shopify-policy__body  > .rte
+        so the band there is the title block itself (background on the
+        block, kicker via ::before).
+
+   Both land inside layout/theme.liquid's .normal_main_content.page-width
+   wrapper (max 1400px, 15px side padding) - the same box the About
+   page's hero fills - so "full-bleed" here means the wrapper's full
+   width, the same composition as /pages/about-us.
+
+   Sections: 1 title band, 2 prose scale, 3 tables, 4 legacy inline
+   markup, 5 live hours lists (assets/xg-policy-hours.js), 6 dark-mode
+   text reds, then 3b layout tables - appended last so it outranks 3.
+   Everything is --xg- tokens (modern-skin.css), which
+   xg-dark.css redefines under html[data-xg-theme="dark"]; the only
+   dark-specific rules are the red-as-text swaps that file prescribes.
+   ============================================================ */
+
+/* ---- 1. Title band ------------------------------------------------ */
+
+/* Shopify ships a small stylesheet for its policy pages through
+   content_for_header (container max-width, centred title). It loads
+   after this file, so these carry an extra `body` to outrank it. */
+body .shopify-policy__container {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.xg-page__hero,
+body .shopify-policy__title {
+  background:
+    radial-gradient(1100px 360px at 50% -120px, rgba(214, 44, 40, 0.22), transparent 70%),
+    var(--xg-charcoal-deep, #1c2322);
+  padding: clamp(30px, 5vw, 50px) clamp(16px, 4vw, 32px) clamp(26px, 4vw, 42px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  text-align: center;
+}
+.xg-page__hero-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.xg-page__kicker,
+body .shopify-policy__title::before {
+  display: block;
+  font-family: var(--xg-font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--xg-accent, #ffd800);
+  margin: 0 0 10px;
+}
+body .shopify-policy__title::before { content: "Exor Games"; }
+.xg-page__title,
+body .shopify-policy__title h1 {
+  font-family: var(--xg-font-display);
+  font-size: clamp(28px, 4.5vw, 46px);
+  font-weight: 600;
+  line-height: 1.05;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--xg-inverse-text, #f4f6f6);
+  margin: 0 auto;
+  max-width: 20ch;
+}
+
+/* ---- 2. Measured prose column ------------------------------------ */
+/* The About page's scale (sections/about-page.liquid .xg-about__body),
+   scoped once for both families. The legacy .rte rules in theme.css
+   (55px heading margins, 35px list indents, currentColor link
+   underlines) lose on specificity; modern-skin pins .rte p to 15px
+   !important, hence the one !important on p. */
+.xg-page__body,
+body .shopify-policy__body {
+  max-width: 68ch;
+  margin: clamp(28px, 4vw, 44px) auto clamp(36px, 6vw, 64px);
+  padding: 0;
+}
+.xg-prose,
+.shopify-policy__body .rte {
+  font-family: var(--xg-font-body);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--xg-text);
+}
+/* Only the policy family needs its container margin reset (theme.css
+   gives .rte its own). On a plain page .xg-page__body and .xg-prose sit
+   on the SAME element, so a blanket `margin: 0` here silently cancelled
+   the `margin: <top> auto <bottom>` above it: the column lost its auto
+   side margins and every plain page rendered hard against the left edge
+   of a 1366px container with 680px of dead space on the right - the
+   owner's "it isn't centered to the page" - and lost its bottom gap. */
+.shopify-policy__body .rte { margin: 0; }
+.xg-prose > :first-child,
+.shopify-policy__body .rte > :first-child { margin-top: 0; }
+
+/* A body that opens with its own h1 (Selling Policy does) would repeat
+   the band's title at display size; inside the column an h1 is a
+   section heading, so it takes the h2 scale. */
+.xg-prose h1,
+.xg-prose h2,
+.shopify-policy__body .rte h1,
+.shopify-policy__body .rte h2 {
+  font-family: var(--xg-font-display);
+  font-size: clamp(21px, 2.6vw, 27px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  color: var(--xg-ink);
+  margin: 34px 0 10px;
+}
+.xg-prose h3,
+.shopify-policy__body .rte h3 {
+  font-family: var(--xg-font-body);
+  font-size: 17px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.3;
+  color: var(--xg-ink);
+  margin: 24px 0 6px;
+}
+.xg-prose h4,
+.xg-prose h5,
+.xg-prose h6,
+.shopify-policy__body .rte h4,
+.shopify-policy__body .rte h5,
+.shopify-policy__body .rte h6 {
+  font-family: var(--xg-font-body);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--xg-ink);
+  margin: 20px 0 6px;
+}
+.xg-prose p,
+.shopify-policy__body .rte p {
+  font-size: 16px !important;
+  line-height: 1.7;
+  margin: 0 0 14px;
+}
+.xg-prose ul,
+.xg-prose ol,
+.shopify-policy__body .rte ul,
+.shopify-policy__body .rte ol {
+  margin: 0 0 16px;
+  padding-left: 1.3em;
+}
+.xg-prose ul,
+.shopify-policy__body .rte ul { list-style: disc outside; }
+.xg-prose ol,
+.shopify-policy__body .rte ol { list-style: decimal outside; }
+.xg-prose li,
+.shopify-policy__body .rte li {
+  margin: 0 0 6px;
+  list-style: inherit;
+}
+.xg-prose li::marker,
+.shopify-policy__body .rte li::marker {
+  color: var(--xg-red);
+  font-weight: 600;
+}
+.xg-prose a,
+.shopify-policy__body .rte a {
+  color: var(--xg-red);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--xg-red-soft);
+  padding-bottom: 0;
+  overflow-wrap: anywhere;
+}
+.xg-prose a:hover,
+.xg-prose a:focus-visible,
+.shopify-policy__body .rte a:hover,
+.shopify-policy__body .rte a:focus-visible {
+  color: var(--xg-red-hover);
+  border-bottom-color: currentColor;
+}
+.xg-prose strong,
+.xg-prose b,
+.shopify-policy__body .rte strong,
+.shopify-policy__body .rte b { color: var(--xg-ink); }
+.xg-prose img,
+.shopify-policy__body .rte img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--xg-radius);
+}
+.xg-prose hr,
+.shopify-policy__body .rte hr {
+  border: 0;
+  border-top: 1px solid var(--xg-border);
+  margin: 26px 0;
+}
+.xg-prose blockquote,
+.shopify-policy__body .rte blockquote {
+  margin: 0 0 16px;
+  padding: 12px 18px;
+  border: 0;
+  border-left: 3px solid var(--xg-red);
+  border-radius: 0 var(--xg-radius-sm) var(--xg-radius-sm) 0;
+  background: var(--xg-surface);
+  font-size: inherit;
+  font-style: normal;
+  text-align: left;
+  color: var(--xg-text);
+}
+
+/* ---- 3. Tables ---------------------------------------------------- */
+/* The shipping policy's rate tables were pasted from a word processor:
+   <table border="solid black" style="width:468px;height:...">, pixel
+   widths and heights on every row and cell, a <p> in each cell, and the
+   header row as bold <td>s. Inline sizes need !important; the rest is
+   theme.css's table defaults (white ground, light borders) re-tokenised
+   so dark mode gets a dark table with --xg-border lines instead of the
+   black border= look. */
+.xg-prose table,
+.shopify-policy__body .rte table {
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  border-spacing: 0;
+  margin: 4px 0 22px;
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.xg-prose tr,
+.shopify-policy__body .rte tr { height: auto !important; }
+.xg-prose th,
+.xg-prose td,
+.shopify-policy__body .rte th,
+.shopify-policy__body .rte td {
+  width: auto !important;
+  height: auto !important;
+  padding: 10px 12px;
+  border: 1px solid var(--xg-border);
+  vertical-align: top;
+  color: var(--xg-text);
+  background: transparent;
+}
+/* Header row: a real <th>, or the first row of a table without a thead
+   (the editor's bold <td> header). */
+.xg-prose th,
+.xg-prose thead td,
+.xg-prose table > tbody:first-child > tr:first-child > td,
+.shopify-policy__body .rte th,
+.shopify-policy__body .rte thead td,
+.shopify-policy__body .rte table > tbody:first-child > tr:first-child > td {
+  font-weight: 700;
+  color: var(--xg-ink);
+  background: var(--xg-bg);
+}
+.xg-prose td p,
+.xg-prose th p,
+.shopify-policy__body .rte td p,
+.shopify-policy__body .rte th p {
+  font-size: inherit !important;
+  line-height: inherit;
+  margin: 0;
+}
+.xg-prose td p + p,
+.shopify-policy__body .rte td p + p { margin-top: 6px; }
+
+/* Narrow screens: the table becomes a scrolling block. An only-child
+   tbody is re-declared as the table so it still fills the width; a table
+   with a thead keeps its anonymous table box and shrinks to fit. The
+   cells keep their own borders, so the block's border goes. */
+@media (max-width: 640px) {
+  .xg-prose table,
+  .shopify-policy__body .rte table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 0;
+  }
+  .xg-prose table > tbody:only-child,
+  .shopify-policy__body .rte table > tbody:only-child {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+  }
+}
+
+/* ---- 4. Legacy inline markup -------------------------------------- */
+/* Word-processor paste residue in the policy bodies:
+   <span style="font-weight: 400;"> around every sentence (privacy,
+   shipping, grading guide), <span style="color:#000000"><a style=
+   "color:#000000"> around a link (selling policy), and the Terms of
+   Service written as <div style="padding-left: 30px;"> blocks with
+   <br>-only spacer divs. Inline styles need !important; the colours go
+   back to the tokens so dark mode never paints black on charcoal. */
+.xg-prose span[style*="font-weight: 400"],
+.xg-prose span[style*="font-weight:400"],
+.shopify-policy__body .rte span[style*="font-weight: 400"],
+.shopify-policy__body .rte span[style*="font-weight:400"] { font-weight: inherit !important; }
+.xg-prose span[style*="color"],
+.shopify-policy__body .rte span[style*="color"] { color: inherit !important; }
+.xg-prose a[style*="color"],
+.shopify-policy__body .rte a[style*="color"] { color: var(--xg-red) !important; }
+.xg-prose div[style*="padding-left"],
+.shopify-policy__body .rte div[style*="padding-left"] {
+  padding-left: clamp(14px, 4vw, 26px) !important;
+  margin: 0 0 10px;
+}
+.xg-prose div[style*="padding-left"] > br:only-child,
+.shopify-policy__body .rte div[style*="padding-left"] > br:only-child { display: none; }
+
+/* ---- 5. Live hours lists (assets/xg-policy-hours.js) -------------- */
+/* Rendered into <div data-xg-hours="pickup|delivery"> markers in the
+   shipping policy body. The status line is the locations strip's pill
+   (dot + state + detail, --xg-text for the small print, the state colour
+   on the dot and the word); the week is a <dl>, so the table rules above
+   never reach it. Today's row is tinted --xg-red-soft with a white-on-red
+   tag: red as a FILL, which stays #d62c28 in dark mode. */
+.xg-livehours {
+  margin: 4px 0 18px;
+  font-family: var(--xg-font-body);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--xg-text);
+}
+.xg-livehours__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--xg-text);
+}
+.xg-livehours__dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--xg-muted);
+}
+.xg-livehours__state {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--xg-ink);
+}
+.xg-livehours__status.is-open .xg-livehours__dot { background: var(--xg-success, #17784a); }
+.xg-livehours__status.is-open .xg-livehours__state { color: var(--xg-success, #17784a); }
+.xg-livehours__week {
+  margin: 0;
+  padding: 0;
+  max-width: 26rem;
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius-sm);
+  overflow: hidden;
+}
+.xg-livehours__row {
+  display: grid;
+  grid-template-columns: 8.5em minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 12px;
+  margin: 0;
+  border-top: 1px solid var(--xg-border);
+}
+.xg-livehours__row:first-child { border-top: 0; }
+.xg-livehours__day,
+.xg-livehours__time { margin: 0; }
+.xg-livehours__day {
+  font-weight: 600;
+  color: var(--xg-ink);
+}
+.xg-livehours__time { color: var(--xg-text); }
+.xg-livehours__row.is-closed .xg-livehours__time { font-style: italic; }
+.xg-livehours__row.is-today { background: var(--xg-red-soft); }
+.xg-livehours__row.is-today .xg-livehours__day::after {
+  content: "today";
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--xg-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  vertical-align: 1px;
+}
+.xg-livehours__note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--xg-text);
+}
+
+/* ---- 6. Dark mode: red as TEXT ------------------------------------ */
+/* xg-dark.css keeps --xg-red at #d62c28 for FILLS (white-on-red holds
+   5.9:1) and swaps red TEXT to #ff6a5e (6.3:1 on the dark ground, where
+   #d62c28 is only 2.9:1). Links and list markers here are text, so they
+   follow that swap; the !important matches the inline-colour override
+   in section 4. */
+html[data-xg-theme="dark"] .xg-prose a,
+html[data-xg-theme="dark"] .shopify-policy__body .rte a {
+  color: #ff6a5e !important;
+  border-bottom-color: rgba(255, 106, 94, 0.35);
+}
+html[data-xg-theme="dark"] .xg-prose a:hover,
+html[data-xg-theme="dark"] .xg-prose a:focus-visible,
+html[data-xg-theme="dark"] .shopify-policy__body .rte a:hover,
+html[data-xg-theme="dark"] .shopify-policy__body .rte a:focus-visible {
+  color: #ff8b82 !important;
+  border-bottom-color: currentColor;
+}
+html[data-xg-theme="dark"] .xg-prose li::marker,
+html[data-xg-theme="dark"] .shopify-policy__body .rte li::marker { color: #ff6a5e; }
+/* Buttons drawn inside a page body keep their own white label: the sell
+   page's red pill "Start a buylist" (class xgsell__btn--go, and any other
+   ...btn... link) was being painted salmon by the link rule above, so it
+   read as disabled (owner, 2026-09-22: "this looks deactivated"). */
+.xg-prose a[class*="btn"],
+.shopify-policy__body .rte a[class*="btn"] { border-bottom: 0; }
+html[data-xg-theme="dark"] .xg-prose a[class*="btn"],
+html[data-xg-theme="dark"] .xg-prose a[class*="btn"]:hover,
+html[data-xg-theme="dark"] .xg-prose a[class*="btn"]:focus-visible,
+html[data-xg-theme="dark"] .shopify-policy__body .rte a[class*="btn"],
+html[data-xg-theme="dark"] .shopify-policy__body .rte a[class*="btn"]:hover { color: #fff !important; border-bottom: 0; }
+/* ---- 3b. Layout tables (round 29) ----------------------------------
+   The editor also uses tables for LAYOUT, not data. The sell page
+   (/pages/sell-to-exor-games-bulk-or-create-a-list) is four rows of
+   "image cell + copy cell" inside <table border="0" width="30%"> with an
+   inline width on every cell. Section 3 above was written for the
+   shipping policy's pixel-sized rate tables, and its blanket
+   `td { width: auto !important }` handed the row to the copy column and
+   squeezed the image cells to about 30px - the owner's "all the images
+   shrank". A table the editor marked border="0" is treated as layout:
+   no grid lines, no surface, no header-row tint, rows separated by a
+   hairline instead, and a cell holding an image sized to that image.
+   :has() outranks the bare td rule above, so no !important contest.
+   Under 640px the row stacks rather than scrolling sideways, which is
+   what a layout table wants and a rate table does not. */
+.xg-prose table[border="0"],
+.shopify-policy__body .rte table[border="0"] {
+  background: transparent;
+  border: 0;
+  font-size: inherit;
+  margin: 8px 0 26px;
+}
+.xg-prose table[border="0"] td,
+.xg-prose table[border="0"] th,
+.shopify-policy__body .rte table[border="0"] td,
+.shopify-policy__body .rte table[border="0"] th {
+  border: 0;
+  padding: 16px 20px 16px 0;
+  background: transparent;
+  vertical-align: top;
+}
+.xg-prose table[border="0"] > tbody > tr + tr > td,
+.shopify-policy__body .rte table[border="0"] > tbody > tr + tr > td { border-top: 1px solid var(--xg-border); }
+.xg-prose table[border="0"] > tbody:first-child > tr:first-child > td,
+.shopify-policy__body .rte table[border="0"] > tbody:first-child > tr:first-child > td {
+  font-weight: inherit;
+  color: inherit;
+  background: transparent;
+}
+.xg-prose td:has(img),
+.shopify-policy__body .rte td:has(img) { width: 1% !important; }
+.xg-prose td img,
+.shopify-policy__body .rte td img {
+  max-width: none;
+  width: clamp(104px, 12vw, 168px);
+  height: auto;
+  border-radius: var(--xg-radius);
+}
+@media (max-width: 640px) {
+  .xg-prose table[border="0"],
+  .shopify-policy__body .rte table[border="0"] { display: block; overflow: visible; }
+  .xg-prose table[border="0"] tbody,
+  .xg-prose table[border="0"] tr,
+  .xg-prose table[border="0"] td,
+  .shopify-policy__body .rte table[border="0"] tbody,
+  .shopify-policy__body .rte table[border="0"] tr,
+  .shopify-policy__body .rte table[border="0"] td { display: block; width: auto !important; }
+  .xg-prose table[border="0"] td:has(img),
+  .shopify-policy__body .rte table[border="0"] td:has(img) { padding-bottom: 2px; }
+  .xg-prose table[border="0"] td img,
+  .shopify-policy__body .rte table[border="0"] td img { width: 96px; }
+}
+
+/* A plain page whose body carries its own full-width design (the sell
+   page's .xgsell block, the drop-off page's .xgdrop block) is not reading
+   prose, so the 68ch measure just wastes half the screen and forces its
+   card grid onto two rows. Those pages get a wider column; the policies
+   keep the reading measure. */
+.xg-page__body:has(.xgsell),
+.xg-page__body:has(.xgdrop) { max-width: 1180px; }
+
+/* Such a page also opens with its OWN hero band inside the body, so the
+   section's title band above it is a second, wider slab saying the same
+   thing twice - the owner circled it on the drop-off page. The band goes,
+   but not its <h1>: collapsing the header to screen-reader-only keeps the
+   page's one real H1 for search engines and assistive tech while the
+   design keeps its own opening. (The section's own "Show the title band"
+   setting would have switched it off for EVERY plain page, since they all
+   share templates/page.json.) */
+.xg-page:has(.xgdrop) > .xg-page__hero {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
