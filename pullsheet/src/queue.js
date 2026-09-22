@@ -43,16 +43,27 @@ const LI_FIELDS = `name sku quantity unfulfilledQuantity variantTitle variant { 
   product { productType }`;
 // No customer{} here: the app has no read_customers scope and Shopify errors
 // on the field (seen 2026-09-22). Names come from the addresses instead.
-const ORDER_FIELDS = `id name createdAt cancelledAt displayFulfillmentStatus tags sourceName
+const ORDER_FIELDS_BASE = `id name createdAt cancelledAt displayFulfillmentStatus tags sourceName
   currentTotalPriceSet { shopMoney { amount currencyCode } }
   shippingLine { title }
   shippingAddress { name city provinceCode }
   billingAddress { name }
   lineItems(first: 250) { pageInfo { hasNextPage endCursor } edges { node { ${LI_FIELDS} } } }`;
+// "Ready for pickup" is a fulfillment in READY_FOR_PICKUP display state: those
+// orders are already pulled and must not be queued (owner, 2026-09-22). If the
+// app's scope rejects the fulfillments field, the query is retried without it.
+const FULFILLMENT_FIELDS = `fulfillments(first: 10) { status displayStatus }`;
+let withFulfillments = true;
+const orderFields = () => ORDER_FIELDS_BASE + (withFulfillments ? '\n  ' + FULFILLMENT_FIELDS : '');
+const fulfillmentsRejected = (r) => withFulfillments && ((r && r.errors) || []).some((e) => /fulfillments/i.test(e.message || ''));
+export function readyForPickup(o) {
+  return ((o && o.fulfillments) || []).some((f) => f && String(f.displayStatus || '').toUpperCase() === 'READY_FOR_PICKUP' && String(f.status || '').toUpperCase() !== 'CANCELLED');
+}
 
 // shopQuery(env, query, variables) -> raw GraphQL JSON ({data, errors}); provided by index.js
 export async function fetchOrder(env, shopQuery, gid) {
-  const r = await shopQuery(env, `query($id:ID!){ order(id:$id){ ${ORDER_FIELDS} } }`, { id: gid });
+  let r = await shopQuery(env, `query($id:ID!){ order(id:$id){ ${orderFields()} } }`, { id: gid });
+  if (!(r && r.data && r.data.order) && fulfillmentsRejected(r)) { withFulfillments = false; r = await shopQuery(env, `query($id:ID!){ order(id:$id){ ${orderFields()} } }`, { id: gid }); }
   const o = r && r.data && r.data.order;
   if (!o) return null;
   let pi = o.lineItems && o.lineItems.pageInfo, guard = 0;
@@ -71,7 +82,9 @@ export async function searchUnfulfilled(env, shopQuery, { since, excludePos = tr
   const parts = ['fulfillment_status:unfulfilled', 'financial_status:paid'];
   if (since) parts.push('created_at:>=' + since);
   if (excludePos) parts.push('-source_name:pos');
-  const r = await shopQuery(env, `query($q:String!,$c:String){ orders(first:25, query:$q, after:$c, sortKey:CREATED_AT){ pageInfo { hasNextPage endCursor } edges { node { ${ORDER_FIELDS} } } } }`, { q: parts.join(' AND '), c: cursor });
+  const q = () => `query($q:String!,$c:String){ orders(first:25, query:$q, after:$c, sortKey:CREATED_AT){ pageInfo { hasNextPage endCursor } edges { node { ${orderFields()} } } } }`;
+  let r = await shopQuery(env, q(), { q: parts.join(' AND '), c: cursor });
+  if (!(r && r.data && r.data.orders) && fulfillmentsRejected(r)) { withFulfillments = false; r = await shopQuery(env, q(), { q: parts.join(' AND '), c: cursor }); }
   const conn = r && r.data && r.data.orders;
   const errors = [...new Set(((r && r.errors) || []).map((e) => e.message))];
   if (!conn) return { orders: [], cursor: null, errors: errors.length ? errors : ['Shopify returned no orders data'] };
@@ -90,6 +103,7 @@ export function toRecord(o) {
   if (o.cancelledAt) return null;
   if (String(o.displayFulfillmentStatus || '').toUpperCase() === 'FULFILLED') return null;
   if (SKIP_SOURCES.includes(String(o.sourceName || '').toLowerCase())) return null;
+  if (readyForPickup(o)) return null;          // already pulled, waiting for the customer
   const lines = [];
   for (const e of (o.lineItems && o.lineItems.edges) || []) {
     const li = e.node; const qty = lineQty(li);
