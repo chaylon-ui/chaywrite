@@ -97,11 +97,10 @@ jobs:
               tally.looked++;
               try {
                 await go(page, 'https://www.plamod.com/retailer/search?q=' + t.barcode);
-                // results arrive a moment after load (the portal fetches them client-side)
-                await page.waitForFunction((bc) => {
-                  const tx = document.body.innerText || '';
-                  return tx.includes('Barcode: ' + bc) || /no (products|results)|0 results|nothing found/i.test(tx);
-                }, { timeout: 12000 }, t.barcode).catch(() => null);
+                // Results arrive a moment after load (the portal fetches them
+                // client-side); until then the page says "No products found",
+                // so that text is NOT an answer - wait for the barcode itself.
+                await page.waitForFunction((bc) => (document.body.innerText || '').includes('Barcode: ' + bc), { timeout: 10000 }, t.barcode).catch(() => null);
                 const hits = await page.evaluate((bc) => {
                   const out = new Set();
                   for (const a of document.querySelectorAll('a[href*="/retailer/products/"]')) {
