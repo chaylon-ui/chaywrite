@@ -59,7 +59,7 @@ test("buildWanted: front-page winners first, in rank order, with the mover's num
   const fetchFn = async (url) => new Response(url === MOVERS_URL ? page : morePage([]), { status: 200 });
   const v = await buildWanted({ fetchFn, search, n: 10, delayMs: 0 });
   assert.equal(v.count, 3);
-  assert.deepEqual(v.hits.map((h) => [h.cardName, h.setName, h.wanted.rank, h.wanted.pct]), [["Samut, Tyrant of Naktamun", "Reality Fracture", 1, 178], ["Gideon's Memorial", "Reality Fracture", 2, 19], ["Starting Town", "Reality Fracture", 3, 7]]);   // its slug (final-fantasy) matches neither hit, so the better offer wins
+  assert.deepEqual(v.hits.map((h) => [h.cardName, h.setName, h.wanted.rank, h.wanted.source]), [["Samut, Tyrant of Naktamun", "Reality Fracture", 1, "movers"], ["Gideon's Memorial", "Reality Fracture", 2, "movers"], ["Starting Town", "Reality Fracture", 3, "movers"]]);   // its slug (final-fantasy) matches neither hit, so the better offer wins
   assert.deepEqual(v.missed, ["Omnipresence"]);
   assert.deepEqual(asked, ["Samut, Tyrant of Naktamun", "Omnipresence", "Gideon's Memorial", "Starting Town"]);
   assert.deepEqual(v.pages, [MOVERS_URL, MORE_URLS.weekly, MORE_URLS.daily]);   // both View More pages were tried and were empty
@@ -133,26 +133,27 @@ test("tallySales counts Magic singles by card name with the sets sold and the lo
   assert.deepEqual(t["Roaming Throne"], { units: 4, sets: { "The Lost Caverns of Ixalan": 4 }, inv: 9 });
 });
 
-test("internalCandidates ranks deck-builder misses and out-of-stock sellers, explains each, and notes a denied orders read", async () => {
+test("internalCandidates interleaves best sellers (any stock) with deck-builder misses, skips basics, and notes a denied orders read", async () => {
   const io = {
     overview: async () => ({ miss: { mtg: [{ name: "Rogue's Passage", c: 26 }, { name: "Fireshrieker", c: 16 }, { name: "One Off", c: 1 }] } }),
     orders: async ({ after }) => after ? { orders: { nodes: [], pageInfo: { hasNextPage: false } } } : { orders: { nodes: [
-      order(["Rogue's Passage [Commander 2014]", 2, "MTG Single", 0]),
+      order(["Rogue's Passage [Commander 2014]", 2, "MTG Single", 0], ["Island [Bloomburrow]", 30, "MTG Single", 99]),
       order(["Roaming Throne [The Lost Caverns of Ixalan]", 5, "MTG Single", 1], ["Sol Ring [Commander 2016]", 9, "MTG Single", 40]),
     ], pageInfo: { hasNextPage: true, endCursor: "x" } } },
   };
   const r = await internalCandidates({}, io);
-  assert.deepEqual(r.notes, { misses: 2, orders: 2, sold: 3, ordersError: null, missesError: null });   // two orders, three Magic lines
-  assert.deepEqual(r.candidates.map((c) => [c.name, c.misses, c.units, c.inv, c.setSlug]), [["Rogue's Passage", 26, 2, 0, "commander-2014"], ["Fireshrieker", 16, 0, null, ""], ["Roaming Throne", 0, 5, 1, "the-lost-caverns-of-ixalan"]]);   // Sol Ring sold 9 but 40 in stock: not a need; One Off: one miss is noise
-  assert.equal(r.candidates[0].why, "Asked for 26 times by deck builders · sold 2 in the last 30 days · out of stock");
-  assert.equal(r.candidates[2].why, "Sold 5 in the last 30 days · 1 left");
+  assert.deepEqual(r.notes, { misses: 2, orders: 2, sold: 4, sellers: 3, ordersError: null, missesError: null });
+  // seller, miss, seller, miss...: Sol Ring (9, plenty in stock - still a best seller), Rogue's Passage (miss 26), Roaming Throne (5), Fireshrieker (16); Rogue's Passage sold 2 but is already in
+  assert.deepEqual(r.candidates.map((c) => c.name), ["Sol Ring", "Rogue's Passage", "Roaming Throne", "Fireshrieker"]);
+  assert.equal(r.candidates[0].setSlug, "commander-2016");
+  assert.ok(!("why" in r.candidates[0]));
   const denied = await internalCandidates({}, { overview: io.overview, orders: async () => ({ orders: null }) });
-  assert.equal(denied.candidates.length, 2);
+  assert.deepEqual(denied.candidates.map((c) => c.name), ["Rogue's Passage", "Fireshrieker"]);
   assert.match(denied.notes.ordersError, /orders not readable/);
 });
 
 test("startWanted puts internal candidates ahead of the movers, keeps going when the movers page fails, and the hits say why", async () => {
-  const candidates = async () => ({ candidates: [{ name: "Rogue's Passage", setSlug: "commander-2014", source: "internal", misses: 26, units: 2, inv: 0, why: "Asked for 26 times by deck builders · out of stock" }], notes: { misses: 1 } });
+  const candidates = async () => ({ candidates: [{ name: "Rogue's Passage", setSlug: "commander-2014", source: "internal", misses: 26, units: 2, inv: 0 }], notes: { misses: 1 } });
   const fetchFn = async (url) => new Response(url === MOVERS_URL ? page : morePage([]), { status: 200 });
   const search = async (name) => [hit(name, "Commander 2014", 3), hit(name, "Reality Fracture", 5)];
   let state = await startWanted({ fetchFn, search, candidates, n: 3 });
@@ -161,7 +162,8 @@ test("startWanted puts internal candidates ahead of the movers, keeps going when
   const r = await stepWanted(state, { fetchFn, search, budget: 3, delayMs: 0 });
   const v = resultOf(r.state);
   assert.equal(v.internal, 1);
-  assert.deepEqual(v.hits.map((h) => [h.cardName, h.setName, h.wanted.source, h.wanted.why]), [["Rogue's Passage", "Commander 2014", "internal", "Asked for 26 times by deck builders · out of stock"], ["Samut, Tyrant of Naktamun", "Reality Fracture", "movers", null], ["Omnipresence", "Reality Fracture", "movers", null]]);
+  assert.deepEqual(v.hits.map((h) => [h.cardName, h.setName, h.wanted.source, h.wanted.rank]), [["Rogue's Passage", "Commander 2014", "internal", 1], ["Samut, Tyrant of Naktamun", "Reality Fracture", "movers", 2], ["Omnipresence", "Reality Fracture", "movers", 3]]);
+  assert.ok(v.hits.every((h) => !("why" in h.wanted) && !("misses" in h.wanted)));   // no reasons reach the page
   // movers page down: the internal list alone still builds
   const down = await startWanted({ fetchFn: async () => new Response("nope", { status: 503 }), search, candidates, n: 3 });
   assert.deepEqual(down.pages, ["internal"]); assert.equal(down.queue.length, 1); assert.match(down.sources.moversError, /503/);

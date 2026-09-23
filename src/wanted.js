@@ -23,8 +23,8 @@ export const WANTED_N = 10;
 export const TTL_MS = 48 * 3600 * 1000;        // a good list is kept two days (a failed refresh keeps yesterday's)
 export const REFRESH_MS = 23 * 3600 * 1000;    // the cron rebuilds after this: once a day (owner, 2026-09-22)
 export const RETRY_MS = 3600 * 1000;           // and retries an hour after a build that found nothing
-const KV_KEY = "wanted:mtg:standard:v4";        // v4: internal demand first (2026-09-22)
-const ATTEMPT_KEY = "wanted:mtg:standard:attempt4";
+const KV_KEY = "wanted:mtg:standard:v5";        // v5: sellers + misses interleaved, no reasons (2026-09-23)
+const ATTEMPT_KEY = "wanted:mtg:standard:attempt5";
 const LAST_TRY_KEY = "wanted:mtg:standard:lasttry";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 const memo = { at: 0, value: null };
@@ -153,7 +153,7 @@ export async function fetchMovers(fetchFn, url) {
    Ranked by misses x 3 + units; a sold card counts only when its stock is
    at LOW_STOCK or below. These go ahead of the MTGGoldfish movers, which
    remain the fallback when the internal list is thin. */
-export const SALES_DAYS = 30;
+export const SALES_DAYS = 40;             // owner, 2026-09-23: "cards we sold the most of ... for the last 40 days"
 export const LOW_STOCK = 2;
 export const MIN_MISSES = 2;
 const ORDERS_Q = `query($q:String!,$after:String){orders(first:50,query:$q,after:$after,sortKey:CREATED_AT,reverse:true){nodes{lineItems(first:40){nodes{title quantity product{productType totalInventory}}}}pageInfo{hasNextPage endCursor}}}`;
@@ -211,7 +211,7 @@ export async function internalCandidates(env, io) {
     const since = new Date(Date.now() - SALES_DAYS * 864e5).toISOString();
     const orders = [];
     let after = null;
-    for (let page = 0; page < 10; page++) {
+    for (let page = 0; page < 24; page++) {    // up to 1200 orders, newest first
       const d = await io.orders({ q: "created_at:>='" + since + "'", after });
       const o = d && d.orders;
       if (!o) { if (page === 0) throw new Error("orders not readable (token scope?)"); break; }
@@ -223,22 +223,31 @@ export async function internalCandidates(env, io) {
     sales = tallySales(orders);
     notes.sold = Object.keys(sales).length;
   } catch (e) { notes.ordersError = String((e && e.message) || e).slice(0, 120); }
-  const names = new Set([...Object.keys(misses), ...Object.keys(sales)]);
-  const out = [];
-  for (const name of names) {
-    const m = misses[name] || 0, t = sales[name];
-    const units = t ? t.units : 0, inv = t ? t.inv : null;
-    const low = inv != null && inv <= LOW_STOCK;
-    if (!m && !(units >= 2 && low)) continue;      // a seller we still have plenty of is not a need
-    const topSet = t ? Object.keys(t.sets).sort((a, b) => t.sets[b] - t.sets[a])[0] : "";
-    const why = [];
-    if (m) why.push("asked for " + m + " time" + (m === 1 ? "" : "s") + " by deck builders");
-    if (units) why.push("sold " + units + " in the last " + SALES_DAYS + " days");
-    if (inv != null) why.push(inv <= 0 ? "out of stock" : inv + " left");
-    out.push({ name, setSlug: slugify(topSet), setCode: "", price: null, change: null, pct: null, source: "internal", misses: m, units, inv, why: why.join(" · ").replace(/^./, (c) => c.toUpperCase()) });
+  /* Two lists, interleaved (owner, 2026-09-23: "can we not just use deck
+     builder as the only source? I would like to have cards we sold the most
+     of as well for the last 40 days"): best sellers by units (any stock
+     level; basics, tokens and art cards left out) and deck-builder misses,
+     taken turn about - seller, miss, seller, miss - one line per name. The
+     reasons stay in the build notes only; the page no longer shows them
+     (owner: "I don't want it to give the details"). */
+  const NOT_A_BUY = /^(snow-covered )?(plains|island|swamp|mountain|forest|wastes)$|\btoken\b|\bemblem\b|art card|\bcheck ?list\b/i;
+  const sellers = Object.keys(sales).filter((n) => sales[n].units >= 2 && !NOT_A_BUY.test(n)).sort((a, b) => sales[b].units - sales[a].units);
+  const missed = Object.keys(misses).filter((n) => !NOT_A_BUY.test(n)).sort((a, b) => misses[b] - misses[a]);
+  const entry = (name) => {
+    const t = sales[name], topSet = t ? Object.keys(t.sets).sort((a, b) => t.sets[b] - t.sets[a])[0] : "";
+    return { name, setSlug: slugify(topSet), setCode: "", price: null, change: null, pct: null, source: "internal", misses: misses[name] || 0, units: t ? t.units : 0, inv: t ? t.inv : null };
+  };
+  const out = [], seen = new Set();
+  for (let i = 0; i < Math.max(sellers.length, missed.length) && out.length < 60; i++) {
+    for (const name of [sellers[i], missed[i]]) {
+      if (!name) continue;
+      const k = name.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k); out.push(entry(name));
+    }
   }
-  out.sort((a, b) => (b.misses * 3 + b.units) - (a.misses * 3 + a.units));
-  return { candidates: out.slice(0, 40), notes };
+  notes.sellers = sellers.length;
+  return { candidates: out.slice(0, 60), notes };
 }
 
 // One lookup's answer in a common shape: a plain array of hits (tests, the
@@ -272,7 +281,7 @@ export async function startWanted(opts) {
   if (front.length) pages.push(MOVERS_URL);
   return { startedAt: new Date().toISOString(), n, queue, more: [MORE_URLS.weekly, MORE_URLS.daily], seen: [...seen],
     hits: [], missed: [], probe: [], tried: 0, pages, sources: { internal: internal.candidates.length, movers: front.length, notes: internal.notes, moversError },
-    front: queue.slice(0, n).map((c) => ({ name: c.name, source: c.source || "movers", setCode: c.setCode, price: c.price, change: c.change, pct: c.pct, why: c.why || null })), backoffUntil: 0 };
+    front: queue.slice(0, n).map((c) => ({ name: c.name, source: c.source || "movers" })), backoffUntil: 0 };
 }
 
 // Up to `budget` lookups; returns {state, done}. A 429 puts the name back,
@@ -303,7 +312,7 @@ export async function stepWanted(state, opts) {
     state.tried++;
     const hit = matchHit(c, got.hits);
     state.probe.push({ name: c.name, status: got.status, got: got.hits.length, bodyType: got.bodyType, first: got.hits[0] ? String(got.hits[0].cardName) : null, error: got.error, matched: hit ? hit.setName : null });
-    if (hit) state.hits.push({ ...hit, wanted: { source: c.source || "movers", why: c.why || null, misses: c.misses || 0, units: c.units || 0, inv: c.inv == null ? null : c.inv, price: c.price, change: c.change, pct: c.pct, setCode: c.setCode, rank: state.hits.length + 1 } });
+    if (hit) state.hits.push({ ...hit, wanted: { source: c.source || "movers", rank: state.hits.length + 1 } });
     else state.missed.push(c.name);
   }
   const exhausted = !state.queue.length && !state.more.length;
@@ -331,7 +340,7 @@ async function readCached(env) {
   try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
   return null;
 }
-const STATE_KEY = "wanted:mtg:standard:state4";
+const STATE_KEY = "wanted:mtg:standard:state5";
 const STATE_TTL = 6 * 3600 * 1000;
 const readJson = async (env, key) => { try { const t = await kvGet(env, key); return t ? JSON.parse(t) : null; } catch { return null; } };
 

@@ -365,6 +365,21 @@
     if (d && d.open && (t === d || (t.closest && t.closest(".bl__guide-close")))) { if (typeof d.close === "function") d.close(); else d.removeAttribute("open"); }
   });
 
+  /* Compact cards (owner, 2026-09-23: "to fit more cards in the results ...
+     a way to expand out the different conditions and if there is a foil or
+     not"): a card shows its first offer only - non-foil Near Mint when the
+     store buys it - and a toggle opens the rest, saying whether a foil or
+     other finish is among them. Rows past the first are hidden by CSS on
+     .bl__hit:not(.is-open). Search results and the first screen alike. */
+  function moreBtn(offers) {
+    var rest = offers.length - 1;
+    if (rest < 1) return "";
+    var fins = {};
+    offers.forEach(function (o) { if (o.p.type && o.p.type !== "Normal") fins[o.p.type] = 1; });
+    var f = Object.keys(fins);
+    return '<button type="button" class="bl__more-opts" data-toggle="1" aria-expanded="false"><span class="bl__more-txt">' + rest + " more condition" + (rest === 1 ? "" : "s") + "</span>" +
+      (f.length ? ' <span class="bl__pill bl__pill--finish">✦ ' + esc(f.join(" / ")) + " available</span>" : "") + ' <span class="bl__chev" aria-hidden="true">&#9660;</span></button>';
+  }
   function renderHits(hits, start) {
     var html = hits.map(function (h, k) {
       var i = start + k;
@@ -376,7 +391,7 @@
         var fin = o.p.type && o.p.type !== "Normal" ? String(o.p.type) : "";
         var band = fin && fin !== lastFinish && j > 0 ? finishBand(fin) : "";
         lastFinish = fin;
-        return band + '<div class="bl__orow' + finishClass(o.p.type) + '" role="row"><span class="bl__ocond" role="cell">' + condBtn(o.v.variantName) + finish(o.p.type) + '</span>' +
+        return band + '<div class="bl__orow' + finishClass(o.p.type) + '" role="row" data-j="' + j + '"><span class="bl__ocond" role="cell">' + condBtn(o.v.variantName) + finish(o.p.type) + '</span>' +
           '<span class="bl__oprice" role="cell">' + money(o.cash) + '</span><span class="bl__oprice bl__oprice--credit" role="cell">' + money(o.credit) + '</span><span role="cell">' +
           (o.max > 0
             ? '<button type="button" class="bl__btn bl__add" data-h="' + i + '" data-o="' + j + '">Add</button>'
@@ -401,9 +416,9 @@
       var delay = "-" + ((i % 7) * 0.79).toFixed(2) + "s";
       return '<article class="bl__hit" data-set="' + esc(h.setName) + '"><span class="bl__cardwrap" style="--bl-float-delay:' + delay + '"><img class="bl__card" src="' + esc(h.imageUrl) + '" alt="' + esc(zlabel) + '" role="button" tabindex="0" aria-label="Enlarge ' + esc(zlabel) + '" loading="lazy"></span><div class="bl__head">' +
         '<h3 class="bl__name">' + esc(h.cardName) + '</h3><p class="bl__set bl__muted">' + seticon(h.setName) + "<span>" + esc(h.setName) + (h.rarity ? " · " + esc(h.rarity) : "") + "</span></p>" +
-        (h.wanted && h.wanted.why ? '<p class="bl__why">' + esc(h.wanted.why) + "</p>" : "") + "</div>" +
+"</div>" +
         (rows ? '<div class="bl__offers" role="table"><div class="bl__orow bl__orow--head" role="row"><span role="columnheader">Condition</span><span role="columnheader">Cash</span><span role="columnheader">Credit</span><span role="columnheader"><span class="bl__sr">Add</span></span></div>' + rows + "</div>" : '<p class="bl__muted bl__none">Not currently buying this printing.</p>') +
-        "</article>";
+        moreBtn(offers) + "</article>";
     }).join("");
     $("#bl-hits").insertAdjacentHTML("beforeend", html);
     floatWatch();
@@ -444,6 +459,15 @@
   $("#bl-hits").addEventListener("click", function (e) {
     var card = e.target.closest("img.bl__card");
     if (card) { openZoom(card); return; }
+    var tg = e.target.closest("button.bl__more-opts");
+    if (tg) {
+      var art = tg.closest(".bl__hit"), open = !art.classList.contains("is-open");
+      art.classList.toggle("is-open", open);
+      tg.setAttribute("aria-expanded", open ? "true" : "false");
+      var n = art.querySelectorAll(".bl__orow[data-j]").length - 1;
+      tg.querySelector(".bl__more-txt").textContent = open ? "Show fewer" : n + " more condition" + (n === 1 ? "" : "s");
+      return;
+    }
     var b = e.target.closest("button.bl__add");
     if (!b) return;
     var h = lastHits[+b.dataset.h];
