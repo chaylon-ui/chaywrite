@@ -52,6 +52,7 @@ export async function plamodTargets(gql) {
         barcode: /^\d{8,14}$/.test(barcode) ? barcode : "",
         images: imgs.length,
         keys: imgs.map(imageKey).filter(Boolean),
+        urls: imgs.map((u) => String(u).split("?")[0]),
       });
     }
     if (!p.pageInfo.hasNextPage) break;
@@ -62,7 +63,7 @@ export async function plamodTargets(gql) {
 
 export async function servePlamodTargets(request, env, ctx, gql) {
   const cache = caches.default;
-  const key = new Request("https://cache.internal/plamod/targets.json?v=1");
+  const key = new Request("https://cache.internal/plamod/targets.json?v=2");
   const hit = await cache.match(key);
   if (hit) return hit;
   let body, status = 200;
