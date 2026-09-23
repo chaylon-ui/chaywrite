@@ -213,3 +213,24 @@ html[data-xg-theme="dark"] .cloud-search-results .see-more-results a {
   background: #1d2327 !important; color: #e6ebee !important; border-color: #2a3236 !important;
 }
 html[data-xg-theme="dark"] .cloud-search-results .see-more-results .actual-search-term { color: #fff !important; }
+/* ---- Collection pages, dark mode (owner, 2026-09-23, after publishing) ----
+   1. "this is weird in MTG": the page numbers sit in two nested
+      .pagination-block boxes; the inner bar is dark, the OUTER one kept the
+      theme's light #f5f5f5 with 20px of padding, drawing a light frame
+      around the dark bar (shot-probe 35864785084, 1280px).
+   2. "all too dark": the Cloud Search filter sidebar's text fields (price
+      from/to, Search By Set Name, Search By Card Name) type in #080808 on the
+      dark page, with a dim grey placeholder (shot-probe 35865028930). */
+html[data-xg-theme="dark"] .collection > .pagination-block,
+html[data-xg-theme="dark"] .pagination-block:has(.pagination-block) { background: transparent !important; }
+html[data-xg-theme="dark"] .cloud-search-text-field__input {
+  color: #e6ebee !important;
+  background: #1d2327 !important;
+  border-color: #39434a !important;
+  caret-color: #e6ebee;
+}
+html[data-xg-theme="dark"] .cloud-search-text-field__input::placeholder { color: #8a969d !important; opacity: 1; }
+html[data-xg-theme="dark"] .cloud-search-num-field__currency { color: #8a969d !important; }
+html[data-xg-theme="dark"] .cloud-search-filters-sidebar__heading,
+html[data-xg-theme="dark"] #cloud_search_filters_sidebar .cloud-search-filter__title,
+html[data-xg-theme="dark"] #cloud_search_filters_sidebar .cloud-search-filter__title * { color: #e6ebee !important; }
