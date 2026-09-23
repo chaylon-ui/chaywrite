@@ -1,154 +1,61 @@
 name: plamod-sync
-# Official product photos (and facts) for our Gunpla, figures and blind boxes
-# from PLAMOD, the distributor we buy them from (owner, 2026-09-23: "I get
-# gunpla from here: https://www.plamod.com/retailer", "I also get figures from
-# there and blind boxes"). The retailer portal gives retailers each product's
-# image set; the images are plain public files on images.plamod.com (full size
-# is the file name with no -S/-L suffix, 1200px), and every product lists its
-# barcode - our products carry the same barcode - so matching is exact.
-#
-# DRY RUN ONLY for now: reads our work list from the worker
-# (/plamod/targets.json), signs in to the portal with the owner's retailer
+# Official photos + facts for our Gunpla, figures and blind boxes from PLAMOD,
+# the distributor we buy them from (owner, 2026-09-23: "Let's do it, add all
+# photos if you can", "make sure any case language isn't included"). Runs
+# tools/plamod-sync.mjs: signs in to the retailer portal with the owner's
 # account (Actions secrets PLAMOD_COMPANY / PLAMOD_USERNAME / PLAMOD_PASSWORD),
-# looks each barcode up (one page a second) and prints what it WOULD add:
-# how many photos we have, how many PLAMOD has, how many are new to us, and
-# the release date / series. Nothing is written anywhere. Never prints the
-# secrets, cookies or any price (wholesale prices are confidential; this
-# repo's logs are public). Only navigates - never clicks cart, preorder or
-# notify buttons.
+# looks our barcodes up and commits data/plamod.json (PLAMOD's public photo
+# URLs, release date, series, brand - never prices, stock or descriptions).
+# The worker's nightly sweep (src/plamod.js) adds the photos and facts to the
+# products. Every 4 hours: the first pass over ~2000 products takes several
+# runs; after that a run only looks at new products (a miss is retried after
+# 14 days, a match re-checked after 30).
 on:
   workflow_dispatch:
     inputs:
-      scope:
-        description: "few = products with 0-1 photos; all = every product"
-        default: few
-      types:
-        description: Product types to include (comma list; blank = Gunpla, Figures, Blind Box)
-        default: ""
+      dry_run:
+        description: Look up and print, commit nothing
+        default: "false"
       limit:
-        description: Look up at most this many products (0 = all)
-        default: "40"
+        description: Look up at most this many products (0 = all due)
+        default: "0"
       barcodes:
-        description: Only these barcodes (comma list; overrides scope/types)
+        description: Only these barcodes (comma list)
         default: ""
+  schedule:
+    - cron: "25 */4 * * *"
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: plamod-sync
+  cancel-in-progress: false
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     steps:
-      - name: Install puppeteer-core
-        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
-      - name: Dry run
+      - uses: actions/checkout@v4
+      - name: Install puppeteer-core and sharp
+        run: npm i --no-save puppeteer-core@22 sharp >/dev/null 2>&1
+      - name: Look products up on PLAMOD
         env:
           PCO: ${{ secrets.PLAMOD_COMPANY }}
           PUS: ${{ secrets.PLAMOD_USERNAME }}
           PPW: ${{ secrets.PLAMOD_PASSWORD }}
-          SCOPE: ${{ inputs.scope }}
-          TYPES: ${{ inputs.types }}
+          DRY_RUN: ${{ inputs.dry_run }}
           LIMIT: ${{ inputs.limit }}
           BARCODES: ${{ inputs.barcodes }}
+          BUDGET_MIN: "40"
         run: |
           if [ -z "$PUS" ] || [ -z "$PPW" ]; then echo "PLAMOD secrets missing"; exit 1; fi
-          curl -sS --max-time 400 -o targets.json https://exor-binder.nevski.workers.dev/plamod/targets.json
-          node -e "const j=require('./targets.json'); if(!j.items){console.log('targets error', JSON.stringify(j).slice(0,300)); process.exit(1)} console.log('targets', j.count, 'generated', j.generated)"
-          cat > sync.js <<'EOF'
-          const puppeteer = require('puppeteer-core');
-          const fs = require('fs');
-          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-          const SECRETS = [process.env.PCO, process.env.PUS, process.env.PPW].filter(s => s && s.length > 2);
-          const clean = (s) => { s = String(s); for (const x of SECRETS) s = s.split(x).join('[secret]'); return s; };
-          const log = (...a) => console.log(clean(a.join(' ')));
-          const KEY = /\/([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})(?:-[A-Z])?\.(png|jpe?g|webp)/;
-          const BUDGET_MS = 35 * 60 * 1000, t0 = Date.now();
-          let last = 0;
-          async function go(page, url) {
-            const wait = 1000 - (Date.now() - last);
-            if (wait > 0) await sleep(wait);
-            last = Date.now();
-            await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
-          }
-          (async () => {
-            const all = JSON.parse(fs.readFileSync('targets.json', 'utf8')).items;
-            const types = (process.env.TYPES || '').split(',').map(s => s.trim()).filter(Boolean);
-            let todo = all.filter(t => t.barcode && (!types.length || types.includes(t.type)) && (process.env.SCOPE === 'all' || t.images <= 1));
-            log('work list:', all.length, 'products;', all.filter(t => !t.barcode).length, 'without a barcode;', todo.length, 'in scope (' + (process.env.SCOPE || 'few') + (types.length ? ', ' + types.join('/') : '') + ')');
-            const only = (process.env.BARCODES || '').split(',').map(s => s.trim()).filter(Boolean);
-            if (only.length) todo = all.filter(t => only.includes(t.barcode)).concat(only.filter(b => !all.some(t => t.barcode === b)).map(b => ({ barcode: b, title: '(not one of ours)', type: '-', images: 0, keys: [] })));
-            const limit = parseInt(process.env.LIMIT || '0', 10);
-            if (limit > 0) todo = todo.slice(0, limit);
-            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-            const page = await browser.newPage();
-            await page.setViewport({ width: 1400, height: 1000 });
-            await go(page, 'https://www.plamod.com/retailer-sign-in');
-            const vis = [];
-            for (const h of await page.$$('input')) { if (await h.evaluate(e => e.offsetParent !== null && !['hidden', 'checkbox', 'submit', 'password'].includes(e.type))) vis.push(h); }
-            if (vis.length >= 2) { await vis[0].type(process.env.PCO || ''); await vis[1].type(process.env.PUS); } else if (vis[0]) await vis[0].type(process.env.PUS);
-            await (await page.$('input[type=password]')).type(process.env.PPW);
-            await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 }).catch(() => null), page.keyboard.press('Enter')]);
-            // the portal redirects client-side after the sign-in call returns
-            for (let i = 0; i < 20 && /sign-in/.test(page.url()); i++) await sleep(1000);
-            if (/sign-in/.test(page.url())) { log('SIGN-IN FAILED (still on the sign-in page after 20s)'); process.exit(1); }
-            log('signed in');
-            const tally = { looked: 0, found: 0, notFound: 0, ambiguous: 0, withNew: 0, newPhotos: 0, facts: 0 };
-            for (const t of todo) {
-              if (Date.now() - t0 > BUDGET_MS) { log('time budget spent'); break; }
-              tally.looked++;
-              try {
-                await go(page, 'https://www.plamod.com/retailer/search?q=' + t.barcode);
-                // Results arrive a moment after load (the portal fetches them
-                // client-side); until then the page says "No products found",
-                // so that text is NOT an answer - wait for the barcode itself.
-                await page.waitForFunction((bc) => (document.body.innerText || '').includes('Barcode: ' + bc), { timeout: 10000 }, t.barcode).catch(() => null);
-                const hits = await page.evaluate((bc) => {
-                  const out = new Set();
-                  for (const a of document.querySelectorAll('a[href*="/retailer/products/"]')) {
-                    let card = a;
-                    for (let i = 0; i < 6 && card && !(card.innerText || '').includes('Barcode'); i++) card = card.parentElement;
-                    if (card && (card.innerText || '').includes(bc)) out.add(a.getAttribute('href').split('?')[0]);
-                  }
-                  return [...out];
-                }, t.barcode);
-                if (hits.length !== 1) {
-                  tally[hits.length ? 'ambiguous' : 'notFound']++;
-                  log((hits.length ? 'AMBIGUOUS ' + hits.length : 'NOT FOUND'), '|', t.type, '|', t.barcode, '|', t.title.slice(0, 70));
-                  if (tally.notFound + tally.ambiguous <= 3) {
-                    const dbg = await page.evaluate(() => ({ url: location.href, links: document.querySelectorAll('a[href*="/retailer/products/"]').length, text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 700) })).catch(e => ({ err: e.message }));
-                    if (dbg.text) dbg.text = dbg.text.replace(/\$\s?\d[\d,.]*/g, '$[x]');
-                    log('  debug', JSON.stringify(dbg));
-                  }
-                  continue;
-                }
-                await go(page, 'https://www.plamod.com' + hits[0]);
-                const info = await page.evaluate(() => ({
-                  text: document.body.innerText.replace(/\s+/g, ' '),
-                  imgs: [...document.querySelectorAll('img')].map(i => i.currentSrc || i.src).filter(u => /images\.plamod\.com/.test(u)),
-                }));
-                const seen = new Set(), photos = [];
-                for (const u of info.imgs) {
-                  const m = u.match(KEY);
-                  if (!m || seen.has(m[1])) continue;
-                  seen.add(m[1]);
-                  photos.push({ key: m[1], url: u.replace(/-[A-Z]\.(png|jpe?g|webp)(\?.*)?$/, '.$1') });
-                }
-                const ours = new Set(t.keys || []);
-                const fresh = photos.filter(p => !ours.has(p.key));
-                const pick = (re) => { const m = info.text.match(re); return m ? m[1].trim() : ''; };
-                const release = pick(/Release Date (.+?) Country of Origin/);
-                const series = pick(/Series (.+?) Categories/);
-                const brand = pick(/Manufacturer Brand (.+?) Release Date/);
-                const barcodeOk = info.text.includes('Barcode ' + t.barcode);
-                tally.found++;
-                if (fresh.length) { tally.withNew++; tally.newPhotos += fresh.length; }
-                if (release || series) tally.facts++;
-                log('FOUND', '|', t.type, '|', t.title.slice(0, 60), '|', t.barcode, barcodeOk ? '' : '(barcode not on page!)', '| plamod', hits[0].split('/').pop(), '| ours', t.images, '| plamod photos', photos.length, '| new', fresh.length, '| release', release || '-', '| series', series || '-', '| brand', brand || '-');
-              } catch (e) {
-                log('ERROR', t.barcode, clean(e.message).slice(0, 160));
-              }
-            }
-            log('SUMMARY', JSON.stringify(tally));
-            await browser.close();
-          })().catch(e => { console.log('ERROR', clean(e.message)); process.exit(1); });
-          EOF
-          node sync.js
+          node tools/plamod-sync.mjs
+      - name: Commit data/plamod.json when it changed
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          set -e
+          if [ ! -f data/plamod.json ] || [ -z "$(git status --porcelain data/plamod.json)" ]; then echo "no change to data/plamod.json"; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/plamod.json
+          git commit -m "plamod: refresh $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
