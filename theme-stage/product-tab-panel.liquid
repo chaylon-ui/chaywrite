@@ -1,0 +1,307 @@
+<div class="page-width product-tab">
+  <ul class="tabs nav-tabs tab-id" role="tablist">
+    {% if section.settings.show_description %}
+    <li class="tab-item"><a class="nav-link" data-toggle="tab" role="tab" href="#desc"><span>{{
+          'products.product.description' | t }}</span></a></li>
+    {% endif %}
+    {% for block in section.blocks %}
+    {% case block.type %}
+    {% when 'policy' %}
+    <li class="tab-item">
+      <a class="nav-link" data-toggle="tab" role="tab" href="#{{block.settings.policy_page}}">
+        <span>{{block.settings.policy_page | replace: "_", " " }}</span>
+      </a>
+    </li>
+    {% endcase %}
+    {% endfor %}
+  </ul>
+  <div class="tab-content" id="tab-content">
+    {% if section.settings.show_description %}
+    <div id="desc" class="tab-pane fade in active" role="tabpanel">
+      {%- comment -%}
+        Board games (owner 2026-09-13, "layed out like BGG"): when the product
+        has no description of its own, the BoardGameGeek description filled by
+        the nightly enrichment (exor.bgg_description) is shown instead, and a
+        Classification card (type, categories, mechanisms) sits beside the text
+        like BGG's own page. Other products render exactly as before.
+      {%- endcomment -%}
+      {%- liquid
+        assign gf = product.metafields.exor
+        assign use_bgg = false
+        if product.description == blank and gf.bgg_description.value != blank
+          assign use_bgg = true
+        endif
+        assign show_class = false
+        if gf.categories.value != blank or gf.mechanics.value != blank
+          assign show_class = true
+        endif
+        comment
+          Gunpla (owner 2026-09-23, "auto update stats and specs like with
+          board games"): the nightly enrichment (chaywrite src/gunpla.js)
+          fills exor.gp_* from the title and Bandai's own kit page; a Kit
+          specs card shows them, and a kit with no description of its own gets
+          one plain sentence built from the same facts.
+        endcomment
+        assign show_kit = false
+        if gf.gp_grade.value != blank
+          assign show_kit = true
+        endif
+        assign kit_when = ''
+        assign rel = gf.gp_release.value | append: ''
+        if rel.size == 10
+          assign kit_when = rel | date: '%B %-d, %Y'
+        elsif rel.size == 7
+          assign kit_when = rel | append: '-01' | date: '%B %Y'
+        elsif rel.size == 4
+          assign kit_when = rel
+        endif
+      -%}
+      {%- if use_bgg or show_class or show_kit -%}
+      <div class="xg-desc{% if show_class or show_kit %} xg-desc--split{% endif %}" data-xg-handle="{{ product.handle | escape }}">
+        <div class="xg-desc__body">
+          {%- if use_bgg -%}
+            <div class="xg-desc__text">{{ gf.bgg_description.value | escape | newline_to_br }}</div>
+            <p class="xg-desc__note">Description from <a href="https://boardgamegeek.com/boardgame/{{ gf.bgg_id.value }}" target="_blank" rel="noopener">BoardGameGeek</a>.</p>
+          {%- elsif show_kit and product.description == blank -%}
+            <div class="xg-desc__text">
+              {{- product.title | escape }} is {% if gf.gp_grade.value contains 'Entry' or gf.gp_grade.value contains 'SD' %}an{% else %}a{% endif %} {{ gf.gp_grade.value | escape }}
+              {%- if gf.gp_grade_code.value != blank %} ({{ gf.gp_grade_code.value | escape }}){% endif %} Gunpla model kit
+              {%- if gf.gp_scale.value != blank %} in {{ gf.gp_scale.value }} scale{% endif %}
+              {%- if gf.gp_line.value != blank %} from the {{ gf.gp_line.value | escape }} line{% endif %}
+              {%- if kit_when != blank %}, released by Bandai {% if rel.size == 10 %}on{% else %}in{% endif %} {{ kit_when }}{% endif %}.
+            </div>
+          {%- else -%}
+            {{ product.description }}
+          {%- endif -%}
+        </div>
+        {%- if show_kit -%}
+        <aside class="xg-class" aria-label="Kit specs">
+          <h3 class="xg-class__title">Kit specs</h3>
+          <dl>
+            <dt>Grade</dt><dd>{{ gf.gp_grade.value | escape }}{% if gf.gp_grade_code.value != blank %} ({{ gf.gp_grade_code.value | escape }}){% endif %}</dd>
+            {%- if gf.gp_line.value != blank -%}<dt>Line</dt><dd>{{ gf.gp_line.value | escape }}</dd>{%- endif -%}
+            {%- if gf.gp_scale.value != blank -%}<dt>Scale</dt><dd>{{ gf.gp_scale.value | escape }}</dd>{%- endif -%}
+            {%- if gf.gp_number.value != blank -%}<dt>Kit number</dt><dd>#{{ gf.gp_number.value | escape }}</dd>{%- endif -%}
+            {%- if gf.gp_series.value != blank -%}<dt>Series</dt><dd>{{ gf.gp_series.value | escape }}</dd>{%- endif -%}
+            {%- if kit_when != blank -%}<dt>Released</dt><dd>{{ kit_when }}</dd>{%- endif -%}
+            {%- if gf.gp_age.value != blank -%}<dt>Age</dt><dd>{{ gf.gp_age.value }}+</dd>{%- endif -%}
+            {%- if gf.gp_price_jpy.value != blank -%}
+              {%- assign yen = gf.gp_price_jpy.value | plus: 0 -%}
+              <dt>Japan list price</dt><dd>&yen;{% if yen >= 1000 %}{{ yen | divided_by: 1000 }},{{ yen | modulo: 1000 | plus: 1000 | append: '' | slice: 1, 3 }}{% else %}{{ yen }}{% endif %}</dd>
+            {%- endif -%}
+          </dl>
+          {%- if gf.gp_bandai_url.value != blank -%}
+          <p class="xg-class__hint"><a href="{{ gf.gp_bandai_url.value }}" target="_blank" rel="noopener">Official kit page on Bandai Hobby &#8599;</a></p>
+          {%- endif -%}
+        </aside>
+        {%- endif -%}
+        {%- if show_class -%}
+        <aside class="xg-class" aria-label="Classification">
+          <h3 class="xg-class__title">Classification</h3>
+          <dl>
+            <dt>Type</dt><dd>{% if gf.base_game.value != blank %}Expansion{% else %}Board game{% endif %}</dd>
+            {%- if gf.categories.value != blank -%}
+            <dt>Category</dt><dd><ul class="xg-class__chips">{% for c in gf.categories.value %}<li><button type="button" class="xg-chip" data-kind="category" data-value="{{ c | escape }}" title="Other {{ c | escape }} games in stock">{{ c | escape }}</button></li>{% endfor %}</ul></dd>
+            {%- endif -%}
+            {%- if gf.mechanics.value != blank -%}
+            <dt>Mechanism</dt><dd><ul class="xg-class__chips">{% for m in gf.mechanics.value %}<li><button type="button" class="xg-chip" data-kind="mechanism" data-value="{{ m | escape }}" title="Other games with {{ m | escape }} in stock">{{ m | escape }}</button></li>{% endfor %}</ul></dd>
+            {%- endif -%}
+          </dl>
+        </aside>
+        {%- endif -%}
+      </div>
+      <style>
+        .xg-desc--split { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px 32px; align-items: start; }
+        @media (max-width: 767px) { .xg-desc--split { grid-template-columns: 1fr; } }
+        .xg-desc__text { font-size: 15.5px; line-height: 1.6; color: var(--xg-text, #3d454b); }
+        .xg-desc__note { margin: 12px 0 0; font-size: 12.5px; color: var(--xg-muted, #8a9299); }
+        .xg-desc__note a { color: inherit; text-decoration: underline; }
+        .xg-class { padding: 16px 18px; background: var(--xg-bg, #f1f4f6); border-radius: var(--xg-radius, 14px); }
+        .xg-class__title { margin: 0 0 4px; font-family: var(--xg-font-display, Oswald, Impact, sans-serif); font-size: 17px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--xg-ink, #10171a); }
+        .xg-class dl { margin: 0; }
+        .xg-class dt { margin: 12px 0 5px; font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-muted, #8a9299); }
+        .xg-class dd { margin: 0; font-size: 14px; font-weight: 600; color: var(--xg-ink, #10171a); }
+        .xg-class__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+        .xg-class__chips li { margin: 0; padding: 0; list-style: none; }
+        .xg-chip { margin: 0; padding: 3px 9px; border-radius: 999px; background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #e3e7ea); font: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.4; color: var(--xg-text, #4b5560); cursor: pointer; transition: border-color 120ms ease, color 120ms ease; }
+        .xg-chip:hover, .xg-chip:focus-visible { border-color: var(--xg-red, #d62c28); color: var(--xg-red, #d62c28); outline: none; }
+        .xg-chip::after { content: " \203A"; opacity: .55; }
+        .xg-class__hint { margin: 10px 0 0; font-size: 11.5px; color: var(--xg-muted, #8a9299); }
+        .xg-class__hint a { color: inherit; text-decoration: underline; }
+        /* the "games like this" panel */
+        .xg-like { position: fixed; inset: 0; z-index: 10050; background: rgba(12, 16, 20, .62); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px 16px; overflow-y: auto; }
+        .xg-like[hidden] { display: none; }
+        .xg-like__panel { width: min(1040px, 100%); background: var(--xg-surface, #fff); color: var(--xg-text, #3d454b); border-radius: var(--xg-radius, 14px); box-shadow: 0 30px 80px rgba(0, 0, 0, .35); padding: 18px 20px 22px; }
+        .xg-like__head { display: flex; align-items: center; gap: 12px; margin: 0 0 4px; }
+        .xg-like__head h3 { flex: 1 1 auto; margin: 0; font-family: var(--xg-font-display, Oswald, Impact, sans-serif); font-size: 22px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--xg-ink, #10171a); }
+        .xg-like__close { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--xg-border, #e3e7ea); background: var(--xg-bg, #f1f4f6); color: var(--xg-ink, #10171a); font-size: 22px; line-height: 1; cursor: pointer; }
+        .xg-like__sub { margin: 0 0 14px; font-size: 13px; color: var(--xg-muted, #8a9299); }
+        .xg-like__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+        .xg-like__card { display: flex; flex-direction: column; background: var(--xg-bg, #f1f4f6); border: 1px solid var(--xg-border, #e3e7ea); border-radius: 12px; padding: 10px 10px 12px; text-align: center; }
+        .xg-like__card a { color: inherit; text-decoration: none; }
+        .xg-like__card img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; border-radius: 8px; display: block; }
+        .xg-like__noimg { width: 100%; aspect-ratio: 1; border-radius: 8px; background: var(--xg-surface, #fff); }
+        .xg-like__t { display: block; margin-top: 8px; font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--xg-ink, #10171a); min-height: 2.6em; }
+        .xg-like__m { display: block; margin-top: 3px; font-size: 11.5px; color: var(--xg-muted, #8a9299); }
+        .xg-like__p { display: block; margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--xg-ink, #10171a); font-variant-numeric: tabular-nums; }
+        .xg-like__add { margin-top: 8px; padding: 7px 10px; border: 0; border-radius: 8px; background: var(--xg-red, #d62c28); color: #fff; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+        .xg-like__add[disabled] { background: #2a9d5c; cursor: default; }
+        .xg-like__empty { padding: 26px 10px; text-align: center; color: var(--xg-muted, #8a9299); }
+        html[data-xg-theme="dark"] .xg-like__card img { background: #23292e; }
+        @media (max-width: 640px) { .xg-like { padding: 0; align-items: stretch; } .xg-like__panel { border-radius: 0; min-height: 100%; } .xg-like__grid { grid-template-columns: repeat(2, 1fr); } }
+      </style>
+      {%- if show_class -%}
+      <p class="xg-class__hint">Tap a category or mechanism to see the other games we have in stock with it.</p>
+      <script>
+        (function () {
+          if (window.__xgLike) return; window.__xgLike = 1;
+          var W = 'https://exor-binder.nevski.workers.dev';
+          var here = (document.querySelector('[data-xg-handle]') || {}).getAttribute ? document.querySelector('[data-xg-handle]').getAttribute('data-xg-handle') : '';
+          function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+          var box = null;
+          function panel() {
+            if (box) return box;
+            box = document.createElement('div');
+            box.className = 'xg-like'; box.hidden = true; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+            box.innerHTML = '<div class="xg-like__panel"><div class="xg-like__head"><h3 id="xg-like-title"></h3><button type="button" class="xg-like__close" aria-label="Close">&times;</button></div><p class="xg-like__sub"></p><div class="xg-like__grid"></div></div>';
+            box.setAttribute('aria-labelledby', 'xg-like-title');
+            document.body.appendChild(box);
+            box.addEventListener('click', function (e) { if (e.target === box || (e.target.closest && e.target.closest('.xg-like__close'))) close(); });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !box.hidden) close(); });
+            box.addEventListener('click', function (e) {
+              var b = e.target.closest && e.target.closest('.xg-like__add');
+              if (b && !b.disabled) addToCart(b);
+            });
+            return box;
+          }
+          function close() { if (!box) return; box.hidden = true; document.body.style.overflow = ''; }
+          function open(kind, value) {
+            var p = panel();
+            p.querySelector('#xg-like-title').textContent = (kind === 'mechanism' ? 'Games with ' : '') + value + (kind === 'category' ? ' games' : '') + ' in stock';
+            p.querySelector('.xg-like__sub').textContent = 'Looking…';
+            p.querySelector('.xg-like__grid').innerHTML = '';
+            p.hidden = false; document.body.style.overflow = 'hidden';
+            fetch(W + '/games/like.json?kind=' + encodeURIComponent(kind) + '&value=' + encodeURIComponent(value) + '&exclude=' + encodeURIComponent(here) + '&limit=36')
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (p.hidden) return;
+                var games = (j && j.ok && j.games) || [];
+                var sub = p.querySelector('.xg-like__sub'), grid = p.querySelector('.xg-like__grid');
+                if (!games.length) { sub.textContent = ''; grid.innerHTML = '<div class="xg-like__empty">Nothing else with ' + esc(value) + ' is in stock right now.</div>'; return; }
+                sub.textContent = j.count + (j.count === 1 ? ' game' : ' games') + ' on the shelf at Exor Games, best rated first. Board game data from BoardGameGeek.';
+                grid.innerHTML = games.map(function (g) {
+                  var meta = [];
+                  if (g.rating) meta.push('BGG ' + Number(g.rating).toFixed(1));
+                  if (g.players) meta.push(g.players + ' players');
+                  if (g.time) meta.push(g.time + ' min');
+                  return '<div class="xg-like__card"><a href="' + esc(g.url) + '">' +
+                    (g.image ? '<img src="' + esc(g.image) + '" alt="' + esc(g.title) + '" loading="lazy">' : '<div class="xg-like__noimg"></div>') +
+                    '<span class="xg-like__t">' + esc(g.title) + '</span>' +
+                    '<span class="xg-like__m">' + esc(meta.join(' · ')) + '</span>' +
+                    '<span class="xg-like__p">$' + esc(g.price) + '</span></a>' +
+                    (g.variant ? '<button type="button" class="xg-like__add" data-variant="' + esc(g.variant) + '" data-title="' + esc(g.title) + '" data-image="' + esc(g.image || '') + '" data-url="' + esc(g.url) + '" data-cents="' + esc(Math.round(Number(g.price) * 100)) + '">Add to cart</button>' : '') +
+                    '</div>';
+                }).join('');
+              })
+              .catch(function () { if (!p.hidden) p.querySelector('.xg-like__sub').textContent = 'Could not load the list right now.'; });
+          }
+          function addToCart(b) {
+            b.disabled = true; b.textContent = 'Adding…';
+            fetch('/cart/add.js', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ id: Number(b.getAttribute('data-variant')), quantity: 1 }) })
+              .then(function (r) { if (!r.ok) throw new Error('cart ' + r.status); return r.json(); })
+              .then(function (it) {
+                b.textContent = 'Added ✓';
+                try { var sync = (window.Shopify && window.Shopify.adjustCartDropDown) || window.adjustCartDropDown; if (typeof sync === 'function') sync(); } catch (e) {}
+                if (window.xgCartPeek) window.xgCartPeek({ title: b.getAttribute('data-title'), image: b.getAttribute('data-image'), url: b.getAttribute('data-url'), qty: 1, cents: Number((it && it.final_price) || b.getAttribute('data-cents')) });
+              })
+              .catch(function () { b.disabled = false; b.textContent = 'Try again'; });
+          }
+          document.addEventListener('click', function (e) {
+            var c = e.target.closest && e.target.closest('.xg-chip[data-kind]');
+            if (!c) return;
+            e.preventDefault();
+            open(c.getAttribute('data-kind'), c.getAttribute('data-value'));
+          });
+        })();
+      </script>
+      {%- endif -%}
+      {%- else -%}
+      {{ product.description }}
+      {%- endif -%}
+    </div>
+    {% endif %}
+    {% for block in section.blocks %}
+    {% case block.type %}
+    {% when 'policy' %}
+    <div id="{{block.settings.policy_page}}" class="tab-pane fade in" role="tabpanel">
+      <div class="policy">
+        <div class="refund">
+          <div class="inner-content">{{ shop[block.settings.policy_page] }}</div>
+        </div>
+      </div>
+    </div>
+    {% endcase %}
+    {% endfor %}
+  </div>
+</div>
+
+{% schema %}
+{
+"name":"Information Tabs",
+"settings":[
+{
+"type":"checkbox",
+"id":"show_description",
+"label":"Show Description Tab",
+"default":true
+},
+{
+"type": "paragraph",
+"content": "Looking to add other tabs? Try adding a block."
+}
+],
+"blocks":[
+{
+"type": "policy",
+"name": "Policy Page",
+"settings": [
+{
+"type": "header",
+"content": "Add a section page to the tabs"
+},
+{
+"type": "select",
+"id": "policy_page",
+"label": "Select a policy template for this block",
+"default": "refund_policy",
+"options": [
+{
+"value": "refund_policy",
+"label": "Refund Policy"
+},
+{
+"value": "privacy_policy",
+"label": "Privacy Policy"
+},
+{
+"value": "terms_of_service",
+"label": "Terms of Service"
+}
+]
+}
+]
+}
+],
+"presets":[
+{
+"name":"Add Information Tabs Snippet",
+"blocks": [
+{
+"type": "policy"
+}
+]
+}
+],
+"templates":["product"]
+}
+{% endschema %}
