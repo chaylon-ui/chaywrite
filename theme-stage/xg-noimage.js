@@ -7,7 +7,8 @@
    with no photo, and BinderPOS's advanced-search widget and the Cloud Search
    app pass the same URL along from their product data. So rather than chase
    every template and both apps, this swaps the picture wherever it shows up:
-   every <img> (and <picture> <source>) whose address is the no-image GIF gets
+   every <img> (and <picture> <source>) whose address is the no-image GIF (or
+   one of BinderPOS's <game>_placeholder pictures, see RE) gets
    NOIMAGE.png instead - on first paint and on anything added later.
 
    Loaded early and NOT deferred, so the observer is watching while the page
@@ -19,7 +20,12 @@
   window.__xgNoImage = 1;
 
   var SRC = 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/NOIMAGE.png?v=1790177287&width=480';
-  var RE = /\/no-image[-_.]/i;
+  // Shopify's no-image GIF, and BinderPOS's per-game "IMAGE COMING SOON"
+  // stand-ins it attaches to products it has no scan for yet (owner's
+  // screenshot: Llanowar Elves (7167) [Secret Lair Drop Series] ->
+  // files/mtg_placeholder_<uuid>.png; also pkm_placeholder, ygo_placeholder...,
+  // 500x700; served as .../mtg_placeholder_<uuid>_370x480.png on the storefront)
+  var RE = /\/no-image[-_.]|\/(?:files|products)\/[a-z0-9]{2,12}_placeholder[_.]/i;
 
   function isNoImage(v) { return !!v && RE.test(v); }
 
