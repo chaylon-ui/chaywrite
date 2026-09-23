@@ -41,6 +41,7 @@
  */
 
 import { adminGql, throttleWait, dayOf, dateOf } from "./price-history.js";
+import { GUNPLA_QUERY, KITS_FILE_URL, indexKits, gunplaMetafields } from "./gunpla.js";
 
 export const ENRICH_DO = "enrich";
 
@@ -563,6 +564,7 @@ export function parseProductPage(data) {
       handle: String(n.handle || ""),
       expansions: jsonOr(n.exp && n.exp.value, null),
       baseGame: jsonOr(n.base && n.base.value, null),
+      gpSig: n.gsig && n.gsig.value ? String(n.gsig.value) : "",
     });
   }
   return {
@@ -582,6 +584,7 @@ const PRODUCT_PAGE = `query($q:String!,$n:Int!,$after:String){
       enriched: metafield(namespace:"exor", key:"enriched_at"){ value }
       ver: metafield(namespace:"exor", key:"enrich_version"){ value }
       bgg: metafield(namespace:"exor", key:"bgg_id"){ value }
+      gsig: metafield(namespace:"exor", key:"gp_sig"){ value }
       exp: metafield(namespace:"exor", key:"expansions"){ value }
       base: metafield(namespace:"exor", key:"base_game"){ value }
       handle
@@ -839,12 +842,31 @@ async function seriesInfo(cx, names) {
   return have;
 }
 
+/* data/bandai-kits.json (tools/bandai-kits.py, weekly) read once per run.
+   Missing or unreadable -> an empty index: every kit still gets its title
+   facts, just no Bandai release date. */
+async function kitsIndex(cx) {
+  if (cx.mem && cx.mem.kits) return cx.mem.kits;
+  let idx = indexKits(null);
+  try {
+    const r = await cx.fetch(KITS_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    if (r.ok) {
+      const j = await r.json();
+      idx = indexKits(j);
+      cx.log("enrich: bandai kits file loaded, " + idx.size + " kits, generated " + ((j && j.generated) || "?"));
+    } else cx.log("enrich: bandai kits file HTTP " + r.status + " - Gunpla gets title facts only");
+  } catch (e) { cx.log("enrich: bandai kits file fetch failed: " + msg(e)); }
+  if (cx.mem) cx.mem.kits = idx;
+  return idx;
+}
+
 /* ---- the nightly run --------------------------------------------------------- */
 
 const newRun = (day, now) => ({
   day, phase: "books", cursor: null, pending: [], hasNext: true,
   pages: 0, seen: 0, written: 0, skipped: 0, ok: 0, ambiguous: 0, notfound: 0,
   errors: 0, errStreak: 0, throttled: 0, ticks: 0, tickAt: now, done: false,
+  gunpla: { seen: 0, changed: 0, bandai: 0, titleOnly: 0, unknown: 0 },
 });
 
 async function arm(cx, at, why) {
@@ -865,7 +887,8 @@ async function finish(cx, run, error) {
   await cx.storage.put({ "en:run": run, "en:last": summary });
   cx.log("enrich: run " + dateOf(run.day) + (error ? " FAILED: " + error : " finished") +
     " seen=" + run.seen + " written=" + run.written + " ok=" + run.ok +
-    " ambiguous=" + run.ambiguous + " notfound=" + run.notfound + " " + run.ms + "ms");
+    " ambiguous=" + run.ambiguous + " notfound=" + run.notfound +
+    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
   return arm(cx, dayOf(now) > run.day ? now + 1000 : nextRunAt(now), "run finished");
@@ -907,7 +930,11 @@ export async function enrichTick(cx) {
           run.pending = [];
           run.gamesPending = true;
           cx.log("enrich: BoardGameGeek gated (" + run.bggBlocked + ") - games phase stood down for today");
-          return finish(cx, run, null);
+          run.phase = "gunpla";            // Gunpla needs no BGG: carry on with it
+          run.cursor = null;
+          run.hasNext = true;
+          await st.put("en:run", run);
+          continue;
         }
         run.errors++;
         run.errStreak++;
@@ -926,8 +953,8 @@ export async function enrichTick(cx) {
     }
 
     if (!run.hasNext) {
-      if (run.phase === "books") {
-        run.phase = "games";
+      if (run.phase === "books" || run.phase === "games") {
+        run.phase = run.phase === "books" ? "games" : "gunpla";
         run.cursor = null;
         run.hasNext = true;
         await st.put("en:run", run);
@@ -937,7 +964,8 @@ export async function enrichTick(cx) {
     }
 
     let page;
-    try { page = await fetchPage(cx, run.phase === "books" ? BOOKS_QUERY : GAMES_QUERY, run.cursor, run.phase === "books" ? PAGE : 25); }
+    const query = run.phase === "books" ? BOOKS_QUERY : run.phase === "gunpla" ? GUNPLA_QUERY : GAMES_QUERY;
+    try { page = await fetchPage(cx, query, run.cursor, run.phase === "books" ? PAGE : 25); }
     catch (e) {
       if (e && e.throttled) {
         run.throttled++;
@@ -956,6 +984,31 @@ export async function enrichTick(cx) {
     run.cursor = page.cursor;
     run.hasNext = page.hasNext;
     run.seen += page.items.length;
+
+    /* Gunpla: every kit is re-read every night (titles and the Bandai file are
+       local, so it costs no outside call) and written only when its facts
+       changed - the stored exor.gp_sig says what was written last time. */
+    if (run.phase === "gunpla") {
+      if (!run.gunpla) run.gunpla = { seen: 0, changed: 0, bandai: 0, titleOnly: 0, unknown: 0 };
+      const idx = await kitsIndex(cx);
+      const mf = [];
+      for (const it of page.items) {
+        run.gunpla.seen++;
+        const res = gunplaMetafields(it.id, it.title, idx, dateStr);
+        if (!res) { run.gunpla.unknown++; continue; }
+        run.gunpla[res.status === "ok" ? "bandai" : "titleOnly"]++;
+        if (res.sig === it.gpSig) continue;
+        run.gunpla.changed++;
+        mf.push(...res.metafields);
+      }
+      if (mf.length) {
+        try { run.written += await writeMetafields(cx, mf); }
+        catch (e) { run.errors++; cx.log("enrich: gunpla page write failed: " + msg(e)); }
+      }
+      await st.put("en:run", run);
+      if (page.wait > 0) return arm(cx, cx.now() + page.wait, "throttle pacing");
+      continue;
+    }
 
     /* Re-enrich anything stamped below the current schema version: that is how
        fields added later reach the products already done. */
@@ -1034,6 +1087,7 @@ function publicRun(run, now) {
     ok: run.ok, ambiguous: run.ambiguous, notfound: run.notfound,
     errors: run.errors, throttled: run.throttled, ticks: run.ticks,
     bggBlocked: run.bggBlocked, gamesPending: !!run.gamesPending,
+    gunpla: run.gunpla || null,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,
     error: run.error,

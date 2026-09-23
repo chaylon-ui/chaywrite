@@ -20,8 +20,8 @@ function storage() {
 // A world: books pages, game pages, and canned BGG answers.
 function world(opts) {
   const w = {
-    books: opts.books || [], games: opts.games || [],
-    written: [], adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0,
+    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [],
+    written: [], adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
   const page = (list, after, n) => {
@@ -35,6 +35,7 @@ function world(opts) {
           enriched: p.enriched ? { value: p.enriched } : null,
           ver: p.version ? { value: String(p.version) } : null,
           bgg: p.bggId ? { value: String(p.bggId) } : null,
+          gsig: p.gpSig ? { value: p.gpSig } : null,
           variants: { nodes: [{ barcode: p.barcode || '' }] },
         })),
       },
@@ -55,8 +56,8 @@ function world(opts) {
           w.written.push(...body.variables.mf);
           data = { metafieldsSet: { userErrors: [] } };
         } else {
-          const isBooks = body.variables.q.includes('Books');
-          data = page(isBooks ? w.books : w.games, body.variables.after, body.variables.n);
+          const q = body.variables.q;
+          data = page(q.includes('Books') ? w.books : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n);
         }
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
@@ -72,6 +73,10 @@ function world(opts) {
       /* AniList is no longer called from the worker at all - it blocks
          Cloudflare's egress. The lookup happens on a GitHub runner and lands
          as a committed file, which the worker fetches back. */
+      if (u.includes("raw.githubusercontent.com") && u.includes("bandai-kits")) {
+        w.kitCalls++;
+        return new Response(JSON.stringify({ generated: '2026-09-23T05:40:00Z', kits: w.kits }), { status: 200 });
+      }
       if (u.includes("raw.githubusercontent.com")) {
         w.alCalls++;
         if (w.seriesFileStatus && w.seriesFileStatus !== 200) return new Response("not found", { status: w.seriesFileStatus });
@@ -95,6 +100,7 @@ function world(opts) {
   w.seriesFileStatus = opts.seriesFileStatus || 200;
   w.bggStatus = opts.bggStatus || 200;
   w.thing = opts.thing || {};
+  w.kits = opts.kits || {};
   return w;
 }
 
@@ -277,6 +283,48 @@ async function drain(w, maxTicks = 60) {
   ok('no game was stamped enriched', !w.written.some((m) => m.ownerId.startsWith('gid://g/') ), 'game writes=' + w.written.filter((m) => m.ownerId.startsWith('gid://g/')).length);
   eq('it gave up after one gated BGG call, not 1500', w.bggCalls, 1);
   ok('next alarm is a day out, not an hourly retry', w.cx.storage.alarmAt() - w.now > 3600000, 'delta=' + (w.cx.storage.alarmAt() - w.now));
+}
+
+// ---------- 5b. Gunpla (owner, 2026-09-23): title facts for every kit, Bandai
+// facts for a unique name match, and a second night writes nothing unchanged.
+// It also runs when BoardGameGeek is gated.
+{
+  const kits = {
+    "01_1043": { name: "HG 1/144 GM SNIPER", launch: "2017-07", age: 8, price_yen: 1700, url: "https://global.bandai-hobby.net/en-us/item/01_1043/" },
+    "01_5000": { name: "MG 1/100 JUSTICE GUNDAM", launch: "2017-06-10", age: 15, price_yen: 5200, url: "https://global.bandai-hobby.net/en-us/item/01_5000/" },
+    "01_6000": { name: "RG 1/144 NU GUNDAM", launch: "2019-08-10", age: 15, url: "u1" },
+    "01_6001": { name: "RG 1/144 Nu GUNDAM", launch: "2023-01-01", age: 15, url: "u2" },
+  };
+  const gunpla = [
+    { id: 'gid://k/1', title: 'HGUC 1/144 GM Sniper' },
+    { id: 'gid://k/2', title: 'MG 1/100 Justice Gundam' },
+    { id: 'gid://k/3', title: 'RG 1/144 Nu GUNDAM' },
+    { id: 'gid://k/4', title: 'HGUC 1/144 #116 Sinanju' },
+    { id: 'gid://k/5', title: '1/1 GUNPLA-KUN DX SET' },
+  ];
+  const w = world({ books: [], games: [{ id: 'gid://g/1', title: 'WINGSPAN' }], gunpla, kits, bggStatus: 401 });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  const val = (id, key) => (w.written.find((m) => m.ownerId === id && m.key === key) || {}).value;
+  eq('gunpla ran although BGG was gated', last.gunpla && last.gunpla.seen, 5);
+  eq('HGUC kit matched to Bandai\'s HG page: release date', val('gid://k/1', 'gp_release'), '2017-07');
+  eq('... grade from the title', val('gid://k/1', 'gp_grade'), 'High Grade');
+  eq('... line from the title', val('gid://k/1', 'gp_line'), 'Universal Century');
+  eq('... Bandai page', val('gid://k/1', 'gp_bandai_url'), 'https://global.bandai-hobby.net/en-us/item/01_1043/');
+  eq('MG kit: age and Japanese price', [val('gid://k/2', 'gp_age'), val('gid://k/2', 'gp_price_jpy'), val('gid://k/2', 'gp_year')].join(','), '15,5200,2017');
+  eq('two Bandai kits with the same name: no release date guessed', val('gid://k/3', 'gp_release'), undefined);
+  eq('... but the title facts are still written', val('gid://k/3', 'gp_grade'), 'Real Grade');
+  eq('kit not on Bandai\'s site: title facts, status title', [val('gid://k/4', 'gp_number'), val('gid://k/4', 'enrich_status')].join(','), '116,title');
+  eq('no grade in the title: nothing written', w.written.filter((m) => m.ownerId === 'gid://k/5').length, 0);
+  eq('kits file fetched once', w.kitCalls, 1);
+  eq('counts', JSON.stringify(last.gunpla), JSON.stringify({ seen: 5, changed: 4, bandai: 2, titleOnly: 2, unknown: 1 }));
+  // the next night: each product now carries the signature it was written with
+  for (const g of gunpla) g.gpSig = val(g.id, 'gp_sig');
+  const before = w.written.length;
+  w.now += 86400000;
+  w.cx.mem = {};
+  await drain(w);
+  eq('second night writes nothing for unchanged kits', w.written.filter((m, i) => i >= before && m.ownerId.startsWith('gid://k/')).length, 0);
 }
 
 // ---------- 6. no token: fails loudly instead of silently ----------
