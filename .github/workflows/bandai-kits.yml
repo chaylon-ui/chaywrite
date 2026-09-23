@@ -1,0 +1,44 @@
+name: bandai-kits
+# Reads Bandai Spirits' global hobby site (English, USA) and commits
+# data/bandai-kits.json: every kit's English name, launch date, Japanese list
+# price and age rating. The worker's nightly Gunpla sweep (src/gunpla.js)
+# matches our Gunpla products to it by name. Incremental: only kit pages not
+# already in the file are fetched, one request a second.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Fetch and print, commit nothing
+        default: "false"
+      limit:
+        description: Only fetch the first N new kit pages (0 = all)
+        default: "0"
+  schedule:
+    # Mondays 05:10 UTC, ahead of the worker's 06:00 sweep
+    - cron: "10 5 * * 1"
+permissions:
+  contents: write
+jobs:
+  kits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the Bandai kit pages
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+        run: python3 tools/bandai-kits.py
+      - name: Commit the file when it changed
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          set -e
+          if [ -z "$(git status --porcelain data/bandai-kits.json)" ]; then
+            echo "no change to data/bandai-kits.json"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/bandai-kits.json
+          git commit -m "bandai-kits: refresh $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
