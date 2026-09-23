@@ -31,12 +31,13 @@ test("parseMovers splits daily and weekly, winners and losers; pickWanted takes 
 });
 
 const hit = (cardName, setName, cash) => ({ id: cardName + "|" + setName, cardName, setName, variants: [{ variantName: "Near Mint", cardBuylistTypes: [{ type: "Normal", buyPrice: cash, creditBuyPrice: cash * 1.3 }] }] });
-test("matchHit wants the exact name from the movers' set, else the exact name the store pays most for", () => {
+test("matchHit wants the exact name from the named set, else a regular printing, else the best offer", () => {
   const entry = { name: "Ghalta, Stampede Tyrant", setSlug: "lost-caverns-of-ixalan" };
   const hits = [hit("Ghalta, Stampede Tyrant // Foo", "Weird", 99), hit("Ghalta, Stampede Tyrant", "The Lost Caverns of Ixalan", 10), hit("Ghalta, Stampede Tyrant", "Commander: The Lost Caverns of Ixalan", 12), hit("Ghalta, Stampede Tyrant", "Secret Lair Drop", 30)];
   assert.equal(matchHit(entry, hits).setName, "Commander: The Lost Caverns of Ixalan");   // both carry the slug's words; the better offer wins
-  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "nowhere-set" }, hits).setName, "Secret Lair Drop");
-  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "" }, hits).setName, "Secret Lair Drop");
+  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "nowhere-set" }, hits).setName, "Commander: The Lost Caverns of Ixalan");   // Secret Lair pays more but is a special printing
+  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "" }, hits).setName, "Commander: The Lost Caverns of Ixalan");
+  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "the-lost-caverns-of-ixalan" }, hits).setName, "The Lost Caverns of Ixalan");   // the exact set wins over one containing its words
   assert.equal(matchHit({ name: "Not There", setSlug: "" }, hits), null);
   assert.equal(matchHit({ name: "GHALTA, stampede tyrant" }, [hit("Ghalta, Stampede Tyrant", "X", 1)]).setName, "X");   // case and punctuation do not matter
   // a printing with no offer the store will take is not a match (the page would say "Not currently buying this printing")
@@ -45,6 +46,12 @@ test("matchHit wants the exact name from the movers' set, else the exact name th
   const none = { cardName: "Lyra, Tolarian Archangel", setName: "Reality Fracture", variants: [] };
   assert.equal(matchHit({ name: "Lyra, Tolarian Archangel" }, [dead, capped, none]), null);
   assert.equal(matchHit({ name: "Lyra, Tolarian Archangel" }, [dead, hit("Lyra, Tolarian Archangel", "Other", 2)]).setName, "Other");
+  // regular printings beat promos and judge cards that pay more; the exact set beats one that merely contains its words
+  const bolts = [hit("Lightning Bolt", "Judge Gift Cards 1998", 90), hit("Lightning Bolt", "Magic 2010", 1), hit("Lightning Bolt", "Secret Lair Drop", 12)];
+  assert.equal(matchHit({ name: "Lightning Bolt", setSlug: "" }, bolts).setName, "Magic 2010");
+  const emer = [hit("Emeritus of Conflict", "Secrets of Strixhaven Promos", 9), hit("Emeritus of Conflict", "Secrets of Strixhaven", 4)];
+  assert.equal(matchHit({ name: "Emeritus of Conflict", setSlug: "secrets-of-strixhaven" }, emer).setName, "Secrets of Strixhaven");
+  assert.equal(matchHit({ name: "Emeritus of Conflict", setSlug: "secrets-of-strixhaven-promos" }, emer).setName, "Secrets of Strixhaven Promos");
 });
 
 const morePage = (names) => `<h1>Top Weekly Winners</h1>${table("Top Weekly Winners", names.map((nm, i) => row(nm, "some-set", String(i), "SET", "3.00", "+1.00", "+10%", "increase")))}`;
@@ -125,10 +132,10 @@ test("stepWanted does a few lookups per tick, keeps its place, and backs off on 
 const order = (...items) => ({ lineItems: { nodes: items.map(([title, quantity, productType, totalInventory]) => ({ title, quantity, product: { productType, totalInventory } })) } });
 test("tallySales counts Magic singles by card name with the sets sold and the lowest stock now; sealed and other games are ignored", () => {
   const t = tallySales([
-    order(["Sol Ring [Commander 2016]", 2, "MTG Single", 0], ["Sol Ring (Borderless) [Commander Masters]", 1, "MTG Single", 5], ["Charizard ex [Obsidian Flames]", 3, "Pokemon Single", 0], ["Bloomburrow Play Booster Box", 1, "MTG Sealed", 4]),
+    order(["Sol Ring [Commander 2016]", 2, "MTG Single", 0], ["Sol Ring (Borderless) (0421) [Commander Masters]", 1, "MTG Single", 5], ["Snow-Covered Forest (284) [Kaldheim]", 3, "MTG Single", 50], ["Charizard ex [Obsidian Flames]", 3, "Pokemon Single", 0], ["Bloomburrow Play Booster Box", 1, "MTG Sealed", 4]),
     order(["Sol Ring [Commander 2016]", 1, "MTG Single", 0], ["Roaming Throne [The Lost Caverns of Ixalan]", 4, "MTG Single", 9]),
   ]);
-  assert.deepEqual(Object.keys(t).sort(), ["Roaming Throne", "Sol Ring"]);
+  assert.deepEqual(Object.keys(t).sort(), ["Roaming Throne", "Snow-Covered Forest", "Sol Ring"]);   // collector numbers and treatments stripped
   assert.deepEqual(t["Sol Ring"], { units: 4, sets: { "Commander 2016": 3, "Commander Masters": 1 }, inv: 0 });
   assert.deepEqual(t["Roaming Throne"], { units: 4, sets: { "The Lost Caverns of Ixalan": 4 }, inv: 9 });
 });

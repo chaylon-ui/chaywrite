@@ -23,8 +23,8 @@ export const WANTED_N = 10;
 export const TTL_MS = 48 * 3600 * 1000;        // a good list is kept two days (a failed refresh keeps yesterday's)
 export const REFRESH_MS = 23 * 3600 * 1000;    // the cron rebuilds after this: once a day (owner, 2026-09-22)
 export const RETRY_MS = 3600 * 1000;           // and retries an hour after a build that found nothing
-const KV_KEY = "wanted:mtg:standard:v5";        // v5: sellers + misses interleaved, no reasons (2026-09-23)
-const ATTEMPT_KEY = "wanted:mtg:standard:attempt5";
+const KV_KEY = "wanted:mtg:standard:v6";        // v5: sellers + misses interleaved, no reasons (2026-09-23)
+const ATTEMPT_KEY = "wanted:mtg:standard:attempt6";
 const LAST_TRY_KEY = "wanted:mtg:standard:lasttry";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 const memo = { at: 0, value: null };
@@ -110,6 +110,7 @@ export function pickWanted(parsed, n) {
   return out;
 }
 
+const SPECIAL_SET = /promo|judge|prerelease|art series|playtest|oversized|championship|collectors|gift card|arena|friday night|\bfnm\b|secret lair|heroes of the realm|30th anniversary|list\b/i;
 const bestCash = (hit) => {
   let best = 0;
   for (const v of hit.variants || []) for (const p of v.cardBuylistTypes || []) best = Math.max(best, Number(p.buyPrice) || 0);
@@ -130,7 +131,13 @@ export function matchHit(entry, hits) {
   const words = String(entry.setSlug || "").split("-").map(letters).filter((w) => w.length > 2);
   const sameSet = words.length ? exact.filter((h) => { const s = letters(h.setName); return words.every((w) => s.includes(w)); }) : [];
   const pool = sameSet.length ? sameSet : exact;
-  return pool.slice().sort((a, b) => bestCash(b) - bestCash(a))[0];
+  // Prefer the printing a shopper most likely holds (2026-09-23: ties went
+  // to the best offer, which picked Judge Gift Cards Lightning Bolt and
+  // Strixhaven promos): the set named exactly, then any regular set, then
+  // the best offer among those.
+  const slugLetters = letters(String(entry.setSlug || "").replace(/-/g, " "));
+  const rank = (h) => (slugLetters && letters(h.setName) === slugLetters ? 0 : 2) + (SPECIAL_SET.test(String(h.setName || "")) ? 1 : 0);
+  return pool.slice().sort((a, b) => rank(a) - rank(b) || bestCash(b) - bestCash(a))[0];
 }
 
 export async function fetchMovers(fetchFn, url) {
@@ -185,7 +192,9 @@ export function tallySales(orders) {
     if (!/^mtg\b/i.test(pt)) continue;
     const m = String(li.title || "").match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
     if (!m) continue;
-    const name = m[1].replace(/\s*\((?:Borderless|Showcase|Extended Art|Foil Etched|Retro Frame|Promo Pack|Prerelease)[^)]*\)\s*$/i, "").trim(), set = m[2].trim();
+    // Every trailing "(...)" is a treatment or collector number, never part
+    // of the card's name: "Snow-Covered Forest (284)", "X (Borderless) (0317)".
+    const name = m[1].replace(/(\s*\([^()]*\))+\s*$/, "").trim(), set = m[2].trim();
     const q = Math.max(0, li.quantity | 0);
     const inv = li.product && li.product.totalInventory != null ? Number(li.product.totalInventory) : null;
     const t = (out[name] = out[name] || { units: 0, sets: {}, inv: null });
@@ -340,7 +349,7 @@ async function readCached(env) {
   try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
   return null;
 }
-const STATE_KEY = "wanted:mtg:standard:state5";
+const STATE_KEY = "wanted:mtg:standard:state6";
 const STATE_TTL = 6 * 3600 * 1000;
 const readJson = async (env, key) => { try { const t = await kvGet(env, key); return t ? JSON.parse(t) : null; } catch { return null; } };
 
