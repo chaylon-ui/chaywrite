@@ -1,0 +1,367 @@
+{%- comment -%} Page numbers (xg-adv-pages.js, 2026-09-23): not deferred, so its fetch hook is in place before advancedSearch.js runs. {%- endcomment -%}
+<script src="{{ 'xg-adv-pages.js' | asset_url }}"></script>
+<script defer src="{{ 'advancedSearch.js' | asset_url }}"></script>
+<link defer href="https://cdn.jsdelivr.net/npm/select2@4.1.0-beta.1/dist/css/select2.min.css" rel="stylesheet" />
+<script defer src="https://cdn.jsdelivr.net/npm/select2@4.1.0-beta.1/dist/js/select2.min.js"></script>
+</script>
+<div class="page-width collection_templete">
+  <div class="row">
+    <div class="normal_main_content col-md-12">
+      {%- assign limit = section.settings.max_products -%}
+      {%- assign size_description = section.settings.size_description | plus: 0 -%}
+
+      <div id="shopify-section-advanced_search" class="shopify-section">
+        <header class="collection-header">
+          <input type="hidden" id="ajaxURL" value="{{shop.url}}{{request.path}}/">
+
+          {% if section.settings.show_collection_image and collection.image %}
+          <div class="collection-hero">
+            <img alt="{{ image.alt | escape }}" class="collection-hero__image ratio-container lazyload js" loading="lazy" src="{{ collection.image | img_url: '870x200' }}"/>
+            <noscript>
+              <img loading="lazy" class="collection-hero__image" src="{{ collection.image | img_url: '870x200', crop: 'top' }}" data-widths="[870]" alt="{{ image.alt | escape }}">
+            </noscript>
+          </div>
+          {% endif %}
+          {% if size_description > 0 and collection.description.size > 0 %}
+          <div class="category_only_name">
+            <div class="section-header collection-name">
+              <div class="rte collection-description">
+                {{ collection.description | truncate: size_description }}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          <div class="filters-toolbar-wrapper">
+            <div class="filters-toolbar">
+              {% include 'collection-views' %}
+              <div class="filters-toolbar__item filters-toolbar__item--count">
+                <span class="filters-toolbar__product-count"></span>
+              </div>
+              {% if section.settings.sort_enable %}
+              <div class="filters-toolbar__item">
+                {%- assign sort_by = "price-descending" -%}
+                <label class="sort-label" for="SortBy">{{ 'collections.sorting.title' | t }}
+                  by:</label>
+                <div class="select-wrapper">
+                  <select class="filters-toolbar__input_sort" id="SortBy">
+                    <option value="title-ascending" {% if sort_by=="title-ascending" %} selected="selected" {% endif %}>{{ 'collections.sorting.az' | t }}</option>
+                    <option value="title-descending" {% if sort_by=="title-descending" %} selected="selected" {% endif %}>{{ 'collections.sorting.za' | t }}</option>
+                    <option value="price-ascending" {% if sort_by=="price-ascending" %} selected="selected" {% endif %}>{{ 'collections.sorting.price_ascending' | t }}</option>
+                    <option value="price-descending" {% if sort_by=="price-descending" %} selected="selected" {% endif %}>{{ 'collections.sorting.price_descending' | t }}</option>
+                    <option value="number-ascending" {% if sort_by=="number-ascending" %} selected="selected" {% endif %}>Collector Number: Low to High</option>
+                    <option value="number-descending" {% if sort_by=="number-descending" %} selected="selected" {% endif %}>Collector Number: High to Low</option>
+                  </select>
+                </div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </header>
+
+        <div class="row" id="Collection">
+
+          <div class="products-display products-display-collection grid grid--uniform grid--view-items"></div>
+          <div class="list--inline pagination page-width">
+            <div class="pagination-block">
+              <div class="pagination__text col-sm-4 col-xs-12"></div>
+              <div class="page-view col-sm-8 col-xs-12">
+                <div class="pag_previous"></div>
+                <div class="pag_next"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+  .select2-container {
+    display: block;
+    margin-top: 5px;
+    text-transform: capitalize;
+  }
+
+  .lds-facebook {
+    display: inline-block;
+    position: relative;
+    width: 40px;
+    height: 40px;
+  }
+
+  .lds-facebook div {
+    display: inline-block;
+    position: absolute;
+    left: 8px;
+    width: 8px;
+    background: #000;
+    animation: lds-facebook 1.2s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+  }
+
+  .lds-facebook div:nth-child(1) {
+    left: 4px;
+    animation-delay: -0.24s;
+  }
+
+  .lds-facebook div:nth-child(2) {
+    left: 16px;
+    animation-delay: -0.12s;
+  }
+
+  .lds-facebook div:nth-child(3) {
+    left: 28px;
+    animation-delay: 0;
+  }
+
+  @keyframes lds-facebook {
+    0% {
+      top: 4px;
+      height: 32px;
+    }
+
+    50%,
+    100% {
+      top: 12px;
+      height: 16px;
+    }
+  }
+
+  .lds-ripple {
+    display: block;
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: auto;
+    margin-top: 50px;
+  }
+
+  .lds-ripple div {
+    position: absolute;
+    border: 4px solid #000;
+    opacity: 1;
+    border-radius: 50%;
+    animation: lds-ripple 1s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+  }
+
+  .lds-ripple div:nth-child(2) {
+    animation-delay: -0.5s;
+  }
+
+  @keyframes lds-ripple {
+    0% {
+      top: 36px;
+      left: 36px;
+      width: 0;
+      height: 0;
+      opacity: 1;
+    }
+
+    100% {
+      top: 0px;
+      left: 0px;
+      width: 72px;
+      height: 72px;
+      opacity: 0;
+    }
+  }
+
+  input.select2-search__field {
+    position: relative;
+    top: -4px;
+    text-transform: capitalize;
+  }
+
+  input.select2-search__field::placeholder {
+    color: black !important;
+    text-transform: capitalize;
+  }
+
+  .select2-container--default .select2-selection--multiple .select2-selection__choice {
+    display: block !important;
+  }
+
+  i.material-icons.remove {
+    display: block;
+  }
+
+  i.material-icons.add {
+    display: none;
+  }
+
+  .collapsed i.material-icons.remove {
+    display: none;
+  }
+
+  .collapsed i.material-icons.add {
+    display: block;
+  }
+
+  .select2-container .select2-selection--single {
+    height: 33px;
+  }
+
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 33px;
+  }
+
+  /* Dark mode (owner, round 23: "this loading part in darkmode almost looks
+     blank"). Both loaders above are hard-coded black - the three bars are
+     background:#000 and the ripple ring is border:#000 - so on the #101416
+     dark page they vanish and the page reads as empty while it loads. The
+     grid/list toggle beside them is a black PNG sprite with the same
+     problem. Brand red for the loaders (the dark palette's #ff6a5e), and the
+     sprite inverted to white. (0,2,2) beats the (0,1,1) rules above. */
+  html[data-xg-theme="dark"] .lds-facebook div { background: #ff6a5e; }
+  html[data-xg-theme="dark"] .lds-ripple div { border-color: #ff6a5e; }
+  /* Round 27 (owner screenshot, dark mode): the widget builds each filter's
+     caption as <label style="... color: #27302f ...">, an inline near-black
+     that vanishes on the dark panel. Weighted because inline. #b8c0c6 is the
+     panel's muted ink (9.22:1 on #181d20, computed). Light mode untouched. */
+  html[data-xg-theme="dark"] .filters-toolbar__input--filter label { color: #b8c0c6 !important; }
+  html[data-xg-theme="dark"] .grid-img,
+  html[data-xg-theme="dark"] .list-img { filter: invert(1); }
+</style>
+{% schema %}
+
+{
+"name": "Advanced Search",
+"settings": [
+{
+"type": "text",
+"id": "max_products",
+"label": "Max Products Per Page",
+"default": "12"
+}, {
+"type": "text",
+"id": "size_description",
+"label": "Length of Characters for Short Collection Description.",
+"default": "440"
+}, {
+"type": "checkbox",
+"id": "show_collection_image",
+"label": "Show Collection Image",
+"default": true
+}, {
+"type": "checkbox",
+"id": "sort_enable",
+"label": "Enable Sorting",
+"default": true
+},
+{
+"type": "header",
+"content": "Category Menu Block Configuration"
+},
+{
+"type": "link_list",
+"id": "sidebar_link",
+"label": "Select Category Menu"
+},
+{
+"type": "header",
+"content": "Collection -1 Block Configuration"
+},
+{
+"type": "checkbox",
+"id": "product1",
+"label": "Show Collection Block",
+"default": true
+},
+{
+"type": "text",
+"id": "title",
+"label": "Main Title",
+"default": "FEATURED COLLECTION"
+},
+{
+"id": "collection",
+"type": "collection",
+"label": "Select Your Collection"
+},
+{
+"type": "range",
+"id": "grid",
+"label": "Products To Display In Collection",
+"min": 2,
+"max": 5,
+"step": 1,
+"default": 3
+},
+{
+"type": "checkbox",
+"id": "show_view_all",
+"label": "Show 'View All' Button For Collection",
+"default": false
+},
+{
+"type": "header",
+"content": "LeftBanner Block Configuration"
+},
+{
+"type": "checkbox",
+"id": "show_banner",
+"label": "Show Banner",
+"default": true
+},
+{
+"type": "image_picker",
+"id": "image",
+"label": "Image",
+"info":"Size : 270px X 350px"
+},
+{
+"type": "select",
+"id": "hover1",
+"default": "fadeinrotate3D",
+"options": [
+{ "value": "fadeinnormal", "label": "FadeIn Normal"},
+{ "value": "fadeinflip", "label": "FadeIn Flip"},
+{ "value": "fadeinrotate", "label": "FadeIn Rotate"},
+{ "value": "fadeinrotate3D", "label": "FadeIn Rotate3D"},
+{ "value": "fadeintop", "label": "FadeIn Top"},
+{ "value": "fadeinbottom", "label": "FadeIn Bottom"},
+{ "value": "fadeintopbottom", "label": "FadeIn Top Bottom"},
+{ "value": "fadeoutcenter", "label": "FadeOut Center"},
+{ "value": "fadeinoutbordercorner", "label": "FadeInOut BorderCorner"},
+{ "value": "doublefadeincenter", "label": "Double FadeInOut Center"},
+{ "value": "fadeinoutsingle", "label": "FadeInOut Single Scroll"},
+{ "value": "fadeinoutdoublevertical", "label": "FadeInOut Double Scroll"},
+{ "value": "perspective", "label": "Perspective"},
+{ "value": "fadeinoutrotatevertical", "label": "FadeInOut Rotate Vertical"}
+],
+"label": "Hover"
+},
+{
+"type": "select",
+"id": "hovercolor",
+"label": "Hover Color",
+"default": "lightcolor",
+"options": [
+{ "value": "lightcolor", "label": "Light Color"},
+{ "value": "darkcolor", "label": "Dark Color"}
+]
+},
+{
+"type": "url",
+"id": "banner_link",
+"label": "Link"
+},
+{
+"type": "checkbox",
+"id": "scale_enable1",
+"label": "Scale Banner",
+"default": false
+}
+],
+"blocks":[
+{
+"type":"@app"
+}
+],
+"presets": [
+{
+"name":"Advanced Search"
+}
+],
+"templates": ["page"]
+}
+{% endschema %}
