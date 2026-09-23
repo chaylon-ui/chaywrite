@@ -722,15 +722,18 @@
       var pay = payChosen(), credit = pay === "Store Credit", n = totalQty(), t = totalsOfCart();
       // The upsell (owner, 2026-09-22: "a quick upsell to try to convert
       // from cash to store credit by earning more on that reminder popup").
-      var more = t.credit - t.cash, pct = t.cash > 0 ? Math.round(more / t.cash * 100) : 0;
-      var gain = more > 0.005 ? money(more) + (pct > 0 ? " (+" + pct + "%)" : "") : "";
+      // Dollar amounts only, no percentage (owner, 2026-09-23: "where does
+      // the 40% come from? ... it should just use the numbers for store
+      // credit and cash").
+      var more = t.credit - t.cash;
+      var gain = more > 0.005 ? money(more) : "";
       d.innerHTML = '<div class="bl__done-head bl__confirm-head' + (credit ? " bl__confirm-head--credit" : "") + '"><span class="bl__done-kicker">One last check</span><h3 id="bl-confirm-title">Submit for <b>' + (credit ? "store credit" : "cash") + "</b>?</h3>" +
         '<p class="bl__done-sum">' + esc(n) + " card" + (n === 1 ? "" : "s") + " · estimated <b>" + money(credit ? t.credit : t.cash) + "</b> in " + (credit ? "Exor Games store credit" : "cash") + "</p></div>" +
         '<div class="bl__guide-body">' +
         (credit
-          ? '<p class="bl__confirm-note">You are asking to be paid in <b>store credit</b>, added to your Exor Games account once we have checked your cards.' + (gain ? ' Good call: that is <b class="bl__confirm-gain">' + gain + " more</b> than cash (" + money(t.cash) + ")." : "") + "</p>"
+          ? '<p class="bl__confirm-note">You are asking to be paid in <b>store credit</b>, added to your Exor Games account once we have checked your cards.' + (gain ? ' Good call: ' + money(t.credit) + ' in store credit instead of ' + money(t.cash) + ' cash is <b class="bl__confirm-gain">' + gain + " more</b>." : "") + "</p>"
           : '<p class="bl__confirm-note">You are asking to be paid in <b>cash</b>, paid once we have checked your cards.</p>' +
-            (gain ? '<div class="bl__upsell"><span class="bl__upsell-kicker">Earn more</span><p class="bl__upsell-text">Take <b>store credit</b> instead and get <b class="bl__confirm-gain">' + money(t.credit) + "</b> for the same cards: <b>" + gain + " more</b>, spendable on anything at Exor Games.</p>" +
+            (gain ? '<div class="bl__upsell"><span class="bl__upsell-kicker">Earn more</span><p class="bl__upsell-text">Take <b>store credit</b> instead and get <b class="bl__confirm-gain">' + money(t.credit) + "</b> for the same cards instead of " + money(t.cash) + " cash: <b>" + gain + " more</b>, spendable on anything at Exor Games.</p>" +
               '<button type="button" class="bl__btn bl__btn--upsell" data-act="switch">Switch to store credit and earn ' + money(more) + " more</button></div>" : "")) +
         '<div class="bl__guide-actions bl__confirm-actions"><button type="button" class="bl__btn" data-act="back">Go back</button>' +
         (credit || !gain ? '<button type="button" class="bl__btn" data-act="switch">Switch to ' + (credit ? "cash" : "store credit") + "</button>" : "") +
