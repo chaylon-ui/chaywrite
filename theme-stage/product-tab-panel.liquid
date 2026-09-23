@@ -85,10 +85,7 @@
             {%- if gf.gp_series.value != blank -%}<dt>Series</dt><dd>{{ gf.gp_series.value | escape }}</dd>{%- endif -%}
             {%- if kit_when != blank -%}<dt>Released</dt><dd>{{ kit_when }}</dd>{%- endif -%}
             {%- if gf.gp_age.value != blank -%}<dt>Age</dt><dd>{{ gf.gp_age.value }}+</dd>{%- endif -%}
-            {%- if gf.gp_price_jpy.value != blank -%}
-              {%- assign yen = gf.gp_price_jpy.value | plus: 0 -%}
-              <dt>Japan list price</dt><dd>&yen;{% if yen >= 1000 %}{{ yen | divided_by: 1000 }},{{ yen | modulo: 1000 | plus: 1000 | append: '' | slice: 1, 3 }}{% else %}{{ yen }}{% endif %}</dd>
-            {%- endif -%}
+            {%- comment -%} No Japan list price here (owner, 2026-09-23: "remove the japan list price from our page"); gp_price_jpy stays in the data. {%- endcomment -%}
           </dl>
           {%- if gf.gp_bandai_url.value != blank -%}
           <p class="xg-class__hint"><a href="{{ gf.gp_bandai_url.value }}" target="_blank" rel="noopener">Official kit page on Bandai Hobby &#8599;</a></p>
