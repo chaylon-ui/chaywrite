@@ -52,7 +52,10 @@ const HEADERS = { accept: "application/json", "content-type": "application/json"
 const ORIGINS = ["https://exorgames.com", "https://www.exorgames.com", "https://most-wanted-ca.myshopify.com"];
 const PAGE = 20;                       // BinderPOS answers 400 above this
 const MAX_OFFSET = 400;
-const MAX_CARDS = 100;
+// Lines kept per saved/submitted list. Was 100, and a longer list lost
+// every line past the 100th at its next save (owner, 2026-09-23: a
+// customer's list "started deleting cards" over 100 items).
+const MAX_CARDS = 500;
 const PAYMENT_TYPES = ["Cash", "Store Credit"];
 const MEMO_TTL = 6 * 3600 * 1000;
 const memo = {};                       // per isolate: games, set lists, Scryfall symbols
@@ -382,8 +385,15 @@ async function route(mode, action, request, env, url, cors) {
     const qs = new URLSearchParams({ keyword: q, limit: String(PAGE), offset: String(offset) });
     if (set) qs.set("setName", set);
     const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {});
-    const hits = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
-    return json({ upstream: r.status, q, game, set, offset, count: hits.length, more: hits.length >= PAGE, hits, upstreamError: Array.isArray(r.body) ? undefined : r.body }, 200, cors);
+    const hits = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : null);
+    // BinderPOS's portal is rate limited (Cloudflare 429 "error code: 1015"
+    // after ~8 quick searches). That refusal used to go out as hits: [] and
+    // read as "Nothing on the buylist matches"; it is a 503 "busy" now, so
+    // the page waits and asks again instead.
+    if (r.status < 200 || r.status >= 300 || !hits) {
+      return json({ error: "busy", busy: true, upstream: r.status, q, game, set, offset, upstreamError: typeof r.body === "string" ? r.body.slice(0, 120) : undefined }, 503, { ...cors, "retry-after": "10" });
+    }
+    return json({ upstream: r.status, q, game, set, offset, count: hits.length, more: hits.length >= PAGE, hits }, 200, cors);
   }
 
   const customer = customerOf(mode, url);
@@ -408,7 +418,10 @@ async function route(mode, action, request, env, url, cors) {
     const cards = cleanCards(payload && payload.cards);
     if (!cards) return json({ error: "cards[] required" }, 400, cors);   // [] is allowed: that is how their app clears the list
     const r = await passthrough(SAVE_URL(customer), { method: "POST", body: JSON.stringify(cards) });
-    return json({ upstream: r.status, sent: cards.length, reply: r.body }, 200, cors);
+    // Not saved is an error the page can see (and retry), not a 200 it
+    // takes for done.
+    const ok = r.status >= 200 && r.status < 300 && !(r.body && r.body.actionPass === false);
+    return json({ upstream: r.status, sent: cards.length, reply: r.body, ...(ok ? {} : { error: "BinderPOS did not save the list (HTTP " + r.status + ")" }) }, ok ? 200 : 502, cors);
   }
 
   if (action === "submit" && request.method === "POST") {

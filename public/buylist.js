@@ -253,15 +253,79 @@
     setStatus(offset ? "Loading more…" : "Searching…");
     var what = (q ? "“" + q + "”" : "") + (set ? (q ? " in " : "") + set : "");
     var mine = lastQuery = { q: q, set: set, game: game, offset: offset };
-    api("/search?q=" + encodeURIComponent(q) + "&game=" + encodeURIComponent(game) + "&offset=" + offset + (set ? "&set=" + encodeURIComponent(set) : "")).then(function (j) {
+    clearTimeout(retryTimer);
+    findCards(q, game, set, offset, mine).then(function (j) {
       if (mine !== lastQuery) return;            // a newer search took over
-      var hits = Array.isArray(j.hits) ? j.hits : [];
+      var hits = j.hits;
       var start = lastHits.length;
       lastHits = lastHits.concat(hits);
       renderHits(hits, start);
       $("#bl-more").hidden = !j.more;
       setStatus(lastHits.length ? lastHits.length + " result" + (lastHits.length === 1 ? "" : "s") + " for " + what + (j.more ? " so far" : "") : "Nothing on the buylist matches " + what + ".");
-    }).catch(function (err) { if (mine === lastQuery) setStatus("Search failed: " + err.message); });
+    }).catch(function (err) { if (mine === lastQuery) setStatus("Search failed: " + err.message + " Please try again."); });
+  }
+
+  /* BinderPOS's card search sits behind a rate limit of about 8 searches a
+     minute (probes 2026-09-23 from a browser on exorgames.com: 8 x 200,
+     then refused for ~60 s, then 6 more; the refusal carries no CORS
+     header, so a browser only sees "Failed to fetch"). A customer
+     adding card after card hit it some 30-50 cards in, and a refused
+     search read as "Nothing on the buylist matches" until a refresh had
+     given the limit time to pass (owner, 2026-09-23, a customer's
+     "fireball" screenshot).
+     Now: (1) the browser asks BinderPOS itself first, like BinderPOS's own
+     buylist app, so each shopper has their own allowance instead of every
+     shopper sharing the worker's; (2) if that is refused it asks through
+     the worker; (3) if both are busy it waits and tries again by itself,
+     saying so; (4) a search already answered this visit is not asked
+     again. A refusal is never shown as "nothing matches". */
+  var PORTAL_CARDS = "https://portal.binderpos.com/external/shopify/a648e57a-678f-45eb-bae0-f8deb7940192/cards/";
+  var found = {};                                // query -> {hits, more}, this visit
+  var directRestUntil = 0;                       // BinderPOS refused the browser: give it a rest
+  var retryTimer = null;
+  var WAITS = [5, 10, 15, 20, 30, 60];           // seconds between tries while BinderPOS is busy (its block lasts ~60 s)
+  function hitsOf(body) { return Array.isArray(body) ? body : body && Array.isArray(body.products) ? body.products : null; }
+  function direct(q, g, set, offset) {
+    var qs = "keyword=" + encodeURIComponent(q) + "&limit=" + PAGE + "&offset=" + offset + (set ? "&setName=" + encodeURIComponent(set) : "");
+    return fetch(PORTAL_CARDS + encodeURIComponent(g) + "?" + qs).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (b) {
+      var hits = hitsOf(b);
+      if (!hits) throw new Error("unexpected answer");
+      return hits;
+    });
+  }
+  function viaWorker(q, g, set, offset) {
+    return api("/search?q=" + encodeURIComponent(q) + "&game=" + encodeURIComponent(g) + "&offset=" + offset + (set ? "&set=" + encodeURIComponent(set) : "")).then(function (j) {
+      if (j.busy || !Array.isArray(j.hits)) { var e = new Error("busy"); e.busy = true; throw e; }
+      return j.hits;
+    }, function (err) { if (/busy|HTTP 429|HTTP 5\d\d|fetch|network/i.test(err.message)) err.busy = true; throw err; });
+  }
+  function findCards(q, g, set, offset, mine) {
+    var key = [g, set, q.toLowerCase(), offset].join("|");
+    if (found[key]) return Promise.resolve(found[key]);
+    function keep(hits) { return (found[key] = { hits: hits, more: hits.length >= PAGE }); }
+    var tries = 0;
+    function attempt() {
+      var first = Date.now() >= directRestUntil
+        ? direct(q, g, set, offset).catch(function () { directRestUntil = Date.now() + 60000; return viaWorker(q, g, set, offset); })
+        : viaWorker(q, g, set, offset);
+      return first.then(keep, function (err) {
+        if (!err.busy) throw err;
+        if (tries >= WAITS.length) throw new Error("BinderPOS is busy right now.");
+        var wait = WAITS[tries++];
+        return new Promise(function (resolve, reject) {
+          (function tick(left) {
+            if (mine !== lastQuery) return reject(new Error("superseded"));
+            if (left <= 0) return resolve(attempt());
+            setStatus("BinderPOS needs a moment between searches. Searching again in " + left + "s…");
+            retryTimer = setTimeout(function () { tick(left - 1); }, 1000);
+          })(wait);
+        });
+      });
+    }
+    return attempt();
   }
 
   // One row per condition x finish the store is buying.
@@ -679,14 +743,37 @@
   });
 
   // Save the whole list, like their saveBuylist(): debounced, one at a time.
+  // A save BinderPOS does not confirm is tried again (5 s, 10 s, 20 s ...
+  // up to a minute) instead of dropped, and until one is confirmed the
+  // list is also kept in this browser, so a refresh in between reloads the
+  // cards the shopper added, not BinderPOS's older copy (owner, 2026-09-23:
+  // a customer's cards "started deleting" on a long list).
+  var BACKUP = "xg-bl-unsaved:" + CUSTOMER;
+  var ver = 0, savedVer = 0, saveRetry = null, saveFails = 0;
+  function backup() {
+    try { localStorage.setItem(BACKUP, JSON.stringify({ at: Date.now(), cards: cart })); } catch (e) {}
+  }
+  function dropBackup() { try { localStorage.removeItem(BACKUP); } catch (e) {} }
   function persist() {
+    ver++;
+    backup();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () { saveChain = saveChain.then(saveNow, saveNow); }, 300);
   }
   function saveNow() {
+    var sending = ver;
+    clearTimeout(saveRetry);
     return api("/save", { cards: cart }).then(function (j) {
-      if (j.reply && j.reply.actionPass === false) setMsg("BinderPOS did not save the list: " + (j.reply.message || "unknown reason"));
-    }).catch(function (err) { setMsg("Could not save the list: " + err.message); });
+      if (j.reply && j.reply.actionPass === false) throw new Error(j.reply.message || "BinderPOS did not accept it");
+      if (sending > savedVer) savedVer = sending;
+      if (saveFails) { saveFails = 0; setMsg("Your list is saved."); }
+      if (savedVer === ver) dropBackup();
+    }).catch(function (err) {
+      saveFails++;
+      var wait = Math.min(60, 5 * Math.pow(2, saveFails - 1));
+      setMsg("Your latest changes are not saved to BinderPOS yet (" + err.message + "). Trying again in " + wait + " s; they are kept in this browser meanwhile.");
+      saveRetry = setTimeout(function () { if (savedVer < ver) saveChain = saveChain.then(saveNow, saveNow); }, wait * 1000);
+    });
   }
   function flushSave() {
     clearTimeout(saveTimer);
@@ -822,6 +909,7 @@
         return;
       }
       cart = [];
+      savedVer = ver; clearTimeout(saveRetry); dropBackup();   // sent: nothing left to restore
       renderCart();
       // Staged (owner, 2026-09-19): the list waits for a staff member before
       // it reaches BinderPOS. The worker's confirmation says so, and the
@@ -977,9 +1065,28 @@
   /* ---- start: the saved draft is the cart, like their app ---- */
   loadGames().then(loadSets).then(wireTiles).then(loadWanted);
   loadMine();
+  // Changes a save never confirmed (kept by backup()) win over BinderPOS's
+  // copy, and are sent again. Only a recent backup counts: a week-old one
+  // is an abandoned list, not an unsaved one.
+  function unsaved() {
+    try {
+      var b = JSON.parse(localStorage.getItem(BACKUP) || "null");
+      if (b && Array.isArray(b.cards) && Date.now() - b.at < 7 * 864e5) return b.cards;
+    } catch (e) {}
+    dropBackup();
+    return null;
+  }
   api("/list").then(function (j) {
     cart = Array.isArray(j.list) ? j.list : [];
   }).catch(function (err) {
     setMsg("Could not load your saved list: " + err.message);
-  }).then(renderCart);
+  }).then(function () {
+    var mine = unsaved();
+    if (mine && JSON.stringify(mine) !== JSON.stringify(cart)) {
+      cart = mine;
+      persist();
+      setMsg("Restored " + cart.length + " line" + (cart.length === 1 ? "" : "s") + " of changes that had not reached BinderPOS yet; saving them now.");
+    } else if (mine) dropBackup();
+    renderCart();
+  });
 })();
