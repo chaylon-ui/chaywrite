@@ -310,7 +310,11 @@ html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.
 .bl__pay label:has(input:focus-visible) { outline: 2px solid var(--bl-accent); outline-offset: 1px; }
 .bl__totals { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding: 12px 0; border-top: 1px solid var(--bl-line); border-bottom: 1px solid var(--bl-line); }
 .bl__totals span { display: flex; flex-direction: column; gap: 2px; }
-.bl__totals span:last-child { text-align: right; }
+/* The store-credit total by position, not :last-child - the store-credit
+   effect appends its caption to this row for 2.8 s, which made the total
+   lose right alignment and jump back when the caption went (owner,
+   2026-09-23: "this weirdly shifts after the animation"). */
+.bl__totals > span:nth-child(2) { text-align: right; }
 .bl__totals b { color: var(--bl-ink); font-size: 18px; font-variant-numeric: tabular-nums; }
 .bl__actions { display: flex; gap: 8px; margin-top: 14px; }
 .bl__actions .bl__btn { border-radius: 999px; }
