@@ -28,6 +28,9 @@ on:
       limit:
         description: Look up at most this many products (0 = all)
         default: "40"
+      barcodes:
+        description: Only these barcodes (comma list; overrides scope/types)
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -45,6 +48,7 @@ jobs:
           SCOPE: ${{ inputs.scope }}
           TYPES: ${{ inputs.types }}
           LIMIT: ${{ inputs.limit }}
+          BARCODES: ${{ inputs.barcodes }}
         run: |
           if [ -z "$PUS" ] || [ -z "$PPW" ]; then echo "PLAMOD secrets missing"; exit 1; fi
           curl -sS --max-time 400 -o targets.json https://exor-binder.nevski.workers.dev/plamod/targets.json
@@ -70,6 +74,8 @@ jobs:
             const types = (process.env.TYPES || '').split(',').map(s => s.trim()).filter(Boolean);
             let todo = all.filter(t => t.barcode && (!types.length || types.includes(t.type)) && (process.env.SCOPE === 'all' || t.images <= 1));
             log('work list:', all.length, 'products;', all.filter(t => !t.barcode).length, 'without a barcode;', todo.length, 'in scope (' + (process.env.SCOPE || 'few') + (types.length ? ', ' + types.join('/') : '') + ')');
+            const only = (process.env.BARCODES || '').split(',').map(s => s.trim()).filter(Boolean);
+            if (only.length) todo = all.filter(t => only.includes(t.barcode)).concat(only.filter(b => !all.some(t => t.barcode === b)).map(b => ({ barcode: b, title: '(not one of ours)', type: '-', images: 0, keys: [] })));
             const limit = parseInt(process.env.LIMIT || '0', 10);
             if (limit > 0) todo = todo.slice(0, limit);
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
@@ -91,6 +97,11 @@ jobs:
               tally.looked++;
               try {
                 await go(page, 'https://www.plamod.com/retailer/search?q=' + t.barcode);
+                // results arrive a moment after load (the portal fetches them client-side)
+                await page.waitForFunction((bc) => {
+                  const tx = document.body.innerText || '';
+                  return tx.includes('Barcode: ' + bc) || /no (products|results)|0 results|nothing found/i.test(tx);
+                }, { timeout: 12000 }, t.barcode).catch(() => null);
                 const hits = await page.evaluate((bc) => {
                   const out = new Set();
                   for (const a of document.querySelectorAll('a[href*="/retailer/products/"]')) {
