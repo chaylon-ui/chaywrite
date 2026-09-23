@@ -795,9 +795,17 @@
     if (totals) totals.appendChild(cap);
     setTimeout(function () { [fx, cap].forEach(function (x) { if (x.parentNode) x.parentNode.removeChild(x); }); }, 2800);
   }
+  // The total for the payment type NOT chosen looks switched off (owner,
+  // 2026-09-23: "When one is chosen the other should look deactivated a bit").
+  function syncPay() {
+    var t = $(".bl__totals");
+    if (t) t.setAttribute("data-pay", payChosen() === "Store Credit" ? "credit" : "cash");
+  }
   root.addEventListener("change", function (e) {
+    if (e.target && e.target.name === "bl-pay") syncPay();
     if (e.target && e.target.name === "bl-pay" && e.target.value === "Store Credit") chargeUp();
   });
+  syncPay();
   function doSubmit(pay) {
     if (!cart.length) return;
     $("#bl-submit").disabled = true;

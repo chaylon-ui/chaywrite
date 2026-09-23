@@ -441,3 +441,10 @@ html[data-xg-theme="dark"] .bl__mine-row--staged .bl__mine-status { color: #f6c4
 .bl__hit { grid-template-areas: "img head" "img offers" "img more"; }
 @media (max-width: 860px) { .bl__hit { grid-template-areas: "img head" "offers offers" "more more"; } }
 .bl__hit.is-open .bl__more-opts .bl__pill { display: none; }
+/* The unchosen total looks switched off (owner, 2026-09-23). nth-child, not
+   last-child: the store-credit caption is appended to the row for a moment. */
+.bl__totals > span:nth-child(1), .bl__totals > span:nth-child(2) { transition: opacity 0.2s, filter 0.2s; }
+.bl__totals[data-pay="credit"] > span:nth-child(1),
+.bl__totals[data-pay="cash"] > span:nth-child(2) { opacity: 0.4; filter: grayscale(1); }
+.bl__totals[data-pay="credit"] > span:nth-child(1) b,
+.bl__totals[data-pay="cash"] > span:nth-child(2) b { font-weight: 600; }
