@@ -146,6 +146,9 @@
         .xg-desc__note { margin: 12px 0 0; font-size: 12.5px; color: var(--xg-muted, #8a9299); }
         .xg-desc__note a { color: inherit; text-decoration: underline; }
         .xg-class { padding: 16px 18px; background: var(--xg-bg, #f1f4f6); border-radius: var(--xg-radius, 14px); }
+        /* dark: the theme's own h3 colour outranks --xg-ink here and left the card
+           titles ("Kit specs", "Product specs", "Classification") dark on dark */
+        html[data-xg-theme="dark"] .xg-class .xg-class__title { color: #e6ebee !important; }
         .xg-class__title { margin: 0 0 4px; font-family: var(--xg-font-display, Oswald, Impact, sans-serif); font-size: 17px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--xg-ink, #10171a); }
         .xg-class dl { margin: 0; }
         .xg-class dt { margin: 12px 0 5px; font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-muted, #8a9299); }
