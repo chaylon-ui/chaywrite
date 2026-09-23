@@ -952,9 +952,8 @@
       var hits = Array.isArray(j.hits) ? j.hits : [];
       if (!hits.length || lastQuery || lastHits.length) return;
       lastHits = hits;
-      var internal = Number(j.internal) || 0;
-      $("#bl-hits").innerHTML = '<div class="bl__wanted"><h3 class="bl__wantedtitle"><span class="bl__flame" aria-hidden="true"></span>Cards we need most right now</h3>' +
-        '<p class="bl__muted">' + (internal ? "What our customers are buying and asking for that we are short of, with what we pay today." : "This week\'s biggest movers in Standard, with what we pay today.") + " Search above for anything else you are selling.</p></div>";
+      // No banner above the cards (owner, 2026-09-23: "Remove this").
+      $("#bl-hits").innerHTML = "";
       renderHits(hits, 0);
       setStatus("");
     }).catch(function () {});
