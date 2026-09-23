@@ -1,0 +1,104 @@
+name: plamod-probe
+# Read-only look at PLAMOD's retailer portal (www.plamod.com/retailer), our
+# Gunpla / figure / blind-box distributor. Owner, 2026-09-23: "I get gunpla
+# from here", "I also get figures from there and blind boxes" - they provide
+# retailer product images (Download ZIP), barcode, release date, series.
+# Signs in with the owner's retailer account (Actions secrets PLAMOD_COMPANY,
+# PLAMOD_USERNAME, PLAMOD_PASSWORD), opens a product page and runs a search,
+# and prints what the portal's own pages load: request URLs, status, JSON
+# shapes (any token/cookie/password-like field blanked), page text, image
+# URLs. It never prints the secrets, cookies or request headers, and never
+# clicks anything that changes the account (cart, preorder, notify).
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: Portal page to open after sign-in
+        default: /retailer/products/5063084
+      search:
+        description: Text to type into the portal's product search (e.g. a barcode)
+        default: "4573102630841"
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
+      - name: Probe the portal
+        env:
+          PCO: ${{ secrets.PLAMOD_COMPANY }}
+          PUS: ${{ secrets.PLAMOD_USERNAME }}
+          PPW: ${{ secrets.PLAMOD_PASSWORD }}
+          PPATH: ${{ inputs.path }}
+          PSEARCH: ${{ inputs.search }}
+        run: |
+          if [ -z "$PUS" ] || [ -z "$PPW" ]; then echo "PLAMOD secrets missing"; exit 1; fi
+          cat > probe.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const SECRETS = [process.env.PCO, process.env.PUS, process.env.PPW].filter(s => s && s.length > 2);
+          const BAD = /token|jwt|auth|pass|secret|session|cookie|signature|credential/i;
+          function scrub(v, depth) {
+            if (depth > 6) return '…';
+            if (Array.isArray(v)) return v.slice(0, 3).map(x => scrub(x, depth + 1)).concat(v.length > 3 ? ['(+' + (v.length - 3) + ' more)'] : []);
+            if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v).slice(0, 60)) o[k] = BAD.test(k) ? '[hidden]' : scrub(v[k], depth + 1); return o; }
+            if (typeof v === 'string') return v.length > 160 ? v.slice(0, 160) + '…' : v;
+            return v;
+          }
+          function clean(s) { s = String(s); for (const x of SECRETS) s = s.split(x).join('[secret]'); return s.replace(/([?&](?:token|sig|signature|key|X-Amz-[A-Za-z-]+|Expires|Policy|Key-Pair-Id)=)[^&\s"]+/gi, '$1[x]'); }
+          const log = (...a) => console.log(clean(a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1400, height: 1000 });
+            let phase = 'signin';
+            page.on('response', async (res) => {
+              try {
+                const req = res.request(), u = res.url(), t = req.resourceType();
+                if (!/plamod/.test(u) || !['xhr', 'fetch', 'document'].includes(t)) return;
+                const ct = res.headers()['content-type'] || '';
+                let body = '';
+                if (/json/.test(ct)) { try { body = JSON.stringify(scrub(await res.json(), 0)).slice(0, 1500); } catch (e) {} }
+                const post = req.method() === 'POST' ? ' post-keys=' + (() => { try { return Object.keys(JSON.parse(req.postData() || '{}')).join(','); } catch (e) { return '(form)'; } })() : '';
+                log('NET[' + phase + ']', req.method(), res.status(), t, u.slice(0, 220), ct.split(';')[0], post, body);
+              } catch (e) {}
+            });
+            await page.goto('https://www.plamod.com/retailer-sign-in', { waitUntil: 'networkidle2', timeout: 60000 });
+            const fields = await page.$$eval('input', els => els.map(e => ({ type: e.type, name: e.name, id: e.id, ph: e.placeholder })));
+            log('FIELDS', fields);
+            const inputs = (await page.$$('input')).filter(Boolean);
+            const vis = [];
+            for (const h of inputs) { const ok = await h.evaluate(e => e.offsetParent !== null && !['hidden', 'checkbox', 'submit'].includes(e.type)); if (ok) vis.push(h); }
+            const pw = await page.$('input[type=password]');
+            // Company, Username, Password in the order the form shows them
+            const plain = [];
+            for (const h of vis) { if ((await h.evaluate(e => e.type)) !== 'password') plain.push(h); }
+            if (plain.length >= 2) { await plain[0].type(process.env.PCO || ''); await plain[1].type(process.env.PUS); }
+            else if (plain.length === 1) { await plain[0].type(process.env.PUS); }
+            await pw.type(process.env.PPW);
+            phase = 'submit';
+            await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 }).catch(() => null), page.keyboard.press('Enter')]);
+            await sleep(3000);
+            log('AFTER SIGN-IN url', page.url(), 'title', await page.title());
+            phase = 'product';
+            await page.goto('https://www.plamod.com' + process.env.PPATH, { waitUntil: 'networkidle2', timeout: 60000 });
+            await sleep(2500);
+            log('PRODUCT url', page.url());
+            log('PRODUCT TEXT', (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 2500));
+            log('IMAGES', await page.$$eval('img', els => [...new Set(els.map(e => e.currentSrc || e.src))].slice(0, 30)));
+            log('LINKS', await page.$$eval('a', els => els.map(a => (a.innerText || '').trim().slice(0, 40) + ' -> ' + a.getAttribute('href')).filter(s => /zip|download|image|product|api/i.test(s)).slice(0, 40)));
+            log('BUTTONS', await page.$$eval('button', els => els.map(b => (b.innerText || '').trim().slice(0, 40)).filter(Boolean).slice(0, 40)));
+            if (process.env.PSEARCH) {
+              phase = 'search';
+              const box = await page.$('input[type=search], input[placeholder*="earch"]');
+              if (box) { await box.click({ clickCount: 3 }); await box.type(process.env.PSEARCH); await page.keyboard.press('Enter'); await sleep(5000); }
+              log('SEARCH url', page.url(), 'box', !!box);
+              log('SEARCH TEXT', (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 1500));
+            }
+            await browser.close();
+          })().catch(e => { console.log('ERROR', clean(e.message)); process.exit(1); });
+          EOF
+          node probe.js
