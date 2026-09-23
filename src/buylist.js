@@ -209,6 +209,48 @@ export async function conditionsFor(env, card) {
   });
 }
 
+// Search-hit-shaped cards (the "cards we need most" list) with every
+// condition/finish price, limit and variant id replaced by BinderPOS's
+// current ones: one staff-portal allPrices call per 20 cards (not the
+// rate-limited public search). A card BinderPOS no longer returns is left
+// out; an offer it no longer has goes to 0 (the page hides those).
+export async function livePrices(env, hits) {
+  if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
+  const games = await gamesList(env);
+  const pairs = [], seen = new Set();
+  for (const h of hits) {
+    const game = gameIdOf(h, games), key = game + "|" + String(h.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push({ game, id: Number(h.id) });
+  }
+  const priced = new Map(), found = new Set();
+  for (let i = 0; i < pairs.length; i += 20) {
+    const grouped = new Map();
+    for (const p of pairs.slice(i, i + 20)) { if (!grouped.has(p.game)) grouped.set(p.game, []); grouped.get(p.game).push(p.id); }
+    const res = await portalPost(env, "/api/buylists/cards/allPrices", Array.from(grouped, ([game, ids]) => ({ game, ids })));
+    if (!Array.isArray(res)) throw new Error("BinderPOS gave no prices");
+    for (const card of res) {
+      found.add(String(card.id));
+      for (const v of card.variants || []) for (const t of v.cardBuylistTypes || []) {
+        for (const f of [t.type, t.legacyType]) if (f) priced.set(String(card.id) + "|" + String(v.id) + "|" + normType(f), t);
+      }
+    }
+  }
+  return hits.filter((h) => found.has(String(h.id))).map((h) => ({
+    ...h,
+    variants: (h.variants || []).map((v) => ({
+      ...v,
+      cardBuylistTypes: (v.cardBuylistTypes || []).map((t) => {
+        const now = priced.get(String(h.id) + "|" + String(v.id) + "|" + normType(t.type)) || priced.get(String(h.id) + "|" + String(v.id) + "|" + normType(t.legacyType));
+        return now
+          ? { ...t, buyPrice: now.buyPrice, creditBuyPrice: now.creditBuyPrice, maxPurchaseQuantity: now.maxPurchaseQuantity, productVariantId: now.productVariantId != null ? now.productVariantId : t.productVariantId }
+          : { ...t, buyPrice: 0, creditBuyPrice: 0, maxPurchaseQuantity: 0 };
+      }),
+    })),
+  }));
+}
+
 export async function repriceCards(env, cards) {
   if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
   const games = await gamesList(env);
@@ -372,7 +414,15 @@ async function route(mode, action, request, env, url, cors) {
   // most wants right now, as ordinary search hits. src/wanted.js.
   if (action === "wanted") {
     const v = await wantedCards(env, gameOf(url));   // built by the cron (refreshWantedCards), never here; ?game=pokemon for the Pokemon list
-    return json(v, 200, { ...cors, "cache-control": v.count ? "public, max-age=600" : "no-store" });
+    // Which cards is the daily build's; what we pay is BinderPOS's NOW
+    // (owner, 2026-09-23: "it needs to pull the price from binderpos every
+    // refresh as the prices may have changed"). No live price, no strip:
+    // better nothing than yesterday's number.
+    if (v.count) {
+      try { v.hits = await livePrices(env, v.hits); v.count = v.hits.length; v.pricedAt = new Date().toISOString(); }
+      catch (e) { v.priceError = String((e && e.message) || e).slice(0, 160); v.hits = []; v.count = 0; }
+    }
+    return json(v, 200, { ...cors, "cache-control": "no-store" });
   }
 
   if (action === "search") {

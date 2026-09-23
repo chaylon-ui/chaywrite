@@ -51,3 +51,35 @@ test("lists longer than 100 lines are kept whole", () => {
   assert.equal(cleanCards(cards).length, 180);
   assert.equal(cleanCards(Array.from({ length: 900 }, (_, i) => ({ cardId: i }))).length, 500);
 });
+
+// "Cards we need most" (the sell page's first view) is built once a day,
+// but what it shows we pay must be BinderPOS's price now (owner,
+// 2026-09-23: "it needs to pull the price from binderpos every refresh").
+test("the wanted strip's prices are BinderPOS's current ones", async () => {
+  const { livePrices } = await import("../src/buylist.js");
+  const env = { BINDERPOS_LOGIN_EMAIL: "x", BINDERPOS_LOGIN_PASSWORD: "y" };
+  const asked = [];
+  globalThis.fetch = async (u, init) => {
+    u = String(u);
+    if (u.includes("verifyPassword")) return new Response(JSON.stringify({ idToken: "t", expiresIn: 3600 }));
+    if (u.includes("supportedGames")) return new Response(JSON.stringify(["mtg"]));
+    if (u.includes("allPrices")) {
+      asked.push(JSON.parse(init.body));
+      return new Response(JSON.stringify([{ id: 11, variants: [{ id: 1, variantName: "Near Mint", cardBuylistTypes: [{ type: "Normal", buyPrice: 5.5, creditBuyPrice: 7.7, maxPurchaseQuantity: 3, productVariantId: 99 }] }] }]));
+    }
+    throw new Error("unexpected " + u);
+  };
+  const T = (type, buy) => ({ type, buyPrice: buy, creditBuyPrice: buy * 1.4, maxPurchaseQuantity: 8, productVariantId: 1 });
+  const hits = [
+    { id: 11, cardName: "Sol Ring", game: "Magic: The Gathering", variants: [{ id: 1, variantName: "Near Mint", cardBuylistTypes: [T("Normal", 2), T("Foil", 9)] }] },
+    { id: 22, cardName: "Gone Card", game: "Magic: The Gathering", variants: [{ id: 1, variantName: "Near Mint", cardBuylistTypes: [T("Normal", 1)] }] },
+  ];
+  const out = await livePrices(env, hits);
+  assert.equal(asked.length, 1);                                   // one call for the whole strip
+  assert.deepEqual(asked[0], [{ game: "mtg", ids: [11, 22] }]);
+  assert.equal(out.length, 1);                                     // a card BinderPOS no longer returns is left out
+  const [normal, foil] = out[0].variants[0].cardBuylistTypes;
+  assert.equal(normal.buyPrice, 5.5); assert.equal(normal.creditBuyPrice, 7.7); assert.equal(normal.maxPurchaseQuantity, 3); assert.equal(normal.productVariantId, 99);
+  assert.equal(foil.buyPrice, 0); assert.equal(foil.maxPurchaseQuantity, 0);   // an offer no longer there is not shown
+  assert.equal(hits[0].variants[0].cardBuylistTypes[0].buyPrice, 2);           // the stored list is not mutated
+});
