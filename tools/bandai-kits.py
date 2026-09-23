@@ -35,6 +35,10 @@ GAP = 1.0
 MAX_FETCH = int(os.environ.get("MAX_FETCH") or "2500")
 DRY = os.environ.get("DRY_RUN") == "true"
 LIMIT = int(os.environ.get("LIMIT") or "0")
+# Stop fetching after this many seconds and save what we have, so a slow
+# night never runs into the job's timeout and loses the lot; the next run
+# carries on from there (incremental).
+BUDGET = int(os.environ.get("BUDGET_SECONDS") or "2400")
 MONTHS = {m: i + 1 for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
 
 _last = [0.0]
@@ -129,7 +133,11 @@ def main():
     if LIMIT:
         todo = todo[:LIMIT]
     fetched = failed = 0
+    t0 = time.time()
     for k in todo[:MAX_FETCH]:
+        if time.time() - t0 > BUDGET:
+            print("time budget spent after %d pages; the rest next run" % fetched)
+            break
         status, page = get(items[k])
         fetched += 1
         if status != 200 or not page:
