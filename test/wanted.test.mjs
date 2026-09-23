@@ -251,3 +251,17 @@ test("a Pokemon build never fetches MTGGoldfish, looks sold printings up in thei
   assert.deepEqual(v.hits.map((h) => [h.cardName, h.wanted.rank]), [["Iono (185/193)", 1], ["Rare Candy (191/198)", 2]]);
   await assert.rejects(startWanted({ game: "pokemon", fetchFn, search }), /no candidates/);
 });
+
+test("Pokemon misses in the TCG Live form lose their set code and number; Magic names are left alone", async () => {
+  const { missName } = await import("../src/wanted.js");
+  assert.equal(missName("Float Stone BKT 137", PKM), "Float Stone");
+  assert.equal(missName("Iono PAL 185", PKM), "Iono");
+  assert.equal(missName("Pikachu PR-SV 27", PKM), "Pikachu");
+  assert.equal(missName("Charizard ex OBF 125", PKM), "Charizard ex");
+  assert.equal(missName("Rare Candy", PKM), "Rare Candy");
+  assert.equal(missName("Boss's Orders", PKM), "Boss's Orders");
+  assert.equal(missName("Float Stone BKT 137", PROFILES.mtg), "Float Stone BKT 137");
+  const io = { overview: async () => ({ miss: { pokemon: [{ name: "Iono PAL 185", c: 3 }, { name: "Iono PAL 254", c: 2 }, { name: "Float Stone BKT 137", c: 4 }] } }), orders: async () => ({ orders: { nodes: [], pageInfo: { hasNextPage: false } } }) };
+  const r = await internalCandidates({}, io, "pokemon");
+  assert.deepEqual(r.candidates.map((c) => c.name), ["Iono", "Float Stone"]);   // Iono 3 + 2 = 5 asks
+});

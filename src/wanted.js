@@ -266,6 +266,13 @@ export function tallySales(orders, profile) {
   return out;
 }
 
+// Deck Builder Pokemon misses arrive in the Pokemon TCG Live export form,
+// "Float Stone BKT 137" / "Iono PAL 185" / "Pikachu PR-SV 27": the set code
+// and number made BinderPOS's keyword search find nothing (first live build,
+// 2026-09-23). The name alone is looked up instead.
+export const PTCGL_TAIL = /\s+[A-Z][A-Z0-9]{1,4}(?:-[A-Z0-9]{1,4})?\s+[A-Z]{0,4}\d+[a-z]?$/;
+export const missName = (name, rules) => rules && rules.printing ? String(name).replace(PTCGL_TAIL, "").trim() : String(name);
+
 // The ranked internal candidate list plus notes on what each source gave.
 export async function internalCandidates(env, io, game) {
   const rules = profileOf(game);
@@ -274,7 +281,11 @@ export async function internalCandidates(env, io, game) {
   const misses = {};
   try {
     const ov = await io.overview();
-    for (const x of ((ov && ov.miss && ov.miss[rules.game]) || [])) if (x && x.name && Number(x.c) >= MIN_MISSES) misses[x.name] = Number(x.c);
+    for (const x of ((ov && ov.miss && ov.miss[rules.game]) || [])) {
+      if (!x || !x.name || !(Number(x.c) >= MIN_MISSES)) continue;
+      const n = missName(x.name, rules);
+      if (n) misses[n] = (misses[n] || 0) + Number(x.c);      // "Iono PAL 185" and "Iono PAL 254" are one ask
+    }
     notes.misses = Object.keys(misses).length;
   } catch (e) { notes.missesError = String((e && e.message) || e).slice(0, 120); }
   let sales = {};
