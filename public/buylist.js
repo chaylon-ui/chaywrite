@@ -277,17 +277,18 @@
      buylist app, so each shopper has their own allowance instead of every
      shopper sharing the worker's; (2) if that is refused it asks through
      the worker; (3) if both are busy it waits and tries again by itself,
-     saying so; (4) a search already answered this visit is not asked
-     again. A refusal is never shown as "nothing matches". */
+     saying so. A refusal is never shown as "nothing matches". Every
+     search asks BinderPOS again, never a remembered or browser-cached
+     answer: prices change (owner, 2026-09-23: "it needs to pull the price
+     from binderpos every refresh as the prices may have changed"). */
   var PORTAL_CARDS = "https://portal.binderpos.com/external/shopify/a648e57a-678f-45eb-bae0-f8deb7940192/cards/";
-  var found = {};                                // query -> {hits, more}, this visit
   var directRestUntil = 0;                       // BinderPOS refused the browser: give it a rest
   var retryTimer = null;
   var WAITS = [5, 10, 15, 20, 30, 60];           // seconds between tries while BinderPOS is busy (its block lasts ~60 s)
   function hitsOf(body) { return Array.isArray(body) ? body : body && Array.isArray(body.products) ? body.products : null; }
   function direct(q, g, set, offset) {
     var qs = "keyword=" + encodeURIComponent(q) + "&limit=" + PAGE + "&offset=" + offset + (set ? "&setName=" + encodeURIComponent(set) : "");
-    return fetch(PORTAL_CARDS + encodeURIComponent(g) + "?" + qs).then(function (r) {
+    return fetch(PORTAL_CARDS + encodeURIComponent(g) + "?" + qs, { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     }).then(function (b) {
@@ -303,9 +304,7 @@
     }, function (err) { if (/busy|HTTP 429|HTTP 5\d\d|fetch|network/i.test(err.message)) err.busy = true; throw err; });
   }
   function findCards(q, g, set, offset, mine) {
-    var key = [g, set, q.toLowerCase(), offset].join("|");
-    if (found[key]) return Promise.resolve(found[key]);
-    function keep(hits) { return (found[key] = { hits: hits, more: hits.length >= PAGE }); }
+    function keep(hits) { return { hits: hits, more: hits.length >= PAGE }; }
     var tries = 0;
     function attempt() {
       var first = Date.now() >= directRestUntil
