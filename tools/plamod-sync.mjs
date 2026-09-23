@@ -105,27 +105,24 @@ async function main() {
       try {
         await go("https://www.plamod.com/retailer/search?q=" + t.barcode);
         // "No products found" shows until the results arrive - wait for the barcode
-        await page.waitForFunction((bc) => (document.body.innerText || "").includes("Barcode: " + bc), { timeout: 10000 }, t.barcode).catch(() => null);
+        // (the portal puts a line break between "Barcode:" and the number - normalise spaces)
+        await page.waitForFunction((bc) => (document.body.innerText || "").replace(/\s+/g, " ").includes("Barcode: " + bc), { timeout: 10000 }, t.barcode).catch(() => null);
         const hits = await page.evaluate((bc) => {
           const out = new Set();
           for (const a of document.querySelectorAll('a[href*="/retailer/products/"]')) {
             let card = a;
             for (let i = 0; i < 6 && card && !(card.innerText || "").includes("Barcode"); i++) card = card.parentElement;
-            if (card && (card.innerText || "").includes("Barcode: " + bc)) out.add(a.getAttribute("href").split("?")[0]);
+            if (card && (card.innerText || "").replace(/\s+/g, " ").includes("Barcode: " + bc)) out.add(a.getAttribute("href").split("?")[0]);
           }
           return [...out];
         }, t.barcode);
         if (hits.length !== 1) {
           tally[hits.length ? "ambiguous" : "notFound"]++;
-          if (tally.notFound + tally.ambiguous <= 2) {
-            const dbg = await page.evaluate(() => ({ url: location.href, links: document.querySelectorAll('a[href*="/retailer/products/"]').length, text: document.body.innerText.replace(/\s+/g, " ").slice(0, 600) })).catch((e) => ({ err: e.message }));
-            log("  miss debug", JSON.stringify(dbg));
-          }
           items[t.barcode] = { found: false, checked: new Date().toISOString(), why: hits.length ? "ambiguous" : "not on PLAMOD" };
           continue;
         }
         await go("https://www.plamod.com" + hits[0]);
-        await page.waitForFunction((bc) => (document.body.innerText || "").includes(bc) && document.querySelector('img[src*="images.plamod.com"]'), { timeout: 12000 }, t.barcode).catch(() => null);
+        await page.waitForFunction((bc) => (document.body.innerText || "").replace(/\s+/g, " ").includes(bc) && document.querySelector('img[src*="images.plamod.com"]'), { timeout: 12000 }, t.barcode).catch(() => null);
         await sleep(800);
         const info = await page.evaluate(() => ({
           text: document.body.innerText.replace(/\s+/g, " "),
