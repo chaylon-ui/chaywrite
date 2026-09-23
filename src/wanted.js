@@ -23,8 +23,8 @@ export const WANTED_N = 10;
 export const TTL_MS = 48 * 3600 * 1000;        // a good list is kept two days (a failed refresh keeps yesterday's)
 export const REFRESH_MS = 23 * 3600 * 1000;    // the cron rebuilds after this: once a day (owner, 2026-09-22)
 export const RETRY_MS = 3600 * 1000;           // and retries an hour after a build that found nothing
-const KV_KEY = "wanted:mtg:standard:v6";        // v5: sellers + misses interleaved, no reasons (2026-09-23)
-const ATTEMPT_KEY = "wanted:mtg:standard:attempt6";
+const KV_KEY = "wanted:mtg:standard:v7";        // v5: sellers + misses interleaved, no reasons (2026-09-23)
+const ATTEMPT_KEY = "wanted:mtg:standard:attempt7";
 const LAST_TRY_KEY = "wanted:mtg:standard:lasttry";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 const memo = { at: 0, value: null };
@@ -137,7 +137,10 @@ export function matchHit(entry, hits) {
   // the best offer among those.
   const slugLetters = letters(String(entry.setSlug || "").replace(/-/g, " "));
   const rank = (h) => (slugLetters && letters(h.setName) === slugLetters ? 0 : 2) + (SPECIAL_SET.test(String(h.setName || "")) ? 1 : 0);
-  return pool.slice().sort((a, b) => rank(a) - rank(b) || bestCash(b) - bestCash(a))[0];
+  // Within the exact set, the best offer (its foil/treatment lines are the
+  // same card); otherwise the CHEAPEST regular printing - the common reprint
+  // a shopper holds, not Alpha (2026-09-23: Lightning Bolt picked Alpha).
+  return pool.slice().sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? bestCash(b) - bestCash(a) : bestCash(a) - bestCash(b)))[0];
 }
 
 export async function fetchMovers(fetchFn, url) {
@@ -349,7 +352,7 @@ async function readCached(env) {
   try { const v = JSON.parse(cached); if (v && v.count > 0) { memo.at = Date.now(); memo.value = v; return v; } } catch { /* rebuild */ }
   return null;
 }
-const STATE_KEY = "wanted:mtg:standard:state6";
+const STATE_KEY = "wanted:mtg:standard:state7";
 const STATE_TTL = 6 * 3600 * 1000;
 const readJson = async (env, key) => { try { const t = await kvGet(env, key); return t ? JSON.parse(t) : null; } catch { return null; } };
 

@@ -34,9 +34,9 @@ const hit = (cardName, setName, cash) => ({ id: cardName + "|" + setName, cardNa
 test("matchHit wants the exact name from the named set, else a regular printing, else the best offer", () => {
   const entry = { name: "Ghalta, Stampede Tyrant", setSlug: "lost-caverns-of-ixalan" };
   const hits = [hit("Ghalta, Stampede Tyrant // Foo", "Weird", 99), hit("Ghalta, Stampede Tyrant", "The Lost Caverns of Ixalan", 10), hit("Ghalta, Stampede Tyrant", "Commander: The Lost Caverns of Ixalan", 12), hit("Ghalta, Stampede Tyrant", "Secret Lair Drop", 30)];
-  assert.equal(matchHit(entry, hits).setName, "Commander: The Lost Caverns of Ixalan");   // both carry the slug's words; the better offer wins
-  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "nowhere-set" }, hits).setName, "Commander: The Lost Caverns of Ixalan");   // Secret Lair pays more but is a special printing
-  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "" }, hits).setName, "Commander: The Lost Caverns of Ixalan");
+  assert.equal(matchHit(entry, hits).setName, "The Lost Caverns of Ixalan");   // both carry the slug's words; the one named exactly wins
+  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "nowhere-set" }, hits).setName, "The Lost Caverns of Ixalan");   // Secret Lair pays more but is special; of the regulars, the cheapest (most common)
+  assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "" }, hits).setName, "The Lost Caverns of Ixalan");
   assert.equal(matchHit({ name: "Ghalta, Stampede Tyrant", setSlug: "the-lost-caverns-of-ixalan" }, hits).setName, "The Lost Caverns of Ixalan");   // the exact set wins over one containing its words
   assert.equal(matchHit({ name: "Not There", setSlug: "" }, hits), null);
   assert.equal(matchHit({ name: "GHALTA, stampede tyrant" }, [hit("Ghalta, Stampede Tyrant", "X", 1)]).setName, "X");   // case and punctuation do not matter
@@ -47,7 +47,7 @@ test("matchHit wants the exact name from the named set, else a regular printing,
   assert.equal(matchHit({ name: "Lyra, Tolarian Archangel" }, [dead, capped, none]), null);
   assert.equal(matchHit({ name: "Lyra, Tolarian Archangel" }, [dead, hit("Lyra, Tolarian Archangel", "Other", 2)]).setName, "Other");
   // regular printings beat promos and judge cards that pay more; the exact set beats one that merely contains its words
-  const bolts = [hit("Lightning Bolt", "Judge Gift Cards 1998", 90), hit("Lightning Bolt", "Magic 2010", 1), hit("Lightning Bolt", "Secret Lair Drop", 12)];
+  const bolts = [hit("Lightning Bolt", "Judge Gift Cards 1998", 90), hit("Lightning Bolt", "Alpha Edition", 400), hit("Lightning Bolt", "Magic 2010", 1), hit("Lightning Bolt", "Secret Lair Drop", 12)];
   assert.equal(matchHit({ name: "Lightning Bolt", setSlug: "" }, bolts).setName, "Magic 2010");
   const emer = [hit("Emeritus of Conflict", "Secrets of Strixhaven Promos", 9), hit("Emeritus of Conflict", "Secrets of Strixhaven", 4)];
   assert.equal(matchHit({ name: "Emeritus of Conflict", setSlug: "secrets-of-strixhaven" }, emer).setName, "Secrets of Strixhaven");
@@ -66,12 +66,12 @@ test("buildWanted: front-page winners first, in rank order, with the mover's num
   const fetchFn = async (url) => new Response(url === MOVERS_URL ? page : morePage([]), { status: 200 });
   const v = await buildWanted({ fetchFn, search, n: 10, delayMs: 0 });
   assert.equal(v.count, 3);
-  assert.deepEqual(v.hits.map((h) => [h.cardName, h.setName, h.wanted.rank, h.wanted.source]), [["Samut, Tyrant of Naktamun", "Reality Fracture", 1, "movers"], ["Gideon's Memorial", "Reality Fracture", 2, "movers"], ["Starting Town", "Reality Fracture", 3, "movers"]]);   // its slug (final-fantasy) matches neither hit, so the better offer wins
+  assert.deepEqual(v.hits.map((h) => [h.cardName, h.setName, h.wanted.rank, h.wanted.source]), [["Samut, Tyrant of Naktamun", "Reality Fracture", 1, "movers"], ["Gideon's Memorial", "Reality Fracture", 2, "movers"], ["Starting Town", "Other", 3, "movers"]]);   // its slug (final-fantasy) matches neither hit, so the cheaper regular printing wins
   assert.deepEqual(v.missed, ["Omnipresence"]);
   assert.deepEqual(asked, ["Samut, Tyrant of Naktamun", "Omnipresence", "Gideon's Memorial", "Starting Town"]);
   assert.deepEqual(v.pages, [MOVERS_URL, MORE_URLS.weekly, MORE_URLS.daily]);   // both View More pages were tried and were empty
   assert.equal(v.picked.length, 4);
-  assert.deepEqual(v.probe.map((p) => [p.name, p.got, p.matched]), [["Samut, Tyrant of Naktamun", 2, "Reality Fracture"], ["Omnipresence", 0, null], ["Gideon's Memorial", 2, "Reality Fracture"], ["Starting Town", 2, "Reality Fracture"]]);
+  assert.deepEqual(v.probe.map((p) => [p.name, p.got, p.matched]), [["Samut, Tyrant of Naktamun", 2, "Reality Fracture"], ["Omnipresence", 0, null], ["Gideon's Memorial", 2, "Reality Fracture"], ["Starting Town", 2, "Other"]]);
   await assert.rejects(buildWanted({ fetchFn: async () => new Response("nope", { status: 403 }), search }), /HTTP 403/);
   await assert.rejects(buildWanted({ fetchFn: async () => new Response("<html></html>", { status: 200 }), search }), /no movers rows/);
 });
