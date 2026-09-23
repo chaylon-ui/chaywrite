@@ -252,8 +252,7 @@
   }
 
   /* The "New cards" pill that brings the tapes back for a customer who hid
-     them. It keeps clear of the app band along the bottom edge: if another
-     layer owns the pill's own centre point, it steps up until it doesn't. */
+     them. See lift() for how it keeps clear of other corner widgets. */
   function showOpener() {
     if (document.getElementById('xg-ticker-open')) return;
     var b = document.createElement('button');
@@ -267,16 +266,43 @@
       start();
     });
     document.body.appendChild(b);
+    /* Keep clear of anything else parked in that corner: Shopify's own
+       preview bar (an iframe that the store admin sees on preview themes;
+       minimised it is a small dark box bottom-left - owner, 2026-09-23:
+       "does this weird black square around the button when minimized"),
+       chat or rewards launchers, the app band along the bottom edge. Any
+       iframe or fixed/sticky box found under OR over the pill's corners and
+       centre pushes it up to sit just above that box. */
+    function fixedHost(el) {
+      for (var n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+        if (n === b) return null;
+        if (n.tagName === 'IFRAME') return n;
+        var pos = getComputedStyle(n).position;
+        if (pos === 'fixed' || pos === 'sticky') return n;
+      }
+      return null;
+    }
     function lift() {
       if (!b.isConnected) return;
-      // our own centre point must be ours; if another layer owns it, step up
       var bottom = 12;
       for (var i = 0; i < 6; i++) {
         b.style.bottom = bottom + 'px';
-        var r = b.getBoundingClientRect();
-        var el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
-        if (!el || b.contains(el)) break;
-        bottom += Math.round(r.height) + 4;
+        var r = b.getBoundingClientRect(), top = null;
+        var pts = [[r.left + 2, r.top + 2], [r.right - 2, r.top + 2], [r.left + 2, r.bottom - 2], [r.right - 2, r.bottom - 2], [r.left + r.width / 2, r.top + r.height / 2]];
+        for (var k = 0; k < pts.length; k++) {
+          var stack = document.elementsFromPoint ? document.elementsFromPoint(pts[k][0], pts[k][1]) : [];
+          for (var j = 0; j < stack.length; j++) {
+            var h = fixedHost(stack[j]);
+            if (h && h !== b) {
+              var hr = h.getBoundingClientRect();
+              if (hr.height < window.innerHeight * 0.5 && (top === null || hr.top < top)) top = hr.top;
+            }
+          }
+        }
+        if (top === null) break;
+        var want = Math.round(window.innerHeight - top + 8);
+        if (want <= bottom) break;
+        bottom = want;
       }
     }
     requestAnimationFrame(lift);
