@@ -98,7 +98,7 @@ async function main() {
   let next = 0, saved = 0;
   async function worker(page) {
     let last = 0;
-    const go = async (url) => { const w = 1000 - (Date.now() - last); if (w > 0) await sleep(w); last = Date.now(); await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }); };
+    const go = async (url) => { const w = 1000 - (Date.now() - last); if (w > 0) await sleep(w); last = Date.now(); await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 }); };
     while (next < todo.length && Date.now() - t0 < BUDGET_MS) {
       const t = todo[next++];
       tally.looked++;
@@ -117,6 +117,10 @@ async function main() {
         }, t.barcode);
         if (hits.length !== 1) {
           tally[hits.length ? "ambiguous" : "notFound"]++;
+          if (tally.notFound + tally.ambiguous <= 2) {
+            const dbg = await page.evaluate(() => ({ url: location.href, links: document.querySelectorAll('a[href*="/retailer/products/"]').length, text: document.body.innerText.replace(/\s+/g, " ").slice(0, 600) })).catch((e) => ({ err: e.message }));
+            log("  miss debug", JSON.stringify(dbg));
+          }
           items[t.barcode] = { found: false, checked: new Date().toISOString(), why: hits.length ? "ambiguous" : "not on PLAMOD" };
           continue;
         }
