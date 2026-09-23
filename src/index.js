@@ -5,7 +5,8 @@ import { serveStores } from "./stores.js";
 import { serveEvents } from "./events.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 import { serveIcs } from "./ics.js";
-import { servePriceHistory } from "./price-history.js";
+import { servePriceHistory, adminGql } from "./price-history.js";
+import { servePlamodTargets } from "./plamod.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
@@ -293,6 +294,16 @@ export default {
     // Store pages: a sister store's events, asked of BinderPOS as that store (events.js).
     if (url.pathname === "/events.json") {
       return serveEvents(request, ctx);
+    }
+
+    // PLAMOD runner's work list: our Gunpla / Figures / Blind Box products
+    // with barcode and the image files they already have (src/plamod.js).
+    if (url.pathname === "/plamod/targets.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return servePlamodTargets(request, env, ctx, gql);
     }
 
     if (url.pathname === "/stores.json") {
