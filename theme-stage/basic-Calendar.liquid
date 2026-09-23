@@ -1,0 +1,608 @@
+{{ 'https://cdn.binderpos.com/eventCalendar.css' | stylesheet_tag }}
+<script src="//cdn.binderpos.com/eventCalendar.js"></script>
+<script>
+  document.addEventListener("shopify:section:load", function () {
+    $.getScript("https://binderpos-big-calendar-1490e.web.app/static/js/runtime-main.js");
+    $.getScript("https://binderpos-big-calendar-1490e.web.app/static/js/main.chunk.js");
+    $.getScript("https://binderpos-big-calendar-1490e.web.app/static/js/2.chunk.js");
+    $.getScript("https://cdn.binderpos.com/eventCalendar.js");
+    var options = {
+      fullNames: false
+    };
+    var myCalendar = new Calendar(document.getElementById('binderpos-calendar'), options, "{{ settings.binderkey }}");
+  });
+</script>
+<section class="calendar-container">
+  <div class="calendar-contents" {% if section.settings.bg_image !=null %} style="background:url({{ section.settings.bg_image | img_url: 'master'  }})" {% else %} style="background:url('')" {% endif %}>
+    <div class="container">
+      <h3>{{ section.settings.title }}</h3>
+      <div class="calendar-inner-container">
+        <div id="binderpos-calendar"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  var binderPosCalendar;
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var options = {
+      fullNames: false
+    };
+    var myCalendar = new Calendar(document.getElementById('binderpos-calendar'), options, "{{ settings.binderkey }}");
+    console.log(myCalendar);
+  });
+</script>
+
+<style>
+  /* ==== Event calendar, 2026 pass: dark glass panel over the owner's photo,
+     card-style day cells, pill navigation. The BinderPOS widget builds the
+     DOM (eventCalendar.js), so everything here rides on its classes -
+     scoped under #binderpos-calendar so it outranks the CDN stylesheet. ==== */
+
+  .calendar-container .calendar-contents:before {
+    display: none;
+  }
+
+  .calendar-contents {
+    position: relative;
+    background-size: cover !important;
+    background-position: center center !important;
+    height: unset !important;
+    padding: 52px 0 56px !important;
+    isolation: isolate;
+  }
+  /* The owner-picked photo stays, but pushed way back: dark slate wash,
+     a soft red/teal glow at the corners, and a blur so the grid reads. */
+  .calendar-contents::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      radial-gradient(820px 380px at 10% -8%, rgba(214, 44, 40, 0.18), transparent 62%),
+      radial-gradient(760px 380px at 96% 108%, rgba(52, 178, 194, 0.12), transparent 62%),
+      linear-gradient(180deg, rgba(11, 14, 16, 0.94), rgba(13, 16, 19, 0.88) 45%, rgba(10, 13, 15, 0.95));
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .calendar-contents .container {
+    position: relative;
+    z-index: 1;
+    max-width: 100%;
+    font-family: "{{ settings.type_base_font.family }}";
+  }
+
+  /* Section heading: was display:none - bring it back as a proper header. */
+  section.calendar-container h3 {
+    display: block;
+    text-align: center;
+    margin: 0 0 6px;
+    padding-bottom: 14px;
+    position: relative;
+    font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fff;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+  }
+  section.calendar-container h3::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: 56px;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #d62c28, #ff8a2e);
+  }
+
+  /* Month bar: prev / AUGUST 2026 / next as a flex row with pill buttons. */
+  #binderpos-calendar .calendar-actions-container {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    margin: 10px 0 18px;
+  }
+  #binderpos-calendar .previous-action-container,
+  #binderpos-calendar .next-action-container,
+  #binderpos-calendar .current-month-container {
+    display: block !important;
+    width: auto !important;
+  }
+  #binderpos-calendar .current-month-container {
+    flex: 1 1 auto;
+    text-align: center;
+    text-shadow: none;
+  }
+  #binderpos-calendar .current-month-container span {
+    font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #fff;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  }
+  #binderpos-calendar span.calendar-nav-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #e8edef !important;
+    font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  }
+  #binderpos-calendar span.calendar-nav-action:hover {
+    background: rgba(214, 44, 40, 0.2);
+    border-color: rgba(214, 44, 40, 0.55);
+    color: #fff !important;
+    transform: translateY(-1px);
+  }
+  #binderpos-calendar span.calendar-nav-action i {
+    color: #ff8a7a;
+  }
+
+  /* The grid: no more washed-out white sheet - spaced card cells. */
+  .calendar-inner-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  #binderpos-calendar table.calendar-table {
+    background: transparent !important;
+    border: 0 !important;
+    border-collapse: separate !important;
+    border-spacing: 6px !important;
+    width: 100%;
+    min-width: 640px;
+  }
+  #binderpos-calendar .calendar-table col,
+  #binderpos-calendar .calendar-table col.darken {
+    background: transparent !important;
+  }
+  #binderpos-calendar .calendar-table th {
+    background: none !important;
+    background-image: none !important;
+    border: 0 !important;
+    padding: 2px 0 10px !important;
+  }
+  #binderpos-calendar .calendar-table th span.calendar-header {
+    font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #8fa0a8;
+  }
+  #binderpos-calendar td.calendar-data-block {
+    background: rgba(255, 255, 255, 0.055) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-radius: 12px;
+    padding: 8px 8px 6px !important;
+    height: 96px;
+    vertical-align: top;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  #binderpos-calendar td.calendar-data-block:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.38);
+  }
+  /* Day number chip (the span is the td's direct child; icons live in divs). */
+  #binderpos-calendar td.calendar-data-block > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    margin: 0 0 6px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 12px;
+    font-weight: 700;
+    color: #e8edef;
+    text-shadow: none !important;
+  }
+  /* Days outside the month: ghosted. */
+  #binderpos-calendar td.calendar-data-block.calendar-inactive-block {
+    background: rgba(255, 255, 255, 0.018) !important;
+    border-color: rgba(255, 255, 255, 0.045) !important;
+  }
+  #binderpos-calendar td.calendar-inactive-block > span {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.28);
+  }
+  #binderpos-calendar td.calendar-inactive-block:hover {
+    transform: none;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.03) !important;
+  }
+  /* Today: red ring + glow, day number fills in. */
+  #binderpos-calendar td.calendar-data-block.calendar-selected-date {
+    background: rgba(214, 44, 40, 0.14) !important;
+    border-color: rgba(214, 44, 40, 0.6) !important;
+    box-shadow: 0 0 0 1px rgba(214, 44, 40, 0.35), 0 8px 24px rgba(214, 44, 40, 0.2);
+  }
+  #binderpos-calendar td.calendar-selected-date > span {
+    background: #d62c28;
+    color: #fff;
+  }
+
+  /* Event logos: no more 40x30 squish - square chips that keep the art's
+     aspect, with a little pop on hover (the click target for the modal). */
+  #binderpos-calendar .calendar-icon-container {
+    display: inline-block;
+    cursor: pointer;
+  }
+  #binderpos-calendar td.calendar-data-block .calendar-icon-container img.calendar-icon {
+    width: 30px !important;
+    height: 30px !important;
+    object-fit: contain !important;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 2px;
+    margin: 1px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  #binderpos-calendar td.calendar-data-block .calendar-icon-container:hover img.calendar-icon {
+    transform: scale(1.16);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Event detail modal: dark card to match. */
+  #binderpos-calendar .calendar-info-modal-overlay {
+    background: rgba(8, 10, 12, 0.72) !important;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  #binderpos-calendar .calendar-info-modal-container {
+    background: #14181b !important;
+    color: #e8edef !important;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px !important;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  }
+  #binderpos-calendar h2.calendar-info-modal-title {
+    font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #fff !important;
+  }
+  #binderpos-calendar hr.calendar-info-modal-divider {
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  #binderpos-calendar .calendar-info-modal-container label {
+    color: #8fa0a8 !important;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  #binderpos-calendar .calendar-info-modal-container p {
+    color: #e8edef !important;
+  }
+  #binderpos-calendar button.calendar-info-modal-close-button {
+    background: linear-gradient(135deg, #d62c28, #ff5a36) !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    padding: 10px 24px;
+    color: #fff !important;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+  }
+  #binderpos-calendar button.calendar-info-modal-close-button:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 6px 18px rgba(214, 44, 40, 0.45);
+  }
+
+  @media (max-width: 767px) {
+    .calendar-contents {
+      padding: 36px 0 40px !important;
+    }
+    section.calendar-container h3 {
+      font-size: 24px;
+    }
+    #binderpos-calendar .current-month-container span {
+      font-size: 20px;
+    }
+    #binderpos-calendar span.calendar-nav-action {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    #binderpos-calendar table.calendar-table {
+      border-spacing: 4px !important;
+      min-width: 560px;
+    }
+    #binderpos-calendar td.calendar-data-block {
+      height: 76px;
+      border-radius: 10px;
+      padding: 6px 6px 4px !important;
+    }
+    #binderpos-calendar td.calendar-data-block .calendar-icon-container img.calendar-icon {
+      width: 24px !important;
+      height: 24px !important;
+      min-width: 24px !important;
+      min-height: 24px !important;
+      max-width: 24px !important;
+      max-height: 24px !important;
+    }
+  }
+
+  /* The event preview popover (.calendar-icon-info, z-index 5 in the
+     widget) was painting UNDER neighbouring day cells: the hover lift's
+     transform turns each hovered cell into its own stacking context. Give
+     cells positioned stacking with a clear ladder — hovered cells at 10,
+     the cell holding an open popover at 60 — so the popover always wins. */
+  #binderpos-calendar td.calendar-data-block { position: relative; z-index: 1; }
+  #binderpos-calendar td.calendar-data-block:hover { z-index: 10; }
+  #binderpos-calendar td.calendar-data-block:has(.calendar-icon-info) { z-index: 60; }
+  #binderpos-calendar .calendar-icon-info {
+    z-index: 60 !important;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Clicking around the grid was leaving a blinking text caret (the cells
+     hold selectable text nodes); hide the caret and stop accidental
+     text-selection drags on the grid chrome. The popover and modal keep
+     their text selectable. */
+  #binderpos-calendar { caret-color: transparent; }
+  #binderpos-calendar td.calendar-data-block,
+  #binderpos-calendar .calendar-table th,
+  #binderpos-calendar .calendar-actions-container {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Close button injected onto the event preview popover (the widget ships
+     none - the only way out was clicking elsewhere). The popover is already
+     absolutely positioned by the widget, so it anchors the X on its own —
+     do NOT re-position it here: a position:relative override puts it back
+     in the table flow and the day cell balloons to the popover's size. */
+  #binderpos-calendar .xg-cal-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 0;
+    padding: 0;
+    background: rgba(20, 24, 27, 0.85);
+    color: #fff;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+  #binderpos-calendar .xg-cal-close:hover { background: #d62c28; }
+
+  /* "Add to calendar" link injected into the same popover (script below).
+     It inherits the popover's own ink so it reads on whatever ground the
+     widget paints, sits as an outlined pill under "More info", and fills
+     exor-red on hover / keyboard focus. */
+  #binderpos-calendar .xg-cal-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 0;
+    padding: 5px 11px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    color: inherit;
+    background: transparent;
+    font-family: var(--xg-font-body, "Inter", sans-serif);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    text-decoration: none;
+    text-transform: none;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  #binderpos-calendar .xg-cal-add svg { width: 14px; height: 14px; flex: 0 0 14px; }
+  #binderpos-calendar .xg-cal-add:hover,
+  #binderpos-calendar .xg-cal-add:focus-visible {
+    background: var(--xg-red, #d62c28);
+    border-color: var(--xg-red, #d62c28);
+    color: #fff;
+  }
+
+  /* Dark mode, the event preview card (owner, 2026-09-23: "When in dark mode
+     the text is basically invisible when looking at any event"). BinderPOS
+     paints the card - .calendar-icon-info (opens left), -right (opens right)
+     and .calendar-mobile-modal (phones) - background white, color #000, with
+     white/#ccc arrow triangles; dark mode's page-wide light ink then lands on
+     that white card. Dark card to match the event detail modal above (#14181b,
+     #e8edef ink, white Oswald title), the arrow re-coloured with it, and the
+     "More info" bar in exor red instead of #33ced4 (white on that cyan is
+     1.9:1). */
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info,
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-right,
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-mobile-modal {
+    background-color: #14181b !important;
+    color: #e8edef !important;
+    border-color: #2e363b !important;
+  }
+  html[data-xg-theme="dark"] #binderpos-calendar :is(.calendar-icon-info, .calendar-icon-info-right, .calendar-mobile-modal) :is(p, span, div, li, strong, em, label) {
+    color: #e8edef !important;
+  }
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-title {
+    color: #fff !important;
+    font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-description,
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-description * { color: #d5dce0 !important; }
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-date,
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-time { color: #7fd0e6 !important; }
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-action {
+    background: linear-gradient(135deg, #d62c28, #ff5a36) !important;
+    color: #fff !important;
+  }
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info:before,
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-right:before { border-color: #2e363b transparent transparent transparent !important; }
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info:after,
+  html[data-xg-theme="dark"] #binderpos-calendar .calendar-icon-info-right:after { border-color: #14181b transparent transparent transparent !important; }
+  html[data-xg-theme="dark"] #binderpos-calendar :is(.calendar-icon-info, .calendar-icon-info-right, .calendar-mobile-modal) .xg-cal-add { color: #e8edef !important; }
+  html[data-xg-theme="dark"] #binderpos-calendar :is(.calendar-icon-info, .calendar-icon-info-right, .calendar-mobile-modal) .xg-cal-add:hover,
+  html[data-xg-theme="dark"] #binderpos-calendar :is(.calendar-icon-info, .calendar-icon-info-right, .calendar-mobile-modal) .xg-cal-add:focus-visible { color: #fff !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #binderpos-calendar td.calendar-data-block,
+    #binderpos-calendar span.calendar-nav-action,
+    #binderpos-calendar td.calendar-data-block .calendar-icon-container img.calendar-icon,
+    #binderpos-calendar td.calendar-data-block .calendar-icon-container:hover img.calendar-icon,
+    #binderpos-calendar td.calendar-data-block:hover {
+      transition: none;
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+  /* The BinderPOS preview popover (opened by CLICKING an event icon) has no
+     close control; watch the calendar for popovers appearing and give each
+     one an X. Esc closes too. Closing goes through the widget's own toggle
+     (a click on the icon that opened it) and ONLY that: the widget hides the
+     popover node and re-shows the same one next time, so removing it
+     ourselves leaves the widget toggling a detached node and no preview can
+     open again until a refresh. Hidden popovers are skipped - "closing" one
+     would toggle it back open. */
+  (function () {
+    var cal = document.getElementById('binderpos-calendar');
+    if (!cal || !window.MutationObserver) return;
+    var lastIcon = null;
+    cal.addEventListener('click', function (e) {
+      var ic = e.target && e.target.closest && e.target.closest('.calendar-icon-container');
+      if (ic) lastIcon = ic;
+    }, true);
+    function closeOne(p) {
+      if (!p.offsetWidth && !p.offsetHeight) return;
+      var icon = (p.closest && p.closest('.calendar-icon-container')) || lastIcon;
+      var tgt = icon && (icon.querySelector('img') || icon);
+      if (tgt) tgt.click();
+    }
+    function closeAll() {
+      cal.querySelectorAll('.calendar-icon-info').forEach(closeOne);
+    }
+
+    /* "Add to calendar" inside the same popover, built only from what the
+       widget prints there: the title (h2.calendar-icon-info-title), the
+       date (p.calendar-icon-info-date - locale-formatted by the widget:
+       9/2/2026 here, 02/09/2026 or 2026-09-02 in other locales, so the day
+       cell's own number settles which part is the day) and the time
+       (p.calendar-icon-info-time: 6:30:00 PM, 6:30 p.m. or 18:30:00). The
+       worker's /ics turns that Atlantic wall time into the .ics (same link
+       the homepage event cards carry). No feed lookup and no guessing: a
+       popover without a readable date AND time gets no link. Idempotent:
+       the link carries the key it was built from, so every observer pass
+       leaves an up-to-date link and never a second one. */
+    var ICS = 'https://exor-binder.nevski.workers.dev/ics';
+    var GLYPH = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<rect x="1.5" y="2.5" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+      '<path d="M1.5 6.5h13M5 1v3M11 1v3M8 8.5v4M6 10.5h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function clean(v) {
+      var t = String(v == null ? '' : v);
+      [10, 13, 9].forEach(function (c) { t = t.split(String.fromCharCode(c)).join(' '); });
+      return t.replace(/[ ]{2,}/g, ' ').trim();
+    }
+    function text(el) { return el ? clean(el.textContent) : ''; }
+    function popDate(p) {
+      var parts = text(p.querySelector('.calendar-icon-info-date')).split(/[^0-9]+/).filter(Boolean);
+      if (parts.length !== 3) return '';
+      var y, m, d;
+      if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; }
+      else if (parts[2].length === 4) {
+        var td = p.closest && p.closest('td'), cellDay = 0;
+        if (td) { for (var i = 0; i < td.children.length; i++) { if (td.children[i].tagName === 'SPAN') { cellDay = parseInt(td.children[i].textContent, 10); break; } } }
+        var a = parseInt(parts[0], 10), b = parseInt(parts[1], 10);
+        y = parts[2];
+        if (cellDay && a === cellDay && b !== cellDay) { d = a; m = b; } else { m = a; d = b; }
+      } else return '';
+      m = parseInt(m, 10); d = parseInt(d, 10);
+      if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return '';
+      return y + '-' + pad2(m) + '-' + pad2(d);
+    }
+    function popTime(p) {
+      var m = /([0-9]{1,2}):([0-9]{2})(?::[0-9]{2})?[^0-9APap]*([APap])?/.exec(text(p.querySelector('.calendar-icon-info-time')));
+      if (!m) return '';
+      var h = parseInt(m[1], 10), mer = (m[3] || '').toUpperCase();
+      if (mer === 'P' && h < 12) h += 12;
+      if (mer === 'A' && h === 12) h = 0;
+      if (h > 23) return '';
+      return pad2(h) + ':' + m[2];
+    }
+    function addCal(p) {
+      var title = text(p.querySelector('.calendar-icon-info-title'));
+      var day = popDate(p), tm = popTime(p);
+      var key = title + '|' + day + '|' + tm;
+      var old = p.querySelector('.xg-cal-add');
+      if (old && old.getAttribute('data-key') === key) return;
+      if (old) old.parentNode.removeChild(old);
+      if (!title || !day || !tm) return;
+      var desc = text(p.querySelector('.calendar-icon-info-description')).slice(0, 300);
+      var page = location.origin + (location.pathname === '/' ? '/pages/events' : location.pathname);
+      var a = document.createElement('a');
+      a.className = 'xg-cal-add';
+      a.setAttribute('data-key', key);
+      a.href = ICS + '?t=' + encodeURIComponent(title.slice(0, 300)) +
+        '&s=' + encodeURIComponent(day + 'T' + tm) +
+        '&loc=' + encodeURIComponent('Exor Games') +
+        (desc ? '&d=' + encodeURIComponent(desc) : '') +
+        '&u=' + encodeURIComponent(page.slice(0, 300));
+      a.title = 'Add this event to your phone calendar';
+      a.innerHTML = GLYPH + '<span>Add to calendar</span>';
+      // The popover lives inside the icon that toggles it: a click that
+      // bubbled would close the preview mid-download. Navigation still runs.
+      a.addEventListener('click', function (ev) { ev.stopPropagation(); });
+      var x = p.querySelector('.xg-cal-close');
+      if (x) p.insertBefore(a, x); else p.appendChild(a);
+    }
+    new MutationObserver(function () {
+      cal.querySelectorAll('.calendar-icon-info').forEach(function (p) {
+        addCal(p);
+        if (p.querySelector('.xg-cal-close')) return;
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'xg-cal-close';
+        b.setAttribute('aria-label', 'Close event preview');
+        b.innerHTML = '&times;';
+        b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); closeOne(p); });
+        p.appendChild(b);
+      });
+    }).observe(cal, { childList: true, subtree: true });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+  })();
+</script>
