@@ -127,6 +127,9 @@ def main():
     except (OSError, ValueError):
         data = {}
     kits = data.get("kits") or {}
+    # pages that answered with the site's "404" page are not kits: drop them
+    # so the next run tries them again
+    kits = {k: v for k, v in kits.items() if (v.get("name") or "").strip() not in ("", "404", "Not Found")}
     items = sitemap_items()
     print("sitemap: %d kit pages, %d already in the file" % (len(items), sum(1 for k in items if k in kits)))
     todo = [k for k in sorted(items) if k not in kits]
@@ -144,7 +147,7 @@ def main():
             failed += 1
             continue
         kit = parse_item(page)
-        if not kit.get("name"):
+        if not kit.get("name") or kit["name"].strip() in ("404", "Not Found"):
             failed += 1
             continue
         kit["url"] = items[k]
