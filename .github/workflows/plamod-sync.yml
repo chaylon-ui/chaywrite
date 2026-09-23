@@ -114,6 +114,11 @@ jobs:
                 if (hits.length !== 1) {
                   tally[hits.length ? 'ambiguous' : 'notFound']++;
                   log((hits.length ? 'AMBIGUOUS ' + hits.length : 'NOT FOUND'), '|', t.type, '|', t.barcode, '|', t.title.slice(0, 70));
+                  if (tally.notFound + tally.ambiguous <= 3) {
+                    const dbg = await page.evaluate(() => ({ url: location.href, links: document.querySelectorAll('a[href*="/retailer/products/"]').length, text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 700) })).catch(e => ({ err: e.message }));
+                    if (dbg.text) dbg.text = dbg.text.replace(/\$\s?\d[\d,.]*/g, '$[x]');
+                    log('  debug', JSON.stringify(dbg));
+                  }
                   continue;
                 }
                 await go(page, 'https://www.plamod.com' + hits[0]);
