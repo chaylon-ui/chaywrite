@@ -52,6 +52,11 @@ test("matchHit wants the exact name from the named set, else a regular printing,
   const emer = [hit("Emeritus of Conflict", "Secrets of Strixhaven Promos", 9), hit("Emeritus of Conflict", "Secrets of Strixhaven", 4)];
   assert.equal(matchHit({ name: "Emeritus of Conflict", setSlug: "secrets-of-strixhaven" }, emer).setName, "Secrets of Strixhaven");
   assert.equal(matchHit({ name: "Emeritus of Conflict", setSlug: "secrets-of-strixhaven-promos" }, emer).setName, "Secrets of Strixhaven Promos");
+  // no penny printings: the cheapest regular printing worth $0.25 or more, and none at all when nothing clears it
+  const umbras = [hit("Boar Umbra", "Planechase Anthology", 0.01), hit("Boar Umbra", "Rise of the Eldrazi", 0.4), hit("Boar Umbra", "Commander 2018", 0.3)];
+  assert.equal(matchHit({ name: "Boar Umbra", setSlug: "" }, umbras).setName, "Commander 2018");
+  assert.equal(matchHit({ name: "Boar Umbra", setSlug: "planechase-anthology" }, umbras).setName, "Commander 2018");   // the exact set pays a penny: another printing instead
+  assert.equal(matchHit({ name: "Boar Umbra", setSlug: "" }, [hit("Boar Umbra", "Planechase Anthology", 0.02)]), null);
 });
 
 const morePage = (names) => `<h1>Top Weekly Winners</h1>${table("Top Weekly Winners", names.map((nm, i) => row(nm, "some-set", String(i), "SET", "3.00", "+1.00", "+10%", "increase")))}`;
