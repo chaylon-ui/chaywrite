@@ -127,7 +127,15 @@ jobs:
               ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
               : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
             await page.setCacheEnabled(false);
-            await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
+            // no-cache only on top-level page loads: sent on every request it made
+            // third-party XHRs (Cloud Search, pop-convert) fail their CORS preflight.
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+              if (req.isInterceptResolutionHandled()) return;
+              if (req.isNavigationRequest() && req.frame() === page.mainFrame()) {
+                req.continue({ headers: Object.assign({}, req.headers(), { 'cache-control': 'no-cache', pragma: 'no-cache' }) });
+              } else { req.continue(); }
+            });
             let grepLeft = 120;
             if (process.env.NET) {
               const needle = process.env.NET;
