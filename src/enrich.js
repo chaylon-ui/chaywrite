@@ -939,8 +939,21 @@ export async function enrichTick(cx) {
         run.errors++;
         run.errStreak++;
         run.pending.shift();
+        /* BGG down (2026-09-23: "bgg HTTP 502" eight times running). Stand
+           the games down for this run but still do the Gunpla phase, which
+           needs no BGG; the run then ends with this error, so the usual
+           failed-run retry brings the games back later. */
+        if (run.errStreak >= 8) {
+          run.bggDown = msg(e);
+          run.pending = [];
+          run.gamesPending = true;
+          run.errStreak = 0;
+          cx.log("enrich: BoardGameGeek failing (" + run.bggDown + ") - games stood down, on to Gunpla");
+          run.phase = "gunpla";
+          run.cursor = null;
+          run.hasNext = true;
+        }
         await st.put("en:run", run);
-        if (run.errStreak >= 8) return finish(cx, run, msg(e));
         continue;
       }
       run.errStreak = 0;
@@ -960,7 +973,7 @@ export async function enrichTick(cx) {
         await st.put("en:run", run);
         continue;
       }
-      return finish(cx, run, null);
+      return finish(cx, run, run.bggDown || null);
     }
 
     let page;

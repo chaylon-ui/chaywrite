@@ -327,6 +327,23 @@ async function drain(w, maxTicks = 60) {
   eq('second night writes nothing for unchanged kits', w.written.filter((m, i) => i >= before && m.ownerId.startsWith('gid://k/')).length, 0);
 }
 
+// ---------- 5c. BoardGameGeek DOWN (not gated) still lets Gunpla run ----------
+// 2026-09-23: "bgg HTTP 502" eight games running ended the whole run before
+// the Gunpla phase. Now the games stand down, Gunpla runs, and the run still
+// ends with the BGG error so the failed-run retry brings the games back.
+{
+  const games = [];
+  for (let i = 1; i <= 9; i++) games.push({ id: 'gid://g/' + i, title: 'GAME NUMBER ' + i });
+  const w = world({ books: [], games, gunpla: [{ id: 'gid://k/1', title: 'HGUC 1/144 GM Sniper' }],
+    kits: { "01_1043": { name: "HG 1/144 GM SNIPER", launch: "2017-07", url: "u" } }, bggStatus: 502 });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('gunpla ran although BGG was down', last.gunpla && last.gunpla.seen, 1);
+  ok('the run still reports the BGG failure', /502/.test(last.error || ''), 'error=' + last.error);
+  eq('games flagged as still owed', last.gamesPending, true);
+  ok('no game was stamped enriched', !w.written.some((m) => m.ownerId.startsWith('gid://g/')), '');
+}
+
 // ---------- 6. no token: fails loudly instead of silently ----------
 {
   const w = world({ books: [], games: [] });
