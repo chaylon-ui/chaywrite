@@ -48,7 +48,7 @@ jobs:
             if (typeof v === 'string') return v.length > 160 ? v.slice(0, 160) + '…' : v;
             return v;
           }
-          function clean(s) { s = String(s); for (const x of SECRETS) s = s.split(x).join('[secret]'); return s.replace(/([?&](?:token|sig|signature|key|X-Amz-[A-Za-z-]+|Expires|Policy|Key-Pair-Id)=)[^&\s"]+/gi, '$1[x]'); }
+          function clean(s) { s = String(s); for (const x of SECRETS) s = s.split(x).join('[secret]'); s = s.replace(/\$\s?\d[\d,.]*/g, '$[x]').replace(/ORDERED:[^|]{0,40}/gi, 'ORDERED: [x]'); return s.replace(/([?&](?:token|sig|signature|key|X-Amz-[A-Za-z-]+|Expires|Policy|Key-Pair-Id)=)[^&\s"]+/gi, '$1[x]'); }
           const log = (...a) => console.log(clean(a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')));
           (async () => {
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
