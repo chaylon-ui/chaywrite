@@ -185,7 +185,7 @@ html[data-xg-theme="dark"] .products-display .grid-view-item__image-wrapper { bo
 html[data-xg-theme="dark"] .products-display .grid-view-item__image-wrapper .image-inner { background: transparent !important; }
 
 .cloud-search-mobile, .cloud-search-results { font-family: var(--xg-font-body); }
-.cloud-search-mobile input { border-radius: 999px !important; padding-left: 16px !important; }
+.cloud-search-mobile input { border-radius: 999px !important; }
 .cloud-search-mobile__cancel { color: var(--xg-red, #d62c28) !important; font-weight: 600; }
 html[data-xg-theme="dark"] .cloud-search-mobile-backdrop { background: rgba(10, 13, 15, 0.86) !important; }
 html[data-xg-theme="dark"] .cloud-search-mobile { background: #161b1e !important; border-color: #2a3236 !important; }
