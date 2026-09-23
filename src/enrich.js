@@ -42,6 +42,7 @@
 
 import { adminGql, throttleWait, dayOf, dateOf } from "./price-history.js";
 import { GUNPLA_QUERY, KITS_FILE_URL, indexKits, gunplaMetafields } from "./gunpla.js";
+import { PLAMOD_FILE_URL, PL_PAGE, PL_ADD_MEDIA, PL_QUERY, parsePlPage, plamodPlan } from "./plamod.js";
 
 export const ENRICH_DO = "enrich";
 
@@ -854,6 +855,18 @@ async function seriesInfo(cx, names) {
 /* data/bandai-kits.json (tools/bandai-kits.py, weekly) read once per run.
    Missing or unreadable -> an empty index: every kit still gets its title
    facts, just no Bandai release date. */
+async function plamodFile(cx) {
+  if (cx.mem && cx.mem.plamod !== undefined) return cx.mem.plamod;
+  let file = null;
+  try {
+    const r = await cx.fetch(PLAMOD_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    if (r.ok) { file = await r.json(); cx.log("enrich: plamod file loaded, " + ((file && file.count) || 0) + " barcodes, generated " + ((file && file.generated) || "?")); }
+    else cx.log("enrich: plamod file HTTP " + r.status + " - PLAMOD phase skipped");
+  } catch (e) { cx.log("enrich: plamod file fetch failed: " + msg(e)); }
+  if (cx.mem) cx.mem.plamod = file;
+  return file;
+}
+
 async function kitsIndex(cx) {
   if (cx.mem && cx.mem.kits) return cx.mem.kits;
   let idx = indexKits(null);
@@ -876,6 +889,7 @@ const newRun = (day, now) => ({
   pages: 0, seen: 0, written: 0, skipped: 0, ok: 0, ambiguous: 0, notfound: 0,
   errors: 0, errStreak: 0, throttled: 0, ticks: 0, tickAt: now, done: false,
   gunpla: { seen: 0, changed: 0, bandai: 0, titleOnly: 0, unknown: 0 },
+  plamod: { seen: 0, matched: 0, photosAdded: 0, productsWithNew: 0, facts: 0, errors: 0 },
 });
 
 async function arm(cx, at, why) {
@@ -897,7 +911,7 @@ async function finish(cx, run, error) {
   cx.log("enrich: run " + dateOf(run.day) + (error ? " FAILED: " + error : " finished") +
     " seen=" + run.seen + " written=" + run.written + " ok=" + run.ok +
     " ambiguous=" + run.ambiguous + " notfound=" + run.notfound +
-    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + " " + run.ms + "ms");
+    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
   return arm(cx, dayOf(now) > run.day ? now + 1000 : nextRunAt(now), "run finished");
@@ -975,14 +989,66 @@ export async function enrichTick(cx) {
     }
 
     if (!run.hasNext) {
-      if (run.phase === "books" || run.phase === "games") {
-        run.phase = run.phase === "books" ? "games" : "gunpla";
+      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla") {
+        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : "plamod";
         run.cursor = null;
         run.hasNext = true;
         await st.put("en:run", run);
         continue;
       }
       return finish(cx, run, run.bggDown || null);
+    }
+
+    /* PLAMOD photos + facts for Gunpla / Figures / Blind Box (src/plamod.js). */
+    if (run.phase === "plamod") {
+      if (!run.plamod) run.plamod = { seen: 0, matched: 0, photosAdded: 0, productsWithNew: 0, facts: 0, errors: 0 };
+      const file = await plamodFile(cx);
+      if (!file) { run.hasNext = false; await st.put("en:run", run); continue; }
+      let r;
+      try { r = await adminGql(cx, PL_PAGE, { q: PL_QUERY, after: run.cursor }); }
+      catch (e) {
+        if (e && e.throttled) { run.throttled++; await st.put("en:run", run); return arm(cx, cx.now() + 1500, "throttled"); }
+        run.errors++; run.errStreak++; await st.put("en:run", run);
+        if (run.errStreak >= 5) return finish(cx, run, msg(e));
+        return arm(cx, cx.now() + 5000, "page error");
+      }
+      run.errStreak = 0;
+      run.pages++;
+      const page = parsePlPage(r.data);
+      run.cursor = page.cursor;
+      run.hasNext = page.hasNext;
+      const mf = [];
+      for (const it of page.items) {
+        run.plamod.seen++;
+        const entry = it.barcode && file.items && file.items[it.barcode];
+        if (!entry || !entry.found) continue;
+        run.plamod.matched++;
+        const plan = plamodPlan(it, entry);
+        const factsOnly = plan.metafields.filter((m) => m.key !== "pl_added");
+        if (factsOnly.length) { run.plamod.facts++; mf.push(...factsOnly); }
+        if (!plan.media.length) continue;
+        try {
+          const u = await adminGql(cx, PL_ADD_MEDIA, { product: { id: it.id }, media: plan.media });
+          const errs = (u.data && u.data.productUpdate && u.data.productUpdate.userErrors) || [];
+          if (errs.length) throw new Error(JSON.stringify(errs).slice(0, 200));
+          run.plamod.photosAdded += plan.media.length;
+          run.plamod.productsWithNew++;
+          // only now: a failed add is tried again next night
+          mf.push(...plan.metafields.filter((m) => m.key === "pl_added"));
+        } catch (e) {
+          if (e && e.throttled) { run.throttled++; await cx.sleep(2000); }
+          run.plamod.errors++;
+          cx.log("enrich: plamod photos for " + it.id + " failed: " + msg(e));
+        }
+      }
+      if (mf.length) {
+        try { run.written += await writeMetafields(cx, mf); }
+        catch (e) { run.errors++; cx.log("enrich: plamod facts write failed: " + msg(e)); }
+      }
+      await st.put("en:run", run);
+      const wait = throttleWait(r.cost, 30);
+      if (wait > 0) return arm(cx, cx.now() + wait, "throttle pacing");
+      continue;
     }
 
     let page;
@@ -1116,6 +1182,7 @@ function publicRun(run, now) {
     errors: run.errors, throttled: run.throttled, ticks: run.ticks,
     bggBlocked: run.bggBlocked, gamesPending: !!run.gamesPending,
     gunpla: run.gunpla || null,
+    plamod: run.plamod || null,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,
     error: run.error,

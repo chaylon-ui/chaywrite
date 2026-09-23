@@ -81,3 +81,68 @@ export async function servePlamodTargets(request, env, ctx, gql) {
   if (status === 200) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 }
+
+/* ---- the nightly apply (a phase of the enrich sweep, after Gunpla) ---------
+
+   data/plamod.json (committed by tools/plamod-sync.mjs) maps barcode ->
+   { found, sku, photos:[{key,url}], dup:[keys], release, series, brand, maker }.
+   For each of our products with a match:
+     - photos: every PLAMOD photo the product does not have yet is added
+       AFTER its existing ones (Shopify appends); never replaces or removes.
+       "Does not have" = not the same file (PLAMOD's GUID name, which Shopify
+       keeps), not the same picture (the runner's dup list), and never offered
+       before (exor.pl_added) - so a photo the owner deletes stays deleted.
+     - facts: exor.pl_release / pl_series / pl_brand / pl_maker / pl_sku,
+       written only when they change (exor.pl_sig). No case / carton wording
+       ever reaches here (the runner drops it; checked again below). */
+export const PLAMOD_FILE_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/plamod.json";
+export const PL_PAGE = `query($q:String!,$after:String){products(first:25,query:$q,after:$after,sortKey:ID){pageInfo{hasNextPage endCursor}nodes{id title productType variants(first:1){nodes{barcode sku}} media(first:30){nodes{... on MediaImage{image{url}}}} added: metafield(namespace:"exor", key:"pl_added"){ value } psig: metafield(namespace:"exor", key:"pl_sig"){ value }}}}`;
+export const PL_ADD_MEDIA = `mutation($product: ProductUpdateInput!, $media: [CreateMediaInput!]) { productUpdate(product: $product, media: $media) { product { id } userErrors { field message } } }`;
+export const PL_QUERY = QUERY;
+const CASE_WORDS = /\b(cases?|cartons?|display(?:\s*box)?|box(?:es)?\s+of|sets?\s+of|packs?\s+of|\d+\s*(?:pcs?|pieces|packs?|boxes)|assort(?:ment|ed)?|inner|master\s*pack|bulk)\b/i;
+const okFact = (s) => { s = String(s || "").trim(); return s && s.length <= 80 && !CASE_WORDS.test(s) ? s : ""; };
+const MF = (ownerId, key, type, value) => ({ ownerId, namespace: "exor", key, type, value: String(value) });
+function sig(list) {
+  const s = list.map((m) => m.key + "=" + m.value).join("\n");
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return "v1:" + h.toString(16) + ":" + s.length;
+}
+
+export function parsePlPage(data) {
+  const p = data && data.products;
+  if (!p) return { items: [], hasNext: false, cursor: null };
+  const items = p.nodes.map((n) => {
+    const v = (n.variants && n.variants.nodes && n.variants.nodes[0]) || {};
+    const bc = String(v.barcode || v.sku || "").replace(/\D/g, "");
+    let added = [];
+    try { added = JSON.parse((n.added && n.added.value) || "[]"); } catch {}
+    const urls = ((n.media && n.media.nodes) || []).map((m) => m && m.image && m.image.url).filter(Boolean);
+    return { id: n.id, title: n.title, type: n.productType, barcode: /^\d{8,14}$/.test(bc) ? bc : "", keys: urls.map(imageKey).filter(Boolean), added: Array.isArray(added) ? added : [], plSig: (n.psig && n.psig.value) || "" };
+  });
+  return { items, hasNext: p.pageInfo.hasNextPage, cursor: p.pageInfo.endCursor };
+}
+
+// One product + its PLAMOD entry -> what to do: { media, metafields } (both may be empty).
+export function plamodPlan(it, entry) {
+  const out = { media: [], metafields: [], newKeys: [] };
+  if (!it || !entry || !entry.found) return out;
+  const skip = new Set([...(it.keys || []), ...(it.added || []), ...(entry.dup || [])]);
+  for (const p of entry.photos || []) {
+    if (!p || !p.key || !/^https:\/\/images\.plamod\.com\//.test(p.url || "") || skip.has(p.key)) continue;
+    skip.add(p.key);
+    out.newKeys.push(p.key);
+    out.media.push({ originalSource: p.url, mediaContentType: "IMAGE", alt: String(it.title || "").slice(0, 250) });
+  }
+  const facts = [];
+  const rel = /^\d{4}-\d{2}(-\d{2})?$/.test(entry.release || "") ? entry.release : "";
+  if (rel) facts.push(MF(it.id, "pl_release", "single_line_text_field", rel));
+  for (const [k, v] of [["pl_series", entry.series], ["pl_brand", entry.brand], ["pl_maker", entry.maker], ["pl_sku", entry.sku]]) {
+    const f = okFact(v);
+    if (f) facts.push(MF(it.id, k, "single_line_text_field", f));
+  }
+  const s = sig(facts);
+  if (s !== it.plSig) out.metafields.push(...facts, MF(it.id, "pl_sig", "single_line_text_field", s));
+  if (out.newKeys.length) out.metafields.push(MF(it.id, "pl_added", "json", JSON.stringify([...(it.added || []), ...out.newKeys])));
+  return out;
+}

@@ -21,10 +21,11 @@ function storage() {
 function world(opts) {
   const w = {
     books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [],
-    written: [], deleted: [], adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
+    written: [], deleted: [], mediaAdds: [], plCalls: 0, adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
   const page = (list, after, n) => {
+    n = n || 25;                     // the PLAMOD page query has a fixed page size
     const start = after ? Number(after) : 0;
     const slice = list.slice(start, start + n);
     return {
@@ -37,6 +38,10 @@ function world(opts) {
           bgg: p.bggId ? { value: String(p.bggId) } : null,
           gsig: p.gpSig ? { value: p.gpSig } : null,
           variants: { nodes: [{ barcode: p.barcode || '' }] },
+          productType: p.type || '',
+          media: { nodes: (p.media || []).map((u) => ({ image: { url: u } })) },
+          added: p.plAdded ? { value: p.plAdded } : null,
+          psig: p.plSig ? { value: p.plSig } : null,
         })),
       },
     };
@@ -55,6 +60,9 @@ function world(opts) {
         if (/metafieldsSet/.test(body.query)) {
           w.written.push(...body.variables.mf);
           data = { metafieldsSet: { userErrors: [] } };
+        } else if (/productUpdate/.test(body.query)) {
+          w.mediaAdds.push({ id: body.variables.product.id, media: body.variables.media });
+          data = { productUpdate: { product: { id: body.variables.product.id }, userErrors: w.mediaError ? [{ field: ['media'], message: 'bad image' }] : [] } };
         } else if (/metafieldsDelete/.test(body.query)) {
           w.deleted.push(...body.variables.m);
           data = { metafieldsDelete: { userErrors: [] } };
@@ -76,6 +84,11 @@ function world(opts) {
       /* AniList is no longer called from the worker at all - it blocks
          Cloudflare's egress. The lookup happens on a GitHub runner and lands
          as a committed file, which the worker fetches back. */
+      if (u.includes("raw.githubusercontent.com") && u.includes("plamod.json")) {
+        w.plCalls++;
+        if (!w.plamod) return new Response("404: Not Found", { status: 404 });
+        return new Response(JSON.stringify(w.plamod), { status: 200 });
+      }
       if (u.includes("raw.githubusercontent.com") && u.includes("bandai-kits")) {
         w.kitCalls++;
         return new Response(JSON.stringify({ generated: '2026-09-23T05:40:00Z', kits: w.kits }), { status: 200 });
@@ -104,6 +117,7 @@ function world(opts) {
   w.bggStatus = opts.bggStatus || 200;
   w.thing = opts.thing || {};
   w.kits = opts.kits || {};
+  w.plamod = opts.plamod || null;
   return w;
 }
 
@@ -356,6 +370,61 @@ async function drain(w, maxTicks = 60) {
   ok('the run still reports the BGG failure', /502/.test(last.error || ''), 'error=' + last.error);
   eq('games flagged as still owed', last.gamesPending, true);
   ok('no game was stamped enriched', !w.written.some((m) => m.ownerId.startsWith('gid://g/')), '');
+}
+
+// ---------- 5d. PLAMOD photos + facts (owner, 2026-09-23: "add all photos if
+// you can", "make sure any case language isn't included") ----------
+{
+  const P = (k) => 'https://images.plamod.com/44E64DF7-DB48-11ED-82C1-0E3221E31575/' + k + '.png';
+  const K = ['2264B66A-4AE5-11EF-9B30-262E661BFA1B', '56E3EAA2-8CE1-11E6-8588-1A8B06F1886E', '21B92A0C-4AE5-11EF-A400-222E661BFA1B', '22549CEE-4AE5-11EF-B8E9-272E661BFA1B'];
+  const gunpla = [
+    // already has PLAMOD photo K[1] (Shopify kept the name) + a box-art shot the runner found to be the same picture as K[3]
+    { id: 'gid://k/1', title: 'RG 1/144 #23 Build Strike Gundam Full Package', barcode: '4573102630841', type: 'Gunpla', media: ['https://cdn.shopify.com/s/files/1/x/products/56E3EAA2-8CE1-11E6-8588-1A8B06F1886E-L.png?v=1', 'https://cdn.shopify.com/s/files/1/x/products/1_abc.jpg'] },
+    { id: 'gid://k/2', title: 'HGUC 1/144 GM Sniper', barcode: '4573102999999', type: 'Gunpla' },   // not on PLAMOD
+  ];
+  const plamod = { count: 2, items: {
+    '4573102630841': { found: true, sku: '5063084', photos: K.map((k) => ({ key: k, url: P(k) })), dup: [K[3]], release: '2016-12', series: 'Mobile Suit Gundam SEED', brand: 'RG', maker: 'Case of 12' },
+    '4573102999999': { found: false },
+  } };
+  const w = world({ books: [], games: [], gunpla, plamod, bggStatus: 401 });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('plamod phase ran', last.plamod && last.plamod.seen, 2);
+  eq('one product matched', last.plamod.matched, 1);
+  eq('only the photos it lacks are added (not the same file, not the same picture)', JSON.stringify(w.mediaAdds.map((a) => a.media.map((m) => m.originalSource))), JSON.stringify([[P(K[0]), P(K[2])]]));
+  eq('added as images, alt = our title', w.mediaAdds[0].media[0].mediaContentType + '|' + w.mediaAdds[0].media[0].alt, 'IMAGE|RG 1/144 #23 Build Strike Gundam Full Package');
+  const val = (id, key) => (w.written.filter((m) => m.ownerId === id && m.key === key).pop() || {}).value;
+  eq('facts written', [val('gid://k/1', 'pl_release'), val('gid://k/1', 'pl_series'), val('gid://k/1', 'pl_brand'), val('gid://k/1', 'pl_sku')].join('|'), '2016-12|Mobile Suit Gundam SEED|RG|5063084');
+  eq('case wording never written', val('gid://k/1', 'pl_maker'), undefined);
+  eq('what was offered is remembered', val('gid://k/1', 'pl_added'), JSON.stringify([K[0], K[2]]));
+  eq('nothing for the product PLAMOD lacks', w.mediaAdds.filter((a) => a.id === 'gid://k/2').length + w.written.filter((m) => m.ownerId === 'gid://k/2' && /^pl_/.test(m.key)).length, 0);
+  // next night: the product carries pl_added + pl_sig; the owner deleted K[0] - it must not come back
+  gunpla[0].plAdded = val('gid://k/1', 'pl_added');
+  gunpla[0].plSig = val('gid://k/1', 'pl_sig');
+  const before = w.written.length, adds = w.mediaAdds.length;
+  w.now += 86400000; w.cx.mem = {};
+  await drain(w);
+  eq('second night: no photo re-added (even one the owner deleted)', w.mediaAdds.length - adds, 0);
+  eq('second night: no PLAMOD facts rewritten', w.written.filter((m, i) => i >= before && m.ownerId === 'gid://k/1' && /^pl_/.test(m.key)).length, 0);
+}
+{
+  // a photo add Shopify rejects is NOT remembered, so it is tried again
+  const K = '2264B66A-4AE5-11EF-9B30-262E661BFA1B';
+  const w = world({ books: [], games: [], bggStatus: 401,
+    gunpla: [{ id: 'gid://k/9', title: 'X', barcode: '4573102630841', type: 'Gunpla' }],
+    plamod: { items: { '4573102630841': { found: true, photos: [{ key: K, url: 'https://images.plamod.com/f/' + K + '.png' }] } } } });
+  w.mediaError = true;
+  await drain(w);
+  eq('rejected photo add: pl_added not written', w.written.filter((m) => m.key === 'pl_added').length, 0);
+  eq('... and counted as an error', (await w.cx.storage.get('en:last')).plamod.errors, 1);
+}
+{
+  // no data/plamod.json yet: the phase is skipped quietly
+  const w = world({ books: [], games: [], bggStatus: 401, gunpla: [{ id: 'gid://k/1', title: 'HGUC 1/144 GM Sniper', barcode: '1' }] });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('no plamod file: run still finishes cleanly', last.error, undefined);
+  eq('... and adds nothing', w.mediaAdds.length, 0);
 }
 
 // ---------- 6. no token: fails loudly instead of silently ----------
