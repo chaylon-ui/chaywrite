@@ -429,8 +429,9 @@ export default {
     try { const d = await discordTick(env); if (d && (d.posted || d.errors)) console.log("discord: " + JSON.stringify(d)); }
     catch (e) { console.log("discord: failed: " + ((e && e.message) || e)); }
     // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
-    // day, one polite BinderPOS lookup at a time, off the request path.
-    try { const w = await refreshWantedCards(env); if (w && !w.skipped) console.log("wanted: " + JSON.stringify({ count: w.count, tried: w.tried, error: w.error || null })); }
+    // day per game (Magic, then Pokemon), one polite BinderPOS lookup at a
+    // time, off the request path.
+    try { const w = await refreshWantedCards(env); if (w && !w.skipped) console.log("wanted: " + JSON.stringify({ game: w.game || "mtg", count: w.count, tried: w.tried, error: w.error || null })); }
     catch (e) { console.log("wanted: failed: " + ((e && e.message) || e)); }
   },
 };

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRow, parseRows, parseMovers, pickWanted, matchHit, buildWanted, startWanted, stepWanted, resultOf, internalCandidates, tallySales, MOVERS_URL, MORE_URLS } from "../src/wanted.js";
+import { parseRow, parseRows, parseMovers, pickWanted, matchHit, buildWanted, startWanted, stepWanted, resultOf, internalCandidates, tallySales, baseName, PROFILES, MOVERS_URL, MORE_URLS } from "../src/wanted.js";
 
 // One row exactly as MTGGoldfish served it on 2026-09-22 (probe 35782007459),
 // whitespace collapsed; a second with an apostrophe entity in the name.
@@ -180,4 +180,74 @@ test("startWanted puts internal candidates ahead of the movers, keeps going when
   const down = await startWanted({ fetchFn: async () => new Response("nope", { status: 503 }), search, candidates, n: 3 });
   assert.deepEqual(down.pages, ["internal"]); assert.equal(down.queue.length, 1); assert.match(down.sources.moversError, /503/);
   await assert.rejects(startWanted({ fetchFn: async () => new Response("nope", { status: 503 }), search, n: 3 }), /503/);
+});
+
+/* ---- Pokemon (owner, 2026-09-23: "Just English") ---- */
+const PKM = PROFILES.pokemon;
+test("baseName drops the set, extra tags and every trailing (...)", () => {
+  assert.equal(baseName("Pikachu (6/12) (Cosmos Holo) [Staff] [Some Set]"), "Pikachu");
+  assert.equal(baseName("Boss's Orders (Ghetsis) (265/182)"), "Boss's Orders");
+  assert.equal(baseName("Charizard ex"), "Charizard ex");
+});
+
+test("tallySales for Pokemon counts English singles by printing; Japanese, graded, sealed and Magic are left out", () => {
+  const t = tallySales([
+    order(["Charizard ex (199/165) [Scarlet & Violet: 151]", 2, "Pokemon Single", 0], ["Charizard ex (006/165) [Scarlet & Violet: 151]", 1, "Pokemon Single", 4], ["Pikachu (093) [Staff] [Mega Evolution Promo]", 1, "Pokemon Single", 0]),
+    order(["Charizard ex (199/165) [Scarlet & Violet: 151]", 1, "Pokemon Single", 0], ["Charizard ex (201/165) [Japanese SV2a: Pokemon Card 151]", 5, "Pokemon Japan Singles", 0], ["Charizard (4/102) [Base Set] Graded PSA 9", 1, "Pokemon Single Graded", 0], ["Sol Ring [Commander 2016]", 3, "MTG Single", 0], ["Surging Sparks Booster Box", 2, "Pokemon Sealed Product", 5]),
+  ], PKM);
+  assert.deepEqual(Object.keys(t).sort(), ["Charizard ex (006/165) [Scarlet & Violet: 151]", "Charizard ex (199/165) [Scarlet & Violet: 151]", "Pikachu (093) [Staff] [Mega Evolution Promo]"]);
+  assert.deepEqual(t["Charizard ex (199/165) [Scarlet & Violet: 151]"], { units: 3, sets: { "Scarlet & Violet: 151": 3 }, inv: 0, name: "Charizard ex", full: "Charizard ex (199/165)", set: "Scarlet & Violet: 151" });
+  assert.equal(t["Pikachu (093) [Staff] [Mega Evolution Promo]"].full, "Pikachu (093) [Staff]");
+  // Magic's tally is unchanged by the Pokemon profile existing
+  assert.deepEqual(Object.keys(tallySales([order(["Charizard ex (199/165) [Scarlet & Violet: 151]", 2, "Pokemon Single", 0], ["Sol Ring [Commander 2016]", 3, "MTG Single", 0])])), ["Sol Ring"]);
+});
+
+test("matchHit for Pokemon: a sold printing matches only itself; a miss takes the cheapest regular English printing", () => {
+  const sir = { name: "Charizard ex", printing: { full: "Charizard ex (199/165)", set: "Scarlet & Violet: 151" } };
+  const hits = [hit("Charizard ex (006/165)", "Scarlet & Violet: 151", 3), hit("Charizard ex (199/165)", "Scarlet & Violet: 151", 60), hit("Charizard ex (201/165)", "Japanese SV2a: Pokemon Card 151", 40)];
+  assert.equal(matchHit(sir, hits, PKM).cardName, "Charizard ex (199/165)");
+  assert.equal(matchHit(sir, [hits[0]], PKM), null);                                           // another printing is another card
+  assert.equal(matchHit({ name: "Charizard ex", printing: { full: "Charizard ex (201/165)", set: "Japanese SV2a: Pokemon Card 151" } }, hits, PKM), null);   // never a Japanese printing
+  const candy = [hit("Rare Candy (191/198)", "Scarlet & Violet", 0.3), hit("Rare Candy (142/149)", "Sun & Moon", 0.5), hit("Rare Candy (256/198)", "Scarlet & Violet", 9), hit("Rare Candy (SWSH100)", "SWSH Black Star Promos", 0.4), hit("Rare Candy (089/100)", "Japanese Scarlet ex", 0.3), hit("Rare Candy (050/100)", "Some Set", 0.1)];
+  // base names match across numbers; the promo and Japanese printings lose; $0.10 is under the floor; of the rest the cheapest
+  assert.equal(matchHit({ name: "Rare Candy", setSlug: "" }, candy, PKM).cardName, "Rare Candy (191/198)");
+  assert.equal(matchHit({ name: "Rare Candy", setSlug: "" }, [candy[4]], PKM), null);
+  // Magic still compares whole names: a numbered Pokemon-style name is not "Rare Candy"
+  assert.equal(matchHit({ name: "Rare Candy", setSlug: "" }, candy), null);
+});
+
+test("internalCandidates for Pokemon: printings that sold twice or more, English misses, no basic energy or jumbo cards", async () => {
+  const io = {
+    overview: async () => ({ miss: { mtg: [{ name: "Sol Ring", c: 40 }], pokemon: [{ name: "Rare Candy", c: 12 }, { name: "Fire Energy", c: 9 }, { name: "Iono", c: 5 }] } }),
+    orders: async () => ({ orders: { nodes: [
+      order(["Charizard ex (199/165) [Scarlet & Violet: 151]", 3, "Pokemon Single", 0], ["Basic Fire Energy (010) (30th Celebration) [Mega Evolution Energies]", 8, "Pokemon Single", 0], ["Mega Hawlucha ex (116/217) (Jumbo Card) [Mega Evolution: Ascended Heroes]", 4, "Pokemon Single", 0]),
+      order(["Iono (185/193) [Paldea Evolved]", 2, "Pokemon Single", 3], ["Pikachu (1/1) [Some Set]", 1, "Pokemon Single", 0], ["Sol Ring [Commander 2016]", 9, "MTG Single", 0]),
+    ], pageInfo: { hasNextPage: false } } }),
+  };
+  const r = await internalCandidates({}, io, "pokemon");
+  assert.deepEqual(r.candidates.map((c) => [c.name, c.printing ? c.printing.full : null]), [["Charizard ex", "Charizard ex (199/165)"], ["Rare Candy", null], ["Iono", "Iono (185/193)"], ["Iono", null]]);
+  assert.equal(r.candidates[0].printing.set, "Scarlet & Violet: 151");
+  assert.equal(r.notes.sellers, 2);
+  // Magic's candidates are untouched by Pokemon data
+  const m = await internalCandidates({}, io, "mtg");
+  assert.deepEqual(m.candidates.map((c) => c.name), ["Sol Ring"]);
+});
+
+test("a Pokemon build never fetches MTGGoldfish, looks sold printings up in their set, and does not feature one card twice", async () => {
+  let fetched = 0;
+  const fetchFn = async () => { fetched++; return new Response(page, { status: 200 }); };
+  const candidates = async () => ({ candidates: [
+    { name: "Iono", key: "Iono (185/193) [Paldea Evolved]", printing: { full: "Iono (185/193)", set: "Paldea Evolved" }, source: "internal" },
+    { name: "Iono", source: "internal" },
+    { name: "Rare Candy", source: "internal" },
+  ], notes: {} });
+  const asked = [];
+  const search = async (name, c) => { asked.push([name, c && c.printing ? c.printing.set : ""]); return name === "Iono" ? [hit("Iono (185/193)", "Paldea Evolved", 0.5), hit("Iono (254/193)", "Paldea Evolved", 20)] : [hit("Rare Candy (191/198)", "Scarlet & Violet", 0.3)]; };
+  const v = await buildWanted({ game: "pokemon", fetchFn, search, candidates, n: 10, delayMs: 0 });
+  assert.equal(fetched, 0);
+  assert.equal(v.game, "pokemon"); assert.equal(v.source, "internal"); assert.deepEqual(v.pages, ["internal"]);
+  assert.deepEqual(asked, [["Iono", "Paldea Evolved"], ["Iono", ""], ["Rare Candy", ""]]);
+  // the Iono miss resolves to the same cheapest printing that sold: shown once
+  assert.deepEqual(v.hits.map((h) => [h.cardName, h.wanted.rank]), [["Iono (185/193)", 1], ["Rare Candy (191/198)", 2]]);
+  await assert.rejects(startWanted({ game: "pokemon", fetchFn, search }), /no candidates/);
 });

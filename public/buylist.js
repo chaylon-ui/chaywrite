@@ -231,7 +231,7 @@
     $("#bl-more").hidden = true;
     lastHits = []; lastQuery = null;
     setStatus("");
-    loadSets().then(function () { if ($("#bl-q").value.trim().length >= 2) search(false); });
+    loadSets().then(function () { if ($("#bl-q").value.trim().length >= 2) search(false); else loadWanted(); });
   });
   $("#bl-set").addEventListener("change", function () {
     if ($("#bl-q").value.trim().length >= 2 || $("#bl-set").value.trim()) search(false);
@@ -956,12 +956,16 @@
      wants right now - this week's biggest paper Standard price risers on
      MTGGoldfish, each resolved by the worker to its BinderPOS buylist entry
      (src/wanted.js) - drawn as ordinary result cards with the usual
-     condition rows and Add buttons. The first real search replaces them. */
+     condition rows and Add buttons. The first real search replaces them.
+     One list per game (owner, 2026-09-23: Pokemon too, English only):
+     Magic and Pokemon have one, and picking a game before searching shows
+     that game's list; a game without one leaves the area empty. */
   function loadWanted() {
     if (lastQuery || lastHits.length) return;           // the shopper searched already
-    api("/wanted").then(function (j) {
+    var forGame = game;
+    api("/wanted?game=" + encodeURIComponent(forGame)).then(function (j) {
       var hits = Array.isArray(j.hits) ? j.hits : [];
-      if (!hits.length || lastQuery || lastHits.length) return;
+      if (!hits.length || lastQuery || lastHits.length || forGame !== game) return;   // searched, or switched game, meanwhile
       lastHits = hits;
       // No banner above the cards (owner, 2026-09-23: "Remove this").
       $("#bl-hits").innerHTML = "";

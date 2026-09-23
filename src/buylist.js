@@ -138,8 +138,9 @@ export async function bpCardSearch(game, keyword, offset) {
 }
 // The same search with the upstream status and body shape kept, for
 // src/wanted.js's lookups and their probe notes.
-export async function bpCardSearchRaw(game, keyword) {
+export async function bpCardSearchRaw(game, keyword, setName) {
   const qs = new URLSearchParams({ keyword: String(keyword || "").slice(0, 80), limit: String(PAGE), offset: "0" });
+  if (setName) qs.set("setName", String(setName).slice(0, 120));   // a Pokemon printing: its own set, or "Pikachu" alone is hundreds of cards
   const r = await passthrough(`${PORTAL}/external/shopify/${STORE_ID}/cards/${game}?${qs}`, {});
   const hits = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.products) ? r.body.products : []);
   const bodyType = Array.isArray(r.body) ? "array" : typeof r.body === "string" ? "text:" + r.body.slice(0, 80) : "object:" + Object.keys(r.body || {}).slice(0, 5).join(",");
@@ -147,7 +148,15 @@ export async function bpCardSearchRaw(game, keyword) {
 }
 // The cron's entry point (src/index.js scheduled): rebuild the sell page's
 // "cards we need most" list when it is due.
-export function refreshWantedCards(env) { return refreshWanted(env, { search: (name) => bpCardSearchRaw("mtg", name), candidates: () => internalCandidates(env) }); }
+// Magic first; Pokemon only on a tick where Magic made no lookups, so the
+// two builds never share a tick's calls to BinderPOS's rate-limited search
+// (and neither runs while Magic is backing off from a 429).
+export async function refreshWantedCards(env) {
+  const mtg = await refreshWanted(env, { game: "mtg", search: (name) => bpCardSearchRaw("mtg", name), candidates: () => internalCandidates(env, null, "mtg") });
+  if (!(mtg && mtg.skipped && !/backing off/.test(mtg.skipped))) return mtg;
+  const pokemon = await refreshWanted(env, { game: "pokemon", search: (name, c) => bpCardSearchRaw("pokemon", name, c && c.printing ? c.printing.set : ""), candidates: () => internalCandidates(env, null, "pokemon") });
+  return { ...pokemon, game: "pokemon", mtg: mtg.skipped };
+}
 const KNOWN_IDS = ["mtg", "pokemon", "yugioh", "one", "ones", "lor", "swu", "fleshAndBlood", "scr", "riftbound"];
 // BinderPOS's supported games as {id, name}, memoised for MEMO_TTL; [] when
 // they cannot be fetched (the tables above still cover the known names).
@@ -359,7 +368,7 @@ async function route(mode, action, request, env, url, cors) {
   // The sell page's first view (owner, 2026-09-22): the ten cards the store
   // most wants right now, as ordinary search hits. src/wanted.js.
   if (action === "wanted") {
-    const v = await wantedCards(env);          // built by the cron (refreshWantedCards), never here
+    const v = await wantedCards(env, gameOf(url));   // built by the cron (refreshWantedCards), never here; ?game=pokemon for the Pokemon list
     return json(v, 200, { ...cors, "cache-control": v.count ? "public, max-age=600" : "no-store" });
   }
 
