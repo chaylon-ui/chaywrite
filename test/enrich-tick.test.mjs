@@ -21,7 +21,7 @@ function storage() {
 function world(opts) {
   const w = {
     books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [],
-    written: [], adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
+    written: [], deleted: [], adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
   const page = (list, after, n) => {
@@ -55,6 +55,9 @@ function world(opts) {
         if (/metafieldsSet/.test(body.query)) {
           w.written.push(...body.variables.mf);
           data = { metafieldsSet: { userErrors: [] } };
+        } else if (/metafieldsDelete/.test(body.query)) {
+          w.deleted.push(...body.variables.m);
+          data = { metafieldsDelete: { userErrors: [] } };
         } else {
           const q = body.variables.q;
           data = page(q.includes('Books') ? w.books : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n);
@@ -325,6 +328,17 @@ async function drain(w, maxTicks = 60) {
   w.cx.mem = {};
   await drain(w);
   eq('second night writes nothing for unchanged kits', w.written.filter((m, i) => i >= before && m.ownerId.startsWith('gid://k/')).length, 0);
+  eq('... and deletes nothing', w.deleted.length, 0);
+  // third night: Bandai's MG Justice page is gone - its Bandai facts must go too
+  for (const g of gunpla) g.gpSig = val(g.id, 'gp_sig');
+  delete w.kits['01_5000'];
+  w.now += 86400000;
+  w.cx.mem = {};
+  await drain(w);
+  const gone = w.deleted.filter((d) => d.ownerId === 'gid://k/2').map((d) => d.key).sort().join(',');
+  ok('a kit that lost its Bandai match has its Bandai facts deleted', ['gp_age', 'gp_bandai_name', 'gp_bandai_url', 'gp_price_jpy', 'gp_release', 'gp_year'].every((k) => gone.split(',').includes(k)), 'deleted=' + gone);
+  ok('... and keeps its title facts', !gone.split(',').includes('gp_scale'), 'deleted=' + gone);
+  eq('no other product touched', w.deleted.filter((d) => d.ownerId !== 'gid://k/2').length, 0);
 }
 
 // ---------- 5c. BoardGameGeek DOWN (not gated) still lets Gunpla run ----------

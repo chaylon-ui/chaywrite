@@ -637,6 +637,15 @@ export function relinkItem(it, map) {
   return out.length ? out : null;
 }
 
+const DELETE_METAFIELDS = `mutation($m: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $m) { userErrors { field message } } }`;
+async function deleteMetafields(cx, list) {
+  for (let i = 0; i < list.length; i += SET_CHUNK) {
+    const r = await adminGql(cx, DELETE_METAFIELDS, { m: list.slice(i, i + SET_CHUNK) });
+    const errs = (r.data && r.data.metafieldsDelete && r.data.metafieldsDelete.userErrors) || [];
+    if (errs.length) throw new Error("metafieldsDelete: " + JSON.stringify(errs).slice(0, 200));
+  }
+}
+
 async function writeMetafields(cx, list) {
   let wrote = 0;
   for (let i = 0; i < list.length; i += SET_CHUNK) {
@@ -1004,7 +1013,7 @@ export async function enrichTick(cx) {
     if (run.phase === "gunpla") {
       if (!run.gunpla) run.gunpla = { seen: 0, changed: 0, bandai: 0, titleOnly: 0, unknown: 0 };
       const idx = await kitsIndex(cx);
-      const mf = [];
+      const mf = [], del = [];
       for (const it of page.items) {
         run.gunpla.seen++;
         const res = gunplaMetafields(it.id, it.title, idx, dateStr);
@@ -1013,10 +1022,16 @@ export async function enrichTick(cx) {
         if (res.sig === it.gpSig) continue;
         run.gunpla.changed++;
         mf.push(...res.metafields);
+        // written before (it has a signature): drop the facts it no longer has
+        if (it.gpSig) for (const key of res.clear) del.push({ ownerId: it.id, namespace: "exor", key });
       }
       if (mf.length) {
         try { run.written += await writeMetafields(cx, mf); }
         catch (e) { run.errors++; cx.log("enrich: gunpla page write failed: " + msg(e)); }
+      }
+      if (del.length) {
+        try { await deleteMetafields(cx, del); }
+        catch (e) { run.errors++; cx.log("enrich: gunpla stale-fact delete failed: " + msg(e)); }
       }
       await st.put("en:run", run);
       if (page.wait > 0) return arm(cx, cx.now() + page.wait, "throttle pacing");

@@ -66,3 +66,18 @@ test("gunplaMetafields: only real values, the Bandai facts on a match, a stable 
   assert.equal(gunplaMetafields("gid://p/2", "GG Char's Customize MS Collection", idx, "2026-09-25"), null);
   assert.equal(sigOf([]), sigOf([]));
 });
+
+test("a Bandai name's model number must be in the title for a loose match (2026-09-23: RG Nu -> RX-93ff)", () => {
+  const idx = indexKits({ kits: { ff: { name: "RG 1/144 RX-93ff ν GUNDAM", launch: "2022-04" }, g: { name: "HG 1/144 GUNDAM AERIAL", launch: "2022-10" } } });
+  const m = (t) => { const k = matchKit(parseGunplaTitle(t), idx); return k ? k.id : null; };
+  assert.equal(m("RG 1/144 Nu GUNDAM"), null);                              // not the Side-F kit
+  assert.equal(m("RG 1/144 RX-93ff Nu Gundam"), "ff");                      // it names the variant
+  assert.equal(m("HG 1/144 XVX-016 GUNDAM AERIAL"), "g");                   // our extra model number is still fine
+});
+
+test("gunplaMetafields lists the gp_ facts a product no longer has, so the sweep can delete them", () => {
+  const r = gunplaMetafields("gid://p/1", "RG 1/144 Nu GUNDAM", indexKits(null), "2026-09-24");
+  assert.equal(r.status, "title");
+  for (const k of ["gp_release", "gp_year", "gp_age", "gp_price_jpy", "gp_bandai_url", "gp_bandai_name", "gp_number", "gp_series", "gp_line"]) assert.ok(r.clear.includes(k), k);
+  assert.ok(!r.clear.includes("gp_scale") && !r.clear.includes("gp_grade"));
+});

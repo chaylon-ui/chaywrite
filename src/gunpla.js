@@ -123,6 +123,10 @@ export function coreKey(name) {
 // is dropped for a second, looser key - Bandai's English names include it
 // on some kits and not others.
 const MODEL_NO = /\b[A-Z]{1,5}\d*[A-Z]*-[0-9A-Z]+(?:[-+/][0-9A-Z]+)*\b/g;
+// The model numbers in a name, letters and digits only ("RX-93ff" -> "RX93FF").
+export function modelNos(name) {
+  return (cleanTitle(name).toUpperCase().match(MODEL_NO) || []).map((m) => m.replace(/[^A-Z0-9]/g, ""));
+}
 export function looseKey(name) {
   const stripped = cleanTitle(name).toUpperCase().replace(MODEL_NO, " ").replace(/\s+/g, " ").trim();
   const words = stripped.split(" ").filter((w) => /[A-Z0-9]/.test(w));
@@ -142,7 +146,7 @@ export function indexKits(json) {
     if (!p) continue;
     const core = coreKey(p.name);
     if (!core) continue;
-    const kit = { id, name: k.name, url: k.url || "", launch: k.launch || "", age: Number.isFinite(k.age) ? k.age : null, priceYen: Number.isFinite(k.price_yen) ? k.price_yen : null };
+    const kit = { id, name: k.name, url: k.url || "", launch: k.launch || "", age: Number.isFinite(k.age) ? k.age : null, priceYen: Number.isFinite(k.price_yen) ? k.price_yen : null, models: modelNos(p.name) };
     put(exact, p.fam + "|" + p.scale + "|" + core, kit);
     put(noScale, p.fam + "|" + core, kit);
     put(loose, p.fam + "|" + p.scale + "|" + looseKey(p.name), kit);
@@ -161,7 +165,18 @@ export function matchKit(parsed, idx) {
   if (b) return b;
   if (b === null) return null;
   const lk = looseKey(parsed.name);
-  return lk ? (idx.loose.get(parsed.fam + "|" + parsed.scale + "|" + lk) || null) : null;
+  const c = lk ? idx.loose.get(parsed.fam + "|" + parsed.scale + "|" + lk) : null;
+  if (!c) return null;
+  /* The loose key ignores model numbers, but on Bandai's side a model number
+     can BE the difference: "RG 1/144 RX-93ff ν GUNDAM" is the 2022 Gundam
+     Side-F kit, not the 2019 RG ν Gundam (which Bandai's English list lacks),
+     and our "RG 1/144 Nu GUNDAM" matched it (2026-09-23). So a Bandai kit
+     whose name carries a model number only matches a title carrying it too. */
+  if (c.models && c.models.length) {
+    const ours = modelNos(parsed.name);
+    if (!c.models.some((m) => ours.includes(m))) return null;
+  }
+  return c;
 }
 
 // Small, stable, non-cryptographic: only has to notice a change.
@@ -172,6 +187,7 @@ export function sigOf(list) {
   return "v1:" + h.toString(16) + ":" + s.length;
 }
 
+const GP_KEYS = ["gp_line", "gp_scale", "gp_number", "gp_series", "gp_release", "gp_year", "gp_age", "gp_price_jpy", "gp_bandai_url", "gp_bandai_name"];
 const MF = (ownerId, key, type, value) => ({ ownerId, namespace: "exor", key, type, value: String(value) });
 
 /* One Gunpla product -> the metafields it should carry, or null when the
@@ -202,5 +218,9 @@ export function gunplaMetafields(ownerId, title, idx, today) {
   const sig = sigOf(facts);
   facts.push(MF(ownerId, "gp_sig", "single_line_text_field", sig));
   facts.push(MF(ownerId, "enriched_at", "single_line_text_field", today));
-  return { status, sig, metafields: facts, parsed: p, kit };
+  // gp_* keys this product should NOT carry now (e.g. its Bandai match went
+  // away): the sweep deletes them so an old wrong fact cannot linger.
+  const have = new Set(facts.map((m) => m.key));
+  const clear = GP_KEYS.filter((k) => !have.has(k));
+  return { status, sig, metafields: facts, clear, parsed: p, kit };
 }
