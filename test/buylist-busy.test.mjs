@@ -83,3 +83,19 @@ test("the wanted strip's prices are BinderPOS's current ones", async () => {
   assert.equal(foil.buyPrice, 0); assert.equal(foil.maxPurchaseQuantity, 0);   // an offer no longer there is not shown
   assert.equal(hits[0].variants[0].cardBuylistTypes[0].buyPrice, 2);           // the stored list is not mutated
 });
+
+test("the strip's own game is asked, whatever the cards' game label says", async () => {
+  const { livePrices } = await import("../src/buylist.js");
+  const env = { BINDERPOS_LOGIN_EMAIL: "x", BINDERPOS_LOGIN_PASSWORD: "y" };
+  const asked = [];
+  globalThis.fetch = async (u, init) => {
+    u = String(u);
+    if (u.includes("verifyPassword")) return new Response(JSON.stringify({ idToken: "t", expiresIn: 3600 }));
+    if (u.includes("supportedGames")) return new Response(JSON.stringify(["mtg", "pokemon"]));
+    if (u.includes("allPrices")) { asked.push(JSON.parse(init.body)); return new Response(JSON.stringify([{ id: 7, variants: [] }])); }
+    throw new Error("unexpected " + u);
+  };
+  const out = await livePrices(env, [{ id: 7, cardName: "Charizard ex", game: "Pokémon TCG (English)", variants: [] }], "pokemon");
+  assert.deepEqual(asked[0], [{ game: "pokemon", ids: [7] }]);
+  assert.equal(out.length, 1);
+});

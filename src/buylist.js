@@ -214,15 +214,18 @@ export async function conditionsFor(env, card) {
 // current ones: one staff-portal allPrices call per 20 cards (not the
 // rate-limited public search). A card BinderPOS no longer returns is left
 // out; an offer it no longer has goes to 0 (the page hides those).
-export async function livePrices(env, hits) {
+// `game` (the strip's own game id) wins over each card's game label: the
+// Pokemon strip's cards did not resolve by label, fell to "mtg", and
+// BinderPOS returned none of them (2026-09-23, first deploy).
+export async function livePrices(env, hits, game) {
   if (!portalConfigured(env)) throw new Error("the price check is not configured on the worker");
   const games = await gamesList(env);
   const pairs = [], seen = new Set();
   for (const h of hits) {
-    const game = gameIdOf(h, games), key = game + "|" + String(h.id);
+    const g = game || gameIdOf(h, games), key = g + "|" + String(h.id);
     if (seen.has(key)) continue;
     seen.add(key);
-    pairs.push({ game, id: Number(h.id) });
+    pairs.push({ game: g, id: Number(h.id) });
   }
   const priced = new Map(), found = new Set();
   for (let i = 0; i < pairs.length; i += 20) {
@@ -419,8 +422,9 @@ async function route(mode, action, request, env, url, cors) {
     // refresh as the prices may have changed"). No live price, no strip:
     // better nothing than yesterday's number.
     if (v.count) {
-      try { v.hits = await livePrices(env, v.hits); v.count = v.hits.length; v.pricedAt = new Date().toISOString(); }
+      try { v.hits = await livePrices(env, v.hits, v.game || gameOf(url)); v.count = v.hits.length; v.pricedAt = new Date().toISOString(); }
       catch (e) { v.priceError = String((e && e.message) || e).slice(0, 160); v.hits = []; v.count = 0; }
+      if (v.pricedAt && !v.count) v.priceError = "BinderPOS returned none of the strip's cards";
     }
     return json(v, 200, { ...cors, "cache-control": "no-store" });
   }
