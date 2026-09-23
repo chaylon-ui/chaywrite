@@ -104,6 +104,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   {{ 'xg-policy.css' | asset_url | stylesheet_tag }}
   {{ 'xg-dark.css' | asset_url | stylesheet_tag }}
   {{ 'xg-dark-fixes.css' | asset_url | stylesheet_tag }}
+  {%- comment -%} Our NOIMAGE.png in place of Shopify's grey "No image" GIF (assets/xg-noimage.js): not deferred, so it is watching while the page parses. {%- endcomment -%}
+  <script src="{{ 'xg-noimage.js' | asset_url }}"></script>
   <script src="{{ 'xg-menu-patch.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'xg-header-offset.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'xg-card-dropdowns.js' | asset_url }}" defer="defer"></script>
