@@ -1059,7 +1059,7 @@ export async function enrichTick(cx) {
       continue;
     }
 
-    /* PLAMOD photos + facts for Gunpla / Figures / Blind Box (src/plamod.js). */
+    /* PLAMOD photos + facts for Gunpla / Figures / Blind Box / plastic model kits (src/plamod.js PLAMOD_TYPES). */
     if (run.phase === "plamod") {
       if (!run.plamod) run.plamod = { seen: 0, matched: 0, photosAdded: 0, productsWithNew: 0, facts: 0, errors: 0 };
       const file = await plamodFile(cx);

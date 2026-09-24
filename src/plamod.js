@@ -8,13 +8,17 @@
    themselves are plain public files on images.plamod.com. The runner
    (.github/workflows/plamod-sync.yml) signs in to the portal with the
    owner's retailer account; it has no Shopify access, so it reads WHAT to
-   look up from here: every active Gunpla / Figures / Blind Box product with
-   its barcode and the image files it already has.
+   look up from here: every active Gunpla / Figures / Blind Box / plastic
+   model kit product with its barcode and the image files it already has
+   (owner, 2026-09-24: "the Pokemon models and other plastic models can
+   probably fall under the plamod update" - Pokemon Model Kits, Figure-rise,
+   Aoshima / Hobby Boss / Kotobukiya kits are filed as "Plastic Model Kit",
+   tools and supplies as "Plastic Model Kit Accessories").
 
    Nothing here is private - titles, barcodes and product images are all on
    the storefront - and nothing is written. Cached for an hour. */
 
-export const PLAMOD_TYPES = ["Gunpla", "Figures", "Blind Box"];
+export const PLAMOD_TYPES = ["Gunpla", "Figures", "Blind Box", "Plastic Model Kit", "Plastic Model Kit Accessories", "Scale Models"];
 const QUERY = "status:active AND (" + PLAMOD_TYPES.map((t) => "product_type:'" + t + "'").join(" OR ") + ")";
 const PAGE_Q = `query($q:String!,$after:String){products(first:50,query:$q,after:$after,sortKey:ID){pageInfo{hasNextPage endCursor}nodes{id title productType variants(first:1){nodes{barcode sku}} media(first:8){nodes{... on MediaImage{image{url}}}}}}}`;
 
@@ -63,7 +67,7 @@ export async function plamodTargets(gql) {
 
 export async function servePlamodTargets(request, env, ctx, gql) {
   const cache = caches.default;
-  const key = new Request("https://cache.internal/plamod/targets.json?v=2");
+  const key = new Request("https://cache.internal/plamod/targets.json?v=3");
   const hit = await cache.match(key);
   if (hit) return hit;
   let body, status = 200;

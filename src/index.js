@@ -297,7 +297,7 @@ export default {
       return serveEvents(request, ctx);
     }
 
-    // PLAMOD runner's work list: our Gunpla / Figures / Blind Box products
+    // PLAMOD runner's work list: our Gunpla / Figures / Blind Box / plastic model kit products
     // with barcode and the image files they already have (src/plamod.js).
     if (url.pathname === "/plamod/targets.json") {
       const gql = async (q, v) => {
