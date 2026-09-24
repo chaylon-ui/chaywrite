@@ -115,6 +115,11 @@ def chars(p):
     return {c.get('name'): (c.text or '').strip() for c in p.iter() if local(c.tag) == 'characteristic'}
 
 
+# the Crusade campaign extras BSData hangs on units ("Crusade", "Crusade
+# Relics"...) - not "Crusader Squad"
+CRUSADE = re.compile(r'^\s*crusade(?![a-z])', re.I)
+
+
 def walk(d, el, seen=None):
     """Every profile reachable from el: inline, and through entry / info
     links (each target once). Crusade-only extras and hidden entries are
@@ -123,7 +128,7 @@ def walk(d, el, seen=None):
     for c in el:
         n = local(c.tag)
         if n in ('selectionEntry', 'selectionEntryGroup', 'entryLink') and (
-                'crusade' in (c.get('name') or '').lower() or c.get('hidden') == 'true'):
+                CRUSADE.match(c.get('name') or '') or c.get('hidden') == 'true'):
             continue
         if n == 'profile':
             yield c
@@ -135,7 +140,7 @@ def walk(d, el, seen=None):
                 if t is not None:
                     if local(t.tag) == 'profile':
                         yield t
-                    elif not ('crusade' in (t.get('name') or '').lower() or t.get('hidden') == 'true'):
+                    elif not (CRUSADE.match(t.get('name') or '') or t.get('hidden') == 'true'):
                         yield from walk(d, t, seen)
         yield from walk(d, c, seen)
 
@@ -384,7 +389,9 @@ NOT_A_UNIT = re.compile(r'\b(KILL TEAM|KILL ZONE|KILLZONE|CODEX|DATACARDS?|DATAS
                         r'BATTLE ?FORCE|ARMY SET|STARTER|CITADEL|BASES?|TERRAIN|MISSION|CHAPTER APPROVED|CHAP APPROVED|'
                         r'CORE BOOK|RULEBOOK|MUG|GLASS|KEYCHAIN|MOUSEPAD|UPGRADES?|TRANSFERS?|COLLECTION|INDEX CARDS|'
                         r'ARKS OF OMEN|ARMY BOX|BUNDLE|PAINT SET|PAINTS|NOVEL|AUDIO|RECRUIT|ESSENTIALS|CAMPAIGN|'
-                        r'MAGAZINE|POSTER|PROMO|GIFT|SMH|HB|ENG|ENGLISH|BOOK)\b')
+                        r'MAGAZINE|POSTER|PROMO|GIFT|SMH|HB|PB|ENG|ENGLISH|BOOK|PAPERBACK|HARDBACK|OMNIBUS|ANTHOLOGY|'
+                        r'BLACK LIBRARY|ANNIVERSARY|ILLUSTRATED|INTRODUCTORY|OBJECTIVE SET|BATTLEFIELD TROPHIES|'
+                        r'ACCESSORIES|MINIATURES GAME|ARMY OF FAITH|STRIKE FORCE)\b')
 
 HEAD = re.compile(r'^\s*WARHAMMER\s+(40\s*,?\s*000|40K)\b[\s:,-]*', re.I)
 
@@ -393,6 +400,8 @@ def parse_title(title):
     """-> (faction or None, unit text) or None when it is not a unit box."""
     t = HEAD.sub('', title or '')
     if t == (title or ''):
+        return None
+    if NOT_A_UNIT.search(norm(t)):              # "(PB)", "(HB)" before the brackets go
         return None
     t = re.sub(r'\([^)]*\)', ' ', t)          # (ENG), (HB)
     t = re.sub(r'\b\d{2,3}-\d{2}\b', ' ', t)   # GW product codes "49-29"
