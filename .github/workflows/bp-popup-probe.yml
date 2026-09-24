@@ -28,6 +28,9 @@ on:
         default: '[{"wait":3000},{"dump":true},{"click":"a[href=\"#buylist\"]"},{"wait":3000},{"shot":"open"},{"dump":true}]'
       width:
         default: "1280"
+      bodies:
+        description: Print the head of BinderPOS JSON answers ("true"); never for anything carrying a customer id or a saved list
+        default: "false"
 permissions:
   contents: write
 concurrency:
@@ -48,6 +51,7 @@ jobs:
           PLAN: ${{ inputs.plan }}
           W: ${{ inputs.width }}
           RUN: ${{ github.run_id }}
+          BODIES: ${{ inputs.bodies }}
         run: |
           mkdir -p probe-shots
           cat > bp.js <<'EOF'
@@ -67,13 +71,17 @@ jobs:
             });
             page.on('pageerror', (e) => console.log('PAGEERROR', String(e && e.message || e).slice(0, 300)));
             page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) console.log('CONSOLE-' + m.type().toUpperCase(), m.text().slice(0, 240)); });
-            page.on('requestfailed', (req) => { if (/binderpos/.test(req.url())) console.log('NET-FAIL', req.failure() && req.failure().errorText, req.url().slice(0, 180)); });
+            page.on('requestfailed', (req) => { if (/binderpos/.test(req.url())) console.log('NET-FAIL', req.failure() && req.failure().errorText, /shopifyCustomerId|forMe|customer/i.test(req.url()) ? '(customer request)' : req.url().slice(0, 180)); });
             page.on('response', async (res) => {
               const u = res.url();
               if (!/binderpos/.test(u) || /\.(png|jpe?g|svg|css|woff2?)(\?|$)/.test(u)) return;
+              // Logs are public: a customer's saved list (buylist/forMe) and
+              // anything carrying a customer id is never printed, not even
+              // its address.
+              const priv = /shopifyCustomerId|forMe|customer/i.test(u);
               let head = '';
-              try { if (/json|text/.test(res.headers()['content-type'] || '')) head = (await res.text()).replace(/\s+/g, ' ').slice(0, 160); } catch (e) {}
-              console.log('NET', res.status(), res.request().resourceType(), u.slice(0, 180), head ? '| ' + head : '');
+              try { if (!priv && process.env.BODIES === 'true' && /json|text/.test(res.headers()['content-type'] || '')) head = (await res.text()).replace(/\s+/g, ' ').slice(0, 160); } catch (e) {}
+              console.log('NET', res.status(), res.request().resourceType(), priv ? '(customer request, not shown)' : u.slice(0, 180), head ? '| ' + head : '');
             });
             await page.goto(process.env.URL, { waitUntil: 'networkidle2', timeout: 90000 }).catch((e) => console.log('GOTO', String(e).slice(0, 120)));
             console.log('title', await page.title());
@@ -86,7 +94,7 @@ jobs:
                 if (st.wait) { await sleep(st.wait); }
                 else if (st.frame !== undefined) {
                   if (!st.frame) { ctx = page; console.log('STEP', n, 'frame: page'); }
-                  else { const f = page.frames().find((fr) => fr.url().includes(st.frame)); if (f) { ctx = f; console.log('STEP', n, 'frame', f.url().slice(0, 140)); } else console.log('STEP', n, 'frame NOT FOUND', st.frame, JSON.stringify(page.frames().map((fr) => fr.url().slice(0, 100)))); }
+                  else { const f = page.frames().find((fr) => fr.url().includes(st.frame)); if (f) { ctx = f; console.log('STEP', n, 'frame', f.url().replace(/shopifyCustomerId=\d+/, 'shopifyCustomerId=…').slice(0, 140)); } else console.log('STEP', n, 'frame NOT FOUND', st.frame, JSON.stringify(page.frames().map((fr) => fr.url().replace(/shopifyCustomerId=\d+/, 'shopifyCustomerId=…').slice(0, 100)))); }
                 }
                 else if (st.eval) { const v = await ctx.evaluate(st.eval); console.log('STEP', n, 'EVAL', JSON.stringify(v).slice(0, 3000)); }
                 else if (st.click) { await ctx.click(st.click); console.log('STEP', n, 'clicked', st.click); }
