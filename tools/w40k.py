@@ -26,7 +26,7 @@ balance update.
 
   python3 tools/w40k.py --bsdata DIR [--targets FILE|URL] [--out data/w40k.json] [--dry]
 """
-import argparse, json, os, re, sys, time, urllib.request
+import argparse, json, os, re, sys, time, unicodedata, urllib.request
 import xml.etree.ElementTree as ET
 
 TARGETS_URL = "https://exor-binder.nevski.workers.dev/w40k/targets.json"
@@ -104,7 +104,8 @@ def faction_of(catname):
     parts = [p.strip() for p in (catname or '').split(' - ') if p.strip()]
     parts = [re.sub(r'\s*Library$', '', p).strip() for p in parts if p != 'Library']
     parts = [p for p in parts if p]
-    return parts[-1] if parts else (catname or '')
+    f = parts[-1] if parts else (catname or '')
+    return {'Daemons': 'Chaos Daemons'}.get(f, f)          # "Chaos - Daemons Library"
 
 
 WEAPON_TYPES = {'Ranged Weapons': 'ranged', 'Melee Weapons': 'melee'}
@@ -215,7 +216,9 @@ def model_count(d, unit):
     if unit.get('type') == 'model':
         return [1, 1]
     r = _span(d, unit)
-    if not r or r[1] <= 0:
+    if not r:
+        return [1, 1]                   # no model entries of its own: the unit is the one model
+    if r[1] <= 0:
         return None
     lo, hi = r
     if hi >= BIG:                       # an open-ended count: only the minimum is known
@@ -223,11 +226,39 @@ def model_count(d, unit):
     return [max(lo, 1), max(hi, lo, 1)]
 
 
+def _model_costs(d, el, out, depth=0):
+    """pts on the model entries under el (a unit priced per model)."""
+    if depth > 6:
+        return
+    for c in list(children_of(el, 'selectionEntries', 'selectionEntry')) + list(children_of(el, 'selectionEntryGroups', 'selectionEntryGroup')) + list(children_of(el, 'entryLinks', 'entryLink')):
+        if CRUSADE.match(c.get('name') or '') or c.get('hidden') == 'true':
+            continue
+        t = d.byid.get(c.get('targetId')) if local(c.tag) == 'entryLink' else c
+        if t is None:
+            continue
+        if local(t.tag) == 'selectionEntry' and t.get('type') == 'model':
+            for k in children_of(t, 'costs', 'cost'):
+                if k.get('typeId') == d.pts and float(k.get('value') or 0) > 0:
+                    out.add(float(k.get('value')))
+        else:
+            _model_costs(d, t, out, depth + 1)
+
+
 def points(d, unit, models):
     base = None
     for c in children_of(unit, 'costs', 'cost'):
         if c.get('typeId') == d.pts:
             base = float(c.get('value') or 0)
+    if not base and models:
+        # priced per model ("Canoptek Spyder" 75 each, 1-2 per unit)
+        each = set()
+        _model_costs(d, unit, each)
+        if len(each) == 1:
+            v = each.pop()
+            v = int(v) if v == int(v) else v
+            lo, hi = models
+            ns = list(range(lo, hi + 1)) if hi - lo < 6 else [lo, hi]
+            return [[n, n * v] for n in ns]
     if base is None:
         return []
     rows = {}
@@ -352,6 +383,7 @@ def build_units(d):
 # ----------------------------------------------------------------- titles --
 
 def norm(s):
+    s = ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))   # "Brôkhyr"
     s = s.upper().replace('&', ' AND ').replace("'", '').replace('’', '')
     s = re.sub(r'[^A-Z0-9]+', ' ', s)
     return re.sub(r'\s+', ' ', s).strip()
@@ -391,7 +423,7 @@ NOT_A_UNIT = re.compile(r'\b(KILL TEAM|KILL ZONE|KILLZONE|CODEX|DATACARDS?|DATAS
                         r'ARKS OF OMEN|ARMY BOX|BUNDLE|PAINT SET|PAINTS|NOVEL|AUDIO|RECRUIT|ESSENTIALS|CAMPAIGN|'
                         r'MAGAZINE|POSTER|PROMO|GIFT|SMH|HB|PB|ENG|ENGLISH|BOOK|PAPERBACK|HARDBACK|OMNIBUS|ANTHOLOGY|'
                         r'BLACK LIBRARY|ANNIVERSARY|ILLUSTRATED|INTRODUCTORY|OBJECTIVE SET|BATTLEFIELD TROPHIES|'
-                        r'ACCESSORIES|MINIATURES GAME|ARMY OF FAITH|STRIKE FORCE)\b')
+                        r'ACCESSORIES|MINIATURES GAME|ARMY OF FAITH|STRIKE FORCE|REALSPACE RAIDERS)\b')
 
 HEAD = re.compile(r'^\s*WARHAMMER\s+(40\s*,?\s*000|40K)\b[\s:,-]*', re.I)
 
@@ -404,6 +436,10 @@ def parse_title(title):
     if NOT_A_UNIT.search(norm(t)):              # "(PB)", "(HB)" before the brackets go
         return None
     t = re.sub(r'\([^)]*\)', ' ', t)          # (ENG), (HB)
+    t = re.sub(r'\bADEPT\s*/\s*MECHANICUS', 'ADEPTUS MECHANICUS', t, flags=re.I)
+    t = re.sub(r'\bW\s*/\s*E\b', 'WORLD EATERS', t, flags=re.I)
+    t = re.sub(r'\bW/\s*', 'WITH ', t, flags=re.I)
+    t = t.replace('/', ' OR ')                   # "EXOCRINE/HARUSPEX": builds one or the other
     t = re.sub(r'\b\d{2,3}-\d{2}\b', ' ', t)   # GW product codes "49-29"
     n = norm(t)
     if not n or NOT_A_UNIT.search(n):
@@ -416,12 +452,18 @@ def parse_title(title):
             faction = ALIASES[k]
             n = n[len(k) + 1:]
             break
+    if faction:
+        # "ADEPTA SORORITAS SISTERS OF BATTLE CANONESS": the faction twice
+        for k in ALIAS_KEYS:
+            if ALIASES[k] == faction and n.startswith(k + ' '):
+                n = n[len(k) + 1:]
+                break
     n = re.sub(r'^(BL|BLACK LIBRARY)\b.*', '', n).strip()   # novels
     return (faction, n) if n else None
 
 
-STOP = {'SQUAD', 'TEAM', 'UNIT', 'THE', 'OF', 'WITH', 'AND', 'A'}
-SPELLING = {'BERSERKER': 'BERZERKER', 'ARCHAEOLOGIST': 'ARCHEOLOGIST'}
+STOP = {'SQUAD', 'TEAM', 'UNIT', 'THE', 'OF', 'WITH', 'AND', 'OR', 'A'}
+SPELLING = {'BERSERKER': 'BERZERKER', 'BERSERK': 'BESERK', 'ARCHAEOLOGIST': 'ARCHEOLOGIST', 'ARMOUR': 'ARMOR'}
 
 
 def words(text):
@@ -466,6 +508,10 @@ def candidates(pool, text, strict=False, maxtier=4):
     if maxtier < 4:
         return None, []
     sub = [k for k in pool if words(k) and words(k) <= tw and len(k) >= (7 if strict else 6)]
+    # a one-word name only as the title's head or tail ("TALLYMAN", "GRETCHIN"),
+    # not in the middle of other words
+    sub = [k for k in sub if len(words(k)) > 1 or text.startswith(k + ' ') or text.endswith(' ' + k)
+           or text.endswith(' ' + k + 'S') or text.startswith(k + 'S ')]
     if sub:
         most = max(len(words(k)) for k in sub)
         sub = [k for k in sub if len(words(k)) == most]
@@ -492,6 +538,28 @@ def match(units, title):
     if not p:
         return None, 'not a unit box'
     faction, text = p
+    f, why = resolve(units, faction, text)
+    sides = re.split(r' (?:AND|OR) ', text)
+    if len(sides) > 1 and not (f and why in ('matched:0', 'matched:1')):
+        # "EXOCRINE/HARUSPEX", "TORMENTORS AND INFRACTORS": a box that builds
+        # one of two datasheets is not either one
+        names = []
+        for side in sides:
+            if len(side) >= 4:
+                g, _ = resolve(units, faction, side)
+                if g and g['name'] not in names:
+                    names.append(g['name'])
+        if len(names) >= 2:
+            return None, 'ambiguous: two kits ' + ' / '.join(names[:3])
+        if not f and not why.startswith('ambiguous') and len(names) == 1 and ' OR ' not in text:
+            # "GRIMALDUS & RETINUE": the one side that names a datasheet
+            # (never half of an either-or kit whose other half BSData lacks)
+            f = next(g for g in (resolve(units, faction, x)[0] for x in sides if len(x) >= 4) if g)
+            return f, 'matched:4'
+    return f, why
+
+
+def resolve(units, faction, text):
     variants = [(text, 4)]
     for pre in ('PRIMARIS ', 'CHAOS ', 'NECRON '):
         if text.startswith(pre):
