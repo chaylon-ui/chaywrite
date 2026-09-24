@@ -43,6 +43,7 @@
 import { adminGql, throttleWait, dayOf, dateOf } from "./price-history.js";
 import { GUNPLA_QUERY, KITS_FILE_URL, indexKits, gunplaMetafields } from "./gunpla.js";
 import { PLAMOD_FILE_URL, PL_PAGE, PL_ADD_MEDIA, PL_QUERY, parsePlPage, plamodPlan } from "./plamod.js";
+import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan } from "./w40k.js";
 
 export const ENRICH_DO = "enrich";
 
@@ -867,6 +868,19 @@ async function plamodFile(cx) {
   return file;
 }
 
+/* data/w40k.json (tools/w40k.py, weekly) read once per run. */
+async function w40kFile(cx) {
+  if (cx.mem && cx.mem.w40k !== undefined) return cx.mem.w40k;
+  let file = null;
+  try {
+    const r = await cx.fetch(W40K_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(30000) });
+    if (r.ok) { file = await r.json(); cx.log("enrich: w40k file loaded, " + ((file && file.count) || 0) + " products, generated " + ((file && file.generated) || "?")); }
+    else cx.log("enrich: w40k file HTTP " + r.status + " - Warhammer phase skipped");
+  } catch (e) { cx.log("enrich: w40k file fetch failed: " + msg(e)); }
+  if (cx.mem) cx.mem.w40k = file;
+  return file;
+}
+
 async function kitsIndex(cx) {
   if (cx.mem && cx.mem.kits) return cx.mem.kits;
   let idx = indexKits(null);
@@ -890,6 +904,7 @@ const newRun = (day, now) => ({
   errors: 0, errStreak: 0, throttled: 0, ticks: 0, tickAt: now, done: false,
   gunpla: { seen: 0, changed: 0, bandai: 0, titleOnly: 0, unknown: 0 },
   plamod: { seen: 0, matched: 0, photosAdded: 0, productsWithNew: 0, facts: 0, errors: 0 },
+  w40k: { seen: 0, matched: 0, written: 0, cleared: 0 },
 });
 
 async function arm(cx, at, why) {
@@ -911,7 +926,7 @@ async function finish(cx, run, error) {
   cx.log("enrich: run " + dateOf(run.day) + (error ? " FAILED: " + error : " finished") +
     " seen=" + run.seen + " written=" + run.written + " ok=" + run.ok +
     " ambiguous=" + run.ambiguous + " notfound=" + run.notfound +
-    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + " " + run.ms + "ms");
+    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
   return arm(cx, dayOf(now) > run.day ? now + 1000 : nextRunAt(now), "run finished");
@@ -989,14 +1004,59 @@ export async function enrichTick(cx) {
     }
 
     if (!run.hasNext) {
-      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla") {
-        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : "plamod";
+      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla" || run.phase === "plamod") {
+        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : run.phase === "gunpla" ? "plamod" : "w40k";
         run.cursor = null;
         run.hasNext = true;
         await st.put("en:run", run);
         continue;
       }
       return finish(cx, run, run.bggDown || null);
+    }
+
+    /* Warhammer 40,000 unit specs from BSData (src/w40k.js). */
+    if (run.phase === "w40k") {
+      if (!run.w40k) run.w40k = { seen: 0, matched: 0, written: 0, cleared: 0 };
+      const file = await w40kFile(cx);
+      // no file, or one that lost most of its matches (a broken weekly run):
+      // leave every product as it is rather than clear their specs
+      if (!file || !file.products || (file.count || 0) < 20) {
+        if (file) cx.log("enrich: w40k file has only " + (file.count || 0) + " products - Warhammer phase skipped");
+        run.hasNext = false; await st.put("en:run", run); continue;
+      }
+      let r;
+      try { r = await adminGql(cx, W40K_PAGE, { q: W40K_QUERY, after: run.cursor }); }
+      catch (e) {
+        if (e && e.throttled) { run.throttled++; await st.put("en:run", run); return arm(cx, cx.now() + 1500, "throttled"); }
+        run.errors++; run.errStreak++; await st.put("en:run", run);
+        if (run.errStreak >= 5) return finish(cx, run, msg(e));
+        return arm(cx, cx.now() + 5000, "page error");
+      }
+      run.errStreak = 0;
+      run.pages++;
+      const page = parseW40kPage(r.data);
+      run.cursor = page.cursor;
+      run.hasNext = page.hasNext;
+      const set = [], del = [];
+      for (const it of page.items) {
+        run.w40k.seen++;
+        const plan = w40kPlan(it, file);
+        if (file.products[String(it.id).split("/").pop()]) run.w40k.matched++;
+        if (plan.set.length) { run.w40k.written++; set.push(...plan.set); }
+        if (plan.del.length) { run.w40k.cleared++; del.push(...plan.del); }
+      }
+      if (set.length) {
+        try { run.written += await writeMetafields(cx, set); }
+        catch (e) { run.errors++; cx.log("enrich: w40k write failed: " + msg(e)); }
+      }
+      if (del.length) {
+        try { await deleteMetafields(cx, del); }
+        catch (e) { run.errors++; cx.log("enrich: w40k clear failed: " + msg(e)); }
+      }
+      await st.put("en:run", run);
+      const wait = throttleWait(r.cost, 30);
+      if (wait > 0) return arm(cx, cx.now() + wait, "throttle pacing");
+      continue;
     }
 
     /* PLAMOD photos + facts for Gunpla / Figures / Blind Box (src/plamod.js). */
@@ -1183,6 +1243,7 @@ function publicRun(run, now) {
     bggBlocked: run.bggBlocked, gamesPending: !!run.gamesPending,
     gunpla: run.gunpla || null,
     plamod: run.plamod || null,
+    w40k: run.w40k || null,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,
     error: run.error,

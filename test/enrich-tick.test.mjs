@@ -20,7 +20,7 @@ function storage() {
 // A world: books pages, game pages, and canned BGG answers.
 function world(opts) {
   const w = {
-    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [],
+    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [],
     written: [], deleted: [], mediaAdds: [], plCalls: 0, adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
@@ -42,6 +42,7 @@ function world(opts) {
           media: { nodes: (p.media || []).map((u) => ({ image: { url: u } })) },
           added: p.plAdded ? { value: p.plAdded } : null,
           psig: p.plSig ? { value: p.plSig } : null,
+          wsig: p.whSig ? { value: p.whSig } : null,
         })),
       },
     };
@@ -68,7 +69,7 @@ function world(opts) {
           data = { metafieldsDelete: { userErrors: [] } };
         } else {
           const q = body.variables.q;
-          data = page(q.includes('Books') ? w.books : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n);
+          data = page(q.includes('Books') ? w.books : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
         }
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
@@ -88,6 +89,11 @@ function world(opts) {
         w.plCalls++;
         if (!w.plamod) return new Response("404: Not Found", { status: 404 });
         return new Response(JSON.stringify(w.plamod), { status: 200 });
+      }
+      if (u.includes("raw.githubusercontent.com") && u.includes("w40k.json")) {
+        w.whCalls = (w.whCalls || 0) + 1;
+        if (!w.w40kFile) return new Response("404: Not Found", { status: 404 });
+        return new Response(JSON.stringify(w.w40kFile), { status: 200 });
       }
       if (u.includes("raw.githubusercontent.com") && u.includes("bandai-kits")) {
         w.kitCalls++;
@@ -118,6 +124,7 @@ function world(opts) {
   w.thing = opts.thing || {};
   w.kits = opts.kits || {};
   w.plamod = opts.plamod || null;
+  w.w40kFile = opts.w40kFile || null;
   return w;
 }
 
@@ -425,6 +432,53 @@ async function drain(w, maxTicks = 60) {
   const last = await w.cx.storage.get('en:last');
   eq('no plamod file: run still finishes cleanly', last.error, undefined);
   eq('... and adds nothing', w.mediaAdds.length, 0);
+}
+
+
+// ---------- 5e. Warhammer 40,000 unit specs from BSData (owner, 2026-09-24:
+// "warhammer, lets do it") ----------
+{
+  const unit = (name, sig) => ({ faction: 'Space Marines', name, legends: false, keywords: ['Infantry'], factionKeywords: ['Adeptus Astartes'],
+    models: [5, 10], sizes: [{ m: '5', p: 75 }, { m: '10', p: 150 }], stats: [{ name, M: '6"', T: '4', SV: '3+', W: '2', LD: '6+', OC: '2' }],
+    weapons: { ranged: [], melee: [] }, source: 'BSData wh40k-10e', sig });
+  const products = {};
+  for (let i = 1; i <= 25; i++) products[String(i)] = unit('Unit ' + i, 'v1:' + i);
+  const w40k = [
+    { id: 'gid://shopify/Product/1', title: 'WARHAMMER 40,000 SPACE MARINES: UNIT 1' },                 // new
+    { id: 'gid://shopify/Product/2', title: 'WARHAMMER 40,000 SPACE MARINES: UNIT 2', whSig: 'v1:2' },  // unchanged
+    { id: 'gid://shopify/Product/3', title: 'WARHAMMER 40,000 SPACE MARINES: UNIT 3', whSig: 'v1:old' },// points changed
+    { id: 'gid://shopify/Product/99', title: 'WARHAMMER 40,000 CODEX', whSig: 'v1:x' },                 // no longer matched
+    { id: 'gid://shopify/Product/98', title: 'WARHAMMER 40,000 DICE' },                                 // never matched
+  ];
+  const w = world({ books: [], games: [], bggStatus: 401, w40k, w40kFile: { count: 25, products } });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('w40k phase ran after the others', last.w40k && last.w40k.seen, 5);
+  eq('matched products counted', last.w40k.matched, 3);
+  const keys = (id) => w.written.filter((m) => m.ownerId === id).map((m) => m.key).sort().join(',');
+  eq('new unit: specs + signature written', keys('gid://shopify/Product/1'), 'wh_sig,wh_unit');
+  eq('unchanged unit: nothing written', keys('gid://shopify/Product/2'), '');
+  eq('changed unit: rewritten', keys('gid://shopify/Product/3'), 'wh_sig,wh_unit');
+  const v = JSON.parse(w.written.find((m) => m.ownerId === 'gid://shopify/Product/1' && m.key === 'wh_unit').value);
+  eq('specs are the file facts, signature kept out', [v.name, v.sizes[1].p, v.sig], ['Unit 1', 150, undefined]);
+  eq('json type', w.written.find((m) => m.key === 'wh_unit').type, 'json');
+  eq('a product no longer matched loses its specs', w.deleted.filter((m) => m.ownerId === 'gid://shopify/Product/99').map((m) => m.key).sort().join(','), 'wh_sig,wh_unit');
+  eq('a never-matched product is left alone', w.written.concat(w.deleted).filter((m) => m.ownerId === 'gid://shopify/Product/98').length, 0);
+}
+{
+  // a broken weekly file (almost no matches) must not wipe everybody's specs
+  const w = world({ books: [], games: [], bggStatus: 401,
+    w40k: [{ id: 'gid://shopify/Product/7', title: 'WARHAMMER 40,000 ORKS: BOYZ', whSig: 'v1:7' }],
+    w40kFile: { count: 0, products: {} } });
+  await drain(w);
+  eq('tiny file: nothing deleted', w.deleted.length, 0);
+  eq('tiny file: run finishes cleanly', (await w.cx.storage.get('en:last')).error, undefined);
+}
+{
+  // no data/w40k.json at all
+  const w = world({ books: [], games: [], bggStatus: 401, w40k: [{ id: 'gid://shopify/Product/7', title: 'X', whSig: 'v1:7' }] });
+  await drain(w);
+  eq('no file: nothing deleted', w.deleted.length, 0);
 }
 
 // ---------- 6. no token: fails loudly instead of silently ----------

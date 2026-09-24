@@ -7,6 +7,7 @@ import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO 
 import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql } from "./price-history.js";
 import { servePlamodTargets } from "./plamod.js";
+import { serveW40kTargets } from "./w40k.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
@@ -304,6 +305,16 @@ export default {
         return r && r.data;
       };
       return servePlamodTargets(request, env, ctx, gql);
+    }
+
+    // Warhammer 40K runner's work list: id + title of every 40K product
+    // (src/w40k.js, tools/w40k.py). Public storefront data only.
+    if (url.pathname === "/w40k/targets.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return serveW40kTargets(request, env, ctx, gql);
     }
 
     if (url.pathname === "/stores.json") {
