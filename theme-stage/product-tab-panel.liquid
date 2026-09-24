@@ -60,6 +60,18 @@
             assign show_pl = true
           endif
         endif
+        comment
+          Warhammer 40,000 unit boxes (owner 2026-09-24, "warhammer, lets do
+          it"): the nightly enrichment (chaywrite src/w40k.js) stores the
+          matching BSData datasheet in exor.wh_unit (json) - faction, model
+          count, points per size, stat lines, keywords, weapon profiles.
+          Unofficial community data, refreshed weekly; no rules text.
+        endcomment
+        assign wu = gf.wh_unit.value
+        assign show_wh = false
+        if wu.name != blank
+          assign show_wh = true
+        endif
         assign pl_when = ''
         assign plrel = gf.pl_release.value | append: ''
         if plrel.size == 10
@@ -77,8 +89,8 @@
           assign kit_when = rel
         endif
       -%}
-      {%- if use_bgg or show_class or show_kit or show_pl -%}
-      <div class="xg-desc{% if show_class or show_kit or show_pl %} xg-desc--split{% endif %}" data-xg-handle="{{ product.handle | escape }}">
+      {%- if use_bgg or show_class or show_kit or show_pl or show_wh -%}
+      <div class="xg-desc{% if show_class or show_kit or show_pl or show_wh %} xg-desc--split{% endif %}" data-xg-handle="{{ product.handle | escape }}">
         <div class="xg-desc__body">
           {%- if use_bgg -%}
             <div class="xg-desc__text">{{ gf.bgg_description.value | escape | newline_to_br }}</div>
@@ -124,6 +136,54 @@
           </dl>
         </aside>
         {%- endif -%}
+        {%- if show_wh -%}
+        <aside class="xg-class xg-unit" aria-label="Unit specs">
+          <h3 class="xg-class__title">Unit specs</h3>
+          <dl>
+            <dt>Army</dt><dd>{{ wu.faction | escape }}{% if wu.legends %} <span class="xg-unit__tag">Legends</span>{% endif %}</dd>
+            <dt>Datasheet</dt><dd>{{ wu.name | remove: ' [Legends]' | escape }}</dd>
+            {%- if wu.models -%}
+            <dt>Models</dt><dd>{% if wu.models[0] == wu.models[1] %}{{ wu.models[0] }}{% else %}{{ wu.models[0] }}&ndash;{{ wu.models[1] }}{% endif %}</dd>
+            {%- endif -%}
+            {%- if wu.sizes.size > 0 -%}
+            <dt>Points</dt>
+            <dd><ul class="xg-unit__pts">{% for z in wu.sizes %}<li><span>{{ z.m | replace: '-', '&ndash;' }} model{% unless z.m == '1' %}s{% endunless %}</span><b>{{ z.p }} pts</b></li>{% endfor %}</ul></dd>
+            {%- endif -%}
+          </dl>
+          {%- for st in wu.stats -%}
+          <table class="xg-unit__stats">
+            {%- if wu.stats.size > 1 -%}<caption>{{ st.name | escape }}</caption>{%- endif -%}
+            <thead><tr><th>M</th><th>T</th><th>SV</th><th>W</th><th>LD</th><th>OC</th></tr></thead>
+            <tbody><tr><td>{{ st.M | escape }}</td><td>{{ st.T | escape }}</td><td>{{ st.SV | escape }}</td><td>{{ st.W | escape }}</td><td>{{ st.LD | escape }}</td><td>{{ st.OC | escape }}</td></tr></tbody>
+          </table>
+          {%- endfor -%}
+          {%- if wu.keywords.size > 0 -%}
+          <dl><dt>Keywords</dt><dd><ul class="xg-class__chips xg-unit__kw">{% for k in wu.keywords %}<li>{{ k | escape }}</li>{% endfor %}{% for k in wu.factionKeywords %}<li class="xg-unit__kw--f">{{ k | escape }}</li>{% endfor %}</ul></dd></dl>
+          {%- endif -%}
+          <p class="xg-class__hint">From the community <a href="https://github.com/BSData/wh40k-10e" target="_blank" rel="noopener">BSData</a> 10th edition datasheets, updated weekly. Unofficial: points change with each balance update, so check the latest Games Workshop rules for your games.</p>
+        </aside>
+        {%- if wu.weapons.ranged.size > 0 or wu.weapons.melee.size > 0 -%}
+        <section class="xg-unit__weapons" aria-label="Weapons">
+          <h3 class="xg-class__title">Weapons</h3>
+          <div class="xg-unit__scroll">
+          <table class="xg-unit__wt">
+            <thead><tr><th scope="col">Weapon</th><th scope="col">Range</th><th scope="col">A</th><th scope="col">BS/WS</th><th scope="col">S</th><th scope="col">AP</th><th scope="col">D</th><th scope="col">Abilities</th></tr></thead>
+            {%- if wu.weapons.ranged.size > 0 -%}
+            <tbody><tr class="xg-unit__wh"><th colspan="8" scope="rowgroup">Ranged</th></tr>
+            {%- for w in wu.weapons.ranged -%}<tr><th scope="row">{{ w.name | escape }}</th><td>{{ w.range | escape }}</td><td>{{ w.a | escape }}</td><td>{{ w.skill | escape }}</td><td>{{ w.s | escape }}</td><td>{{ w.ap | escape }}</td><td>{{ w.d | escape }}</td><td>{{ w.kw | escape }}</td></tr>{%- endfor -%}
+            </tbody>
+            {%- endif -%}
+            {%- if wu.weapons.melee.size > 0 -%}
+            <tbody><tr class="xg-unit__wh"><th colspan="8" scope="rowgroup">Melee</th></tr>
+            {%- for w in wu.weapons.melee -%}<tr><th scope="row">{{ w.name | escape }}</th><td>{{ w.range | escape }}</td><td>{{ w.a | escape }}</td><td>{{ w.skill | escape }}</td><td>{{ w.s | escape }}</td><td>{{ w.ap | escape }}</td><td>{{ w.d | escape }}</td><td>{{ w.kw | escape }}</td></tr>{%- endfor -%}
+            </tbody>
+            {%- endif -%}
+          </table>
+          </div>
+          <p class="xg-class__hint">Every weapon the datasheet can take, including options; the box may not include all of them.</p>
+        </section>
+        {%- endif -%}
+        {%- endif -%}
         {%- if show_class -%}
         <aside class="xg-class" aria-label="Classification">
           <h3 class="xg-class__title">Classification</h3>
@@ -160,6 +220,28 @@
         .xg-chip::after { content: " \203A"; opacity: .55; }
         .xg-class__hint { margin: 10px 0 0; font-size: 11.5px; color: var(--xg-muted, #8a9299); }
         .xg-class__hint a { color: inherit; text-decoration: underline; }
+        /* Warhammer 40K unit specs */
+        .xg-unit__tag { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #e3e7ea); color: var(--xg-muted, #8a9299); }
+        .xg-unit__pts { margin: 0; padding: 0; list-style: none; }
+        .xg-unit__pts li { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 3px; padding: 0; list-style: none; font-variant-numeric: tabular-nums; }
+        .xg-unit__pts span { font-weight: 500; color: var(--xg-text, #3d454b); }
+        .xg-unit__stats { width: 100%; margin: 14px 0 0; border-collapse: collapse; table-layout: fixed; text-align: center; font-variant-numeric: tabular-nums; }
+        .xg-unit__stats caption { caption-side: top; text-align: left; font-size: 12px; font-weight: 600; color: var(--xg-muted, #8a9299); padding: 0 0 4px; }
+        .xg-unit__stats th { padding: 4px 0; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--xg-surface, #fff); background: var(--xg-ink, #10171a); }
+        .xg-unit__stats th:first-child { border-radius: 6px 0 0 6px; } .xg-unit__stats th:last-child { border-radius: 0 6px 6px 0; }
+        .xg-unit__stats td { padding: 6px 0 2px; font-size: 16px; font-weight: 700; color: var(--xg-ink, #10171a); }
+        html[data-xg-theme="dark"] .xg-unit__stats th { background: #e6ebee; color: #14181b; }
+        .xg-unit__kw li { padding: 2px 8px; border-radius: 999px; background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #e3e7ea); font-size: 12px; font-weight: 500; color: var(--xg-text, #4b5560); }
+        .xg-unit__kw li.xg-unit__kw--f { border-color: var(--xg-red, #d62c28); color: var(--xg-red, #d62c28); }
+        .xg-unit__weapons { grid-column: 1 / -1; min-width: 0; }
+        .xg-unit__scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; border: 1px solid var(--xg-border, #e3e7ea); border-radius: var(--xg-radius, 14px); }
+        .xg-unit__wt { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+        .xg-unit__wt th, .xg-unit__wt td { padding: 7px 10px; text-align: center; border-bottom: 1px solid var(--xg-border, #e3e7ea); color: var(--xg-text, #3d454b); }
+        .xg-unit__wt thead th { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--xg-muted, #8a9299); background: var(--xg-bg, #f1f4f6); }
+        .xg-unit__wt tbody th[scope="row"], .xg-unit__wt thead th:first-child { text-align: left; font-weight: 600; color: var(--xg-ink, #10171a); }
+        .xg-unit__wt td:last-child, .xg-unit__wt thead th:last-child { text-align: left; font-size: 12.5px; }
+        .xg-unit__wh th { text-align: left !important; font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-red, #d62c28) !important; background: transparent; }
+        .xg-unit__wt tbody tr:last-child > * { border-bottom: 0; }
         /* the "games like this" panel */
         .xg-like { position: fixed; inset: 0; z-index: 10050; background: rgba(12, 16, 20, .62); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px 16px; overflow-y: auto; }
         .xg-like[hidden] { display: none; }
