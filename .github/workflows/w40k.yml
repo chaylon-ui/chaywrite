@@ -1,0 +1,46 @@
+name: w40k
+# Warhammer 40,000 unit specs for our unit boxes (owner, 2026-09-24:
+# "warhammer, lets do it"). Reads the community BSData wh40k-10e datasheets
+# (github.com/BSData/wh40k-10e - unofficial; Games Workshop owns the game),
+# matches our 40K products (the worker's /w40k/targets.json) by faction and
+# unit name, and commits data/w40k.json: stat lines, points per unit size,
+# model count, keywords and weapon profiles - never rules text. The worker's
+# nightly sweep (src/w40k.js) writes them to the products. Weekly: points
+# change with each balance update.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Match and print, commit nothing
+        default: "false"
+  schedule:
+    # Mondays 05:40 UTC, ahead of the worker's 06:00 sweep
+    - cron: "40 5 * * 1"
+permissions:
+  contents: write
+concurrency:
+  group: w40k
+  cancel-in-progress: false
+jobs:
+  w40k:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch BSData wh40k-10e
+        run: |
+          git clone -q --depth 1 https://github.com/BSData/wh40k-10e /tmp/bsdata
+          echo "BSREV=$(git -C /tmp/bsdata rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Match our 40K products
+        run: |
+          python3 tools/w40k.py --bsdata /tmp/bsdata --rev "$BSREV" --out data/w40k.json ${{ inputs.dry_run == 'true' && '--dry' || '' }}
+      - name: Commit data/w40k.json when it changed
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          set -e
+          if [ ! -f data/w40k.json ] || [ -z "$(git status --porcelain data/w40k.json)" ]; then echo "no change to data/w40k.json"; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/w40k.json
+          git commit -m "w40k: BSData ${BSREV:0:7} $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
