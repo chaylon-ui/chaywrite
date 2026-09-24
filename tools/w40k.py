@@ -520,7 +520,7 @@ def match(units, title):
         if best:
             f = pick(best[1])
             if f:
-                return f, 'matched'
+                return f, 'matched:%d' % best[0]
             return None, 'ambiguous: ' + ', '.join(sorted({x['name'] for x in best[1]})[:4])
     return None, 'no datasheet' + (' in ' + faction if faction else '')
 
@@ -569,8 +569,9 @@ def main():
             facts['source'] = 'BSData wh40k-10e' + (' ' + a.rev[:7] if a.rev else '')
             facts['sig'] = sig(facts)
             products[str(it['id']).split('/')[-1]] = facts
-            if counts['matched'] <= 25:
-                print('MATCH  %-60s -> %s / %s  %s models %s pts' % (it['title'][:60], f['faction'], f['name'], f['models'], f['points']))
+            if a.dry or counts['matched'] <= 25:
+                # tier: 0 exact, 1 same words, 2 cut-short title, 3 words contained, 4 name inside title
+                print('MATCH%s %-60s -> %s / %s  %s models %s pts' % (why.split(':')[1], it['title'][:60], f['faction'], f['name'], f['models'], f['points']))
         elif why == 'not a unit box':
             counts['notUnit'] += 1
         else:
