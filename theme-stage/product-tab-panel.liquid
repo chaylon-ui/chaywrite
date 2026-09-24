@@ -143,7 +143,7 @@
             <dt>Army</dt><dd>{{ wu.faction | escape }}{% if wu.legends %} <span class="xg-unit__tag">Legends</span>{% endif %}</dd>
             <dt>Datasheet</dt><dd>{{ wu.name | remove: ' [Legends]' | escape }}</dd>
             {%- if wu.models -%}
-            <dt>Models</dt><dd>{% if wu.models[0] == wu.models[1] %}{{ wu.models[0] }}{% else %}{{ wu.models[0] }}&ndash;{{ wu.models[1] }}{% endif %}</dd>
+            <dt>Unit size</dt><dd>{% if wu.models[0] == wu.models[1] %}{{ wu.models[0] }} {% if wu.models[0] == 1 %}model{% else %}models{% endif %}{% else %}{{ wu.models[0] }}&ndash;{{ wu.models[1] }} models{% endif %}</dd>
             {%- endif -%}
             {%- if wu.sizes.size > 0 -%}
             <dt>Points</dt>
