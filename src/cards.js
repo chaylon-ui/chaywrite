@@ -536,6 +536,9 @@ const GAME_PTQ = {
   starwars: 'product_type:"Star Wars: Unlimited Single"',
   onepiece: 'product_type:"One Piece Single"',
   riftbound: "product_type:Riftbound*",
+  // Deck builder only (owner 2026-09-24: "deckbuilder, can we add Lorcana?");
+  // not a GAMES lane scheme, so the new-cards strips and showcase ignore it.
+  lorcana: 'product_type:"Lorcana Single"',
   hockey: "product_type:Hockey*",
   basketball: 'product_type:"Basketball Singles"',
 };
@@ -1018,10 +1021,12 @@ function baseName(title) {
    whole requested name, so distinct cards can never collide. Without this
    the $5.00 SLD Command Tower lost the cheapest-printing race to an $18.10
    plain copy because its title never exact-matched (owner screenshot). */
-function nameMatches(title, want) {
+function nameMatches(title, want, game) {
   const b = baseName(title).toLowerCase();
   if (b === want) return true;
-  if (b.indexOf(" - ") === -1) return false;
+  // Lorcana names ARE "Character - Version" ("Stitch - Rock Star"): a bare
+  // "Stitch" must not pick up every Stitch, so no segment matching there.
+  if (game === "lorcana" || b.indexOf(" - ") === -1) return false;
   return b.split(" - ").some((seg) => seg.trim() === want);
 }
 
@@ -1246,9 +1251,12 @@ function codeMatches(p, code) {
 async function findInStock(name, headers, env, game) {
   try {
     game = (game && GAME_PTQ[game]) ? game : "mtg";
+    // Curly apostrophes from pasted lists ("Peter Pan’s Ally") never match
+    // our straight-quoted titles.
+    name = String(name).replace(/[\u2018\u2019]/g, "'");
     const want = name.toLowerCase();
     const codeMode = CODE_RE.test(name);
-    const gmatch = (GAMES[game] && GAMES[game].match) || /^mtg\b/i;
+    const gmatch = (GAMES[game] && GAMES[game].match) || SISTER_ONLY_MATCH[game] || /^mtg\b/i;
     // This store's native predictive search is disabled (Searchanise owns
     // search here), so the public /search/suggest.json returns nothing — the
     // Admin API is the only reliable catalogue search. Scope it to the game's
@@ -1265,7 +1273,7 @@ async function findInStock(name, headers, env, game) {
     // Every printing of the exact card (title minus its trailing "[Set]") in
     // the chosen game — no cap, so the cheapest printing can't be truncated.
     const matches = products.filter((p) =>
-      (codeMode ? codeMatches(p, name) : nameMatches(p.title, want)) &&
+      (codeMode ? codeMatches(p, name) : nameMatches(p.title, want, game)) &&
       gmatch.test(p.product_type || "")
     );
     // Every AVAILABLE variant across every printing, cheapest first. The top
@@ -1412,6 +1420,7 @@ const SISTER_ONLY_MATCH = { lorcana: /lorcana/i, fab: /flesh\s*and\s*blood/i };
 // builder passes no opts and keeps its cheapest-any-printing behaviour.
 async function findAtSisters(name, game, opts) {
   opts = opts || {};
+  name = String(name).replace(/[\u2018\u2019]/g, "'");
   const gmatch = (GAMES[game] && GAMES[game].match) || SISTER_ONLY_MATCH[game] || /^mtg\b/i;
   const want = baseName(name).toLowerCase();
   const normNum = (x) => String(x || "").trim().toLowerCase().replace(/^0+(?=\d)/, "").replace(/\s+/g, "");
@@ -1445,7 +1454,7 @@ async function findAtSisters(name, game, opts) {
       // check waits for hydration: /products/<handle>.js always carries
       // `type` authoritatively.
       const matches = hits.filter((h) => h && h.title && h.handle && h.available !== false
-        && (codeMode || nameMatches(h.title, want)));
+        && (codeMode || nameMatches(h.title, want, game)));
       if (wantSet) matches.sort((a, b) => tierOf(a.title) - tierOf(b.title));
       let best = null;
       for (const h of matches.slice(0, wantSet ? 3 : 2)) {   // hydrate at most 2 printings per store (3 when a printing is wanted)

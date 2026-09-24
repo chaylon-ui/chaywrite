@@ -39,7 +39,8 @@
     { key: 'yugioh', label: 'Yu-Gi-Oh!' },
     { key: 'starwars', label: 'Star Wars: Unlimited' },
     { key: 'onepiece', label: 'One Piece' },
-    { key: 'riftbound', label: 'Riftbound' }
+    { key: 'riftbound', label: 'Riftbound' },
+    { key: 'lorcana', label: 'Disney Lorcana' }
   ];
   var DEFAULT_GAME = attr('data-game', 'mtg');
 
@@ -102,7 +103,8 @@
     yugioh: '3 Blue-Eyes White Dragon\n3 Ash Blossom & Joyous Spring\n2 Called by the Grave',
     starwars: '3 Darth Vader, Dark Lord of the Sith\n3 Force Choke\n2 TIE Advanced',
     onepiece: '4 Monkey.D.Luffy\n4 Roronoa Zoro\n2 Trafalgar Law',
-    riftbound: '3 Jinx\n3 Yasuo\n2 Ahri'
+    riftbound: '3 Jinx\n3 Yasuo\n2 Ahri',
+    lorcana: '4 Stitch - Carefree Surfer\n4 Tinker Bell - Peter Pan\'s Ally\n2 Be Prepared\n2 Ursula\'s Cauldron'
   };
   var PH_TAIL = '\n...paste your whole list — quantities and set tags are fine';
   if (root.getAttribute('data-placeholder') == null || root.getAttribute('data-placeholder') === '') {
