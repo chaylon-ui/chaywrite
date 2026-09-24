@@ -1,0 +1,138 @@
+name: bp-popup-probe
+# Read-only: how BinderPOS's OWN buylist popup behaves, and what it shows
+# when BinderPOS's card search refuses (owner, 2026-09-24: "Can you test how
+# binderpos pop up behaves when it gets refused? Without breaking anything").
+# The sell page now runs our buylist, whose tile guard keeps BinderPOS's
+# popup from opening, so this browser simply does not load our script
+# (`block`) - the page is then what it was before ours. A "burst" step
+# spends BinderPOS's per-connection search allowance (~8 a minute) from
+# THIS runner only; no store, customer or list is touched, nothing is
+# saved or submitted. Screenshots go to probe-shots/.
+#
+# plan: a JSON list of steps, run in order:
+#   {"click": "css"}  {"clickText": "regex"}  {"type": ["css", "text"]}
+#   {"key": "Enter"}  {"wait": ms}  {"burst": n}  {"shot": "name"}
+#   {"dump": true}   (visible text of popups/overlays, inputs, buttons)
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        default: "https://exorgames.com/pages/sell-to-exor-games-bulk-or-create-a-list"
+      block:
+        description: Comma list of URL fragments to block
+        default: "exor-binder.nevski.workers.dev/buylist"
+      plan:
+        default: '[{"wait":3000},{"dump":true},{"click":"a[href=\"#buylist\"]"},{"wait":3000},{"shot":"open"},{"dump":true}]'
+      width:
+        default: "1280"
+permissions:
+  contents: write
+concurrency:
+  group: probe-shots
+  cancel-in-progress: false
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core@22 >/dev/null 2>&1
+      - name: Run the plan
+        env:
+          URL: ${{ inputs.url }}
+          BLOCK: ${{ inputs.block }}
+          PLAN: ${{ inputs.plan }}
+          W: ${{ inputs.width }}
+          RUN: ${{ github.run_id }}
+        run: |
+          mkdir -p probe-shots
+          cat > bp.js <<'EOF'
+          const puppeteer = require('puppeteer-core');
+          const fs = require('fs');
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          (async () => {
+            const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            const w = parseInt(process.env.W || '1280', 10) || 1280;
+            await page.setViewport({ width: w, height: 900, isMobile: w < 700, hasTouch: w < 700 });
+            const block = (process.env.BLOCK || '').split(',').map((s) => s.trim()).filter(Boolean);
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+              if (block.some((b) => req.url().includes(b))) { console.log('BLOCKED', req.url().slice(0, 140)); return req.abort(); }
+              req.continue();
+            });
+            page.on('pageerror', (e) => console.log('PAGEERROR', String(e && e.message || e).slice(0, 300)));
+            page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) console.log('CONSOLE-' + m.type().toUpperCase(), m.text().slice(0, 240)); });
+            page.on('requestfailed', (req) => { if (/binderpos/.test(req.url())) console.log('NET-FAIL', req.failure() && req.failure().errorText, req.url().slice(0, 180)); });
+            page.on('response', async (res) => {
+              const u = res.url();
+              if (!/binderpos/.test(u) || /\.(png|jpe?g|svg|css|woff2?)(\?|$)/.test(u)) return;
+              let head = '';
+              try { if (/json|text/.test(res.headers()['content-type'] || '')) head = (await res.text()).replace(/\s+/g, ' ').slice(0, 160); } catch (e) {}
+              console.log('NET', res.status(), res.request().resourceType(), u.slice(0, 180), head ? '| ' + head : '');
+            });
+            await page.goto(process.env.URL, { waitUntil: 'networkidle2', timeout: 90000 }).catch((e) => console.log('GOTO', String(e).slice(0, 120)));
+            console.log('title', await page.title());
+            const plan = JSON.parse(process.env.PLAN || '[]');
+            let n = 0;
+            for (const st of plan) {
+              n++;
+              try {
+                if (st.wait) { await sleep(st.wait); }
+                else if (st.click) { await page.click(st.click); console.log('STEP', n, 'clicked', st.click); }
+                else if (st.clickText) {
+                  const ok = await page.evaluate((re) => {
+                    const rx = new RegExp(re, 'i');
+                    const vis = (e) => { const b = e.getBoundingClientRect(), cs = getComputedStyle(e); return b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+                    const all = [...document.querySelectorAll('button, a, li, [role=button], div, span, img')].filter((e) => vis(e) && (rx.test((e.innerText || '').trim()) || rx.test(e.getAttribute('alt') || '')));
+                    all.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length);
+                    if (!all.length) return null;
+                    all[0].click();
+                    return all[0].tagName + '.' + String(all[0].className).slice(0, 40) + ' "' + (all[0].innerText || all[0].getAttribute('alt') || '').trim().slice(0, 40) + '"';
+                  }, st.clickText);
+                  console.log('STEP', n, 'clickText', st.clickText, '->', ok);
+                }
+                else if (st.type) { await page.click(st.type[0], { clickCount: 3 }).catch(() => {}); await page.type(st.type[0], st.type[1], { delay: 40 }); console.log('STEP', n, 'typed', st.type[1]); }
+                else if (st.key) { await page.keyboard.press(st.key); console.log('STEP', n, 'key', st.key); }
+                else if (st.burst) {
+                  const out = await page.evaluate(async (k) => {
+                    const S = 'https://portal.binderpos.com/external/shopify/a648e57a-678f-45eb-bae0-f8deb7940192/cards/mtg?limit=20&offset=0&keyword=';
+                    const words = ['opt', 'shock', 'duress', 'negate', 'cancel', 'murder', 'terror', 'divination', 'disenchant', 'naturalize', 'giant growth', 'dark ritual'];
+                    const r = [];
+                    for (let i = 0; i < k; i++) { try { const x = await fetch(S + encodeURIComponent(words[i % words.length])); await x.text(); r.push(x.status); } catch (e) { r.push('X'); } }
+                    return r.join(',');
+                  }, st.burst);
+                  console.log('STEP', n, 'burst', out);
+                }
+                else if (st.shot) {
+                  const f = 'probe-shots/bp-' + process.env.RUN + '-' + String(st.shot).replace(/[^a-z0-9-]/gi, '') + '.jpg';
+                  fs.writeFileSync(f, await page.screenshot({ type: 'jpeg', quality: 60 }));
+                  console.log('STEP', n, 'SHOT', f);
+                }
+                else if (st.dump) {
+                  const d = await page.evaluate(() => {
+                    const vis = (e) => { const b = e.getBoundingClientRect(), cs = getComputedStyle(e); return b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0'; };
+                    const layers = [...document.querySelectorAll('body *')].filter((e) => { const cs = getComputedStyle(e); const b = e.getBoundingClientRect(); return (cs.position === 'fixed' || (parseInt(cs.zIndex, 10) || 0) >= 100) && b.width * b.height > 40000 && vis(e); })
+                      .filter((e, i, arr) => !arr.some((o) => o !== e && o.contains(e)))
+                      .slice(0, 6).map((e) => ({ el: e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '.' + String(e.className).trim().split(/\s+/).slice(0, 3).join('.'), text: (e.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 700) }));
+                    const inputs = [...document.querySelectorAll('input, select, textarea')].filter(vis).slice(0, 12).map((e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '[' + (e.name || e.type || '') + '] ph="' + (e.placeholder || '') + '" val="' + String(e.value || '').slice(0, 30) + '"');
+                    const scripts = [...document.scripts].map((s) => s.src).filter((s) => /binderpos|buylist/i.test(s)).map((s) => s.slice(0, 140));
+                    return { layers, inputs, scripts, hash: location.hash };
+                  });
+                  console.log('STEP', n, 'DUMP', JSON.stringify(d));
+                }
+              } catch (e) { console.log('STEP', n, 'ERR', JSON.stringify(st).slice(0, 80), String(e).slice(0, 160)); }
+            }
+            await browser.close();
+          })().catch((e) => { console.log('FATAL', String(e).slice(0, 300)); process.exit(0); });
+          EOF
+          node bp.js
+      - name: Commit the shots
+        run: |
+          if [ -z "$(ls probe-shots/bp-${{ github.run_id }}-* 2>/dev/null)" ]; then echo "no shots"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add probe-shots/bp-${{ github.run_id }}-*
+          git commit -m "probe shots bp ${{ github.run_id }}"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
