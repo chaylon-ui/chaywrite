@@ -48,6 +48,12 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
   .xg-bc--logo .xg-bc__logo img { display: block; margin: 0 auto; width: auto; height: auto; max-width: min(460px, 90%); max-height: 110px; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .55)); }
   @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img { max-height: 72px; } }
+  .xg-bc__pp { display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 8px 16px 8px 10px; border-radius: 999px; background: #fff; color: #14181b !important; font: 700 13px/1 var(--xg-font-body, sans-serif); letter-spacing: .02em; text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  .xg-bc__pp:hover { background: #d62c28; color: #fff !important; }
+  .xg-bc__pp-dots { display: inline-flex; }
+  .xg-bc__pp-dots i { width: 14px; height: 14px; border-radius: 50%; margin-right: -4px; border: 2px solid #fff; }
+  .xg-bc__pp-dots i:nth-child(1) { background: #b3261e; } .xg-bc__pp-dots i:nth-child(2) { background: #e8a317; }
+  .xg-bc__pp-dots i:nth-child(3) { background: #2f8f5b; } .xg-bc__pp-dots i:nth-child(4) { background: #2d5fae; margin-right: 0; }
   /* Warhammer-logo.png is 1400x900 with the mark in a band across the middle: larger box, pulled in by negative margins */
   .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-width: min(560px, 96%); max-height: 230px; margin: -55px auto -50px; }
   @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-height: 150px; margin: -36px auto -32px; } }
@@ -59,6 +65,18 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   <div class="banner-title-container">
     {% if xg_bc_logo != '' %}
     <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
+    {%- if xg_bc_logo == 'logo_blanc.png' and template.suffix != 'paints' -%}
+    {%- comment -%} Vallejo: a way into the colour picker (owner, 2026-09-25: "how is it accessed"). A range collection opens the picker on that range. {%- endcomment -%}
+    {%- assign xg_pp_range = '' -%}
+    {%- case xg_bc_key -%}
+      {%- when 'vallejo-game-color' -%}{%- assign xg_pp_range = 'Game Color' -%}
+      {%- when 'vallejo-game-air' -%}{%- assign xg_pp_range = 'Game Air' -%}
+      {%- when 'vallejo-model-color' -%}{%- assign xg_pp_range = 'Model Color' -%}
+      {%- when 'vallejo-model-air' -%}{%- assign xg_pp_range = 'Model Air' -%}
+      {%- when 'vallejo-mecha-color' -%}{%- assign xg_pp_range = 'Mecha Color' -%}
+    {%- endcase -%}
+    <a class="xg-bc__pp" href="/collections/all-vallejo?view=paints{% if xg_pp_range != '' %}#range={{ xg_pp_range | url_encode }}{% endif %}"><span class="xg-bc__pp-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Shop by colour</a>
+    {%- endif -%}
     {% elsif template contains 'product' %}
     <h1 class="h3 head-title">{{ product.title }}</h1>
     {% elsif template contains 'collection' %}

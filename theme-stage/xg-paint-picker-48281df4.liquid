@@ -15,7 +15,7 @@
 <div class="xg-pp page-width" data-handle="{{ collection.handle | escape }}" data-colours="{{ 'xg-vallejo-colours.json' | asset_url }}">
   <div class="xg-pp__head">
     <h2 class="xg-pp__title">Find your colour</h2>
-    <p class="xg-pp__sub">Tap a colour to see the bottle. On-screen colours are approximate.</p>
+    <p class="xg-pp__sub">Tap a colour to see the bottle. On-screen colours are approximate. <a href="{{ collection.url }}">See the full Vallejo list &rsaquo;</a></p>
   </div>
   <div class="xg-pp__bar">
     <div class="xg-pp__ranges" role="tablist" aria-label="Paint range"></div>
@@ -55,6 +55,7 @@
   .xg-pp { padding: 20px 0 40px; font-family: var(--xg-font-body); color: var(--xg-text); }
   .xg-pp__title { font-family: var(--xg-font-display); color: var(--xg-ink); font-size: 30px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .02em; }
   .xg-pp__sub { color: var(--xg-muted); margin: 0 0 16px; font-size: 14px; }
+  .xg-pp__sub a { color: var(--xg-red); font-weight: 600; white-space: nowrap; }
   .xg-pp__bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .xg-pp__ranges { display: flex; flex-wrap: wrap; gap: 6px; }
   .xg-pp__ranges button, .xg-pp__families button { font: 600 13px/1 var(--xg-font-body); border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); border-radius: 999px; padding: 8px 13px; cursor: pointer; }
@@ -131,6 +132,8 @@
     ['blue', 'Blues', '#2d5fae'], ['purple', 'Purples', '#7b3f9a'], ['pink', 'Pinks', '#d9709e'], ['brown', 'Browns', '#7a5232'],
     ['flesh', 'Skin tones', '#e0a98a'], ['grey', 'Greys, black & white', '#8d9396'], ['metal', 'Metallics', '#b9b9b9'], ['wash', 'Washes & inks', '#4a5a78']];
   var state = { range: 'All', family: '', q: '', stock: true };
+  // "Shop by colour" on a range collection opens the picker on that range (#range=Game%20Color)
+  try { var hr = /(?:^|[#&])range=([^&]+)/.exec(location.hash); if (hr) state.range = decodeURIComponent(hr[1].replace(/\+/g, ' ')); } catch (e) {}
   var paints = [];
   function key(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
   function money(c) { return '$' + (Number(c) || 0).toFixed(2); }
@@ -233,6 +236,7 @@
       g.items.forEach(function (it) { if (!seen[it.range]) { seen[it.range] = 1; counts[it.range] = (counts[it.range] || 0) + 1; } });
     });
     var names = ['All'].concat(RANGES.filter(function (r) { return counts[r]; }));
+    if (names.indexOf(state.range) < 0) state.range = 'All';
     $('.xg-pp__ranges').innerHTML = names.map(function (r) {
       return '<button type="button" data-range="' + r + '" aria-pressed="' + (state.range === r) + '">' + r + '<span>' + (r === 'All' ? paints.length : counts[r]) + '</span></button>';
     }).join('');

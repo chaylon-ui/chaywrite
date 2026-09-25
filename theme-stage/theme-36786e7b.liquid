@@ -246,6 +246,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   {% if template.suffix == 'advanced_search' %}
   {% assign show_sidebar = true %}
   {% endif %}
+  {%- comment -%} The Vallejo colour picker view (/collections/<handle>?view=paints) is full width: no filter sidebar, whose search-app skeleton only blinked there (owner, 2026-09-25). {%- endcomment -%}
+  {% if template.suffix == 'paints' %}
+  {% assign show_sidebar = false %}
+  {% endif %}
   <div class="whole-content">
 
     <a class="in-page-link visually-hidden skip-link" href="#MainContent">{{ 'general.accessibility.skip_to_content' | t }}</a>
