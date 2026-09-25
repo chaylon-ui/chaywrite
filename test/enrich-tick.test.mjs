@@ -21,7 +21,7 @@ function storage() {
 // A world: books pages, game pages, and canned BGG answers.
 function world(opts) {
   const w = {
-    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [], gs: opts.gs || [],
+    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [], gs: opts.gs || [], bt: opts.bt || [],
     written: [], deleted: [], mediaAdds: [], plCalls: 0, adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
@@ -45,6 +45,7 @@ function world(opts) {
           psig: p.plSig ? { value: p.plSig } : null,
           wsig: p.whSig ? { value: p.whSig } : null,
           vendor: p.vendor || '',
+          bsig: p.btSig ? { value: p.btSig } : null,
           gs: p.gsVal ? { value: p.gsVal } : null,
         })),
       },
@@ -72,7 +73,7 @@ function world(opts) {
           data = { metafieldsDelete: { userErrors: [] } };
         } else {
           const q = body.variables.q;
-          data = page(q.includes('Books') ? w.books : q.includes("vendor:'Games Workshop'") ? (w.gs || []) : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
+          data = page(q.includes('Books') ? w.books : q.includes("vendor:'Games Workshop'") ? (w.gs || []) : q.includes('battletech') ? (w.bt || []) : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
         }
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
@@ -97,6 +98,10 @@ function world(opts) {
         w.whCalls = (w.whCalls || 0) + 1;
         if (!w.w40kFile) return new Response("404: Not Found", { status: 404 });
         return new Response(JSON.stringify(w.w40kFile), { status: 200 });
+      }
+      if (u.includes("raw.githubusercontent.com") && u.includes("battletech.json")) {
+        if (!w.btFile) return new Response("404: Not Found", { status: 404 });
+        return new Response(JSON.stringify(w.btFile), { status: 200 });
       }
       if (u.includes("raw.githubusercontent.com") && u.includes("bandai-kits")) {
         w.kitCalls++;
@@ -128,6 +133,7 @@ function world(opts) {
   w.kits = opts.kits || {};
   w.plamod = opts.plamod || null;
   w.w40kFile = opts.w40kFile || null;
+  w.btFile = opts.btFile || null;
   return w;
 }
 
@@ -478,6 +484,33 @@ async function drain(w, maxTicks = 60) {
   await drain(w);
   eq('tiny file: nothing deleted', w.deleted.length, 0);
   eq('tiny file: run finishes cleanly', (await w.cx.storage.get('en:last')).error, undefined);
+}
+
+// ---------- 5g. BattleTech box contents (owner, 2026-09-25: "lets do battle tech") ----------
+{
+  const unit = (name, tons, cls, tech, role) => ({ name, model: 'X-1', type: 'BattleMech', tons, cls, tech, role, walk: 4, run: 6, jump: 0, year: 3025 });
+  const products = {};
+  for (let i = 1; i <= 12; i++) products[String(i)] = { pack: 'Pack ' + i, kind: 'forcepack', units: [unit('Atlas', 100, 'Assault', 'Inner Sphere', 'Juggernaut')], sig: 's' + i };
+  products['31'] = { pack: 'Clan Heavy Star', kind: 'forcepack', units: [unit('Supernova', 90, 'Assault', 'Clan', 'Sniper'), unit('Hunchback IIC', 50, 'Medium', 'Clan', 'Juggernaut')], sig: 'hs1' };
+  const bt = [
+    { id: 'gid://shopify/Product/31', title: 'BATTLETECH CLAN HEAVY STAR' },                      // new
+    { id: 'gid://shopify/Product/1', title: 'BATTLETECH PACK 1', btSig: 's1+b1' },                 // unchanged
+    { id: 'gid://shopify/Product/90', title: 'BATTLETECH TOTAL WARFARE HC', btSig: 'old' },        // no longer matched
+    { id: 'gid://shopify/Product/91', title: 'BATTLETECH BATTLE MAT' },                           // never matched
+  ];
+  const w = world({ books: [], games: [], bggStatus: 401, bt, btFile: { count: 13, products } });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('bt phase ran', last.bt && last.bt.seen, 4);
+  eq('bt matched', last.bt.matched, 2);
+  const keys = (id) => w.written.filter((m) => m.ownerId === id).map((m) => m.key).sort().join(',');
+  eq('new pack: contents + filters + signature', keys('gid://shopify/Product/31'), 'bt_classes,bt_pack,bt_roles,bt_sig,bt_tech,bt_types');
+  eq('unchanged pack: nothing written', keys('gid://shopify/Product/1'), '');
+  const f = (k) => (w.written.find((m) => m.ownerId === 'gid://shopify/Product/31' && m.key === k) || {}).value;
+  eq('filters', [f('bt_classes'), f('bt_tech'), f('bt_roles'), f('bt_types'), f('bt_sig')], ['["Medium","Assault"]', '["Clan"]', '["Juggernaut","Sniper"]', '["BattleMech"]', 'hs1+b1']);
+  eq('pack json keeps units, drops sig', [JSON.parse(f('bt_pack')).units.length, JSON.parse(f('bt_pack')).sig], [2, undefined]);
+  eq('unmatched product loses its fields', w.deleted.filter((m) => m.ownerId === 'gid://shopify/Product/90').map((m) => m.key).sort().join(','), 'bt_classes,bt_pack,bt_roles,bt_sig,bt_tech,bt_types');
+  eq('never-matched product untouched', w.written.concat(w.deleted).filter((m) => m.ownerId === 'gid://shopify/Product/91').length, 0);
 }
 
 // ---------- 5f. Game system for the collection filter (owner, 2026-09-25: "so I

@@ -45,6 +45,7 @@ import { GUNPLA_QUERY, KITS_FILE_URL, indexKits, gunplaMetafields } from "./gunp
 import { PLAMOD_FILE_URL, PL_PAGE, PL_ADD_MEDIA, PL_QUERY, parsePlPage, plamodPlan } from "./plamod.js";
 import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan, WINDEX_QUERY, WINDEX_PAGE, UNIT_KINDS, parseWindexPage, likeUnits } from "./w40k.js";
 import { GS_PAGE, GS_QUERY, parseGsPage, gsPlan } from "./gamesys.js";
+import { BT_FILE_URL, BT_PAGE, BT_QUERY, parseBtPage, btPlan } from "./bt.js";
 
 export const ENRICH_DO = "enrich";
 
@@ -882,6 +883,18 @@ async function w40kFile(cx) {
   return file;
 }
 
+async function btFile(cx) {
+  if (cx.mem && cx.mem.bt !== undefined) return cx.mem.bt;
+  let file = null;
+  try {
+    const r = await cx.fetch(BT_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(30000) });
+    if (r.ok) { file = await r.json(); cx.log("enrich: battletech file loaded, " + ((file && file.count) || 0) + " products, generated " + ((file && file.generated) || "?")); }
+    else cx.log("enrich: battletech file HTTP " + r.status + " - BattleTech phase skipped");
+  } catch (e) { cx.log("enrich: battletech file fetch failed: " + msg(e)); }
+  if (cx.mem) cx.mem.bt = file;
+  return file;
+}
+
 async function kitsIndex(cx) {
   if (cx.mem && cx.mem.kits) return cx.mem.kits;
   let idx = indexKits(null);
@@ -906,6 +919,7 @@ const newRun = (day, now) => ({
   gunpla: { seen: 0, changed: 0, bandai: 0, titleOnly: 0, unknown: 0 },
   plamod: { seen: 0, matched: 0, photosAdded: 0, productsWithNew: 0, facts: 0, errors: 0 },
   w40k: { seen: 0, matched: 0, written: 0, cleared: 0 },
+  bt: { seen: 0, matched: 0, written: 0, cleared: 0 },
   gamesys: { seen: 0, tagged: 0, written: 0, cleared: 0 },
 });
 
@@ -928,7 +942,7 @@ async function finish(cx, run, error) {
   cx.log("enrich: run " + dateOf(run.day) + (error ? " FAILED: " + error : " finished") +
     " seen=" + run.seen + " written=" + run.written + " ok=" + run.ok +
     " ambiguous=" + run.ambiguous + " notfound=" + run.notfound +
-    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + (run.gamesys ? " gamesys=" + JSON.stringify(run.gamesys) : "") + " " + run.ms + "ms");
+    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + (run.bt ? " bt=" + JSON.stringify(run.bt) : "") + (run.gamesys ? " gamesys=" + JSON.stringify(run.gamesys) : "") + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
   refreshUnitsIndexLater(cx);   // and the Warhammer "units like this" one
@@ -1007,14 +1021,60 @@ export async function enrichTick(cx) {
     }
 
     if (!run.hasNext) {
-      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla" || run.phase === "plamod" || run.phase === "w40k") {
-        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : run.phase === "gunpla" ? "plamod" : run.phase === "plamod" ? "w40k" : "gamesys";
+      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla" || run.phase === "plamod" || run.phase === "w40k" || run.phase === "bt") {
+        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : run.phase === "gunpla" ? "plamod" : run.phase === "plamod" ? "w40k" : run.phase === "w40k" ? "bt" : "gamesys";
         run.cursor = null;
         run.hasNext = true;
         await st.put("en:run", run);
         continue;
       }
       return finish(cx, run, run.bggDown || null);
+    }
+
+    /* BattleTech box contents from Sarna + MegaMek (src/bt.js). */
+    if (run.phase === "bt") {
+      if (!run.bt) run.bt = { seen: 0, matched: 0, written: 0, cleared: 0 };
+      const file = await btFile(cx);
+      // no file, or one that lost most of its matches (a broken weekly run):
+      // leave every product as it is rather than clear their contents
+      if (!file || !file.products || (file.count || 0) < 10) {
+        if (file) cx.log("enrich: battletech file has only " + (file.count || 0) + " products - BattleTech phase skipped");
+        run.hasNext = false; await st.put("en:run", run); continue;
+      }
+      let r;
+      try { r = await adminGql(cx, BT_PAGE, { q: BT_QUERY, after: run.cursor }); }
+      catch (e) {
+        if (e && e.throttled) { run.throttled++; await st.put("en:run", run); return arm(cx, cx.now() + 1500, "throttled"); }
+        run.errors++; run.errStreak++; await st.put("en:run", run);
+        if (run.errStreak >= 5) return finish(cx, run, msg(e));
+        return arm(cx, cx.now() + 5000, "page error");
+      }
+      run.errStreak = 0;
+      run.pages++;
+      const page = parseBtPage(r.data);
+      run.cursor = page.cursor;
+      run.hasNext = page.hasNext;
+      const set = [], del = [];
+      for (const it of page.items) {
+        run.bt.seen++;
+        const plan = btPlan(it, file);
+        if (file.products[String(it.id).split("/").pop()]) run.bt.matched++;
+        if (plan.set.length) { run.bt.written++; set.push(...plan.set); }
+        if (plan.del.length) { run.bt.cleared++; del.push(...plan.del); }
+        if (plan.unset && plan.unset.length) del.push(...plan.unset);
+      }
+      if (set.length) {
+        try { run.written += await writeMetafields(cx, set); }
+        catch (e) { run.errors++; cx.log("enrich: battletech write failed: " + msg(e)); }
+      }
+      if (del.length) {
+        try { await deleteMetafields(cx, del); }
+        catch (e) { run.errors++; cx.log("enrich: battletech clear failed: " + msg(e)); }
+      }
+      await st.put("en:run", run);
+      const wait = throttleWait(r.cost, 30);
+      if (wait > 0) return arm(cx, cx.now() + wait, "throttle pacing");
+      continue;
     }
 
     /* Game system for the collection filter (src/gamesys.js): exor.game_system
@@ -1287,6 +1347,7 @@ function publicRun(run, now) {
     gunpla: run.gunpla || null,
     plamod: run.plamod || null,
     w40k: run.w40k || null,
+    bt: run.bt || null,
     gamesys: run.gamesys || null,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,

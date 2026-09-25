@@ -8,6 +8,7 @@ import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql } from "./price-history.js";
 import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
+import { serveBtTargets } from "./bt.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
@@ -315,6 +316,16 @@ export default {
         return r && r.data;
       };
       return serveW40kTargets(request, env, ctx, gql);
+    }
+
+    // BattleTech runner's work list: id + title of every active BattleTech
+    // product (src/bt.js, tools/battletech.py). Public storefront data only.
+    if (url.pathname === "/bt/targets.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return serveBtTargets(request, env, ctx, gql);
     }
 
     if (url.pathname === "/stores.json") {
