@@ -1,6 +1,6 @@
 {
 "source": "https://global.bandai-hobby.net/en-us/",
-"generated": "2026-09-25T20:51:06Z",
+"generated": "2026-09-25T21:09:12Z",
 "count": 1616,
 "kits": {
 "01_1019": {
@@ -8,6 +8,7 @@
 "price_yen": 5200,
 "launch": "2017-06",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1019/"
 },
 "01_1037": {
@@ -15,6 +16,7 @@
 "price_yen": 500,
 "launch": "2017-06-24",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1037/"
 },
 "01_1038": {
@@ -22,6 +24,7 @@
 "price_yen": 500,
 "launch": "2017-06-24",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1038/"
 },
 "01_104": {
@@ -29,6 +32,7 @@
 "price_yen": 600,
 "launch": "2014-05",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_104/"
 },
 "01_1043": {
@@ -36,6 +40,7 @@
 "price_yen": 1700,
 "launch": "2017-07",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -49,6 +54,7 @@
 "price_yen": 2000,
 "launch": "2017-07-08",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1053/"
 },
 "01_106": {
@@ -56,6 +62,7 @@
 "price_yen": 600,
 "launch": "2014-05-10",
 "age": 15,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -66,6 +73,18 @@
 "price_yen": 900,
 "launch": "2017-07-08",
 "age": 6,
+"info": {
+"intro": "The Pokemon Plastic Model Collection Select series is now available with a full PIKACHU full of action!",
+"features": [
+"The movement of ears, neck, hands, tail, and legs has been greatly improved!",
+"Various poses such as cute sitting poses and impressive Z-move poses in the play can be reproduced!",
+"Two types of facial expression parts are also included: a motivated expression and a cute smiling expression."
+],
+"includes": [
+"Facial Expression Parts × 2"
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -76,6 +95,7 @@
 "price_yen": 2200,
 "launch": "2017-07",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -88,6 +108,7 @@
 "name": "MG 1/100 OO XN RAISER",
 "price_yen": 8000,
 "launch": "2017-07",
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -100,6 +121,7 @@
 "price_yen": 1400,
 "launch": "2017-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -110,6 +132,7 @@
 "price_yen": 1000,
 "launch": "2017-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "petitgguy"
 ],
@@ -120,6 +143,7 @@
 "price_yen": 1000,
 "launch": "2017-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "petitgguy"
 ],
@@ -130,6 +154,7 @@
 "price_yen": 4800,
 "launch": "2017-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -140,6 +165,7 @@
 "price_yen": 4100,
 "launch": "2017-08-05",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1085/"
 },
 "01_1115": {
@@ -147,6 +173,7 @@
 "price_yen": 2000,
 "launch": "2017-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -160,6 +187,7 @@
 "price_yen": 500,
 "launch": "2017-10-14",
 "age": 8,
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -170,6 +198,7 @@
 "price_yen": 3500,
 "launch": "2017-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -182,6 +211,7 @@
 "price_yen": 3400,
 "launch": "2001-07",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -192,6 +222,7 @@
 "price_yen": 600,
 "launch": "2017-12-16",
 "age": 8,
+"iv": 1,
 "brands": [
 "actionbase_c"
 ],
@@ -202,6 +233,7 @@
 "price_yen": 600,
 "launch": "2017-12-16",
 "age": 8,
+"iv": 1,
 "brands": [
 "actionbase_c"
 ],
@@ -212,6 +244,7 @@
 "price_yen": 500,
 "launch": "2017-12-16",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1174/"
 },
 "01_1175": {
@@ -219,6 +252,7 @@
 "price_yen": 500,
 "launch": "2017-12-16",
 "age": 8,
+"iv": 1,
 "brands": [
 "actionbase_c"
 ],
@@ -229,6 +263,15 @@
 "price_yen": 18000,
 "launch": "2017-12-02",
 "age": 15,
+"info": {
+"features": [
+"The \"PG GUNDAM Exia\" standard version is also available! ■ Under the supervision of mechanical designer Kanetake Ebikawa, we focused on the solar reactor \"GN Drive\", which is the biggest feature, and thoroughly examined the mechanism by whi"
+],
+"includes": [
+"【Product details】 ■ Molded products × 40 ■ Marking sticker × 1 ■ Metallic seal × 1 ■ Silicone sheet × 2 ■ Instruction manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "pg"
 ],
@@ -239,6 +282,7 @@
 "price_yen": 3300,
 "launch": "2018-02",
 "age": 8,
+"iv": 1,
 "brands": [
 "hguc",
 "pb_gunpla",
@@ -251,6 +295,7 @@
 "price_yen": 600,
 "launch": "2018-01-27",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1245/"
 },
 "01_1248": {
@@ -258,6 +303,7 @@
 "price_yen": 3900,
 "launch": "2017-12-27",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -268,6 +314,7 @@
 "price_yen": 23000,
 "launch": "2018-02",
 "age": 15,
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_pg",
@@ -280,6 +327,15 @@
 "price_yen": 4300,
 "launch": "2018-02-17",
 "age": 15,
+"info": {
+"features": [
+"On 1/144, the black lion \"RG Unicorn GUNDAM No. 2 Banshee Norn\" equipped with a transformation gimmick is finally here! ■ The dark blue coloring is reproduced in three molding colors, and the characteristic head antenna is selectable and co"
+],
+"includes": [
+"【Product details】 ■Molded products × 20 ■ Realistic Decal × 1 ■ Instruction manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -290,6 +346,7 @@
 "price_yen": 900,
 "launch": "2018-03-24",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1275/"
 },
 "01_1282": {
@@ -297,6 +354,7 @@
 "price_yen": 7000,
 "launch": "2018-02",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -309,6 +367,7 @@
 "price_yen": 5600,
 "launch": "2018-03-10",
 "age": 15,
+"iv": 1,
 "brands": [
 "mgka"
 ],
@@ -319,6 +378,7 @@
 "price_yen": 2800,
 "launch": "2018-04-28",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1299/"
 },
 "01_1308": {
@@ -326,6 +386,7 @@
 "price_yen": 1200,
 "launch": "2018-05-11",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1308/"
 },
 "01_133": {
@@ -333,6 +394,15 @@
 "price_yen": 1100,
 "launch": "2014-06-28",
 "age": 6,
+"info": {
+"intro": "\"Mega LUCARIO\" is now available in the \"Pokepla\" Select series, which can be made without the use of glue or tools!",
+"features": [
+"Ball joints are used for some of the joints to greatly increase the range of motion.",
+"The arms can be moved forward and backward, up and down. The neck and legs move a lot.",
+"Comes with an action pedestal with a ball joint. Dynamic poses such as jumping and glow punches are possible."
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -343,6 +413,7 @@
 "price_yen": 2300,
 "launch": "2018-04",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -356,6 +427,7 @@
 "price_yen": 4400,
 "launch": "2018-05-19",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1349/"
 },
 "01_1382": {
@@ -363,6 +435,7 @@
 "price_yen": 4500,
 "launch": "2018-06",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -374,6 +447,7 @@
 "name": "HG 1/144 GUNDAM TR-6 [WONDWORT]",
 "price_yen": 1800,
 "launch": "2018-06",
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -387,6 +461,7 @@
 "price_yen": 2900,
 "launch": "2001-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -397,6 +472,7 @@
 "price_yen": 4400,
 "launch": "2018-07-14",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -407,6 +483,7 @@
 "price_yen": 1800,
 "launch": "2018-07-28",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -417,6 +494,7 @@
 "price_yen": 3000,
 "launch": "2018-07-28",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1403/"
 },
 "01_1405": {
@@ -424,6 +502,7 @@
 "price_yen": 1100,
 "launch": "2018-07-28",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1405/"
 },
 "01_1406": {
@@ -431,6 +510,7 @@
 "price_yen": 1400,
 "launch": "2018-07-28",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1406/"
 },
 "01_1408": {
@@ -438,6 +518,7 @@
 "price_yen": 4800,
 "launch": "2018-08-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -448,6 +529,7 @@
 "price_yen": 2600,
 "launch": "2014-07-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -459,6 +541,7 @@
 "price_yen": 700,
 "launch": "2014-07-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -469,6 +552,7 @@
 "price_yen": 6700,
 "launch": "2018-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -481,6 +565,7 @@
 "price_yen": 700,
 "launch": "2014-07",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_145/"
 },
 "01_146": {
@@ -488,6 +573,7 @@
 "price_yen": 2600,
 "launch": "2014-07-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -499,6 +585,7 @@
 "price_yen": 12800,
 "launch": "2010-08-07",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -509,6 +596,7 @@
 "price_yen": 1000,
 "launch": "1992-04",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1488/"
 },
 "01_1494": {
@@ -516,6 +604,7 @@
 "price_yen": 1000,
 "launch": "1992-07",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1494/"
 },
 "01_15": {
@@ -523,6 +612,7 @@
 "price_yen": 9400,
 "launch": "2013-12-14",
 "age": 15,
+"iv": 1,
 "brands": [
 "mgka"
 ],
@@ -533,6 +623,19 @@
 "price_yen": 1100,
 "launch": "2014-07-19",
 "age": 6,
+"info": {
+"intro": "Mega CHARIZARD X is now available in Pokepla.",
+"features": [
+"Raising its tail to intimidate, looking up at the sky and roaring. Let's play with cool poses.",
+"You can also pose flying in the sky with the included pedestal."
+],
+"includes": [
+"Molded Parts × 3",
+"Foil Seal × 1",
+"Assembly Instruction Manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -543,6 +646,7 @@
 "price_yen": 2800,
 "launch": "2014-07-19",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -553,6 +657,7 @@
 "price_yen": 2000,
 "launch": "2013-12-14",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -563,6 +668,7 @@
 "price_yen": 1900,
 "launch": "2014-07-26",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -573,6 +679,7 @@
 "price_yen": 1800,
 "launch": "1999-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -584,6 +691,7 @@
 "price_yen": 1000,
 "launch": "1999-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -595,6 +703,7 @@
 "price_yen": 1100,
 "launch": "2003-07",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -606,6 +715,7 @@
 "price_yen": 1800,
 "launch": "2007-03",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -617,6 +727,7 @@
 "price_yen": 4500,
 "launch": "2007-03",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -627,6 +738,7 @@
 "price_yen": 3900,
 "launch": "2007-05",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -637,6 +749,7 @@
 "price_yen": 2700,
 "launch": "2007-07",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1658/"
 },
 "01_1663": {
@@ -644,6 +757,7 @@
 "price_yen": 4400,
 "launch": "2007-08",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1663/"
 },
 "01_1667": {
@@ -651,6 +765,7 @@
 "price_yen": 5200,
 "launch": "2007-10",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1667/"
 },
 "01_1668": {
@@ -658,6 +773,10 @@
 "price_yen": 7000,
 "launch": "2007-10",
 "age": 15,
+"info": {
+"intro": "MG Destiny GUNDAM now has an \"Extreme Blast Mode\" with effect parts that recreate scenes from the play. The most impressive light wings are specially processed PET material to reproduce even complex light. Palma Fiokina and beam boomerang throwing scenes released from the palm of the hand can also be reproduced with the included effect parts."
+},
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -668,6 +787,7 @@
 "price_yen": 1400,
 "launch": "2008-05",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1680/"
 },
 "01_1681": {
@@ -675,6 +795,7 @@
 "price_yen": 4900,
 "launch": "2008-05",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -685,6 +806,7 @@
 "price_yen": 3000,
 "launch": "2008-06",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -696,6 +818,7 @@
 "price_yen": 5400,
 "launch": "2008-10",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1688/"
 },
 "01_1695": {
@@ -703,6 +826,7 @@
 "price_yen": 8000,
 "launch": "2009-03",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -713,6 +837,7 @@
 "price_yen": 4900,
 "launch": "2009-04",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -723,6 +848,20 @@
 "price_yen": 1100,
 "launch": "2014-08-09",
 "age": 6,
+"info": {
+"intro": "Mega Bashamo, who made an impressive appearance in the anime \"Pokémon XY\", appeared.",
+"features": [
+"Powerful battle poses such as blaze kicks and fighting poses are coolly decided.",
+"The mellow feeling of the flame is produced with a foil seal.",
+"Comes with a pedestal that can be angled."
+],
+"includes": [
+"Molded Parts × 3",
+"Foil Seal × 1",
+"Assembly Instruction Manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -733,6 +872,7 @@
 "price_yen": 4200,
 "launch": "2009-05",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1701/"
 },
 "01_172": {
@@ -740,6 +880,7 @@
 "price_yen": 3000,
 "launch": "2014-08-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -751,6 +892,7 @@
 "price_yen": 1800,
 "launch": "2014-08-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -761,6 +903,7 @@
 "price_yen": 5400,
 "launch": "2010-02-20",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -771,6 +914,7 @@
 "price_yen": 2500,
 "launch": "2002-05",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -781,6 +925,7 @@
 "price_yen": 2000,
 "launch": "2010-04-15",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -791,6 +936,7 @@
 "price_yen": 4400,
 "launch": "2010-04-28",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1751/"
 },
 "01_1763": {
@@ -798,6 +944,7 @@
 "price_yen": 1400,
 "launch": "2010-08-21",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1763/"
 },
 "01_1764": {
@@ -805,6 +952,7 @@
 "price_yen": 1600,
 "launch": "2010-09-11",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1764/"
 },
 "01_1771": {
@@ -812,6 +960,7 @@
 "price_yen": 1800,
 "launch": "2010-11-06",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -823,6 +972,7 @@
 "price_yen": 1800,
 "launch": "2011-01-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -833,6 +983,7 @@
 "price_yen": 4900,
 "launch": "2011-02-26",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -843,6 +994,7 @@
 "price_yen": 4200,
 "launch": "2011-03-26",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1776/"
 },
 "01_1777": {
@@ -850,6 +1002,7 @@
 "price_yen": 3900,
 "launch": "2011-03-26",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1777/"
 },
 "01_1779": {
@@ -857,6 +1010,7 @@
 "price_yen": 5200,
 "launch": "2011-06-25",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -867,6 +1021,7 @@
 "price_yen": 4200,
 "launch": "2011-10-29",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -877,6 +1032,7 @@
 "price_yen": 4200,
 "launch": "2012-01-28",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -887,6 +1043,7 @@
 "price_yen": 4600,
 "launch": "2012-02-18",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -897,6 +1054,7 @@
 "price_yen": 4000,
 "launch": "2012-09-22",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -907,6 +1065,7 @@
 "price_yen": 4800,
 "launch": "2012-10-27",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -917,6 +1076,7 @@
 "price_yen": 4600,
 "launch": "2012-11-17",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -927,6 +1087,7 @@
 "price_yen": 7400,
 "launch": "2012-12-15",
 "age": 15,
+"iv": 1,
 "brands": [
 "mgka"
 ],
@@ -937,6 +1098,7 @@
 "price_yen": 2600,
 "launch": "2007-10-20",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -948,6 +1110,7 @@
 "price_yen": 2200,
 "launch": "2008-11-15",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -959,6 +1122,7 @@
 "price_yen": 3400,
 "launch": "2018-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -971,6 +1135,7 @@
 "price_yen": 7400,
 "launch": "2014-08-30",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_183/"
 },
 "01_1836": {
@@ -978,6 +1143,7 @@
 "price_yen": 500,
 "launch": "2005-12-23",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1836/"
 },
 "01_1848": {
@@ -985,6 +1151,7 @@
 "price_yen": 500,
 "launch": "2007-07-28",
 "age": 8,
+"iv": 1,
 "brands": [
 "gundam_decal",
 "hguc"
@@ -996,6 +1163,7 @@
 "price_yen": 500,
 "launch": "2007-07-28",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1849/"
 },
 "01_1850": {
@@ -1003,6 +1171,7 @@
 "price_yen": 500,
 "launch": "2007-07-28",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1850/"
 },
 "01_1855": {
@@ -1010,6 +1179,7 @@
 "price_yen": 500,
 "launch": "2008-03-26",
 "age": 8,
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -1020,6 +1190,7 @@
 "price_yen": 500,
 "launch": "2008-03-26",
 "age": 8,
+"iv": 1,
 "brands": [
 "gundam_decal",
 "hg"
@@ -1031,6 +1202,7 @@
 "price_yen": 500,
 "launch": "2008-08-23",
 "age": 8,
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -1041,6 +1213,7 @@
 "price_yen": 500,
 "launch": "2008-08-23",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1863/"
 },
 "01_1865": {
@@ -1048,6 +1221,7 @@
 "price_yen": 1200,
 "launch": "2002-07",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1059,6 +1233,7 @@
 "price_yen": 6400,
 "launch": "2002-07",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1877/"
 },
 "01_1883": {
@@ -1066,6 +1241,7 @@
 "price_yen": 5900,
 "launch": "2018-09-15",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -1076,6 +1252,10 @@
 "price_yen": 1700,
 "launch": "2018-09",
 "age": 8,
+"info": {
+"intro": "\"Solomon's White Wolf\" Gelgoog J (Jaeger) - From \"MOBILE SUIT GUNDAM MSV-R\", Shin Matsunaga's exclusive Gelgugu J Appeared in the HG series! The characteristic aircraft color called \"White Wolf\" is reproduced with molding color, Various wea"
+},
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -1089,6 +1269,7 @@
 "price_yen": 2500,
 "launch": "2018-06",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1099,6 +1280,7 @@
 "price_yen": 2200,
 "launch": "2018-06",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1901/"
 },
 "01_191": {
@@ -1106,6 +1288,7 @@
 "price_yen": 2000,
 "launch": "2014-09-20",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1116,6 +1299,7 @@
 "price_yen": 3100,
 "launch": "2017-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -1126,6 +1310,7 @@
 "price_yen": 5100,
 "launch": "2017-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -1136,6 +1321,7 @@
 "price_yen": 550,
 "launch": "2017-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "actionbase_c"
 ],
@@ -1146,6 +1332,7 @@
 "price_yen": 450,
 "launch": "2017-08",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1915/"
 },
 "01_1919": {
@@ -1153,6 +1340,7 @@
 "price_yen": 4000,
 "launch": "2017-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -1163,6 +1351,7 @@
 "price_yen": 10500,
 "launch": "2017-09",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1925/"
 },
 "01_1927": {
@@ -1170,6 +1359,7 @@
 "price_yen": 7100,
 "launch": "2017-09",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1927/"
 },
 "01_1930": {
@@ -1177,6 +1367,7 @@
 "price_yen": 2200,
 "launch": "2017-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1186,6 +1377,10 @@
 "name": "MEGA SIZE MODEL 1/48 THE GUNDAM BASE LIMITED RX-0 UNICORN GUNDAM Ver. TWC",
 "launch": "2017-12",
 "age": 8,
+"info": {
+"intro": "For GUNPLA fans around the world, this is a limited edition GUNPLA at the official GUNPLA complex \"GUNDAM Base\". Powerful big size! A mega-size model Unicorn GUNDAM Ver.TWC that reproduces a life-size unicorn statue is now available. Faithfully reproduce the shape of the backpack and left and right hand parts."
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1933/"
 },
 "01_1935": {
@@ -1193,6 +1388,7 @@
 "price_yen": 500,
 "launch": "2017-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "petitgguy"
 ],
@@ -1203,6 +1399,7 @@
 "price_yen": 2400,
 "launch": "2018-01",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1213,6 +1410,7 @@
 "price_yen": 3400,
 "launch": "2018-02",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1223,6 +1421,7 @@
 "price_yen": 700,
 "launch": "2018-04",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1939/"
 },
 "01_1940": {
@@ -1230,6 +1429,7 @@
 "price_yen": 600,
 "launch": "2018-04",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1940/"
 },
 "01_1961": {
@@ -1237,6 +1437,7 @@
 "price_yen": 1400,
 "launch": "2017-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1247,6 +1448,7 @@
 "price_yen": 1000,
 "launch": "2018-11-30",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1984/"
 },
 "01_1991": {
@@ -1254,6 +1456,7 @@
 "price_yen": 1200,
 "launch": "2002-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1265,6 +1468,7 @@
 "price_yen": 18400,
 "launch": "2018-07",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1997/"
 },
 "01_1998": {
@@ -1272,6 +1476,7 @@
 "price_yen": 500,
 "launch": "2018-07",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_1998/"
 },
 "01_2003": {
@@ -1279,6 +1484,7 @@
 "price_yen": 500,
 "launch": "2018-07",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2003/"
 },
 "01_2008": {
@@ -1286,6 +1492,7 @@
 "price_yen": 3800,
 "launch": "2018-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1297,6 +1504,7 @@
 "price_yen": 13000,
 "launch": "2018-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -1309,6 +1517,16 @@
 "price_yen": 5700,
 "launch": "2018-12-22",
 "age": 15,
+"info": {
+"intro": "The final battle specification unicorn GUNDAM that appears in \"MOBILE SUIT GUNDAM Unicorn\" is now available in the largest volume of the RG series!",
+"features": [
+"Various weapons of RG Full Armor Unicorn GUNDAM including new modeling are included. The shield merges with the Beam Gatling Gun. It is designed with special joint parts in mind for ease of installation on the MS body. ■ Comes with a Hyper "
+],
+"includes": [
+"【Product details】 ■ Molded products × 24 ■ Realistic Decal × 1 ■ Instruction manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -1319,6 +1537,13 @@
 "price_yen": 900,
 "launch": "2018-12-22",
 "age": 6,
+"info": {
+"intro": "TV anime, movies, Twitter, and other popular EEVEE are now available in select series!",
+"includes": [
+"Facial Expression Parts × 2 (Normal, Smile)"
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -1329,6 +1554,7 @@
 "price_yen": 4400,
 "launch": "2018-11",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2041/"
 },
 "01_2042": {
@@ -1336,6 +1562,7 @@
 "price_yen": 1200,
 "launch": "2018-10",
 "age": 8,
+"iv": 1,
 "brands": [
 "sdcs"
 ],
@@ -1346,6 +1573,7 @@
 "price_yen": 6200,
 "launch": "2018-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -1358,6 +1586,7 @@
 "price_yen": 500,
 "launch": "2018-09",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2071/"
 },
 "01_2087": {
@@ -1365,6 +1594,7 @@
 "price_yen": 3000,
 "launch": "2019-01-26",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2087/"
 },
 "01_2089": {
@@ -1372,6 +1602,7 @@
 "price_yen": 600,
 "launch": "2019-01-26",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2089/"
 },
 "01_209": {
@@ -1379,6 +1610,7 @@
 "price_yen": 2000,
 "launch": "2014-11-15",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1390,6 +1622,7 @@
 "price_yen": 900,
 "launch": "2019-02-23",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2095/"
 },
 "01_210": {
@@ -1397,6 +1630,7 @@
 "price_yen": 2000,
 "launch": "2014-11-15",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1407,6 +1641,10 @@
 "price_yen": 1100,
 "launch": "2007-05",
 "age": 8,
+"info": {
+"intro": "A new version in Kerorororobo! \"Kerororobo Mk-II\" is here! It can be transformed into a flight form \"Kero Jet\". Each joint is movable for a variety of poses. The attached Keroro Sergeant rides the Saucer, and the Saucer can be combined with the Robo body as a cockpit. Weapons come with a rifle and shield."
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2105/"
 },
 "01_2107": {
@@ -1414,6 +1652,10 @@
 "price_yen": 1100,
 "launch": "2007-08",
 "age": 8,
+"info": {
+"intro": "From the popular Robo series, \"Kururu Robo Mk-II\" is launched! ! Transform into a crurule ball form! Sergeant Kururu, who gets into the robot, also has movable limbs. Sergeant Kururu can be placed on a saucer that can also be used as Robo's cockpit."
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2107/"
 },
 "01_2108": {
@@ -1421,6 +1663,10 @@
 "price_yen": 1100,
 "launch": "2007-09",
 "age": 8,
+"info": {
+"intro": "Full of full-body weapons such as cannons and missiles, \"Girororo Robo Mk-II\" appeared. Transforms from Robo form to tank form. Corporal Giroro, who gets into the robot, also has movable limbs. Corporal Giroro can be placed on a saucer that can also be used as Robo's cockpit."
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2108/"
 },
 "01_2109": {
@@ -1428,6 +1674,10 @@
 "price_yen": 1100,
 "launch": "2007-10",
 "age": 8,
+"info": {
+"intro": "Finally, the fifth Mk-II robot \"Dorororobo Mk-II\" appeared. Transformed from Robo form to drill machine form. Sergeant Dororo, who gets into the robot, also has movable limbs. Sergeant Dororo can be placed on a saucer that can also be used as Robo's cockpit. Weapons come with a Dororo sword and a shield."
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2109/"
 },
 "01_2113": {
@@ -1435,6 +1685,7 @@
 "price_yen": 600,
 "launch": "2018-11",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2113/"
 },
 "01_2126": {
@@ -1442,6 +1693,7 @@
 "price_yen": 2200,
 "launch": "2002-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1453,6 +1705,16 @@
 "price_yen": 4500,
 "launch": "2019-03-22",
 "age": 15,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM 00\" GUNDAM Dynames finally appears in MG in a completely new model!",
+"features": [
+"The stand of the GN sniper rifle can be unfolded, and the \"sniping\" stance with the main body face down on the ground can also be reproduced. ■ The head gimmick that corresponds to the movement of the snipe pose and the leg joint structure "
+],
+"includes": [
+"【Product details】 ■ Molded products × 17 ■ Foil seal × 1 ■ Marking sticker × 1 ■ PP Sheet × 1 ■ Instruction manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -1463,6 +1725,20 @@
 "price_yen": 1100,
 "launch": "2014-11-15",
 "age": 6,
+"info": {
+"intro": "Mega CHARIZARD Y, where CHARIZARD is a mega sinka, appears.",
+"features": [
+"The mouth, neck, arms, legs, tail, and wings can be moved, allowing for dynamic posing.",
+"The left and right wings flap in conjunction with each other. The flame is clear red and foil seal to create a mellow feel.",
+"A pedestal that can be decorated with a flying pose is included."
+],
+"includes": [
+"Molded Parts × 3",
+"Foil Seal × 1",
+"Assembly Instruction Manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -1473,6 +1749,7 @@
 "price_yen": 3400,
 "launch": "2018-12-08",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2142/"
 },
 "01_2143": {
@@ -1480,6 +1757,7 @@
 "price_yen": 7400,
 "launch": "2019-02",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -1492,6 +1770,7 @@
 "price_yen": 2200,
 "launch": "2019-02",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1503,6 +1782,7 @@
 "price_yen": 1300,
 "launch": "2011-09-23",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2169/"
 },
 "01_2177": {
@@ -1510,6 +1790,7 @@
 "price_yen": 1400,
 "launch": "2019-04-20",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1520,6 +1801,7 @@
 "price_yen": 2200,
 "launch": "2017-11",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2188/"
 },
 "01_2199": {
@@ -1527,6 +1809,7 @@
 "price_yen": 1500,
 "launch": "2019-04",
 "age": 15,
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_rg",
@@ -1539,6 +1822,7 @@
 "price_yen": 800,
 "launch": "2021-01",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2200/"
 },
 "01_2201": {
@@ -1546,6 +1830,7 @@
 "price_yen": 800,
 "launch": "2021-01",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2201/"
 },
 "01_2202": {
@@ -1553,6 +1838,7 @@
 "price_yen": 800,
 "launch": "2021-01",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2202/"
 },
 "01_2203": {
@@ -1560,6 +1846,7 @@
 "price_yen": 1000,
 "launch": "2021-01",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2203/"
 },
 "01_2205": {
@@ -1567,6 +1854,7 @@
 "price_yen": 700,
 "launch": "2021-01",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2205/"
 },
 "01_2206": {
@@ -1574,6 +1862,7 @@
 "price_yen": 800,
 "launch": "2021-01",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2206/"
 },
 "01_2224": {
@@ -1581,6 +1870,7 @@
 "price_yen": 2800,
 "launch": "2011-07-23",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -1591,6 +1881,7 @@
 "price_yen": 2800,
 "launch": "2010-11-27",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -1601,6 +1892,7 @@
 "price_yen": 400,
 "launch": "2019-06-29",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -1611,6 +1903,7 @@
 "price_yen": 400,
 "launch": "2019-06-29",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2238/"
 },
 "01_2240": {
@@ -1618,6 +1911,7 @@
 "price_yen": 600,
 "launch": "2019-06-29",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2240/"
 },
 "01_2241": {
@@ -1625,6 +1919,7 @@
 "price_yen": 1380,
 "launch": "2019-07-27",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -1635,6 +1930,7 @@
 "price_yen": 400,
 "launch": "2019-07-27",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -1645,6 +1941,7 @@
 "price_yen": 400,
 "launch": "2019-07-27",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2246/"
 },
 "01_226": {
@@ -1652,6 +1949,7 @@
 "price_yen": 4800,
 "launch": "2014-11-22",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -1662,6 +1960,7 @@
 "price_yen": 1000,
 "launch": "2019-04-20",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2283/"
 },
 "01_229": {
@@ -1669,6 +1968,7 @@
 "price_yen": 600,
 "launch": "2014-11-29",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_229/"
 },
 "01_23": {
@@ -1676,6 +1976,7 @@
 "price_yen": 1400,
 "launch": "2013-12-21",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1687,6 +1988,7 @@
 "price_yen": 700,
 "launch": "2014-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -1697,6 +1999,7 @@
 "price_yen": 2500,
 "launch": "2019-04-06",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -1707,6 +2010,7 @@
 "price_yen": 1200,
 "launch": "2021-02",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2310/"
 },
 "01_2312": {
@@ -1714,6 +2018,7 @@
 "price_yen": 1600,
 "launch": "2021-02",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2312/"
 },
 "01_2313": {
@@ -1721,6 +2026,7 @@
 "price_yen": 800,
 "launch": "2021-02",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2313/"
 },
 "01_2314": {
@@ -1728,6 +2034,7 @@
 "price_yen": 900,
 "launch": "2021-03",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2314/"
 },
 "01_2315": {
@@ -1735,6 +2042,7 @@
 "price_yen": 900,
 "launch": "2021-03",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2315/"
 },
 "01_2326": {
@@ -1742,6 +2050,7 @@
 "price_yen": 5000,
 "launch": "2019-05-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -1752,6 +2061,7 @@
 "price_yen": 4000,
 "launch": "2019-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -1764,6 +2074,7 @@
 "price_yen": 3400,
 "launch": "2019-07-13",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2338/"
 },
 "01_2357": {
@@ -1771,6 +2082,7 @@
 "price_yen": 600,
 "launch": "2019-06-15",
 "age": 8,
+"iv": 1,
 "brands": [
 "actionbase_c"
 ],
@@ -1781,6 +2093,7 @@
 "price_yen": 600,
 "launch": "2019-06-15",
 "age": 8,
+"iv": 1,
 "brands": [
 "actionbase_c"
 ],
@@ -1791,6 +2104,7 @@
 "price_yen": 3100,
 "launch": "2019-07",
 "age": 15,
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_rg",
@@ -1803,6 +2117,7 @@
 "price_yen": 22000,
 "launch": "2014-12-13",
 "age": 15,
+"iv": 1,
 "brands": [
 "pg"
 ],
@@ -1813,6 +2128,7 @@
 "price_yen": 3000,
 "launch": "2019-08-24",
 "age": 15,
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -1823,6 +2139,7 @@
 "price_yen": 400,
 "launch": "2019-08-10",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -1833,6 +2150,7 @@
 "price_yen": 700,
 "launch": "2019-09-14",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -1843,6 +2161,7 @@
 "price_yen": 4300,
 "launch": "2019-09-28",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -1853,6 +2172,7 @@
 "price_yen": 3000,
 "launch": "2019-09-07",
 "age": 15,
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -1863,6 +2183,7 @@
 "price_yen": 2400,
 "launch": "2017-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1873,6 +2194,7 @@
 "price_yen": 1500,
 "launch": "2019-07-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1883,6 +2205,7 @@
 "price_yen": 12800,
 "launch": "2019-07-20",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -1893,6 +2216,7 @@
 "price_yen": 700,
 "launch": "2019-07-20",
 "age": 8,
+"iv": 1,
 "brands": [
 "actionbase_c"
 ],
@@ -1903,6 +2227,7 @@
 "price_yen": 5500,
 "launch": "2019-10",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -1915,6 +2240,7 @@
 "price_yen": 1380,
 "launch": "2019-10-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -1925,6 +2251,7 @@
 "price_yen": 3000,
 "launch": "2019-10-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -1935,6 +2262,7 @@
 "price_yen": 1000,
 "launch": "2019-08-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "sdcs"
 ],
@@ -1945,6 +2273,7 @@
 "price_yen": 1400,
 "launch": "2019-11-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -1955,6 +2284,7 @@
 "price_yen": 2800,
 "launch": "2014-12-26",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_251/"
 },
 "01_2512": {
@@ -1962,6 +2292,28 @@
 "price_yen": 2200,
 "launch": "2019-06-29",
 "age": 15,
+"info": {
+"intro": "Figure-rise Standard KID BUU returns with renewed packaging!!",
+"features": [
+"The existence of evil itself, with no self-control at all, KID BUU is now available in the long-awaited Figure-rise Standard!",
+"Massive body modeling that makes you feel the overwhelming power condensed in a small body.",
+"The face parts that reproduce the various facial expressions of KID BUU come with two types: normal and evil! Fine changes in the eyes and mouth, and the vicious expression are skillfully modeled, and the high quality perfection!",
+"Facial expression formation technology by assembling parts reproduces the red eyes that shine in the jet black without printing misalignment!",
+"Huge qi bullet effects of qigong waves and burnishing balls are also included. Combined with the simultaneous release of Figure-rise Standard Super Saiyan 3 Son Goku, you can recreate the impressive last battle of DRAGON BALL Z!",
+"Figure-rise Standard Collect the \"DRAGON BALL\" series and recreate the overwhelming battle scene!"
+],
+"includes": [
+"Face (Alternate Expression: Evil) ×1",
+"Wrist [Vanishing Ball] (left and right) × 1 each",
+"Vanishing Ball Effect ×1",
+"Qigong Wave Effect×1",
+"【Product details】",
+"Molded product ×4",
+"Seal × 1",
+"Assembly Instruction ×1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -1972,6 +2324,7 @@
 "price_yen": 4000,
 "launch": "2019-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "re100"
@@ -1983,6 +2336,7 @@
 "price_yen": 3400,
 "launch": "2019-10-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -1994,6 +2348,7 @@
 "price_yen": 25000,
 "launch": "2020-02-22",
 "age": 15,
+"iv": 1,
 "brands": [
 "pg"
 ],
@@ -2004,6 +2359,7 @@
 "price_yen": 500,
 "launch": "2020-02-29",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2588/"
 },
 "01_2612": {
@@ -2011,6 +2367,7 @@
 "price_yen": 12300,
 "launch": "2020-02",
 "age": 15,
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_rg",
@@ -2023,6 +2380,7 @@
 "price_yen": 2500,
 "launch": "2019-10-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -2033,6 +2391,7 @@
 "price_yen": 1900,
 "launch": "2020-03-14",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2043,6 +2402,7 @@
 "price_yen": 3200,
 "launch": "2020-03-21",
 "age": 15,
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -2053,6 +2413,7 @@
 "price_yen": 1500,
 "launch": "2003-06",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -2064,6 +2425,7 @@
 "price_yen": 2000,
 "launch": "2019-11-01",
 "age": 8,
+"iv": 1,
 "brands": [
 "bb"
 ],
@@ -2074,6 +2436,7 @@
 "price_yen": 3900,
 "launch": "2019-11-30",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2648/"
 },
 "01_2649": {
@@ -2081,6 +2444,7 @@
 "price_yen": 5000,
 "launch": "2019-11-23",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -2091,6 +2455,7 @@
 "price_yen": 3400,
 "launch": "2019-12-20",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2101,6 +2466,7 @@
 "price_yen": 3900,
 "launch": "2003-06",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -2111,6 +2477,7 @@
 "price_yen": 6500,
 "launch": "2010-07-01",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -2121,6 +2488,7 @@
 "price_yen": 2000,
 "launch": "2015-02-07",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2131,6 +2499,7 @@
 "price_yen": 9800,
 "launch": "2020-01-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -2141,6 +2510,13 @@
 "price_yen": 2500,
 "launch": "2020-03-14",
 "age": 8,
+"info": {
+"intro": "The Origin version of RX-78-02 GUNDAM from \"MOBILE SUIT GUNDAM THE ORIGIN\" is now available in the HG lineup!",
+"features": [
+"Parts configuration that can be reproduced in color just by assembling, the latest format of the HG series, etc., items suitable for the beginning of the 40th anniversary of GUNPLA. ■ With a parts selection type, you can enjoy both the earl"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2151,6 +2527,7 @@
 "price_yen": 400,
 "launch": "2020-04-25",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2161,6 +2538,7 @@
 "price_yen": 550,
 "launch": "2020-05-16",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -2172,6 +2550,7 @@
 "price_yen": 400,
 "launch": "2020-05-16",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -2183,6 +2562,7 @@
 "price_yen": 700,
 "launch": "2020-04-11",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2723/"
 },
 "01_2734": {
@@ -2190,6 +2570,7 @@
 "price_yen": 8900,
 "launch": "2020-02-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -2200,6 +2581,7 @@
 "price_yen": 1200,
 "launch": "2003-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -2211,6 +2593,7 @@
 "price_yen": 2000,
 "launch": "2020-06-06",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2221,6 +2604,7 @@
 "price_yen": 1500,
 "launch": "2015-02-28",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_277/"
 },
 "01_2781": {
@@ -2228,6 +2612,7 @@
 "price_yen": 400,
 "launch": "2020-05-30",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2238,6 +2623,7 @@
 "price_yen": 780,
 "launch": "2020-05-30",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2248,6 +2634,7 @@
 "price_yen": 780,
 "launch": "2020-05-30",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2258,6 +2645,7 @@
 "price_yen": 1600,
 "launch": "2020-07-31",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2268,6 +2656,7 @@
 "price_yen": 800,
 "launch": "2020-07-18",
 "age": 3,
+"iv": 1,
 "brands": [
 "entry_grade"
 ],
@@ -2278,6 +2667,7 @@
 "price_yen": 1000,
 "launch": "2020-08-08",
 "age": 3,
+"iv": 1,
 "brands": [
 "entry_grade"
 ],
@@ -2288,6 +2678,7 @@
 "price_yen": 500,
 "launch": "2020-07-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2298,6 +2689,7 @@
 "price_yen": 780,
 "launch": "2020-07-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2308,6 +2700,7 @@
 "price_yen": 400,
 "launch": "2020-07-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2318,6 +2711,7 @@
 "price_yen": 2400,
 "launch": "2020-05-30",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2328,6 +2722,7 @@
 "price_yen": 2800,
 "launch": "2020-05-30",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2830/"
 },
 "01_2835": {
@@ -2335,6 +2730,7 @@
 "price_yen": 16000,
 "launch": "2020-05-30",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -2345,6 +2741,21 @@
 "price_yen": 1500,
 "launch": "2020-08-22",
 "age": 8,
+"info": {
+"intro": "The main mobile suit that appears in \"IRON-BLOODED ORPHANS Ur's Hunt\" is now available from HG!",
+"features": [
+"The shield has a built-in gimmick that deploys a variable claw that deploys left and right and a needle fire.",
+"The thruster has a structure in which two huge armors swing on the left and right.",
+"Comes with a special rifle."
+],
+"includes": [
+"Mace × 1",
+"Rifle × 1",
+"Shield ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2355,6 +2766,20 @@
 "price_yen": 2000,
 "launch": "2020-08-29",
 "age": 8,
+"info": {
+"intro": "From \"GUNDAM Build Diverizer\", new Core GUNDAM and GUNDAM Animalize are now available!",
+"features": [
+"Core docking custom support. The design of the animal is reproduced with a metallic seal.",
+"Smoke clear parts are used on the arms and legs."
+],
+"includes": [
+"Beam Saber ×1",
+"Rifle × 1",
+"Shield ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2365,6 +2790,19 @@
 "price_yen": 850,
 "launch": "2020-08-29",
 "age": 8,
+"info": {
+"intro": "New feature option armor is here! Use your abilities differently depending on how you equip them!",
+"features": [
+"Core docking custom support. It can be combined with the separately sold Core GUNDAM to convert it into a speed booster type or a power arm type.",
+"With a display pedestal."
+],
+"includes": [
+"Armor × 1",
+"Pedestal × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2375,6 +2813,21 @@
 "price_yen": 1200,
 "launch": "2020-08-29",
 "age": 8,
+"info": {
+"intro": "From \"BUILD DIVERS Re:RISE\", which is currently being distributed on the GUNDAM channel for the 2nd season, the work machine is reproduced in Halopla!",
+"features": [
+"Equipped with a folding opening and closing gimmick for the ears.",
+"The renewed version of the halo is included in a new color.",
+"Included options can be stored in a backpack."
+],
+"includes": [
+"Halo × 1",
+"Paint Roller × 1",
+"Caulking Gun × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2843/"
 },
 "01_2844": {
@@ -2382,6 +2835,25 @@
 "price_yen": 1500,
 "launch": "2020-08-08",
 "age": 15,
+"info": {
+"intro": "From \"Fate/Grand Order\", the Knight King Altria Pendragon appears in the Petit Rics series!",
+"features": [
+"The simple parts configuration makes it easy to assemble even for beginners. The details are also well reproduced.",
+"Although it is a three-headed body, it is a cute deformation without destroying the character's characteristic silhouette line.",
+"The upper body can be moved to pose with expression without losing proportions.",
+"The \"Crown\" and \"Cloak\" added in \"Excalibur\" and the Second Coming of the Spirit are detachable.",
+"A special pedestal with the image of \"Noble Phantasm production\" is included."
+],
+"includes": [
+"Excalibur × 1",
+"Crown × 1",
+"Cloak × 1",
+"Pedestal × 1",
+"Foil seal × 1",
+"Kainas Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "petit_rits"
 ],
@@ -2392,6 +2864,13 @@
 "price_yen": 400,
 "launch": "2020-08-08",
 "age": 8,
+"info": {
+"intro": "THE 30MM OPTIONAL ARMOR SERIES NOW INCLUDES ITEMS FOR RABIOT!",
+"features": [
+"A set of armor and a shield. ■ New Roy Roy is included."
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2402,6 +2881,13 @@
 "price_yen": 780,
 "launch": "2020-08-22",
 "age": 8,
+"info": {
+"intro": "BROWN APPEARS IN THE 30MM \"EXA VEHICLE SERIES\" TANK, WHICH CAN BE PLAYED ALONE OR IN COMBINATION!",
+"features": [
+"In addition to the tank form, it can also be enjoyed as a vehicle form in combination with each aircraft."
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2412,6 +2898,22 @@
 "price_yen": 1800,
 "launch": "2020-08-22",
 "age": 8,
+"info": {
+"intro": "Olive Drab is now available in the 30MM series \"eEXM-17 Alto (Land Combat Specification)\"!",
+"features": [
+"Color mix with other colored items sold separately to create an original aircraft!",
+"You can change the tank shape to your liking.",
+"New equipment such as a backpack with a land battle cover and a massible leg are included.",
+"A reconfigurable bazooka is also included.",
+"Additional parts can also be equipped on the Porta Nova."
+],
+"includes": [
+"Land Backpack / Armored Type × 1",
+"Bazooka × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2422,6 +2924,19 @@
 "price_yen": 5000,
 "launch": "2020-10-24",
 "age": 8,
+"info": {
+"intro": "From \"MOBILE SUIT Z GUNDAM\", the bound dock is three-dimensional in HG's latest format, which is about 190mm high!",
+"features": [
+"Characteristic coloring is expressed in molding colors.",
+"Without compromising the unique proportions of supple and dynamic, the variable gimmick of MS and MA is thoroughly reproduced.",
+"Calculated part composition and color coding reproduce the characteristic skirt structure.",
+"Reproduce a unique deformation that folds the upper body into the waist skirt armor. You can enjoy the display in a form that suits your preference.",
+"The power pipes of each part are made of elastomer material and can be flexibly moved.",
+"Included armament is \"Beam Rifle\", \"Diffusion Mega Particle Cannon\", and \"Beam Saber\".",
+"Comes with a dedicated pedestal."
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2432,6 +2947,26 @@
 "price_yen": 600,
 "launch": "2020-09-19",
 "age": 8,
+"info": {
+"intro": "The second expansion parts set of the Cross Silhouette series!",
+"features": [
+"A luxurious set that further expands the range of play of the existing lineup of products.",
+"Reproduce the wave rider by assembling the separately sold \"SDCS Zeta GUNDAM\".",
+"The exterior for Zaku I reproduction can easily reproduce the Zaku I head even if it is a single item. In addition, mono-eye dummy parts are also included.",
+"Two types of \"joint brush-up parts\" that can add a swing mechanism to the hip joint are included.",
+"\"Version up thigh parts for CS frame\" is designed to cover the seams of the parts.",
+"General-purpose facial expression hand and beam saber included."
+],
+"includes": [
+"The swing hip parts for CS/SD frames × 1 each",
+"Square thigh parts for CS frame × 2",
+"General Expression Hand × 2",
+"Zaku I reproduction parts × 1 set",
+"Zeta GUNDAM Wave Rider Reproduction Parts × 1 set",
+"Beam Saber × 2"
+]
+},
+"iv": 1,
 "brands": [
 "sdcs"
 ],
@@ -2442,6 +2977,21 @@
 "price_yen": 750,
 "launch": "2020-09-26",
 "age": 8,
+"info": {
+"intro": "From \"BUILD DIVERS Re:RISE\", which is currently being distributed on the GUNDAM channel for the 2nd season, GUNDAM Tertium's new armament has been three-dimensional in HG!",
+"features": [
+"New armament of a large backpack and rifle.",
+"The rifle is equipped with a transformation mechanism to the stored state. It can also be combined with the unassembled \"HGBD:R 1/144 SELTSAM ARMS\" (sold separately).",
+"The two shields can be combined."
+],
+"includes": [
+"Backpack × 1",
+"Shield × 2",
+"Rifle × 1",
+"General Purpose Joint Parts for HG ×1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2452,6 +3002,25 @@
 "price_yen": 7500,
 "launch": "2020-09-26",
 "age": 8,
+"info": {
+"intro": "GUNDAM From the 2nd Season of \"BUILD DIVERS Re:RISE\" every Thursday from 8 p.m. on the official YouTube channel \"GUNDAM Channel\", the Grand Cross Color Rerising GUNDAM when using special moves is now available!",
+"features": [
+"Hiroto and his friends \"Build Divers\" Grand Cross Color Gunpla 4 set",
+"Reproduce the grand cross color when using a special move with a molded color.",
+"Re-Rising GUNDAM when using special moves can be reproduced!",
+"With a dedicated pedestal"
+],
+"includes": [
+"HGBD:R Euraven GUNDAM × 1",
+"HGBD: R GUNDAM Aegis Knight × 1",
+"SDBD:R EX VALKYLANDER × 1",
+"HGBD:R Wodompod × 1",
+"Dedicated pedestal × 3",
+"Foil seal × 1",
+"The four HGBD:R and SDBD:R Gunpla models above will be specially molded in the image of the Grand Cross Color."
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2462,6 +3031,24 @@
 "price_yen": 2400,
 "launch": "2020-10-17",
 "age": 8,
+"info": {
+"intro": "From \"GUNDAM BUILD FIGHTERS Try\", a girl who sincerely loves GUNDAM and Gunpla, Fumina-senpai, appears from the Figure-rise series!",
+"features": [
+"The hoodie is detachable.",
+"Three types of facial expression parts are included. You can reproduce embarrassed or surprised faces.",
+"Hand parts come with a grip and an opening hand.",
+"Fumina-colored bubble wrap that can be displayed together is also included."
+],
+"includes": [
+"Facial Expression Parts × 3",
+"Wrist parts (left and right) × 2 each",
+"Bubble wrap × 1",
+"Foil seal × 1",
+"Waterslide Decal × 1",
+"Dedicated pedestal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -2472,6 +3059,23 @@
 "price_yen": 4500,
 "launch": "2020-09-05",
 "age": 15,
+"info": {
+"intro": "From \"Getter Robo G\", the Getter Dragon redesigned by mecha designer Takayuki Yanase is now available as the third installment of \"INFINITISM\"!",
+"features": [
+"We are particular about molding colors and propose specifications that can be satisfied just by assembling them.",
+"Not only the main body, but also the machine wing can be used to create a variety of poses by using a large number of moving axes.",
+"Part of the Mach Wing is equipped with a plastic model original gimmick that can be combined with the Long Tomahawk.",
+"Display base included. Using special joint parts, it can be displayed in flight."
+],
+"includes": [
+"Getter Tomahawk × 2",
+"Long Tomahawk reproduction parts × 1 set",
+"Hand Parts × 6 (Weapon Handle, Left and Right/Grip, Left and Right/Hand, Right/Open Hand, Right)",
+"Foil seal × 1",
+"Display Base × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -2482,6 +3086,18 @@
 "price_yen": 700,
 "launch": "2020-09-12",
 "age": 15,
+"info": {
+"intro": "The jet-black autonomous unmanned combat ship \"Andromeda Black\" that appeared in Chapter 5 of \"Space Battleship Yamato 2202: Warriors of Love\" is now available in the mecha collection!",
+"features": [
+"The skull mark and the phrase engraved on the side of the hull are reproduced with water transfer decals.",
+"If you have multiple of them, you can reproduce the Andromeda fleet in the play."
+],
+"includes": [
+"Display Base × 1",
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "mecha-colle"
 ],
@@ -2492,6 +3108,27 @@
 "price_yen": 4800,
 "launch": "2020-09-12",
 "age": 15,
+"info": {
+"intro": "As the third installment of the \"RG Evangelion Series\" that pursues reality as an android, Eva Unit 2 is now available!",
+"features": [
+"The wide range of motion realized without interference from interlocking armor and parts reproduces the intense action scenes in the play.",
+"The sinking structure behind the knee reduces the interference between armor parts when the legs are moving.",
+"When the legs are opened, the internal parts inspired by muscles are interlocked for a natural standing posture.",
+"The head is also divided into fine parts, and color reproduction is possible just by assembling it.",
+"The eye parts are reproduced in molded colors.",
+"Progressive knife (for Unit 2) is a new model. Thunder Spear is equipped with a folding gimmick.",
+"Hand parts for armament are included."
+],
+"includes": [
+"Pallet Rifle × 1",
+"Thunder Spear × 1",
+"Progressive knife (for Unit 2) ×2",
+"Umbilical Cable × 1",
+"Realistic Decal × 1",
+"Hand parts (left and right) ×7 types, Thunder Spear handle (right) × 1 type"
+]
+},
+"iv": 1,
 "brands": [
 "rg-c"
 ],
@@ -2502,6 +3139,22 @@
 "price_yen": 4300,
 "launch": "2020-09-12",
 "age": 15,
+"info": {
+"intro": "From \"Digimon Adventure 02\", \"Black War Greymon\" is now available in Figure-rise Standard Amplified!",
+"features": [
+"The ultimate Dark Tower Digimon is reproduced in silver and gold molding colors and black-based colors.",
+"Equipped with an original gimmick on the wing parts that can be connected to the back. The structure unfolds like wings so that the figure equipped on the back stands out even more.",
+"The wing parts can also be removed and replaced with arms.",
+"Effect parts inspired by slashing are newly included, allowing you to reproduce the image in the play."
+],
+"includes": [
+"Dramon Killer × 2",
+"Wing parts set × 1",
+"Effect Parts × 2",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard-amp"
 ],
@@ -2512,6 +3165,19 @@
 "price_yen": 400,
 "launch": "2020-09-26",
 "age": 8,
+"info": {
+"intro": "Items for Labio are now available in the 30MM optional armor series!",
+"features": [
+"A set of armor and a shield.",
+"New Roy-Roy is included."
+],
+"includes": [
+"Armor × 1",
+"Shield × 1",
+"Roy Roy × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2522,6 +3188,24 @@
 "price_yen": 500,
 "launch": "2020-09-26",
 "age": 8,
+"info": {
+"intro": "THE 30MM OPTIONAL WEAPON SERIES NOW INCLUDES ITEMS FOR CIEL NOVA!",
+"features": [
+"Set of 8 types including sniper rifle, gatling, large axe, sword mace, kunai, etc.",
+"Various joints are included."
+],
+"includes": [
+"Handgun Parts ×1",
+"Sniper Rifle Parts ×1",
+"Gatling Parts ×1",
+"Sword Mace ×1",
+"Large Axe ×1",
+"Kunai×1 Shield ×1",
+"Backpack × 1 set",
+"Various joints × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2532,6 +3216,20 @@
 "price_yen": 2600,
 "launch": "2020-12-19",
 "age": 15,
+"info": {
+"intro": "The main character of the TV anime \"Demon Slayer\", \"Tanjiro Kamado\", has been made into a plastic model with the technology of BANDAI SPIRITS Hobby Division!",
+"features": [
+"A non-movable model with a dynamic pose holding a Nichirin sword with a total height of about 120mm.",
+"Comes with face parts by \"insert molding\" unique to Bandai Hobby Center.",
+"Comes with \"painted haori\" parts with color reproduction."
+],
+"includes": [
+"Nichirin Knife × 1",
+"Seal × 1",
+"Instruction manual × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2872/"
 },
 "01_29": {
@@ -2539,6 +3237,7 @@
 "price_yen": 1800,
 "launch": "2014-01-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2549,6 +3248,7 @@
 "price_yen": 3600,
 "launch": "2003-11",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2901/"
 },
 "01_2907": {
@@ -2556,6 +3256,7 @@
 "price_yen": 4500,
 "launch": "2014-06",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -2567,6 +3268,7 @@
 "name": "PG 1/60 RX-0 UNICORN GUNDAM [FINAL BATTLE Ver.]",
 "price_yen": 25000,
 "launch": "2016-02",
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_pg",
@@ -2578,6 +3280,7 @@
 "name": "MG 1/100 MSZ-006-3B ZETA GUNDAM 3B TYPE GRAY ZETA",
 "price_yen": 6500,
 "launch": "2015-02",
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -2589,6 +3292,7 @@
 "name": "RG 1/144 DESTINY GUNDAM EFFECT UNIT \"LIGHTNING WING\"",
 "price_yen": 1700,
 "launch": "2013-06",
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_rg"
@@ -2599,6 +3303,7 @@
 "name": "MG 1/100 M’QUVE’S GOUF",
 "price_yen": 4500,
 "launch": "2014-08",
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -2611,6 +3316,7 @@
 "price_yen": 3800,
 "launch": "2014-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -2623,6 +3329,7 @@
 "price_yen": 3500,
 "launch": "2020-06-06",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2632,6 +3339,7 @@
 "name": "MG 1/100 QUBELEY EMBELLIR",
 "price_yen": 5400,
 "launch": "2020-08",
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -2644,6 +3352,28 @@
 "price_yen": 2700,
 "launch": "2020-09-18",
 "age": 15,
+"info": {
+"intro": "A new sensation that cannot be made in 3 minutes Cup Noodle plastic model is born!",
+"features": [
+"Take a 3D scan from the actual noodles and make them into plastic parts with precise modeling.",
+"The \"noodle lump\" part can assemble a \"dense noodle mass structure\" similar to \"cup noodles\".",
+"Since the noodles float from the bottom of the cup, you can remove the parts on the side of the container to appreciate the \"intermediate holding structure\" that protects the noodles from vibration during transportation and makes them diffi",
+"The ingredients are realistically reproduced by 3D scanning in the same way as the noodle blocks. The \"eggs\", \"shrimps\", and \"mystery meat\" that are also included in the actual product are precisely designed as individual parts.",
+"Green onions can be cut out of the vinyl material and added to your liking.",
+"The \"CUPNOODLE\" logo, divided by color, has a multi-layered structure that tickles the motivation to assemble alphabet parts!",
+"The characteristic golden dashed pattern of the cup is reproduced by assembling annular parts with a high degree of clearance precision.",
+"With mold processing technology, the character mold printed on the package is reproduced with precise mold technology, including precautions, ingredient notation, allergy notation, and even information on the customer service center!",
+"Comes with a sticker for reproducing the lid that can be attached and peeled off."
+],
+"includes": [
+"Runner ×14",
+"Instruction manual × 1",
+"Lid seal × 1",
+"Cainas Seal ×1",
+"Vinyl material for reproduction of green onions×1"
+]
+},
+"iv": 1,
 "brands": [
 "besthit_chronicle"
 ],
@@ -2654,6 +3384,27 @@
 "price_yen": 3400,
 "launch": "2020-10-17",
 "age": 15,
+"info": {
+"intro": "\"MASKED RIDER HIBIKI\" is now available as a Figure-rise Standard!",
+"features": [
+"Thoroughly reproduce the proportions in the play.",
+"Newly developed \"polarized molding color\" is used to reproduce the distinctive color of the suit. The reflection that changes like a gradient depending on the way the light hits expresses the texture.",
+"The gradation of the mask part is reproduced by combining the change in thickness of the clear part and the sticker attached to the inside.",
+"The sound angle and sound strike stick (A・Kun) are each integrated with the hand parts to express the fine expression of the fingertips holding the weapon.",
+"The tip of the sound strike stick and fierce fire comes with replaceable clear molded effect parts.",
+"The included drum effect allows you to powerfully reproduce special moves."
+],
+"includes": [
+"Figure Rise Effect Pedestal × 1",
+"Sound stick, sound stick effect × 2",
+"Sound Drumming Effect × 1",
+"Sound angle × 1",
+"Wrist parts Decisive hand (right), sound angle hand (right), sound stick integrated handle (left and right), flat hand (left and right), grip hand (left and right)",
+"Foil seal × 1",
+"Tetron Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -2664,6 +3415,22 @@
 "price_yen": 2000,
 "launch": "2020-11-21",
 "age": 8,
+"info": {
+"intro": "\"HG 1/144 LOAD ASTRAY DOUBLE REBAKE\" from \"BUILD DIVERS Re:RISE\" 2nd Season is now available!",
+"features": [
+"Beam parts can be attached to the armor of both arms.",
+"Weapons using the included lead wires are also mounted.",
+"The rifle is detachable from the main body.",
+"Hidden transformation function is also installed."
+],
+"includes": [
+"Dedicated pedestal × 1",
+"Lead wire × 2",
+"Beam parts (large, small) × 2",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2674,6 +3441,21 @@
 "price_yen": 1700,
 "launch": "2020-10-24",
 "age": 8,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM WING\", the overwhelming firepower of the GUNDAM Heavy Arms is now available in the latest HG format!",
+"features": [
+"Equipped with a variety of armaments such as chest Gatling cannons, shoulder homing missiles, and micro missiles on the legs.",
+"The beam gatling can be attached to two places on the left arm of the aircraft and the backpack as set.",
+"The right arm is equipped with a gimmick to fix the included army knife.",
+"Powerful full-open gimmick can be reproduced."
+],
+"includes": [
+"Beam Gatling × 1",
+"Army Knife × 1",
+"Foil seal × 1sc"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2684,6 +3466,19 @@
 "price_yen": 400,
 "launch": "2020-11-14",
 "age": 8,
+"info": {
+"intro": "The 30MM optional armor series for labiots is now available in light gray that is easy to customize!",
+"features": [
+"A set of armor and a shield.",
+"New Roy-Roy is included."
+],
+"includes": [
+"Armor × 1",
+"Shield × 1",
+"Roy Roy × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2694,6 +3489,19 @@
 "price_yen": 400,
 "launch": "2020-11-14",
 "age": 8,
+"info": {
+"intro": "The popular white color for the 30MM Rabiot optional armor series is now available!",
+"features": [
+"A set of armor and a shield.",
+"New Roy-Roy is included."
+],
+"includes": [
+"Armor × 1",
+"Shield × 1",
+"Roy Roy × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2704,6 +3512,19 @@
 "price_yen": 780,
 "launch": "2020-11-07",
 "age": 8,
+"info": {
+"intro": "Attack Submarine Ver. is now available in the 30MM \"Exa Vehicle Series\" that expands the range of customization!",
+"features": [
+"By rearranging the parts, it transforms into three forms: ray-shaped, saw-shark-shaped, and hammerhead-shaped.",
+"Can also be used as a backpack for each aircraft.",
+"If you disassemble it, it can be used as a customized part."
+],
+"includes": [
+"Vehicle x 1",
+"Face part x 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2714,6 +3535,20 @@
 "price_yen": 1800,
 "launch": "2020-11-07",
 "age": 8,
+"info": {
+"intro": "The 30MM series Porta Nova (underwater version) is now available in a new color blue and gray!",
+"features": [
+"The underwater tank can be attached to the arm or leg by recombining.",
+"Can also be linked with existing items.",
+"Anchor claw included."
+],
+"includes": [
+"Underwater backpack/armored × 1set",
+"Anchor claw × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2724,6 +3559,18 @@
 "price_yen": 500,
 "launch": "2020-11-07",
 "age": 8,
+"info": {
+"intro": "The best effects for 1/144 scale are now available! Anyone can easily create their own original battle scenes! The \"Slashing\" effect is now available in the Customization Effect Series!",
+"features": [
+"Creates an image of a slash. The color is green.",
+"A set of effect parts and joint parts."
+],
+"includes": [
+"Effect parts × 1 set",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -2735,6 +3582,18 @@
 "price_yen": 500,
 "launch": "2020-11-07",
 "age": 8,
+"info": {
+"intro": "The best effects for 1/144 scale are now available! Anyone can easily create their own original battle scenes! The \"Slashing\" effect is now available in the Customization Effect Series!",
+"features": [
+"Creates an image of a slash. The color is blue.",
+"A set of effect parts and joint parts."
+],
+"includes": [
+"Effect parts × 1 set",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -2746,6 +3605,21 @@
 "price_yen": 900,
 "launch": "2020-11-28",
 "age": 8,
+"info": {
+"intro": "Ideal for exhibiting 1/144 scale plastic models! A CUSTOMIZE SCENE BASE that can reproduce various scenes is now available on the water! Make full use of scene-based and customizable effects to participate in \"30MM CUSTOMIZE MISSIONS\"!",
+"features": [
+"Reproduce realistic underwater scenes with realistic water surface effect parts.",
+"Comes with a scene sheet to liven up the scene base."
+],
+"includes": [
+"Scene Base x1",
+"Water Splash Effect x1",
+"Support Parts x1",
+"Joint Parts x1",
+"Scenery Sheets x2"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -2757,6 +3631,27 @@
 "price_yen": 2500,
 "launch": "2020-11-21",
 "age": 15,
+"info": {
+"intro": "From \"Dragon Ball Z\", Ultimate Son Gohan is now available in the Figure-rise Standard lineup!",
+"features": [
+"Equipped with a muscle build system. Assemble the ultimate Son Gohan!",
+"\"Ultimate Son Gohan\" and \"Super Saiyan Son Gohan (Future)\" can be reproduced in a selective form by parts.",
+"Super Saiyan Son Gohan (Future) For reproduction, hair, sleeves, waist belt, and shoes are included with new parts. The sticker also reproduces the scars on the face and the letters on the back.",
+"Two types of facial expression parts are included: \"normal\" and \"screaming\".",
+"2 types of effect parts included."
+],
+"includes": [
+"Facial Expression Parts × 2",
+"Super Saiyan Son Gohan (Future) Reproduction Parts × 1set",
+"Hand parts (left and right) × 2 types each",
+"Energy Wave × 2 (Accumulation, Release)",
+"Energy Wave Pedestal × 1",
+"Joint parts for action base mounting × 1",
+"Foil seal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -2767,6 +3662,22 @@
 "price_yen": 4500,
 "launch": "2020-11-14",
 "age": 15,
+"info": {
+"intro": "From \"New Sakura Wars\", the Reiko fighter Mugen (Anastasia Palma aircraft) is lined up in HG!",
+"features": [
+"Adopts an \"extension gimmick\" that allows the joint part of the limbs to be extended and contracted. You can reproduce the action scene of the deadly attack.",
+"Equipped with a cockpit hatch opening gimmick.",
+"A character figure in a boarding outfit is included."
+],
+"includes": [
+"Umbrella Rifle × 1",
+"Handgun × 2",
+"Foil seal × 1",
+"Jewel Seal × 1",
+"Waterslide Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -2777,6 +3688,13 @@
 "price_yen": 5500,
 "launch": "2020-11-28",
 "age": 15,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM WING Endless Waltz\", under the complete supervision of Hajime Katoki, Wing GUNDAM Zero EW Ver.Ka is now available!",
+"features": [
+"Three-dimensional with completely new modeling. ■ Thorough examination of various joints and pursuing the deployment and linkage gimmick of \"white wings\" and the shooting pose of the twin buster rifle. ■ As a new gimmick, the Twin Buster Ri"
+]
+},
+"iv": 1,
 "brands": [
 "mgka"
 ],
@@ -2787,6 +3705,7 @@
 "price_yen": 700,
 "launch": "2021-05-29",
 "age": 8,
+"iv": 1,
 "brands": [
 "entry_grade_g"
 ],
@@ -2797,6 +3716,7 @@
 "price_yen": 500,
 "launch": "2020-06-19",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_2988/"
 },
 "01_2990": {
@@ -2804,6 +3724,7 @@
 "price_yen": 5100,
 "launch": "2020-06-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -2814,6 +3735,7 @@
 "price_yen": 4300,
 "launch": "2013-12-07",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3/"
 },
 "01_3003": {
@@ -2821,6 +3743,7 @@
 "price_yen": 2200,
 "launch": "2020-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -2833,6 +3756,7 @@
 "price_yen": 1700,
 "launch": "2004-01",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -2844,6 +3768,31 @@
 "price_yen": 23000,
 "launch": "2020-09-12",
 "age": 15,
+"info": {
+"intro": "Gunpla 40th Anniversary! A high-end brand is born in MG! \"MGEX\" is a new brand that challenges MS's \"extreme expression\" based on the \"theme\" set for each aircraft by combining the technology accumulated by BANDAI SPIRITS and different materials.",
+"features": [
+"The theme of the first installment is \"Extreme \"Light Emission Mechanism\". The \"structure\" that has been calculated and the \"luminous\" expression of the new LED unit is expressed.",
+"From the light of the main camera of the eyes and head with the button operation, the main body psycho frame emits light in red and green, and then it is possible to produce light with intensity and weakness.",
+"The newly adopted \"flexible LED sheet\" makes it easy to assemble and saves space. Starting from this technology, the unicorn GUNDAM realized the first ever transformation, luminescence, color change, and movement co-existence.",
+"The proportions of the whole body were completely supervised by Hajime Katoki and produced with a new modeling.",
+"Using lead wires, it is possible to emit light from the clear parts of the shield placed away from the main body.",
+"Comes with a water transfer type decal including a new design of the plastic model's original.",
+"The dedicated MS cage also has the function of storing the battery box of the lighting unit, adjusting the position of the support, and holding the weapon.",
+"Three AA alkaline batteries (sold separately) are required for luminous reproduction."
+],
+"includes": [
+"Beam Magnum × 1",
+"Hyper Bazooka × 1",
+"Shield × 3",
+"Beam Gatling Gun × 6",
+"Beam Saber × 4",
+"Lighting unit × 1 set",
+"Dedicated MS Cage × 1",
+"Waterslide Decal × 1",
+"Metallic seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "mgex"
 ],
@@ -2854,6 +3803,20 @@
 "price_yen": 2400,
 "launch": "2020-12-05",
 "age": 8,
+"info": {
+"intro": "From the 2nd Season of \"BUILD DIVERS Re:RISE\", a new aircraft based on the Double-O GUNDAM is now available!",
+"features": [
+"The backpack is transformed into a sword form in combination with beam parts. In addition, it can be combined with a short rifle gimmick or transformed into a rifle form on its own.",
+"Wings of Light effect parts are included."
+],
+"includes": [
+"Short Rifle × 2",
+"1 set × effect parts",
+"1 set × beam parts",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2864,6 +3827,20 @@
 "price_yen": 700,
 "launch": "2020-12-19",
 "age": 8,
+"info": {
+"intro": "From the 2nd Season of BUILD DIVERS Re:RISE, new armaments for new aircraft that follow the flow of GUNDAM Astray are now available!",
+"features": [
+"The backpack can be transformed into a double rifle.",
+"Lead wire included. You can enjoy the production of weapons using lead wires.",
+"Joint parts that can be used for various HGs are included."
+],
+"includes": [
+"Backpack Unit × 1",
+"Lead wire × 2",
+"HG compatible joint parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2874,6 +3851,21 @@
 "price_yen": 1380,
 "launch": "2020-12-12",
 "age": 8,
+"info": {
+"intro": "From the 30MM series, \"Ciel Nova\" is now available in a new color that expands the range of customization!",
+"features": [
+"White color that is easy to match with other colors.",
+"Distinctive parts such as massive legs, long forearms, and a backpack that can be expanded upwards.",
+"Adopts an expandable joint mechanism. New hip parts can be incorporated into the existing aircraft to adjust the body shape.",
+"Options for commander aircraft, special forces, and close combat The chest part of the armor is linked to Portanova."
+],
+"includes": [
+"Handgun × 1",
+"Backpack × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2884,6 +3876,18 @@
 "price_yen": 400,
 "launch": "2020-12-12",
 "age": 8,
+"info": {
+"intro": "The 30MM optional armor series is now available with a high mobility type for Cielnova!",
+"features": [
+"Color is black.",
+"A set of armor and foil seals."
+],
+"includes": [
+"Armor × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2894,6 +3898,18 @@
 "price_yen": 400,
 "launch": "2020-12-12",
 "age": 8,
+"info": {
+"intro": "THE 30MM OPTIONAL ARMOR SERIES NOW INCLUDES A HIGH-MOBILITY TYPE FOR CIERNOVA!",
+"features": [
+"The color is blue.",
+"A set of armor and a set of foil seals."
+],
+"includes": [
+"Armor ×1 set",
+"Foil seal ×1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2904,6 +3920,20 @@
 "price_yen": 780,
 "launch": "2020-12-05",
 "age": 8,
+"info": {
+"intro": "The 30MM Ex Vehicle series \"Attack Submarine Ver.\", which expands the range of customization, is now available in new colors inspired by underwater combat!",
+"features": [
+"The color is blue-gray.",
+"By reassembling parts, it is transformed into three forms: ray type, saw shark type, and hammerhead shark type.",
+"It can also be used as a backpack for each aircraft.",
+"If disassembled, it can also be used as a customized part."
+],
+"includes": [
+"Vehicle × 1",
+"Face Parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -2914,6 +3944,24 @@
 "price_yen": 3400,
 "launch": "2020-11-14",
 "age": 15,
+"info": {
+"intro": "From the Monthly Hobby Japan series \"ULTRAMAN SUIT ANOTHER UNIVERSE\", Ultraman Zero's rival \"Dark Crops Zero\" appears in the ULTRAMAN SUIT!",
+"features": [
+"Reproduce the characteristic mono-eye with new parts.",
+"The abdominal joint is a two-pattern selection type: \"when moving is prioritized\" and \"when the LED unit (sold separately) is built-in\".",
+"The LED unit (sold separately) can be placed on the chest to keep the breasts and eyes open.",
+"Lance-type weapon is included."
+],
+"includes": [
+"Lance-type weapon × 1",
+"Part for built-in LED × 1",
+"Hand parts (left and right) × 2 types each",
+"Figure-rise Effect pedestal × 1",
+"Foil seal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -2924,6 +3972,21 @@
 "price_yen": 600,
 "launch": "2020-12-12",
 "age": 8,
+"info": {
+"intro": "ν GUNDAM from \"SD GUNDAM EX Standard\" is now available!",
+"features": [
+"Includes beam rifle, beam saber, and shield.",
+"Equipped with 3mm joints in various places. You can enjoy the original form of the plastic model by combining equipment.",
+"Let's recreate the battle to the death between Char and Amuro with the \"SD GUNDAM EX Standard Sotheby\" sold separately!"
+],
+"includes": [
+"Beam Rifle ×1",
+"Beam Saber ×1",
+"Shield ×1",
+"Foil seal ×1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3020/"
 },
 "01_3021": {
@@ -2931,6 +3994,21 @@
 "price_yen": 600,
 "launch": "2020-12-12",
 "age": 8,
+"info": {
+"intro": "Sotheby's is now available from \"SD GUNDAM EX Standard\"!",
+"features": [
+"Includes Beam Shot Rifle, Beam Tomahawk and Shield.",
+"Equipped with 3mm joints in various places. You can enjoy the original form of the plastic model by combining equipment.",
+"Let's recreate the battle to the death between Char and Amuro with the \"SD GUNDAM EX Standard ν GUNDAM\" sold separately!"
+],
+"includes": [
+"Beam Shot Rifle×1",
+"Beam Tomahawk ×1",
+"Shield ×1",
+"Foil seal ×1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3021/"
 },
 "01_3022": {
@@ -2938,6 +4016,7 @@
 "price_yen": 4400,
 "launch": "2020-07-10",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2948,6 +4027,7 @@
 "price_yen": 7300,
 "launch": "2020-08-07",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -2958,6 +4038,7 @@
 "price_yen": 1400,
 "launch": "2020-08-07",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3063/"
 },
 "01_307": {
@@ -2965,6 +4046,7 @@
 "price_yen": 2000,
 "launch": "2015-04-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -2975,6 +4057,7 @@
 "price_yen": 1100,
 "launch": "2011-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -2985,6 +4068,7 @@
 "price_yen": 5700,
 "launch": "2020-11",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -2997,6 +4081,7 @@
 "price_yen": 1200,
 "launch": "2004-02",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3081/"
 },
 "01_3082": {
@@ -3004,6 +4089,7 @@
 "price_yen": 2200,
 "launch": "2020-09-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3014,6 +4100,7 @@
 "price_yen": 1900,
 "launch": "2020-09-11",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3024,6 +4111,7 @@
 "price_yen": 300,
 "launch": "1980-07",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3084/"
 },
 "01_3158": {
@@ -3031,6 +4119,7 @@
 "price_yen": 3900,
 "launch": "2004-03",
 "age": 15,
+"iv": 1,
 "brands": [
 "mgka"
 ],
@@ -3041,6 +4130,7 @@
 "price_yen": 3300,
 "launch": "2015-04-29",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -3051,6 +4141,7 @@
 "price_yen": 1400,
 "launch": "2004-04",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -3062,6 +4153,7 @@
 "price_yen": 1900,
 "launch": "2015-05-15",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3072,6 +4164,7 @@
 "price_yen": 3900,
 "launch": "2004-05",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3279/"
 },
 "01_3290": {
@@ -3079,6 +4172,24 @@
 "price_yen": 500,
 "launch": "2020-12-19",
 "age": 8,
+"info": {
+"intro": "[Nationwide general store sales decision! ] From ENTRY GRADE, the RX-78-2 GUNDAM is now available! \"The next generation of first Gunpla\" is born here!",
+"features": [
+"Available in specifications that can be enjoyed by many people at an affordable price! The packaging adopts a PP bag!",
+"Consists of a total of 67 parts. (Armament is not included.) ）",
+"Just assemble the parts and you're done. No painting or sticking is required.",
+"Touch gate specification that can be easily removed by hand without using nippers.",
+"The runner has parts arranged together for each part, so it is easy to understand.",
+"Movable parts that move well and bend well.",
+"Bold and excellent parts division.",
+"The black outline of the camera eye is expressed with shadows that can be used as clearance between parts."
+],
+"includes": [
+"Runner × 2",
+"Instruction manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "entry_grade_g"
 ],
@@ -3089,6 +4200,21 @@
 "price_yen": 1100,
 "launch": "2020-12-26",
 "age": 8,
+"info": {
+"intro": "From \"BUILD DIVERS Re:RISE\", Core GUNDAM II is now available alone!",
+"features": [
+"Adopts a new mechanism \"Core Docking Custom\" that goes beyond build custom! Mix and match colors and weapons to create your own original GUNDAM!",
+"Coloring is G-3 specification.",
+"Shield and rifle included.",
+"It can be transformed into a core fryer."
+],
+"includes": [
+"Shield ×1",
+"Rifle × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3099,6 +4225,21 @@
 "price_yen": 1100,
 "launch": "2020-12-26",
 "age": 8,
+"info": {
+"intro": "From \"BUILD DIVERS Re:RISE\", Core GUNDAM II is now available alone!",
+"features": [
+"Adopts a new mechanism \"Core Docking Custom\" that goes beyond build custom! Mix and match colors and weapons to create your own original GUNDAM!",
+"The coloring is Titans specification.",
+"Shield and rifle included.",
+"It can be transformed into a core fryer."
+],
+"includes": [
+"Shield ×1",
+"Rifle × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3109,6 +4250,20 @@
 "price_yen": 800,
 "launch": "2020-12-19",
 "age": 8,
+"info": {
+"intro": "From \"BUILD DIVERS Re:RISE\", a different color version of the \"HGBD:R 1/144 GUNDAM TRY AGE MAGNUM\" equipment is now available! Combined with the HG series, upgrade the aircraft! Expand your customization!",
+"features": [
+"Can be transformed into cloak state and greatsword state.",
+"Beam effect and HG general-purpose handle compatible grip included."
+],
+"includes": [
+"Effectfor the greatsword × 1 set",
+"Cloak Effect × 1",
+"Cloak joint parts × 1",
+"HG General Purpose Handle Compatible Grip × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3119,6 +4274,25 @@
 "price_yen": 2500,
 "launch": "2020-12-05",
 "age": 8,
+"info": {
+"intro": "Hello Kitty and GUNDAM, the second collaboration project of dreams! Char's exclusive Zaku II and Hello Kitty set is now available from the SDCS series!",
+"features": [
+"Easy assembly without glue.",
+"Char's exclusive Zaku II and Hello Kitty's combined form can be reproduced.",
+"Comes with a wide variety of items for Zaku.",
+"It is possible to hold the small apple parts that come with Kitty's hands.",
+"Kitty can also be seated.",
+"With apple parts and apple-shaped pedestal."
+],
+"includes": [
+"Complete set of equipment",
+"Apple × 1",
+"Apple-shaped pedestal × 1",
+"Foil seal × 1",
+"Tetron Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdcs"
 ],
@@ -3129,6 +4303,25 @@
 "price_yen": 2500,
 "launch": "2020-12-05",
 "age": 8,
+"info": {
+"intro": "Hello Kitty and GUNDAM, the second collaboration project of dreams! Zaku II and Hello Kitty sets are now available from the SDCS series!",
+"features": [
+"Easy assembly without glue.",
+"The combined form of Zaku II and Hello Kitty can be reproduced.",
+"Comes with a wide variety of items for Zaku.",
+"It is possible to hold the small apple parts that come with Kitty's hands.",
+"Kitty can also be seated.",
+"With apple parts and apple-shaped pedestal."
+],
+"includes": [
+"Complete set of equipment",
+"Apple × 1",
+"Apple-shaped pedestal × 1",
+"Foil seal × 1",
+"Tetron Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdcs"
 ],
@@ -3139,6 +4332,18 @@
 "price_yen": 1380,
 "launch": "2021-01-09",
 "age": 8,
+"info": {
+"intro": "Navy appears in the 30MM series Earth Alliance's \"eEXM-21 Labiot\"! Enjoy color coordination customization!",
+"features": [
+"Shotgun, backpack, and marking sticker included."
+],
+"includes": [
+"Shotgun × 1",
+"Backpack × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3149,6 +4354,18 @@
 "price_yen": 400,
 "launch": "2021-01-09",
 "age": 8,
+"info": {
+"intro": "A new mold of Ciel Nova armor is now available in the 30MM optional armor series!",
+"features": [
+"The color is white.",
+"Chest armor can also be customized to Portanova.",
+"Leg extension parts are included. Ciernova's style can be changed!"
+],
+"includes": [
+"Armor × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3159,6 +4376,18 @@
 "price_yen": 400,
 "launch": "2021-01-09",
 "age": 8,
+"info": {
+"intro": "A new mold of armor for Cielnova is now available in the 30MM optional armor series!",
+"features": [
+"The color is blue-gray.",
+"Chest armor can also be customized to Portanova.",
+"Leg extension parts included. Cielnova's style change is possible!"
+],
+"includes": [
+"Armor × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3169,6 +4398,16 @@
 "price_yen": 400,
 "launch": "2020-12-12",
 "age": 8,
+"info": {
+"intro": "General-purpose marking is now available in the 30MM series! Can also be used for customized missions!",
+"features": [
+"Water transfer decals packed with versatile markings."
+],
+"includes": [
+"Waterslide Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3179,6 +4418,27 @@
 "price_yen": 3200,
 "launch": "2020-12-12",
 "age": 15,
+"info": {
+"intro": "Sticking to color-coded reproduction, the \"MASKED RIDER DECADE\" that comes with a wide variety of optional parts, including 26 types of rider cards, is now available in Figure-rise Standard!",
+"features": [
+"By dividing the parts unique to plastic models, it is possible to assemble a head that resembles a transformation scene.",
+"Ridebookers can be assembled in three forms: sword form, gun form, and carrying form.",
+"Comes with 26 types of rider cards made of PET material that can be loaded on the belt.",
+"Adapter included to attach the belt to other Figure-rise Standard MASKED RIDER series.",
+"Neo decay driver is also included."
+],
+"includes": [
+"Rider Cards x 26",
+"Ride Booker (Carrying Mode/Gun Mode/Sword Mode) x 1 each",
+"Neo Decade Driver x 1",
+"Belt Adapters x 7",
+"Wrist Parts: Gripping Hands (Left and Right), Flat Hands (Left and Right), Weapon-Holding Hand (Right), Card-Holding Hand (Right)",
+"Figure-rise Effect Base x 1",
+"Foil Sticker x 1",
+"Tetron Sticker x 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -3189,6 +4449,26 @@
 "price_yen": 5500,
 "launch": "2021-01-23",
 "age": 15,
+"info": {
+"intro": "In line with GUNDAM 40th ANNIVERSARY, \"Zeong\" from \"MOBILE SUIT GUNDAM\" has been converted into an RG with the latest technology and design!",
+"features": [
+"In order to reproduce the mechanism on the setting and the poses in the play, the original gimmick based on the actual machine examination is condensed to 1/144.",
+"Built-in \"Advanced MS Joint\". It combines smooth and powerful expressions with meticulous details.",
+"The mono eye can be moved in conjunction with the movement of the neck to the left and right. In addition, it can be manually moved up and down.",
+"Built-in frame with a wide range of motion in the waist. More dynamic poses are possible.",
+"Four verniers on the chest and back are deployed in conjunction with the front and back movement of the chest.",
+"Each vernier of size can be individually moved by expanding the skirt part.",
+"Hand parts are insert molded to reproduce intricate details and movable joints.",
+"By removing the forearm and attaching the lead wire, the arm wired mega particle cannon is reproduced."
+],
+"includes": [
+"Display Base ×1",
+"Lead wire (red) ×1",
+"Lead wire (black) ×2",
+"Realistic Decal ×1"
+]
+},
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -3199,6 +4479,34 @@
 "price_yen": 9000,
 "launch": "2021-01-23",
 "age": 15,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM\", \"RG 1/144 ZEONG\" is now a set item that comes with effect parts and a pedestal!",
+"features": [
+"A wide variety of effect parts allow you to reproduce the pose just like the scene in the play.",
+"Zeong is RG with the latest technology and design. In order to reproduce the mechanism of the setting and the posing in the play, the original gimmick based on actual machine research is condensed to 1/144.",
+"Built-in \"Advanced MS Joint\". It combines smooth and powerful expression with detailed details.",
+"The mono eye can be moved left and right in conjunction with the movement of the neck. In addition, it can be moved up and down manually.",
+"Built-in frame with a wide range of motion at the waist. More dynamic poses are possible.",
+"Linked to the front and back of the chest, the verniers in four places on the chest and back are deployed.",
+"The large and small verniers can be moved individually by unfolding the skirt part.",
+"The hand parts are insert molded to reproduce precise details and movable joints.",
+"By removing the forearm and attaching the lead wire, the arm wired mega particle cannon is reproduced.",
+"Comes with \"GUNDAM effects\" and \"scene base\" that can reproduce \"Last Shot\"."
+],
+"includes": [
+"Effects for Zeong",
+"(Lumbar Verniers (Large × 2, Small × 5), Arm Verniers × 2, Head Verniers × 2, Finger Mega Particle Cannons × 10, Head Mega Particle Cannons × 2, Head Mega Particle Cannons × 2,Head Explosion × 1 )",
+"Display parts for forearms × 2",
+"Effects for GUNDAM",
+"(Head destruction part × 1, Shoulder destruction part × 1, Rbeam effect × 1, Rfle hand part × 1)",
+"Last Shooting Display Base × 1",
+"Display base for Zeong × 1",
+"Lead wire (red) × 1",
+"Lead wire (black) × 2",
+"Realistic Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -3209,6 +4517,7 @@
 "price_yen": 2200,
 "launch": "2020-10",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3219,6 +4528,20 @@
 "price_yen": 4500,
 "launch": "2021-01-30",
 "age": 15,
+"info": {
+"intro": "From \"Digimon Adventure 02\", \"Imperialdramon\", which can transform into two forms, is now available as an Amplified Arrangement Plastic Model!",
+"features": [
+"Cooperation of official designer Kenji Watanabe.",
+"By replacing and stretching each part, you can reproduce \"Fighter Mode\" and \"Dragon Mode\".",
+"Reproduce the coloring just by assembling it.",
+"Exclusive weapon Positron laser included."
+],
+"includes": [
+"Positron laser × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard-amp"
 ],
@@ -3229,6 +4552,7 @@
 "price_yen": 49000,
 "launch": "2021-01",
 "age": 15,
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_pg",
@@ -3241,6 +4565,21 @@
 "price_yen": 1200,
 "launch": "2021-03-06",
 "age": 6,
+"info": {
+"intro": "Edogawa Conan appears in the introductory series \"ENTRY GRADE\" for all inexperienced plastic models!",
+"features": [
+"Fun assembly with hidden mystery-solving elements!",
+"Since it is a touch gate, the parts are \"petit!\" You can take it!",
+"No glue or tools required. The instructions are colored for easy reading.",
+"The color coding of each part is also well reproduced, so you can create a cool Edogawa Conan that has been posed just by assembling it!"
+],
+"includes": [
+"Runner × 3",
+"Foil seal × 1",
+"Instruction manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "entry_grade"
 ],
@@ -3250,6 +4589,12 @@
 "name": "PG UNLEASHED 1/60 RX-78-2 GUNDAM",
 "launch": "2020-12-19",
 "age": 15,
+"info": {
+"features": [
+"The GUNPLA EVOLUTION LINK SYSTEM uses a step-by-step assembly process to create a simulated experience of building a real MS. ■ Designed to condense the latest GUNPLA technology in each assembly phase, such as \"assembly\", \"movement\", \"struc"
+]
+},
+"iv": 1,
 "brands": [
 "pg"
 ],
@@ -3260,6 +4605,23 @@
 "price_yen": 4500,
 "launch": "2021-01-23",
 "age": 15,
+"info": {
+"intro": "The Unit 8 α that appeared at the beginning of \"Evangelion New Theatrical Version: Q\" is now available from the RG brand!",
+"features": [
+"Based on the setting in the play called \"artificial humans\", we pursue the reproduction of natural action poses as humans.",
+"Achieve human-like mobility such as \"spine movement\" and \"arm twisting\".",
+"Comes with an ultra-long-range rifle that appeared in the play."
+],
+"includes": [
+"Ultra-long-range rifle × 1",
+"Progressive Knife × 2",
+"Pallet Rifle × 1",
+"Umbilical Cable × 1",
+"Realistic Decal × 1",
+"Hand parts × 7 types each (left and right), Handle for ultra-long-range rifles × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "rg-c"
 ],
@@ -3270,6 +4632,7 @@
 "price_yen": 2200,
 "launch": "2015-05-23",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -3281,6 +4644,23 @@
 "price_yen": 4500,
 "launch": "2021-01-30",
 "age": 15,
+"info": {
+"intro": "From \"New Sakura Wars\", \"Reiko Fighter Mugen (Clarice Aircraft)\" will be lined up in HG!",
+"features": [
+"Equipped with an open gimmick in the cockpit hatch.",
+"An extension gimmick that widens the range of action poses is used in the joints of the hands and feet. Limbs can be extended and contracted.",
+"Closed grimoire and open grimoire are included.",
+"The page part of the open grimoire is reproduced by cutting out the instruction manual.",
+"A character figure in a boarding outfit is included."
+],
+"includes": [
+"grimoire (closed grimoire, open grimoire) × 2 types",
+"Foil seal × 1",
+"Jewel Seal × 1",
+"Waterslide Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3291,6 +4671,25 @@
 "price_yen": 5000,
 "launch": "2021-01-30",
 "age": 15,
+"info": {
+"intro": "The main character of the anime \"Steel Jeeg\", which is highly popular in Western countries, \"Steel Jeeg\" is now available as the fourth installment of the arrangement series \"INFINITISM\"!",
+"features": [
+"Design arrangement by mecha designer Takayuki Yanase. The head length is 175 mm high, and it has succeeded in incorporating the world view of INFINITISM.",
+"Original arrangements of plastic models, such as gimmicks and details, are also installed.",
+"A large kit with a total height of over 230mm when equipped with a Mach drill.",
+"Colorful finish just by assembling without using stickers.",
+"Action base is included and can be displayed in flight state.",
+"Knuckle bomber reproduction parts and effects with both fingers crossed are also included."
+],
+"includes": [
+"Mach Drill × 1 set",
+"Display Base × 1",
+"Sideways Flight Pose Reproduction Part ×1",
+"Knuckle Bomber Effect × 1",
+"Hand parts × 4 (Handshakes, left and right/open hands, right/knuckle bomber hands × 1 set)"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3301,6 +4700,7 @@
 "price_yen": 1100,
 "launch": "2004-05",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -3312,6 +4712,7 @@
 "price_yen": 3500,
 "launch": "2020-11-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -3322,6 +4723,7 @@
 "price_yen": 3000,
 "launch": "2020-11-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -3332,6 +4734,7 @@
 "price_yen": 700,
 "launch": "2015-05-23",
 "age": 15,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -3342,6 +4745,20 @@
 "price_yen": 780,
 "launch": "2021-02-20",
 "age": 8,
+"info": {
+"intro": "Space Craft Ver. is now available in the 30MM \"Exa Vehicle Series\" that expands the range of customization!",
+"features": [
+"Deformable space-spec vehicles.",
+"It can also be transformed into a navigation form by recombination.",
+"Face parts included.",
+"If you disassemble it, it can be used as a customized part."
+],
+"includes": [
+"Vehicle ×1",
+"Face Parts ×1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3352,6 +4769,18 @@
 "price_yen": 500,
 "launch": "2021-02-06",
 "age": 8,
+"info": {
+"intro": "The best effects for 1/144 scale are now available! Anyone can easily create their own original battle scenes! Action image version is now available in the customized effect series!",
+"features": [
+"A set that colors intense action scenes. The color is yellow.",
+"A set of effect parts and joint parts."
+],
+"includes": [
+"Effect parts × 1 set",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -3363,6 +4792,18 @@
 "price_yen": 500,
 "launch": "2021-02-06",
 "age": 8,
+"info": {
+"intro": "The best effects for 1/144 scale are now available! Anyone can easily create their own original battle scenes! Action image version is now available in the customized effect series!",
+"features": [
+"A set that colors intense action scenes. The color is red.",
+"A set of effect parts and joint parts."
+],
+"includes": [
+"Effect parts × 1 set",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -3374,6 +4815,23 @@
 "price_yen": 5300,
 "launch": "2021-02-27",
 "age": 15,
+"info": {
+"intro": "From \"New Sakura Wars\", the phantom aircraft \"Reiko Fighter Prototype Sakura Take\" is lined up in HG!",
+"features": [
+"The structure and gimmick that are different from other Reiko fighters are reproduced in the plastic model.",
+"Reproduce the cockpit hatch that opens and closes in a unique way.",
+"Equipped with a feather deployment gimmick.",
+"Equipped with an extension gimmick that allows expansion and contraction at the joints of the limbs. The range of action poses expands.",
+"A figure that reproduces the appearance of Sakura Amamiya when boarding is also included."
+],
+"includes": [
+"Knife × 1",
+"Foil seal × 1",
+"Jewel Seal × 1",
+"Waterslide Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3384,6 +4842,22 @@
 "price_yen": 2300,
 "launch": "2021-03-13",
 "age": 15,
+"info": {
+"intro": "From \"HEAVY METAL L-GAIM\", L-GAIM has upgraded to the HG series!",
+"features": [
+"Adjusted the balance of the head parts and changed the division of the thigh parts. Be more stylish.",
+"In order to improve mobility, the shoulder part has been changed to a ball shaft.",
+"It is possible to pull the arm back and forth with new parts.",
+"Buster Launcher was created with a new mold to improve color coding.",
+"Comes with new joint parts that can be attached to the ACTION BASE 5."
+],
+"includes": [
+"Buster Launcher × 1",
+"Power Launcher ×2",
+"Shield ×1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3394,6 +4868,7 @@
 "price_yen": 2000,
 "launch": "2015-05-23",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3404,6 +4879,20 @@
 "price_yen": 2300,
 "launch": "2021-03-13",
 "age": 15,
+"info": {
+"intro": "From \"Heavy Fighter Elgaim\", Oji has upgraded to the HG series!",
+"features": [
+"The frame is made of clear parts.",
+"The color coding of the shoulders is reproduced by dividing the parts.",
+"Hip split has been changed to expand the range of motion.",
+"New saber included."
+],
+"includes": [
+"Scythe × 1",
+"Beam Saber × 2"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3414,6 +4903,20 @@
 "price_yen": 2000,
 "launch": "2021-03-13",
 "age": 15,
+"info": {
+"intro": "From \"Heavy Fighter Elgaim\", Atoll has upgraded it to the HG series!",
+"features": [
+"Improves hip interference and expands the range of motion of the legs. More dynamic poses are possible.",
+"The vinyl tube on the arm has been changed to a red lead wire to increase the freedom of posing.",
+"A new Tetron seal for reproducing Atoll V is included."
+],
+"includes": [
+"Saber Frogger × 1",
+"Marking sticker × 1",
+"Lead wire × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3424,6 +4927,19 @@
 "price_yen": 3500,
 "launch": "2021-03-13",
 "age": 15,
+"info": {
+"intro": "Four old kits of \"Heavy Fighter Elgaim\" are now available as a set!",
+"features": [
+"A set of 1/144 scale \"Auger\", \"Bash\", \"Grune\", and \"Ashura Temple\"."
+],
+"includes": [
+"1/144 Grune × 1",
+"1/144 Bash × 1",
+"1/144 Auger × 1",
+"1/144 Ashura Temple × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3352/"
 },
 "01_3353": {
@@ -3431,6 +4947,22 @@
 "price_yen": 7400,
 "launch": "2021-03-27",
 "age": 15,
+"info": {
+"intro": "From \"Macross Delta\", a special pack with Siegfried and Lil Draken is now available!",
+"features": [
+"Newly designed joint parts can be equipped with Lil Draken!",
+"Optimal proportions are achieved in each form.",
+"The locking mechanism allows for stable posing in each form.",
+"Comes with a wealth of optional parts such as Hayate Immelmann's pilot figure, landing gear, and various armaments."
+],
+"includes": [
+"Pilot parts (Hayate Immelmann)",
+"Lil Draken × 2",
+"Foil seal × 2",
+"Water Transfer Decal × 2"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3353/"
 },
 "01_3354": {
@@ -3438,6 +4970,22 @@
 "price_yen": 7400,
 "launch": "2021-03-27",
 "age": 15,
+"info": {
+"intro": "From \"Macross Δ\", a special pack with Lil Draken and a missile pod is now available for Draken III!",
+"features": [
+"Reproduce the original coloring aircraft of the movie version.",
+"Lil Draken and Missile Pod also support three-stage transformation into Fighter, Gawalk, and Batroid forms.",
+"Mirage Farina Genus pilot figure included."
+],
+"includes": [
+"Pilot parts (Mirage Farina Genus)",
+"Lil Draken×2",
+"Missile Pod × 2",
+"Foil seal×2",
+"Water Transfer Decal × 2"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3354/"
 },
 "01_3355": {
@@ -3445,6 +4993,20 @@
 "price_yen": 6000,
 "launch": "2021-03-20",
 "age": 15,
+"info": {
+"intro": "From \"Digimon Adventure\", the Digital World Machine-type Digimon \"Mugendramon\" is now available in the Figure-rise Standard Amplified series!",
+"features": [
+"One of the largest large kits in the series! The overwhelming power in the play is reproduced with a large plastic model with a total length of 250mm.",
+"By pulling out each part of the body, the range of motion is expanded, and a variety of poses can be expressed.",
+"The neck and tail adopt a bellows structure through lead wires for expressive reproduction.",
+"Equipped with a chest opening and closing gimmick with the image of \"Giga Destroyer\"."
+],
+"includes": [
+"Lead wire × 2",
+"Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard-amp"
 ],
@@ -3455,6 +5017,21 @@
 "price_yen": 7000,
 "launch": "2021-03-27",
 "age": 15,
+"info": {
+"intro": "The Figure-riseLABO series challenges new expressions of plastic models. The theme of the fourth research is \"Transparent suit expression that adheres to the skin\"! From the movie \"Evangelion New Theatrical Version: Ha\", Asuka wearing a \"te",
+"features": [
+"Body expression by shading using molding technology.",
+"The clear orange part of the suit that adheres to the skin is reproduced by special molding of about 3mm ~ about 0.3mm at the thinnest part. The overwhelming sense of reality is pursued by layering materials selected with thorough care.",
+"Eye tracking injection (eye insert molding) realizes the follow-up of the gaze as if Asuka is staring at you.",
+"Molds are processed considering the properties and material texture of various parts that overlap in a complex way.",
+"The prototype is a collaboration with \"ALTER\"."
+],
+"includes": [
+"Display Base × 1",
+"Marking seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-labo"
 ],
@@ -3465,6 +5042,23 @@
 "price_yen": 3200,
 "launch": "2021-03-20",
 "age": 6,
+"info": {
+"intro": "A large plastic model that embodies the charm of Pokemon! The first installment is the Carp King of \"Sakana Pokemon\"!",
+"features": [
+"A total of 30 large parts that are easy to assemble. The total length is about 20 cm.",
+"Color coding reproduction by parts minimizes the use of seals.",
+"The characteristic beard is reproduced with a material that is different from the main body that is resistant to breaking.",
+"By replacing parts, you can also express a dynamic pose of \"bouncing\".",
+"Comes with a dedicated display base."
+],
+"includes": [
+"Runner × 6",
+"Foil seal × 1",
+"Dedicated bass × 1",
+"Instruction manual × 1"
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -3475,6 +5069,19 @@
 "price_yen": 1000,
 "launch": "2021-03-20",
 "age": 8,
+"info": {
+"intro": "Ideal for exhibiting 1/144 scale plastic models! Expand your own world view with CUSTOMIZE SCENE BASE that allows you to recreate various scenes!",
+"features": [
+"Reproduce a realistic \"urban area\". Includes buildings and road effects.",
+"The road surface is grained, and the electric wires are reproduced with lead wires.",
+"A powerful diorama can be reproduced just by combining multiple ones."
+],
+"includes": [
+"Scene-based ×1 set",
+"Lead wire ×1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -3486,6 +5093,7 @@
 "price_yen": 700,
 "launch": "2015-05-23",
 "age": 15,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -3496,6 +5104,22 @@
 "price_yen": 600,
 "launch": "2021-03-20",
 "age": 8,
+"info": {
+"intro": "OPTION PARTS SET FURTHER CUSTOMIZE YOUR 30MM SERIES!",
+"features": [
+"Large weapons that can be customized in various ways by rearranging.",
+"The large sword can be changed in shape to a small sword, a medium sword, or a large sword.",
+"Large lances or large drills can be recombined.",
+"If you purchase more than one, you can infinitely connect large shields."
+],
+"includes": [
+"Large lance parts x 1 set",
+"Large drill parts x 1 set",
+"Large sword parts x 1 set",
+"Large shield parts x 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3506,6 +5130,15 @@
 "price_yen": 730,
 "launch": "2021-03-06",
 "age": 8,
+"info": {
+"intro": "From the official BANDAI SPIRITS nippers, which are recommended for plastic model beginners, a new color is now available!",
+"features": [
+"Nipper for plastic models for those who purchase plastic models for the first time.",
+"Basic specifications and price for beginners.",
+"The color is coral pink with a soft impression."
+]
+},
+"iv": 1,
 "brands": [
 "tool"
 ],
@@ -3516,6 +5149,15 @@
 "price_yen": 730,
 "launch": "2021-03-06",
 "age": 8,
+"info": {
+"intro": "From the official BANDAI SPIRITS nippers, which are recommended for plastic model beginners, a new color is now available!",
+"features": [
+"Nipper for plastic models for those who purchase plastic models for the first time.",
+"Basic specifications and price for beginners.",
+"The color is a chic and calm warm gray."
+]
+},
+"iv": 1,
 "brands": [
 "tool"
 ],
@@ -3525,6 +5167,32 @@
 "name": "HG 1/144 L-GAIM Mk-Ⅱ",
 "price_yen": 3500,
 "launch": "2021-03",
+"info": {
+"intro": "－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－ Over time, L-GAIM Mk-Ⅱ becomes HG. －－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－ From \"HEAVY METAL L-GAIM\", \"L-GAIM Mk-II\" is commercialized in a completely new model in the HG series. Various weapons such as Buster Launcher and the transformation into a prowler form are precisely reproduced. A wide variety of optional ",
+"features": [
+"[L-GAIM Mk-II] is three-dimensional with a completely new model!",
+"HG's first commercialized L-GAIM Mk-II is thoroughly reproduced with attention to detail. The light gray-based coloring is reproduced by molding color and parts division.",
+"Pursue the texture and mobility of the kit",
+"The crystal on the head uses clear parts to pursue texture.",
+"The cable on the back of the knee is made of soft material to create a structure that does not interfere with movement.",
+"Various weapons of [L-GAIM Mk-II] are included.",
+"Buster launcher and various weapons are reproduced in a new model.",
+"Buster Launcher",
+"The gray, navy, and red color scheme of the long buster launcher is reproduced in molding colors.",
+"Saber",
+"The blade part is reproduced with clear parts. In addition, the handle part can be stored in the arm.",
+"Power Launcher",
+"The power launcher that can be attached to the arm can reproduce the cable connection with the waist.",
+"Reproduce the transformation into a puller form",
+"Reproduce the transformation into a characteristic puller form. Each part has a locking mechanism to realize a stable display.",
+"It is possible to reproduce the damaged \"L-GAIM Mk-II\" head.",
+"Optional parts for the head that can reproduce the damaged state by selection are included.",
+"Powerful linkage with the upgraded \"HG L-GAIM\"!",
+"Two types of joint parts that can reproduce the suspended state of \"HG 1/144 L-GAIM\" (sold separately in March 2021 at stores) are included.",
+"Comes with a handle part on the shoulder of the \"L-GAIM Mk-II\" and a joint part to hold the \"L-GAIM Mk-II\"."
+]
+},
+"iv": 1,
 "brands": [
 "hg-c",
 "pb_charapla"
@@ -3536,6 +5204,7 @@
 "price_yen": 2400,
 "launch": "2020-12-18",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3546,6 +5215,7 @@
 "price_yen": 4500,
 "launch": "2021-03",
 "age": 15,
+"iv": 1,
 "brands": [
 "pb_gunpla",
 "pb_pg",
@@ -3558,6 +5228,7 @@
 "price_yen": 7800,
 "launch": "2015-05-30",
 "age": 15,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_338/"
 },
 "01_3380": {
@@ -3565,6 +5236,7 @@
 "price_yen": 2200,
 "launch": "2021-04",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -3578,6 +5250,7 @@
 "price_yen": 8500,
 "launch": "2021-01-08",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -3588,6 +5261,7 @@
 "price_yen": 1900,
 "launch": "2021-01-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3598,6 +5272,22 @@
 "price_yen": 6000,
 "launch": "2021-04-24",
 "age": 8,
+"info": {
+"intro": "The main character of \"MOBILE SUIT GUNDAM Hathaway’s Flash\", \"Ξ (Kusu) GUNDAM\", is made into a plastic model!",
+"features": [
+"With Hajime Katoki's latest drawing, a large MS over 26 meters is thoroughly reproduced in 1/144 scale in the play. By reflecting even the smallest details in each part, a sense of density and volume is created.",
+"Beam saber, beam rifle, shield armament and hand parts included. The shield can be removed and attached by removing the hexagonal parts of the arm.",
+"The wings on the back of the body, the blades on the side of the legs, and the deployment and movement of the Minovsky flight unit are reproduced. It is possible to transform from \"MS form\" to \"flight form\" by deforming the legs and large p"
+],
+"includes": [
+"Beam Rifle ×1",
+"Beam Saber ×2",
+"Shield ×1",
+"Hand parts: Flat hand (left and right), grip hand (left and right), rifle handle (right)",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -3609,6 +5299,26 @@
 "price_yen": 15800,
 "launch": "2021-04-24",
 "age": 8,
+"info": {
+"intro": "To commemorate the release of the \"MOBILE SUIT GUNDAM Hathaway’s Flash\" movie, the main character \"Ξ (Kusu) GUNDAM\" and the rival machine \"Penelope\" are now available as a set!",
+"features": [
+"A luxurious specification that includes funnel missiles and funnel effect parts by new modeling.",
+"Clear color funnel missile launch effect and 12 funnel missile parts are included with each MS. The confrontation composition can be vividly expressed.",
+"The frame that holds the effect parts has multiple mounting positions, allowing you to create a random fennel trajectory.",
+"The funnel missile with new parts with details reproduces the battle image.",
+"Two sets of clear color display pedestals [BA13] without screws with a sturdy frame that supports the weight of a large aircraft are included."
+],
+"includes": [
+"Ξ GUNDAM ×1",
+"Penelope ×1",
+"Display pedestal× 2",
+"Funnel missile (for Ξ GUNDAM Penelope) × 1 type",
+"1 funnel missile effect (Ξ GUNDAM for Penelope) ×",
+"Foil seal×2",
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -3620,6 +5330,20 @@
 "price_yen": 1200,
 "launch": "2021-04-10",
 "age": 8,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM SEED DESTINY\", the mass-produced machine \"Dagger L\" is made into a plastic model for the first time with a new modeling!",
+"features": [
+"\"Easy assembly\" & \"replacement gimmick\" that makes you want to collect multiple machines",
+"Adopts the same standard equipment replacement system \"Stryker Pack System\". It can also be equipped with the separately sold \"Jet Striker\" and \"Ale Striker\".",
+"Beam carbine, beam saber, shield included."
+],
+"includes": [
+"Beam Carbine ×1",
+"Beam Saber ×2",
+"Shield ×1"
+]
+},
+"iv": 1,
 "brands": [
 "hg",
 "hgce"
@@ -3631,6 +5355,28 @@
 "price_yen": 4300,
 "launch": "2021-04-17",
 "age": 15,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM SEED\", Cosmic Ira's mass-produced machine \"Mobile Gin\" is now available at MG!",
+"features": [
+"Proportions and design follow the design of the latest MG SEED series. MG's unique internal frame configuration mechanically expresses the characteristic backpack of Mobile Jean.",
+"Built-in Z.A.F.T. frame of the same standard as the separately sold \"MG 1/100 GUNNER ZAKU WARRIOR (LUNAMARIA HAWKE CUSTOM)\". By adopting a common frame by interpreting it like an actual industrial product, it expresses a design unique to ma",
+"The backpack can be axis moved up and down, as well as swinging backwards for a wide range of movement.",
+"The heavy slash sword is a new design that reproduces the shape of the sword with a sharp form. It is also detailed.",
+"Triple short-range guided missile launcher (missile pod) can be pulled out with a handle. In addition to color-coding missiles by precise parts division, it can also produce movements that draw out the grip.",
+"4 magazines, 1 magazine rack included. One magazine can be mounted on a rifle and the other three can be mounted on a magazine rack."
+],
+"includes": [
+"Heavy Slasher × 1",
+"76mm Heavy Assault Machine Gun × 1",
+"Magazine Rack × 1",
+"Missile Pod × 2",
+"Hand parts (left and right) × 1 type",
+"Expression parts (left and right) × 3 types each",
+"Foil seal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -3641,6 +5387,25 @@
 "price_yen": 600,
 "launch": "2021-04-24",
 "age": 8,
+"info": {
+"intro": "THE OPTION PARTS SET OF THE 30MM SERIES NEWLY ADDED, THE THIRD FORCE MASS-PRODUCED MACHINE \"SPINATIO\"!",
+"features": [
+"Armor inspired by \"Sengoku\" expands the range of customization.",
+"There are two types of head parts: a warrior type and a foot light type.",
+"The bellows unit, which incorporates joints between the parts, can be reassembled to reproduce the rocket form.",
+"Front, rear, and side armor, large shoulders, dragon head, etc. are included.",
+"Can be installed on Alto, Portanova and other existing aircraft."
+],
+"includes": [
+"Bellows unit × 1 set",
+"Front, rear, and side armor parts × 1 set",
+"Large shoulder × 1",
+"Ashigaru, Musha head parts × 1 each",
+"Elbow parts × 2",
+"Dragon Head × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3651,6 +5416,28 @@
 "price_yen": 2700,
 "launch": "2021-04-17",
 "age": 15,
+"info": {
+"intro": "From \"86-Eighty-Six-\", which began airing as an anime on terrestrial television in April 2021, the combat machine \"Juggernaut\" that the main characters ride on appears on 1/48 scale!",
+"features": [
+"High-detail expression based on the original work",
+"Various actions are possible with the movement of each part",
+"Juggernaut's distinctive \"smoothbore cannon\" is standard equipment.",
+"The Shin boarding aircraft comes with a \"high-frequency blade\".",
+"Comes with a support machine scavenger on the same scale as the Juggernaut and figures of Shin and Rena.",
+"The first limited edition includes a special short story written by Asato Anri \"86-Eighty-Six-\"."
+],
+"includes": [
+"Smoothbore Cannon × 1",
+"High Frequency Blade × 2",
+"Lead wire × 2",
+"Scavenger × 1",
+"Figures × 2 types (Shin [sitting], Lena [standing])",
+"Dedicated pedestal × 1",
+"Marking sticker × 1",
+"First Press Limited \"86-Eighty-Six-\" Special Short Story × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3661,6 +5448,26 @@
 "price_yen": 2700,
 "launch": "2021-04-17",
 "age": 15,
+"info": {
+"intro": "From \"86-Eighty-Six-\", which began airing as an anime on terrestrial television in April 2021, the combat machine \"Juggernaut\" that the main characters ride on appears on 1/48 scale!",
+"features": [
+"High-detail expression based on the original work",
+"Various actions are possible with the movement of each part",
+"Juggernaut's distinctive \"smoothbore cannon\" is standard equipment.",
+"The general-purpose machine comes with a \"heavy machine gun\".",
+"On the same scale as the Juggernaut, a support aircraft scavenger and figures of Kaie and Reyna are included."
+],
+"includes": [
+"Smoothbore Cannon × 1",
+"Heavy Machine Gun × 2",
+"Lead wire × 2",
+"Scavenger × 1",
+"Figures × 2 types (Caie [sitting], Lena [standing])",
+"Dedicated pedestal ×1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3671,6 +5478,26 @@
 "price_yen": 3300,
 "launch": "2021-04-17",
 "age": 15,
+"info": {
+"intro": "From \"86-Eighty-Six-\", which started anime broadcasting on terrestrial channels in April 2021, the heroine \"Rena\" is three-dimensional!",
+"features": [
+"There are three types of facial expression parts: \"normal face\", \"smile\", and \"angry face\". You can enjoy facial expressions that match the pose.",
+"A part of the hair is molded with a material that is not easy to break (AFX), allowing for natural posing even though it is long. You can change the shape of your hair according to the pose.",
+"The impressive hat worn by \"Rena\" can be reproduced with or without a part selection system.",
+"\"Binder\" is included."
+],
+"includes": [
+"Facial Expression Parts × 3",
+"Wrist parts: Flat hand (left and right), binder handle (left), hat handle (left)",
+"Hat × 1",
+"Binder × 1",
+"Foil seal × 1",
+"Marking sticker × 1",
+"Figure-rise Effect pedestal × 1",
+"Pedestal Joint Parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -3681,6 +5508,26 @@
 "price_yen": 2700,
 "launch": "2021-04-17",
 "age": 15,
+"info": {
+"intro": "In \"Star Wars: The Dawn of Skywalker\", the X-wing starfighter inherited from Luke and Ray is now available on 1/72 scale!",
+"features": [
+"Iropra molding, water transfer decals, and marking stickers faithfully reproduce details and coloring.",
+"Reproduce distinctive internal details such as mechanical details on the top of the rear and various sensors inside the nose and cone.",
+"Reproduction of Ray's pilot parts with new modeling.",
+"Landing leg parts are included, and the time of deployment and storage is reproduced by replacing them.",
+"Two types of canopies are included, one made of clear material and one with only a frame.",
+"A clear green pedestal inspired by the sea area where the X wing was hidden is included, and a simple white pedestal are included."
+],
+"includes": [
+"Dedicated display base × 2 types (clear green, white)",
+"Pilot parts × 1 type (Ray [seated])",
+"Implantation foot × 1 set",
+"Canopy × 2 types (clear part × 1 , frame part × 1)",
+"Waterslide Decal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3394/"
 },
 "01_3395": {
@@ -3688,6 +5535,31 @@
 "price_yen": 4000,
 "launch": "2021-04-24",
 "age": 15,
+"info": {
+"intro": "From the side story \"ULTRAMAN SUIT ANOTHER UNIVERSE\" serialized in \"Monthly Hobby Japan\", the forced entry type of \"ULTRAMAN SUIT Ver.7.5\" is now available!",
+"features": [
+"The molding colors are black metallic and dark gray to express a sense of gravity.",
+"By eliminating LEDs and adopting a unique new technology that connects and moves the chest and abdomen with multiple ball joints, the range of motion in the twisting direction is greatly increased.",
+"Comes with an original design weapon EYE SLUGGER by the original author, Eiichi Shimizu.",
+"In addition to WIDE SHOT and EX-RIFLE, two SPECIUM SWORDS that can reproduce dual wielding are included.",
+"EX-RIFLE comes with plastic model original barrel expansion parts."
+],
+"includes": [
+"SPACIUM SWORD×2",
+"SPACIUM SWORD Sheath × 2",
+"KNIFE×２",
+"WIDE SHOT×２",
+"Original Weapon \"EYE SLUGGER\" ×2",
+"Original Weapon \"EX-RIFLE\" ×2",
+"Original Weapon \"EX-RIFLE Expansion Barrel\" ×2",
+"Hand parts Flat hand (left and right), grip hand (left and right), EX-RIFLE handle (left and right)",
+"Figure-rise Effect pedestal ×1",
+"Joint parts for pedestal× 1",
+"Marking seal× 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -3698,6 +5570,28 @@
 "price_yen": 4300,
 "launch": "2021-04-17",
 "age": 15,
+"info": {
+"intro": "\"MASKED RIDER RYUKI\" is now available as the 11th work in the project to make all of the Heisei protagonist MASKED RIDER plastic models!",
+"features": [
+"The silver part is expressed with an extra finish.",
+"The opening of the head slit is realized by ultra-thin molding. The compound eyes under the slit are clear red parts, and the characteristic mask is thoroughly reproduced.",
+"Comes with 5 PET advent cards. The upper part of the drag visor slides forward to accommodate the loading of Advent cards.",
+"A handle for the card is included, and the loading image can be reproduced.",
+"Comes with a drag redder with a total length of about 630 mm.",
+"By using some parts of the drag redder, it is possible to reproduce the \"sword vent\" and \"guard vent\". \"Strike Vent\" pursues the atmosphere when it is installed, and special drag claw parts are created.",
+"The movable parts of each joint and the pedestal for the drag ledder make it possible to display a scene in the play."
+],
+"includes": [
+"Dragredder × 1 set",
+"Drag Claw × 1",
+"Wrist parts Decisive hand (right), card handle (right), grip hand (left and right), weapon handle (left and right), flat hand (left and right)",
+"Advent cards × 5 types",
+"Pedestal for dragredder × 2",
+"Figure-rise Effect Pedestal × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -3708,6 +5602,22 @@
 "price_yen": 4500,
 "launch": "2021-04-10",
 "age": 15,
+"info": {
+"intro": "From \"New Sakura Wars\", \"Reiko Fighter Mugen (Shinonome Hatsuhoki)\" will participate in the battle!",
+"features": [
+"Reproduce the impressive opening and closing of the cockpit hatch in the play. A figure of Hatsuho Shinonome in boarding is included.",
+"The inside of the cockpit is also faithfully reproduced to the setting.",
+"Equipped with an extension gimmick that allows you to stretch and contract the joints of the hands and feet. The range of action poses expands.",
+"Comes with a huge hammer, which is the characteristic armament of the Hatsusho machine."
+],
+"includes": [
+"Hammer × 1",
+"Foil seal × 1",
+"Jewel Seal × 1",
+"Water transfer type decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3718,6 +5628,26 @@
 "price_yen": 2900,
 "launch": "2021-06-12",
 "age": 15,
+"info": {
+"intro": "From \"86-Eighty-Six-\", which began airing as an anime on terrestrial television in April 2021, the combat machine \"Juggernaut\" that the main characters ride on appears on 1/48 scale!",
+"features": [
+"High-detail expression based on the original work",
+"Various actions are possible with the movement of each part",
+"Equipped with a \"long-range smoothbore cannon\" specialized for long-range artillery fire. The barrel length is about 250 mm, equipped with a folding gimmick.",
+"Long-range artillery specifications come with a \"heavy machine gun\".",
+"On the same scale as the Juggernaut, a support aircraft scavenger and figures of Kurena and Reina are included."
+],
+"includes": [
+"Long-range smoothbore gun × 1",
+"Heavy Machine Gun × 2",
+"Lead wire × 2",
+"Scavenger × 1",
+"Figure × 2 types (Kurena [sitting], Lena [standing])",
+"Dedicated pedestal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3728,6 +5658,18 @@
 "price_yen": 700,
 "launch": "2021-06-19",
 "age": 8,
+"info": {
+"intro": "From \"SD Gundam World Heroes\", the anime scheduled to be released worldwide in April 2021, versatile WAR HORSE throughout the series is here!",
+"features": [
+"The legs have moving joints that enable various expressions.",
+"The back is developed so that heroes sold separately can be ridden steadily.",
+"3mm holes have been placed throughout the body and can be used to attach armor parts.",
+"The kit has an axis that is compatible with Action Bases.",
+"Includes:",
+"Joint parts × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3401/"
 },
 "01_3402": {
@@ -3735,6 +5677,20 @@
 "price_yen": 800,
 "launch": "2021-06-19",
 "age": 8,
+"info": {
+"intro": "From \"SD Gundam World Heroes\", the anime scheduled to be released worldwide in April 2021, Shinobi loyal to Nobunaga, SASUKE DELTA GUNDAM is here!",
+"features": [
+"The entire body is covered with clear parts.",
+"The fingertips of making the mark that is characteristic of Shinobi are included.",
+"The back of the figure is a design of Shinobi wearing equipment all over its body.",
+"Wears a mysterious fox mask.",
+"Includes:",
+"Ninja Sword × 1",
+"Mask × 1",
+"Foil stickers × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3402/"
 },
 "01_3403": {
@@ -3742,6 +5698,24 @@
 "price_yen": 700,
 "launch": "2021-05-29",
 "age": 8,
+"info": {
+"intro": "Benjamin V2 GUNDAM, a marine adventurer who goes to the ocean from \"SD GUNDAM WORLD HEROES\", which is scheduled to start anime around the world from April 2021, participates!",
+"features": [
+"The left hand is equipped with a large hook with outstanding clear parts.",
+"Comes with a mask with distinctive clear parts.",
+"He is equipped with a variety of weapons, such as carrying a small knife on his chest and holding a gun in both hands.",
+"It is possible to hold the gun beautifully with the right hand for holding an angled weapon."
+],
+"includes": [
+"Saber × 1",
+"Gun × 2",
+"Large hook × 1",
+"Mask × 1",
+"Weapon Handle (Right) ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3403/"
 },
 "01_3404": {
@@ -3749,6 +5723,22 @@
 "price_yen": 600,
 "launch": "2021-05-29",
 "age": 8,
+"info": {
+"intro": "From \"SD GUNDAM WORLD HEROES\", which is scheduled to start anime worldwide in April 2021, Edward Second V equipped with a large firearm is now available!",
+"features": [
+"The large cannon can be attached and detached with the telescope of the \"Mask\" part.",
+"The saber is held by the rear armor.",
+"It is possible to hold the saber with the left hand of the angled weapon holder."
+],
+"includes": [
+"Large Cannon × 1",
+"Saber × 1",
+"Mask × 1",
+"Weapon Handle (Left) × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3404/"
 },
 "01_3405": {
@@ -3756,6 +5746,22 @@
 "price_yen": 800,
 "launch": "2021-04-17",
 "age": 8,
+"info": {
+"intro": "Goku Impulse GUNDAM is now available from \"SD GUNDAM WORLD HEROES\", which is scheduled to start anime worldwide in April 2021!",
+"features": [
+"The silhouette changes in 3 stages by recombining! A special kit that allows you to move your legs and decide on bold actions!",
+"A large number of clear effect parts are included, allowing for reassembly and production.",
+"Goku's silhouette, Gomonkey form, and red lotus claw are reproduced by reassembling clear parts and equipment, respectively.",
+"Ankle joint parts are included to enhance Goku Impulse's kicking action!",
+"The \"mask\" parts are included with clear molding."
+],
+"includes": [
+"Ruyi Stick × 1",
+"Clear effect parts (mask/red claw, etc.) × 1 Set",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3405/"
 },
 "01_3406": {
@@ -3763,6 +5769,22 @@
 "price_yen": 700,
 "launch": "2021-04-17",
 "age": 8,
+"info": {
+"intro": "Nobunaga GUNDAM Epion, a hero named after Nobunaga, will appear from \"SD GUNDAM WORLD HEROES\", which is scheduled to start anime worldwide in April 2021!",
+"features": [
+"Nobunaga GUNDAM Epion's armament and heat rod are reproduced with clear parts that can be moved freely!",
+"The elbow of the right arm is movable, reproducing the stance of the famous sword \"Heshikiri Hasebe\".",
+"Clear parts are layered on the blade and can be used as a sword and halberd effect.",
+"The cloak consists of three pieces, creating a pose that exudes Haki.",
+"The \"mask\" parts are included with clear molding."
+],
+"includes": [
+"Sword (Heshikiri Hasebe) ×1",
+"Clear Effect Parts (Mask/Heat Rod) ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3406/"
 },
 "01_3407": {
@@ -3770,6 +5792,21 @@
 "price_yen": 600,
 "launch": "2021-04-17",
 "age": 8,
+"info": {
+"intro": "From \"SD GUNDAM WORLD HEROES\", which is scheduled to start anime worldwide in April 2021, the Sardgent Verdebuster GUNDAM with a unique face design is now available!",
+"features": [
+"The mask with clear parts and slits is reproduced with a combination of color-coded parts and stickers.",
+"\"Justice Lock\" (handcuffs) are always on the front armor and can be removed to become a handheld weapon.",
+"\"EXT-Magnum LB\" (gun) can be equipped on the left hip.",
+"You can ride the \"SD SD SANGOKU SOKETSUDEN Trinity Bike (sold separately)\"! The L-shaped parts inside the frame support a motorcycle riding posture."
+],
+"includes": [
+"Pistol (EXT-Magnum LB) ×1",
+"Handcuffs (Justice Lock) ×1",
+"Foil seal ×1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3407/"
 },
 "01_3408": {
@@ -3777,6 +5814,7 @@
 "price_yen": 8000,
 "launch": "2021-04",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -3789,6 +5827,22 @@
 "price_yen": 4500,
 "launch": "2021-06-26",
 "age": 15,
+"info": {
+"intro": "Commercialization of the popular Digimon \"Dukemon\" from \"Digimon Tamers\", which is celebrating its 20th anniversary!",
+"features": [
+"A three-dimensional version of the Amplified Dukemon designed by As'Maria under official supervision.",
+"Holy Shield Aegis and Holy Spear Gram are equipped with a plastic model original gimmick.",
+"A wide range of movements with gimmicks such as joint expansion and contraction create a natural pose.",
+"The distinctive cloak adopts a new structure using molded products, PET sheets and seals."
+],
+"includes": [
+"Holy Spear Gram ×1",
+"Holy Shield Aegis × 1",
+"Stand for Aegis × 1",
+"Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard-amp"
 ],
@@ -3799,6 +5853,22 @@
 "price_yen": 4800,
 "launch": "2021-06-26",
 "age": 15,
+"info": {
+"intro": "Commercialization of Evangelion Mark.06 from \"Evangelion New Theatrical Version\"!",
+"features": [
+"Based on the setting in the play called \"artificial humans\", we pursue the reproduction of natural action poses as humans.",
+"The color coding of the antenna, head sphere, and pupil is reproduced by insert molding.",
+"The impressive \"Cassius' Spear\" in the play is reproduced in a new model.",
+"The halo on the head is reproduced using PET material."
+],
+"includes": [
+"Cassius' Spear × 1",
+"Halo Sheet × 1",
+"Realistic Decal × 1",
+"Hand parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "rg-c"
 ],
@@ -3809,6 +5879,23 @@
 "price_yen": 4000,
 "launch": "2021-06-12",
 "age": 15,
+"info": {
+"intro": "\"Super Robot Wars\" 30th Anniversary! The Hobby Division participates in \"Super Robot Wars OG\"! The first is the commercialization of the popular aircraft \"Cyberstar\"!",
+"features": [
+"A range of motion that allows for a high degree of freedom in posing.",
+"The \"cyber form\" can be reproduced by recombining parts. A pedestal that allows for display in cyber form is also included.",
+"Two \"Discutters\" and \"High Familia\" are included, and two pedestals for the High Familia are also included."
+],
+"includes": [
+"Discutor × 1",
+"High Familia × 2",
+"Hand parts × 1 set",
+"High Familia pedestal × 2",
+"Pedestal for the main body × 1",
+"Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -3819,6 +5906,24 @@
 "price_yen": 1700,
 "launch": "2021-05-22",
 "age": 8,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM WING\", the TV version of \"GUNDAM Death Size\" is three-dimensional in HG1/144 scale!",
+"features": [
+"Natural posing is possible with the sliding gimmick of the shoulder armor and knee armor.",
+"Two types of beam-sized effects are included.",
+"The blade parts of the shield of the Buster Shield are interlocked to the left and right. The beam injection state is reproduced by attaching clear parts.",
+"Comes with parts that can reproduce the beam size storage state. Can be attached to the rear armor."
+],
+"includes": [
+"Beam size × 1",
+"Beam size storage state reproduction part × 1",
+"Buster Shield × 1 type",
+"Effect parts (for beam size) × 2 types",
+"Effect Parts (for Buster Shield) × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3829,6 +5934,22 @@
 "price_yen": 1280,
 "launch": "2021-05-22",
 "age": 8,
+"info": {
+"intro": "A new addition to the 30MM series, the third force's mass-produced machine \"Spinatio\" is now available in ninja specifications!",
+"features": [
+"In addition to the main body, it is an all-in-one item that combines armor parts and weapon parts into one.",
+"New structure that is easier to assemble! While taking advantage of the range of motion, there is no pinching during assembly.",
+"Adopts a common joint structure that can be mixed with existing items, 3mm joints."
+],
+"includes": [
+"Beam Rifle × 1",
+"Short Blade × 2",
+"Hand parts Weapon handle (left and right), flat hand (left and right), rifle handle (right)",
+"Ninja Armor × 1 set",
+"Joint parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3839,6 +5960,20 @@
 "price_yen": 1380,
 "launch": "2021-05-29",
 "age": 8,
+"info": {
+"intro": "From the 30MM series, \"Cielnova\" is now available in black for a wider range of customization!",
+"features": [
+"Distinctive parts such as massive legs, long forearms, and a backpack that can be expanded upwards.",
+"Adopts an expandable joint mechanism. New hip parts can be incorporated into the existing aircraft to adjust the body shape.",
+"Options for commander aircraft, special forces, and close combat The chest part of the armor is linked to Portanova."
+],
+"includes": [
+"Handgun × 1",
+"Backpack × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3849,6 +5984,20 @@
 "price_yen": 1380,
 "launch": "2021-05-29",
 "age": 8,
+"info": {
+"intro": "Green is now available in the 30MM series Earth Alliance's \"eEXM-21 Labiot\"!",
+"features": [
+"C-type joint structure added to the exterior. New customization is possible.",
+"Chest parts for close combat, long-range sniping, and commander aircraft are linked to Alto.",
+"Can be linked with previous weapon sets. By separating the grip parts and using the included relay parts, it can be combined with Alto Optional Weapon 1."
+],
+"includes": [
+"Shotgun × 1",
+"Backpack × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3859,6 +6008,31 @@
 "price_yen": 500,
 "launch": "2021-05-22",
 "age": 8,
+"info": {
+"intro": "Customized weapons with weapons inspired by \"Sengoku\" are now available!",
+"features": [
+"A weapon set of melee weapons and heavy weapons inspired by \"Sengoku\".",
+"Comes with equipment that allows you to customize the rifle.",
+"Comes with hand parts tied to the mark.",
+"By combining multiple bows, it is possible to reproduce a huge bow by connecting the scabbard to the bow and arrow relay unit."
+],
+"includes": [
+"Arrow × 1",
+"Bow and arrow relay unit × 1",
+"Tachi × 1",
+"Kodachi × 1",
+"Sheath × 1",
+"Sheath (short) × 1",
+"Beam Rifle × 1",
+"Rifle equipment × 2 types",
+"Short blade × 2",
+"Pattern × 1",
+"Tip parts (spear, sword) × 1 each",
+"Water Spider × 2",
+"Hand parts Ninja hand (right)"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -3870,6 +6044,27 @@
 "price_yen": 3200,
 "launch": "2021-06-19",
 "age": 15,
+"info": {
+"intro": "The TV version of \"Wing GUNDAM\" has been made into a long-awaited RG with a completely new modeling!",
+"features": [
+"Various gimmicks to reproduce the mechanisms in the setting and poses in the play, as well as original gimmicks based on actual machine research, are condensed into 1/144 scale.",
+"Based on RG's unique actual machine research, an original movable gimmick inspired by a bird was introduced into the wings.",
+"The base of the wings uses \"Advanced MS Joint\".",
+"Buster rifle and beam saber to reproduce the dynamic stance of the shoulder and body blocks are built-in movable gimmicks.",
+"By reassembling parts, it is possible to transform into a bird form.",
+"By using action-based compatible parts, it is possible to display not only in MS state but also in bird form."
+],
+"includes": [
+"Buster Rifle × 1",
+"Shield × 1",
+"Beam Saber × 1",
+"Hand parts (left and right) × 3 types eachof",
+"Weapon holder (right) × 1 type",
+"Action-based compatible parts × 1",
+"Realistic Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -3880,6 +6075,24 @@
 "price_yen": 5000,
 "launch": "2021-06-26",
 "age": 15,
+"info": {
+"intro": "From \"MOBILE SUIT GUNDAM SEED\", as the first installment of \"FULL MECHANICS\", which will be renewed as a new series, the completely new Calamity GUNDAM is now available!",
+"features": [
+"The head is pulled out of the fuselage, and a built-in gimmick is built in to relieve the cushion with the collar.",
+"The movable axis of the abdomen is equipped with a gimmick that swings forward and backward, left and right. The crotch axis can also swing downward, creating a powerful pose with a wide stance.",
+"Equipped with an interlocking movement that tilts the front skirt towards you so as not to interfere with the rotation of the torso in the left and right directions when bending forward. The front block has a structure that hides the gaps b",
+"The arms are connected by a ball joint with the shoulder armor. Movable with a combination of shoulder swing, elbow double joint, and wrist double joint.",
+"Comes with a \"Todess Block\" as a hand-held weapon. Equipped with a movable gimmick that swings the grip forward.",
+"Comes with a \"Kafer Zwei\" (shield) that allows the gun barrel to swing moving. Can be attached to the forearm using joint parts."
+],
+"includes": [
+"337mm Plasma Sabot Bazooka Cannon \"Todice Block\" × 1",
+"115mm Twin Assault Gun \"Kafer Zwei\" (Shield) × 1",
+"Foil seal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "fullmechanics"
 ],
@@ -3890,6 +6103,19 @@
 "price_yen": 1800,
 "launch": "2021-06-12",
 "age": 8,
+"info": {
+"intro": "The 30MM series is now available as a refurbished type for local warfare, and Dark Purple is now available for Porta Nova (space specification)!",
+"features": [
+"New waist parts increase expandability. If you combine the backpack with the second Porta Nova (space specification) [dark purple] legs, you can achieve a quadrupedal type.",
+"Arm unit Rifle/large claw included."
+],
+"includes": [
+"Space backpack / armor × 1 set",
+"Arm unit Rifle / large claw × 1 set",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3900,6 +6126,20 @@
 "price_yen": 780,
 "launch": "2021-06-12",
 "age": 8,
+"info": {
+"intro": "BLACK IS NOW AVAILABLE IN THE 30MM \"EXA VEHICLE SERIES\" THAT EXPANDS THE RANGE OF CUSTOMIZATION!",
+"features": [
+"Deformable space-spec vehicles.",
+"It can also be transformed into a navigation form by recombination.",
+"Face parts included.",
+"If you disassemble it, it can be used as a customized part."
+],
+"includes": [
+"Vehicle × 1",
+"Face Parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3910,6 +6150,21 @@
 "price_yen": 780,
 "launch": "2021-06-26",
 "age": 8,
+"info": {
+"intro": "The 30MM \"Ex Vehicle Series\" that expands the range of customization is now available as a motorcycle version from the third force!",
+"features": [
+"A one-wheeled motorcycle-type vehicle.",
+"When disassembled, it can be transformed into a third force, Roy Roy, and a large cannon.",
+"Roy Roy is connected to the body and can also be used as a customized part.",
+"Alto, Porta Nova, Labiot, Ciernova, and existing aircraft can also be ridden.",
+"If you purchase multiple bikes, you can customize them into two-wheeled bikes."
+],
+"includes": [
+"Vehicle × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -3920,6 +6175,24 @@
 "price_yen": 3200,
 "launch": "2021-06-12",
 "age": 15,
+"info": {
+"intro": "From the monthly Hobby Japan series \"ULTRAMAN SUIT ANOTHER UNIVERSE\", a popular variation of the Tiga suit \"Tigas Suit Sky Type\" is commercialized in the -ACTION- series!",
+"features": [
+"The thruster with a grated design drawn by Mr. Shimizu × Mr. Shimoguchi is equipped with a movable gimmick on the side and back parts.",
+"The shape of the abdomen and neck joint parts has been improved to -ACTION- specifications to expand the range of motion.",
+"With a wide range of motion, it is possible to reproduce the stance pose of the special move Zeperion Ray.",
+"Plastic model The original weapon Zeperion Spear is included with clear parts.",
+"The LED unit (sold separately) can be placed on the chest to keep the breasts and eyes open."
+],
+"includes": [
+"Zeperion Ray × 1",
+"Zeperion Spear × 1",
+"Figure-rise Effect pedestal ×1",
+"Foil seal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -3930,6 +6203,22 @@
 "price_yen": 1000,
 "launch": "2021-06-19",
 "age": 6,
+"info": {
+"intro": "Kirby appears in the introductory series \"ENTRY GRADE\" for all inexperienced plastic models!",
+"features": [
+"The color-coded parts of the face are reproduced with Maxim tomatoes and rice ball parts! The \"Manpuku Build\" that Kirby assembles with the image of food is fun!",
+"Since it is a touch gate, the parts are \"petit!\" You can take it.",
+"No glue or tools required. The instructions are colored for easy reading.",
+"The number of parts is small, so even those who are making plastic models for the first time can assemble them crisply.",
+"Comes with a warpstar-shaped pedestal."
+],
+"includes": [
+"Runner × 4",
+"Instruction manual ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "entry_grade"
 ],
@@ -3940,6 +6229,7 @@
 "price_yen": 4200,
 "launch": "2021-03-12",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -3950,6 +6240,7 @@
 "price_yen": 2400,
 "launch": "2021-03-12",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -3960,6 +6251,7 @@
 "price_yen": 4700,
 "launch": "2021-06",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg",
 "pb_gunpla",
@@ -3972,6 +6264,7 @@
 "price_yen": 1800,
 "launch": "2004-06",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -3983,6 +6276,7 @@
 "price_yen": 9400,
 "launch": "2021-04-10",
 "age": 15,
+"iv": 1,
 "brands": [
 "mg"
 ],
@@ -3993,6 +6287,7 @@
 "price_yen": 3800,
 "launch": "2021-04-24",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg"
 ],
@@ -4003,6 +6298,7 @@
 "price_yen": 1300,
 "launch": "2021-04-29",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3494/"
 },
 "01_3496": {
@@ -4010,6 +6306,7 @@
 "price_yen": 4700,
 "launch": "2021-04-10",
 "age": 15,
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -4020,6 +6317,17 @@
 "price_yen": 500,
 "launch": "2021-07-10",
 "age": 8,
+"info": {
+"intro": "The first \"GUNDAM decal\" new lineup in about 3 years! Versatile water transfer decals for 1/144 scale are now available!",
+"features": [
+"HG \"MOBILE SUIT GUNDAM AGE\" general-purpose.",
+"Newly designed decals."
+],
+"includes": [
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -4030,6 +6338,16 @@
 "price_yen": 500,
 "launch": "2021-07-10",
 "age": 8,
+"info": {
+"intro": "The first \"GUNDAM decal\" new lineup in about 3 years! Versatile water transfer decals for 1/144 scale are now available!",
+"features": [
+"HG 1/144 \"MOBILE SUIT GUNDAM Hathaway’s Flash\" general-purpose."
+],
+"includes": [
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -4040,6 +6358,16 @@
 "price_yen": 500,
 "launch": "2021-07-10",
 "age": 8,
+"info": {
+"intro": "The first \"GUNDAM decal\" new lineup in about 3 years! Versatile water transfer decals for 1/144 scale are now available!",
+"features": [
+"\"MOBILE SUIT GUNDAM THE ORIGIN\" general-purpose."
+],
+"includes": [
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -4050,6 +6378,17 @@
 "price_yen": 500,
 "launch": "2021-07-10",
 "age": 8,
+"info": {
+"intro": "The first \"GUNDAM decal\" new lineup in about 3 years! Versatile water transfer decals for 1/144 scale are now available!",
+"features": [
+"HG 1/144 \"BUILD DIVERS Re:RISE\" general-purpose.",
+"Newly designed decals."
+],
+"includes": [
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -4060,6 +6399,16 @@
 "price_yen": 500,
 "launch": "2021-07-10",
 "age": 8,
+"info": {
+"intro": "The first \"GUNDAM decal\" new lineup in about 3 years! Water transfer decals that can be used on 1/144 scale are now available!",
+"features": [
+"RG 1/144 νGUNDAM for."
+],
+"includes": [
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -4070,6 +6419,16 @@
 "price_yen": 500,
 "launch": "2021-07-10",
 "age": 8,
+"info": {
+"intro": "The first \"GUNDAM decal\" new lineup in about 3 years! Water transfer decals that can be used on 1/144 scale are now available!",
+"features": [
+"RG 1/144 SAZABI for."
+],
+"includes": [
+"Waterslide Decal×1"
+]
+},
+"iv": 1,
 "brands": [
 "gundam_decal"
 ],
@@ -4080,6 +6439,31 @@
 "price_yen": 7000,
 "launch": "2021-07-22",
 "age": 8,
+"info": {
+"intro": "The nightingale that appeared in \"MOBILE SUIT GUNDAM Char’s Counterattack Bertuchka Children\" has been made into an HG for a long-awaited HG!",
+"features": [
+"The MA class giant is reproduced in 1/144 scale down to the smallest detail. The width of the left and right sides is about 400mm, and the total height is about 211mm.",
+"The antenna block can be deployed and movable to expose internal details.",
+"The mono-eye can be rotated. The shape of the characteristic cockpit block is also reproduced.",
+"The abdomen can be moved up and down. By moving the abdominal parts, you can expose the mega particle cannon.",
+"The funnel binder has movable parts at the base, and the binder can be unfolded and folded. The funnel can be removed individually.",
+"Reproduce the movement of the manipulator (hidden arm) behind the front skirt. A beam saber can be attached to the hidden arm.",
+"The landing gear of the rear skirt can be replaced, and the axis can be moved to reproduce storage and deployment. The propellant tank can be deployed with ball movement.",
+"Each joint such as shoulder, elbow, forearm, groin, knee, and ankle can be moved. The base of the arm can be pulled out. The front left and right blocks of the tips of the legs can also be moved individually. Elbows and knees are two-axis m",
+"Optional parts with built-in various gimmicks are included. Bipods can be deployed. Beam Tomahawks and missiles can be suspended behind the shield. The effect of the beam tomahawk has been reproduced with a new modeling."
+],
+"includes": [
+"Large Mega Beam Rifle ×1",
+"Beam Saber ×4",
+"Beam Tomahawk × 1",
+"Effect parts for beams and tomahawks × 1 set",
+"Shield ×1",
+"Set of facial expressions: Grip (left and right), rifle handle (right), open hand (left)",
+"Foil seal × 1",
+"Marking sticker × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -4091,6 +6475,13 @@
 "price_yen": 800,
 "launch": "2021-08-28",
 "age": 8,
+"info": {
+"includes": [
+"Knife × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdgundamseries"
 ],
@@ -4101,6 +6492,21 @@
 "price_yen": 600,
 "launch": "2021-09-25",
 "age": 8,
+"info": {
+"intro": "\"Wing GUNDAM Zero\" is now available in a completely new form from SD-EX!",
+"features": [
+"Comes with a wide variety of weapons. He also poses with a twin buster rifle.",
+"By combining equipped weapons, you can customize the original armament of the plastic model. You can also have it on a 1/144 scale HG!",
+"The wings of the backpack can be deployed with movable shafts. It can also be customized to HG."
+],
+"includes": [
+"Twin Buster Rifle × 1",
+"Beam Saber × 1",
+"Shield × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3509/"
 },
 "01_3510": {
@@ -4108,6 +6514,24 @@
 "price_yen": 3200,
 "launch": "2021-07-10",
 "age": 15,
+"info": {
+"intro": "MASKED RIDER AGITO Grand Foam is the long-awaited commercialization!",
+"features": [
+"Plated parts are used to thoroughly pursue the texture of the golden part of the suit.",
+"By adopting parts that feature a wide range of motion, a variety of action poses such as \"rider kicks\" can be reproduced.",
+"The development of the \"Crosshorn\" is reproduced with replacement parts.",
+"Three types of hand parts are included.",
+"\"Agito's Crest\" effect parts are included."
+],
+"includes": [
+"Parts for crosshorn deployment × 1 set",
+"Wrist parts Grip (left and right), flat hand (left and right), decisive hand (left and right)",
+"Effect Parts × 1",
+"Figure-rise Effect pedestal ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -4118,6 +6542,26 @@
 "price_yen": 3600,
 "launch": "2021-07-22",
 "age": 15,
+"info": {
+"intro": "Imagining \"life\" from the ancient memory of \"fossils\"-",
+"features": [
+"Total length is about 35cm. A plastic model that incorporates the latest theories and scientific findings in a volume of 1/32 and allows you to experience assembling a skeletal specimen.",
+"The part where the abdominal bone (abdominal ribs) are twisted in conjunction with the skin and is shaped to adhere to the body at the moment of jumping.",
+"The three bones are closely reinforced to faithfully reproduce the special instep that supports a weight of nearly 10 tons.",
+"The wishbone located at the base of the shoulder, which supports both short but powerful arms, reproduces the scars of stress fractures caused by strong impacts.",
+"The marks of the holes where the nerves passed through the lips are also reproduced with precision modeling unique to plastic models.",
+"The tooth shape created by the bite with the teeth of the lower jaw is also reproduced on the upper jaw parts.",
+"The long tail, which is a weapon and maintains the balance of the body's center of gravity, has small bones connected to the tip, and also expresses its delicate shape.",
+"A pedestal that also reproduces plants from the Cretaceous period is included. Fine details are applied to each leaf.",
+"An explanatory booklet supervised by dinosaur expert Kyoichi Tomita is included as a separate volume."
+],
+"includes": [
+"Instruction manual ×1",
+"Commentary booklet ×1",
+"Dedicated pedestal ×1"
+]
+},
+"iv": 1,
 "brands": [
 "imaginary_skeleton"
 ],
@@ -4128,6 +6572,18 @@
 "price_yen": 1580,
 "launch": "2021-07-22",
 "age": 15,
+"info": {
+"intro": "From Star Wars' first live-action drama series \"The Mandalorian\", the transport armored shuttle \"Razor Crest\" owned by the main character \"The Mandalorian\" is now available!",
+"features": [
+"Normal color version for painting enthusiasts.",
+"Comes with a pedestal with a ball joint that can be displayed at the desired angle."
+],
+"includes": [
+"Cainas Seal ×1",
+"Dedicated display base ×1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3513/"
 },
 "01_3514": {
@@ -4135,6 +6591,18 @@
 "price_yen": 2200,
 "launch": "2021-07-22",
 "age": 15,
+"info": {
+"intro": "From \"Star Wars' first live-action drama series \"The Mandalorian\", the transport armored shuttle \"Razor Crest\" owned by the main character \"The Mandalorian\" is now available!",
+"features": [
+"The silver coating reproduces the heavy texture of the aircraft.",
+"Comes with a pedestal with a ball joint that can be displayed at your favorite angle."
+],
+"includes": [
+"Kainas Seal × 1",
+"Dedicated display base× 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3514/"
 },
 "01_3515": {
@@ -4142,6 +6610,26 @@
 "price_yen": 3500,
 "launch": "2021-07-22",
 "age": 15,
+"info": {
+"intro": "From \"Star Wars' first live-action drama series \"The Mandalorian\", the main character \"The Mandalorian\" is made into a plastic model on 1/12 scale with a variety of accessories!",
+"features": [
+"Regular color that is easy to process such as painting.",
+"The jetpack on the back can be attached and detached. By using the joint, it is possible to attach a spear or a special blaster to the back.",
+"The distinctive cloak is reproduced with parts made of cloth material.",
+"Comes with a variety of weapons used in various scenes in the play.",
+"Various joint parts and a dedicated pedestal are included."
+],
+"includes": [
+"Dedicated blasters × 2 types",
+"Spear × 1",
+"Darksaber × 1",
+"Cloak ×1",
+"Hand parts Gun holder (right), rifle handle (right), weapon holder (right), facial expression hand (left)",
+"Joint parts × 1 set",
+"Dedicated display base× 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3515/"
 },
 "01_3516": {
@@ -4149,6 +6637,27 @@
 "price_yen": 4800,
 "launch": "2021-07-22",
 "age": 15,
+"info": {
+"intro": "From \"Star Wars' first live-action drama series \"The Mandalorian\", the main character \"The Mandalorian\" is made into a plastic model on 1/12 scale with a variety of accessories!",
+"features": [
+"The silver color of the Besker armor is reproduced with a heavy silver coating.",
+"Impressive metallic armor reproduced with silver coating.",
+"The jetpack on the back can be attached and detached. By using the joint, it is possible to attach a spear or a special blaster to the back.",
+"The distinctive cloak is reproduced with parts made of cloth material.",
+"Comes with a variety of weapons used in various scenes in the play.",
+"Various joint parts and a dedicated pedestal are included."
+],
+"includes": [
+"Dedicated blasters × 2 types",
+"Spear × 1",
+"Darksaber × 1",
+"Cloak ×1",
+"Hand parts Gun holder (right), rifle handle (right), weapon holder (right), facial expression hand (left)",
+"Joint parts × 1 set",
+"Dedicated display base × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3516/"
 },
 "01_3517": {
@@ -4156,6 +6665,18 @@
 "price_yen": 1400,
 "launch": "2021-09-18",
 "age": 8,
+"info": {
+"intro": "From \"SD GUNDAM WORLD HEROES\", a DX set that adds armor that can reproduce the silhouette of Sa Gojo and the silhouette of Boardo Bakai to \"Goku Impulse GUNDAM\" is now available!",
+"features": [
+"In addition to reassembling each form, further forms that combine each part can also be reproduced."
+],
+"includes": [
+"Ruyi Stick × 1",
+"Goku, Inoba Precept, Sha Gojo each reproduction part × set 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdgundamseries"
 ],
@@ -4166,6 +6687,18 @@
 "price_yen": 600,
 "launch": "2021-10-16",
 "age": 8,
+"info": {
+"intro": "From \"SD GUNDAM WORLD HEROES\", a new character with a phantom thief motif will join the battle!",
+"features": [
+"Various armaments can be stored on the back or inside the cloak."
+],
+"includes": [
+"G Controller × 1",
+"Attachment parts × 4 types",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdgundamseries"
 ],
@@ -4176,6 +6709,24 @@
 "price_yen": 3200,
 "launch": "2021-08-21",
 "age": 15,
+"info": {
+"intro": "\"Lacus Klein\" from \"MOBILE SUIT GUNDAM SEED\" is three-dimensional with Figure-rise Standard!",
+"features": [
+"Comes with three types of facial expression parts: \"normal face\", \"smile\", and \"troubled face\". Normally, the face is expressed by tampo printing. Smiles and troubled faces are made of waterslide decals.",
+"The original miniskirt version of the plastic model can also be reproduced.",
+"Various hand parts and a halo called \"Pink-chan\" by Lux are included."
+],
+"includes": [
+"Facial expression parts (tampo printing) × 1 type",
+"Facial expression parts × 2 types",
+"Wrist parts: Flat hand (left and right), prayer hand (left and right), halo handle (left and right)",
+"Pink halo (ear opening, ear closed) × 1 type each",
+"Foil seal × 1",
+"Waterslide Decal × 1",
+"Display pedestal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -4186,6 +6737,16 @@
 "price_yen": 3500,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"intro": "As the first installment of \"ULTIMAGEAR\", which ultimately reproduces the most attractive settings of the items in the play with a technique unique to plastic models, the \"Millennium Puzzle\" is three-dimensional from \"Yu-Gi-Oh!\"!",
+"features": [
+"A plastic model of ultra-high difficulty puzzles that looks like the real thing.",
+"There are two stages of assembly in \"ULTIMAGEAR MILLENNIUM PUZZLE\". The first step is to assemble the puzzle pieces of the millennium puzzle as a plastic model, and the second step is to complete the millennium puzzle as a puzzle. From the ",
+"In order to complete this product, it is necessary to derive a very small path to completion by relying on one's own inspiration from the countless assembly patterns created by the order of fitting the pieces, the position of fitting, and t",
+"The finished product is life-size with a total length of about 10 cm."
+]
+},
+"iv": 1,
 "brands": [
 "ultimagear"
 ],
@@ -4196,6 +6757,23 @@
 "price_yen": 3000,
 "launch": "2021-08-07",
 "age": 15,
+"info": {
+"intro": "From the anime \"Demon Slayer\", the main character Tanjiro Kamado appears in the \"Hinokami Kagura\" specification!",
+"features": [
+"The impressive effect of \"Hinokami Kagura\" with a blade wrapped in flames is reproduced with three layers of yellow and clear red parts.",
+"The haori, uniform, hair, etc. are expressed in reddish molded colors that evoke the reflection of flames.",
+"Layered injection molding for a lively look.",
+"Tanjiro's eyes are reproduced up to the iris with the technology of molding multiple molding colors into one part.",
+"The face is molded in one part, including the scar pattern on the eyebrows and forehead. The scars on the eyebrows and forehead are of different colors and are integrated into the facial parts.",
+"Reproduce the dynamic haori only by dividing the calculated parts."
+],
+"includes": [
+"Nichirin sword (folded) ×1",
+"Hinokami Kagura Effect ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3521/"
 },
 "01_3524": {
@@ -4203,6 +6781,29 @@
 "price_yen": 4500,
 "launch": "2021-09-11",
 "age": 15,
+"info": {
+"intro": "Hi-ν GUNDAM, which appears in \"MOBILE SUIT GUNDAM Char’s Counterattack Bertochka Children\", is now available in RG in pursuit of a new interpretation of detail expression and reality!",
+"features": [
+"Equipped with a \"multi-link gimmick\" in which the armor slides in conjunction with the movement of each joint. Each part of the armor can be slid to expose the mechanical internal frame.",
+"The upper waist base swings up and down for bold poses. The lumbar armor is equipped with a connection joint and is designed not to interfere with the movement of the legs.",
+"Extensive movement of the legs allows the knees to be firmly grounded.",
+"The arm beam gun is equipped with a gimmick that extends in conjunction with the wrist when it is pressed down.",
+"Neckline parts can be moved according to movable interference.",
+"The container is equipped with a gimmick that spreads the fin funnel wide and makes it look like wings.",
+"The \"Advanced MS Joint\" allows you to retain your fin funnel shooting form.",
+"Various weapons and hand parts included."
+],
+"includes": [
+"Beam Rifle × 1",
+"New Hyper Bazooka × 1",
+"Shield × 1",
+"Beam Saber (Handle × 3, Beam Blade × 2)",
+"Hand parts (left and right) × 3 types each",
+"Weapon handle (right) × 1 type",
+"Realistic Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "rg"
 ],
@@ -4213,6 +6814,20 @@
 "price_yen": 900,
 "launch": "2021-10-30",
 "age": 8,
+"info": {
+"intro": "From \"SD GUNDAM WORLD HEROES\", \"Nobunaga GUNDAM Epion\" is now available in a mysterious and mysterious different color version!",
+"features": [
+"Movable parts are used on the elbow to express the action of drawing the sword.",
+"Clear parts are layered on the blade to reproduce the special move \"Absolute Sword, Burning Dragon Piercing\".",
+"Dark mask included."
+],
+"includes": [
+"Sword (Heshikiri Hasebe) ×1",
+"Clear Parts (Mask/Heat Rod) ×1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdgundamseries"
 ],
@@ -4223,6 +6838,24 @@
 "price_yen": 2000,
 "launch": "2021-10-16",
 "age": 8,
+"info": {
+"intro": "From \"SD GUNDAM WORLD HEROES\", the \"Sergeant Verdebuster GUNDAM\" and a DX set of enhanced armament are now available!",
+"features": [
+"A set of parts for reproducing the full package of enhanced armament attached to the \"Sgt. Verdebuster GUNDAM\" is included.",
+"The separately sold \"Veldbuster Member\" includes \"pistols\", handcuffs, batons, and shields, as well as flight units and leg units for members."
+],
+"includes": [
+"Pistol × 2",
+"Handcuff × 1",
+"Shield ×1",
+"Baton × 1",
+"A set of parts for full package reproduction",
+"Flight unit × 1 type",
+"Leg unit × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdgundamseries"
 ],
@@ -4233,6 +6866,22 @@
 "price_yen": 600,
 "launch": "2021-10-30",
 "age": 8,
+"info": {
+"intro": "From \"SD GUNDAM WORLD HEROES\", an elite police officer who protects the citizens with \"Sergeant Verdebuster GUNDAM\" appears!",
+"features": [
+"The reinforcement parts that come with the separately sold \"Sergeant Verdebuster GUNDAM DX Set\" can be attached.",
+"Comes with huge handcuffs on the front skirt, a newly shaped shield, and a baton.",
+"Combined with the separately sold \"Sgtveldebuster GUNDAM DX Set\", clear blue parts that improve the color reproduction of both sides are included."
+],
+"includes": [
+"Pistol × 1",
+"Handcuff × 1",
+"Shield ×1",
+"Baton × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "sdgundamseries"
 ],
@@ -4243,6 +6892,26 @@
 "price_yen": 4000,
 "launch": "2021-09-11",
 "age": 15,
+"info": {
+"intro": "The main machine of \"Getter Robo Arc\", \"Getter Ark\", has been converted to HG with the latest design!",
+"features": [
+"Particular about molding color reproduction, satisfactory quality just by assembling.",
+"The head can also be replaced.",
+"The Battle Shot Cutter can be reproduced in both the undeployed and non-deployed versions by replacing parts.",
+"The backpack with its distinctive shape can be reproduced by flipping up and down and moving each wing to reproduce the \"Thunder Bomber\" activation state.",
+"Comes with a wide range of options. It is possible to reproduce the original scene by replacing parts."
+],
+"includes": [
+"Getter Tomahawk × 2",
+"Getter Tomahawk Connecting Parts × 1",
+"Battle Shot Cutter (Undeployed/Undeployed) × 1",
+"Opening face parts × 1",
+"Hand parts × 1 set",
+"Seal × 1",
+"Display Base × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -4253,6 +6922,27 @@
 "price_yen": 3200,
 "launch": "2021-09-11",
 "age": 15,
+"info": {
+"intro": "From \"KAMEN RIDER FOURZE\", a fourze that has been precisely reproduced to the smallest detail is now available!",
+"features": [
+"With a wide range of motion, it is possible to reproduce special moves and characteristic poses in the play.",
+"The \"white\" and \"black\" parts use different molding materials to express the difference in texture between the suit and the mask.",
+"Different molding materials are used to reproduce the difference in texture between a shiny head and a suit with a suppressed glossy feel. By adopting an extra finish, the texture of the silver part is also thoroughly pursued.",
+"Shading mold is used to reproduce the black lines of the body.",
+"6 types of switches can be detached.",
+"Rockets, drill modules, and various hand parts that are essential for reproducing special moves are included."
+],
+"includes": [
+"Rocket Module × 1",
+"Drill Module × 1",
+"S witch parts × 6 types",
+"Wrist parts: Belt grip grip (right), grip (left and right), flat hand (left and right)",
+"Figure-rise Effect pedestal ×1",
+"Foil seal × 1",
+"Realistic Decal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "figurerise-standard"
 ],
@@ -4263,6 +6953,20 @@
 "price_yen": 3200,
 "launch": "2021-09-18",
 "age": 6,
+"info": {
+"intro": "The second installment of the large plan model \"Pokepla BIG\" packed with the charm of Pokémon is Eevee! !",
+"features": [
+"All 48 parts, total length approx. 20 cm. Easy to assemble. Color coding reproduction with minimal sealing.",
+"The dull eyes that make you want to look at it forever are expressed by superimposing clear parts.",
+"The head, ears, and buttocks can be moved left and right for expressive poses.",
+"Attention to touch comfort Soft materials are used for the paws and tongue.",
+"The hair around the front legs and neck can be moved back and forth to reproduce the \"touch\" pose."
+],
+"includes": [
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "pokepla"
 ],
@@ -4273,6 +6977,22 @@
 "price_yen": 1280,
 "launch": "2021-07-17",
 "age": 8,
+"info": {
+"intro": "The third force newly added to the 30MM series, the \"Maxion Army\", has a new female aircraft \"Spinatia\" in fencer specifications!",
+"features": [
+"A new female body is now available in the 30MM series.",
+"In addition to the main body, it is an all-in-one item that combines armor parts and weapon parts into one.",
+"New structure that is easier to assemble! While taking advantage of the range of motion, there is no pinching during assembly.",
+"Adopts a common joint structure that can be mixed with existing items, 3mm joints."
+],
+"includes": [
+"Sword × 2",
+"Hand parts Weapon holder (left and right), flat hand (left and right), facial expression weapon holder (right)",
+"Fencer Armor × 1 set",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -4283,6 +7003,24 @@
 "price_yen": 600,
 "launch": "2021-07-17",
 "age": 8,
+"info": {
+"intro": "An optional parts set that comes with a multi-wing that changes its appearance when deployed!",
+"features": [
+"Comes with a multi-wing that transforms. It can be attached to existing aircraft using the included joint parts.",
+"The multi-wing can also be used as a custom part for the legs.",
+"A multi-booster that can be folded by multiple moving points is also included.",
+"Two types of mask parts and head parts for customization are included."
+],
+"includes": [
+"Multi-wing × 2",
+"Multi Booster × 2",
+"Masks × 2 types",
+"Twin Tail Parts × 1",
+"Ponytail Part × 1",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -4293,6 +7031,23 @@
 "price_yen": 2300,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"features": [
+"An all-in-one item that includes a character body, 3 types of face parts, and armor parts.",
+"Ease of assembly, conscious of the work line, and the runner's parts arrangement in pursuit of \"optimal\" allows for smooth assembly.",
+"Face parts, hairstyle parts, and body parts are available for each part. You can recombine them with separately sold parts to create your favorite sister.",
+"The face parts use tampo printing. You can enjoy changing facial expressions to match the scene.",
+"Various optional parts sold separately can be installed and you can enjoy \"customization\".",
+"30 MINUTES series common 3mm diameter shaft is adopted. Parts from \"30 MINUTES MISSIONS\" can also be installed as an option. (*The \"30 MINUTES MISSIONS\" kit is for 8 years old.) )",
+"The official website of \"30 MINUTES SISTERS\" has a \"customization simulator\" that allows you to imagine the recombination of actual plastic models."
+],
+"includes": [
+"Face parts x 3",
+"Armor parts x 1 set",
+"Hand parts: Gripping hands (left and right), weapon-holding hands (left and right)"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4303,6 +7058,17 @@
 "price_yen": 600,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"intro": "Customize to your liking by replacing hairstyle parts",
+"features": [
+"You can make your sister a character with twin tail hairstyle parts with pink coloring.",
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4313,6 +7079,17 @@
 "price_yen": 600,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"intro": "Customize to your liking by replacing hairstyle parts",
+"features": [
+"Sisters can be made into characters with twin tail hairstyle parts with yellow coloring",
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4323,6 +7100,17 @@
 "price_yen": 600,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"intro": "Customize to your liking by replacing hairstyle parts",
+"features": [
+"Sisters can be made into characters with short hair hairstyle parts with red coloring",
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4333,6 +7121,16 @@
 "price_yen": 600,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"intro": "You can create your favorite characters in various colors and shapes!",
+"features": [
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4343,6 +7141,18 @@
 "price_yen": 980,
 "launch": "2022-03-19",
 "age": 15,
+"info": {
+"intro": "You can create your favorite character with a variety of facial expressions!",
+"features": [
+"Comes with 3 types of facial expression parts.",
+"The expressions of the face parts, such as pupils, eyebrows, and blush, are tampo printed. You can enjoy changing facial expressions to match the scene.",
+"The combination of facial expression parts can greatly change the impression even with the same character."
+],
+"includes": [
+"3 types × face parts"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4353,6 +7163,7 @@
 "price_yen": 1400,
 "launch": "2015-06-20",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc"
@@ -4364,6 +7175,18 @@
 "price_yen": 980,
 "launch": "2022-03-19",
 "age": 15,
+"info": {
+"intro": "You can create your favorite character with a variety of facial expressions!",
+"features": [
+"Comes with 3 types of facial expression parts.",
+"The expressions of the face parts, such as pupils, eyebrows, and blush, are tampo printed. You can enjoy changing facial expressions to match the scene.",
+"The combination of facial expression parts can greatly change the impression even with the same character."
+],
+"includes": [
+"Face parts × 3 types"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4374,6 +7197,18 @@
 "price_yen": 980,
 "launch": "2022-03-19",
 "age": 15,
+"info": {
+"intro": "You can create your favorite character with a variety of facial expressions!",
+"features": [
+"Comes with 3 types of facial expression parts.",
+"The expressions of the face parts, such as pupils, eyebrows, and blush, are tampo printed. You can enjoy changing facial expressions to match the scene.",
+"The combination of facial expression parts can greatly change the impression even with the same character."
+],
+"includes": [
+"3 types × face parts"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4384,6 +7219,18 @@
 "price_yen": 980,
 "launch": "2022-03-19",
 "age": 15,
+"info": {
+"intro": "You can create your favorite character with a variety of facial expressions!",
+"features": [
+"Comes with 3 types of facial expression parts.",
+"The expressions of the face parts, such as pupils, eyebrows, and blush, are tampo printed. You can enjoy changing facial expressions to match the scene.",
+"The combination of facial expression parts can greatly change the impression even with the same character."
+],
+"includes": [
+"3 types × face parts"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4394,6 +7241,18 @@
 "price_yen": 800,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"intro": "By replacing the torso parts, you can make a character of the Sister according to your own taste.",
+"features": [
+"Body parts with the same volume as the \"SIS-G00 Richetta\" (sold separately) but with a different silhouette.",
+"30MS 3mm common 3mm joint allows you to recombine arms and legs with the separately sold character."
+],
+"includes": [
+"Body parts × 1 set",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4404,6 +7263,20 @@
 "price_yen": 600,
 "launch": "2021-08-28",
 "age": 15,
+"info": {
+"intro": "You can customize the platter to your character's body!",
+"features": [
+"An optional parts set with a tiger-inspired design that can be mainly attached to the \"SIS-G00 Rechetta\".",
+"Thick thigh parts come with parts of a different color than the richetta.",
+"Through the \"leg above knee parts\", mechanical leg parts of the \"30MM\" series, which are sold separately, can be attached. (*The \"30 MINUTES MISSIONS\" kit is for 8 years old.) )"
+],
+"includes": [
+"Optional armor × 1 set",
+"Thick thigh parts × 1 set",
+"Leg above the knee parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4414,6 +7287,24 @@
 "price_yen": 1280,
 "launch": "2021-08-07",
 "age": 8,
+"info": {
+"intro": "THE THIRD FORCE \"MAXION ARMY\", WHICH HAS BEEN NEWLY ADDED TO THE 30MM SERIES, HAS A NEW FEMALE AIRCRAFT \"SPINATIA\" IN ASSASSIN SPECIFICATIONS!",
+"features": [
+"A new female body is now available in the 30MM series.",
+"In addition to the main body, an all-in-one item that combines armor parts and weapon parts into one.",
+"New structure that is even easier to assemble! While taking advantage of the range of motion, there is no pinching during assembly.",
+"Uses a common joint structure that can be mixed with existing items, and a 3mm joint."
+],
+"includes": [
+"Handgun × 2",
+"Kunai × 2",
+"Shield binder × 2",
+"Hand parts: Weapon handle (left and right), flat hand (left and right), facial expression weapon handle (right)",
+"Assassin's Armor × 1 set",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -4424,6 +7315,23 @@
 "price_yen": 500,
 "launch": "2021-08-07",
 "age": 8,
+"info": {
+"intro": "Customized weapons with magic motif weapons are now available!",
+"features": [
+"It is possible to customize various types of weapons by rearranging parts.",
+"Comes with effect parts that can be combined with shields.",
+"Comes with left and right hand parts to which effect parts can be attached."
+],
+"includes": [
+"Magic Circle × 1",
+"Grip parts × 1",
+"Tip parts (Magic Staff, Magic Wand, Scythe) × 1 each",
+"Tip effect parts (Beam Whip, Beam Rapier, Beam Sword) × 1 each",
+"Hand parts Magic circle hands (left and right)",
+"Joint parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30mm",
 "customize_scenebase"
@@ -4435,6 +7343,25 @@
 "price_yen": 2300,
 "launch": "2021-09-25",
 "age": 15,
+"info": {
+"features": [
+"An all-in-one item that includes a character body, three types of facial parts, and armor parts.",
+"Ease of assembly, conscious of the work line, and the runner's parts arrangement in pursuit of \"optimal\" allows for smooth assembly.",
+"The face parts use tampo printing. You can enjoy changing facial expressions to match the scene.",
+"Face parts, hairstyle parts, and body parts are available for each part. You can recombine them with separately sold parts to create your favorite sister.",
+"Various optional parts sold separately can be installed and you can enjoy \"customization\".",
+"30 MINUTES series common 3mm diameter shaft is adopted. Parts from \"30 MINUTES MISSIONS\" can also be installed as an option. (*The \"30 MINUTES MISSIONS\" kit is for 8 years old.) )",
+"The official website of \"30 MINUTES SISTERS\" has a \"customization simulator\" that allows you to imagine the recombination of actual plastic models."
+],
+"includes": [
+"Sword x 1",
+"Shield x 1",
+"Face parts x 3",
+"Armor parts x 1 set",
+"Hand parts: Gripping hands (left and right), Weapon-holding hands (left and right)"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4445,6 +7372,17 @@
 "price_yen": 600,
 "launch": "2021-09-25",
 "age": 15,
+"info": {
+"intro": "Customize to your liking by replacing hairstyle parts",
+"features": [
+"Poni with navy coloring",
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4455,6 +7393,17 @@
 "price_yen": 600,
 "launch": "2021-09-25",
 "age": 15,
+"info": {
+"intro": "Customize to your liking by replacing hairstyle parts",
+"features": [
+"You can make your sister a character with a ponytail hairstyle part with red coloring.",
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4465,6 +7414,17 @@
 "price_yen": 600,
 "launch": "2021-09-25",
 "age": 15,
+"info": {
+"intro": "Customize to your liking by replacing hairstyle parts",
+"features": [
+"Sisters can be made into characters with medium hairstyle parts with brown coloring",
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4475,6 +7435,17 @@
 "price_yen": 600,
 "launch": "2021-09-25",
 "age": 15,
+"info": {
+"intro": "Customize to your liking by replacing hairstyle parts",
+"features": [
+"Sister can be made into a character with medium hairstyle parts with purple coloring",
+"By rearranging the hairstyle parts, the impression of the same facial expression parts will change significantly."
+],
+"includes": [
+"Hairstyle parts × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4485,6 +7456,18 @@
 "price_yen": 800,
 "launch": "2021-09-25",
 "age": 15,
+"info": {
+"intro": "By replacing the torso parts, you can make a character of the Sister according to your own taste.",
+"features": [
+"Body parts with the same volume as the \"SIS-A00 Tiasha\" (sold separately) but with a different silhouette.",
+"30MS 3mm common 3mm joint allows you to recombine arms and legs with the separately sold character."
+],
+"includes": [
+"Body parts× 1 set",
+"1 set × joint parts"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4495,6 +7478,20 @@
 "price_yen": 600,
 "launch": "2021-09-25",
 "age": 15,
+"info": {
+"intro": "It is possible to customize the platter to the character body (sold separately)!",
+"features": [
+"An optional parts set with a bird-inspired design that can be mainly attached to the \"SIS-A00 Tiasha\".",
+"Thick thigh parts come with parts of a different color than Tiasha.",
+"Through the \"leg above knee parts\", mechanical leg parts of the \"30MM\" series, which are sold separately, can be attached. (*The \"30 MINUTES MISSIONS\" kit is for 8 years old.) )"
+],
+"includes": [
+"Optional armor × 1 set",
+"Thick thigh parts × 1 set",
+"Leg above the knee parts × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4505,6 +7502,21 @@
 "price_yen": 780,
 "launch": "2021-09-18",
 "age": 8,
+"info": {
+"intro": "Dog Mecha Ver. is now available in the 30MM \"Exa Vehicle Series\" that expands the range of customization!",
+"features": [
+"THE TAIL PART USES THE FIRST LEAD WIRE IN THE 30MM SERIES TO MAKE IT EASY TO ADD EXPRESSIONS.",
+"Comes with backpack parts that are convenient for customization.",
+"If you disassemble it, it can be used as a customized part."
+],
+"includes": [
+"Vehicle × 1",
+"Pack Pack × 1",
+"Lead wire × 1",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30mm"
 ],
@@ -4515,6 +7527,16 @@
 "price_yen": 800,
 "launch": "2021-10-23",
 "age": 15,
+"info": {
+"intro": "Customize your favorite sister by rearranging the arm and leg parts!",
+"features": [
+"It is possible to customize the impression greatly by rearranging both arms and legs."
+],
+"includes": [
+"Optional armor × 1 set"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4525,6 +7547,23 @@
 "price_yen": 2300,
 "launch": "2021-10-23",
 "age": 15,
+"info": {
+"features": [
+"An all-in-one item that includes a character body, three types of facial expression parts, and armor parts.",
+"Smooth assembly is possible by being aware of ease of assembly, work guides, and the placement of runner parts in pursuit of \"optimality\".",
+"Tampo printing is used for the face parts. You can enjoy changing the facial expressions according to the scene.",
+"We have a lineup of face parts, hairstyle parts, and body parts for each part. You can recombine it with parts sold separately to create your own favorite sister.",
+"You can also enjoy \"customizing\" by installing various optional parts sold separately.",
+"Adopts a common 3mm diameter shaft for the 30 MINUTES series. \"30 MINUTES MISSIONS\" parts can also be installed as an option. (* The \"30 MINUTES MISSIONS\" kit is for ages 8 and up.)",
+"On the official website of \"30 MINUTES SISTERS\", a \"customization simulator\" is being set up where you can imagine the recombination of actual plastic models."
+],
+"includes": [
+"Face parts × 3 types",
+"Armor parts × 1 set",
+"Hand parts: Grip hand (left and right), Weapon handle (left and right)"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4535,6 +7574,24 @@
 "price_yen": 2000,
 "launch": "2021-10-23",
 "age": 15,
+"info": {
+"intro": "Uniform design armor that can be equipped on Lady Commander Alice is now available!",
+"features": [
+"Can also be linked to the 30MS series.",
+"The replacement parts are equipped with 3mm diameter holes in various places, and they are designed to be played with the 30MM series at the same time as the uniform.",
+"Three guns with the motif of the \"girl gun\", which is the symbol of GGL, are included. As in the play, three guns can be combined.",
+"An extension arm that can be connected to backpack parts is also included."
+],
+"includes": [
+"Uniform parts set ×1 (for Alice, Richetta selection assembly)",
+"Weapon Parts (Attack Girl Gun) ×1",
+"Weapon Parts (Blast Girl Gun) ×1",
+"Weapon Parts (Change Girl Gun) ×1",
+"2 types × backpacks",
+"Backpack Expansion Arm × 1"
+]
+},
+"iv": 1,
 "brands": [
 "30ms"
 ],
@@ -4545,6 +7602,7 @@
 "price_yen": 2200,
 "launch": "2021-08",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "hguc",
@@ -4558,6 +7616,7 @@
 "price_yen": 4400,
 "launch": "2021-09-19",
 "age": 8,
+"iv": 1,
 "brands": [
 "fullmechanics"
 ],
@@ -4568,6 +7627,7 @@
 "price_yen": 700,
 "launch": "2021-09",
 "age": 8,
+"iv": 1,
 "url": "https://global.bandai-hobby.net/en-us/item/01_3574/"
 },
 "01_3577": {
@@ -4575,6 +7635,24 @@
 "price_yen": 2400,
 "launch": "2021-10-09",
 "age": 15,
+"info": {
+"intro": "In commercialization, the main character aircraft was three-dimensional after structural verification to actually design a 10m class aircraft by KEN OKUYAMA DESIGN.",
+"features": [
+"AMAIM assembled with an autonomous thinking AI guy that Amou, who was collecting junk parts, met",
+"Equipped with a cylinder gimmick on the chest. The pose of the action with the included weapon sword and gun can also be reproduced with a wide range of motion.",
+"Unfinished equipment can also be reproduced with a parts selection system."
+],
+"includes": [
+"60mm portable cannon × 1",
+"Super Thermal Vibration Combat Straight Sword × 1",
+"Dagger with Shield × 1",
+"Weapon Rack × 1",
+"Hand parts Flat hand (left and right), weapon holder (left and right), gun holder (right)",
+"A set of parts for reproducing the unfinished state",
+"Foil seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
@@ -4585,6 +7663,7 @@
 "price_yen": 700,
 "launch": "2021-06-21",
 "age": 8,
+"iv": 1,
 "brands": [
 "entry_grade_g"
 ],
@@ -4595,6 +7674,7 @@
 "price_yen": 1800,
 "launch": "2021-09",
 "age": 8,
+"iv": 1,
 "brands": [
 "hg",
 "pb_gunpla",
@@ -4607,6 +7687,7 @@
 "price_yen": 600,
 "launch": "2012-07-28",
 "age": 15,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -4617,6 +7698,7 @@
 "price_yen": 700,
 "launch": "2012-07-28",
 "age": 15,
+"iv": 1,
 "brands": [
 "parts"
 ],
@@ -4627,6 +7709,18 @@
 "price_yen": 4000,
 "launch": "2021-12-04",
 "age": 15,
+"info": {
+"intro": "From the \"Super Robot Wars OG\" series, \"Alto Eisen\" is three-dimensional in the HG series!",
+"features": [
+"The cylinder of the \"revolving stake\" mounted on the right arm is equipped with a rotating function. By deploying the armor on both shoulders, it is possible to reproduce the state of the \"Square Claymore\" just before it was launched.",
+"Includes a pedestal for display."
+],
+"includes": [
+"Display base",
+"Seal × 1"
+]
+},
+"iv": 1,
 "brands": [
 "hg-c"
 ],
