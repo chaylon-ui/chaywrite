@@ -138,7 +138,9 @@ def pick_variant(variants, hints):
     return sorted(live or variants, key=lambda v: (v['year'] or 9999, len(v['model'] or '')))[0]
 
 def unit_facts(name, target, hints, idx):
+    name = name.replace("''", '').strip()
     cands = [name, target]
+    cands += [re.sub(r'^Inner Sphere\b', 'IS', c or '') for c in list(cands)]
     m = re.match(r'^(.*?)\s*\((.*?)\)$', target or '')
     if m:
         cands += [m.group(1), m.group(2)]
@@ -148,7 +150,7 @@ def unit_facts(name, target, hints, idx):
         vs = idx.get(key(c))
         if vs:
             v = pick_variant(vs, hints)
-            return {'name': name, 'model': v['model'], 'type': v['type'], 'tons': v['tons'],
+            return {'name': name, 'model': '' if v['type'] == 'Battle Armor' else v['model'], 'type': v['type'], 'tons': v['tons'],
                     'cls': weight_class(v['tons'], v['type']), 'tech': v['tech'], 'role': v['role'],
                     'walk': v['walk'], 'run': v['run'], 'jump': v['jump'], 'year': v['year'], 'mul': v['mul']}
     return None
@@ -197,6 +199,22 @@ def contents(text):
                 if not re.search(r'card|pilot|miniature|record sheet', disp, re.I):
                     out.append([disp, target, []])
     if not out:
+        # "* Four plastic ''UrbanMech'' miniatures" followed by bare model codes ("** UM-R60L")
+        lines = m.group(1).split('\n')
+        for i, line in enumerate(lines):
+            s1 = line.strip()
+            mm = re.match(r"^\*\s[^*].*?''([^']+)''.*miniatures", s1)
+            if not mm:
+                continue
+            chassis = mm.group(1).strip()
+            for nxt in lines[i + 1:]:
+                s2 = nxt.strip()
+                if not s2.startswith('**') or s2.startswith('***'):
+                    break
+                code = s2.lstrip('*').strip()
+                if code and not LINK.search(code) and len(code) < 20 and not re.search(r'card', code, re.I):
+                    out.append([chassis, chassis, [chassis + ' ' + code]])
+    if not out:
         # some pages list the units without the ''italics'' (e.g. "* Five [[Elemental]] Battle Armor")
         for line in m.group(1).split('\n'):
             s = line.strip()
@@ -205,9 +223,11 @@ def contents(text):
             for lk in LINK.finditer(s):
                 target = lk.group(1).strip()
                 disp = (lk.group(2) or target).strip()
-                if not re.search(r'card|pilot|record sheet|miniature|dry-erase|file:|image:', disp + ' ' + target, re.I):
+                if not re.search(r'card|pilot|record sheet|miniature|dry-erase|file:|image:|^battle armor$|^point$', disp + ' ' + target, re.I) and not re.match(r'(?i)^(battle armor|point)$', target):
                     out.append([disp, target, []])
     for u in out:
+        if u[2]:
+            continue
         u[2] = [h for h in hints_all if key(u[0]) and key(u[0]) in key(h) or key(re.sub(r'\s*\(.*?\)', '', u[1])) in key(h)]
     return out
 
@@ -228,12 +248,19 @@ def title_key(t):
     return k
 
 def search_pack(title):
-    q = re.sub(r'(?i)\b(battletech|forcepack|force pack)\b', '', title).strip(' :-')
-    j = sarna(action='query', list='search', srsearch=q + ' ForcePack', srlimit=5)
-    for s in ((j or {}).get('query') or {}).get('search') or []:
-        tk, want = title_key(s['title']), title_key(q)
-        if want and (tk == want or tk.endswith(want) or want.endswith(tk)):
-            return s['title']
+    q = re.sub(r'(?i)\b(battletech|forcepack|force pack)\b', '', title).replace('&', ' ').strip(' :-')
+    q = re.sub(r'\s+', ' ', q)
+    want = re.sub(r'pack$', '', title_key(q))
+    j = sarna(action='query', list='search', srsearch=q, srlimit=10)
+    hits = [x['title'] for x in (((j or {}).get('query') or {}).get('search') or [])]
+    def k2(t): return re.sub(r'pack$', '', title_key(t))
+    exact = [t for t in hits if k2(t) == want]
+    loose = [t for t in hits if want and len(want) >= 10 and (k2(t).endswith(want) or want.endswith(k2(t)))]
+    # product pages first ("BattleTech: ..."), then any page that really has a Contents list
+    for t in sorted(exact, key=lambda t: not t.startswith('BattleTech:')) + sorted(loose, key=lambda t: not t.startswith('BattleTech:')):
+        pt, text = wikitext(t)
+        if text and contents(text):
+            return t
     return None
 
 # ---------------------------------------------------------------- main
@@ -271,7 +298,7 @@ def main():
     for it in items:
         title = it['title']
         pid = str(it['id']).split('/')[-1]
-        sal = re.search(r'(?i)salvage box\s*:?\s*(.+)$', title)
+        sal = re.search(r'(?i)salvage box\s*:?\s*(.+)$', title) or re.search(r'(?i)battletech\s+(?:gothic\s+)?(.+?)\s+c-scale', title)
         if sal and not re.search(r'(?i)asst|assortment|\bmercenaries\b|battlefield support', title):
             name = re.sub(r'(?i)\b\d+\s*ct\b', '', sal.group(1)).strip()
             u = None
