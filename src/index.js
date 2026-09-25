@@ -10,6 +10,7 @@ import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
 import { servePaints } from "./paints.js";
+import { serveEavy } from "./eavy.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
@@ -337,6 +338,16 @@ export default {
         return r && r.data;
       };
       return servePaints(request, env, ctx, gql);
+    }
+
+    // "Paint it like the box": 'Eavy Archive paint lists for a Warhammer product, each paint
+    // linked to our own Citadel listing (src/eavy.js). Public storefront data only.
+    if (url.pathname === "/eavy/for.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return serveEavy(request, env, ctx, async () => (await servePaints(request, env, ctx, gql)).json());
     }
 
     if (url.pathname === "/stores.json") {

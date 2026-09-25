@@ -1,0 +1,197 @@
+/* "Paint it like the box" (owner, 2026-09-25: "Can you use this website to help
+   suggest paints on Warhammer products with direct links to the paints on our
+   site for sale https://eavy-archive.com/40k/adeptus-mechanicus/").
+
+   GET /eavy/for.json?title=<product title>&faction=<40K faction, optional>
+     -> { ok, page: {url, title}, schemes: [{ name, url, areas: [{ name, url,
+          paints: [{ name, handle, title, price, a (in stock), v (variant id),
+                     i (image), h (#hex) } | { name }] }] }], credit }
+
+   data/eavy-archive.json (tools/eavy-archive.py, weekly) holds, for every
+   'Eavy Archive page, each scheme's areas and ONLY the names of the paints
+   they use - never the steps, ratios or photos (the page links back to
+   'Eavy Archive for the method). This module picks the page for a product and
+   resolves each paint name to our own Citadel listing through /paints.json.
+
+   Which page: a character / chapter / sub-army page whose name the title
+   carries ("Ghazghkull Thraka", "Blood Angels") beats the army page; the army
+   comes from the 40K unit facts (exor.wh_unit faction) when the theme passes
+   it, otherwise from an army name in the title ("STORMCAST ETERNALS:
+   VINDICTORS"). No page -> schemes [] and the card stays hidden. */
+
+export const EAVY_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/eavy-archive.json";
+
+export const key = (s) => String(s || "").toLowerCase()
+  .replace(/[‘’']s\b/g, "").replace(/&/g, " and ")
+  .normalize("NFKD").replace(/[^a-z0-9]/g, "");
+const words = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[‘’']s\b/g, "").replace(/[‘’']/g, "")
+  .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+const slug = (s) => words(s).join("-");
+
+/* 'Eavy Metal recipes say "Black" / "White" for the plain pots. */
+const ALIASES = { black: "Abaddon Black", white: "White Scar", abaddonblack: "Abaddon Black", corax: "Corax White" };
+/* A paint's name is in several Citadel ranges (Leadbelcher Base / Spray / Air): the pot a recipe means. */
+const RANGE_PREF = ["Base", "Layer", "Shade", "Contrast", "Technical", "Dry", "Glaze", "Air", "Spray"];
+
+/* /paints.json swatches -> Citadel paint name key -> the listing to link. */
+export function citadelIndex(paints) {
+  const best = new Map();
+  for (const s of (paints && paints.swatches) || []) {
+    if (s.b !== "Citadel") continue;
+    for (const it of s.items || []) {
+      const cand = { handle: it.u, title: it.t, price: it.p, a: !!it.a, v: it.v, i: it.i || null, h: s.h || null, r: it.r };
+      const k = key(s.n), prev = best.get(k);
+      // in stock first, then the pot a recipe means (Base before Spray)
+      if (!prev || (cand.a && !prev.a) || (cand.a === prev.a && rank(cand.r) < rank(prev.r))) best.set(k, cand);
+    }
+  }
+  return best;
+}
+function rank(r) { const i = RANGE_PREF.indexOf(r); return i < 0 ? 99 : i; }
+
+export function resolvePaint(idx, name) {
+  const k = key(name);
+  const alias = ALIASES[k];
+  const hit = idx.get(k) || (alias && idx.get(key(alias)));
+  return hit ? { name: alias && !idx.get(k) ? alias : name, ...hit } : { name };
+}
+
+/* data/eavy-archive.json -> lookup tables. Every page is an army page; its
+   schemes include the characters and sub-factions ("Ghazghkull Thraka" on the
+   Orks page, "Blood Angels" on the Space Marines page). */
+export function indexEavy(data) {
+  const armies = [], schemes = [], byFaction = new Map();
+  for (const p of Object.values((data && data.pages) || {})) {
+    if (!p.schemes || !p.schemes.length) continue;
+    armies.push({ p, w: words(p.title) });
+    byFaction.set(p.game + "|" + p.faction, p);
+    p.schemes.forEach((s, i) => schemes.push({ p, i, w: words(s.name), slug: slug(s.name) }));
+  }
+  // longest names first: "Blood Angels Death Company" beats "Blood Angels"
+  schemes.sort((a, b) => b.w.length - a.w.length);
+  armies.sort((a, b) => b.w.length - a.w.length);
+  return { armies, schemes, byFaction };
+}
+
+// "SPACE MARINE SCOUT SQUAD" names the Space Marines, "NECRON" the Necrons
+const has = (hay, w) => hay.includes(w) || hay.includes(w.replace(/s$/, "")) || hay.includes(w + "s");
+const hasAll = (hay, need) => need.length > 0 && need.every((w) => has(hay, w));
+// words that name nothing on their own
+const WEAK = new Set(["the", "of", "and", "a", "an", "warhammer", "40000", "40k", "age", "sigmar", "bases", "base", "weapons",
+  "squad", "armour", "armor", "scheme", "classic", "new", "old", "red", "blue", "green", "black", "white", "gold", "silver"]);
+const strongOf = (w) => w.filter((x) => !WEAK.has(x));
+
+/* Product -> { page, first } (the scheme index to show first), or null. */
+// Not model kits: nothing to paint (or a whole range of it)
+export const NOT_MODELS = /\b(codex|codexes|rulebook|rule book|core book|battletome|cards?|datacards?|dice|annual|novel|book|killzone|terrain|scenery|tokens?|templates?|objective markers?|paint set|paints?|brush(es)?|tool|glue|case|mat|playmat)\b/i;
+
+// BSData army names that 'Eavy Archive files under another page
+const FACTION_ALIAS = { "adeptus-custodes": "talons-of-the-emperor", "imperial-agents": "agents-of-the-imperium" };
+
+export function pickPage(ix, title, faction) {
+  if (NOT_MODELS.test(String(title || ""))) return null;
+  const tw = words(title);
+  const fslug = FACTION_ALIAS[slug(faction)] || slug(faction);
+  const homes = new Set(fslug ? ix.schemes.filter((s) => s.p.faction === fslug || s.slug === fslug).map((s) => s.p) : []);
+  // 1. a scheme the title names - a character, sub-faction or chapter ("GHAZGHKULL THRAKA")
+  for (const s of ix.schemes) {
+    const strong = strongOf(s.w);
+    if (!strong.length || !hasAll(tw, strong)) continue;
+    if (strong.length === 1 && strong[0].length < 5) continue;          // one short word is too loose
+    // a 40K box whose unit facts name its army: only the page holding that army or chapter
+    if (fslug && !homes.has(s.p)) continue;
+    return { page: s.p, first: s.i };
+  }
+  // 2. the 40K faction from the unit facts: its army page, or a chapter scheme of that name
+  if (fslug) {
+    const a = ix.byFaction.get("40k|" + fslug);
+    if (a) return { page: a, first: defaultScheme(a, tw) };
+    const ch = ix.schemes.find((s) => s.slug === fslug && s.p.game === "40k");
+    if (ch) return { page: ch.p, first: ch.i };
+  }
+  // 3. an army name in the title ("STORMCAST ETERNALS: VINDICTORS")
+  for (const a of ix.armies) {
+    const strong = strongOf(a.w);
+    if (strong.length && hasAll(tw, strong)) return { page: a.p, first: defaultScheme(a.p, tw) };
+  }
+  return null;
+}
+
+/* The scheme to open on an army page matched by army, not by a named character:
+   one sharing a word with the title ("KILL TEAM: CORSAIR VOIDSCARRED"), else the
+   army's general scheme ("Orks (General)"), else its house colours, else the first
+   scheme that is not a named character. */
+const HOUSE = { "space-marines": "ultramarines", "tau-empire": "tausept", "tyranids": "hivefleetleviathan",
+  "chaos-space-marines": "blacklegion", "astra-militarum": "cadianshocktroops", "stormcast-eternals": "stormcasteternals",
+  "adepta-sororitas": "orderofourmartyredlady", "aeldari": "craftworldbieltan", "leagues-of-votann": "greaterthurianleague" };
+const CHARACTER = /,|\bthe\b|\b(avatar|commander|lord|lady|captain|warboss|knight of|primaris|mortarch|son of|jain zar|maugan|guilliman|jonson|angron|fulgrim|mortarion|helbrecht|yndrasta|krondys|uthar|ghazghkull|wazdakka)\b/i;
+export function defaultScheme(p, tw) {
+  const n = p.schemes.length;
+  let best = -1, bestScore = 0;
+  const pw = words(p.title);
+  for (let i = 0; i < n; i++) {
+    if (CHARACTER.test(p.schemes[i].name)) continue;                 // a character is only shown when the title names it
+    const sw = strongOf(words(p.schemes[i].name)).filter((w) => !has(pw, w));
+    const score = sw.filter((w) => has(tw || [], w)).length;
+    if (score > bestScore) { best = i; bestScore = score; }
+  }
+  if (best >= 0) return best;
+  let i = p.schemes.findIndex((s) => /\bgeneral\b/i.test(s.name));
+  if (i >= 0) return i;
+  const house = HOUSE[p.faction];
+  if (house) { i = p.schemes.findIndex((s) => key(s.name) === house); if (i >= 0) return i; }
+  const tk = key(p.title);
+  i = p.schemes.findIndex((s) => key(s.name) === tk);
+  if (i >= 0) return i;
+  i = p.schemes.findIndex((s) => !CHARACTER.test(s.name));
+  return i < 0 ? 0 : i;
+}
+
+export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40) {
+  const hit = pickPage(ix, title, faction);
+  if (!hit) return { ok: true, page: null, schemes: [] };
+  const p = hit.page;
+  const order = [hit.first].concat(p.schemes.map((_, i) => i).filter((i) => i !== hit.first)).slice(0, maxSchemes);
+  const schemes = order.map((i) => {
+    const s = p.schemes[i];
+    const surl = p.url + "?modal=" + encodeURIComponent(s.slug);
+    return {
+      name: s.name, url: surl,
+      areas: s.areas.map((ar) => ({
+        name: ar.name, url: surl + "&block=" + encodeURIComponent(ar.slug),
+        paints: ar.paints.map((n) => resolvePaint(paintIdx, n)),
+      })),
+    };
+  });
+  return { ok: true, page: { url: p.url, title: p.title }, schemes };
+}
+
+const CREDIT = "Box-art recipes from 'Eavy Archive, collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)";
+
+export async function serveEavy(request, env, ctx, getPaints) {
+  const url = new URL(request.url);
+  const title = (url.searchParams.get("title") || "").slice(0, 200);
+  const faction = (url.searchParams.get("faction") || "").slice(0, 80);
+  const cache = caches.default;
+  const ck = new Request("https://cache.internal/eavy/for.json?v=1&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)));
+  const hit = await cache.match(ck);
+  if (hit) return hit;
+  let body, status = 200;
+  try {
+    const [dr, paints] = await Promise.all([
+      fetch(EAVY_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => { if (!r.ok) throw new Error("eavy data HTTP " + r.status); return r.json(); }),
+      getPaints(),
+    ]);
+    body = { ...forProduct(indexEavy(dr), citadelIndex(paints), title, faction), credit: CREDIT, source: "https://eavy-archive.com/" };
+  } catch (e) {
+    status = 502;
+    body = { ok: false, error: String((e && e.message) || e).slice(0, 200) };
+  }
+  const res = new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*",
+      "cache-control": status === 200 ? "public, max-age=900" : "no-store" },
+  });
+  if (status === 200) ctx.waitUntil(cache.put(ck, res.clone()));
+  return res;
+}
