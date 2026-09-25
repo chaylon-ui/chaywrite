@@ -1,0 +1,107 @@
+{% comment %}
+Documentation -
+website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/support/your-website/navigation/creating-a-breadcrumb-navigation
+{% endcomment %}
+
+{% unless template == 'index' or template contains 'product' %}
+{%- comment -%}
+  Game logo banners (owner, 2026-09-25: "can you add these as headers replacing
+  that rainbow header at the top for the sections"): the Warhammer collections
+  show their game's logo (Shopify Files) on a dark backdrop instead of the
+  rainbow image and the title text. The title stays as the logo's alt text.
+{%- endcomment -%}
+{%- assign xg_bc_logo = '' -%}
+{%- assign xg_bc_key = collection.handle -%}
+{%- comment -%} the search app's collection pages (/a/search/<handle>) carry no collection object {%- endcomment -%}
+{%- if xg_bc_key == blank and request.path contains '/a/search/' -%}{%- assign xg_bc_key = request.path | split: '/' | last -%}{%- endif -%}
+{%- case xg_bc_key -%}
+  {%- when 'all-warhammer-40-000' -%}{%- assign xg_bc_logo = 'Warhammer-logo.png' -%}
+  {%- when 'all-warhammer-age-of-sigmar' -%}{%- assign xg_bc_logo = 'warhammeraos.png' -%}
+  {%- when 'all-warhammer-kill-team' -%}{%- assign xg_bc_logo = 'killteam-logo.png' -%}
+  {%- when 'all-warhammer-the-horus-heresy' -%}{%- assign xg_bc_logo = 'warhammer_thehorusheresy.png' -%}
+  {%- when 'all-warhammer-the-old-world' -%}{%- assign xg_bc_logo = 'ToW_Logo.png' -%}
+{%- endcase -%}
+{%- if xg_bc_logo != '' -%}
+<style>
+  .breadcrumb-container.xg-bc--logo { background: radial-gradient(ellipse at 50% 45%, #2b3137 0%, #171b1f 55%, #0e1113 100%) !important; }
+  .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
+  .xg-bc--logo .xg-bc__logo img { display: block; margin: 0 auto; width: auto; height: auto; max-width: min(460px, 90%); max-height: 110px; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .55)); }
+  @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img { max-height: 72px; } }
+</style>
+{%- endif -%}
+<div class="breadcrumb-container{% if xg_bc_logo != '' %} xg-bc--logo{% endif %}" style="{% if xg_bc_logo != '' %}{% elsif settings.breadcrumb != blank %}background-image: url('{{ settings.breadcrumb | img_url: 'master' }}');{% else %}background-color: {{ settings.breadcrumb_background }};{% endif %}">
+  <nav class="breadcrumbs page-width {% unless settings.show_product_breadcrumb %}breadcrumbs-empty{% endunless %}">
+    <p class="h3 banner-secondary mb-0">We Buy Collections of any size!</p>
+  <div class="banner-title-container">
+    {% if xg_bc_logo != '' %}
+    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
+    {% elsif template contains 'product' %}
+    <h1 class="h3 head-title">{{ product.title }}</h1>
+    {% elsif template contains 'collection' %}
+    {% if collection.title %}
+    <h1 class="h3 head-title">{{ collection.title }}</h1>
+    {% else %}
+    <h1 class="h3 head-title">{{ 'collections.general.title' | t }}</h1>
+    {% endif %}
+    {% elsif template contains 'page' %}
+    <h1 class="h3 head-title">{{ page.title }}</h1>
+    {% elsif template contains 'blog' %}
+    <h1 class="h3 head-title">{{ blog.title }}</h1>
+    {% elsif template contains 'article' %}
+    <h1 class="h3 head-title">{{ article.title }}</h1>
+    {% else %}
+    <h1 class="h3 head-title">{{ template | split: '.' | first }} </h1>
+    {% endif %}
+    <p>
+    <a href="/" title="Back to the frontpage">{{ shop.name }}</a>
+    {% if template contains 'product' %}
+    {% if collection %}
+    <span class="divider">&dash;</span>
+    {% if collection.handle %}
+    {% capture url %}/collections/{{ collection.handle }}{% endcapture %}
+    {{ collection.title | link_to: url }}
+    {% endif %}
+    {% endif %}
+
+    {% elsif template contains 'collection' and collection.handle %}
+    {% if current_tags %}
+    <span class="divider">&dash;</span>
+    {% capture url %}/collections/{{ collection.handle }}{% endcapture %}
+    {{ collection.title | link_to: url }}
+    {% else %}
+    <span class="divider">&dash;</span>
+    <span>{{ collection.title }}</span>
+    {% endif %}
+    {% elsif template == 'article' %}
+    <span class="divider">&dash;</span>
+    {{ blog.title | link_to: blog.url }}
+    <span class="divider">&dash;</span>
+    <span>{{ article.title }}</span>
+
+    {% elsif template contains 'page' %}
+    <span class="divider"></span>
+
+
+    {% else %}
+    {%- comment -%}
+      Search results (the search app's /a/search proxy page included) have no
+      title of their own: page_title is the shop name there, so this crumb
+      read "Exor Games Charlottetown ‐ Exor Games Charlottetown" (owner,
+      2026-09-09). Name the search instead, and never repeat the shop name
+      on any other page that lacks a title.
+    {%- endcomment -%}
+    {%- if template contains 'search' or request.path contains '/a/search' -%}
+    <span class="divider">&dash;</span>
+    <span>{% if request.locale.iso_code contains 'fr' %}Recherche{% else %}Search{% endif %}</span>
+    {%- elsif page_title != blank and page_title != shop.name -%}
+    <span class="divider">&dash;</span>
+    <span>{{ page_title }}</span>
+    {%- endif -%}
+    {% endif %}
+    </p>
+        </div>
+    <p class="h3 banner-secondary mb-0">We pay cash or credit for cards</p>
+  </nav>
+</div>
+
+{% endunless %}
