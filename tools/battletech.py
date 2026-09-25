@@ -143,6 +143,7 @@ def unit_facts(name, target, hints, idx):
     if m:
         cands += [m.group(1), m.group(2)]
     cands += [re.sub(r'\s*\(.*?\)', '', c or '') for c in list(cands)]
+    cands += [c + ' Battle Armor' for c in list(cands) if c]
     for c in cands:
         vs = idx.get(key(c))
         if vs:
