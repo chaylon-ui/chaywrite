@@ -64,6 +64,23 @@
       '<span class="xgdbm__shot" role="img" aria-label="The Deck Builder pricing a Magic decklist: eight of eight cards in stock, each with its photo, set and price, and a running subtotal."></span>',
       '</div>'
     ].join('');
+    // The paint colour picker (sections/xg-paint-picker.liquid, a ?view=paints collection view).
+    // Styled by .xgpcm in assets/xg-features.css; the buttons open the picker on one brand.
+    var PICK = 'https://exorgames.com/collections/all-paint?view=paints';
+    var PAINT_HTML = [
+      '<div class="xgdbm xgpcm">',
+      '<p class="xgdbm__kicker">New</p>',
+      '<h4 class="xgdbm__title">Shop paints by colour</h4>',
+      '<p class="xgdbm__copy">Tap a colour to see the bottle, with the closest match from the other brands.</p>',
+      '<span class="xgpcm__dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>',
+      '<span class="xgpcm__brands">',
+      '<a href="' + PICK + '#brand=Citadel">Citadel</a>',
+      '<a href="' + PICK + '#brand=The+Army+Painter">Army Painter</a>',
+      '<a href="' + PICK + '#brand=Vallejo">Vallejo</a>',
+      '</span>',
+      '<a class="xgdbm__cta" href="' + PICK + '">Open the colour picker</a>',
+      '</div>'
+    ].join('');
     // Replaces the "Other Locations" paragraph of the owner's "Custom contact
     // content" block (see step 6). Same inline colour and sizing the rest of
     // that block uses, so the app draws it exactly like the Address and
@@ -89,6 +106,16 @@
       var changed = 0, i;
       // 1. "All Pre Orders" reads "Pre-Orders".
       walk(top, function (it) { if (title(it) === 'all pre orders') { it.setting.title = 'Pre-Orders'; changed++; } });
+      // 1b. Battle Systems opens its own collection (owner, 2026-09-25: "in the menu battle
+      // systems is going to battle tech. It should be going here: .../collections/all-battle-systems").
+      var BS = 'https://exorgames.com/collections/all-battle-systems';
+      walk(top, function (it) {
+        if (title(it) !== 'battle systems' || !it.setting) return;
+        if (it.setting.url && it.setting.url.link === BS) return;
+        it.setting.url = url(BS);
+        delete it.setting.disable_link;
+        changed++;
+      });
       var ti = find(top, 'trading cards'), trading = ti > -1 ? top[ti] : null;
       if (trading && trading.menus) {
         // 2. Sports Cards becomes a tab of Trading Cards, in front of Deck Builder.
@@ -140,6 +167,16 @@
         s.custom_html = s.custom_html.replace(OTHER_RE, VIDEO_HTML);
         changed++;
       });
+      // 7. Paints gets a "Shop by Colour" tab after Vallejo (owner, 2026-09-25, screenshot of
+      //    the Paints menu: "put the color picker in this menu"). Like Deck Builder, the tab
+      //    carries a small panel so hovering it does not open a blank one.
+      var pi = find(top, 'paints'), paints = pi > -1 ? top[pi] : null;
+      if (paints && paints.menus && !has(paints.menus, 'shop by colour')) {
+        var tab = { id: id(), setting: { item_layout: 'text', title: 'Shop by Colour', url: url(PICK) }, menus: [htmlBlock('Shop by Colour', PAINT_HTML)], hide_submenu: true };
+        var vi = find(paints.menus, 'vallejo');
+        paints.menus.splice(vi > -1 ? vi + 1 : paints.menus.length, 0, tab);
+        changed++;
+      }
       return changed;
     }
 
