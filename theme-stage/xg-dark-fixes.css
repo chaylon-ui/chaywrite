@@ -250,3 +250,38 @@ html[data-xg-theme="dark"] .xg-sisters.xg-sisters--mid {
   border-color: rgba(255, 106, 94, 0.28);
 }
 html[data-xg-theme="dark"] .xg-sisters.xg-sisters--mid .xg-sisters__title { color: #f2f4f5; }
+/* ---- Header mini-cart text in dark mode (owner, 2026-09-25: "too dark
+   and can't read") ---------------------------------------------------------
+   theme.css pins the dropdown's item title and remove icon to #000 with
+   #_desktop_cart/#_mobile_cart .cart-display .cart-dropdown-inner
+   .product-list .product .product-data .product-title (1 id + 6 classes),
+   which outranked the shorter dark rules in xg-dark.css; the footer lines
+   (Subtotal, "Shipping & taxes...", "Go to Your Cart to use Store Credit")
+   and the "1 x $0.50" line just inherit the dropdown's dark body ink. Same
+   selector depth here, so dark mode wins without !important. */
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner { color: #c3ccd1; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .product-list .product,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .product-list .product,
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .product-list .product:hover,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .product-list .product:hover,
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .product-list .product .product-data,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .product-list .product .product-data { color: #c3ccd1; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .product-list .product .product-data .product-title,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .product-list .product .product-data .product-title { color: #eef2f4; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .product-list .product .product-data .product-title:hover,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .product-list .product .product-data .product-title:hover { color: #ffffff; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .product-list .product a.remove i,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .product-list .product a.remove i { color: #c3ccd1; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .product-list .product a.remove i:hover,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .product-list .product a.remove i:hover { color: #ffffff; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .cart__subtotal-title,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .cart__subtotal-title,
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .cart__subtotal,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .cart__subtotal { color: #eef2f4; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .cart__shipping,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .cart__shipping,
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .cart__store-credit-info,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .cart__store-credit-info { color: #aab4ba; }
+html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .cart__empty,
+html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .cart__empty { color: #aab4ba; }

@@ -1,0 +1,112 @@
+{%- comment -%}
+  Store-credit lead-in on the cart page (owner, 2026-09-09: "make this a
+  little more obvious and intentful to use ... add a part about selling
+  cards to us to gain more store credit"). Rendered by
+  sections/cart-template.liquid in both of its layouts, right where the old
+  centred "Store Credit is applied at the checkout" line was, which is
+  directly above BinderPOS's injected "Pay with store credit" row
+  (.binderpos-credit-input-div, mounted by their script below the cart
+  table). This snippet:
+    - explains the row in one line and points sellers to the buylist page
+      (store credit pays a better rate than cash under every buylist rule
+      we have seen in the portal);
+    - restyles BinderPOS's row into a matching card with a bigger, clearly
+      bordered amount box (their markup is theirs; only the container, its
+      inputs and labels are touched, so an unknown inner class costs
+      nothing);
+    - gives logged-out shoppers a log-in nudge instead of a hidden widget.
+  `enabled` is the section's "Enable BinderPOS Store Credit" checkbox,
+  passed in because render snippets do not see section.settings.
+{%- endcomment -%}
+{%- if enabled -%}
+  {%- if customer -%}
+  <div class="xg-credit">
+    <p class="xg-credit__lead"><strong>Your store credit.</strong> Enter the amount to use in the box below, or press <em>Use all</em>; it comes off your total at checkout.</p>
+    <p class="xg-credit__sell">Want more credit? <a href="/pages/selling-to-exor-games-buylist">Sell us your cards</a> and take store credit for a better rate than cash.</p>
+  </div>
+  <script>
+    /* Two jobs once BinderPOS's row has mounted (their script runs after the
+       page): move the lead-in to sit directly above the row in the same
+       container, so both cards share one width (the lead-in renders inside
+       the cart table's cell, their row outside it); and add a "Use all"
+       button beside their amount box that fills in the balance, capped at
+       the cart total, through the native value setter plus input/change
+       events so their own handler sees it. Owner asks, 2026-09-09. */
+    (function () {
+      var card = document.querySelector('.xg-credit');
+      if (!card) return;
+      var total = Number('{{ cart.total_price | divided_by: 100.0 }}') || 0;
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries++;
+        var row = document.querySelector('.binderpos-credit-input-div');
+        var input = row ? row.querySelector('input') : null;
+        if (!row || !input) { if (tries > 40) clearInterval(timer); return; }
+        if (card.nextElementSibling !== row && row.parentNode) row.parentNode.insertBefore(card, row);
+        if (row.querySelector('.xg-credit__all')) { clearInterval(timer); return; }
+        /* BinderPOS writes "$4.58 available" only after its own balance
+           request answers, some time AFTER the input exists - keep polling
+           for it (about 30 s) instead of reading an empty row once. */
+        var m = (row.textContent || '').match(/\$\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*available/i);
+        if (!m) { if (tries > 100) clearInterval(timer); return; }
+        clearInterval(timer);
+        var balance = Number(m[1].replace(/,/g, ''));
+        var amount = total > 0 ? Math.min(balance, total) : balance;
+        if (!(amount > 0)) return;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'xg-credit__all';
+        btn.textContent = 'Use all';
+        btn.title = 'Use $' + amount.toFixed(2) + ' of your store credit';
+        btn.addEventListener('click', function () {
+          var v = amount.toFixed(2);
+          var desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value');
+          if (desc && desc.set) desc.set.call(input, v); else input.value = v;
+          ['input', 'change', 'keyup', 'blur'].forEach(function (t) { input.dispatchEvent(new Event(t, { bubbles: true })); });
+          try { input.focus(); } catch (e) {}
+        });
+        input.insertAdjacentElement('afterend', btn);
+      }, 300);
+    })();
+  </script>
+  {%- else -%}
+  <div class="xg-credit">
+    <p class="xg-credit__lead"><strong>Have store credit with us?</strong> <a href="{{ routes.account_login_url }}?return_url=%2Fcart">Log in</a> to use it at checkout.</p>
+    <p class="xg-credit__sell">Want some? <a href="/pages/selling-to-exor-games-buylist">Sell us your cards</a> and take store credit for a better rate than cash.</p>
+  </div>
+  <style>.binderpos-credit-input-div{display:none !important}</style>
+  {%- endif -%}
+{%- else -%}
+  <style>.binderpos-credit-input-div{display:none !important}</style>
+{%- endif -%}
+<style>
+  .xg-credit{margin:14px 0 8px;padding:12px 14px;border:1px solid var(--xg-border,#e3e6e8);border-left:4px solid var(--xg-success,#17784a);border-radius:12px;background:var(--xg-surface,#fff);color:var(--xg-text,#3d454b);font-size:14px;line-height:1.45;text-align:left}
+  .xg-credit p{margin:0}
+  .xg-credit__lead{font-size:15px;color:var(--xg-ink,#171b1d)}
+  .xg-credit__lead a{color:var(--xg-red,#d62c28);font-weight:700;text-decoration:underline}
+  .xg-credit__sell{margin-top:4px;font-size:13px;color:var(--xg-muted,#707a83)}
+  .xg-credit__sell a{color:var(--xg-red,#d62c28);font-weight:700;text-decoration:none}
+  .xg-credit__sell a:hover,.xg-credit__lead a:hover{text-decoration:underline}
+  /* BinderPOS's row, dressed to match: same card, bigger type, an amount box
+     that reads as the thing to fill in. Their two-column grid (theme.css)
+     is kept; only the container, inputs and labels are styled. */
+  .binderpos-credit-input-div{margin:0 0 18px;padding:14px 16px;border:1px solid var(--xg-border,#e3e6e8);border-left:4px solid var(--xg-success,#17784a);border-radius:12px;background:var(--xg-surface,#fff);font-family:var(--xg-font-body,inherit);font-size:15px;color:var(--xg-ink,#171b1d);align-items:center;box-sizing:border-box}
+  .binderpos-credit-input-div label{font-weight:600;color:var(--xg-ink,#171b1d)}
+  /* BinderPOS's credit.css names a "roboto" font the site never loads (so
+     the row fell back to Times) and pins the box white by id
+     (input#binderpos-credit-input, which outranks a class rule): in dark
+     mode our light ink landed on their white box (owner, 2026-09-25: "too
+     dark and can't read"). Same id here, plus our font on their text. */
+  .binderpos-credit-input-div p,.binderpos-credit-input-div label,.binderpos-credit-input-div span,.binderpos-credit-input-div input,.binderpos-credit-input-div button{font-family:var(--xg-font-body,inherit) !important}
+  .binderpos-credit-input-div p{color:var(--xg-ink,#171b1d)}
+  .binderpos-credit-input-div p .creditBlock{color:var(--xg-ink,#171b1d);font-weight:700}
+  .binderpos-credit-input-div input,.binderpos-credit-input-div input#binderpos-credit-input{font-size:18px;font-weight:700;padding:8px 10px;min-width:130px;border:2px solid var(--xg-success,#17784a);border-radius:8px;color:var(--xg-ink,#171b1d);background:var(--xg-surface,#fff);box-sizing:border-box;caret-color:var(--xg-ink,#171b1d)}
+  .binderpos-credit-input-div input#binderpos-credit-input::placeholder{color:var(--xg-muted,#707a83);opacity:1}
+  .binderpos-credit-input-div ol{color:var(--xg-muted,#707a83)}
+  .binderpos-credit-input-div input:focus{outline:3px solid rgba(23,120,74,.28);outline-offset:1px}
+  .binderpos-credit-input-div button{font-weight:700;border-radius:8px}
+  .binderpos-credit-input-div .xg-credit__all{margin-left:8px;padding:9px 14px;border:2px solid var(--xg-success,#17784a);border-radius:8px;background:var(--xg-success,#17784a);color:var(--xg-inverse-text,#fff);font-size:14px;font-weight:700;line-height:1.2;cursor:pointer;vertical-align:middle;white-space:nowrap}
+  .binderpos-credit-input-div .xg-credit__all:hover{filter:brightness(1.08)}
+  .binderpos-credit-input-div .xg-credit__all:focus-visible{outline:3px solid rgba(23,120,74,.35);outline-offset:2px}
+  @media (max-width:991px){.binderpos-credit-input-div{row-gap:10px}}
+</style>
