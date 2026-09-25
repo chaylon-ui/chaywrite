@@ -42,7 +42,16 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
 {%- comment -%} Warhammer Colour logo on every Citadel paint line (citadel-base-paints, citadel-contrast-paints, ...) {%- endcomment -%}
 {%- assign xg_bc_head = xg_bc_key | slice: 0, 8 -%}
 {%- if xg_bc_logo == '' and xg_bc_head == 'citadel-' and xg_bc_key contains '-paints' -%}{%- assign xg_bc_logo = 'DgX8B69wOApRYTQ2-300x130.png' -%}{%- endif -%}
-{%- if xg_bc_logo != '' -%}
+{%- comment -%}
+  The colour picker view (?view=paints) covers every paint brand, so it gets its own banner
+  instead of the logo of whichever collection it was opened from (owner, 2026-09-25: the
+  Vallejo logo + "All Vallejo" crumb over the picker "is not proper anymore with other
+  brands"): a title, the three brand logos (each switches the picker's brand tab; the picker
+  marks the one showing) and a "Shop by colour" crumb.
+{%- endcomment -%}
+{%- assign xg_bc_paints = false -%}
+{%- if template.suffix == 'paints' -%}{%- assign xg_bc_paints = true -%}{%- assign xg_bc_logo = '' -%}{%- endif -%}
+{%- if xg_bc_logo != '' or xg_bc_paints -%}
 <style>
   .breadcrumb-container.xg-bc--logo { background: radial-gradient(ellipse at 50% 45%, #2b3137 0%, #171b1f 55%, #0e1113 100%) !important; }
   .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
@@ -57,13 +66,26 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   /* Warhammer-logo.png is 1400x900 with the mark in a band across the middle: larger box, pulled in by negative margins */
   .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-width: min(560px, 96%); max-height: 230px; margin: -55px auto -50px; }
   @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-height: 150px; margin: -36px auto -32px; } }
+  .xg-bc--logo .head-title.xg-bc__ptitle { color: #fff; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 12px; }
+  .xg-bc__brands { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin: 0 0 10px; }
+  .xg-bc__brand { display: flex; align-items: center; justify-content: center; height: 58px; padding: 6px 16px; border-radius: 12px; border: 2px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); opacity: .6; transition: opacity .15s, border-color .15s, background .15s; }
+  .xg-bc__brand img { display: block; max-height: 42px; max-width: 150px; width: auto; height: auto; object-fit: contain; filter: drop-shadow(0 3px 8px rgba(0,0,0,.5)); }
+  .xg-bc__brand:hover, .xg-bc__brand:focus-visible, .xg-bc__brand[aria-current="true"] { opacity: 1; border-color: rgba(255,255,255,.7); background: rgba(255,255,255,.08); }
+  @media (max-width: 767px) { .xg-bc__brand { height: 46px; padding: 5px 10px; } .xg-bc__brand img { max-height: 32px; max-width: 96px; } }
 </style>
 {%- endif -%}
-<div class="breadcrumb-container{% if xg_bc_logo != '' %} xg-bc--logo{% endif %}" style="{% if xg_bc_logo != '' %}{% elsif settings.breadcrumb != blank %}background-image: url('{{ settings.breadcrumb | img_url: 'master' }}');{% else %}background-color: {{ settings.breadcrumb_background }};{% endif %}">
+<div class="breadcrumb-container{% if xg_bc_logo != '' or xg_bc_paints %} xg-bc--logo{% endif %}" style="{% if xg_bc_logo != '' or xg_bc_paints %}{% elsif settings.breadcrumb != blank %}background-image: url('{{ settings.breadcrumb | img_url: 'master' }}');{% else %}background-color: {{ settings.breadcrumb_background }};{% endif %}">
   <nav class="breadcrumbs page-width {% unless settings.show_product_breadcrumb %}breadcrumbs-empty{% endunless %}">
     <p class="h3 banner-secondary mb-0">We Buy Collections of any size!</p>
   <div class="banner-title-container">
-    {% if xg_bc_logo != '' %}
+    {% if xg_bc_paints %}
+    <h1 class="h3 head-title xg-bc__ptitle">Shop paints by colour</h1>
+    <div class="xg-bc__brands">
+      <a class="xg-bc__brand" data-brand="Citadel" href="/collections/citadel-collection?view=paints#brand=Citadel"><img src="{{ 'DgX8B69wOApRYTQ2-300x130.png' | file_url }}" alt="Citadel (Warhammer Colour)" width="300" height="130"></a>
+      <a class="xg-bc__brand" data-brand="The Army Painter" href="/collections/all-the-army-painter?view=paints#brand=The+Army+Painter"><img src="{{ 'Asset-1.png' | file_url }}" alt="The Army Painter" width="300" height="100"></a>
+      <a class="xg-bc__brand" data-brand="Vallejo" href="/collections/all-vallejo?view=paints#brand=Vallejo"><img src="{{ 'logo_blanc.png' | file_url }}" alt="Vallejo" width="300" height="100"></a>
+    </div>
+    {% elsif xg_bc_logo != '' %}
     <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
     {%- comment -%} Paint brands: a way into the colour picker (owner, 2026-09-25: "how is it accessed", then Citadel + Army Painter: "Sure"). A range collection opens the picker on that range. {%- endcomment -%}
     {%- assign xg_pp_brand = '' -%}
@@ -123,6 +145,9 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     {% endif %}
     {% endif %}
 
+    {% elsif xg_bc_paints %}
+    <span class="divider">&dash;</span>
+    <span>Shop by colour</span>
     {% elsif template contains 'collection' and collection.handle %}
     {% if current_tags %}
     <span class="divider">&dash;</span>

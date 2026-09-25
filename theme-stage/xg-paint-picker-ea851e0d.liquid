@@ -5,7 +5,9 @@
   help with the army painter, warhammer paints, etc" -> "Sure"). Alternate collection view:
   /collections/<handle>?view=paints (templates/collection.paints.liquid). The brand opened first
   follows the collection (citadel-* -> Citadel, *army-painter* -> The Army Painter, *vallejo* ->
-  Vallejo, else all brands); #brand=...&range=... in the address picks brand and range.
+  Vallejo, else all brands); #brand=...&range=... in the address picks brand and range. The page
+  banner (snippets/breadcrumb.liquid, template.suffix 'paints') carries the title and the three
+  brand logos; this section keeps them in step with the brand tabs.
 
   The colours come from the exor-binder worker, /paints.json: every Citadel, The Army Painter
   and Vallejo paint on the online store, matched to a colour chart and grouped one swatch per
@@ -29,8 +31,7 @@
 -%}
 <div class="xg-pp page-width" data-brand="{{ xg_brand }}" data-src="https://exor-binder.nevski.workers.dev/paints.json">
   <div class="xg-pp__head">
-    <h2 class="xg-pp__title">Find your colour</h2>
-    <p class="xg-pp__sub">Citadel, The Army Painter and Vallejo. Tap a colour to see the bottle and its closest match from the other brands. On-screen colours are approximate.{% if collection.url != blank %} <a href="{{ collection.url }}">See the full {{ collection.title | escape }} list &rsaquo;</a>{% endif %}</p>
+    <p class="xg-pp__sub">Tap a colour to see the bottle and its closest match from the other brands. On-screen colours are approximate. <a class="xg-pp__all" href="#" hidden></a></p>
   </div>
   <div class="xg-pp__brands" role="tablist" aria-label="Brand"></div>
   <div class="xg-pp__bar">
@@ -73,7 +74,6 @@
 
 <style>
   .xg-pp { padding: 20px 0 40px; font-family: var(--xg-font-body); color: var(--xg-text); }
-  .xg-pp__title { font-family: var(--xg-font-display); color: var(--xg-ink); font-size: 30px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .02em; }
   .xg-pp__sub { color: var(--xg-muted); margin: 0 0 16px; font-size: 14px; }
   .xg-pp__sub a { color: var(--xg-red); font-weight: 600; white-space: nowrap; }
   .xg-pp__brands { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -163,6 +163,7 @@
   var $ = function (s, el) { return (el || root).querySelector(s); };
   var BRANDS = ['Citadel', 'The Army Painter', 'Vallejo'];
   var SHORT = { 'Citadel': 'Citadel', 'The Army Painter': 'Army Painter', 'Vallejo': 'Vallejo' };
+  var HOME = { 'Citadel': 'citadel-collection', 'The Army Painter': 'all-the-army-painter', 'Vallejo': 'all-vallejo' };
   var RANGES = {
     'Citadel': ['Base', 'Layer', 'Shade', 'Contrast', 'Dry', 'Technical', 'Air', 'Spray', 'Glaze'],
     'The Army Painter': ['Warpaints', 'Warpaints Fanatic', 'Warpaints Fanatic Wash', 'Speedpaint', 'Speedpaint Marker', 'Warpaints Air', 'Warpaints Primer', 'Quickshade Washes Set'],
@@ -278,6 +279,11 @@
   }
   function drawBrands() {
     var n = {}; paints.forEach(function (g) { n[g.b] = (n[g.b] || 0) + 1; });
+    // the banner's brand logos (snippets/breadcrumb.liquid) mark the brand showing
+    [].forEach.call(document.querySelectorAll('.xg-bc__brand'), function (a) { a.setAttribute('aria-current', String(a.getAttribute('data-brand') === state.brand)); });
+    var all = $('.xg-pp__all');
+    all.hidden = state.brand === 'All';
+    if (state.brand !== 'All') { all.href = '/collections/' + HOME[state.brand]; all.innerHTML = 'See every ' + esc(SHORT[state.brand]) + ' product &rsaquo;'; }
     $('.xg-pp__brands').innerHTML = ['All'].concat(BRANDS.filter(function (b) { return n[b]; })).map(function (b) {
       return '<button type="button" data-brand="' + esc(b) + '" aria-pressed="' + (state.brand === b) + '">' + (b === 'All' ? 'All brands' : esc(b)) + '<span>' + (b === 'All' ? paints.length : n[b]) + '</span></button>';
     }).join('');
@@ -396,6 +402,16 @@
         })
         .catch(function () { t.disabled = false; $('.xg-pp__msg').textContent = 'Could not add - please try again.'; });
     }
+  });
+  // banner logos switch the brand in place (their href is the no-script fallback)
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('.xg-bc__brand');
+    if (!a || !paints.length || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    var b = a.getAttribute('data-brand');
+    state.brand = state.brand === b ? 'All' : b; state.range = 'All';
+    drawBrands(); drawRanges(); setHash(); draw();
+    root.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   $('.xg-pp__q').addEventListener('input', function (e) { state.q = e.target.value; draw(); });
   $('.xg-pp__stock input').addEventListener('change', function (e) { state.stock = e.target.checked; draw(); });
