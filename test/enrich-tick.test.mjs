@@ -21,7 +21,7 @@ function storage() {
 // A world: books pages, game pages, and canned BGG answers.
 function world(opts) {
   const w = {
-    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [],
+    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [], gs: opts.gs || [],
     written: [], deleted: [], mediaAdds: [], plCalls: 0, adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
@@ -44,6 +44,8 @@ function world(opts) {
           added: p.plAdded ? { value: p.plAdded } : null,
           psig: p.plSig ? { value: p.plSig } : null,
           wsig: p.whSig ? { value: p.whSig } : null,
+          vendor: p.vendor || '',
+          gs: p.gsVal ? { value: p.gsVal } : null,
         })),
       },
     };
@@ -70,7 +72,7 @@ function world(opts) {
           data = { metafieldsDelete: { userErrors: [] } };
         } else {
           const q = body.variables.q;
-          data = page(q.includes('Books') ? w.books : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
+          data = page(q.includes('Books') ? w.books : q.includes("vendor:'Games Workshop'") ? (w.gs || []) : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
         }
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
@@ -476,6 +478,32 @@ async function drain(w, maxTicks = 60) {
   await drain(w);
   eq('tiny file: nothing deleted', w.deleted.length, 0);
   eq('tiny file: run finishes cleanly', (await w.cx.storage.get('en:last')).error, undefined);
+}
+
+// ---------- 5f. Game system for the collection filter (owner, 2026-09-25: "so I
+// can filter by say, Blood Bowl") ----------
+{
+  const gs = [
+    { id: 'gid://shopify/Product/11', title: 'WARHAMMER BLOOD BOWL MORG N THORG', vendor: 'Games Workshop', type: 'Tabletop Wargames' },  // new
+    { id: 'gid://shopify/Product/12', title: 'Warhammer 40,000: Kill Team - Hivestorm', vendor: 'Games Workshop', type: 'Tabletop Wargames' }, // two systems
+    { id: 'gid://shopify/Product/13', title: 'NECROMUNDA: GOLIATH GANG', vendor: 'Games Workshop', type: 'Tabletop Wargames', gsVal: '["Necromunda"]' }, // unchanged
+    { id: 'gid://shopify/Product/14', title: 'CITADEL BASE: ABADDON BLACK', vendor: 'Games Workshop', type: 'Paint', gsVal: '["Blood Bowl"]' }, // stale value
+    { id: 'gid://shopify/Product/15', title: 'BOLT ACTION: US ARMY STARTER', vendor: 'Warlord Games', type: 'Tabletop Wargames' },
+    { id: 'gid://shopify/Product/16', title: 'BATTLETECH: CLAN HEAVY STAR', vendor: 'Catalyst Game Labs', type: 'Tabletop Wargames' },
+    { id: 'gid://shopify/Product/17', title: 'Blood Bowl dice (third party)', vendor: 'Someone', type: 'Accessories' },           // not GW: untouched
+  ];
+  const w = world({ books: [], games: [], bggStatus: 401, gs });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('gamesys phase ran last', last.gamesys && last.gamesys.seen, 7);
+  const v = (id) => (w.written.find((m) => m.ownerId === 'gid://shopify/Product/' + id && m.key === 'game_system') || {}).value;
+  eq('Blood Bowl', v(11), '["Blood Bowl"]');
+  eq('Kill Team box is 40K too', v(12), '["Warhammer 40,000","Kill Team"]');
+  eq('unchanged: not rewritten', v(13), undefined);
+  eq('stale value cleared', w.deleted.filter((m) => m.ownerId === 'gid://shopify/Product/14').map((m) => m.key).join(), 'game_system');
+  eq('Bolt Action / BattleTech by type', [v(15), v(16)], ['["Bolt Action"]', '["BattleTech"]']);
+  eq('list type', (w.written.find((m) => m.key === 'game_system') || {}).type, 'list.single_line_text_field');
+  eq('counts', [last.gamesys.tagged, last.gamesys.written, last.gamesys.cleared], [5, 4, 1]);
 }
 {
   // no data/w40k.json at all

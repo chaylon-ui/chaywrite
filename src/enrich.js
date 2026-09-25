@@ -44,6 +44,7 @@ import { adminGql, throttleWait, dayOf, dateOf } from "./price-history.js";
 import { GUNPLA_QUERY, KITS_FILE_URL, indexKits, gunplaMetafields } from "./gunpla.js";
 import { PLAMOD_FILE_URL, PL_PAGE, PL_ADD_MEDIA, PL_QUERY, parsePlPage, plamodPlan } from "./plamod.js";
 import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan, WINDEX_QUERY, WINDEX_PAGE, UNIT_KINDS, parseWindexPage, likeUnits } from "./w40k.js";
+import { GS_PAGE, GS_QUERY, parseGsPage, gsPlan } from "./gamesys.js";
 
 export const ENRICH_DO = "enrich";
 
@@ -905,6 +906,7 @@ const newRun = (day, now) => ({
   gunpla: { seen: 0, changed: 0, bandai: 0, titleOnly: 0, unknown: 0 },
   plamod: { seen: 0, matched: 0, photosAdded: 0, productsWithNew: 0, facts: 0, errors: 0 },
   w40k: { seen: 0, matched: 0, written: 0, cleared: 0 },
+  gamesys: { seen: 0, tagged: 0, written: 0, cleared: 0 },
 });
 
 async function arm(cx, at, why) {
@@ -926,7 +928,7 @@ async function finish(cx, run, error) {
   cx.log("enrich: run " + dateOf(run.day) + (error ? " FAILED: " + error : " finished") +
     " seen=" + run.seen + " written=" + run.written + " ok=" + run.ok +
     " ambiguous=" + run.ambiguous + " notfound=" + run.notfound +
-    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + " " + run.ms + "ms");
+    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + (run.gamesys ? " gamesys=" + JSON.stringify(run.gamesys) : "") + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
   refreshUnitsIndexLater(cx);   // and the Warhammer "units like this" one
@@ -1005,14 +1007,53 @@ export async function enrichTick(cx) {
     }
 
     if (!run.hasNext) {
-      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla" || run.phase === "plamod") {
-        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : run.phase === "gunpla" ? "plamod" : "w40k";
+      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla" || run.phase === "plamod" || run.phase === "w40k") {
+        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : run.phase === "gunpla" ? "plamod" : run.phase === "plamod" ? "w40k" : "gamesys";
         run.cursor = null;
         run.hasNext = true;
         await st.put("en:run", run);
         continue;
       }
       return finish(cx, run, run.bggDown || null);
+    }
+
+    /* Game system for the collection filter (src/gamesys.js): exor.game_system
+       on every Games Workshop / Tabletop Wargames product, from its title. */
+    if (run.phase === "gamesys") {
+      if (!run.gamesys) run.gamesys = { seen: 0, tagged: 0, written: 0, cleared: 0 };
+      let r;
+      try { r = await adminGql(cx, GS_PAGE, { q: GS_QUERY, after: run.cursor }); }
+      catch (e) {
+        if (e && e.throttled) { run.throttled++; await st.put("en:run", run); return arm(cx, cx.now() + 1500, "throttled"); }
+        run.errors++; run.errStreak++; await st.put("en:run", run);
+        if (run.errStreak >= 5) return finish(cx, run, msg(e));
+        return arm(cx, cx.now() + 5000, "page error");
+      }
+      run.errStreak = 0;
+      run.pages++;
+      const page = parseGsPage(r.data);
+      run.cursor = page.cursor;
+      run.hasNext = page.hasNext;
+      const set = [], del = [];
+      for (const it of page.items) {
+        run.gamesys.seen++;
+        const plan = gsPlan(it);
+        if (plan.set.length) { run.gamesys.written++; set.push(...plan.set); }
+        if (plan.del.length) { run.gamesys.cleared++; del.push(...plan.del); }
+        if (plan.want.length) run.gamesys.tagged++;
+      }
+      if (set.length) {
+        try { run.written += await writeMetafields(cx, set); }
+        catch (e) { run.errors++; cx.log("enrich: game_system write failed: " + msg(e)); }
+      }
+      if (del.length) {
+        try { await deleteMetafields(cx, del); }
+        catch (e) { run.errors++; cx.log("enrich: game_system clear failed: " + msg(e)); }
+      }
+      await st.put("en:run", run);
+      const wait = throttleWait(r.cost, 40);
+      if (wait > 0) return arm(cx, cx.now() + wait, "throttle pacing");
+      continue;
     }
 
     /* Warhammer 40,000 unit specs from BSData (src/w40k.js). */
@@ -1246,6 +1287,7 @@ function publicRun(run, now) {
     gunpla: run.gunpla || null,
     plamod: run.plamod || null,
     w40k: run.w40k || null,
+    gamesys: run.gamesys || null,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,
     error: run.error,
