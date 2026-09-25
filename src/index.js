@@ -9,6 +9,7 @@ import { servePriceHistory, adminGql } from "./price-history.js";
 import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
+import { servePaints } from "./paints.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
@@ -326,6 +327,16 @@ export default {
         return r && r.data;
       };
       return serveBtTargets(request, env, ctx, gql);
+    }
+
+    // Paint colour picker data: Vallejo / Citadel / Army Painter paints matched to a colour
+    // chart, one swatch per colour (src/paints.js). Public storefront data only.
+    if (url.pathname === "/paints.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return servePaints(request, env, ctx, gql);
     }
 
     if (url.pathname === "/stores.json") {
