@@ -109,7 +109,9 @@ def parse_item(page):
     return out
 
 
-INCLUDE_HEAD = re.compile(r"^\[\s*(includes?|accessories|set contents?|contents|components|included items?)\s*\]", re.I)
+# "[Includes]" or, on some pages, the full-width "【Includes】"
+INCLUDE_HEAD = re.compile(r"^[\[【]\s*(includes?|accessories|set contents?|contents|components|included items?)\s*[\]】]", re.I)
+HEAD = re.compile(r"^[\[【][^\]】]{1,40}[\]】]\s*$")
 
 
 def parse_info(page):
@@ -127,7 +129,7 @@ def parse_info(page):
     intro, feats, incl, other = [], [], [], []
     part = "intro"
     for t in lines:
-        if t.startswith("[") and "]" in t[:40]:
+        if HEAD.match(t):
             part = "includes" if INCLUDE_HEAD.match(t) else "other"
             continue
         item = re.sub(r"^[■◆●・\-\*]\s*", "", t).strip()
