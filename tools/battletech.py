@@ -195,6 +195,17 @@ def contents(text):
                 disp = (lk.group(2) or target).strip()
                 if not re.search(r'card|pilot|miniature|record sheet', disp, re.I):
                     out.append([disp, target, []])
+    if not out:
+        # some pages list the units without the ''italics'' (e.g. "* Five [[Elemental]] Battle Armor")
+        for line in m.group(1).split('\n'):
+            s = line.strip()
+            if not s.startswith('*') or s.startswith('***'):
+                continue
+            for lk in LINK.finditer(s):
+                target = lk.group(1).strip()
+                disp = (lk.group(2) or target).strip()
+                if not re.search(r'card|pilot|record sheet|miniature|dry-erase|file:|image:', disp + ' ' + target, re.I):
+                    out.append([disp, target, []])
     for u in out:
         u[2] = [h for h in hints_all if key(u[0]) and key(u[0]) in key(h) or key(re.sub(r'\s*\(.*?\)', '', u[1])) in key(h)]
     return out
