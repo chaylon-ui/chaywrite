@@ -71,19 +71,73 @@ export function parseW40kPage(data) {
   };
 }
 
-// One product + the file -> { set: [metafield inputs], del: [identifiers] }.
+/* Collection filters (owner, 2026-09-25: "possible to add those filter
+   options to here" - the Cloud Search sidebar on the 40K collection). The
+   sidebar app filters on plain product metafields, not on the wh_unit json,
+   so four simple ones ride along with it:
+     wh_army        single line   "Orks"
+     wh_unit_size   single line   "1 model" / "5-10 models"
+     wh_points_band single line   "50-99 pts" (from the smallest size's points)
+     wh_roles       list          battlefield roles only (Character, Infantry,
+                                  Vehicle...), not every BSData keyword
+   FACETS_V is part of the stored signature so a change here rewrites every
+   product once, even when the BSData facts themselves did not move. */
+export const FACETS_V = "f1";
+export const ROLE_KEYWORDS = ["Epic Hero", "Character", "Battleline", "Infantry", "Mounted", "Beast", "Swarm", "Monster",
+  "Vehicle", "Walker", "Dedicated Transport", "Transport", "Fly", "Aircraft", "Titanic", "Fortification", "Psyker"];
+export const FACET_KEYS = ["wh_army", "wh_unit_size", "wh_points_band", "wh_roles"];
+
+export function sizeLabel(models) {
+  if (!Array.isArray(models) || !models.length) return "";
+  const lo = Number(models[0]) || 0, hi = Number(models[1]) || lo;
+  if (!lo) return "";
+  return hi > lo ? lo + "\u2013" + hi + " models" : lo + (lo === 1 ? " model" : " models");
+}
+
+export function pointsBand(pts) {
+  const p = Number(pts) || 0;
+  if (p <= 0) return "";
+  if (p < 50) return "Under 50 pts";
+  const bands = [[100, "50\u201399 pts"], [150, "100\u2013149 pts"], [200, "150\u2013199 pts"], [300, "200\u2013299 pts"], [500, "300\u2013499 pts"]];
+  for (const [top, label] of bands) if (p < top) return label;
+  return "500+ pts";
+}
+
+export function facets(facts) {
+  let pts = (facts.points || []).map((r) => Number(r && r[1]) || 0).filter((x) => x > 0);
+  if (!pts.length) pts = (facts.sizes || []).map((z) => Number(z && z.p) || 0).filter((x) => x > 0);
+  const kw = new Set([...(facts.keywords || [])].map(String));
+  return {
+    wh_army: String(facts.faction || ""),
+    wh_unit_size: sizeLabel(facts.models),
+    wh_points_band: pointsBand(pts.length ? Math.min(...pts) : 0),
+    wh_roles: ROLE_KEYWORDS.filter((k) => kw.has(k)),
+  };
+}
+
+// One product + the file -> { set: [metafield inputs], del: [identifiers],
+// unset: [identifiers] } - unset are facet fields that are empty for this unit
+// (not a cleared product, so the caller does not count them as one).
 export function w40kPlan(it, file) {
-  const out = { set: [], del: [] };
+  const out = { set: [], del: [], unset: [] };
   const num = String(it.id || "").split("/").pop();
   const facts = file && file.products && file.products[num];
   if (facts && facts.name && facts.sig) {
-    if (facts.sig === it.sig) return out;                     // unchanged
+    const want = facts.sig + "+" + FACETS_V;
+    if (want === it.sig) return out;                          // unchanged
     const { sig, ...unit } = facts;
     out.set.push({ ownerId: it.id, namespace: "exor", key: "wh_unit", type: "json", value: JSON.stringify(unit) });
-    out.set.push({ ownerId: it.id, namespace: "exor", key: "wh_sig", type: "single_line_text_field", value: String(sig) });
+    const f = facets(unit);
+    for (const k of FACET_KEYS) {
+      const v = f[k];
+      const empty = Array.isArray(v) ? !v.length : !v;
+      if (empty) out.unset.push({ ownerId: it.id, namespace: "exor", key: k });
+      else out.set.push({ ownerId: it.id, namespace: "exor", key: k, type: Array.isArray(v) ? "list.single_line_text_field" : "single_line_text_field", value: Array.isArray(v) ? JSON.stringify(v) : v });
+    }
+    out.set.push({ ownerId: it.id, namespace: "exor", key: "wh_sig", type: "single_line_text_field", value: want });
   } else if (it.sig) {
     // matched before, not any more (renamed, or the datasheet went away)
-    out.del.push({ ownerId: it.id, namespace: "exor", key: "wh_unit" }, { ownerId: it.id, namespace: "exor", key: "wh_sig" });
+    for (const k of ["wh_unit", "wh_sig", ...FACET_KEYS]) out.del.push({ ownerId: it.id, namespace: "exor", key: k });
   }
   return out;
 }

@@ -446,7 +446,7 @@ async function drain(w, maxTicks = 60) {
   for (let i = 1; i <= 25; i++) products[String(i)] = unit('Unit ' + i, 'v1:' + i);
   const w40k = [
     { id: 'gid://shopify/Product/1', title: 'WARHAMMER 40,000 SPACE MARINES: UNIT 1' },                 // new
-    { id: 'gid://shopify/Product/2', title: 'WARHAMMER 40,000 SPACE MARINES: UNIT 2', whSig: 'v1:2' },  // unchanged
+    { id: 'gid://shopify/Product/2', title: 'WARHAMMER 40,000 SPACE MARINES: UNIT 2', whSig: 'v1:2+f1' },  // unchanged
     { id: 'gid://shopify/Product/3', title: 'WARHAMMER 40,000 SPACE MARINES: UNIT 3', whSig: 'v1:old' },// points changed
     { id: 'gid://shopify/Product/99', title: 'WARHAMMER 40,000 CODEX', whSig: 'v1:x' },                 // no longer matched
     { id: 'gid://shopify/Product/98', title: 'WARHAMMER 40,000 DICE' },                                 // never matched
@@ -457,13 +457,15 @@ async function drain(w, maxTicks = 60) {
   eq('w40k phase ran after the others', last.w40k && last.w40k.seen, 5);
   eq('matched products counted', last.w40k.matched, 3);
   const keys = (id) => w.written.filter((m) => m.ownerId === id).map((m) => m.key).sort().join(',');
-  eq('new unit: specs + signature written', keys('gid://shopify/Product/1'), 'wh_sig,wh_unit');
+  eq('new unit: specs + filters + signature written', keys('gid://shopify/Product/1'), 'wh_army,wh_points_band,wh_roles,wh_sig,wh_unit,wh_unit_size');
   eq('unchanged unit: nothing written', keys('gid://shopify/Product/2'), '');
-  eq('changed unit: rewritten', keys('gid://shopify/Product/3'), 'wh_sig,wh_unit');
+  eq('changed unit: rewritten', keys('gid://shopify/Product/3'), 'wh_army,wh_points_band,wh_roles,wh_sig,wh_unit,wh_unit_size');
+  const f1 = (k) => (w.written.find((m) => m.ownerId === 'gid://shopify/Product/1' && m.key === k) || {});
+  eq('filter fields', [f1('wh_army').value, f1('wh_unit_size').value, f1('wh_points_band').value, f1('wh_roles').value, f1('wh_roles').type, f1('wh_sig').value], ['Space Marines', '5\u201310 models', '50\u201399 pts', '["Infantry"]', 'list.single_line_text_field', 'v1:1+f1']);
   const v = JSON.parse(w.written.find((m) => m.ownerId === 'gid://shopify/Product/1' && m.key === 'wh_unit').value);
   eq('specs are the file facts, signature kept out', [v.name, v.sizes[1].p, v.sig], ['Unit 1', 150, undefined]);
   eq('json type', w.written.find((m) => m.key === 'wh_unit').type, 'json');
-  eq('a product no longer matched loses its specs', w.deleted.filter((m) => m.ownerId === 'gid://shopify/Product/99').map((m) => m.key).sort().join(','), 'wh_sig,wh_unit');
+  eq('a product no longer matched loses its specs', w.deleted.filter((m) => m.ownerId === 'gid://shopify/Product/99').map((m) => m.key).sort().join(','), 'wh_army,wh_points_band,wh_roles,wh_sig,wh_unit,wh_unit_size');
   eq('a never-matched product is left alone', w.written.concat(w.deleted).filter((m) => m.ownerId === 'gid://shopify/Product/98').length, 0);
 }
 {

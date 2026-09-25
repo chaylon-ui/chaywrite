@@ -1045,6 +1045,7 @@ export async function enrichTick(cx) {
         if (file.products[String(it.id).split("/").pop()]) run.w40k.matched++;
         if (plan.set.length) { run.w40k.written++; set.push(...plan.set); }
         if (plan.del.length) { run.w40k.cleared++; del.push(...plan.del); }
+        if (plan.unset && plan.unset.length) del.push(...plan.unset);
       }
       if (set.length) {
         try { run.written += await writeMetafields(cx, set); }
