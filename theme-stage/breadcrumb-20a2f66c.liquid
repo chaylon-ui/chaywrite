@@ -11,12 +11,19 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   rainbow image and the title text. The title stays as the logo's alt text.
 {%- endcomment -%}
 {%- assign xg_bc_logo = '' -%}
-{%- case collection.handle -%}
+{%- assign xg_bc_key = collection.handle -%}
+{%- comment -%} the search app's collection pages (/a/search/<handle>) carry no collection object {%- endcomment -%}
+{%- if xg_bc_key == blank and request.path contains '/a/search/' -%}{%- assign xg_bc_key = request.path | split: '/' | last -%}{%- endif -%}
+{%- case xg_bc_key -%}
   {%- when 'all-warhammer-40-000' -%}{%- assign xg_bc_logo = 'Warhammer-logo.png' -%}
   {%- when 'all-warhammer-age-of-sigmar' -%}{%- assign xg_bc_logo = 'warhammeraos.png' -%}
   {%- when 'all-warhammer-kill-team' -%}{%- assign xg_bc_logo = 'killteam-logo.png' -%}
   {%- when 'all-warhammer-the-horus-heresy' -%}{%- assign xg_bc_logo = 'warhammer_thehorusheresy.png' -%}
   {%- when 'all-warhammer-the-old-world' -%}{%- assign xg_bc_logo = 'ToW_Logo.png' -%}
+  {%- when 'all-necromunda' -%}{%- assign xg_bc_logo = 'necromunda-logo.png' -%}
+  {%- when 'all-blood-bowl' -%}{%- assign xg_bc_logo = 'Bloodbowl_logo.png' -%}
+  {%- when 'all-legions-imperialis' -%}{%- assign xg_bc_logo = 'legions-imperialis-logo-2x.png' -%}
+  {%- when 'all-middle-earth' -%}{%- assign xg_bc_logo = 'Middle-Earth_Strategy_Battle_Game_logo.webp' -%}
 {%- endcase -%}
 {%- if xg_bc_logo != '' -%}
 <style>
@@ -30,12 +37,12 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   <nav class="breadcrumbs page-width {% unless settings.show_product_breadcrumb %}breadcrumbs-empty{% endunless %}">
     <p class="h3 banner-secondary mb-0">We Buy Collections of any size!</p>
   <div class="banner-title-container">
-    {% if template contains 'product' %}
+    {% if xg_bc_logo != '' %}
+    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
+    {% elsif template contains 'product' %}
     <h1 class="h3 head-title">{{ product.title }}</h1>
     {% elsif template contains 'collection' %}
-    {% if xg_bc_logo != '' %}
-    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{{ collection.title | escape }}" width="460" height="110" fetchpriority="high"></h1>
-    {% elsif collection.title %}
+    {% if collection.title %}
     <h1 class="h3 head-title">{{ collection.title }}</h1>
     {% else %}
     <h1 class="h3 head-title">{{ 'collections.general.title' | t }}</h1>
