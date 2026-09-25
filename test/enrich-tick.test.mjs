@@ -580,6 +580,9 @@ async function drain(w, maxTicks = 60) {
   eq('keyword stays in the army', likeUnits(U, 'keyword', 'Vehicle', 'Orks', 'orks-trukk').units.map((u) => u.handle).join(','), 'legends');
   eq('points near, closest first, army only', likeUnits(U, 'points', '70 pts', 'Orks', 'orks-trukk').units.map((u) => u.handle).join(','), 'legends,orks-boyz');
   eq('size same range', likeUnits(U, 'size', '10-20', 'Orks', '').units.map((u) => u.handle).join(','), 'orks-boyz');
+  // pages (owner, 2026-09-25: "there is no way to go beyond the first page of 36 results")
+  eq('offset pages through the list', [likeUnits(U, 'army', 'orks', '', '', 1, 0).units[0].handle, likeUnits(U, 'army', 'orks', '', '', 1, 1).units[0].handle, likeUnits(U, 'army', 'orks', '', '', 1, 1).offset], [likeUnits(U, 'army', 'orks', '', '', 2).units[0].handle, likeUnits(U, 'army', 'orks', '', '', 2).units[1].handle, 1]);
+  eq('offset past the end is empty, count kept', [likeUnits(U, 'army', 'orks', '', '', 5, 99).units.length, likeUnits(U, 'army', 'orks', '', '', 5, 99).count], [0, likeUnits(U, 'army', 'orks', '', '').count]);
   eq('unknown kind', likeUnits(U, 'colour', 'x', '', '').count, 0);
   eq('answer shape', JSON.stringify(likeUnits(U, 'datasheet', 'Rhino', '', '').units[0]), JSON.stringify({ handle: 'rhino', title: 'SM RHINO', url: '/products/rhino', image: null, price: '0.00', qty: 3, variant: null, army: 'Space Marines', datasheet: 'Rhino', size: '1', points: 75 }));
 }

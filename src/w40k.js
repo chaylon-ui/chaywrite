@@ -211,7 +211,7 @@ export function pointsNear(a, b) {
   return Math.abs(a - b) <= Math.max(10, b * 0.15);
 }
 
-export function likeUnits(units, kind, value, army, exclude, limit) {
+export function likeUnits(units, kind, value, army, exclude, limit, offset) {
   const want = fold(value), arm = fold(army), ex = fold(exclude);
   if (!UNIT_KINDS.includes(kind) || !want) return { count: 0, units: [] };
   const target = kind === "points" ? num(String(value).replace(/[^\d.]/g, ""), 0) : 0;
@@ -231,9 +231,11 @@ export function likeUnits(units, kind, value, army, exclude, limit) {
     return n || String(a.t).localeCompare(String(b.t));
   });
   const n = Math.max(1, Math.min(UNIT_LIMIT_MAX, num(limit, 24)));
+  const at = Math.max(0, Math.min(hit.length, Math.floor(num(offset, 0))));
   return {
     count: hit.length,
-    units: hit.slice(0, n).map((u) => ({
+    offset: at,
+    units: hit.slice(at, at + n).map((u) => ({
       handle: u.h, title: u.t, url: "/products/" + u.h,
       image: u.i ? u.i + (u.i.indexOf("?") > -1 ? "&" : "?") + "width=360" : null,
       price: (u.p / 100).toFixed(2), qty: u.q, variant: u.v || null,

@@ -1632,7 +1632,7 @@ function refreshGamesIndexLater(cx) {
 
 const foldKey = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
 
-export function likeGames(games, kind, value, exclude, limit) {
+export function likeGames(games, kind, value, exclude, limit, offset) {
   const field = LIKE_KINDS[kind];
   const want = foldKey(value);
   if (!field || !want) return { count: 0, games: [] };
@@ -1648,9 +1648,11 @@ export function likeGames(games, kind, value, exclude, limit) {
     return String(a.t).localeCompare(String(b.t));
   });
   const n = Math.max(1, Math.min(LIKE_LIMIT_MAX, numOr(limit, 24)));
+  const at = Math.max(0, Math.min(hit.length, Math.floor(numOr(offset, 0))));
   return {
     count: hit.length,
-    games: hit.slice(0, n).map((g) => ({
+    offset: at,
+    games: hit.slice(at, at + n).map((g) => ({
       handle: g.h, title: g.t, url: "/products/" + g.h,
       image: g.i ? g.i + (g.i.indexOf("?") > -1 ? "&" : "?") + "width=360" : null,
       price: (g.p / 100).toFixed(2), qty: g.q, variant: g.v || null,
@@ -1672,8 +1674,8 @@ async function gamesLike(cx, url) {
   } else if (cx.now() - idx.builtAt > GINDEX_MAX_AGE_MS) {
     refreshGamesIndexLater(cx);
   }
-  const res = likeGames(idx.games, kind, value, exclude, limit);
-  return { ok: true, kind, value, builtAt: new Date(idx.builtAt).toISOString(), indexed: idx.games.length, count: res.count, games: res.games };
+  const res = likeGames(idx.games, kind, value, exclude, limit, url.searchParams.get("offset"));
+  return { ok: true, kind, value, builtAt: new Date(idx.builtAt).toISOString(), indexed: idx.games.length, count: res.count, offset: res.offset, games: res.games };
 }
 
 /* ---- Warhammer "units like this" (src/w40k.js likeUnits) --------------------
@@ -1750,8 +1752,8 @@ async function unitsLike(cx, url) {
   } else if (cx.now() - idx.builtAt > GINDEX_MAX_AGE_MS) {
     refreshUnitsIndexLater(cx);
   }
-  const res = likeUnits(idx.units, kind, value, army, exclude, limit);
-  return { ok: true, kind, value, army: army || null, builtAt: new Date(idx.builtAt).toISOString(), indexed: idx.units.length, count: res.count, units: res.units };
+  const res = likeUnits(idx.units, kind, value, army, exclude, limit, url.searchParams.get("offset"));
+  return { ok: true, kind, value, army: army || null, builtAt: new Date(idx.builtAt).toISOString(), indexed: idx.units.length, count: res.count, offset: res.offset, units: res.units };
 }
 
 export async function enrichDoFetch(cx, request, url) {
