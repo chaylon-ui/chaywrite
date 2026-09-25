@@ -230,7 +230,8 @@
       });
     });
 
-    var u = W + '/eavy/for.json?title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '');
+    // v= changes with the worker's cache version so a browser never keeps an answer from before a fix
+    var u = W + '/eavy/for.json?v=3&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '');
     fetch(u).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d || !d.ok || !d.schemes || !d.schemes.length) return;
       // a scheme is only worth showing when we sell at least one of its paints
