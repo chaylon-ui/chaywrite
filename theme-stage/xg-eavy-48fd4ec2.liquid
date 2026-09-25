@@ -1,0 +1,194 @@
+{%- comment -%}
+  "Paint it like the box" (owner 2026-09-25: "Can you use this website to help
+  suggest paints on Warhammer products with direct links to the paints on our
+  site for sale https://eavy-archive.com/40k/adeptus-mechanicus/").
+
+  The worker (chaywrite src/eavy.js, /eavy/for.json) picks the 'Eavy Archive
+  army page and box-art scheme for this product - a character or chapter the
+  title names first, else the army from the 40K unit facts or the title - and
+  resolves every paint each area uses to our own Citadel listing. Only the
+  paint NAMES come from 'Eavy Archive; the method (steps, ratios, photos)
+  stays on their site, linked per scheme and per area, with a credit.
+
+  Layout (owner, same day: "a lot more structured ... smaller and tighter"):
+  one compact shopping list - each pot once, in the order the recipe first
+  uses it - then "Which paint goes where" folded under a toggle. Paints we do
+  not list sit on one muted line. No scheme found -> the card stays hidden.
+
+  Params: product, faction (exor.wh_unit faction, may be blank).
+{%- endcomment -%}
+{%- liquid
+  assign ptype = product.type | downcase
+  assign skip = false
+  if ptype contains 'paint' or ptype contains 'hobby' or ptype contains 'book' or ptype contains 'dice' or ptype contains 'accessor' or ptype contains 'tool'
+    assign skip = true
+  endif
+-%}
+{%- unless skip -%}
+<section class="xg-eavy" hidden aria-label="Paint it like the box" data-title="{{ product.title | escape }}" data-faction="{{ faction | escape }}">
+  <div class="xg-eavy__top">
+    <div class="xg-eavy__ttl">Paint it like the box</div>
+    <label class="xg-eavy__pick"><span class="visually-hidden">Colour scheme</span><select></select></label>
+  </div>
+  <div class="xg-eavy__meta"></div>
+  <div class="xg-eavy__list" role="list"></div>
+  <button type="button" class="xg-eavy__all" hidden></button>
+  <div class="xg-eavy__more"></div>
+  <div class="xg-eavy__act">
+    <button type="button" class="xg-eavy__add"></button>
+    <a class="xg-eavy__how" target="_blank" rel="noopener">Step-by-step guide &rsaquo;</a>
+  </div>
+  <div class="xg-eavy__msg" role="status"></div>
+  <details class="xg-eavy__where">
+    <summary>Which paint goes where</summary>
+    <div class="xg-eavy__areas"></div>
+  </details>
+  <p class="xg-eavy__credit">Paint lists from <a href="https://eavy-archive.com/" target="_blank" rel="noopener">&lsquo;Eavy Archive</a>, box-art recipes collected by The Infernal Brush community (unofficial, not endorsed by Games Workshop).</p>
+</section>
+<style>
+  .xg-eavy { --e-ink: #171b1d; --e-text: #3d454b; --e-mute: #6b757c; --e-line: #e3e7ea; --e-bg: #fff; --e-row: #f6f8f9;
+    margin: 22px 0 0; padding: 14px 16px 12px; border: 1px solid var(--e-line); border-radius: 12px; background: var(--e-bg); max-width: 720px; font-size: 14px; line-height: 1.35; }
+  html[data-xg-theme="dark"] .xg-eavy { --e-ink: #eef1f3; --e-text: #d5dbdf; --e-mute: #93a0a8; --e-line: #2f373c; --e-bg: #171c1f; --e-row: #1e2428; }
+  .xg-eavy__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .xg-eavy .xg-eavy__ttl { margin: 0; white-space: nowrap; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--e-ink) !important; }
+  .xg-eavy__pick select { max-width: 240px; height: 30px; padding: 0 26px 0 9px; border: 1px solid var(--e-line); border-radius: 7px; background-color: var(--e-row); color: var(--e-ink); font: inherit; font-size: 13px; }
+  .xg-eavy__meta { margin: 3px 0 10px; font-size: 12.5px; color: var(--e-mute); }
+  .xg-eavy__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; border-top: 1px solid var(--e-line); }
+  .xg-eavy .xg-eavy__row { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 29px; padding: 3px 2px; border-bottom: 1px solid var(--e-line); color: var(--e-text) !important; text-decoration: none !important; }
+  .xg-eavy a.xg-eavy__row:hover { background: var(--e-row); }
+  .xg-eavy__dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); background: #999; }
+  .xg-eavy__nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--e-ink); }
+  .xg-eavy__nm small { margin-left: 5px; font-weight: 500; font-size: 11px; color: var(--e-mute); }
+  .xg-eavy__pr { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--e-text); white-space: nowrap; }
+  .xg-eavy__row.is-out .xg-eavy__nm, .xg-eavy__row.is-out .xg-eavy__pr { color: var(--e-mute); font-weight: 500; }
+  .xg-eavy__list:not(.is-all) .xg-eavy__row:nth-child(n+9) { display: none; }
+  @media (min-width: 561px) { .xg-eavy__list:not(.is-all) .xg-eavy__row:nth-child(n+9) { display: grid; } .xg-eavy__list:not(.is-all) .xg-eavy__row:nth-child(n+13) { display: none; } }
+  .xg-eavy .xg-eavy__all { display: block; margin: 6px 0 0; padding: 0; border: 0; background: none; color: var(--e-ink) !important; font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+  .xg-eavy .xg-eavy__all[hidden] { display: none; }
+  .xg-eavy__more { margin: 7px 0 0; font-size: 12px; color: var(--e-mute); }
+  .xg-eavy__act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 12px 0 0; }
+  .xg-eavy .xg-eavy__add { height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--xg-red, #d62c28); color: #fff !important; font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; }
+  .xg-eavy__add[disabled] { opacity: .65; cursor: default; }
+  .xg-eavy .xg-eavy__how { font-size: 13px; font-weight: 600; color: var(--e-ink) !important; text-decoration: underline; }
+  .xg-eavy__msg { margin: 6px 0 0; font-size: 12.5px; color: var(--e-mute); }
+  .xg-eavy__msg:empty { display: none; }
+  .xg-eavy__msg a { color: inherit; text-decoration: underline; }
+  .xg-eavy__where { margin: 12px 0 0; border-top: 1px solid var(--e-line); }
+  .xg-eavy__where summary { padding: 9px 0 2px; font-size: 12.5px; font-weight: 700; color: var(--e-ink); cursor: pointer; list-style: revert; }
+  .xg-eavy__areas { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; padding: 6px 0 2px; font-size: 12.5px; }
+  .xg-eavy__an { font-weight: 700; color: var(--e-ink); }
+  .xg-eavy__an a { font-weight: 500; color: var(--e-mute) !important; text-decoration: underline; margin-left: 4px; }
+  .xg-eavy__ap { color: var(--e-text); }
+  .xg-eavy__credit { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--e-mute); }
+  .xg-eavy__credit a { color: inherit !important; text-decoration: underline; }
+  @media (max-width: 560px) {
+    .xg-eavy { padding: 12px 12px 10px; }
+    .xg-eavy__list { grid-template-columns: 1fr; }
+    .xg-eavy__top { flex-wrap: nowrap; }
+    .xg-eavy__pick select { max-width: 150px; }
+    .xg-eavy .xg-eavy__ttl { font-size: 12px; letter-spacing: .06em; }
+    .xg-eavy__areas { grid-template-columns: 1fr; gap: 1px; }
+    .xg-eavy__an { margin-top: 5px; }
+  }
+</style>
+<script>
+  (function () {
+    var box = document.currentScript && document.currentScript.previousElementSibling && document.currentScript.previousElementSibling.previousElementSibling;
+    if (!box || !box.classList || !box.classList.contains('xg-eavy') || !window.fetch) return;
+    var W = 'https://exor-binder.nevski.workers.dev';
+    var data = null, cur = 0;
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function money(p) { return '$' + (Number(p) || 0).toFixed(2); }
+    function $(s) { return box.querySelector(s); }
+    function kOf(p) { return p.handle || ('?' + String(p.name).toLowerCase()); }
+
+    // each pot once, in the order the recipe first uses it
+    function pots(s) {
+      var seen = {}, ours = [], other = [];
+      s.areas.forEach(function (ar) { ar.paints.forEach(function (p) {
+        var k = kOf(p); if (seen[k]) return; seen[k] = 1;
+        (p.handle ? ours : other).push(p);
+      }); });
+      return { ours: ours, other: other };
+    }
+    function row(p) {
+      var rng = p.r ? '<small>' + esc(p.r) + '</small>' : '';
+      var was = p.was ? ' (recipe: ' + esc(p.was) + ')' : '';
+      return '<a role="listitem" class="xg-eavy__row' + (p.a ? '' : ' is-out') + '" href="/products/' + encodeURIComponent(p.handle) + '" title="' + esc(p.title) + was + '">' +
+        '<span class="xg-eavy__dot"' + (p.h ? ' style="background:' + esc(p.h) + '"' : '') + '></span>' +
+        '<span class="xg-eavy__nm">' + esc(p.name) + rng + '</span>' +
+        '<span class="xg-eavy__pr">' + (p.a ? money(p.price) : 'sold out') + '</span></a>';
+    }
+    function show(i) {
+      cur = i;
+      var s = data.schemes[i], pp = pots(s);
+      var inst = pp.ours.filter(function (p) { return p.a && p.v; });
+      var sum = inst.reduce(function (t, p) { return t + (Number(p.price) || 0); }, 0);
+      $('.xg-eavy__pick select').value = String(i);
+      $('.xg-eavy__meta').textContent = data.page.title + ' · ' + pp.ours.length + ' paint' + (pp.ours.length === 1 ? '' : 's') + ' · ' + inst.length + ' in stock';
+      var list = $('.xg-eavy__list'), all = $('.xg-eavy__all');
+      list.innerHTML = pp.ours.map(row).join('');
+      list.classList.remove('is-all');
+      // 8 rows on a phone, 12 (two columns) wider; the rest behind one toggle
+      var fold = window.matchMedia && window.matchMedia('(max-width: 560px)').matches ? 8 : 12;
+      all.hidden = pp.ours.length <= fold;
+      all.textContent = 'Show all ' + pp.ours.length + ' paints';
+      $('.xg-eavy__more').textContent = pp.other.length ? 'Also used, not sold here: ' + pp.other.map(function (p) { return p.name; }).join(', ') : '';
+      $('.xg-eavy__areas').innerHTML = s.areas.map(function (ar) {
+        return '<div class="xg-eavy__an">' + esc(ar.name) + '<a href="' + esc(ar.url) + '" target="_blank" rel="noopener">how</a></div>' +
+          '<div class="xg-eavy__ap">' + ar.paints.map(function (p) { return esc(p.name); }).join(' · ') + '</div>';
+      }).join('');
+      $('.xg-eavy__how').href = s.url;
+      var add = $('.xg-eavy__add');
+      add.hidden = !inst.length; add.disabled = false;
+      add.textContent = 'Add ' + inst.length + ' in-stock paint' + (inst.length === 1 ? '' : 's') + ' · ' + money(sum);
+      $('.xg-eavy__msg').textContent = '';
+    }
+    function added(ok) {
+      $('.xg-eavy__add').disabled = false;
+      $('.xg-eavy__msg').innerHTML = ok ? 'Added to your cart. <a href="/cart">View cart</a>' : 'Could not add them - please try again.';
+      if (ok) {
+        document.dispatchEvent(new CustomEvent('cart:refresh'));
+        try { var sync = (window.Shopify && window.Shopify.adjustCartDropDown) || window.adjustCartDropDown; if (typeof sync === 'function') sync(); } catch (e) {}
+      }
+    }
+    function post(items) {
+      return fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: items }) })
+        .then(function (r) { return r.ok; }, function () { return false; });
+    }
+    box.addEventListener('change', function (e) { if (e.target.tagName === 'SELECT') show(+e.target.value); });
+    box.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('.xg-eavy__all')) {
+        var on = $('.xg-eavy__list').classList.toggle('is-all');
+        e.target.textContent = on ? 'Show fewer' : 'Show all ' + pots(data.schemes[cur]).ours.length + ' paints';
+        return;
+      }
+      if (!(e.target.closest && e.target.closest('.xg-eavy__add'))) return;
+      var list = pots(data.schemes[cur]).ours.filter(function (p) { return p.a && p.v; });
+      if (!list.length) return;
+      $('.xg-eavy__add').disabled = true; $('.xg-eavy__msg').textContent = 'Adding…';
+      post(list.map(function (p) { return { id: p.v, quantity: 1 }; })).then(function (ok) {
+        if (ok) return added(true);
+        // one pot just sold out: add the rest one by one
+        var any = false;
+        list.reduce(function (q, p) { return q.then(function () { return post([{ id: p.v, quantity: 1 }]).then(function (k) { any = any || k; }); }); }, Promise.resolve())
+          .then(function () { added(any); });
+      });
+    });
+
+    var u = W + '/eavy/for.json?title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '');
+    fetch(u).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !d.ok || !d.schemes || !d.schemes.length) return;
+      // a scheme is only worth showing when we sell at least one of its paints
+      d.schemes = d.schemes.filter(function (s) { return s.areas.some(function (ar) { return ar.paints.some(function (p) { return p.handle; }); }); });
+      if (!d.schemes.length) return;
+      data = d;
+      var sel = $('.xg-eavy__pick select');
+      sel.innerHTML = d.schemes.map(function (s, i) { return '<option value="' + i + '">' + esc(s.name) + '</option>'; }).join('');
+      if (d.schemes.length < 2) $('.xg-eavy__pick').hidden = true;
+      show(0);
+      box.hidden = false;
+    }).catch(function () {});
+  })();
+</script>
+{%- endunless -%}

@@ -49,7 +49,7 @@ const RENAMED = new Set(["bleachedbone", "scorchedbrown", "codexgrey", "bestialb
   "fortressgrey", "regalblue", "shininggold", "goblingreen", "elfflesh", "scabred", "tinbitz", "redgore", "burnishedgold", "devlanmud",
   "badabblack", "fleshwash", "ogrynfleshwash", "leviathanpurple", "bloodred", "darkflesh", "bubonicbrown", "verminbrown", "fieryorange", "lichepurple", "skullwhite"]);
 // step words and mixes the crawler read as paint names ("Basecoat Mix", "Previous mix", "Water", "Add White")
-export const NOT_A_PAINT = /\b(mix|mixes|basecoat|base coat|previous|water|thinned|glaze medium|lahmian medium)\b|^add\b|:/i;
+export const NOT_A_PAINT = /\b(mix|mixes|basecoat|base coat|previous|water|thinned|medium)\b|^add\b|:/i;
 /* A paint's name is in several Citadel ranges (Leadbelcher Base / Spray / Air): the pot a recipe means. */
 const RANGE_PREF = ["Base", "Layer", "Shade", "Contrast", "Technical", "Dry", "Glaze", "Air", "Spray"];
 
