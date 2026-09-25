@@ -73,7 +73,7 @@ def paints_of(step_body):
         p = re.sub(r"\s+", " ", part).strip(" .-;")
         if not p or len(p) < 3 or not re.search(r"[A-Za-z]", p) or NOT_PAINT.match(p):
             continue
-        if len(p) > 40:  # a sentence, not a paint name
+        if len(p) > 40 or not re.match(r"[A-Z0-9'‘]", p):  # a sentence or a note ("add Black to..."), not a name
             continue
         out.append(p)
     return out
@@ -126,7 +126,9 @@ def sitemap():
         print("sitemap HTTP", st)
         return []
     locs = re.findall(r"<loc>(?:<!\[CDATA\[)?([^\]<]+)(?:\]\]>)?</loc>", body)
-    return sorted(set(l.strip() for l in locs if re.match(re.escape(BASE) + r"/(40k|age-of-sigmar|other-games)/.+", l.strip())))
+    # army pages only (/40k/orks/): a character or sub-faction page (/40k/orks/ghazghkull-thraka/)
+    # is one scheme of its army page, which already holds every scheme
+    return sorted(set(l.strip() for l in locs if re.match(re.escape(BASE) + r"/(40k|age-of-sigmar|other-games)/[^/]+/?$", l.strip())))
 
 
 def main():
@@ -163,7 +165,7 @@ def main():
     data = {
         "source": BASE + "/",
         "credit": "'Eavy Archive - box-art recipes collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)",
-        "generated": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "count": len(pages),
         "pages": dict(sorted(pages.items())),
     }
