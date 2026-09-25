@@ -20,13 +20,20 @@
       scale, same kit name once punctuation is dropped. Only a unique match
       is used - a wrong release date is worse than none.
 
+   3. BANDAI'S PRODUCTS INFO box on that page (owner, 2026-09-25: "is there
+      a chance you can capture this data for gunpla? also the pokemon
+      gunpla"): the intro line, the feature points and the [Includes] list,
+      written as one exor.gp_info json. Bandai's Pokemon Model Kits (Plamod
+      files them as product type "Plastic Model Kit") go through the same
+      sweep: grade "Pokemon Model Kit", line Quick!! / Big.
+
    Everything is written to the exor.* namespace as gp_* metafields (never
    the title, price, stock or tags that BinderPOS owns). A signature of the
    values (exor.gp_sig) is written with them, so the nightly pass rewrites a
    product only when something changed - a kit that Bandai adds later gets
    its release date the week it appears. */
 
-export const GUNPLA_QUERY = "product_type:Gunpla AND status:active";
+export const GUNPLA_QUERY = "status:active AND (product_type:Gunpla OR (product_type:'Plastic Model Kit' AND title:*pokemon*))";
 export const KITS_FILE_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/bandai-kits.json";
 
 /* Most specific first. fam = the grade family the Bandai site files it
@@ -73,7 +80,7 @@ export const GRADES = [
 const SCALE = /\b1\s*\/\s*(144|100|72|60|48|35|24|20|12|1)\b/;
 // Mis-decoded UTF-8 in some BinderPOS titles ("GUNDVÃ–LVA", "DOANÃ¢â‚¬â„¢S") and
 // the full-width roman numerals Bandai uses ("Mk-Ⅱ").
-const MOJIBAKE = [[/Ã–/g, "O"], [/Ã¶/g, "o"], [/Ã¢â‚¬â„¢|â€™|’/g, "'"], [/Ⅱ/g, "II"], [/Ⅲ/g, "III"], [/Ⅳ/g, "IV"], [/ν/g, "Nu"]];
+const MOJIBAKE = [[/Ã–/g, "O"], [/Ã¶/g, "o"], [/Ã©|é/g, "e"], [/Ã‰|É/g, "E"], [/Ã¢â‚¬â„¢|â€™|’/g, "'"], [/Ⅱ/g, "II"], [/Ⅲ/g, "III"], [/Ⅳ/g, "IV"], [/ν/g, "Nu"]];
 export function cleanTitle(s) {
   let t = String(s || "");
   for (const [re, to] of MOJIBAKE) t = t.replace(re, to);
@@ -83,8 +90,30 @@ export function cleanTitle(s) {
 // "HGUC 1/144 #116 Sinanju" -> { code:"HGUC", grade:"High Grade", fam:"HG",
 //   line:"Universal Century", scale:"1/144", scaleStated:true, number:"116",
 //   series:"", name:"Sinanju" }. Returns null when no grade is recognised.
+/* Bandai's Pokemon Model Kits (Pokepla): "Pokémon Model Kit QUICK!! 08 MIMIKYU" on
+   Bandai's page; ours read "Pokemon Model Kit Quick! #04 Eevee", "POKEMON MODEL KIT
+   GENGAR", "Bandai 05 Scorbunny 'Pokemon', Bandai Spirits Hobby Pokemon Model Kit
+   Quick!!". The line (Quick!! / Big / main) is part of the key, the kit number is not
+   (Bandai's main-line names carry none). */
+const POKE = /\bPOKEMON\b[\s\S]*\bMODEL\s+KIT\b|\bMODEL\s+KIT\b[\s\S]*\bPOKEMON\b|\bPOKEPLA\b/i;
+export function parsePokemonKit(title) {
+  const line = /\bQUICK\b/i.test(title) ? "Quick!!" : /\bBIG\s+\d{1,3}\b|\bBIG\s*$/i.test(title) ? "Big" : "";
+  const nm = title.match(/#\s*0*(\d{1,3})\b/) || title.match(/\bQUICK!*\s*0*(\d{1,3})\b/i) || title.match(/\bBIG\s+0*(\d{1,3})\b/i) || title.match(/^\s*Bandai\s+0*(\d{1,3})\b/i);
+  const name = title
+    .replace(/\s'[^']{3,40}'\s*(?:,|$)/, " ")
+    .replace(/\b(Bandai\s+Spirits\s+Hobby|Bandai\s+Spirits|Bandai|Pokemon|Pokepla|Model\s+Kit|Plamo)\b/gi, " ")
+    .replace(/\bQUICK\b!*/gi, " ")
+    .replace(line === "Big" ? /\bBIG\b/gi : /$^/, " ")
+    .replace(/#\s*\d{1,3}\b|\b\d{1,3}\b/g, " ")
+    .replace(/[\s,\-–:]+$/, "").replace(/^[\s,\-–:]+/, "")
+    .replace(/\s+/g, " ").trim();
+  if (!name) return null;
+  return { code: "POKEPLA", grade: "Pokémon Model Kit", fam: "POKE" + (line ? "-" + line.replace(/!/g, "").toUpperCase() : ""), line, scale: "", scaleStated: false, number: nm ? nm[1] : "", series: "", name };
+}
+
 export function parseGunplaTitle(raw) {
   const title = cleanTitle(raw);
+  if (POKE.test(title)) return parsePokemonKit(title);
   const g = GRADES.find((x) => x.re.test(title));
   if (!g) return null;
   const sm = title.match(SCALE);
@@ -146,7 +175,7 @@ export function indexKits(json) {
     if (!p) continue;
     const core = coreKey(p.name);
     if (!core) continue;
-    const kit = { id, name: k.name, url: k.url || "", launch: k.launch || "", age: Number.isFinite(k.age) ? k.age : null, priceYen: Number.isFinite(k.price_yen) ? k.price_yen : null, models: modelNos(p.name) };
+    const kit = { id, name: k.name, url: k.url || "", launch: k.launch || "", age: Number.isFinite(k.age) ? k.age : null, priceYen: Number.isFinite(k.price_yen) ? k.price_yen : null, models: modelNos(p.name), info: k.info && typeof k.info === "object" ? k.info : null };
     put(exact, p.fam + "|" + p.scale + "|" + core, kit);
     put(noScale, p.fam + "|" + core, kit);
     put(loose, p.fam + "|" + p.scale + "|" + looseKey(p.name), kit);
@@ -187,7 +216,21 @@ export function sigOf(list) {
   return "v1:" + h.toString(16) + ":" + s.length;
 }
 
-const GP_KEYS = ["gp_line", "gp_scale", "gp_number", "gp_series", "gp_release", "gp_year", "gp_age", "gp_price_jpy", "gp_bandai_url", "gp_bandai_name"];
+const GP_KEYS = ["gp_line", "gp_scale", "gp_number", "gp_series", "gp_release", "gp_year", "gp_age", "gp_price_jpy", "gp_bandai_url", "gp_bandai_name", "gp_info"];
+
+/* Bandai's PRODUCTS INFO -> the gp_info json ({intro, features, includes}), or "" when
+   there is nothing worth showing. Strings trimmed, lists capped. */
+export function kitInfo(info) {
+  if (!info) return "";
+  const str = (x, n) => String(x || "").replace(/\s+/g, " ").trim().slice(0, n);
+  const list = (a) => (Array.isArray(a) ? a : []).map((x) => str(x, 240)).filter(Boolean).slice(0, 20);
+  const out = {};
+  const intro = str(info.intro, 600), features = list(info.features), includes = list(info.includes);
+  if (intro) out.intro = intro;
+  if (features.length) out.features = features;
+  if (includes.length) out.includes = includes;
+  return Object.keys(out).length ? JSON.stringify(out) : "";
+}
 const MF = (ownerId, key, type, value) => ({ ownerId, namespace: "exor", key, type, value: String(value) });
 
 /* One Gunpla product -> the metafields it should carry, or null when the
@@ -212,6 +255,8 @@ export function gunplaMetafields(ownerId, title, idx, today) {
     if (kit.priceYen != null) facts.push(MF(ownerId, "gp_price_jpy", "number_integer", kit.priceYen));
     if (kit.url) facts.push(MF(ownerId, "gp_bandai_url", "url", kit.url));
     facts.push(MF(ownerId, "gp_bandai_name", "single_line_text_field", kit.name));
+    const info = kitInfo(kit.info);
+    if (info) facts.push(MF(ownerId, "gp_info", "json", info));
   }
   const status = kit ? "ok" : "title";
   facts.push(MF(ownerId, "enrich_status", "single_line_text_field", status));

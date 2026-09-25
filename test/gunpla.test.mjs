@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseGunplaTitle, indexKits, matchKit, gunplaMetafields, sigOf } from "../src/gunpla.js";
+import { parseGunplaTitle, indexKits, matchKit, gunplaMetafields, sigOf, kitInfo } from "../src/gunpla.js";
 
 // Real titles from the store's Gunpla product type (2026-09-23).
 const cases = [
@@ -80,4 +80,33 @@ test("gunplaMetafields lists the gp_ facts a product no longer has, so the sweep
   assert.equal(r.status, "title");
   for (const k of ["gp_release", "gp_year", "gp_age", "gp_price_jpy", "gp_bandai_url", "gp_bandai_name", "gp_number", "gp_series", "gp_line"]) assert.ok(r.clear.includes(k), k);
   assert.ok(!r.clear.includes("gp_scale") && !r.clear.includes("gp_grade"));
+});
+
+test("Pokemon Model Kits (owner, 2026-09-25): line in the key, number not; Bandai's é folded", () => {
+  const idx = indexKits({ kits: {
+    q8: { name: "Pokémon Model Kit QUICK!! 08 MIMIKYU", launch: "2021-12" },
+    m: { name: "Pokémon Model Kit RESHIRAM" },
+    b2: { name: "Pokémon Model Kit BIG 02 EEVEE" },
+    e: { name: "Pokémon Model Kit EEVEE" },
+  } });
+  const m = (t) => { const k = matchKit(parseGunplaTitle(t), idx); return k ? k.id : null; };
+  assert.equal(m("Pokemon Model Kit QUICK!! 08 MIMIKYU"), "q8");
+  assert.equal(m("Pokemon Model Kit #13 Reshiram"), "m");
+  assert.equal(m("POKEMON MODEL KIT EEVEE"), "e");                           // main line, not the Big one
+  assert.equal(m("Pokemon Model Kit Quick! #04 Eevee"), null);               // a Quick!! Eevee Bandai's list lacks
+  const p = parseGunplaTitle("Bandai 05 Scorbunny 'Pokemon', Bandai Spirits Hobby Pokemon Model Kit Quick!!");
+  assert.deepEqual([p.grade, p.line, p.number, p.name], ["Pokémon Model Kit", "Quick!!", "5", "Scorbunny"]);
+});
+
+test("Bandai's PRODUCTS INFO becomes gp_info json, and is cleared when it goes away", () => {
+  const info = { intro: "From GQuuuuuuX, RICK DOM joined as HG series!", features: ["Highly articulated.", " Transformable. "], includes: ["Weapons ×1 set"] };
+  const idx = indexKits({ kits: { a: { name: "HG 1/144 GM SNIPER", info } } });
+  const r = gunplaMetafields("gid://p/1", "HGUC 1/144 GM Sniper", idx, "2026-09-25");
+  const mf = r.metafields.find((x) => x.key === "gp_info");
+  assert.equal(mf.type, "json");
+  assert.deepEqual(JSON.parse(mf.value), { intro: info.intro, features: ["Highly articulated.", "Transformable."], includes: ["Weapons ×1 set"] });
+  const none = gunplaMetafields("gid://p/1", "HGUC 1/144 GM Sniper", indexKits({ kits: { a: { name: "HG 1/144 GM SNIPER" } } }), "2026-09-25");
+  assert.ok(none.clear.includes("gp_info"));
+  assert.notEqual(none.sig, r.sig);
+  assert.equal(kitInfo({}), "");
 });
