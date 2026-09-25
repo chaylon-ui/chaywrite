@@ -47,6 +47,22 @@
           assign show_kit = true
         endif
         comment
+          Bandai's PRODUCTS INFO box (owner 2026-09-25: "is there a chance you can
+          capture this data for gunpla? also the pokemon gunpla"): exor.gp_info json
+          {intro, features[], includes[]} from the kit's own Bandai page, shown under
+          the description. Pokemon Model Kits (gp_grade_code POKEPLA) share the Kit
+          specs card, so the PLAMOD card is not drawn beside it.
+        endcomment
+        assign gpi = gf.gp_info.value
+        assign show_gpi = false
+        if gpi.intro != blank or gpi.features.size > 0 or gpi.includes.size > 0
+          assign show_gpi = true
+        endif
+        assign is_poke = false
+        if gf.gp_grade_code.value == 'POKEPLA'
+          assign is_poke = true
+        endif
+        comment
           Figures and blind boxes (owner 2026-09-23): brand, series and release
           date from PLAMOD, the distributor (exor.pl_*, chaywrite
           src/plamod.js - case / carton wording never gets that far). Blind
@@ -55,6 +71,8 @@
         assign show_pl = false
         if product.type == 'Blind Box'
           assign show_pl = true
+        elsif show_kit
+          assign show_pl = false
         elsif product.type == 'Figures' or product.type == 'Plastic Model Kit' or product.type == 'Plastic Model Kit Accessories' or product.type == 'Scale Models'
           comment
             Plastic model kits too (owner 2026-09-24: "the Pokemon models and
@@ -110,6 +128,12 @@
           {%- if use_bgg -%}
             <div class="xg-desc__text">{{ gf.bgg_description.value | escape | newline_to_br }}</div>
             <p class="xg-desc__note">Description from <a href="https://boardgamegeek.com/boardgame/{{ gf.bgg_id.value }}" target="_blank" rel="noopener">BoardGameGeek</a>.</p>
+          {%- elsif show_kit and product.description == blank and is_poke -%}
+            <div class="xg-desc__text">
+              {{- product.title | escape }} is a Pok&eacute;mon Model Kit from Bandai
+              {%- if gf.gp_line.value != blank %}'s {{ gf.gp_line.value | escape }} line{% endif %}: a snap-together plastic model, no glue or paint needed
+              {%- if kit_when != blank %}, released {% if rel.size == 10 %}on{% else %}in{% endif %} {{ kit_when }}{% endif %}.
+            </div>
           {%- elsif show_kit and product.description == blank -%}
             <div class="xg-desc__text">
               {{- product.title | escape }} is {% if gf.gp_grade.value contains 'Entry' or gf.gp_grade.value contains 'SD' %}an{% else %}a{% endif %} {{ gf.gp_grade.value | escape }}
@@ -121,12 +145,27 @@
           {%- else -%}
             {{ product.description }}
           {%- endif -%}
+          {%- if show_kit and show_gpi -%}
+          <section class="xg-kitinfo" aria-label="Kit features from Bandai">
+            {%- if gpi.intro != blank -%}<p class="xg-kitinfo__intro">{{ gpi.intro | escape }}</p>{%- endif -%}
+            {%- if gpi.features.size > 0 -%}
+            <h3 class="xg-kitinfo__h">Kit features</h3>
+            <ul class="xg-kitinfo__list">{% for f in gpi.features %}<li>{{ f | escape }}</li>{% endfor %}</ul>
+            {%- endif -%}
+            {%- if gpi.includes.size > 0 -%}
+            <h3 class="xg-kitinfo__h">In the box</h3>
+            <ul class="xg-kitinfo__list xg-kitinfo__list--box">{% for f in gpi.includes %}<li>{{ f | escape }}</li>{% endfor %}</ul>
+            {%- endif -%}
+            <p class="xg-desc__note">From {% if gf.gp_bandai_url.value != blank %}<a href="{{ gf.gp_bandai_url.value }}" target="_blank" rel="noopener">Bandai's kit page</a>{% else %}Bandai's kit page{% endif %} (Bandai's own English text).</p>
+          </section>
+          {%- endif -%}
         </div>
         {%- if show_kit -%}
         <aside class="xg-class" aria-label="Kit specs">
           <h3 class="xg-class__title">Kit specs</h3>
           <dl>
-            <dt>Grade</dt><dd>{{ gf.gp_grade.value | escape }}{% if gf.gp_grade_code.value != blank %} ({{ gf.gp_grade_code.value | escape }}){% endif %}</dd>
+            {%- if is_poke -%}<dt>Type</dt><dd>Pok&eacute;mon Model Kit</dd>
+            {%- else -%}<dt>Grade</dt><dd>{{ gf.gp_grade.value | escape }}{% if gf.gp_grade_code.value != blank %} ({{ gf.gp_grade_code.value | escape }}){% endif %}</dd>{%- endif -%}
             {%- if gf.gp_line.value != blank -%}<dt>Line</dt><dd>{{ gf.gp_line.value | escape }}</dd>{%- endif -%}
             {%- if gf.gp_scale.value != blank -%}<dt>Scale</dt><dd>{{ gf.gp_scale.value | escape }}</dd>{%- endif -%}
             {%- if gf.gp_number.value != blank -%}<dt>Kit number</dt><dd>#{{ gf.gp_number.value | escape }}</dd>{%- endif -%}
@@ -274,6 +313,14 @@
         .xg-desc__text { font-size: 15.5px; line-height: 1.6; color: var(--xg-text, #3d454b); }
         .xg-desc__note { margin: 12px 0 0; font-size: 12.5px; color: var(--xg-muted, #8a9299); }
         .xg-desc__note a { color: inherit; text-decoration: underline; }
+        .xg-kitinfo { margin: 18px 0 0; padding: 16px 18px; border: 1px solid var(--xg-border, #e3e7ea); border-radius: 12px; background: var(--xg-surface-2, rgba(127,127,127,.05)); }
+        .xg-kitinfo__intro { margin: 0 0 10px; font-size: 15px; line-height: 1.55; font-weight: 600; color: var(--xg-ink, #171b1d); }
+        .xg-kitinfo__h { margin: 12px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-muted, #8a9299); }
+        .xg-kitinfo__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+        .xg-kitinfo__list li { position: relative; padding-left: 16px; font-size: 14.5px; line-height: 1.45; color: var(--xg-text, #3d454b); }
+        .xg-kitinfo__list li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 6px; height: 6px; border-radius: 2px; background: var(--xg-red, #d62c28); }
+        .xg-kitinfo__list--box { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+        .xg-kitinfo .xg-desc__note { margin-top: 12px; }
         .xg-class { padding: 16px 18px; background: var(--xg-bg, #f1f4f6); border-radius: var(--xg-radius, 14px); }
         /* dark: the theme's own h3 colour outranks --xg-ink here and left the card
            titles ("Kit specs", "Product specs", "Classification") dark on dark */
