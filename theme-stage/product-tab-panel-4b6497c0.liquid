@@ -76,6 +76,17 @@
         if wu.name != blank
           assign show_wh = true
         endif
+        comment
+          BattleTech ForcePacks and Salvage Boxes (owner 2026-09-25, "lets do battle
+          tech"): the nightly enrichment (chaywrite src/bt.js) stores what is in
+          the box in exor.bt_pack (json) - pack name and, per unit, tonnage,
+          weight class, tech base, role, movement, year, Master Unit List id.
+        endcomment
+        assign btp = gf.bt_pack.value
+        assign show_bt = false
+        if btp.units.size > 0
+          assign show_bt = true
+        endif
         assign pl_when = ''
         assign plrel = gf.pl_release.value | append: ''
         if plrel.size == 10
@@ -93,8 +104,8 @@
           assign kit_when = rel
         endif
       -%}
-      {%- if use_bgg or show_class or show_kit or show_pl or show_wh -%}
-      <div class="xg-desc{% if show_class or show_kit or show_pl or show_wh %} xg-desc--split{% endif %}{% if show_wh %} xg-desc--wh{% if product.description == blank and use_bgg == false %} xg-desc--wh-bare{% endif %}{% endif %}" data-xg-handle="{{ product.handle | escape }}">
+      {%- if use_bgg or show_class or show_kit or show_pl or show_wh or show_bt -%}
+      <div class="xg-desc{% if show_class or show_kit or show_pl or show_wh or show_bt %} xg-desc--split{% endif %}{% if show_bt %} xg-desc--bt{% endif %}{% if show_wh %} xg-desc--wh{% if product.description == blank and use_bgg == false %} xg-desc--wh-bare{% endif %}{% endif %}" data-xg-handle="{{ product.handle | escape }}">
         <div class="xg-desc__body">
           {%- if use_bgg -%}
             <div class="xg-desc__text">{{ gf.bgg_description.value | escape | newline_to_br }}</div>
@@ -198,6 +209,45 @@
         </section>
         {%- endif -%}
         {%- endif -%}
+        {%- if show_bt -%}
+        {%- assign bt_classes = '' -%}{%- assign bt_tech = '' -%}
+        {%- for u in btp.units -%}
+          {%- unless bt_classes contains u.cls -%}{%- assign bt_classes = bt_classes | append: u.cls | append: '|' -%}{%- endunless -%}
+          {%- unless bt_tech contains u.tech -%}{%- assign bt_tech = bt_tech | append: u.tech | append: '|' -%}{%- endunless -%}
+        {%- endfor -%}
+        <aside class="xg-class xg-bt" aria-label="Box contents">
+          <h3 class="xg-class__title">{% if btp.kind == 'salvage' %}Unit specs{% else %}In this box{% endif %}</h3>
+          <dl>
+            {%- if btp.kind != 'salvage' -%}<dt>ForcePack</dt><dd>{{ btp.pack | escape }}</dd>
+            <dt>Units</dt><dd>{{ btp.units.size }} {% if btp.units.size == 1 %}miniature{% else %}miniatures{% endif %}</dd>{%- endif -%}
+            <dt>Weight {% assign bt_cl = bt_classes | split: '|' %}{% if bt_cl.size > 1 %}classes{% else %}class{% endif %}</dt>
+            <dd><ul class="xg-class__chips">{% for c in bt_cl %}{% if c != blank %}<li><span class="xg-bt__cls xg-bt__cls--{{ c | handleize }}">{{ c }}</span></li>{% endif %}{% endfor %}</ul></dd>
+            <dt>Tech base</dt><dd>{{ bt_tech | split: '|' | join: ' / ' }}</dd>
+          </dl>
+        </aside>
+        <section class="xg-bt__units" aria-label="Units">
+          <h3 class="xg-class__title">{% if btp.kind == 'salvage' %}Stats{% else %}The units{% endif %}</h3>
+          <div class="xg-bt__scroll">
+          <table class="xg-bt__table">
+            <thead><tr><th>Unit</th><th>Tons</th><th>Class</th><th title="Walk / Run / Jump">Move</th><th>Role</th><th>Tech</th><th>Year</th></tr></thead>
+            <tbody>
+            {%- for u in btp.units -%}
+            <tr>
+              <td class="xg-bt__name">{% if u.mul %}<a href="https://masterunitlist.info/Unit/Details/{{ u.mul }}" target="_blank" rel="noopener" title="Master Unit List">{{ u.name | escape }}</a>{% else %}{{ u.name | escape }}{% endif %}{% if u.model != blank %}<span>{{ u.model | escape }}</span>{% endif %}{% if u.type != 'BattleMech' %}<span>{{ u.type | escape }}</span>{% endif %}</td>
+              <td>{{ u.tons }}</td>
+              <td><span class="xg-bt__cls xg-bt__cls--{{ u.cls | handleize }}">{{ u.cls }}</span></td>
+              <td>{{ u.walk }}/{{ u.run }}{% if u.jump > 0 %}/{{ u.jump }}{% endif %}</td>
+              <td>{{ u.role | escape }}</td>
+              <td>{{ u.tech }}</td>
+              <td>{{ u.year }}</td>
+            </tr>
+            {%- endfor -%}
+            </tbody>
+          </table>
+          </div>
+          <p class="xg-class__hint">Move is walk / run / jump in hexes. Stats are for the standard variant; the Alpha Strike cards in the box may show another.</p>
+        </section>
+        {%- endif -%}
         {%- if show_class -%}
         <aside class="xg-class" aria-label="Classification">
           <h3 class="xg-class__title">Classification</h3>
@@ -256,6 +306,23 @@
         .xg-unit__pts li { align-items: center; }
         .xg-unit__pts .xg-chip--v { font-variant-numeric: tabular-nums; }
         .xg-unit__weapons { grid-column: 1 / -1; min-width: 0; }
+        /* BattleTech box contents */
+        .xg-bt__units { grid-column: 1 / -1; min-width: 0; }
+        .xg-bt__scroll { overflow-x: auto; margin-top: 8px; }
+        .xg-class .xg-bt__table, .xg-bt__table { width: 100%; border-collapse: collapse; background: transparent; font-variant-numeric: tabular-nums; }
+        .xg-bt__table th, .xg-bt__table td { border: 0; border-bottom: 1px solid var(--xg-border, #e3e7ea); padding: 8px 10px; text-align: center; font-size: 14px; color: var(--xg-ink, #10171a); white-space: nowrap; background: transparent; }
+        .xg-bt__table th { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--xg-surface, #fff); background: var(--xg-ink, #10171a); border-bottom: 0; }
+        .xg-bt__table th:first-child, .xg-bt__table td:first-child { text-align: left; }
+        .xg-bt__table th:first-child { border-radius: 6px 0 0 6px; } .xg-bt__table th:last-child { border-radius: 0 6px 6px 0; }
+        html[data-xg-theme="dark"] .xg-bt__table th { background: #e6ebee; color: #14181b; }
+        .xg-bt__name { font-weight: 700; }
+        .xg-bt__name a { color: inherit; text-decoration: none; border-bottom: 1px dotted currentColor; }
+        .xg-bt__name a:hover { color: var(--xg-red, #d62c28); }
+        .xg-bt__name span { display: inline-block; margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--xg-muted, #8a9299); }
+        .xg-bt__cls { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; background: #6b7780; }
+        .xg-bt__cls--light { background: #2f8f5b; } .xg-bt__cls--medium { background: #2d6fb0; }
+        .xg-bt__cls--heavy { background: #c77a1a; } .xg-bt__cls--assault { background: #b3261e; }
+        .xg-bt__cls--superheavy { background: #6e2a8c; } .xg-bt__cls--ultralight { background: #5f8f2f; }
         /* Wide screens: the weapons table sits in the left column beside the
            Unit specs card (under the description when there is one; at the
            top when the box has none, instead of below an empty gap). */
