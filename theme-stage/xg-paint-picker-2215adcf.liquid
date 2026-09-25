@@ -1,0 +1,271 @@
+{%- comment -%}
+  Paint colour picker (owner, 2026-09-25: "using the colors on here is it possible to make an
+  interactive filtering system for people to click on colors for our valleyjo paints and when
+  they click the color the bottle comes up for them to add to cart?" then "show me how the
+  swatch will look for valleyjo"). DEMO: alternate collection view, opened as
+  /collections/all-vallejo?view=paints (templates/collection.paints.liquid).
+
+  The browser reads the collection's products from /collections/<handle>/products.json and the
+  colour list from assets/xg-vallejo-colours.json ({range: {name key: [code, hex, name]}}),
+  matches each product by range + name from its title ("VALLEJO: GAME COLOR WOLF GREY 17ML"),
+  and draws one swatch per paint. A swatch opens the bottle: photo, code, price, stock and Add
+  to cart (/cart/add.js). Colour values: Miniature Painter Pro's open paint list (demo only).
+{%- endcomment -%}
+<div class="xg-pp page-width" data-handle="{{ collection.handle | escape }}" data-colours="{{ 'xg-vallejo-colours.json' | asset_url }}">
+  <div class="xg-pp__head">
+    <h2 class="xg-pp__title">Find your colour</h2>
+    <p class="xg-pp__sub">Tap a colour to see the bottle. On-screen colours are approximate.</p>
+  </div>
+  <div class="xg-pp__bar">
+    <div class="xg-pp__ranges" role="tablist" aria-label="Paint range"></div>
+    <div class="xg-pp__tools">
+      <input class="xg-pp__q" type="search" placeholder="Search colours" aria-label="Search colours">
+      <label class="xg-pp__stock"><input type="checkbox" checked> In stock only</label>
+    </div>
+  </div>
+  <div class="xg-pp__families" aria-label="Colour family"></div>
+  <p class="xg-pp__count" aria-live="polite">Loading colours…</p>
+  <div class="xg-pp__grid"></div>
+
+  <div class="xg-pp__sheet" hidden>
+    <div class="xg-pp__backdrop" data-close></div>
+    <div class="xg-pp__card" role="dialog" aria-modal="true" aria-labelledby="xg-pp-name">
+      <button class="xg-pp__x" type="button" data-close aria-label="Close">&times;</button>
+      <div class="xg-pp__photo"><img alt="" loading="lazy"></div>
+      <div class="xg-pp__info">
+        <div class="xg-pp__chip"></div>
+        <p class="xg-pp__range"></p>
+        <h3 id="xg-pp-name" class="xg-pp__name"></h3>
+        <p class="xg-pp__price"></p>
+        <p class="xg-pp__avail"></p>
+        <div class="xg-pp__buy">
+          <div class="xg-pp__qty"><button type="button" data-q="-1" aria-label="Less">&minus;</button><input type="number" min="1" value="1" aria-label="Quantity"><button type="button" data-q="1" aria-label="More">+</button></div>
+          <button class="xg-pp__add btn" type="button">Add to cart</button>
+        </div>
+        <p class="xg-pp__msg" aria-live="polite"></p>
+        <a class="xg-pp__link" href="#">Full product page &rsaquo;</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .xg-pp { padding: 20px 0 40px; font-family: var(--xg-font-body); color: var(--xg-text); }
+  .xg-pp__title { font-family: var(--xg-font-display); color: var(--xg-ink); font-size: 30px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .02em; }
+  .xg-pp__sub { color: var(--xg-muted); margin: 0 0 16px; font-size: 14px; }
+  .xg-pp__bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .xg-pp__ranges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .xg-pp__ranges button, .xg-pp__families button { font: 600 13px/1 var(--xg-font-body); border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); border-radius: 999px; padding: 8px 13px; cursor: pointer; }
+  .xg-pp__ranges button[aria-pressed="true"] { background: var(--xg-red); border-color: var(--xg-red); color: #fff; }
+  .xg-pp__ranges button span { opacity: .7; font-weight: 500; margin-left: 4px; }
+  .xg-pp__tools { display: flex; gap: 12px; align-items: center; }
+  .xg-pp__q { font: 14px var(--xg-font-body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); min-width: 190px; }
+  .xg-pp__stock { font-size: 13px; color: var(--xg-text); display: flex; gap: 6px; align-items: center; margin: 0; white-space: nowrap; }
+  .xg-pp__families { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .xg-pp__families button { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 7px; }
+  .xg-pp__families button i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+  .xg-pp__families button[aria-pressed="true"] { border-color: var(--xg-ink); box-shadow: 0 0 0 1px var(--xg-ink); }
+  .xg-pp__count { font-size: 13px; color: var(--xg-muted); margin: 6px 0 14px; }
+  .xg-pp__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 16px 10px; }
+  .xg-pp__sw { background: none; border: 0; padding: 0; cursor: pointer; text-align: center; color: var(--xg-text); font: 500 12px/1.25 var(--xg-font-body); }
+  .xg-pp__dot { display: block; width: 64px; height: 64px; margin: 0 auto 7px; border-radius: 50%; position: relative;
+    box-shadow: inset 0 -8px 14px rgba(0,0,0,.28), inset 0 6px 10px rgba(255,255,255,.28), 0 2px 6px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.12);
+    transition: transform .15s ease; }
+  .xg-pp__dot.is-metal { background-image: linear-gradient(135deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 38%, rgba(0,0,0,.25) 70%, rgba(255,255,255,.35) 100%) !important; }
+  .xg-pp__dot.is-photo { background: #fff center 42% / 150% no-repeat; }
+  .xg-pp__sw:hover .xg-pp__dot, .xg-pp__sw:focus-visible .xg-pp__dot { transform: scale(1.08); }
+  .xg-pp__sw.is-out { opacity: .42; }
+  .xg-pp__sw.is-out .xg-pp__dot::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; background: rgba(255,255,255,.85); transform: rotate(-35deg); box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+  .xg-pp__code { display: block; color: var(--xg-muted); font-size: 11px; margin-top: 2px; }
+  .xg-pp__sheet { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .xg-pp__sheet[hidden] { display: none; }
+  .xg-pp__backdrop { position: absolute; inset: 0; background: rgba(8,10,12,.62); }
+  .xg-pp__card { position: relative; background: var(--xg-surface); color: var(--xg-text); border-radius: 16px; max-width: 640px; width: 100%; display: grid; grid-template-columns: 1fr 1.1fr; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+  .xg-pp__photo { background: #fff; display: flex; align-items: center; justify-content: center; padding: 18px; min-height: 280px; }
+  .xg-pp__photo img { max-width: 100%; max-height: 320px; object-fit: contain; }
+  .xg-pp__info { padding: 22px 22px 20px; }
+  .xg-pp__chip { width: 100%; height: 54px; border-radius: 10px; margin-bottom: 12px; box-shadow: inset 0 -10px 18px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.1); }
+  .xg-pp__range { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--xg-muted); }
+  .xg-pp__name { margin: 2px 0 8px; font-family: var(--xg-font-display); color: var(--xg-ink); font-size: 24px; text-transform: uppercase; }
+  .xg-pp__price { margin: 0; font-size: 20px; font-weight: 700; color: var(--xg-ink); }
+  .xg-pp__avail { margin: 2px 0 14px; font-size: 13px; }
+  .xg-pp__avail.ok { color: var(--xg-success); } .xg-pp__avail.no { color: var(--xg-danger); }
+  .xg-pp__buy { display: flex; gap: 8px; }
+  .xg-pp__qty { display: flex; border: 1px solid var(--xg-border); border-radius: 8px; overflow: hidden; }
+  .xg-pp__qty button { width: 34px; border: 0; background: var(--xg-surface); color: var(--xg-ink); font-size: 18px; cursor: pointer; }
+  .xg-pp__qty input { width: 42px; text-align: center; border: 0; background: var(--xg-surface); color: var(--xg-ink); -moz-appearance: textfield; }
+  .xg-pp__qty input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .xg-pp__add { flex: 1; background: var(--xg-red); color: #fff; border: 0; border-radius: 8px; font-weight: 700; padding: 11px 14px; cursor: pointer; }
+  .xg-pp__add[disabled] { background: #8a969d; cursor: not-allowed; }
+  .xg-pp__msg { min-height: 18px; font-size: 13px; margin: 8px 0 4px; }
+  .xg-pp__msg a { color: var(--xg-red); font-weight: 600; }
+  .xg-pp__link { font-size: 13px; color: var(--xg-muted); }
+  .xg-pp__x { position: absolute; top: 8px; right: 10px; z-index: 2; background: rgba(0,0,0,.35); color: #fff; border: 0; width: 32px; height: 32px; border-radius: 50%; font-size: 22px; line-height: 1; cursor: pointer; }
+  @media (max-width: 600px) {
+    .xg-pp__card { grid-template-columns: 1fr; max-height: 92vh; overflow-y: auto; }
+    .xg-pp__photo { min-height: 200px; }
+    .xg-pp__photo img { max-height: 220px; }
+    .xg-pp__grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+    .xg-pp__dot { width: 54px; height: 54px; }
+    .xg-pp__tools { width: 100%; } .xg-pp__q { flex: 1; min-width: 0; }
+  }
+</style>
+
+<script>
+(function () {
+  var root = document.currentScript && document.currentScript.previousElementSibling && document.currentScript.previousElementSibling.previousElementSibling;
+  if (!root || !root.classList.contains('xg-pp')) root = document.querySelector('.xg-pp');
+  if (!root) return;
+  var handle = root.getAttribute('data-handle');
+  var $ = function (s, el) { return (el || root).querySelector(s); };
+  var RANGES = ['Game Color', 'Game Air', 'Model Color', 'Model Air', 'Mecha Color', 'Xpress Color Intense', 'Xpress Color', 'Panzer Aces', 'Metal Color', 'Surface Primer', 'Wash FX', 'Weathering FX'];
+  var FAMILIES = [
+    ['red', 'Reds', '#c0282d'], ['orange', 'Oranges', '#e07b22'], ['yellow', 'Yellows', '#e8c42a'], ['green', 'Greens', '#3f8f3a'],
+    ['blue', 'Blues', '#2d5fae'], ['purple', 'Purples', '#7b3f9a'], ['pink', 'Pinks', '#d9709e'], ['brown', 'Browns', '#7a5232'],
+    ['flesh', 'Skin tones', '#e0a98a'], ['grey', 'Greys, black & white', '#8d9396'], ['metal', 'Metallics', '#b9b9b9'], ['wash', 'Washes & inks', '#4a5a78']];
+  var state = { range: 'All', family: '', q: '', stock: true };
+  var paints = [];
+  function key(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  function money(c) { return '$' + (Number(c) || 0).toFixed(2); }
+  function hsl(hex) {
+    var r = parseInt(hex.slice(0, 2), 16) / 255, g = parseInt(hex.slice(2, 4), 16) / 255, b = parseInt(hex.slice(4, 6), 16) / 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, h = 0, s = 0, d = mx - mn;
+    if (d) { s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+    return [h, s, l];
+  }
+  function family(name, hex) {
+    var n = name.toLowerCase();
+    if (/gold|silver|bronze|copper|brass|steel|gunmetal|chainmail|metal|tin|pewter|chrome/.test(n)) return 'metal';
+    if (/wash|ink|shade/.test(n)) return 'wash';
+    if (/flesh|skin/.test(n)) return 'flesh';
+    var t = hsl(hex), h = t[0], s = t[1], l = t[2];
+    if (s < .13 || l < .09 || l > .93) return 'grey';
+    if (h >= 15 && h < 48 && l < .5 && s < .75) return 'brown';
+    if (h < 12 || h >= 345) return 'red';
+    if (h < 40) return 'orange';
+    if (h < 68) return 'yellow';
+    if (h < 170) return 'green';
+    if (h < 255) return 'blue';
+    if (h < 300) return 'purple';
+    return 'pink';
+  }
+  function parse(title, data) {
+    var t = String(title).replace(/^\s*vallejo\s*:?\s*/i, '');
+    var range = '', rest = t;
+    for (var i = 0; i < RANGES.length; i++) {
+      if (t.toUpperCase().indexOf(RANGES[i].toUpperCase() + ' ') === 0) { range = RANGES[i]; rest = t.slice(RANGES[i].length); break; }
+    }
+    rest = rest.replace(/\b\d+\s*ML\b/ig, '').replace(/\s+/g, ' ').trim();
+    var k0 = key(rest), keys = [k0, k0.replace(/scarlett/, 'scarlet'), k0.replace(/(glaze|ink)$/, ''), k0.replace(/tone$/, '')];
+    var groups = [range, range === 'Game Air' ? 'Game Color' : range === 'Game Color' ? 'Game Air' : ''].concat(Object.keys(data));
+    for (var g = 0; g < groups.length; g++) {
+      var set = groups[g] && data[groups[g]];
+      if (!set) continue;
+      for (var j = 0; j < keys.length; j++) {
+        var hit = keys[j] && set[keys[j]];
+        if (hit) return { range: range || 'Other', code: hit[0], hex: hit[1], name: hit[2] };
+      }
+    }
+    // not on the colour chart (the Game Color inks, sets): show the bottle photo instead
+    return range ? { range: range, code: '', hex: '', name: rest.toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }) } : null;
+  }
+  function load(page, acc) {
+    return fetch('/collections/' + encodeURIComponent(handle) + '/products.json?limit=250&page=' + page, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : { products: [] }; })
+      .then(function (j) { var p = j.products || []; acc = acc.concat(p); return p.length === 250 && page < 8 ? load(page + 1, acc) : acc; });
+  }
+  Promise.all([fetch(root.getAttribute('data-colours')).then(function (r) { return r.json(); }), load(1, [])]).then(function (res) {
+    var data = res[0], prods = res[1], miss = 0;
+    prods.forEach(function (p) {
+      var c = parse(p.title, data);
+      if (!c) { miss++; return; }
+      var v = (p.variants || []).filter(function (x) { return x.available; })[0] || (p.variants || [])[0];
+      if (!v) return;
+      var img = p.images && p.images[0] ? p.images[0].src : '';
+      var hx = c.hex || '8D9396';
+      paints.push({ title: p.title, handle: p.handle, range: c.range, code: c.code, hex: c.hex ? '#' + c.hex : '', name: c.name, fam: c.hex ? family(c.name, c.hex) : (/wash|ink/i.test(c.name) ? 'wash' : 'other'),
+        l: hsl(hx)[2], h: hsl(hx)[0], price: v.price, avail: (p.variants || []).some(function (x) { return x.available; }), vid: v.id, img: img });
+    });
+    var order = FAMILIES.map(function (f) { return f[0]; }).concat('other');
+    paints.sort(function (a, b) { return order.indexOf(a.fam) - order.indexOf(b.fam) || a.h - b.h || b.l - a.l; });
+    root.setAttribute('data-unmatched', miss);
+    drawRanges(); drawFamilies(); draw();
+  }).catch(function () { $('.xg-pp__count').textContent = 'Could not load the colours - please refresh.'; });
+
+  function visible() {
+    var q = key(state.q);
+    return paints.filter(function (p) {
+      return (state.range === 'All' || p.range === state.range) && (!state.family || p.fam === state.family) &&
+        (!state.stock || p.avail) && (!q || key(p.name + p.code).indexOf(q) > -1);
+    });
+  }
+  function drawRanges() {
+    var counts = {}; paints.forEach(function (p) { counts[p.range] = (counts[p.range] || 0) + 1; });
+    var names = ['All'].concat(RANGES.filter(function (r) { return counts[r]; }));
+    $('.xg-pp__ranges').innerHTML = names.map(function (r) {
+      return '<button type="button" data-range="' + r + '" aria-pressed="' + (state.range === r) + '">' + r + '<span>' + (r === 'All' ? paints.length : counts[r]) + '</span></button>';
+    }).join('');
+  }
+  function drawFamilies() {
+    $('.xg-pp__families').innerHTML = FAMILIES.map(function (f) {
+      return '<button type="button" data-fam="' + f[0] + '" aria-pressed="' + (state.family === f[0]) + '"><i style="background:' + f[2] + (f[0] === 'metal' ? ';background-image:linear-gradient(135deg,#eee,#888 60%,#ddd)' : '') + '"></i>' + f[1] + '</button>';
+    }).join('');
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function draw() {
+    var list = visible();
+    $('.xg-pp__count').textContent = list.length + (list.length === 1 ? ' colour' : ' colours') + (state.stock ? ' in stock' : '');
+    $('.xg-pp__grid').innerHTML = list.map(function (p, i) {
+      return '<button type="button" class="xg-pp__sw' + (p.avail ? '' : ' is-out') + '" data-i="' + paints.indexOf(p) + '" title="' + esc(p.name) + ' (' + p.code + ')">' +
+        '<span class="xg-pp__dot' + (p.fam === 'metal' ? ' is-metal' : '') + (p.hex ? '" style="background-color:' + p.hex : ' is-photo" style="background-image:url(' + esc(thumb(p.img, 160)) + ')') + '"></span>' + esc(p.name) + '<span class="xg-pp__code">' + (p.code || '&nbsp;') + '</span></button>';
+    }).join('');
+  }
+  function thumb(src, w) { return src ? src.replace(/(\.[a-z]+)(\?|$)/i, '_' + w + 'x$1$2') : ''; }
+  var cur = null;
+  function open(p) {
+    cur = p;
+    var s = $('.xg-pp__sheet');
+    $('.xg-pp__photo img').src = thumb(p.img, 480);
+    $('.xg-pp__photo img').alt = p.title;
+    $('.xg-pp__chip').style.background = p.hex;
+    $('.xg-pp__range').textContent = 'Vallejo ' + p.range + ' · ' + p.code;
+    $('.xg-pp__name').textContent = p.name;
+    $('.xg-pp__price').textContent = money(p.price);
+    var a = $('.xg-pp__avail'); a.textContent = p.avail ? 'In stock' : 'Sold out'; a.className = 'xg-pp__avail ' + (p.avail ? 'ok' : 'no');
+    $('.xg-pp__add').disabled = !p.avail; $('.xg-pp__add').textContent = p.avail ? 'Add to cart' : 'Sold out';
+    $('.xg-pp__qty input').value = 1; $('.xg-pp__msg').textContent = '';
+    $('.xg-pp__link').href = '/products/' + p.handle;
+    s.hidden = false; $('.xg-pp__add').focus();
+  }
+  function close() { $('.xg-pp__sheet').hidden = true; }
+  root.addEventListener('click', function (e) {
+    var t = e.target.closest('button, [data-close]');
+    if (!t) return;
+    if (t.hasAttribute('data-close')) return close();
+    if (t.hasAttribute('data-range')) { state.range = t.getAttribute('data-range'); drawRanges(); return draw(); }
+    if (t.hasAttribute('data-fam')) { var f = t.getAttribute('data-fam'); state.family = state.family === f ? '' : f; drawFamilies(); return draw(); }
+    if (t.hasAttribute('data-i')) return open(paints[+t.getAttribute('data-i')]);
+    if (t.hasAttribute('data-q')) { var inp = $('.xg-pp__qty input'); inp.value = Math.max(1, (+inp.value || 1) + (+t.getAttribute('data-q'))); return; }
+    if (t.classList.contains('xg-pp__add') && cur) {
+      t.disabled = true; $('.xg-pp__msg').textContent = 'Adding…';
+      fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ items: [{ id: cur.vid, quantity: Math.max(1, +$('.xg-pp__qty input').value || 1) }] }) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (x) {
+          t.disabled = false;
+          $('.xg-pp__msg').innerHTML = x.ok ? 'Added to your cart. <a href="/cart">View cart</a>' : esc((x.j && (x.j.description || x.j.message)) || 'Could not add - please try again.');
+          if (x.ok) document.dispatchEvent(new CustomEvent('cart:refresh'));
+        })
+        .catch(function () { t.disabled = false; $('.xg-pp__msg').textContent = 'Could not add - please try again.'; });
+    }
+  });
+  $('.xg-pp__q').addEventListener('input', function (e) { state.q = e.target.value; draw(); });
+  $('.xg-pp__stock input').addEventListener('change', function (e) { state.stock = e.target.checked; draw(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+
+{% schema %}
+{ "name": "Paint colour picker", "settings": [] }
+{% endschema %}
