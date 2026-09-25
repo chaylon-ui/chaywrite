@@ -23,7 +23,8 @@
      product codes) are redrawn in light grey, their darkness becoming their
      opacity, so they stay readable on the dark card.
 
-   Skipped: trading-card singles (.card), photos whose border is not mostly
+   Skipped: trading-card singles (.card) and anything whose cut-out is a solid
+   card-shaped rectangle (sports card scans), photos whose border is not mostly
    white (scene shots), a ground under 4% or over 90% of the frame, and any
    image the canvas cannot read (CORS). */
 (function () {
@@ -138,10 +139,20 @@
         }
         for (q = 0; q < add.length; q++) filled[add[q]] = 1;
       }
-      var count = 0;
-      for (p = 0; p < n; p++) count += filled[p];
+      var count = 0, bx0 = w, bx1 = -1, by0 = h, by1 = -1;
+      for (p = 0; p < n; p++) {
+        if (filled[p]) { count++; continue; }
+        x = p % w; y = (p - x) / w;
+        if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+        if (y < by0) by0 = y; if (y > by1) by1 = y;
+      }
       var frac = count / n;
       if (frac < MIN_GROUND || frac > MAX_GROUND) return false;
+      // A trading card scan (sports cards and the like - the .card singles are
+      // skipped already): what is left is a solid rectangle in card proportions.
+      // Leave it as served: a white card border would be eaten with the ground.
+      var bw = bx1 - bx0 + 1, bh = by1 - by0 + 1, ar = bw / bh;
+      if ((n - count) / (bw * bh) >= 0.92 && ((ar >= 0.66 && ar <= 0.78) || (ar >= 1.28 && ar <= 1.52))) return false;
 
       // Distance (0 = ground, 1, 2 = rim rings, 3 = inside) for the un-blend.
       var dist = new Uint8Array(n);
