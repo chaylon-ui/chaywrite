@@ -1,0 +1,50 @@
+name: eavy-archive
+# Reads 'Eavy Archive (eavy-archive.com - box-art paint recipes collected by
+# The Infernal Brush Discord community) and commits data/eavy-archive.json:
+# for every scheme and area, only the names of the paints used, plus links
+# back. The worker (src/eavy.js) matches Warhammer products to it and links
+# each paint to our own shop. One request every 1.5 s.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read and print, commit nothing
+        default: "false"
+      limit:
+        description: Only read the first N pages (0 = all)
+        default: "0"
+      only:
+        description: Read just this one page URL (implies dry run)
+        default: ""
+  schedule:
+    # Tuesdays 05:20 UTC
+    - cron: "20 5 * * 2"
+permissions:
+  contents: write
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the paint lists
+        env:
+          DRY: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          ARGS=""
+          if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry"; fi
+          if [ -n "$LIMIT" ] && [ "$LIMIT" != "0" ]; then ARGS="$ARGS --limit $LIMIT"; fi
+          if [ -n "$ONLY" ]; then ARGS="$ARGS --only $ONLY"; fi
+          python3 tools/eavy-archive.py $ARGS
+      - name: Commit the file when it changed
+        if: ${{ inputs.dry_run != 'true' && inputs.only == '' }}
+        run: |
+          set -e
+          if [ -z "$(git status --porcelain data/eavy-archive.json)" ]; then echo "no change"; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/eavy-archive.json
+          git commit -m "eavy-archive: refresh $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
