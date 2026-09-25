@@ -43,7 +43,7 @@
 import { adminGql, throttleWait, dayOf, dateOf } from "./price-history.js";
 import { GUNPLA_QUERY, KITS_FILE_URL, indexKits, gunplaMetafields } from "./gunpla.js";
 import { PLAMOD_FILE_URL, PL_PAGE, PL_ADD_MEDIA, PL_QUERY, parsePlPage, plamodPlan } from "./plamod.js";
-import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan } from "./w40k.js";
+import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan, WINDEX_QUERY, WINDEX_PAGE, UNIT_KINDS, parseWindexPage, likeUnits } from "./w40k.js";
 
 export const ENRICH_DO = "enrich";
 
@@ -929,6 +929,7 @@ async function finish(cx, run, error) {
     (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
+  refreshUnitsIndexLater(cx);   // and the Warhammer "units like this" one
   return arm(cx, dayOf(now) > run.day ? now + 1000 : nextRunAt(now), "run finished");
 }
 
@@ -1571,9 +1572,88 @@ async function gamesLike(cx, url) {
   return { ok: true, kind, value, builtAt: new Date(idx.builtAt).toISOString(), indexed: idx.games.length, count: res.count, games: res.games };
 }
 
+/* ---- Warhammer "units like this" (src/w40k.js likeUnits) --------------------
+   Same shape as the games index: published, in-stock 40K products carrying
+   exor.wh_unit, chunked in this DO's storage, rebuilt after the nightly run
+   and whenever an answer finds it older than GINDEX_MAX_AGE_MS. */
+async function buildUnitsIndex(cx) {
+  if (!cx.mem) cx.mem = {};
+  const units = [];
+  let cursor = null, pages = 0;
+  for (;;) {
+    let r;
+    try { r = await adminGql(cx, WINDEX_PAGE, { q: WINDEX_QUERY, n: PAGE, after: cursor }); }
+    catch (e) {
+      if (e && e.throttled) { await cx.sleep(Math.max(1000, throttleWait(e.cost, 60))); continue; }
+      throw e;
+    }
+    const page = parseWindexPage(r.data);
+    for (const it of page.items) units.push(it);
+    pages++;
+    if (!page.hasNext || pages >= GINDEX_PAGES_MAX) break;
+    cursor = page.cursor;
+    const w = throttleWait(r.cost, 60);
+    if (w) await cx.sleep(w);
+  }
+  const builtAt = cx.now();
+  const chunks = Math.ceil(units.length / GINDEX_CHUNK);
+  const put = { "en:windex:meta": { builtAt, count: units.length, chunks, pages } };
+  for (let i = 0; i < chunks; i++) put["en:windex:" + i] = units.slice(i * GINDEX_CHUNK, (i + 1) * GINDEX_CHUNK);
+  await cx.storage.put(put);
+  const old = cx.mem.windexChunks || 0;
+  for (let i = chunks; i < old; i++) { try { await cx.storage.delete("en:windex:" + i); } catch (e) { /* stale chunk, harmless */ } }
+  cx.mem.windexChunks = chunks;
+  cx.mem.windex = { builtAt, units };
+  cx.log("enrich: units index built: " + units.length + " in-stock 40K boxes over " + pages + " pages");
+  return cx.mem.windex;
+}
+
+async function loadUnitsIndex(cx) {
+  if (!cx.mem) cx.mem = {};
+  if (cx.mem.windex) return cx.mem.windex;
+  const meta = await cx.storage.get("en:windex:meta");
+  if (!meta || !meta.chunks) return null;
+  const keys = [];
+  for (let i = 0; i < meta.chunks; i++) keys.push("en:windex:" + i);
+  const got = await cx.storage.get(keys);
+  const units = [];
+  for (const k of keys) { const part = got && got.get ? got.get(k) : null; if (Array.isArray(part)) for (const u of part) units.push(u); }
+  cx.mem.windexChunks = meta.chunks;
+  cx.mem.windex = { builtAt: meta.builtAt, units };
+  return cx.mem.windex;
+}
+
+function refreshUnitsIndexLater(cx) {
+  if (!cx.mem) cx.mem = {};
+  if (cx.mem.windexBuilding) return;
+  cx.mem.windexBuilding = true;
+  const p = buildUnitsIndex(cx).catch((e) => cx.log("enrich: units index rebuild failed: " + msg(e)))
+    .then(() => { cx.mem.windexBuilding = false; });
+  if (cx.waitUntil) cx.waitUntil(p);
+}
+
+async function unitsLike(cx, url) {
+  const kind = String(url.searchParams.get("kind") || "").trim().toLowerCase().slice(0, 20);
+  const value = String(url.searchParams.get("value") || "").trim().slice(0, 80);
+  const army = String(url.searchParams.get("army") || "").trim().slice(0, 80);
+  const exclude = String(url.searchParams.get("exclude") || "").trim().slice(0, 200);
+  const limit = url.searchParams.get("limit");
+  if (!UNIT_KINDS.includes(kind) || !value) return { ok: false, error: "kind (" + UNIT_KINDS.join("|") + ") and value are required" };
+  let idx = await loadUnitsIndex(cx);
+  if (!idx) {
+    if (!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) return { ok: false, error: "SHOPIFY_ADMIN_TOKEN not configured" };
+    idx = await buildUnitsIndex(cx);
+  } else if (cx.now() - idx.builtAt > GINDEX_MAX_AGE_MS) {
+    refreshUnitsIndexLater(cx);
+  }
+  const res = likeUnits(idx.units, kind, value, army, exclude, limit);
+  return { ok: true, kind, value, army: army || null, builtAt: new Date(idx.builtAt).toISOString(), indexed: idx.units.length, count: res.count, units: res.units };
+}
+
 export async function enrichDoFetch(cx, request, url) {
   await armEnrichAlarm(cx);
   if (url.pathname === "/_en/like") return doJson(await gamesLike(cx, url));
+  if (url.pathname === "/_en/wlike") return doJson(await unitsLike(cx, url));
   if (url.pathname === "/_en/series") return doJson(await seriesList(cx));
   if (url.pathname === "/_en/al-check") return doJson(await aniListCheck(cx));
   if (url.pathname === "/_en/status") return doJson(await statusOf(cx));
@@ -1585,11 +1665,12 @@ export async function enrichDoFetch(cx, request, url) {
 export async function serveEnrich(request, env, ctx) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-  const like = url.pathname === "/games/like.json";
+  const like = url.pathname === "/games/like.json" || url.pathname === "/w40k/like.json";
   const inner = url.pathname === "/enrich/run" ? "/_en/run"
     : url.pathname === "/enrich/bgg-check" ? "/_en/bgg-check"
     : url.pathname === "/enrich/al-check" ? "/_en/al-check"
     : url.pathname === "/enrich/series.json" ? "/_en/series"
+    : url.pathname === "/w40k/like.json" ? "/_en/wlike" + url.search
     : like ? "/_en/like" + url.search
     : "/_en/status";
   const stub = env.ROOM.get(env.ROOM.idFromName(ENRICH_DO));

@@ -1,4 +1,5 @@
 import { enrichTick, statusOf, kickRun, ENRICH_VERSION } from '../src/enrich.js';
+import { parseWindexPage, likeUnits, sizeKey, pointsNear } from '../src/w40k.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, d) => { if (c) pass++; else { fail++; console.log('FAIL ' + n + (d ? ' :: ' + d : '')); } };
@@ -490,6 +491,34 @@ async function drain(w, maxTicks = 60) {
   eq('missing token reported', last.error, 'SHOPIFY_ADMIN_TOKEN not configured');
   const st = await statusOf(w.cx);
   eq('status says token missing', st.tokenConfigured, false);
+}
+
+// --- Warhammer "units like this" (owner 2026-09-25) ---
+{
+  const wu = (o) => ({ value: JSON.stringify(o) });
+  const page = parseWindexPage({ products: { pageInfo: { hasNextPage: false, endCursor: 'c1' }, nodes: [
+    { handle: 'orks-trukk', title: 'ORKS: TRUKK', totalInventory: 2, featuredImage: { url: 'https://cdn/x.png' }, priceRangeV2: { minVariantPrice: { amount: '55.00' } }, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/11', availableForSale: true }] },
+      wu: wu({ faction: 'Orks', name: 'Trukk', models: [1, 1], points: [[1, 70]], keywords: ['Vehicle', 'Transport'], factionKeywords: ['Orks'] }) },
+    { handle: 'orks-boyz', title: 'ORKS: BOYZ', totalInventory: 1, variants: { nodes: [] }, wu: wu({ faction: 'Orks', name: 'Boyz', models: [10, 20], points: [[10, 80], [20, 170]], keywords: ['Infantry'] }) },
+    { handle: 'rhino', title: 'SM RHINO', totalInventory: 3, variants: { nodes: [] }, wu: wu({ faction: 'Space Marines', name: 'Rhino', models: [1, 1], points: [[1, 75]], keywords: ['Vehicle'] }) },
+    { handle: 'legends', title: 'OLD', totalInventory: 1, variants: { nodes: [] }, wu: wu({ faction: 'Orks', name: 'Trukk [Legends]', models: [1, 1], points: [[1, 65]], keywords: ['Vehicle'] }) },
+    { handle: 'no-unit', title: 'X', totalInventory: 1, variants: { nodes: [] }, wu: null },
+    { handle: 'bad-json', title: 'Y', totalInventory: 1, variants: { nodes: [] }, wu: { value: '{nope' } },
+  ] } });
+  eq('windex keeps only products with a unit', page.items.length, 4);
+  eq('windex item shape', JSON.stringify(page.items[0]), JSON.stringify({ h: 'orks-trukk', t: 'ORKS: TRUKK', q: 2, i: 'https://cdn/x.png', p: 5500, v: '11', f: 'Orks', n: 'Trukk', z: '1', pt: 70, k: ['Vehicle', 'Transport', 'Orks'] }));
+  eq('windex legends name folded', page.items[3].n, 'Trukk');
+  eq('sizeKey range', sizeKey([10, 20]), '10-20');
+  eq('pointsNear 70~80', pointsNear(80, 70), true);
+  eq('pointsNear 70 vs 170 no', pointsNear(170, 70), false);
+  const U = page.items;
+  eq('datasheet: the other Trukk box (legends folded)', likeUnits(U, 'datasheet', 'Trukk', 'Orks', 'orks-trukk').units.map((u) => u.handle).join(','), 'legends');
+  eq('army store-wide', likeUnits(U, 'army', 'orks', '', 'orks-trukk').count, 2);
+  eq('keyword stays in the army', likeUnits(U, 'keyword', 'Vehicle', 'Orks', 'orks-trukk').units.map((u) => u.handle).join(','), 'legends');
+  eq('points near, closest first, army only', likeUnits(U, 'points', '70 pts', 'Orks', 'orks-trukk').units.map((u) => u.handle).join(','), 'legends,orks-boyz');
+  eq('size same range', likeUnits(U, 'size', '10-20', 'Orks', '').units.map((u) => u.handle).join(','), 'orks-boyz');
+  eq('unknown kind', likeUnits(U, 'colour', 'x', '', '').count, 0);
+  eq('answer shape', JSON.stringify(likeUnits(U, 'datasheet', 'Rhino', '', '').units[0]), JSON.stringify({ handle: 'rhino', title: 'SM RHINO', url: '/products/rhino', image: null, price: '0.00', qty: 3, variant: null, army: 'Space Marines', datasheet: 'Rhino', size: '1', points: 75 }));
 }
 
 console.log((fail ? 'TICK-FAILS ' + fail : 'TICK OK') + ' :: ' + pass + '/' + (pass + fail) + ' checks passed');
