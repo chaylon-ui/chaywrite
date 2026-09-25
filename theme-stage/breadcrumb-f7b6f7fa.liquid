@@ -38,6 +38,9 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
   .xg-bc--logo .xg-bc__logo img { display: block; margin: 0 auto; width: auto; height: auto; max-width: min(460px, 90%); max-height: 110px; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .55)); }
   @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img { max-height: 72px; } }
+  /* Warhammer-logo.png is 1400x900 with the mark in a band across the middle: larger box, pulled in by negative margins */
+  .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-width: min(560px, 96%); max-height: 230px; margin: -55px auto -50px; }
+  @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-height: 150px; margin: -36px auto -32px; } }
 </style>
 {%- endif -%}
 <div class="breadcrumb-container{% if xg_bc_logo != '' %} xg-bc--logo{% endif %}" style="{% if xg_bc_logo != '' %}{% elsif settings.breadcrumb != blank %}background-image: url('{{ settings.breadcrumb | img_url: 'master' }}');{% else %}background-color: {{ settings.breadcrumb_background }};{% endif %}">
