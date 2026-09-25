@@ -620,6 +620,10 @@
       {%- else -%}
       {{ product.description }}
       {%- endif -%}
+      {%- comment -%} 'Eavy Archive box-art paints, linked to ours (owner 2026-09-25); hides itself when no scheme matches. {%- endcomment -%}
+      {%- if product.vendor == 'Games Workshop' or gf.game_system.value != blank or wu.name != blank -%}
+        {%- render 'xg-eavy', product: product, faction: wu.faction -%}
+      {%- endif -%}
     </div>
     {% endif %}
     {% for block in section.blocks %}
