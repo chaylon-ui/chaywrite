@@ -304,3 +304,9 @@ html[data-xg-theme="dark"] .template-cart .cart .cart__price-wrapper,
 html[data-xg-theme="dark"] .template-cart .cart .total-product { color: #dfe5e8; }
 html[data-xg-theme="dark"] .template-cart .cart .product_remove a { color: #c3ccd1; }
 html[data-xg-theme="dark"] .template-cart .cart .product_remove a:hover { color: #ffffff; }
+/* The totals box: theme.css styles "Subtotal" (#3a3838) and the shipping
+   line's top rule (#f2f2f2) seven classes deep, past xg-dark.css's rules. */
+html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart_total_title span { color: #dfe5e8; }
+html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart_total_title .cart__subtotal { color: var(--brand-secondary); }
+html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart__shipping,
+html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart__store-credit-info { border-top-color: #2a3236; color: #aab4ba; }
