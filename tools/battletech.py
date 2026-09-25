@@ -307,8 +307,8 @@ def main():
                 if u:
                     break
             if u:
-                u['name'] = re.sub(r'(?i)urban\s*mech', 'UrbanMech', name.title())
-                f = {'pack': name.title(), 'kind': 'salvage', 'source': 'MegaMek', 'units': [u]}
+                u['name'] = re.sub(r'\bLam\b', 'LAM', re.sub(r'(?i)urban\s*mech', 'UrbanMech', name.title()))
+                f = {'pack': u['name'], 'kind': 'salvage', 'source': 'MegaMek', 'units': [u]}
                 f['sig'] = sig(f); products[pid] = f; counts['salvage'] += 1
                 report.append(('SALVAGE', title, u['name'], u['tons']))
             else:
@@ -337,12 +337,19 @@ def main():
             u = unit_facts(disp, target, hints, idx)
             if u: units.append(u)
             else: missing.append(disp)
+        missing = [x for x in missing if not re.match(r'(?i)^points?$', x)]
         if not units:
             counts['nopack'] += 1
             report.append(('EMPTY', title, page, ','.join(missing)))
             continue
         if missing:
+            # a partial list would tell the customer the wrong box contents
             counts['unitMissing'] += len(missing)
+            report.append(('PARTIAL', title, page, 'MISSING ' + ','.join(missing)))
+            continue
+        for u in units:
+            if u['type'] == 'Battle Armor' and not re.search(r'(?i)armor|elemental', u['name']):
+                u['name'] = re.sub(r'^Inner Sphere\b', 'IS', u['name']) + ' Battle Armor'
         f = {'pack': re.sub(r'^BattleTech:\s*', '', ptitle or page), 'kind': 'forcepack', 'source': 'Sarna + MegaMek', 'units': units}
         f['sig'] = sig(f)
         products[pid] = f
