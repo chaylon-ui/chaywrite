@@ -85,5 +85,28 @@ test("recipe shorthand, old Citadel names and step words", () => {
       { slug: "a", name: "Skin", paints: ["Basecoat Mix", "Evil Sunz Scarlet", "Previous mix", "Water", "Add White to previous mix", "Evil Sunz Scarlet"] },
       { slug: "b", name: "Mix only", paints: ["Highlight Mix"] }] }] } } };
   const r = forProduct(indexEavy(D), idx, "WARHAMMER 40,000 ORKS: BOYZ", "Orks");
-  assert.deepEqual(r.schemes[0].areas.map((a) => [a.name, a.paints.map((p) => p.name)]), [["Skin", ["Evil Sunz Scarlet"]]]);
+  assert.deepEqual(r.schemes[0].areas.map((a) => [a.name, a.paints.map((p) => p.name)]), [["Skin", ["Evil Sunz Scarlet", "White"]]]);   // "Add White to previous mix" uses White
+});
+
+test("ratio tails trimmed, unresolved shorthand folded into the full name", () => {
+  const P = { swatches: [{ b: "Citadel", n: "Corax White", h: "#FFFFFF", items: [{ r: "Base", u: "cw", t: "BASE: CORAX WHITE", p: "5", a: true, v: 9 }] }] };
+  const D = { pages: { u: { url: "https://e/40k/astra-militarum/", title: "Astra Militarum", game: "40k", faction: "astra-militarum", sub: "",
+    schemes: [{ slug: "dr", name: "Death Korps of Krieg: Death Riders", areas: [
+      { slug: "s", name: "Krieg Steed Skin", paints: ["Sons of Horus", "Corax White :", "Base Mix", "Sons of Horus Green", "Corax White"] }] }] } } };
+  const r = forProduct(indexEavy(D), citadelIndex(P), "DEATH RIDERS", "Astra Militarum");
+  assert.deepEqual(r.schemes[0].areas[0].paints.map((p) => [p.name, p.handle || null]), [["Corax White", "cw"], ["Sons of Horus Green", null]]);
+});
+
+test("step notes yield the paint inside them or nothing", async () => {
+  const { expand, resolveLoose } = await import("../src/eavy.js");
+  assert.deepEqual(expand("Add White to previous mix"), ["White"]);
+  assert.deepEqual(expand("Add Screaming Skull progressively to Basecoat"), ["Screaming Skull"]);
+  assert.deepEqual(expand("Screaming Skull : White"), ["Screaming Skull", "White"]);
+  assert.deepEqual(expand("Rhinox Hide1:1"), ["Rhinox Hide"]);
+  assert.deepEqual(expand("Mephiston Red*"), ["Mephiston Red"]);
+  assert.deepEqual(expand("Bestial Brown (Mournfang Brown"), ["Bestial Brown"]);
+  const idx = citadelIndex({ swatches: [{ b: "Citadel", n: "Nuln Oil", h: "#14100E", items: [{ r: "Shade", u: "no", t: "SHADE: NULN OIL", p: "7", a: true, v: 1 }] }] });
+  assert.equal(resolveLoose(idx, "Nuln Oil in the recesses").handle, "no");
+  assert.equal(resolveLoose(idx, "Blue horror corner dot highlight"), null);
+  assert.deepEqual(resolveLoose(idx, "Sons of Horus Green"), { name: "Sons of Horus Green" });
 });

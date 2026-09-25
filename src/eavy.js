@@ -202,17 +202,54 @@ export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40) {
       name: s.name, url: surl,
       areas: s.areas.map((ar) => ({
         name: ar.name, url: surl + "&block=" + encodeURIComponent(ar.slug),
-        paints: dedupe(ar.paints.filter((n) => !NOT_A_PAINT.test(n)).map((n) => resolvePaint(paintIdx, n))),
+        paints: dedupe(ar.paints.flatMap(expand).filter((n) => n && !NOT_A_PAINT.test(n)).map((n) => resolveLoose(paintIdx, n)).filter(Boolean)),
       })).filter((ar) => ar.paints.length),
     };
   });
   return { ok: true, page: { url: p.url, title: p.title }, schemes };
 }
 
-// one chip per pot: "Black" and "Abaddon Black" in one area are the same paint
+// ratio tails the crawler left on a name: "Corax White :" (from "... & Corax White 1:1:1:3:3"),
+// "Rhinox Hide1:1", "Mephiston Red*"
+const tidy = (n) => String(n || "").replace(/\s*\d*\s*[:(][\s\d:.)]*$/, "").replace(/\d+\s*:\s*\d.*$/, "").replace(/\s*\*+$/, "").trim();
+const SMALL = new Set(["of", "the", "and", "for", "a"]);
+/* A recipe step read as a name -> the paint(s) in it:
+   "Add White to previous mix" -> White; "Screaming Skull : White" -> both;
+   "Bestial Brown (Mournfang Brown" -> Bestial Brown (the old name maps on). */
+export function expand(raw) {
+  let n = String(raw || "").replace(/[‘’]/g, "'").trim();
+  const add = /^(?:gradually |progressively )?add (?:a touch of )?(.+?) (?:progressively |gradually |bit by bit )?to\b/i.exec(n);
+  if (add) return [tidy(add[1])];
+  n = n.split("(")[0];
+  return n.split(/\s+:\s+/).map(tidy).filter(Boolean);
+}
+/* resolvePaint, plus: a step note ("Nuln Oil in the recesses", "Thin glazes of Screamer Pink")
+   yields the stocked paint named inside it; a note naming none is dropped (null), while a
+   proper paint name we do not stock stays as { name }. */
+export function resolveLoose(idx, n) {
+  const r = resolvePaint(idx, n);
+  if (r.handle) return r;
+  const ws = n.split(/\s+/);
+  const note = ws.length > 4 || ws.some((w) => /^[a-z]/.test(w) && !SMALL.has(w));
+  if (!note) return r;
+  for (let len = Math.min(4, ws.length); len >= 1; len--) {
+    for (let i = 0; i + len <= ws.length; i++) {
+      const part = ws.slice(i, i + len).join(" ");
+      if (len === 1 && part.length < 5) continue;
+      const hit = resolvePaint(idx, part);
+      if (hit.handle) return hit;
+    }
+  }
+  return null;
+}
+
+// one chip per pot: "Black" and "Abaddon Black" in one area are the same paint; a shorthand
+// we could not resolve ("Sons of Horus") goes when the same area names the full paint
 function dedupe(list) {
   const seen = new Set();
-  return list.filter((p) => { const k = p.handle || key(p.name); if (seen.has(k)) return false; seen.add(k); return true; });
+  const out = list.filter((p) => { const k = p.handle || key(p.name); if (seen.has(k)) return false; seen.add(k); return true; });
+  const full = out.map((p) => words(p.name).join(" "));
+  return out.filter((p, i) => p.handle || !full.some((f, j) => j !== i && f !== full[i] && f.startsWith(full[i] + " ")));
 }
 
 const CREDIT = "Box-art recipes from 'Eavy Archive, collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)";
@@ -222,7 +259,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
   const title = (url.searchParams.get("title") || "").slice(0, 200);
   const faction = (url.searchParams.get("faction") || "").slice(0, 80);
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=2&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)));
+  const ck = new Request("https://cache.internal/eavy/for.json?v=3&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)));
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
