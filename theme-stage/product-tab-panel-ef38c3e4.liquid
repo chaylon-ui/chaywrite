@@ -315,16 +315,18 @@
         .xg-desc__note a { color: inherit; text-decoration: underline; }
         .xg-kitinfo { margin: 18px 0 0; padding: 16px 18px; border: 1px solid var(--xg-border, #e3e7ea); border-radius: 12px; background: var(--xg-surface-2, rgba(127,127,127,.05)); }
         .xg-kitinfo__intro { margin: 0 0 10px; font-size: 15px; line-height: 1.55; font-weight: 600; color: var(--xg-ink, #171b1d); }
-        .xg-kitinfo__h { margin: 12px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-muted, #8a9299); }
-        .xg-kitinfo__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
-        .xg-kitinfo__list li { position: relative; padding-left: 16px; font-size: 14.5px; line-height: 1.45; color: var(--xg-text, #3d454b); }
+        .xg-desc .xg-kitinfo .xg-kitinfo__h { margin: 12px 0 6px; font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-muted, #6b757c) !important; }
+        html[data-xg-theme="dark"] .xg-desc .xg-kitinfo .xg-kitinfo__h { color: #9aa6ad !important; }
+        .xg-desc .xg-kitinfo .xg-kitinfo__list { margin: 0 !important; padding: 0 !important; list-style: none !important; display: grid; gap: 5px; }
+        .xg-desc .xg-kitinfo .xg-kitinfo__list li { position: relative; margin: 0 !important; padding: 0 0 0 18px !important; list-style: none !important; font-size: 14.5px; line-height: 1.45; color: var(--xg-text, #3d454b); }
         .xg-kitinfo__list li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 6px; height: 6px; border-radius: 2px; background: var(--xg-red, #d62c28); }
         .xg-kitinfo__list--box { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
         .xg-kitinfo .xg-desc__note { margin-top: 12px; }
         .xg-class { padding: 16px 18px; background: var(--xg-bg, #f1f4f6); border-radius: var(--xg-radius, 14px); }
         /* dark: the theme's own h3 colour outranks --xg-ink here and left the card
            titles ("Kit specs", "Product specs", "Classification") dark on dark */
-        html[data-xg-theme="dark"] .xg-class .xg-class__title { color: #e6ebee !important; }
+        html[data-xg-theme="dark"] .xg-class .xg-class__title,
+        html[data-xg-theme="dark"] .xg-desc .xg-class__title { color: #e6ebee !important; }
         .xg-class__title { margin: 0 0 4px; font-family: var(--xg-font-display, Oswald, Impact, sans-serif); font-size: 17px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--xg-ink, #10171a); }
         .xg-class dl { margin: 0; }
         .xg-class dt { margin: 12px 0 5px; font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--xg-muted, #8a9299); }
