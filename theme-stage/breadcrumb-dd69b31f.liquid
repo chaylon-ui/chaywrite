@@ -65,17 +65,35 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   <div class="banner-title-container">
     {% if xg_bc_logo != '' %}
     <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
-    {%- if xg_bc_logo == 'logo_blanc.png' and template.suffix != 'paints' -%}
-    {%- comment -%} Vallejo: a way into the colour picker (owner, 2026-09-25: "how is it accessed"). A range collection opens the picker on that range. {%- endcomment -%}
+    {%- comment -%} Paint brands: a way into the colour picker (owner, 2026-09-25: "how is it accessed", then Citadel + Army Painter: "Sure"). A range collection opens the picker on that range. {%- endcomment -%}
+    {%- assign xg_pp_brand = '' -%}
     {%- assign xg_pp_range = '' -%}
-    {%- case xg_bc_key -%}
-      {%- when 'vallejo-game-color' -%}{%- assign xg_pp_range = 'Game Color' -%}
-      {%- when 'vallejo-game-air' -%}{%- assign xg_pp_range = 'Game Air' -%}
-      {%- when 'vallejo-model-color' -%}{%- assign xg_pp_range = 'Model Color' -%}
-      {%- when 'vallejo-model-air' -%}{%- assign xg_pp_range = 'Model Air' -%}
-      {%- when 'vallejo-mecha-color' -%}{%- assign xg_pp_range = 'Mecha Color' -%}
-    {%- endcase -%}
-    <a class="xg-bc__pp" href="/collections/all-vallejo?view=paints{% if xg_pp_range != '' %}#range={{ xg_pp_range | url_encode }}{% endif %}"><span class="xg-bc__pp-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Shop by colour</a>
+    {%- if template.suffix != 'paints' -%}
+      {%- if xg_bc_logo == 'logo_blanc.png' -%}
+        {%- assign xg_pp_brand = 'Vallejo' -%}
+        {%- assign xg_pp_home = 'all-vallejo' -%}
+        {%- case xg_bc_key -%}
+          {%- when 'vallejo-game-color' -%}{%- assign xg_pp_range = 'Game Color' -%}
+          {%- when 'vallejo-game-air' -%}{%- assign xg_pp_range = 'Game Air' -%}
+          {%- when 'vallejo-model-color' -%}{%- assign xg_pp_range = 'Model Color' -%}
+          {%- when 'vallejo-model-air' -%}{%- assign xg_pp_range = 'Model Air' -%}
+          {%- when 'vallejo-mecha-color' -%}{%- assign xg_pp_range = 'Mecha Color' -%}
+        {%- endcase -%}
+      {%- elsif xg_bc_key == 'citadel-collection' or xg_bc_key contains '-paints' and xg_bc_key contains 'citadel-' -%}
+        {%- assign xg_pp_brand = 'Citadel' -%}
+        {%- assign xg_pp_home = 'citadel-collection' -%}
+        {%- if xg_bc_key != 'citadel-collection' -%}{%- assign xg_pp_range = xg_bc_key | remove: 'citadel-' | remove: '-paints' | capitalize -%}{%- endif -%}
+      {%- else -%}
+        {%- case xg_bc_key -%}
+          {%- when 'all-the-army-painter', 'the-army-painter-warpaints' -%}{%- assign xg_pp_brand = 'The Army Painter' -%}
+          {%- when 'the-army-painter-quickshade' -%}{%- assign xg_pp_brand = 'The Army Painter' -%}{%- assign xg_pp_range = 'Quickshade Washes Set' -%}
+          {%- when 'the-army-painter-spray' -%}{%- assign xg_pp_brand = 'The Army Painter' -%}{%- assign xg_pp_range = 'Warpaints Primer' -%}
+        {%- endcase -%}
+        {%- assign xg_pp_home = 'all-the-army-painter' -%}
+      {%- endif -%}
+    {%- endif -%}
+    {%- if xg_pp_brand != '' -%}
+    <a class="xg-bc__pp" href="/collections/{{ xg_pp_home }}?view=paints#brand={{ xg_pp_brand | url_encode }}{% if xg_pp_range != '' %}&range={{ xg_pp_range | url_encode }}{% endif %}"><span class="xg-bc__pp-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Shop by colour</a>
     {%- endif -%}
     {% elsif template contains 'product' %}
     <h1 class="h3 head-title">{{ product.title }}</h1>

@@ -1,0 +1,408 @@
+{%- comment -%}
+  Paint colour picker (owner, 2026-09-25: "using the colors on here is it possible to make an
+  interactive filtering system for people to click on colors for our valleyjo paints and when
+  they click the color the bottle comes up for them to add to cart?", then "can color picker
+  help with the army painter, warhammer paints, etc" -> "Sure"). Alternate collection view:
+  /collections/<handle>?view=paints (templates/collection.paints.liquid). The brand opened first
+  follows the collection (citadel-* -> Citadel, *army-painter* -> The Army Painter, *vallejo* ->
+  Vallejo, else all brands); #brand=...&range=... in the address picks brand and range.
+
+  The colours come from the exor-binder worker, /paints.json: every Citadel, The Army Painter
+  and Vallejo paint on the online store, matched to a colour chart and grouped one swatch per
+  colour ({ b: brand, n: name, h: "#RRGGBB" | null, items: [{ r: range, c: code, t: title,
+  u: handle, i: image, p: price, a: in stock, v: variant id, s: size }] }). Paints the chart
+  does not know show their bottle photo. A swatch opens the bottle (photo, code, price, stock,
+  Add to cart via /cart/add.js) and the closest colour from each other brand (CIEDE2000 on the
+  chart colours; washes only match washes, Contrast/Speedpaint/Xpress only each other,
+  metallics only metallics, primers and sprays only each other). Colour values: Miniature Painter Pro's open paint list.
+{%- endcomment -%}
+{%- liquid
+  assign xg_h = collection.handle | default: ''
+  assign xg_brand = 'All'
+  if xg_h contains 'citadel'
+    assign xg_brand = 'Citadel'
+  elsif xg_h contains 'army-painter'
+    assign xg_brand = 'The Army Painter'
+  elsif xg_h contains 'vallejo'
+    assign xg_brand = 'Vallejo'
+  endif
+-%}
+<div class="xg-pp page-width" data-brand="{{ xg_brand }}" data-src="https://exor-binder.nevski.workers.dev/paints.json">
+  <div class="xg-pp__head">
+    <h2 class="xg-pp__title">Find your colour</h2>
+    <p class="xg-pp__sub">Citadel, The Army Painter and Vallejo. Tap a colour to see the bottle and its closest match from the other brands. On-screen colours are approximate.{% if collection.url != blank %} <a href="{{ collection.url }}">See the full {{ collection.title | escape }} list &rsaquo;</a>{% endif %}</p>
+  </div>
+  <div class="xg-pp__brands" role="tablist" aria-label="Brand"></div>
+  <div class="xg-pp__bar">
+    <div class="xg-pp__ranges" role="tablist" aria-label="Paint range"></div>
+    <div class="xg-pp__tools">
+      <input class="xg-pp__q" type="search" placeholder="Search colours" aria-label="Search colours">
+      <label class="xg-pp__stock"><input type="checkbox" checked> In stock only</label>
+    </div>
+  </div>
+  <div class="xg-pp__families" aria-label="Colour family"></div>
+  <p class="xg-pp__count" aria-live="polite">Loading colours…</p>
+  <div class="xg-pp__grid"></div>
+
+  <div class="xg-pp__sheet" hidden>
+    <div class="xg-pp__backdrop" data-close></div>
+    <div class="xg-pp__card" role="dialog" aria-modal="true" aria-labelledby="xg-pp-name">
+      <button class="xg-pp__x" type="button" data-close aria-label="Close">&times;</button>
+      <div class="xg-pp__photo"><img alt="" loading="lazy"></div>
+      <div class="xg-pp__info">
+        <div class="xg-pp__chip"></div>
+        <p class="xg-pp__range"></p>
+        <h3 id="xg-pp-name" class="xg-pp__name"></h3>
+        <div class="xg-pp__opts" role="group" aria-label="Bottle" hidden></div>
+        <p class="xg-pp__price"></p>
+        <p class="xg-pp__avail"></p>
+        <div class="xg-pp__buy">
+          <div class="xg-pp__qty"><button type="button" data-q="-1" aria-label="Less">&minus;</button><input type="number" min="1" value="1" aria-label="Quantity"><button type="button" data-q="1" aria-label="More">+</button></div>
+          <button class="xg-pp__add btn" type="button">Add to cart</button>
+        </div>
+        <p class="xg-pp__msg" aria-live="polite"></p>
+        <a class="xg-pp__link" href="#">Full product page &rsaquo;</a>
+      </div>
+      <div class="xg-pp__match" hidden>
+        <p class="xg-pp__mh">Closest from other brands</p>
+        <div class="xg-pp__ml"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .xg-pp { padding: 20px 0 40px; font-family: var(--xg-font-body); color: var(--xg-text); }
+  .xg-pp__title { font-family: var(--xg-font-display); color: var(--xg-ink); font-size: 30px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .02em; }
+  .xg-pp__sub { color: var(--xg-muted); margin: 0 0 16px; font-size: 14px; }
+  .xg-pp__sub a { color: var(--xg-red); font-weight: 600; white-space: nowrap; }
+  .xg-pp__brands { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .xg-pp__brands button { font: 700 14px/1 var(--xg-font-body); border: 2px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); border-radius: 10px; padding: 10px 16px; cursor: pointer; text-transform: uppercase; letter-spacing: .03em; }
+  .xg-pp__brands button span { opacity: .65; font-weight: 500; margin-left: 5px; }
+  .xg-pp__brands button[aria-pressed="true"] { border-color: var(--xg-ink); background: var(--xg-ink); color: var(--xg-surface); }
+  .xg-pp__bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .xg-pp__ranges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .xg-pp__ranges:empty { display: none; }
+  .xg-pp__ranges button, .xg-pp__families button { font: 600 13px/1 var(--xg-font-body); border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); border-radius: 999px; padding: 8px 13px; cursor: pointer; }
+  .xg-pp__ranges button[aria-pressed="true"] { background: var(--xg-red); border-color: var(--xg-red); color: #fff; }
+  .xg-pp__ranges button span { opacity: .7; font-weight: 500; margin-left: 4px; }
+  .xg-pp__tools { display: flex; gap: 12px; align-items: center; margin-left: auto; }
+  .xg-pp__q { font: 14px var(--xg-font-body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); min-width: 190px; }
+  .xg-pp__stock { font-size: 13px; color: var(--xg-text); display: flex; gap: 6px; align-items: center; margin: 0; white-space: nowrap; }
+  .xg-pp__families { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .xg-pp__families button { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 7px; }
+  .xg-pp__families button i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+  .xg-pp__families button[aria-pressed="true"] { border-color: var(--xg-ink); box-shadow: 0 0 0 1px var(--xg-ink); }
+  .xg-pp__count { font-size: 13px; color: var(--xg-muted); margin: 6px 0 14px; }
+  .xg-pp__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 16px 10px; }
+  .xg-pp__sw { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: none; border: 0; padding: 0; cursor: pointer; text-align: center; color: var(--xg-text); font: 500 12px/1.25 var(--xg-font-body); }
+  .xg-pp__dot { display: block; width: 64px; height: 64px; margin: 0 auto 7px; border-radius: 50%; position: relative;
+    box-shadow: inset 0 -8px 14px rgba(0,0,0,.28), inset 0 6px 10px rgba(255,255,255,.28), 0 2px 6px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.12);
+    transition: transform .15s ease; }
+  .xg-pp__dot.is-metal { background-image: linear-gradient(135deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 38%, rgba(0,0,0,.25) 70%, rgba(255,255,255,.35) 100%) !important; }
+  .xg-pp__dot.is-photo { background: #fff center 42% / 150% no-repeat; }
+  .xg-pp__sw:hover .xg-pp__dot, .xg-pp__sw:focus-visible .xg-pp__dot { transform: scale(1.08); }
+  .xg-pp__sw.is-out { opacity: .42; }
+  .xg-pp__sw.is-out .xg-pp__dot::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; background: rgba(255,255,255,.85); transform: rotate(-35deg); box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+  .xg-pp__code { display: block; color: var(--xg-muted); font-size: 11px; margin-top: 2px; }
+  .xg-pp__bn { display: block; color: var(--xg-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; margin-top: 1px; }
+  .xg-pp__sheet { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .xg-pp__sheet[hidden] { display: none; }
+  .xg-pp__backdrop { position: absolute; inset: 0; background: rgba(8,10,12,.62); }
+  .xg-pp__card { position: relative; background: var(--xg-surface); color: var(--xg-text); border-radius: 16px; max-width: 660px; width: 100%; max-height: 94vh; overflow-y: auto; display: grid; grid-template-columns: 1fr 1.1fr; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+  .xg-pp__photo { background: #fff; display: flex; align-items: center; justify-content: center; padding: 18px; min-height: 280px; border-radius: 16px 0 0 0; }
+  .xg-pp__photo img { max-width: 100%; max-height: 320px; object-fit: contain; }
+  .xg-pp__info { padding: 22px 22px 20px; }
+  .xg-pp__chip { width: 100%; height: 54px; border-radius: 10px; margin-bottom: 12px; box-shadow: inset 0 -10px 18px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.1); }
+  .xg-pp__range { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--xg-muted); }
+  .xg-pp__name { margin: 2px 0 8px; font-family: var(--xg-font-display); color: var(--xg-ink); font-size: 24px; text-transform: uppercase; }
+  .xg-pp__opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .xg-pp__opts button { font: 600 12px/1.2 var(--xg-font-body); border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); border-radius: 8px; padding: 7px 10px; cursor: pointer; text-align: left; }
+  .xg-pp__opts button span { display: block; font-weight: 500; color: var(--xg-muted); margin-top: 2px; }
+  .xg-pp__opts button[aria-pressed="true"] { border-color: var(--xg-red); box-shadow: 0 0 0 1px var(--xg-red); }
+  .xg-pp__opts button.is-out { opacity: .55; }
+  .xg-pp__price { margin: 0; font-size: 20px; font-weight: 700; color: var(--xg-ink); }
+  .xg-pp__avail { margin: 2px 0 14px; font-size: 13px; }
+  .xg-pp__avail.ok { color: var(--xg-success); } .xg-pp__avail.no { color: var(--xg-danger); }
+  .xg-pp__buy { display: flex; gap: 8px; }
+  .xg-pp__qty { display: flex; border: 1px solid var(--xg-border); border-radius: 8px; overflow: hidden; }
+  .xg-pp__qty button { width: 34px; border: 0; background: var(--xg-surface); color: var(--xg-ink); font-size: 18px; cursor: pointer; }
+  .xg-pp__qty input { width: 42px; text-align: center; border: 0; background: var(--xg-surface); color: var(--xg-ink); -moz-appearance: textfield; }
+  .xg-pp__qty input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .xg-pp__add { flex: 1; background: var(--xg-red); color: #fff; border: 0; border-radius: 8px; font-weight: 700; padding: 11px 14px; cursor: pointer; }
+  .xg-pp__add[disabled] { background: #8a969d; cursor: not-allowed; }
+  .xg-pp__msg { min-height: 18px; font-size: 13px; margin: 8px 0 4px; }
+  .xg-pp__msg a { color: var(--xg-red); font-weight: 600; }
+  .xg-pp__link { font-size: 13px; color: var(--xg-muted); }
+  .xg-pp__match { grid-column: 1 / -1; border-top: 1px solid var(--xg-border); padding: 14px 22px 18px; }
+  .xg-pp__match[hidden] { display: none; }
+  .xg-pp__mh { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--xg-muted); font-weight: 700; }
+  .xg-pp__ml { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .xg-pp__m { display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); border-radius: 10px; padding: 8px 10px; cursor: pointer; font: 600 13px/1.25 var(--xg-font-body); }
+  .xg-pp__m:hover, .xg-pp__m:focus-visible { border-color: var(--xg-ink); }
+  .xg-pp__m i { flex: 0 0 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 -5px 9px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.12); }
+  .xg-pp__m span { display: block; font-weight: 500; font-size: 11px; color: var(--xg-muted); margin-top: 2px; }
+  .xg-pp__m.is-out { opacity: .6; }
+  .xg-pp__x { position: absolute; top: 8px; right: 10px; z-index: 2; background: rgba(0,0,0,.35); color: #fff; border: 0; width: 32px; height: 32px; border-radius: 50%; font-size: 22px; line-height: 1; cursor: pointer; }
+  @media (max-width: 600px) {
+    .xg-pp__card { grid-template-columns: 1fr; max-height: 92vh; }
+    .xg-pp__photo { min-height: 200px; border-radius: 16px 16px 0 0; }
+    .xg-pp__photo img { max-height: 220px; }
+    .xg-pp__grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+    .xg-pp__dot { width: 54px; height: 54px; }
+    .xg-pp__brands button { padding: 9px 11px; font-size: 12px; }
+    .xg-pp__tools { width: 100%; } .xg-pp__q { flex: 1; min-width: 0; }
+  }
+</style>
+
+<script>
+(function () {
+  var root = document.currentScript && document.currentScript.previousElementSibling && document.currentScript.previousElementSibling.previousElementSibling;
+  if (!root || !root.classList.contains('xg-pp')) root = document.querySelector('.xg-pp');
+  if (!root) return;
+  var $ = function (s, el) { return (el || root).querySelector(s); };
+  var BRANDS = ['Citadel', 'The Army Painter', 'Vallejo'];
+  var SHORT = { 'Citadel': 'Citadel', 'The Army Painter': 'Army Painter', 'Vallejo': 'Vallejo' };
+  var RANGES = {
+    'Citadel': ['Base', 'Layer', 'Shade', 'Contrast', 'Dry', 'Technical', 'Air', 'Spray', 'Glaze'],
+    'The Army Painter': ['Warpaints', 'Warpaints Fanatic', 'Warpaints Fanatic Wash', 'Speedpaint', 'Speedpaint Marker', 'Warpaints Air', 'Warpaints Primer', 'Quickshade Washes Set'],
+    'Vallejo': ['Game Color', 'Game Air', 'Model Color', 'Model Air', 'Mecha Color', 'Xpress Color Intense', 'Xpress Color', 'Panzer Aces', 'Metal Color', 'Surface Primer', 'Wash FX', 'Weathering FX']
+  };
+  var FAMILIES = [
+    ['red', 'Reds', '#c0282d'], ['orange', 'Oranges', '#e07b22'], ['yellow', 'Yellows', '#e8c42a'], ['green', 'Greens', '#3f8f3a'],
+    ['blue', 'Blues', '#2d5fae'], ['purple', 'Purples', '#7b3f9a'], ['pink', 'Pinks', '#d9709e'], ['brown', 'Browns', '#7a5232'],
+    ['flesh', 'Skin tones', '#e0a98a'], ['grey', 'Greys, black & white', '#8d9396'], ['metal', 'Metallics', '#b9b9b9'], ['wash', 'Washes & inks', '#4a5a78']];
+  var state = { brand: root.getAttribute('data-brand') || 'All', range: 'All', family: '', q: '', stock: true };
+  // "Shop by colour" links open on a brand and range: #brand=Citadel&range=Base (older links: #range=Game%20Color)
+  function hashVal(k) { var m = new RegExp('(?:^|[#&])' + k + '=([^&]+)').exec(location.hash); return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; }
+  try { var hb = hashVal('brand'), hr = hashVal('range'); if (hb === 'All' || BRANDS.indexOf(hb) > -1) state.brand = hb; if (hr) state.range = hr; } catch (e) {}
+  if (state.brand !== 'All' && BRANDS.indexOf(state.brand) < 0) state.brand = 'All';
+  var paints = [];
+  function key(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  function money(c) { return '$' + (Number(c) || 0).toFixed(2); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function thumb(src, w) { return src ? src.replace(/(\.[a-z]+)(\?|$)/i, '_' + w + 'x$1$2') : ''; }
+  function rgb(hex) { hex = hex.replace('#', ''); return [parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255]; }
+  function hsl(hex) {
+    var c = rgb(hex), r = c[0], g = c[1], b = c[2];
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, h = 0, s = 0, d = mx - mn;
+    if (d) { s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+    return [h, s, l];
+  }
+  // sRGB -> CIE Lab (D65)
+  function lab(hex) {
+    var c = rgb(hex).map(function (v) { return v > .04045 ? Math.pow((v + .055) / 1.055, 2.4) : v / 12.92; });
+    var x = (c[0] * .4124 + c[1] * .3576 + c[2] * .1805) / .95047, y = c[0] * .2126 + c[1] * .7152 + c[2] * .0722, z = (c[0] * .0193 + c[1] * .1192 + c[2] * .9505) / 1.08883;
+    var f = function (t) { return t > .008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116; };
+    return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+  }
+  // CIEDE2000 colour difference
+  function de2000(a, b) {
+    var rad = Math.PI / 180, L1 = a[0], a1 = a[1], b1 = a[2], L2 = b[0], a2 = b[1], b2 = b[2];
+    var C1 = Math.sqrt(a1 * a1 + b1 * b1), C2 = Math.sqrt(a2 * a2 + b2 * b2), Cm = (C1 + C2) / 2;
+    var G = .5 * (1 - Math.sqrt(Math.pow(Cm, 7) / (Math.pow(Cm, 7) + Math.pow(25, 7))));
+    var a1p = a1 * (1 + G), a2p = a2 * (1 + G);
+    var C1p = Math.sqrt(a1p * a1p + b1 * b1), C2p = Math.sqrt(a2p * a2p + b2 * b2);
+    var h1p = C1p ? (Math.atan2(b1, a1p) / rad + 360) % 360 : 0, h2p = C2p ? (Math.atan2(b2, a2p) / rad + 360) % 360 : 0;
+    var dL = L2 - L1, dC = C2p - C1p, dh = 0;
+    if (C1p * C2p) { dh = h2p - h1p; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
+    var dH = 2 * Math.sqrt(C1p * C2p) * Math.sin(dh / 2 * rad);
+    var Lm = (L1 + L2) / 2, Cmp = (C1p + C2p) / 2, hm = h1p + h2p;
+    if (C1p * C2p) { hm = Math.abs(h1p - h2p) > 180 ? (h1p + h2p + (h1p + h2p < 360 ? 360 : -360)) / 2 : (h1p + h2p) / 2; }
+    var T = 1 - .17 * Math.cos((hm - 30) * rad) + .24 * Math.cos(2 * hm * rad) + .32 * Math.cos((3 * hm + 6) * rad) - .2 * Math.cos((4 * hm - 63) * rad);
+    var SL = 1 + .015 * (Lm - 50) * (Lm - 50) / Math.sqrt(20 + (Lm - 50) * (Lm - 50)), SC = 1 + .045 * Cmp, SH = 1 + .015 * Cmp * T;
+    var RT = -2 * Math.sqrt(Math.pow(Cmp, 7) / (Math.pow(Cmp, 7) + Math.pow(25, 7))) * Math.sin(60 * Math.exp(-Math.pow((hm - 275) / 25, 2)) * rad);
+    return Math.sqrt(Math.pow(dL / SL, 2) + Math.pow(dC / SC, 2) + Math.pow(dH / SH, 2) + RT * (dC / SC) * (dH / SH));
+  }
+  var METAL = /gold|silver|bronze|copper|brass|steel|gunmetal|chainmail|metal|\btin\b|pewter|chrome|leadbelcher|ironbreaker|retributor|alloy|runefang|stormhost|auric|gehenna|sycorax|plate mail|\biron\b|aluminium|mithril/;
+  var WASH = /\bwash|\bink\b|\bshade\b|\btone\b|quickshade/;
+  function family(g) {
+    var n = g.n.toLowerCase(), r = g.items.map(function (it) { return it.r; }).join(' ').toLowerCase();
+    if (METAL.test(n) || /metal/.test(r)) return 'metal';
+    if (WASH.test(n) || /shade|wash/.test(r)) return 'wash';
+    if (!g.h) return 'other';
+    if (/flesh|skin/.test(n)) return 'flesh';
+    var t = hsl(g.h), h = t[0], s = t[1], l = t[2];
+    if (s < .13 || l < .09 || l > .93) return 'grey';
+    if (h >= 15 && h < 48 && l < .5 && s < .75) return 'brown';
+    if (h < 12 || h >= 345) return 'red';
+    if (h < 40) return 'orange';
+    if (h < 68) return 'yellow';
+    if (h < 170) return 'green';
+    if (h < 255) return 'blue';
+    if (h < 300) return 'purple';
+    return 'pink';
+  }
+  // what a paint does, so a match is a like-for-like swap
+  function kind(g) {
+    var r = g.items.map(function (it) { return it.r; }).join(' ');
+    if (g.fam === 'wash') return 'wash';
+    if (g.fam === 'metal') return 'metal';
+    if (/Contrast|Speedpaint|Xpress/.test(r)) return 'contrast';
+    if (/Technical|Weathering/.test(r)) return 'fx';
+    if (/Primer|Spray/.test(r)) return 'primer';
+    return 'paint';
+  }
+  function rangeIdx(b, r) { var i = (RANGES[b] || []).indexOf(r); return i < 0 ? 99 : i; }
+
+  fetch(root.getAttribute('data-src')).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j || !j.ok || !j.swatches) throw new Error('no data');
+    paints = j.swatches.filter(function (g) { return BRANDS.indexOf(g.b) > -1 && g.items && g.items.length; });
+    paints.forEach(function (g) {
+      g.fam = family(g); g.kind = kind(g); g.dry = g.items.every(function (it) { return it.r === 'Dry'; });
+      if (g.h) { g.lab = lab(g.h); var t = hsl(g.h); g.hue = t[0]; g.l = t[2]; } else { g.hue = 999; g.l = 0; }
+      g.items.sort(function (x, y) { return rangeIdx(g.b, x.r) - rangeIdx(g.b, y.r) || (parseFloat(x.s) || 0) - (parseFloat(y.s) || 0); });
+    });
+    var order = FAMILIES.map(function (f) { return f[0]; }).concat('other');
+    paints.sort(function (a, b) { return order.indexOf(a.fam) - order.indexOf(b.fam) || a.hue - b.hue || b.l - a.l || BRANDS.indexOf(a.b) - BRANDS.indexOf(b.b); });
+    drawBrands(); drawRanges(); drawFamilies(); draw();
+  }).catch(function () { $('.xg-pp__count').textContent = 'Could not load the colours - please refresh.'; });
+
+  // the bottles of a colour that pass the range + stock filters
+  function items(g, noStock) {
+    return g.items.filter(function (it) {
+      return (state.brand === 'All' || state.range === 'All' || g.b !== state.brand || it.r === state.range) && (noStock || !state.stock || it.a);
+    });
+  }
+  function visible() {
+    var q = key(state.q);
+    return paints.filter(function (g) {
+      return (state.brand === 'All' || g.b === state.brand) && (!state.family || g.fam === state.family) && items(g).length &&
+        (!q || key(g.n + g.items.map(function (it) { return it.c; }).join('') + (state.brand === 'All' ? g.b : '')).indexOf(q) > -1);
+    });
+  }
+  function setHash() {
+    var h = state.brand === 'All' ? 'brand=All' : 'brand=' + encodeURIComponent(state.brand) + (state.range !== 'All' ? '&range=' + encodeURIComponent(state.range) : '');
+    try { history.replaceState(null, '', location.pathname + location.search + '#' + h); } catch (e) {}
+  }
+  function drawBrands() {
+    var n = {}; paints.forEach(function (g) { n[g.b] = (n[g.b] || 0) + 1; });
+    $('.xg-pp__brands').innerHTML = ['All'].concat(BRANDS.filter(function (b) { return n[b]; })).map(function (b) {
+      return '<button type="button" data-brand="' + esc(b) + '" aria-pressed="' + (state.brand === b) + '">' + (b === 'All' ? 'All brands' : esc(b)) + '<span>' + (b === 'All' ? paints.length : n[b]) + '</span></button>';
+    }).join('');
+  }
+  function drawRanges() {
+    if (state.brand === 'All') { state.range = 'All'; $('.xg-pp__ranges').innerHTML = ''; return; }
+    var counts = {}, extra = [];
+    paints.forEach(function (g) {
+      if (g.b !== state.brand) return;
+      var seen = {};
+      g.items.forEach(function (it) {
+        if (seen[it.r]) return; seen[it.r] = 1; counts[it.r] = (counts[it.r] || 0) + 1;
+        if (rangeIdx(g.b, it.r) === 99 && extra.indexOf(it.r) < 0) extra.push(it.r);
+      });
+    });
+    var names = ['All'].concat(RANGES[state.brand].filter(function (r) { return counts[r]; }), extra.sort());
+    if (names.indexOf(state.range) < 0) state.range = 'All';
+    var total = paints.filter(function (g) { return g.b === state.brand; }).length;
+    $('.xg-pp__ranges').innerHTML = names.length < 3 ? '' : names.map(function (r) {
+      return '<button type="button" data-range="' + esc(r) + '" aria-pressed="' + (state.range === r) + '">' + esc(r === 'All' ? 'All ranges' : r) + '<span>' + (r === 'All' ? total : counts[r]) + '</span></button>';
+    }).join('');
+  }
+  function drawFamilies() {
+    $('.xg-pp__families').innerHTML = FAMILIES.map(function (f) {
+      return '<button type="button" data-fam="' + f[0] + '" aria-pressed="' + (state.family === f[0]) + '"><i style="background:' + f[2] + (f[0] === 'metal' ? ';background-image:linear-gradient(135deg,#eee,#888 60%,#ddd)' : '') + '"></i>' + f[1] + '</button>';
+    }).join('');
+  }
+  function dot(g, cls, first) {
+    return '<span class="' + cls + (g.fam === 'metal' && g.h ? ' is-metal' : '') + (g.h ? '" style="background-color:' + g.h : ' is-photo" style="background-image:url(' + esc(thumb(first && first.i, 160)) + ')') + '"></span>';
+  }
+  function draw() {
+    var list = visible();
+    $('.xg-pp__count').textContent = list.length + (list.length === 1 ? ' colour' : ' colours') + (state.stock ? ' in stock' : '');
+    $('.xg-pp__grid').innerHTML = list.map(function (g) {
+      var its = items(g), out = !its.some(function (it) { return it.a; }), first = its[0] || g.items[0];
+      return '<button type="button" class="xg-pp__sw' + (out ? ' is-out' : '') + '" data-i="' + paints.indexOf(g) + '" title="' + esc(SHORT[g.b] + ' ' + g.n) + '">' +
+        dot(g, 'xg-pp__dot', first) + esc(g.n) + '<span class="xg-pp__code">' + (esc(first.c) || (state.brand === 'All' ? '' : '&nbsp;')) + (its.length > 1 ? ' +' + (its.length - 1) : '') + '</span>' +
+        (state.brand === 'All' ? '<span class="xg-pp__bn">' + esc(SHORT[g.b]) + '</span>' : '') + '</button>';
+    }).join('');
+  }
+  // closest colour of each other brand: same kind of paint, CIEDE2000 under 12, in stock preferred
+  function matches(g) {
+    if (!g.lab) return [];
+    var out = [];
+    BRANDS.forEach(function (b) {
+      if (b === g.b) return;
+      var best = null;
+      paints.forEach(function (o) {
+        if (o.b !== b || !o.lab || o.kind !== g.kind) return;
+        var d = de2000(g.lab, o.lab), stock = o.items.some(function (it) { return it.a; });
+        // an in-stock paint wins over a sold-out one unless the sold-out one is clearly closer
+        var score = d + (stock ? 0 : 2.5);
+        // a Citadel Dry pot is for drybrushing: a plain paint is the better swap unless the Dry one is clearly closer
+        if (o.dry && !g.dry) score += 3;
+        if (d < 12 && (!best || score < best.score)) best = { g: o, d: d, score: score, stock: stock };
+      });
+      if (best) out.push(best);
+    });
+    return out.sort(function (a, b) { return a.d - b.d; });
+  }
+  var cur = null, curG = null;
+  function pick(it) {
+    cur = it;
+    $('.xg-pp__photo img').src = thumb(it.i, 480);
+    $('.xg-pp__photo img').alt = it.t;
+    $('.xg-pp__range').textContent = SHORT[curG.b] + ' ' + it.r + (it.c ? ' · ' + it.c : '');
+    $('.xg-pp__price').textContent = money(it.p);
+    var a = $('.xg-pp__avail'); a.textContent = it.a ? 'In stock' : 'Sold out'; a.className = 'xg-pp__avail ' + (it.a ? 'ok' : 'no');
+    $('.xg-pp__add').disabled = !it.a; $('.xg-pp__add').textContent = it.a ? 'Add to cart' : 'Sold out';
+    $('.xg-pp__msg').textContent = '';
+    $('.xg-pp__link').href = '/products/' + it.u;
+    [].forEach.call(root.querySelectorAll('.xg-pp__opts button'), function (b) { b.setAttribute('aria-pressed', String(curG.items[+b.getAttribute('data-o')] === it)); });
+  }
+  function open(g) {
+    curG = g;
+    $('.xg-pp__chip').style.background = g.h || 'transparent';
+    $('.xg-pp__chip').hidden = !g.h;
+    $('.xg-pp__name').textContent = g.n;
+    var opts = $('.xg-pp__opts');
+    opts.innerHTML = g.items.length > 1 ? g.items.map(function (it, i) {
+      return '<button type="button" data-o="' + i + '" class="' + (it.a ? '' : 'is-out') + '">' + esc(it.r + (it.s ? ' ' + it.s : '')) + '<span>' + money(it.p) + (it.a ? '' : ' · sold out') + '</span></button>';
+    }).join('') : '';
+    opts.hidden = g.items.length < 2;
+    $('.xg-pp__qty input').value = 1;
+    var its = items(g, true);
+    pick(its.filter(function (it) { return it.a; })[0] || g.items.filter(function (it) { return it.a; })[0] || its[0] || g.items[0]);
+    var m = matches(g);
+    $('.xg-pp__match').hidden = !m.length;
+    $('.xg-pp__ml').innerHTML = m.map(function (x) {
+      var o = x.g, first = o.items.filter(function (it) { return it.a; })[0] || o.items[0];
+      return '<button type="button" class="xg-pp__m' + (x.stock ? '' : ' is-out') + '" data-i="' + paints.indexOf(o) + '"><i style="background:' + o.h + '"></i><div>' + esc(o.n) +
+        '<span>' + esc(SHORT[o.b] + ' ' + first.r + (first.c ? ' · ' + first.c : '')) + '</span><span>' + (x.d < 3 ? 'Very close match' : x.d < 6 ? 'Close match' : 'Similar') + (x.stock ? '' : ' · sold out') + '</span></div></button>';
+    }).join('');
+    $('.xg-pp__sheet').hidden = false; $('.xg-pp__card').scrollTop = 0; $('.xg-pp__add').focus();
+  }
+  function close() { $('.xg-pp__sheet').hidden = true; }
+  root.addEventListener('click', function (e) {
+    var t = e.target.closest('button, [data-close]');
+    if (!t) return;
+    if (t.hasAttribute('data-close')) return close();
+    if (t.hasAttribute('data-brand')) { state.brand = t.getAttribute('data-brand'); state.range = 'All'; drawBrands(); drawRanges(); setHash(); return draw(); }
+    if (t.hasAttribute('data-range')) { state.range = t.getAttribute('data-range'); drawRanges(); setHash(); return draw(); }
+    if (t.hasAttribute('data-fam')) { var f = t.getAttribute('data-fam'); state.family = state.family === f ? '' : f; drawFamilies(); return draw(); }
+    if (t.hasAttribute('data-i')) return open(paints[+t.getAttribute('data-i')]);
+    if (t.hasAttribute('data-o') && curG) return pick(curG.items[+t.getAttribute('data-o')]);
+    if (t.hasAttribute('data-q')) { var inp = $('.xg-pp__qty input'); inp.value = Math.max(1, (+inp.value || 1) + (+t.getAttribute('data-q'))); return; }
+    if (t.classList.contains('xg-pp__add') && cur) {
+      t.disabled = true; $('.xg-pp__msg').textContent = 'Adding…';
+      fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ items: [{ id: cur.v, quantity: Math.max(1, +$('.xg-pp__qty input').value || 1) }] }) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (x) {
+          t.disabled = false;
+          $('.xg-pp__msg').innerHTML = x.ok ? 'Added to your cart. <a href="/cart">View cart</a>' : esc((x.j && (x.j.description || x.j.message)) || 'Could not add - please try again.');
+          if (x.ok) document.dispatchEvent(new CustomEvent('cart:refresh'));
+        })
+        .catch(function () { t.disabled = false; $('.xg-pp__msg').textContent = 'Could not add - please try again.'; });
+    }
+  });
+  $('.xg-pp__q').addEventListener('input', function (e) { state.q = e.target.value; draw(); });
+  $('.xg-pp__stock input').addEventListener('change', function (e) { state.stock = e.target.checked; draw(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+
+{% schema %}
+{ "name": "Paint colour picker", "settings": [] }
+{% endschema %}
