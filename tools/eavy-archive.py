@@ -66,8 +66,9 @@ def paints_of(step_body):
     Ratios, parentheses and thinning notes are dropped; alternatives ('A or B', 'A/B')
     all count as paints you might buy."""
     s = re.sub(r"\([^)]*\)", " ", step_body)
-    s = re.sub(r"\b\d+\s*:\s*\d+(\s*:\s*\d+)?\b", " ", s)
+    s = re.sub(r"\d+(?:\s*:\s*\d+)+", " ", s)  # 1:1, 1:1:1:3:3, "Rhinox Hide1:1"
     s = re.sub(r"\b\d+\s*%", " ", s)
+    s = s.replace("*", " ")
     out = []
     for part in re.split(r"\s*(?:&|\+|,|/|\bor\b|\band\b|\bthen\b)\s*", s, flags=re.I):
         p = re.sub(r"\s+", " ", part).strip(" .-;")
