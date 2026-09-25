@@ -67,11 +67,11 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-width: min(560px, 96%); max-height: 230px; margin: -55px auto -50px; }
   @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-height: 150px; margin: -36px auto -32px; } }
   .xg-bc--logo .head-title.xg-bc__ptitle { color: #fff; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 12px; }
-  .xg-bc__brands { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin: 0 0 10px; }
-  .xg-bc__brand { display: flex; align-items: center; justify-content: center; height: 58px; padding: 6px 16px; border-radius: 12px; border: 2px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); opacity: .6; transition: opacity .15s, border-color .15s, background .15s; }
-  .xg-bc__brand img { display: block; max-height: 42px; max-width: 150px; width: auto; height: auto; object-fit: contain; filter: drop-shadow(0 3px 8px rgba(0,0,0,.5)); }
+  .xg-bc__brands { display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 8px; margin: 0 auto 10px; width: max-content; max-width: 100%; }
+  .xg-bc__brand { flex: 0 0 128px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 128px; height: 52px; padding: 6px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); opacity: .6; transition: opacity .15s, border-color .15s, background .15s; }
+  .xg-bc__brand img { display: block; max-height: 34px; max-width: 100%; width: auto; height: auto; object-fit: contain; filter: drop-shadow(0 3px 8px rgba(0,0,0,.5)); }
   .xg-bc__brand:hover, .xg-bc__brand:focus-visible, .xg-bc__brand[aria-current="true"] { opacity: 1; border-color: rgba(255,255,255,.7); background: rgba(255,255,255,.08); }
-  @media (max-width: 767px) { .xg-bc__brand { height: 46px; padding: 5px 10px; } .xg-bc__brand img { max-height: 32px; max-width: 96px; } }
+  @media (max-width: 767px) { .xg-bc__brands { gap: 6px; } .xg-bc__brand { flex-basis: 30vw; width: 30vw; max-width: 112px; height: 44px; padding: 5px 8px; } .xg-bc__brand img { max-height: 28px; } }
 </style>
 {%- endif -%}
 <div class="breadcrumb-container{% if xg_bc_logo != '' or xg_bc_paints %} xg-bc--logo{% endif %}" style="{% if xg_bc_logo != '' or xg_bc_paints %}{% elsif settings.breadcrumb != blank %}background-image: url('{{ settings.breadcrumb | img_url: 'master' }}');{% else %}background-color: {{ settings.breadcrumb_background }};{% endif %}">
