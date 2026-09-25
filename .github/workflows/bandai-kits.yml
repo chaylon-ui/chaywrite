@@ -2,7 +2,8 @@ name: bandai-kits
 # Reads Bandai Spirits' global hobby site (English, USA) and commits
 # data/bandai-kits.json: every kit's English name, launch date, Japanese list
 # price and age rating. The worker's nightly Gunpla sweep (src/gunpla.js)
-# matches our Gunpla products to it by name. Incremental: only kit pages not
+# matches our Gunpla and Pokémon model kits to it by name. Also keeps each page's
+# PRODUCTS INFO (intro, features, includes). Incremental: only kit pages not
 # already in the file are fetched, one request a second.
 on:
   workflow_dispatch:

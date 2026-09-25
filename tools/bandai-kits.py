@@ -8,7 +8,10 @@ Source: Bandai Spirits' own global hobby site, English (USA) edition,
 https://global.bandai-hobby.net/en-us/item/01_NNNN/ - one page per kit with
 the English kit name (the same wording our Gunpla titles use, e.g.
 "HG 1/144 RED GUNDAM"), the Japanese list price, the launch date and the age
-rating. The page list comes from the site's own sitemap. Bandai publishes no
+rating, plus the page's PRODUCTS INFO box (owner, 2026-09-25: "is there a
+chance you can capture this data for gunpla? also the pokemon gunpla"): the
+intro line, the "■" feature points and the [Includes] / [Accessories] list.
+The page list comes from the site's own sitemap. Bandai publishes no
 barcode on these pages (checked 2026-09-23), so the worker matches kits to
 our products by name.
 
@@ -39,6 +42,9 @@ LIMIT = int(os.environ.get("LIMIT") or "0")
 # night never runs into the job's timeout and loses the lot; the next run
 # carries on from there (incremental).
 BUDGET = int(os.environ.get("BUDGET_SECONDS") or "2400")
+# Bump when parse_item learns a new field: kits stamped below it are fetched
+# again (within the time budget) so the whole file catches up over a run or two.
+INFO_V = 1
 MONTHS = {m: i + 1 for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
 
 _last = [0.0]
@@ -93,9 +99,50 @@ def parse_item(page):
     a = re.search(r"(\d+)", specs.get("age", ""))
     if a:
         out["age"] = int(a.group(1))
+    info = parse_info(page)
+    if info:
+        out["info"] = info
+    out["iv"] = INFO_V
     brands = re.findall(r'href="(?:https://global\.bandai-hobby\.net)?/en-us/brand/([a-z0-9_\-]+)/?"', page)
     if brands:
         out["brands"] = sorted(set(brands))[:6]
+    return out
+
+
+INCLUDE_HEAD = re.compile(r"^\[\s*(includes?|accessories|set contents?|contents|components|included items?)\s*\]", re.I)
+
+
+def parse_info(page):
+    """PRODUCTS INFO -> {intro, features, includes}; {} when the page has none.
+    The box is <div class="pg-products__article"> holding one <p> per line:
+    an intro sentence, "■" points, then "[Includes]" and its "■" items."""
+    m = re.search(r'class="pg-products__article"[^>]*>([\s\S]*?)<div class="pg-products__(?:bnrWrap|linkWrap)"', page)
+    if not m:
+        return {}
+    lines = []
+    for p in re.findall(r"<p[^>]*>([\s\S]*?)</p>", m.group(1)):
+        t = text(p.replace("&nbsp;", " ")).replace("\u00a0", " ").strip()
+        if t:
+            lines.append(t)
+    intro, feats, incl, other = [], [], [], []
+    part = "intro"
+    for t in lines:
+        if t.startswith("[") and "]" in t[:40]:
+            part = "includes" if INCLUDE_HEAD.match(t) else "other"
+            continue
+        item = re.sub(r"^[■◆●・\-\*]\s*", "", t).strip()
+        if not item:
+            continue
+        if part == "intro" and t[0] in "■◆●・":
+            part = "features"
+        {"intro": intro, "features": feats, "includes": incl, "other": other}[part].append(item[:240])
+    out = {}
+    if intro:
+        out["intro"] = " ".join(intro)[:600]
+    if feats:
+        out["features"] = feats[:20]
+    if incl:
+        out["includes"] = incl[:20]
     return out
 
 
@@ -133,9 +180,13 @@ def main():
     items = sitemap_items()
     print("sitemap: %d kit pages, %d already in the file" % (len(items), sum(1 for k in items if k in kits)))
     todo = [k for k in sorted(items) if k not in kits]
+    # kits read before the current INFO_V (no PRODUCTS INFO yet): read again, newest first
+    stale = [k for k in sorted(items, reverse=True) if k in kits and (kits[k].get("iv") or 0) < INFO_V]
+    print("%d new kit pages, %d to re-read for the products info" % (len(todo), len(stale)))
+    todo = todo + stale
     if LIMIT:
         todo = todo[:LIMIT]
-    fetched = failed = 0
+    fetched = failed = with_info = 0
     t0 = time.time()
     for k in todo[:MAX_FETCH]:
         if time.time() - t0 > BUDGET:
@@ -152,10 +203,13 @@ def main():
             continue
         kit["url"] = items[k]
         kits[k] = kit
+        if kit.get("info"):
+            with_info += 1
         if fetched <= 5 or fetched % 200 == 0:
             print("%5d %s %s" % (fetched, k, json.dumps(kit, ensure_ascii=False)[:200]))
     gone = [k for k in kits if k not in items]
-    print("fetched %d, failed %d, kits now %d (%d no longer in the sitemap, kept)" % (fetched, failed, len(kits), len(gone)))
+    print("fetched %d, failed %d, with products info %d, kits now %d (%d no longer in the sitemap, kept; %d still to re-read)" % (
+        fetched, failed, with_info, len(kits), len(gone), sum(1 for v in kits.values() if (v.get("iv") or 0) < INFO_V)))
     data = {
         "source": BASE + "/en-us/",
         "generated": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
