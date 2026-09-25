@@ -8,6 +8,10 @@ name: tcg-menu-probe
 on:
   workflow_dispatch:
     inputs:
+      root:
+        description: Top menu item to open (regex, case-insensitive)
+        required: false
+        default: "trading"
       tab:
         description: Tab whose panel markup to dump
         required: false
@@ -30,6 +34,7 @@ jobs:
     timeout-minutes: 10
     env:
       TAB: ${{ inputs.tab }}
+      ROOT: ${{ inputs.root }}
       DARK: ${{ inputs.dark }}
       LAYOUT: ${{ inputs.layout }}
       SHOT: probe-shots/tcgmenu-${{ github.run_id }}.jpg
@@ -95,7 +100,7 @@ jobs:
             // --- open Trading Cards --------------------------------------
             const labels = await page.evaluate(() => [...document.querySelectorAll('.tmenu_item--root')].map(e => (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)));
             console.log('ROOTS-DOM', JSON.stringify(labels));
-            const idx = labels.findIndex(t => /trading/i.test(t));
+            const idx = labels.findIndex(t => new RegExp(process.env.ROOT || 'trading', 'i').test(t));
             if (idx < 0) { console.log('NO-TRADING-ROOT'); await browser.close(); return; }
             const roots = await page.$$('.tmenu_item--root');
             await roots[idx].hover(); await sleep(1500);
