@@ -141,17 +141,27 @@
         </aside>
         {%- endif -%}
         {%- if show_wh -%}
-        <aside class="xg-class xg-unit" aria-label="Unit specs">
+        {%- comment -%}
+          Army, datasheet, unit size, points and keywords are chips (owner
+          2026-09-25: "make these clickable so you can bring up other warhammer
+          comps? like how we do by boardgames"): each opens the other 40K boxes
+          in stock that share it (worker /w40k/like.json). Size, points and
+          keywords stay inside this army (data-army).
+        {%- endcomment -%}
+        {%- assign wh_army = wu.faction | escape -%}
+        {%- assign wh_name = wu.name | remove: ' [Legends]' | escape -%}
+        <aside class="xg-class xg-unit" aria-label="Unit specs" data-army="{{ wh_army }}">
           <h3 class="xg-class__title">Unit specs</h3>
           <dl>
-            <dt>Army</dt><dd>{{ wu.faction | escape }}{% if wu.legends %} <span class="xg-unit__tag">Legends</span>{% endif %}</dd>
-            <dt>Datasheet</dt><dd>{{ wu.name | remove: ' [Legends]' | escape }}</dd>
+            <dt>Army</dt><dd><button type="button" class="xg-chip xg-chip--v" data-wkind="army" data-value="{{ wh_army }}" title="Other {{ wh_army }} in stock">{{ wh_army }}</button>{% if wu.legends %} <span class="xg-unit__tag">Legends</span>{% endif %}</dd>
+            <dt>Datasheet</dt><dd><button type="button" class="xg-chip xg-chip--v" data-wkind="datasheet" data-value="{{ wh_name }}" title="Other {{ wh_name }} boxes in stock">{{ wh_name }}</button></dd>
             {%- if wu.models -%}
-            <dt>Unit size</dt><dd>{% if wu.models[0] == wu.models[1] %}{{ wu.models[0] }} {% if wu.models[0] == 1 %}model{% else %}models{% endif %}{% else %}{{ wu.models[0] }}&ndash;{{ wu.models[1] }} models{% endif %}</dd>
+            {%- if wu.models[0] == wu.models[1] -%}{%- assign wh_size = wu.models[0] | append: '' -%}{%- else -%}{%- assign wh_size = wu.models[0] | append: '-' | append: wu.models[1] -%}{%- endif -%}
+            <dt>Unit size</dt><dd><button type="button" class="xg-chip xg-chip--v" data-wkind="size" data-value="{{ wh_size }}" title="Other {{ wh_army }} units of this size in stock">{% if wu.models[0] == wu.models[1] %}{{ wu.models[0] }} {% if wu.models[0] == 1 %}model{% else %}models{% endif %}{% else %}{{ wu.models[0] }}&ndash;{{ wu.models[1] }} models{% endif %}</button></dd>
             {%- endif -%}
             {%- if wu.sizes.size > 0 -%}
             <dt>Points</dt>
-            <dd><ul class="xg-unit__pts">{% for z in wu.sizes %}<li><span>{{ z.m | replace: '-', '&ndash;' }} model{% unless z.m == '1' %}s{% endunless %}</span><b>{{ z.p }} pts</b></li>{% endfor %}</ul></dd>
+            <dd><ul class="xg-unit__pts">{% for z in wu.sizes %}<li><span>{{ z.m | replace: '-', '&ndash;' }} model{% unless z.m == '1' %}s{% endunless %}</span><button type="button" class="xg-chip xg-chip--v" data-wkind="points" data-value="{{ z.p }}" title="Other {{ wh_army }} units around {{ z.p }} pts in stock">{{ z.p }} pts</button></li>{% endfor %}</ul></dd>
             {%- endif -%}
           </dl>
           {%- for st in wu.stats -%}
@@ -162,7 +172,8 @@
           </table>
           {%- endfor -%}
           {%- if wu.keywords.size > 0 -%}
-          <dl><dt>Keywords</dt><dd><ul class="xg-class__chips xg-unit__kw">{% for k in wu.keywords %}<li>{{ k | escape }}</li>{% endfor %}{% for k in wu.factionKeywords %}<li class="xg-unit__kw--f">{{ k | escape }}</li>{% endfor %}</ul></dd></dl>
+          <dl><dt>Keywords</dt><dd><ul class="xg-class__chips xg-unit__kw">{% for k in wu.keywords %}<li><button type="button" class="xg-chip" data-wkind="keyword" data-value="{{ k | escape }}" title="Other {{ wh_army }} {{ k | escape }} units in stock">{{ k | escape }}</button></li>{% endfor %}{% for k in wu.factionKeywords %}<li class="xg-unit__kw--f"><button type="button" class="xg-chip" data-wkind="keyword" data-value="{{ k | escape }}" title="Other {{ k | escape }} units in stock">{{ k | escape }}</button></li>{% endfor %}</ul></dd></dl>
+          <p class="xg-class__hint">Tap the army, datasheet, size, points or a keyword to see the other boxes we have in stock with it.</p>
           {%- endif -%}
           <p class="xg-class__hint">From the community <a href="https://github.com/BSData/wh40k-10e" target="_blank" rel="noopener">BSData</a> 10th edition datasheets, updated weekly. Unofficial: points change with each balance update, so check the latest Games Workshop rules for your games.</p>
         </aside>
@@ -239,8 +250,12 @@
         .xg-unit__stats th:first-child { border-radius: 6px 0 0 6px; } .xg-unit__stats th:last-child { border-radius: 0 6px 6px 0; }
         .xg-unit__stats td { padding: 6px 0 2px; font-size: 16px; font-weight: 700; color: var(--xg-ink, #10171a); background: transparent; }
         html[data-xg-theme="dark"] .xg-unit__stats th { background: #e6ebee; color: #14181b; }
-        .xg-unit__kw li { padding: 2px 8px; border-radius: 999px; background: var(--xg-surface, #fff); border: 1px solid var(--xg-border, #e3e7ea); font-size: 12px; font-weight: 500; color: var(--xg-text, #4b5560); }
-        .xg-unit__kw li.xg-unit__kw--f { border-color: var(--xg-red, #d62c28); color: var(--xg-red, #d62c28); }
+        .xg-unit__kw .xg-chip { font-size: 12px; padding: 2px 8px; }
+        .xg-unit__kw li.xg-unit__kw--f .xg-chip { border-color: var(--xg-red, #d62c28); color: var(--xg-red, #d62c28); }
+        .xg-chip.xg-chip--v { padding: 2px 10px; font-size: 13.5px; font-weight: 600; color: var(--xg-ink, #10171a); }
+        .xg-chip.xg-chip--v:hover, .xg-chip.xg-chip--v:focus-visible { color: var(--xg-red, #d62c28); }
+        .xg-unit__pts li { align-items: center; }
+        .xg-unit__pts .xg-chip--v { font-variant-numeric: tabular-nums; }
         .xg-unit__weapons { grid-column: 1 / -1; min-width: 0; }
         /* Wide screens: the weapons table sits in the left column beside the
            Unit specs card (under the description when there is one; at the
@@ -286,6 +301,8 @@
       </style>
       {%- if show_class -%}
       <p class="xg-class__hint">Tap a category or mechanism to see the other games we have in stock with it.</p>
+      {%- endif -%}
+      {%- if show_class or show_wh -%}
       <script>
         (function () {
           if (window.__xgLike) return; window.__xgLike = 1;
@@ -309,6 +326,46 @@
             return box;
           }
           function close() { if (!box) return; box.hidden = true; document.body.style.overflow = ''; }
+          function sizeLabel(v) { var m = String(v).split('-'); return m.length > 1 ? m[0] + '–' + m[1] + ' models' : (m[0] === '1' ? '1 model' : m[0] + ' models'); }
+          function openUnits(kind, value, army) {
+            var p = panel();
+            var t = kind === 'army' ? value + ' in stock'
+              : kind === 'datasheet' ? value + ' boxes in stock'
+              : kind === 'size' ? army + ' units of ' + sizeLabel(value) + ' in stock'
+              : kind === 'points' ? army + ' units around ' + value + ' pts in stock'
+              : (army && army !== value ? army + ' ' : '') + value + ' units in stock';
+            p.querySelector('#xg-like-title').textContent = t;
+            p.querySelector('.xg-like__sub').textContent = 'Looking…';
+            p.querySelector('.xg-like__grid').innerHTML = '';
+            p.hidden = false; document.body.style.overflow = 'hidden';
+            fetch(W + '/w40k/like.json?kind=' + encodeURIComponent(kind) + '&value=' + encodeURIComponent(value) + '&army=' + encodeURIComponent(army || '') + '&exclude=' + encodeURIComponent(here) + '&limit=36')
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (p.hidden) return;
+                var units = (j && j.ok && j.units) || [];
+                var sub = p.querySelector('.xg-like__sub'), grid = p.querySelector('.xg-like__grid');
+                if (!units.length) { sub.textContent = ''; grid.innerHTML = '<div class="xg-like__empty">Nothing else like that is in stock right now.</div>'; return; }
+                sub.textContent = j.count + (j.count === 1 ? ' box' : ' boxes') + ' on the shelf at Exor Games' + (kind === 'points' ? ', closest in points first' : '') + '. Unit data from the community BSData datasheets.';
+                grid.innerHTML = units.map(function (u) {
+                  var meta = [];
+                  if (u.datasheet && kind !== 'datasheet') meta.push(u.datasheet);
+                  if (u.points) meta.push(u.points + ' pts');
+                  if (u.size) meta.push(sizeLabel(u.size));
+                  if (kind === 'datasheet' && u.army) meta.unshift(u.army);
+                  return card(u, meta);
+                }).join('');
+              })
+              .catch(function () { if (!p.hidden) p.querySelector('.xg-like__sub').textContent = 'Could not load the list right now.'; });
+          }
+          function card(g, meta) {
+            return '<div class="xg-like__card"><a href="' + esc(g.url) + '">' +
+              (g.image ? '<img src="' + esc(g.image) + '" alt="' + esc(g.title) + '" loading="lazy">' : '<div class="xg-like__noimg"></div>') +
+              '<span class="xg-like__t">' + esc(g.title) + '</span>' +
+              '<span class="xg-like__m">' + esc(meta.join(' · ')) + '</span>' +
+              '<span class="xg-like__p">$' + esc(g.price) + '</span></a>' +
+              (g.variant ? '<button type="button" class="xg-like__add" data-variant="' + esc(g.variant) + '" data-title="' + esc(g.title) + '" data-image="' + esc(g.image || '') + '" data-url="' + esc(g.url) + '" data-cents="' + esc(Math.round(Number(g.price) * 100)) + '">Add to cart</button>' : '') +
+              '</div>';
+          }
           function open(kind, value) {
             var p = panel();
             p.querySelector('#xg-like-title').textContent = (kind === 'mechanism' ? 'Games with ' : '') + value + (kind === 'category' ? ' games' : '') + ' in stock';
@@ -351,6 +408,13 @@
               .catch(function () { b.disabled = false; b.textContent = 'Try again'; });
           }
           document.addEventListener('click', function (e) {
+            var w = e.target.closest && e.target.closest('.xg-chip[data-wkind]');
+            if (w) {
+              e.preventDefault();
+              var a = w.closest('[data-army]');
+              openUnits(w.getAttribute('data-wkind'), w.getAttribute('data-value'), a ? a.getAttribute('data-army') : '');
+              return;
+            }
             var c = e.target.closest && e.target.closest('.xg-chip[data-kind]');
             if (!c) return;
             e.preventDefault();
