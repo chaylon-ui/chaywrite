@@ -220,12 +220,18 @@ const GP_KEYS = ["gp_line", "gp_scale", "gp_number", "gp_series", "gp_release", 
 
 /* Bandai's PRODUCTS INFO -> the gp_info json ({intro, features, includes}), or "" when
    there is nothing worth showing. Strings trimmed, lists capped. */
+const INCLUDE_HEAD = /^[\[【]\s*(includes?|accessories|set contents?|contents|components|included items?)\s*[\]】]$/i;
 export function kitInfo(info) {
   if (!info) return "";
   const str = (x, n) => String(x || "").replace(/\s+/g, " ").trim().slice(0, n);
   const list = (a) => (Array.isArray(a) ? a : []).map((x) => str(x, 240)).filter(Boolean).slice(0, 20);
   const out = {};
-  const intro = str(info.intro, 600), features = list(info.features), includes = list(info.includes);
+  let features = list(info.features), includes = list(info.includes);
+  /* Some pages head the box list with a full-width "【Includes】" the crawler
+     read as one more feature point (Challia's Rick Dom, 2026-09-25): split there. */
+  const cut = features.findIndex((f) => INCLUDE_HEAD.test(f));
+  if (cut > -1) { includes = features.slice(cut + 1).concat(includes).slice(0, 20); features = features.slice(0, cut); }
+  const intro = str(info.intro, 600);
   if (intro) out.intro = intro;
   if (features.length) out.features = features;
   if (includes.length) out.includes = includes;

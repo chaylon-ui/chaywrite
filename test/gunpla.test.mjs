@@ -110,3 +110,9 @@ test("Bandai's PRODUCTS INFO becomes gp_info json, and is cleared when it goes a
   assert.notEqual(none.sig, r.sig);
   assert.equal(kitInfo({}), "");
 });
+
+test("a full-width 【Includes】 read as a feature splits into the box list (Challia's Rick Dom)", () => {
+  const v = JSON.parse(kitInfo({ intro: "Challia Bull's Rick Dom!", features: ["Transformable.", "Includes a giant bazooka.", "【Includes】", "Weapons ×1 set", "Lead wire×1"] }));
+  assert.deepEqual(v.features, ["Transformable.", "Includes a giant bazooka."]);
+  assert.deepEqual(v.includes, ["Weapons ×1 set", "Lead wire×1"]);
+});
