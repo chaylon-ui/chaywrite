@@ -40,6 +40,13 @@ eq('vallejo primers are Surface Primer', [parseTitle('Vallejo', 'VALLEJO: GAME A
 eq('vallejo "GAME AIR - X"', parseTitle('Vallejo', 'VALLEJO: GAME AIR - SCAR RED 17 ML'), { range: 'Game Air', name: 'SCAR RED' });
 eq('army painter marker + colour primer spray', [parseTitle('The Army Painter', 'THE ARMY PAINTER SPEEDPAINT MARKER ABSOLUTION GREEN'), parseTitle('The Army Painter', 'THE ARMY PAINTER COLOUR PRIMER: WOLF GREY SPRAY')],
   [{ range: 'Speedpaint Marker', name: 'ABSOLUTION GREEN' }, { range: 'Warpaints Primer', name: 'WOLF GREY' }]);
+// GW's 2026 "Warhammer Colour" labels and unprefixed six-packs (not in the Citadel collection)
+eq('warhammer colour with range', parseTitle('Citadel', 'WARHAMMER COLOUR LAYER EVIL SUNZ SCARLET 12ML'), { range: 'Layer', name: 'EVIL SUNZ SCARLET' });
+eq('warhammer colour without range is loose', [parseTitle('Citadel', 'WARHAMMER COLOUR ABADDON BLACK 12ML'), parseTitle('Citadel', 'MEPHISTON RED 12ML (6-PACK)'), parseTitle('Citadel', 'CITADEL MEPHISTON RED SPRAY')],
+  [{ range: null, name: 'ABADDON BLACK', loose: true }, { range: null, name: 'MEPHISTON RED', loose: true }, { range: 'Spray', name: 'MEPHISTON RED', loose: true }]);
+const res2 = buildSwatches(chart, [{ brand: 'Citadel', products: [P('WARHAMMER COLOUR ABADDON BLACK 12ML', 'wc-ab'), P('WARHAMMER COLOUR KABALITE GREEN 12ML', 'wc-kg'), P('WARHAMMER COLOUR PAINTING HANDLE', 'wc-h'), P('WARHAMMER COLOUR TOOL SET', 'wc-t')] }]);
+eq('loose labels take the range the chart gives (Base before Air); unknown loose names are left out',
+  res2.swatches.map((s) => s.n + ':' + s.items.map((i) => i.r).join()), ['Abaddon Black:Base', 'Kabalite Green:Layer']);
 // the real chart: a few of our real titles resolve
 // (PAINT_CHART=path/to/data/paint-colours.json from chaywrite main; skipped when unset)
 const real = process.env.PAINT_CHART ? JSON.parse(readFileSync(process.env.PAINT_CHART, 'utf8')).brands : null;
