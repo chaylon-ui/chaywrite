@@ -220,8 +220,11 @@
           <dl>
             {%- if btp.kind != 'salvage' -%}<dt>ForcePack</dt><dd>{{ btp.pack | escape }}</dd>
             <dt>Units</dt><dd>{{ btp.units.size }} {% if btp.units.size == 1 %}miniature{% else %}miniatures{% endif %}</dd>{%- endif -%}
-            <dt>Weight {% assign bt_cl = bt_classes | split: '|' %}{% if bt_cl.size > 1 %}classes{% else %}class{% endif %}</dt>
+            {%- assign bt_cl = bt_classes | split: '|' -%}
+            {%- if bt_cl.size > 0 -%}
+            <dt>Weight {% if bt_cl.size > 1 %}classes{% else %}class{% endif %}</dt>
             <dd><ul class="xg-class__chips">{% for c in bt_cl %}{% if c != blank %}<li><span class="xg-bt__cls xg-bt__cls--{{ c | handleize }}">{{ c }}</span></li>{% endif %}{% endfor %}</ul></dd>
+            {%- endif -%}
             <dt>Tech base</dt><dd>{{ bt_tech | split: '|' | join: ' / ' }}</dd>
           </dl>
         </aside>
@@ -234,8 +237,8 @@
             {%- for u in btp.units -%}
             <tr>
               <td class="xg-bt__name">{% if u.mul %}<a href="https://masterunitlist.info/Unit/Details/{{ u.mul }}" target="_blank" rel="noopener" title="Master Unit List">{{ u.name | escape }}</a>{% else %}{{ u.name | escape }}{% endif %}{% if u.model != blank %}<span>{{ u.model | escape }}</span>{% endif %}{% if u.type != 'BattleMech' %}<span>{{ u.type | escape }}</span>{% endif %}</td>
-              <td>{{ u.tons }}</td>
-              <td><span class="xg-bt__cls xg-bt__cls--{{ u.cls | handleize }}">{{ u.cls }}</span></td>
+              <td>{% if u.tons %}{{ u.tons }}{% else %}&ndash;{% endif %}</td>
+              <td>{% if u.cls != blank %}<span class="xg-bt__cls xg-bt__cls--{{ u.cls | handleize }}">{{ u.cls }}</span>{% else %}&ndash;{% endif %}</td>
               <td>{{ u.walk }}/{{ u.run }}{% if u.jump > 0 %}/{{ u.jump }}{% endif %}</td>
               <td>{{ u.role | escape }}</td>
               <td>{{ u.tech }}</td>
