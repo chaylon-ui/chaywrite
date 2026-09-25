@@ -266,6 +266,8 @@
       <style>
         .xg-desc--split { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px 32px; align-items: start; }
         @media (max-width: 767px) { .xg-desc--split { grid-template-columns: 1fr; } }
+        .xg-desc--split.xg-desc--solo { grid-template-columns: 1fr; }
+        .xg-class.xg-class--meta { margin: 18px 0 0; max-width: 520px; }
         .xg-desc__text { font-size: 15.5px; line-height: 1.6; color: var(--xg-text, #3d454b); }
         .xg-desc__note { margin: 12px 0 0; font-size: 12.5px; color: var(--xg-muted, #8a9299); }
         .xg-desc__note a { color: inherit; text-decoration: underline; }
@@ -486,6 +488,31 @@
             e.preventDefault();
             open(c.getAttribute('data-kind'), c.getAttribute('data-value'));
           });
+        })();
+        /* Board games: on wide screens the Classification card sits in the buy
+           column, under the Add to cart / payment buttons (owner, 2026-09-25,
+           screenshot of I Feel Attacked: "for boardgames, this could go there"),
+           and the description takes the full width. Phones keep it where it
+           was. Chip clicks are delegated on document, so they follow it. */
+        (function () {
+          var card = document.querySelector('.xg-desc aside.xg-class[aria-label="Classification"]');
+          var meta = document.querySelector('.product-single-right .product-single__meta') || document.querySelector('.product-single__meta');
+          if (!card || !meta || !window.matchMedia) return;
+          var home = card.parentNode, next = card.nextSibling, desc = card.closest('.xg-desc');
+          var mq = window.matchMedia('(min-width: 768px)');
+          function place() {
+            if (mq.matches && card.parentNode !== meta) {
+              meta.appendChild(card);
+              card.classList.add('xg-class--meta');
+              if (desc && !desc.querySelector('aside, .xg-bt__units, .xg-unit__weapons')) desc.classList.add('xg-desc--solo');
+            } else if (!mq.matches && card.parentNode !== home) {
+              home.insertBefore(card, next);
+              card.classList.remove('xg-class--meta');
+              if (desc) desc.classList.remove('xg-desc--solo');
+            }
+          }
+          place();
+          if (mq.addEventListener) mq.addEventListener('change', place); else if (mq.addListener) mq.addListener(place);
         })();
       </script>
       {%- endif -%}
