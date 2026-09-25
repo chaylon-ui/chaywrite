@@ -12,8 +12,9 @@
 
   Layout (owner, same day: "a lot more structured ... smaller and tighter"):
   one compact shopping list - each pot once, in the order the recipe first
-  uses it - then "Which paint goes where" folded under a toggle. Paints we do
-  not list sit on one muted line. No scheme found -> the card stays hidden.
+  uses it. Paints we do not list sit on one muted line. (The step-by-step
+  link and the "Which paint goes where" breakdown were removed at the
+  owner's request; the credit line links to 'Eavy Archive.) No scheme found -> the card stays hidden.
 
   Teaser (owner, same day: "add a fun little graphic up near the top to say
   don't forget the paint and maybe an arrow or something to do with Warhammer
@@ -44,13 +45,8 @@
   <div class="xg-eavy__more"></div>
   <div class="xg-eavy__act">
     <button type="button" class="xg-eavy__add"></button>
-    <a class="xg-eavy__how" target="_blank" rel="noopener">Step-by-step guide &rsaquo;</a>
   </div>
   <div class="xg-eavy__msg" role="status"></div>
-  <details class="xg-eavy__where">
-    <summary>Which paint goes where</summary>
-    <div class="xg-eavy__areas"></div>
-  </details>
   <p class="xg-eavy__credit">Paint lists from <a href="https://eavy-archive.com/" target="_blank" rel="noopener">&lsquo;Eavy Archive</a>, box-art recipes collected by The Infernal Brush community (unofficial, not endorsed by Games Workshop).</p>
 </section>
 <style>
@@ -77,16 +73,9 @@
   .xg-eavy__act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 12px 0 0; }
   .xg-eavy .xg-eavy__add { height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--xg-red, #d62c28); color: #fff !important; font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; }
   .xg-eavy__add[disabled] { opacity: .65; cursor: default; }
-  .xg-eavy .xg-eavy__how { font-size: 13px; font-weight: 600; color: var(--e-ink) !important; text-decoration: underline; }
   .xg-eavy__msg { margin: 6px 0 0; font-size: 12.5px; color: var(--e-mute); }
   .xg-eavy__msg:empty { display: none; }
   .xg-eavy__msg a { color: inherit; text-decoration: underline; }
-  .xg-eavy__where { margin: 12px 0 0; border-top: 1px solid var(--e-line); }
-  .xg-eavy__where summary { padding: 9px 0 2px; font-size: 12.5px; font-weight: 700; color: var(--e-ink); cursor: pointer; list-style: revert; }
-  .xg-eavy__areas { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; padding: 6px 0 2px; font-size: 12.5px; }
-  .xg-eavy__an { font-weight: 700; color: var(--e-ink); }
-  .xg-eavy__an a { font-weight: 500; color: var(--e-mute) !important; text-decoration: underline; margin-left: 4px; }
-  .xg-eavy__ap { color: var(--e-text); }
   .xg-eavy { scroll-margin-top: 120px; }
   .xg-eavy.is-flash { animation: xgEavyFlash 1.4s ease-out 1; }
   @keyframes xgEavyFlash { 0%, 30% { box-shadow: 0 0 0 3px var(--xg-red, #d62c28); } 100% { box-shadow: 0 0 0 3px transparent; } }
@@ -109,8 +98,6 @@
     .xg-eavy__top { flex-wrap: nowrap; }
     .xg-eavy__pick select { max-width: 150px; }
     .xg-eavy .xg-eavy__ttl { font-size: 12px; letter-spacing: .06em; }
-    .xg-eavy__areas { grid-template-columns: 1fr; gap: 1px; }
-    .xg-eavy__an { margin-top: 5px; }
   }
 </style>
 <script>
@@ -156,11 +143,6 @@
       all.hidden = pp.ours.length <= fold;
       all.textContent = 'Show all ' + pp.ours.length + ' paints';
       $('.xg-eavy__more').textContent = pp.other.length ? 'Also used, not sold here: ' + pp.other.map(function (p) { return p.name; }).join(', ') : '';
-      $('.xg-eavy__areas').innerHTML = s.areas.map(function (ar) {
-        return '<div class="xg-eavy__an">' + esc(ar.name) + '<a href="' + esc(ar.url) + '" target="_blank" rel="noopener">how</a></div>' +
-          '<div class="xg-eavy__ap">' + ar.paints.map(function (p) { return esc(p.name); }).join(' · ') + '</div>';
-      }).join('');
-      $('.xg-eavy__how').href = s.url;
       var add = $('.xg-eavy__add');
       add.hidden = !inst.length; add.disabled = false;
       add.textContent = 'Add ' + inst.length + ' in-stock paint' + (inst.length === 1 ? '' : 's') + ' · ' + money(sum);
