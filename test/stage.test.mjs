@@ -242,14 +242,14 @@ test("the decision emails and the popup payload carry the number, the list and t
   r.number = "9P-1007"; r.bp = { number: "908738" };
   const a = buildDecisionEmail(r, "approved");
   assert.match(a.subject, /9P-1007 has been approved/);
-  for (const x of ["Hi Ada,", "908738", "Lightning Bolt", "Sol Ring", "Cash total: $6.50", "51 Allen Street", "logo2.png"]) assert.ok(a.html.includes(x) || a.text.includes(x), x);
+  for (const x of ["Hi Ada,", "908738", "Lightning Bolt", "Sol Ring", "Cash total: $6.50", "51 Allen Street", "exor-games-logo-transparent.png"]) assert.ok(a.html.includes(x) || a.text.includes(x), x);
   assert.ok(a.text.includes("Cash total: $6.50") && a.text.includes("51 Allen Street"));
   r.customerNote = "The Sol Ring is a proxy <b>";
   const d = buildDecisionEmail(r, "rejected");
   assert.match(d.subject, /About your buylist 9P-1007/);
   assert.ok(d.html.includes("could not accept") && d.html.includes("The Sol Ring is a proxy &lt;b&gt;") && !d.html.includes("Cash total"));
   assert.ok(d.text.includes("Reason: The Sol Ring is a proxy"));
-  assert.ok(buildEmail(r).html.includes("logo2.png"));
+  assert.ok(buildEmail(r).html.includes("exor-games-logo-transparent.png"));
   const ins = instructionsPayload();
   assert.ok(ins.nextStep.startsWith("What's the next step?") && ins.sections.length === 7 && ins.sections[1].address === true);
   assert.deepEqual(ins.address.slice(0, 2), ["Exor Games", "ATTN: Gage Office"]);

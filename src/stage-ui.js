@@ -24,7 +24,7 @@ export const BRAND = "9Pocket by Exor";
 // The store's mark (the theme header's own file), drawn after "9Pocket by" in
 // the bar and on the sign-in pages (owner, 2026-09-22: "instead of text
 // exor, add this logo").
-export const LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/logo2.png?v=1789388474";
+export const LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946";
 const brandMark = () => `9Pocket <span class="by">by</span> <img class="logo" src="${LOGO}" alt="Exor Games" width="47" height="34">`;
 const ADMIN_CUSTOMER = "https://admin.shopify.com/store/most-wanted-ca/customers/";
 

@@ -804,7 +804,7 @@ html.portrait .tsteps{grid-template-columns:1fr}
 .zoomtv .zc .emblbl{z-index:12}
 .zoomtv .zc .emblbl span{font-size:2.1vh}
 </style></head><body>
-<header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span><div class="tapetop" id="tapetop" aria-hidden="true"></div></header>
+<header><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games"><span class="sub" id="subhead">Featured Singles · <b>New arrivals over $10</b></span><div class="tapetop" id="tapetop" aria-hidden="true"></div></header>
 <div class="stage">
   <div class="conn" id="conn"><span class="d"></span><span id="connT">connecting…</span></div>
   <div class="ttabs" id="ttabs"></div>
@@ -858,8 +858,8 @@ html.portrait .tsteps{grid-template-columns:1fr}
     <div class="ttp2">TAP ANYWHERE to keep shopping!</div>
   </div></div>
   <div class="tshow" id="tshow"><div class="tsbox2">
-    <img class="tslogo" alt="Exor Games" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/ExorMainLogo.png?v=1727973753&width=560"
-      onerror="this.onerror=null;this.src='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/ExorMainLogo.png?v=1727973753'">
+    <img class="tslogo" alt="Exor Games" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946&width=560"
+      onerror="this.onerror=null;this.src='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946'">
     <div class="tshead">EVERY SINGLE, ONE TAP AWAY!</div>
     <div class="tssub">This screen is a live showcase of the cards we stock — browse it, build a cart, take it home.</div>
     <div class="tsteps">
@@ -1140,7 +1140,7 @@ function cardHTML(c){if(!c)return '';
   :`${c.foil?'<div class="oil"></div>':''}<div class="psticker"><span class="pink">${money(c.price)} $</span></div>${c.foil?`<div class="fsticker"><span class="fink">${foilWordFor(c)}</span></div>`:''}`;
  return `<div class="card ${DARK.includes(c.color)?'dark':''}${TOPLOAD&&!SLEEVES()?' intl':''}" data-c="${H(c.color)}" data-id="${H(KEY(c))}" style="${tiltStyle(KEY(c))}">${face}${tags}</div>`;}
 /* One of the store's e-ink shelf labels, drawn over the card's text box. */
-const ESL_LOGO='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/Exor_Games_Logo-PNG.webp?v=1729099866&width=180';
+const ESL_LOGO='https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946&width=180';
 function ESL_TAG(c){return `<div class="esl"><div class="escr"><div class="enm"><span class="en">${H(c.name)}${c.foil?' ·'+(cardGame(c)==='pokemon'?'Holo':'Foil'):''}</span><span class="ec">${H(String(c.set||'').slice(0,12))}</span></div><div class="erow"><div class="elogo"><img src="${ESL_LOGO}" alt="" loading="lazy"></div><div class="eprice"><span class="ed">$</span>${money(c.price)}</div></div></div><div class="eled"></div></div>`;}
 /* Shingled shelves, top-anchored so the leftover space collects at the bottom. */
 function fillTray(el,cards){const rows=[];for(let i=0;i<cards.length;i+=COLS)rows.push(cards.slice(i,i+COLS));

@@ -93,7 +93,7 @@ function connect(room){
    src slug ("shipday", …). Each row gets a badge and the notification title
    says where the order came from. */
 const SRC = {
-  kiosk:   { label: 'KIOSK',   icon: '<img class="srci" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/ExorMainLogo.png?v=1727973753&width=48" alt="">', title: 'Counter order' },
+  kiosk:   { label: 'KIOSK',   icon: '<img class="srci" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946&width=96" alt="">', title: 'Counter order' },
   shipday: { label: 'SHIPDAY', icon: '🚚', title: 'Pickup order' },
 };
 function srcOf(d, via){ return (d.src || (via === 'kiosk' ? 'kiosk' : '')) || 'other'; }

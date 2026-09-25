@@ -21,7 +21,7 @@ const HOW_TO_SELL = "https://exorgames.com/pages/how-to-sell-cards";
 const STATUS_PAGE = "https://exorgames.com/pages/selling-to-exor-games-buylist";
 const REPLY_TO = "customerservice@exorgames.com";
 export const EMAIL_FROM_DEFAULT = "9Pocket by Exor <9pocket@exorgames.com>";
-const LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/logo2.png?v=1789388474";   // the store's mark, the theme header's own file
+const LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946";   // the store's mark, the theme header's own file (the owner's transparent logo, 2026-09-25)
 // Owner, 2026-09-22: "an ad for Mallow Games to also sell their video games
 // using this graphic inside the email" - the banner the owner uploaded to
 // Shopify Files (2172x724, transparent margins); the CDN serves it resized.
