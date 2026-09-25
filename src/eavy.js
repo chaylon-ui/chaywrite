@@ -28,32 +28,75 @@ const words = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[â
   .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
 const slug = (s) => words(s).join("-");
 
-/* 'Eavy Metal recipes say "Black" / "White" for the plain pots. */
-const ALIASES = { black: "Abaddon Black", white: "White Scar", abaddonblack: "Abaddon Black", corax: "Corax White" };
+/* 'Eavy Metal recipes say "Black" / "White" for the plain pots, and the older ones use the
+   pre-2012 Citadel names: each maps to the pot GW itself named as its replacement. Spelling
+   slips seen in the data map to the real name. */
+const ALIASES = { black: "Abaddon Black", white: "White Scar", abaddonblack: "Abaddon Black", corax: "Corax White",
+  bleachedbone: "Ushabti Bone", scorchedbrown: "Rhinox Hide", codexgrey: "Dawnstone", bestialbrown: "Mournfang Brown",
+  mithrilsilver: "Runefang Steel", chainmail: "Ironbreaker", boltgunmetal: "Leadbelcher", fortressgrey: "Administratum Grey",
+  regalblue: "Kantor Blue", shininggold: "Gehenna's Gold", goblingreen: "Warboss Green", elfflesh: "Kislev Flesh",
+  scabred: "Khorne Red", tinbitz: "Warplock Bronze", redgore: "Wazdakka Red", burnishedgold: "Auric Armour Gold",
+  devlanmud: "Agrax Earthshade", badabblack: "Nuln Oil", fleshwash: "Reikland Fleshshade", ogrynfleshwash: "Reikland Fleshshade",
+  leviathanpurple: "Druchii Violet", bloodred: "Evil Sunz Scarlet", darkflesh: "Doombull Brown", bubonicbrown: "Zamesi Desert",
+  verminbrown: "Skrag Brown", fieryorange: "Troll Slayer Orange", lichepurple: "Xereus Purple",
+  abbadonblack: "Abaddon Black", gorgruntafur: "Gore-Grunta Fur", evilsunsscarlet: "Evil Sunz Scarlet",
+  kreigkhaki: "Krieg Khaki", druchiviolet: "Druchii Violet", cadianflesh: "Cadian Fleshtone",
+  ironwarrior: "Iron Warriors", gehennasgold: "Gehenna's Gold", dawnstonegrey: "Dawnstone", xeruspurple: "Xereus Purple",
+  scragbrown: "Skrag Brown", evilsunzred: "Evil Sunz Scarlet", sepraphimsepia: "Seraphim Sepia",
+  reiklandfleshadegloss: "Reikland Fleshshade Gloss", skullwhite: "White Scar" };
+// the pre-2012 names: the card says which old pot the recipe named
+const RENAMED = new Set(["bleachedbone", "scorchedbrown", "codexgrey", "bestialbrown", "mithrilsilver", "chainmail", "boltgunmetal",
+  "fortressgrey", "regalblue", "shininggold", "goblingreen", "elfflesh", "scabred", "tinbitz", "redgore", "burnishedgold", "devlanmud",
+  "badabblack", "fleshwash", "ogrynfleshwash", "leviathanpurple", "bloodred", "darkflesh", "bubonicbrown", "verminbrown", "fieryorange", "lichepurple", "skullwhite"]);
+// step words and mixes the crawler read as paint names ("Basecoat Mix", "Previous mix", "Water", "Add White")
+export const NOT_A_PAINT = /\b(mix|mixes|basecoat|base coat|previous|water|thinned|glaze medium|lahmian medium)\b|^add\b|:/i;
 /* A paint's name is in several Citadel ranges (Leadbelcher Base / Spray / Air): the pot a recipe means. */
 const RANGE_PREF = ["Base", "Layer", "Shade", "Contrast", "Technical", "Dry", "Glaze", "Air", "Spray"];
 
 /* /paints.json swatches -> Citadel paint name key -> the listing to link. */
 export function citadelIndex(paints) {
   const best = new Map();
+  // word-boundary prefixes of each name ("khorne" -> Khorne Red, "flashgitz" -> Flash Gitz Yellow):
+  // recipes often shorten a paint to its first word(s)
+  const pre = new Map();
   for (const s of (paints && paints.swatches) || []) {
     if (s.b !== "Citadel") continue;
     for (const it of s.items || []) {
-      const cand = { handle: it.u, title: it.t, price: it.p, a: !!it.a, v: it.v, i: it.i || null, h: s.h || null, r: it.r };
+      const cand = { handle: it.u, title: it.t, price: it.p, a: !!it.a, v: it.v, i: it.i || null, h: s.h || null, r: it.r, n: s.n };
       const k = key(s.n), prev = best.get(k);
       // in stock first, then the pot a recipe means (Base before Spray)
       if (!prev || (cand.a && !prev.a) || (cand.a === prev.a && rank(cand.r) < rank(prev.r))) best.set(k, cand);
+      const ws = words(s.n);
+      for (let i = 1; i < ws.length; i++) {
+        const pk = ws.slice(0, i).join("");
+        if (pk.length < 5) continue;
+        if (!pre.has(pk)) pre.set(pk, new Set());
+        pre.get(pk).add(k);
+      }
     }
   }
+  best.prefix = pre;
   return best;
 }
+const better = (x, y) => !y || (x.a && !y.a) || (x.a === y.a && rank(x.r) < rank(y.r));
 function rank(r) { const i = RANGE_PREF.indexOf(r); return i < 0 ? 99 : i; }
 
 export function resolvePaint(idx, name) {
   const k = key(name);
+  if (idx.get(k)) return { name, ...idx.get(k) };
   const alias = ALIASES[k];
-  const hit = idx.get(k) || (alias && idx.get(key(alias)));
-  return hit ? { name: alias && !idx.get(k) ? alias : name, ...hit } : { name };
+  if (alias && idx.get(key(alias))) return { name: alias, ...(RENAMED.has(k) ? { was: name } : {}), ...idx.get(key(alias)) };
+  // "Doombull" -> Doombull Brown: the first word(s) of exactly one colour name
+  const cands = idx.prefix && idx.prefix.get(k);
+  if (cands) {
+    const names = new Set([...cands].map((c) => c.replace(/gloss$/, "")));
+    if (names.size === 1) {
+      let bk = null;
+      for (const c of cands) if (better(idx.get(c), bk && idx.get(bk))) bk = c;
+      if (bk) return { name: idx.get(bk).n, ...idx.get(bk) };
+    }
+  }
+  return { name };
 }
 
 /* data/eavy-archive.json -> lookup tables. Every page is an army page; its
@@ -159,11 +202,17 @@ export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40) {
       name: s.name, url: surl,
       areas: s.areas.map((ar) => ({
         name: ar.name, url: surl + "&block=" + encodeURIComponent(ar.slug),
-        paints: ar.paints.map((n) => resolvePaint(paintIdx, n)),
-      })),
+        paints: dedupe(ar.paints.filter((n) => !NOT_A_PAINT.test(n)).map((n) => resolvePaint(paintIdx, n))),
+      })).filter((ar) => ar.paints.length),
     };
   });
   return { ok: true, page: { url: p.url, title: p.title }, schemes };
+}
+
+// one chip per pot: "Black" and "Abaddon Black" in one area are the same paint
+function dedupe(list) {
+  const seen = new Set();
+  return list.filter((p) => { const k = p.handle || key(p.name); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 const CREDIT = "Box-art recipes from 'Eavy Archive, collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)";
@@ -173,7 +222,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
   const title = (url.searchParams.get("title") || "").slice(0, 200);
   const faction = (url.searchParams.get("faction") || "").slice(0, 80);
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=1&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)));
+  const ck = new Request("https://cache.internal/eavy/for.json?v=2&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)));
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;

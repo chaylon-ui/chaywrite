@@ -65,3 +65,25 @@ if (process.env.EAVY_DATA && existsSync(process.env.EAVY_DATA)) {
     assert.equal(pickPage(ix, "WARHAMMER 40,000 ADEPTUS MECHANICUS: SKITARII RANGERS", "Adeptus Mechanicus").page.faction, "adeptus-mechanicus");
   });
 }
+
+test("recipe shorthand, old Citadel names and step words", () => {
+  const P = { swatches: [
+    { b: "Citadel", n: "Doombull Brown", h: "#5D0009", items: [{ r: "Layer", u: "db", t: "LAYER: DOOMBULL BROWN", p: "4.59", a: true, v: 5 }] },
+    { b: "Citadel", n: "Ushabti Bone", h: "#BBBB7F", items: [{ r: "Layer", u: "ub", t: "LAYER: USHABTI BONE", p: "4.59", a: true, v: 6 }] },
+    { b: "Citadel", n: "Reikland Fleshshade", h: "#CA6C4D", items: [{ r: "Shade", u: "rf", t: "SHADE: REIKLAND FLESHSHADE", p: "7.25", a: true, v: 7 }] },
+    { b: "Citadel", n: "Reikland Fleshshade Gloss", h: "#CA6C4D", items: [{ r: "Shade", u: "rfg", t: "SHADE: REIKLAND FLESHSHADE GLOSS", p: "7.25", a: false, v: 8 }] },
+    { b: "Citadel", n: "Evil Sunz Scarlet", h: "#C01411", items: [{ r: "Layer", u: "ess", t: "x", p: "4.59", a: true, v: 2 }] },
+  ] };
+  const idx = citadelIndex(P);
+  assert.deepEqual([resolvePaint(idx, "Doombull").name, resolvePaint(idx, "Doombull").handle], ["Doombull Brown", "db"]);
+  const bb = resolvePaint(idx, "Bleached Bone");
+  assert.deepEqual([bb.name, bb.was, bb.handle], ["Ushabti Bone", "Bleached Bone", "ub"]);
+  assert.equal(resolvePaint(idx, "Reikland").handle, "rf");                       // the gloss is the same colour
+  assert.equal(resolvePaint(idx, "Evil").handle, undefined);                      // too short to guess
+  const D = { pages: { u: { url: "https://e/40k/orks/", title: "Orks", game: "40k", faction: "orks", sub: "",
+    schemes: [{ slug: "g", name: "Orks (General)", areas: [
+      { slug: "a", name: "Skin", paints: ["Basecoat Mix", "Evil Sunz Scarlet", "Previous mix", "Water", "Add White to previous mix", "Evil Sunz Scarlet"] },
+      { slug: "b", name: "Mix only", paints: ["Highlight Mix"] }] }] } } };
+  const r = forProduct(indexEavy(D), idx, "WARHAMMER 40,000 ORKS: BOYZ", "Orks");
+  assert.deepEqual(r.schemes[0].areas.map((a) => [a.name, a.paints.map((p) => p.name)]), [["Skin", ["Evil Sunz Scarlet"]]]);
+});
