@@ -24,7 +24,14 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   {%- when 'all-blood-bowl' -%}{%- assign xg_bc_logo = 'Bloodbowl_logo.png' -%}
   {%- when 'all-legions-imperialis' -%}{%- assign xg_bc_logo = 'legions-imperialis-logo-2x.png' -%}
   {%- when 'all-middle-earth' -%}{%- assign xg_bc_logo = 'Middle-Earth_Strategy_Battle_Game_logo.webp' -%}
+  {%- when 'all-bolt-action' -%}{%- assign xg_bc_logo = 'Bolt-Action-final-600x283.png' -%}
+  {%- when 'battletech-miniatures-and-accessories' -%}{%- assign xg_bc_logo = 'BattleTech_2018.webp' -%}
+  {%- when 'all-ak-interactive' -%}{%- assign xg_bc_logo = 'blanco_logo-02-copia.png' -%}
+  {%- when 'citadel-collection' -%}{%- assign xg_bc_logo = 'DgX8B69wOApRYTQ2-300x130.png' -%}
 {%- endcase -%}
+{%- comment -%} Warhammer Colour logo on every Citadel paint line (citadel-base-paints, citadel-contrast-paints, ...) {%- endcomment -%}
+{%- assign xg_bc_head = xg_bc_key | slice: 0, 8 -%}
+{%- if xg_bc_logo == '' and xg_bc_head == 'citadel-' and xg_bc_key contains '-paints' -%}{%- assign xg_bc_logo = 'DgX8B69wOApRYTQ2-300x130.png' -%}{%- endif -%}
 {%- if xg_bc_logo != '' -%}
 <style>
   .breadcrumb-container.xg-bc--logo { background: radial-gradient(ellipse at 50% 45%, #2b3137 0%, #171b1f 55%, #0e1113 100%) !important; }
@@ -107,5 +114,29 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     <p class="h3 banner-secondary mb-0">We pay cash or credit for cards</p>
   </nav>
 </div>
+{%- if xg_bc_logo != '' -%}
+<script>
+  /* The search app's collection pages (/a/search/<handle>) rewrite the banner
+     title with the collection's name after load, which drops the logo. Put
+     it back whenever the title loses its image. */
+  (function () {
+    var box = document.currentScript && document.currentScript.previousElementSibling;
+    if (!box || !box.classList.contains('xg-bc--logo')) return;
+    var src = {{ xg_bc_logo | file_url | json }};
+    function fix() {
+      var h = box.querySelector('.head-title') || box.querySelector('h1');
+      if (!h || h.querySelector('img')) return;
+      var alt = (h.textContent || '').trim();
+      var img = document.createElement('img');
+      img.src = src; img.alt = alt; img.width = 460; img.height = 110;
+      h.classList.add('xg-bc__logo');
+      h.textContent = '';
+      h.appendChild(img);
+    }
+    fix();
+    if (window.MutationObserver) new MutationObserver(fix).observe(box, { childList: true, subtree: true, characterData: true });
+  })();
+</script>
+{%- endif -%}
 
 {% endunless %}
