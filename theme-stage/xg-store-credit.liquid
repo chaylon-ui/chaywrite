@@ -102,7 +102,12 @@
   .binderpos-credit-input-div p .creditBlock{color:var(--xg-ink,#171b1d);font-weight:700}
   .binderpos-credit-input-div input,.binderpos-credit-input-div input#binderpos-credit-input{font-size:18px;font-weight:700;padding:8px 10px;min-width:130px;border:2px solid var(--xg-success,#17784a);border-radius:8px;color:var(--xg-ink,#171b1d);background:var(--xg-surface,#fff);box-sizing:border-box;caret-color:var(--xg-ink,#171b1d)}
   .binderpos-credit-input-div input#binderpos-credit-input::placeholder{color:var(--xg-muted,#707a83);opacity:1}
-  .binderpos-credit-input-div ol{color:var(--xg-muted,#707a83)}
+  /* Their "$" is label.binderpos-credit-symbol, floated over the box's left
+     edge (position:absolute; margin-left:27px) into the box's own 30px left
+     padding - so the box must keep that padding or the amount slides under
+     the sign (owner screenshot 2026-09-25: "$.58"). */
+  .binderpos-credit-input-div input#binderpos-credit-input{padding-left:30px}
+  .binderpos-credit-input-div label.binderpos-credit-symbol{margin-top:12px;margin-left:28px;font-size:18px;line-height:26px;font-weight:700;color:var(--xg-muted,#707a83);pointer-events:none;z-index:1}
   .binderpos-credit-input-div input:focus{outline:3px solid rgba(23,120,74,.28);outline-offset:1px}
   .binderpos-credit-input-div button{font-weight:700;border-radius:8px}
   .binderpos-credit-input-div .xg-credit__all{margin-left:8px;padding:9px 14px;border:2px solid var(--xg-success,#17784a);border-radius:8px;background:var(--xg-success,#17784a);color:var(--xg-inverse-text,#fff);font-size:14px;font-weight:700;line-height:1.2;cursor:pointer;vertical-align:middle;white-space:nowrap}

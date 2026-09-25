@@ -285,3 +285,22 @@ html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .ca
 html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .cart__store-credit-info { color: #aab4ba; }
 html[data-xg-theme="dark"] #_desktop_cart .cart-display .cart-dropdown-inner .cart__empty,
 html[data-xg-theme="dark"] #_mobile_cart .cart-display .cart-dropdown-inner .cart__empty { color: #aab4ba; }
+/* ---- Cart page table in dark mode (owner screenshot, 2026-09-25: "this is
+   also weird for dark mode") --------------------------------------------------
+   theme.css gives EVERY table background-color:#fff, and the cart is a table
+   (form.cart > table), so the rows sat on a white slab while their text had
+   already gone light. The header row is #f8f8f8 (the dark rule in xg-dark.css
+   keys on .cart-items, which this template does not have), the row rules are
+   #f2f2f2, and "Remove" is pinned #000 by .template-cart .cart .product_remove a. */
+html[data-xg-theme="dark"] .template-cart form.cart table { background-color: transparent; }
+html[data-xg-theme="dark"] .template-cart .cart .cart__header { background: #161b1e; border-color: #2a3236; }
+html[data-xg-theme="dark"] .template-cart .cart .cart__header th { color: #aab4ba; border-color: #2a3236; }
+html[data-xg-theme="dark"] .template-cart .cart .cart__row,
+html[data-xg-theme="dark"] .template-cart .cart .cart__row td,
+html[data-xg-theme="dark"] .template-cart .cart .cart_top { border-color: #2a3236; }
+html[data-xg-theme="dark"] .template-cart .cart .list-view-item__title a { color: #eef2f4; }
+html[data-xg-theme="dark"] .template-cart .cart .cart__meta-text,
+html[data-xg-theme="dark"] .template-cart .cart .cart__price-wrapper,
+html[data-xg-theme="dark"] .template-cart .cart .total-product { color: #dfe5e8; }
+html[data-xg-theme="dark"] .template-cart .cart .product_remove a { color: #c3ccd1; }
+html[data-xg-theme="dark"] .template-cart .cart .product_remove a:hover { color: #ffffff; }
