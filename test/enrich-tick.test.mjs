@@ -587,4 +587,19 @@ async function drain(w, maxTicks = 60) {
   eq('answer shape', JSON.stringify(likeUnits(U, 'datasheet', 'Rhino', '', '').units[0]), JSON.stringify({ handle: 'rhino', title: 'SM RHINO', url: '/products/rhino', image: null, price: '0.00', qty: 3, variant: null, army: 'Space Marines', datasheet: 'Rhino', size: '1', points: 75 }));
 }
 
+// ---------- kickRun: an open run whose ticks stopped is resumed, a live one is left alone ----------
+{
+  const w = world({});
+  const t = w.now;
+  await w.cx.storage.put('en:run', { day: 1, phase: 'games', done: false, tickAt: t - 20 * 60 * 1000, started: t - 90 * 60 * 1000, pending: [], cursor: null, hasNext: true });
+  await w.cx.storage.setAlarm(t + 10 * 3600 * 1000);
+  const k = await kickRun(w.cx);
+  ok('stalled run resumed', k.resumed === true && k.started === false);
+  ok('alarm pulled in to now', w.cx.storage.alarmAt() <= t + 1000);
+  await w.cx.storage.put('en:run', { day: 1, phase: 'games', done: false, tickAt: t - 60 * 1000, started: t - 90 * 60 * 1000, pending: [], cursor: null, hasNext: true });
+  await w.cx.storage.setAlarm(t + 30000);
+  const k2 = await kickRun(w.cx);
+  ok('live run left alone', !k2.resumed && k2.reason === 'a run is already open' && w.cx.storage.alarmAt() === t + 30000);
+}
+
 console.log((fail ? 'TICK-FAILS ' + fail : 'TICK OK') + ' :: ' + pass + '/' + (pass + fail) + ' checks passed');

@@ -1373,10 +1373,21 @@ export async function statusOf(cx) {
   };
 }
 
+const STALL_MS = 10 * 60 * 1000;
 export async function kickRun(cx) {
   const now = cx.now();
   const run = await cx.storage.get("en:run");
-  if (run && !run.done) return { ok: true, started: false, reason: "a run is already open", current: publicRun(run, now) };
+  if (run && !run.done) {
+    /* An open run whose ticks stopped (its continuation alarm was lost - seen
+       2026-09-25: no tick for 70+ minutes, next alarm the 06:00 daily) is picked
+       up where it stands instead of waiting for tomorrow. */
+    const last = run.tickAt || run.started || 0;
+    if (now - last > STALL_MS) {
+      await cx.storage.setAlarm(now + 500);
+      return { ok: true, started: false, resumed: true, reason: "the open run had stalled; resumed", idleMs: now - last, current: publicRun(run, now) };
+    }
+    return { ok: true, started: false, reason: "a run is already open", current: publicRun(run, now) };
+  }
   await cx.storage.delete("en:last");
   await cx.storage.put("en:run", { ...newRun(dayOf(now), now), started: now });
   await cx.storage.setAlarm(now + 500);
