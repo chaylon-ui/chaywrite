@@ -8,6 +8,10 @@ name: tcg-menu-probe
 on:
   workflow_dispatch:
     inputs:
+      theme:
+        description: Theme id to preview
+        required: false
+        default: "167070498989"
       root:
         description: Top menu item to open (regex, case-insensitive)
         required: false
@@ -35,6 +39,7 @@ jobs:
     env:
       TAB: ${{ inputs.tab }}
       ROOT: ${{ inputs.root }}
+      THEME: ${{ inputs.theme }}
       DARK: ${{ inputs.dark }}
       LAYOUT: ${{ inputs.layout }}
       SHOT: probe-shots/tcgmenu-${{ github.run_id }}.jpg
@@ -48,7 +53,7 @@ jobs:
           cat > probe.js <<'EOF'
           const puppeteer = require('puppeteer-core');
           const fs = require('fs');
-          const T = '157462692013';
+          const T = process.env.THEME || '167070498989';
           const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           (async () => {
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
