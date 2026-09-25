@@ -1,0 +1,48 @@
+name: battletech
+# BattleTech box contents for our ForcePacks and Salvage Boxes (owner,
+# 2026-09-25: "lets do battle tech"). Reads what is in each pack from Sarna's
+# ForcePack pages and each unit's plain facts (tonnage, class, tech base,
+# role, movement, year, MUL id) from MegaMek's unit files
+# (github.com/MegaMek/mm-data), matches our BattleTech products (the worker's
+# /bt/targets.json) and commits data/battletech.json. The worker's nightly
+# sweep (src/bt.js) writes them to the products. Names and numbers only.
+# Both sources are CC BY-NC-SA (non-commercial): the owner decides before the
+# card goes live.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Match and print, commit nothing
+        default: "false"
+  schedule:
+    # Mondays 05:30 UTC, ahead of the worker's 06:00 sweep
+    - cron: "30 5 * * 1"
+permissions:
+  contents: write
+concurrency:
+  group: battletech
+  cancel-in-progress: false
+jobs:
+  battletech:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch MegaMek unit files
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/MegaMek/mm-data /tmp/mm
+          git -C /tmp/mm sparse-checkout set data/mekfiles/meks data/mekfiles/vehicles data/mekfiles/battlearmor
+          echo "MMREV=$(git -C /tmp/mm rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Match our BattleTech products
+        run: |
+          python3 tools/battletech.py --mm /tmp/mm --rev "$MMREV" --out data/battletech.json ${{ inputs.dry_run == 'true' && '--dry' || '' }}
+      - name: Commit data/battletech.json when it changed
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          set -e
+          if [ ! -f data/battletech.json ] || [ -z "$(git status --porcelain data/battletech.json)" ]; then echo "no change to data/battletech.json"; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/battletech.json
+          git commit -m "battletech: MegaMek ${MMREV:0:7} $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
