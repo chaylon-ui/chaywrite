@@ -16,7 +16,7 @@
    file no longer matches. Nothing else on the product is touched. */
 
 export const BT_FILE_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/battletech.json";
-export const BT_QUERY = "status:active AND (title:*battletech* OR title:*battle tech*)";
+export const BT_QUERY = "status:active AND title:*battletech*";
 const TARGETS_Q = `query($q:String!,$after:String){products(first:250,query:$q,after:$after,sortKey:ID){pageInfo{hasNextPage endCursor}nodes{id title}}}`;
 export const BT_PAGE = `query($q:String!,$after:String){products(first:50,query:$q,after:$after,sortKey:ID){pageInfo{hasNextPage endCursor}nodes{id title bsig: metafield(namespace:"exor", key:"bt_sig"){ value }}}}`;
 
@@ -64,7 +64,7 @@ export async function btTargets(gql) {
 
 export async function serveBtTargets(request, env, ctx, gql) {
   const cache = caches.default;
-  const key = new Request("https://cache.internal/bt/targets.json?v=1");
+  const key = new Request("https://cache.internal/bt/targets.json?v=2");
   const hit = await cache.match(key);
   if (hit) return hit;
   let body, status = 200;
