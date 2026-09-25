@@ -310,19 +310,3 @@ html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_
 html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart_total_title .cart__subtotal { color: var(--brand-secondary); }
 html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart__shipping,
 html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart__store-credit-info { border-top-color: #2a3236; color: #aab4ba; }
-
-/* Card plates (assets/xg-card-plates.js; owner, 2026-09-25: "backgrounds, can they be
-   more of a blur, so there is less white?"). The script swaps each product photo for a
-   transparent PNG without its baked white ground and puts a tiny canvas of the cut-out
-   product behind it, blurred here into a soft glow of its own colours. Dark mode only:
-   in light mode the script puts the served photo back and the halo is hidden. The hover
-   photo (.extra-img) is swapped too, so the first photo fades out under it and its own
-   dark fill (theme.css background: var(--color-body)) goes. */
-.xg-plate-halo { display: none; }
-html[data-xg-theme="dark"] .xg-plate { position: relative; isolation: isolate; background: transparent !important; }
-html[data-xg-theme="dark"] .xg-plate > .xg-plate-halo { display: block; position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; filter: blur(22px) saturate(1.6); opacity: .55; transform: scale(1.12); }
-html[data-xg-theme="dark"] img.xg-plate-img { background: transparent !important; }
-@media (min-width: 768px) {
-  html[data-xg-theme="dark"] .xg-plate:has(.extra-img.xg-plate-img) img:not(.extra-img) { transition: opacity .3s ease; }
-  html[data-xg-theme="dark"] .grid-view-item:hover .xg-plate:has(.extra-img.xg-plate-img) img:not(.extra-img) { opacity: 0; }
-}

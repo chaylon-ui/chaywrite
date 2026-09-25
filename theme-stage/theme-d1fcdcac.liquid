@@ -1,0 +1,519 @@
+<!doctype html>
+<!--[if IE 9]> <html class="ie9 no-js" lang="{{ request.locale.iso_code }}"> <![endif]-->
+<!--[if (gt IE 9)|!(IE)]><!-->
+<html class="no-js " lang="{{ request.locale.iso_code }}">
+<!--<![endif]-->
+
+<head>
+{% include 'booster-seo' %}
+<meta name="viewport" content="width=device-width, initial-scale=1">
+ <script>/* start spd config */window._spt_delay_keywords=["/gtag/js,gtag(,/checkouts,/tiktok-track.js,/hotjar-,/smile-,/adoric.js,/wpm/,fbq("];/* end spd config */</script> 
+ {%- if content_for_header contains 'tapita-seo-script-tags' -%}{%- include 'tapita-seo-schema' -%}{%- endif -%} 
+
+
+  <!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-KPNDR6SJ');</script>
+<!-- End Google Tag Manager -->
+  
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  
+  <meta name="theme-color" content="#27302f">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="canonical" href="{{ canonical_url }}">
+
+  <meta theme="Premium Theme 4">
+
+  <meta name="analytics.txt" content='GooGhywoiu9839t543j0s7543uw1 - Add analytics3@seoplus.ca to GA account (Web) G-DVE1DBM0HM with "Administrator" permissions - date 02/21/2024.'>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <!-- Hotjar Tracking Code for Exor Games -->
+  <script>
+    (function(h,o,t,j,a,r){
+        h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
+        h._hjSettings={hjid:3930900,hjsv:6};
+        a=o.getElementsByTagName('head')[0];
+        r=o.createElement('script');r.async=1;
+        r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
+        a.appendChild(r);
+    })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
+  </script>
+  
+  <!--[if (gt IE 9)|!(IE)]><!-->
+  <script src="{{ 'vendor.js' | asset_url }}"></script>
+  <!--<![endif]-->
+  <!--[if lte IE 9]><script src="{{ 'vendor.js' | asset_url }}"></script><![endif]-->
+
+  {% if settings.favicon != blank %}
+  <link rel="shortcut icon" href="{{ settings.favicon | img_url: '32x32' }}" type="image/png">
+  <link rel="apple-touch-icon" href="{{ settings.favicon | img_url: '180x180' }}">
+  {% endif %}
+
+  {% capture seo_title %}
+  {{ page_title }}
+  {% if current_tags %}
+  {%- assign meta_tags = current_tags | join: ', ' %} &ndash; {{ 'general.meta.tags' | t: tags: meta_tags -}}
+  {% endif %}
+  {% if current_page != 1 %}
+  &ndash; {{ 'general.meta.page' | t: page: current_page | capitalize }}
+  {% endif %}
+
+  {% endcapture %}
+  {% comment %}<title>{{ seo_title | strip }}</title>{% endcomment %}
+
+  {% if page_description %}
+  {% comment %}<meta name="description" content="{{ page_description | escape }}">{% endcomment %}
+  {% endif %}
+ {% if request.path contains '/a/search' or template.suffix == 'advanced_search' %}
+    <meta name="robots" content="noindex">
+  {% endif %}
+  {% include 'social-meta-tags' %}
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    /* Dark mode boot — must run before the stylesheets paint. DARK IS THE
+       DEFAULT (owner, 2026-09-16): the only way to get the light skin is to
+       ask for it with the header sun/moon button, which stores
+       localStorage.xgTheme = 'light'. The device's own preference is no
+       longer consulted — it used to decide for shoppers who had not chosen.
+       xg-dark.css keys everything on this attribute, and xg-theme-toggle.js
+       owns the header button. */
+    (function () {
+      try {
+        if (localStorage.getItem('xgTheme') !== 'light') {
+          document.documentElement.setAttribute('data-xg-theme', 'dark');
+        }
+      } catch (e) {
+        document.documentElement.setAttribute('data-xg-theme', 'dark');
+      }
+    })();
+  </script>
+  {{ 'binderVariables.css' | asset_url | stylesheet_tag }}
+  {{ 'base.css' | asset_url | stylesheet_tag }}
+  {{ 'includes.css' | asset_url | stylesheet_tag }}
+  <link rel="stylesheet" href="{{ 'theme.css' | asset_url }}">
+  {{ 'custom.css' | asset_url | stylesheet_tag }}
+  {{ 'modern-skin.css' | asset_url | stylesheet_tag }}
+  {{ 'xg-features.css' | asset_url | stylesheet_tag }}
+  {{ 'xg-policy.css' | asset_url | stylesheet_tag }}
+  {{ 'xg-dark.css' | asset_url | stylesheet_tag }}
+  {{ 'xg-dark-fixes.css' | asset_url | stylesheet_tag }}
+  {%- comment -%} Our NOIMAGE.png in place of Shopify's grey "No image" GIF (assets/xg-noimage.js): not deferred, so it is watching while the page parses. {%- endcomment -%}
+  <script src="{{ 'xg-noimage.js' | asset_url }}"></script>
+  <script src="{{ 'xg-menu-patch.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-header-offset.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-card-dropdowns.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-sister-stores.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-cart-peek.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-quick-add.js' | asset_url }}" defer="defer"></script>
+  {% comment %}
+    Card scanner OFF (owner, 2026-09-16: "disable the card scanner for now").
+    xg-card-scan.js injects its own camera button beside the search inputs, so
+    not loading it removes the button and the whole feature. The asset itself
+    is untouched and still in the theme; to turn the scanner back on, restore
+    this one line:
+      <script src="{{ 'xg-card-scan.js' | asset_url }}" defer="defer"></script>
+  {% endcomment %}
+  <script src="{{ 'xg-theme-toggle.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-ticker.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-card-peek.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-logo-knockout.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-policy-hours.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-price-history.js' | asset_url }}" defer="defer"></script>
+  {%- comment -%} Personalised homepage: which game this page is about (assets/xg-personal.js);
+      "Also at our other Exor locations" on single-card pages (assets/xg-product-sisters.js). {%- endcomment -%}
+  <meta name="xg-game" content="{% if product %}{{ product.type | escape }}{% elsif collection %}{{ collection.handle }} {{ collection.title | escape }}{% endif %}">
+  <script src="{{ 'xg-personal.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-whatsnew.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'xg-product-sisters.js' | asset_url }}" defer="defer"></script>
+  {%- comment -%} Our own store-credit tab and panel over BinderPOS's data, signed-in shoppers only (assets/xg-store-credit.js). {%- endcomment -%}
+  <script src="{{ 'xg-store-credit.js' | asset_url }}" defer="defer"></script>
+
+  {{ content_for_header }}
+
+  <script>
+    var theme = {
+    pageType: {{ request.page_type | json }},
+      strings: {
+        addToCart: {{ 'products.product.add_to_cart' | t | json }},
+    soldOut: {{ 'products.product.sold_out' | t | json }},
+    unavailable: {{ 'products.product.unavailable' | t | json }},
+    regularPrice: {{ 'products.product.regular_price' | t | json }},
+    sale: {{ 'products.product.on_sale' | t | json }},
+    showMore: {{ 'general.filters.show_more' | t | json }},
+    showLess: {{ 'general.filters.show_less' | t | json }},
+    addressError: {{ 'sections.map.address_error' | t | json }},
+    addressNoResults: {{ 'sections.map.address_no_results' | t | json }},
+    addressQueryLimit: {{ 'sections.map.address_query_limit_html' | t | json }},
+    authError: {{ 'sections.map.auth_error_html' | t | json }},
+    newWindow: {{ 'general.accessibility.link_messages.new_window' | t | json }},
+    external: {{ 'general.accessibility.link_messages.external' | t | json }},
+    newWindowExternal: {{ 'general.accessibility.link_messages.new_window_and_external' | t | json }}
+      },
+    moneyFormat: {{ shop.money_format | json }},
+    permanentDomain: "{{ shop.permanent_domain }}"
+    }
+
+    window.routes = {
+      rootUrl: {{ routes.root_url | json }},
+    rootUrlWithoutSlash: {% if routes.root_url == '/' %} ''{% else %} {{ routes.root_url | json }} {% endif %},
+    cartUrl: {{ routes.cart_url | json }},
+    cartAddUrl: {{ routes.cart_add_url | json }},
+    cartChangeUrl: {{ routes.cart_change_url | json }},
+    searchUrl: {{ routes.search_url | json }},
+    productRecommendationsUrl: {{ routes.product_recommendations_url | json }}
+      };
+
+    document.documentElement.className = document.documentElement.className.replace('no-js', 'js');
+
+
+  </script>
+
+  <!--[if (lte IE 9) ]><script src="{{ 'match-media.min.js' | asset_url }}"></script><![endif]-->
+
+  {% if template.directory == 'customers' %}
+  <!--[if (gt IE 9)|!(IE)]><!-->
+  <script defer src="{{ 'shopify_common.js' | shopify_asset_url }}"></script>
+  <!--<![endif]-->
+  <!--[if lte IE 9]><script src="{{ 'shopify_common.js' | shopify_asset_url }}"></script><![endif]-->
+  {% endif %}
+  <script defer src="{{ 'global.js' | asset_url }}"></script>
+  <script src="{{ 'api.jquery.js' | shopify_asset_url }}"></script>
+
+  <!--[if (gt IE 9)|!(IE)]><!-->
+  <script defer src="{{ 'quickview.js' | asset_url }}"></script>
+  <!--<![endif]-->
+
+  <!--[if (gt IE 9)|!(IE)]><!-->
+  <script defer src="{{ 'theme.js' | asset_url }}"></script>
+  <!--<![endif]-->
+  <!--[if lte IE 9]><script src="{{ 'theme.js' | asset_url }}"></script><![endif]-->
+  <!--[if (gt IE 9)|!(IE)]><!-->
+  <script defer src="{{ 'shop.js' | asset_url }}"></script>
+  <!--<![endif]-->
+  <!--[if lte IE 9]><script src="{{ 'store.js' | asset_url }}"></script><![endif]-->
+  <script defer src="{{ 'cookie.js' | asset_url }}"></script>
+  <!--<![endif]-->
+  <!--[if lte IE 9]><script src="{{ 'cookie.js' | asset_url }}"></script><![endif]-->
+  <script defer src="https://cdn.jsdelivr.net/npm/toastify-js" type="text/javascript"></script>
+
+  {%- comment -%}
+    Round 28 (site audit): the Font Awesome kit script at kit.fontawesome.com
+    answered 403 on every page - the kit is gone - so the theme's fa-* icons
+    (cart remove, blog bylines, footer social fallbacks) rendered nothing.
+    Free Font Awesome 6 plus its v4 shims covers every name the theme uses
+    (fa-trash-o, fa-youtube-play, fa-snapchat-ghost, fa-user, fa-calendar...).
+  {%- endcomment -%}
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/v4-shims.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  {{ 'https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css' | stylesheet_tag }}
+
+  <link href="https://fonts.googleapis.com/css?family={{settings.type_base_family}}:300,400,500,600,700,800" rel="stylesheet" type="text/css" media="all">
+  <link href="https://fonts.googleapis.com/css?family={{settings.type_title_family}}:300,400,500,600,700,800" rel="stylesheet" type="text/css" media="all">
+
+  <!-- BeginConsistentCartAddon -->
+  <script>{% if customer %} Shopify.merge_cart_text = '{{ "consistent_cart_addon.merge_cart_text" | t }}'; Shopify.customer_logged_in = true; Shopify.customer_email = "{{ customer.email }}"; Shopify.log_uuids = true; {% else %} Shopify.customer_logged_in = false; Shopify.customer_email = ""; Shopify.log_uuids = true; {% endif %}</script><!-- EndConsistentCartAddon -->
+
+  <!-- BeginWishyAddon -->
+  <script>  Shopify.wishy_btn_settings = { "btn_placer_element": null, "btn_margin_unit": "px", "btn_margin_top": 5, "btn_margin_left": 5, "btn_margin_right": 5, "btn_margin_bottom": 5, "btn_width": "auto", "btn_display": "block", "btn_append": "before", "btn_background_color": "#ffffff", "btn_border_color": "#b9b9b9", "btn_border_width": 1, "btn_text": "♡ {{ 'layout.wishlist.title' | t }}", "btn_color": "#1b1b1b", "heart_icon_margin_right": 15, "heart_icon_margin_bottom": 15, "heart_icon_margin_top": 15, "heart_icon_margin_left": 15, "heart_icon_location": "bottom-right" }; Shopify.cc_swim_button_css_json = ""; {% if customer %} Shopify.customer_email = "{{ customer.email }}"; {% else %} Shopify.customer_email = ""; {% endif %}</script>
+  <!-- EndWishyAddon -->
+  <script> Shopify.money_format = "{{ shop.money_format }}";</script>
+</head>
+
+<body class="template-{{ template | split: '.' | first | replace: '/', '-' }} {{ page.template_suffix }}">
+
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KPNDR6SJ"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+  
+  {% assign show_sidebar = false %}
+  {% if settings.show_product and template.name == 'product' %}
+  {% assign show_sidebar = true %}
+  {% endif %}
+  {% if settings.show_collection and template.name == 'collection' or request.path contains '/a/search/' %}
+  {% assign show_sidebar = true %}
+  {% endif %}
+  {% if settings.show_blog and template.name == 'article' %}
+  {% assign show_sidebar = true %}
+  {% endif %}
+  {% if template.suffix == 'advanced_search' %}
+  {% assign show_sidebar = true %}
+  {% endif %}
+  <div class="whole-content">
+
+    <a class="in-page-link visually-hidden skip-link" href="#MainContent">{{ 'general.accessibility.skip_to_content' | t }}</a>
+
+    <div id="SearchDrawer" class="search-bar drawer drawer--top">
+      <div class="search-bar__table">
+        <div class="search-bar__table-cell search-bar__form-wrapper">
+          <form class="search search-bar__form" action="/search" method="get" role="search">
+            <input name="options[prefix]" type="hidden" value="last">
+            <button class="search-bar__submit search__submit btn--link" type="submit">
+              <span class="icon__fallback-text">{{ 'general.search.submit' | t }}</span>
+            </button>
+            <input class="search__input search-bar__input" type="search" name="q" value="{{ search.terms | escape }}" placeholder="{{ 'general.search.placeholder' | t }}" aria-label="{{ 'general.search.placeholder' | t }}">
+          </form>
+        </div>
+        <div class="search-bar__table-cell text-right">
+          <button type="button" class="btn--link search-bar__close js-drawer-close">
+            {% include 'icon-close' %}
+            <span class="icon__fallback-text">{{ 'general.search.close' | t }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="spin-wrapper"></div>
+    <div id="siteloader">
+      <div class="loader binder-{{settings.loader-main}}"></div>
+    </div>
+    <div class="header-nav {% if settings.show_breadcrumb == blank %}border-bottom{% endif %}">
+      {% section 'header-top' %}
+       <div class="col-md-3 col-xs-12 normal-sidebar sidebar_content">
+    </div>
+    {% if settings.show_breadcrumb %}
+    {% include 'breadcrumb' %}
+    {% endif %}
+    <div class="page-container" id="PageContainer">
+      <main id="MainContent" class="content-for-layout focus-none" role="main" tabindex="-1">
+        {%- comment -%} The search app's proxy page draws its own results and never renders our search section; the deck-list nudge is planted here and its script slots it above the app's results once singles show (snippets/xg-decknote.liquid). {%- endcomment -%}
+        {%- if request.path contains '/a/search' -%}{% render 'xg-decknote', shown: false, app_page: true %}{%- endif -%}
+
+
+        {% if show_sidebar == true %}
+        <div class="page-width">
+          <div class="row">
+            {% endif %}
+            {% if show_sidebar == true %}
+            <div class="col-md-3 col-xs-12 normal-sidebar sidebar_content">
+              {% section "sidebar" %}
+            </div>
+            {% endif %}
+            <div class="normal_main_content {% if show_sidebar == true %}col-md-9 col-xs-12{% elsif template.name != 'index' and page.handle != 'contact' %}page-width{% endif %}">
+              {% if template contains 'page' or template contains 'collections' or template contains 'cart' %}
+              {% endif %}
+              {{ content_for_layout }}
+            </div>
+            {% if show_sidebar == true %}
+          </div>
+        </div>
+        {% endif %}
+      </main>
+      {% section 'footer' %}
+    </div>
+    {% include 'search-autocomplete' %}
+    <a id="slidetop" href="#top" title="top">{{ 'general.back_to_top.top' | t }}
+    </a>
+    <div id="cartmessage">
+      <div class="title-success hide">{{ 'cart.cart-popup.success' | t }}</div>
+      <div class="title-failed hide">{{ 'cart.cart-popup.failed' | t }}</div>
+    </div>
+    <div id="wishlistmessage">
+      <div class="title-success hide">{{ 'products.wishlist.success' | t }}</div>
+    </div>
+
+    {% section 'cookieconsent' %}
+    {% section 'newsletterpopup' %}
+
+    <!-- Size Chart Modal -->
+    {% if settings.chart_img %}
+    {% assign modal_text_column_class = "col-md-6" %}
+    {% assign modal_dialog_styles = "" %}
+    {% else %}
+    {% assign modal_text_column_class = "" %}
+    {% assign modal_dialog_styles = "max-width: 500px" %}
+    {% endif %}
+
+    <div class="modal fade size-chart-modal" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+      <div class="modal-dialog" style="{{ modal_dialog_styles }}">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">x</button>
+          </div>
+          <div class="modal-body row">
+            {% if settings.chart_img %}
+            <div class="modal-img col-sm-12 col-md-6">
+              {% capture image_size %}{{ settings.chart_max_width }}x{% endcapture %}
+              {% capture chart_alt %}{{ settings.chart_img.alt }}{% endcapture %}
+              <img alt="{{ chart_alt | escape }}" itemprop="chart-image" src="{{ settings.chart_img | img_url: '480x650' }}"/>
+            </div>
+            {% endif %}
+            <div class="modal-text col-sm-12 {{ modal_text_column_class }}">
+              <div class="custom_size_chart_des">
+                <h4>{{ shop.name | split: ' ' | first }} {{ settings.sizechart-title }}</h4>
+                <span class="custom-text-right-table">{{ settings.sizechart-html-table }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- <div class="modal-footer">
+                      <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                  </div> -->
+        </div>
+      </div>
+    </div>
+
+
+    <div id="quickviewModal" class="modal fade" role="dialog" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <!-- Modal content-->
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="row">
+              <div class="col-sm-6">
+                <div id="qv-images-container">
+                  <div id="qv-product-cover">
+                    <img id="main-thumbnail" src="#" alt="product-img">
+                  </div>
+                  <div id="qv-thumbnails" class="owl-carousel owl-theme">
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div id="qv-text-container">
+                  <div id="qv-productname"></div>
+                  <div id="qv-productprice"></div>
+                  <div id="qv-spr-badge"></div>
+                  <div id="qv-productdescription"></div>
+                  <div id="qv-quantity"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  
+  {% if settings.enable_preorder_amai %}
+    {% include 'conditional-snippet', value: 'spurit_po2_theme_snippet' %}
+    <script>
+      Spurit.globalSnippet.checkoutDefaultHandlers = [
+        { event: 'submit', selector: 'form[action^="/cart"]:not([action^="/cart/add"]):not(.spurit-checkout)' },
+        { event: 'click', selector: '[name="checkout"]:not(.spurit-checkout)' },
+        { event: 'click', selector: '[name="goto_pp"]' },
+        { event: 'click', selector: '[name="goto_amazon_payments"]' },
+      ];
+    </script>
+  {% endif %}
+
+  {% if template.name == 'product' %}
+  <script type="text/javascript">
+    $(document).ready(function () {
+      $(".product-tab .custom-tab").each(function (index) {
+        $('.nav-tabs').append('<li class="tab-item"> <a href="#tab' + index + '" class="nav-link" data-toggle="tab" role="tab">' + $(this).find('.title').html() + '</a> </li>');
+        $('#tab-content').append('<div id="tab' + index + '" class="custom-desc tab-pane fade in">' + $(this).find('.description').html() + '</div>');
+        $(this).remove();
+      });
+    });
+  </script>
+  {% endif %}
+  {% if template.name == 'index' %}
+  <script type="text/javascript">
+    $(document).ready(function () {
+      $(".binder-singleproduct-section .product-tab .custom-tab").each(function (index) {
+        $('.binder-singleproduct-section .nav-tabs').append('<li class="tab-item"> <a href="#tab' + index + '" class="nav-link" data-toggle="tab" role="tab">' + $(this).find('.title').html() + '</a> </li>');
+        $('.binder-singleproduct-section #tab-content').append('<div id="tab' + index + '" class="custom-desc tab-pane fade in">' + $(this).find('.description').html() + '</div>');
+        $(this).remove();
+      });
+    });
+  </script>
+  {% endif %}
+  
+  {% if settings.enable_smile_rewards %}
+    {% include 'conditional-snippet', value: 'smile-initializer' %}
+  {% endif %}
+
+<!-- Start Schema added by Seoplus -->
+
+{% if template.name != 'product' %}
+
+
+<!-- Website schema -->
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "WebSite",
+  "name": "Exor Games",
+  "url": "https://exorgames.com/",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "https://exorgames.com/search?q={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+
+<!-- Organization schema -->
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Exor Games",
+  "alternateName": "Exor Games",
+  "url": "https://exorgames.com/",
+  "logo": "https://exorgames.com/cdn/shop/files/WE_BUY_CARDS_951e0f40-efac-4b8a-97b3-8ee6330881bd_large.png?v=1706987808"
+}
+</script>
+
+{% endif %}
+
+<!-- End Schema added by Seoplus -->
+<script>
+(function () {
+
+  const isAdvancedSearch = window.location.pathname.includes('/pages/advanced-search');
+
+  const cleanUpFilters = () => {
+
+    // 1. Remove the broken Shopify filter (but NOT the mobile one we want to keep)
+    document.querySelectorAll('.left-column.tag-filter:not(.mobile)')
+      .forEach(el => el.style.display = 'none');
+
+    // 2. On Advanced Search ONLY: remove Cloud Search filters
+    if (isAdvancedSearch) {
+      document
+        .querySelectorAll('#cloud_search_filters_sidebar')
+        .forEach(el => el.style.display = 'none');
+    }
+  };
+
+  // Run immediately
+  cleanUpFilters();
+
+  // Watch for async app injection - but only observe the main content area, not header/navigation
+  const mainContent = document.querySelector('main, #MainContent, .main-content');
+  if (mainContent) {
+    const observer = new MutationObserver(cleanUpFilters);
+    observer.observe(mainContent, { childList: true, subtree: true });
+  } else {
+    // Fallback: observe body but with a delay to let mega menu load first
+    setTimeout(() => {
+      const observer = new MutationObserver(cleanUpFilters);
+      observer.observe(document.body, { childList: true, subtree: true });
+    }, 1000);
+  }
+
+})();
+</script>
+</body>
+</html>
+{% render 'decklist.liquid' %}
+
+
+
+<script src="https://widget.sezzle.com/v1/javascript/price-widget?uuid=470be456-ae0e-42b0-bc00-b2cfd7b6356d"></script>
