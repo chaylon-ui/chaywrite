@@ -28,7 +28,17 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   {%- when 'battletech-miniatures-and-accessories' -%}{%- assign xg_bc_logo = 'BattleTech_2018.webp' -%}
   {%- when 'all-ak-interactive' -%}{%- assign xg_bc_logo = 'blanco_logo-02-copia.png' -%}
   {%- when 'citadel-collection' -%}{%- assign xg_bc_logo = 'DgX8B69wOApRYTQ2-300x130.png' -%}
+  {%- when 'all-battle-systems' -%}{%- assign xg_bc_logo = 'battle-systems_1200x1200_57d44751-bbb7-4aa7-a4fe-a39d6ca47b90.webp' -%}
+  {%- when 'all-the-army-painter' -%}{%- assign xg_bc_logo = 'Asset-1.png' -%}
+  {%- when 'all-vallejo' -%}{%- assign xg_bc_logo = 'logo_blanc.png' -%}
 {%- endcase -%}
+{%- comment -%} every Army Painter line (the-army-painter-warpaints, ...) and Vallejo line (vallejo-game-color, ...) {%- endcomment -%}
+{%- if xg_bc_logo == '' -%}
+  {%- assign xg_bc_head = xg_bc_key | slice: 0, 17 -%}
+  {%- if xg_bc_head == 'the-army-painter-' -%}{%- assign xg_bc_logo = 'Asset-1.png' -%}{%- endif -%}
+  {%- assign xg_bc_head = xg_bc_key | slice: 0, 8 -%}
+  {%- if xg_bc_head == 'vallejo-' -%}{%- assign xg_bc_logo = 'logo_blanc.png' -%}{%- endif -%}
+{%- endif -%}
 {%- comment -%} Warhammer Colour logo on every Citadel paint line (citadel-base-paints, citadel-contrast-paints, ...) {%- endcomment -%}
 {%- assign xg_bc_head = xg_bc_key | slice: 0, 8 -%}
 {%- if xg_bc_logo == '' and xg_bc_head == 'citadel-' and xg_bc_key contains '-paints' -%}{%- assign xg_bc_logo = 'DgX8B69wOApRYTQ2-300x130.png' -%}{%- endif -%}
