@@ -31,10 +31,22 @@ eq('vallejo two bottles one swatch, each with its own code', sw('Vallejo', 'Warl
 eq('unknown colour keeps a photo swatch', [sw('Citadel', 'Not On Chart').h, sw('Citadel', 'Not On Chart').items[0].i], [null, 'https://cdn/x.jpg']);
 eq('sets, brushes and drafts left out', [!!sw('Vallejo', 'Starter Set'), res.counts.Citadel.products, res.counts.Citadel.skipped], [false, 5, 1]);
 eq('variant id numeric, size parsed', [sw('Vallejo', 'Warlord Purple').items[0].v, sw('Vallejo', 'Warlord Purple').items[0].s], [11, '17 ml']);
+// live titles that used to fall back to a photo (2026-09-25 /paints.json)
+eq('citadel repeated range + 6-pack tail', [parseTitle('Citadel', 'LAYER: LAYER:SKULLCRUSHER BRASS (12ML)'), parseTitle('Citadel', 'TECHNICAL: TESSERACT GLOW (18ML) 6-PA'), parseTitle('Citadel', 'SHADE: REIKLAND FLESHSHADE (18ML) (6 P')],
+  [{ range: 'Layer', name: 'SKULLCRUSHER BRASS' }, { range: 'Technical', name: 'TESSERACT GLOW' }, { range: 'Shade', name: 'REIKLAND FLESHSHADE' }]);
+eq("apostrophe-s dropped", parseTitle('Citadel', "BASE: BUGMAN'S GLOW").name, 'BUGMAN GLOW');
+eq('vallejo primers are Surface Primer', [parseTitle('Vallejo', 'VALLEJO: GAME AIR PRIMER BLACK 17ML'), parseTitle('Vallejo', 'VALLEJO: GAME COLOR WHITE PRIMER 17 ML')],
+  [{ range: 'Surface Primer', name: 'BLACK' }, { range: 'Surface Primer', name: 'WHITE' }]);
+eq('vallejo "GAME AIR - X"', parseTitle('Vallejo', 'VALLEJO: GAME AIR - SCAR RED 17 ML'), { range: 'Game Air', name: 'SCAR RED' });
+eq('army painter marker + colour primer spray', [parseTitle('The Army Painter', 'THE ARMY PAINTER SPEEDPAINT MARKER ABSOLUTION GREEN'), parseTitle('The Army Painter', 'THE ARMY PAINTER COLOUR PRIMER: WOLF GREY SPRAY')],
+  [{ range: 'Speedpaint Marker', name: 'ABSOLUTION GREEN' }, { range: 'Warpaints Primer', name: 'WOLF GREY' }]);
 // the real chart: a few of our real titles resolve
 // (PAINT_CHART=path/to/data/paint-colours.json from chaywrite main; skipped when unset)
 const real = process.env.PAINT_CHART ? JSON.parse(readFileSync(process.env.PAINT_CHART, 'utf8')).brands : null;
-if (real) for (const [b, t, want] of [['Citadel', 'LAYER: KABALITE GREEN', '008962'], ['Citadel', 'LAYER: TEMPLE GUARD BLUE', null], ['The Army Painter', 'THE ARMY PAINTER WARPAINTS: TROGLODYTE BLUE', '2588B9'], ['Vallejo', 'VALLEJO: GAME COLOR WARLORD PURPLE 17 ML', '862351']]) {
+if (real) for (const [b, t, want] of [['Citadel', 'LAYER: KABALITE GREEN', '008962'], ['Citadel', 'LAYER: TEMPLE GUARD BLUE', null], ['The Army Painter', 'THE ARMY PAINTER WARPAINTS: TROGLODYTE BLUE', '2588B9'], ['Vallejo', 'VALLEJO: GAME COLOR WARLORD PURPLE 17 ML', '862351'],
+  ['Citadel', "BASE: BUGMAN'S GLOW", '804C43'], ['Citadel', 'LAYER: LAYER:SKULLCRUSHER BRASS (12ML)', 'F4CB7A'], ['Vallejo', 'VALLEJO: GAME COLOR FLUO GREEN 17 ML', '74B72C'],
+  ['Vallejo', 'VALLEJO: GAME COLOR EXTRA OPAQUE HEAVY VIOLET 17 ML', '484069'], ['Vallejo', 'VALLEJO: GAME COLOR HEAVY BLUEGRAY 17ML', 'CBCAC8'],
+  ['The Army Painter', 'THE ARMY PAINTER SPEEDPAINT MARKER ABSOLUTION GREEN', '22311F'], ['The Army Painter', 'THE ARMY PAINTER COLOUR PRIMER: WOLF GREY SPRAY', '517383']]) {
   const p = parseTitle(b, t), c = findColour(real, b, p.range, p.name);
   eq('real chart: ' + t, want ? c && c.hex : !!c, want || true);
 }

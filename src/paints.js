@@ -13,7 +13,7 @@
    mediums, varnishes and tools are left out. */
 
 export const PAINT_COLOURS_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/paint-colours.json";
-const CACHE_KEY = "https://cache.internal/paints.json?v=1";
+const CACHE_KEY = "https://cache.internal/paints.json?v=2";
 
 export const PAINT_BRANDS = [
   { brand: "Citadel", collection: "citadel-collection" },
@@ -28,7 +28,8 @@ export const NOT_PAINT = /\bset\b|\bsets\b|varnish|medium|softener|thinner|clean
 export const key = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const titleCase = (s) => String(s).toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 const sizeOf = (t) => { const m = /\b(\d+)\s*ML\b/i.exec(t); return m ? m[1] + " ml" : ""; };
-const stripSize = (s) => String(s).replace(/\(?\b\d+\s*ML\b\)?/ig, "").replace(/\s+/g, " ").trim();
+// "(18ML)", "17 ML", and the till's truncated six-pack tails: "(18ML) 6-PA", "(6 P", "(6PA"
+const stripSize = (s) => String(s).replace(/(?:\s|\()6\s*-?\s*PA?C?K?\b.*$/i, "").replace(/\(?\b\d+\s*ML\b\)?/ig, "").replace(/'S\b/ig, "").replace(/\s+/g, " ").trim();
 
 const VALLEJO_RANGES = ["Game Color", "Game Air", "Model Color", "Model Air", "Mecha Color", "Xpress Color Intense", "Xpress Color", "Panzer Aces", "Metal Color", "Surface Primer", "Wash FX", "Weathering FX"];
 const CITADEL_RANGES = ["Base", "Layer", "Shade", "Contrast", "Dry", "Technical", "Air", "Spray", "Glaze"];
@@ -39,25 +40,30 @@ export function parseTitle(brand, title) {
   if (brand === "Vallejo") {
     const rest0 = t.replace(/^\s*vallejo\s*:?\s*/i, "");
     for (const r of VALLEJO_RANGES) {
-      if (rest0.toUpperCase().indexOf(r.toUpperCase() + " ") === 0) return { range: r, name: stripSize(rest0.slice(r.length)) };
+      if (rest0.toUpperCase().indexOf(r.toUpperCase() + " ") !== 0) continue;
+      const name = stripSize(rest0.slice(r.length).replace(/^\s*-\s*/, ""));
+      // "GAME AIR PRIMER BLACK", "GAME COLOR WHITE PRIMER" are Surface Primers
+      if (/^primer\s+|\s+primer$/i.test(name)) return { range: "Surface Primer", name: name.replace(/^primer\s+|\s+primer$/i, "") };
+      return { range: r, name };
     }
     return null;
   }
   if (brand === "Citadel") {
     const m = /^\s*(?:citadel\s*(?:colou?r)?\s*[:\-]?\s*)?(base|layer|shade|contrast|dry|technical|air|spray|glaze)\s*(?:paint)?\s*[:\-]\s*(.+)$/i.exec(t);
     if (!m) return null;
-    return { range: titleCase(m[1]), name: stripSize(m[2]) };
+    // "LAYER: LAYER:SKULLCRUSHER BRASS" repeats the range
+    return { range: titleCase(m[1]), name: stripSize(m[2].replace(new RegExp("^\\s*" + m[1] + "\\s*:\\s*", "i"), "")) };
   }
   if (brand === "The Army Painter") {
     const u = t.toUpperCase();
     let range = "Warpaints";
-    if (/SPEEDPAINT/.test(u)) range = "Speedpaint";
+    if (/SPEEDPAINT/.test(u)) range = /MARKER/.test(u) ? "Speedpaint Marker" : "Speedpaint";
     else if (/\bAIR\b/.test(u)) range = "Warpaints Air";
     else if (/FANATIC/.test(u)) range = /WASH/.test(u) ? "Warpaints Fanatic Wash" : "Warpaints Fanatic";
     else if (/PRIMER/.test(u)) range = "Warpaints Primer";
     else if (/QUICKSHADE/.test(u)) range = "Quickshade Washes Set";
     const after = t.indexOf(":") > -1 ? t.slice(t.lastIndexOf(":") + 1) : t.replace(/^\s*(the\s+army\s+painter\s*)?(warpaints?\s*)?/i, "");
-    const name = stripSize(after.replace(/\b(the army painter|warpaints?|fanatic|speedpaint\s*(2\.0)?|acrylic|air|paint)\b/ig, " "));
+    const name = stripSize(after.replace(/\b(the army painter|warpaints?|fanatic|speedpaint\s*(2\.0)?|acrylic|air|paint|marker|spray|colou?r primer)\b/ig, " "));
     if (!name) return null;
     return { range, name };
   }
@@ -69,7 +75,9 @@ export function findColour(chart, brand, range, name) {
   const b = chart && chart[brand];
   if (!b) return null;
   const k0 = key(name);
-  const keys = [k0, k0.replace(/scarlett/, "scarlet"), k0.replace(/(glaze|ink)$/, ""), k0.replace(/tone$/, "")].filter(Boolean);
+  const keys = [k0, k0.replace(/scarlett/, "scarlet"), k0.replace(/(glaze|ink)$/, ""), k0.replace(/tone$/, ""),
+    k0.replace(/gray/g, "grey"), k0.replace(/grn$/, "green"), k0.replace(/fluo(?!rescent)/, "fluorescent"),
+    k0.replace(/^(extraopaque|effects)/, ""), k0.replace(/metalmetal$/, "metal")].filter(Boolean);
   const sets = [range];
   if (brand === "Vallejo") sets.push(range === "Game Air" ? "Game Color" : range === "Game Color" ? "Game Air" : "");
   sets.push(...Object.keys(b));
@@ -92,6 +100,7 @@ export function buildSwatches(chart, byBrand) {
       c.products++;
       const parsed = parseTitle(brand, p.title);
       if (!parsed) { c.skipped++; continue; }
+      if (/\bmedium\b|varnish/i.test(parsed.name)) { c.skipped++; continue; }
       const col = findColour(chart, brand, parsed.range, parsed.name);
       if (!col && NOT_PAINT.test(p.title)) { c.skipped++; continue; }
       const vs = (p.variants && p.variants.nodes) || [];
