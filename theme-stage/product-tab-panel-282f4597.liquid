@@ -622,7 +622,8 @@
       {%- endif -%}
       {%- comment -%} 'Eavy Archive box-art paints, linked to ours (owner 2026-09-25); hides itself when no scheme matches. {%- endcomment -%}
       {%- if product.vendor == 'Games Workshop' or gf.game_system.value != blank or wu.name != blank -%}
-        {%- render 'xg-eavy', product: product, faction: wu.faction -%}
+        {%- assign eavy_kind = '' -%}{%- if wu.keywords contains 'Vehicle' -%}{%- assign eavy_kind = 'vehicle' -%}{%- endif -%}
+        {%- render 'xg-eavy', product: product, faction: wu.faction, kind: eavy_kind -%}
       {%- endif -%}
     </div>
     {% endif %}

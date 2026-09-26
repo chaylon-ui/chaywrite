@@ -24,7 +24,8 @@
   and a bouncing arrow; it opens the Description tab and scrolls to the card.
   Drawn here (no Games Workshop marks); nothing shows when no scheme matched.
 
-  Params: product, faction (exor.wh_unit faction, may be blank).
+  Params: product, faction (exor.wh_unit faction, may be blank), kind ('vehicle' when the unit
+  facts carry the Vehicle keyword: a tank opens on the army's vehicle scheme, owner 2026-09-26).
 {%- endcomment -%}
 {%- liquid
   assign ptype = product.type | downcase
@@ -34,7 +35,7 @@
   endif
 -%}
 {%- unless skip -%}
-<section class="xg-eavy" hidden aria-label="Paint it like the box" data-title="{{ product.title | escape }}" data-faction="{{ faction | escape }}">
+<section class="xg-eavy" hidden aria-label="Paint it like the box" data-title="{{ product.title | escape }}" data-faction="{{ faction | escape }}" data-kind="{{ kind }}">
   <div class="xg-eavy__top">
     <div class="xg-eavy__ttl">Paint it like the box</div>
     <label class="xg-eavy__pick"><span class="visually-hidden">Colour scheme</span><select></select></label>
@@ -213,7 +214,7 @@
     });
 
     // v= changes with the worker's cache version so a browser never keeps an answer from before a fix
-    var u = W + '/eavy/for.json?v=3&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '');
+    var u = W + '/eavy/for.json?v=4&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '') + '&kind=' + encodeURIComponent(box.getAttribute('data-kind') || '');
     fetch(u).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d || !d.ok || !d.schemes || !d.schemes.length) return;
       // a scheme is only worth showing when we sell at least one of its paints
