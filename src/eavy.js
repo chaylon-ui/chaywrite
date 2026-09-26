@@ -43,7 +43,7 @@ const ALIASES = { black: "Abaddon Black", white: "White Scar", abaddonblack: "Ab
   kreigkhaki: "Krieg Khaki", druchiviolet: "Druchii Violet", cadianflesh: "Cadian Fleshtone",
   ironwarrior: "Iron Warriors", gehennasgold: "Gehenna's Gold", dawnstonegrey: "Dawnstone", xeruspurple: "Xereus Purple",
   scragbrown: "Skrag Brown", evilsunzred: "Evil Sunz Scarlet", sepraphimsepia: "Seraphim Sepia",
-  reiklandfleshadegloss: "Reikland Fleshshade Gloss", skullwhite: "White Scar" };
+  reiklandfleshadegloss: "Reikland Fleshshade Gloss", skullwhite: "White Scar", administratrumgrey: "Administratum Grey" };
 // the pre-2012 names: the card says which old pot the recipe named
 const RENAMED = new Set(["bleachedbone", "scorchedbrown", "codexgrey", "bestialbrown", "mithrilsilver", "chainmail", "boltgunmetal",
   "fortressgrey", "regalblue", "shininggold", "goblingreen", "elfflesh", "scabred", "tinbitz", "redgore", "burnishedgold", "devlanmud",
@@ -131,7 +131,14 @@ export const NOT_MODELS = /\b(codex|codexes|rulebook|rule book|core book|battlet
 // BSData army names that 'Eavy Archive files under another page
 const FACTION_ALIAS = { "adeptus-custodes": "talons-of-the-emperor", "imperial-agents": "agents-of-the-imperium" };
 
-export function pickPage(ix, title, faction) {
+/* A tank wants the army's vehicle scheme, a squad never does (owner 2026-09-26, Baneblade opening on
+   "Cadian Shock Troops" - the infantry uniform). The theme passes kind=vehicle from the 40K unit
+   facts (keyword Vehicle); without them a few common hull names in the title count. */
+const VEHICLE_SCHEME = /\bvehicles?\b|\btanks?\b|\barmou?red\b/i;
+const VEHICLE_TITLE = /\b(tank|baneblade|shadowsword|stormlord|leman russ|rogal dorn|chimera|taurox|hellhound|basilisk|manticore|wyvern|hydra|valkyrie|sentinel|rhino|razorback|predator|land raider|repulsor|gladiator|impulsor|vindicator|whirlwind|dreadnought|battlewagon|trukk|land speeder|stormraven|knight)\b/i;
+export function isVehicle(title, kind) { return kind === "vehicle" || VEHICLE_TITLE.test(String(title || "")); }
+
+export function pickPage(ix, title, faction, kind) {
   if (NOT_MODELS.test(String(title || ""))) return null;
   const tw = words(title);
   const fslug = FACTION_ALIAS[slug(faction)] || slug(faction);
@@ -148,14 +155,14 @@ export function pickPage(ix, title, faction) {
   // 2. the 40K faction from the unit facts: its army page, or a chapter scheme of that name
   if (fslug) {
     const a = ix.byFaction.get("40k|" + fslug);
-    if (a) return { page: a, first: defaultScheme(a, tw) };
+    if (a) return { page: a, first: defaultScheme(a, tw, isVehicle(title, kind)) };
     const ch = ix.schemes.find((s) => s.slug === fslug && s.p.game === "40k");
     if (ch) return { page: ch.p, first: ch.i };
   }
   // 3. an army name in the title ("STORMCAST ETERNALS: VINDICTORS")
   for (const a of ix.armies) {
     const strong = strongOf(a.w);
-    if (strong.length && hasAll(tw, strong)) return { page: a.p, first: defaultScheme(a.p, tw) };
+    if (strong.length && hasAll(tw, strong)) return { page: a.p, first: defaultScheme(a.p, tw, isVehicle(title, kind)) };
   }
   return null;
 }
@@ -168,12 +175,18 @@ const HOUSE = { "space-marines": "ultramarines", "tau-empire": "tausept", "tyran
   "chaos-space-marines": "blacklegion", "astra-militarum": "cadianshocktroops", "stormcast-eternals": "stormcasteternals",
   "adepta-sororitas": "orderofourmartyredlady", "aeldari": "craftworldbieltan", "leagues-of-votann": "greaterthurianleague" };
 const CHARACTER = /,|\bthe\b|\b(avatar|commander|lord|lady|captain|warboss|knight of|primaris|mortarch|son of|jain zar|maugan|guilliman|jonson|angron|fulgrim|mortarion|helbrecht|yndrasta|krondys|uthar|ghazghkull|wazdakka)\b/i;
-export function defaultScheme(p, tw) {
+export function defaultScheme(p, tw, vehicle) {
   const n = p.schemes.length;
+  if (vehicle) {
+    const v = p.schemes.findIndex((s) => VEHICLE_SCHEME.test(s.name));
+    if (v >= 0) return v;
+  }
+  // a squad or character never opens on the army's vehicle scheme
+  const skip = (s) => CHARACTER.test(s.name) || (!vehicle && VEHICLE_SCHEME.test(s.name));
   let best = -1, bestScore = 0;
   const pw = words(p.title);
   for (let i = 0; i < n; i++) {
-    if (CHARACTER.test(p.schemes[i].name)) continue;                 // a character is only shown when the title names it
+    if (skip(p.schemes[i])) continue;                                 // a character is only shown when the title names it
     const sw = strongOf(words(p.schemes[i].name)).filter((w) => !has(pw, w));
     const score = sw.filter((w) => has(tw || [], w)).length;
     if (score > bestScore) { best = i; bestScore = score; }
@@ -186,14 +199,16 @@ export function defaultScheme(p, tw) {
   const tk = key(p.title);
   i = p.schemes.findIndex((s) => key(s.name) === tk);
   if (i >= 0) return i;
-  i = p.schemes.findIndex((s) => !CHARACTER.test(s.name));
+  i = p.schemes.findIndex((s) => !skip(s));
   return i < 0 ? 0 : i;
 }
 
-export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40) {
-  const hit = pickPage(ix, title, faction);
+export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40, kind = "") {
+  const hit = pickPage(ix, title, faction, kind);
   if (!hit) return { ok: true, page: null, schemes: [] };
   const p = hit.page;
+  // the crawler sometimes read the NEXT scheme's name as a last paint ("Artillery", "Death Riders")
+  const schemeWords = new Set(p.schemes.flatMap((s) => [key(s.name), key(s.name.split(":").pop())]));
   const order = [hit.first].concat(p.schemes.map((_, i) => i).filter((i) => i !== hit.first)).slice(0, maxSchemes);
   const schemes = order.map((i) => {
     const s = p.schemes[i];
@@ -202,7 +217,7 @@ export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40) {
       name: s.name, url: surl,
       areas: s.areas.map((ar) => ({
         name: ar.name, url: surl + "&block=" + encodeURIComponent(ar.slug),
-        paints: dedupe(ar.paints.flatMap(expand).filter((n) => n && !NOT_A_PAINT.test(n)).map((n) => resolveLoose(paintIdx, n)).filter(Boolean)),
+        paints: dedupe(ar.paints.flatMap(expand).filter((n) => n && !NOT_A_PAINT.test(n) && !schemeWords.has(key(n))).map((n) => resolveLoose(paintIdx, n)).filter(Boolean)),
       })).filter((ar) => ar.paints.length),
     };
   });
@@ -258,8 +273,9 @@ export async function serveEavy(request, env, ctx, getPaints) {
   const url = new URL(request.url);
   const title = (url.searchParams.get("title") || "").slice(0, 200);
   const faction = (url.searchParams.get("faction") || "").slice(0, 80);
+  const kind = url.searchParams.get("kind") === "vehicle" ? "vehicle" : "";
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=3&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)));
+  const ck = new Request("https://cache.internal/eavy/for.json?v=4&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
@@ -268,7 +284,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
       fetch(EAVY_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => { if (!r.ok) throw new Error("eavy data HTTP " + r.status); return r.json(); }),
       getPaints(),
     ]);
-    body = { ...forProduct(indexEavy(dr), citadelIndex(paints), title, faction), credit: CREDIT, source: "https://eavy-archive.com/" };
+    body = { ...forProduct(indexEavy(dr), citadelIndex(paints), title, faction, 40, kind), credit: CREDIT, source: "https://eavy-archive.com/" };
   } catch (e) {
     status = 502;
     body = { ok: false, error: String((e && e.message) || e).slice(0, 200) };

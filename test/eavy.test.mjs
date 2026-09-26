@@ -110,3 +110,18 @@ test("step notes yield the paint inside them or nothing", async () => {
   assert.equal(resolveLoose(idx, "Blue horror corner dot highlight"), null);
   assert.deepEqual(resolveLoose(idx, "Sons of Horus Green"), { name: "Sons of Horus Green" });
 });
+
+test("a tank opens on the army's vehicle scheme, a squad never does; scheme names are not paints", () => {
+  const D = { pages: { u: { url: "https://e/40k/astra-militarum/", title: "Astra Militarum", game: "40k", faction: "astra-militarum", sub: "",
+    schemes: [
+      { slug: "c", name: "Cadian Shock Troops", areas: [{ slug: "f", name: "Flak Armour", paints: ["Castellan Green"] }] },
+      { slug: "v", name: "Cadian Vehicles", areas: [{ slug: "g", name: "Earthy Green", paints: ["Castellan Green"] }] },
+      { slug: "k", name: "Death Korps of Krieg: Artillery", areas: [{ slug: "w", name: "Weathering", paints: ["Karak Stone", "Death Riders"] }] },
+      { slug: "r", name: "Death Korps of Krieg: Death Riders", areas: [{ slug: "s", name: "Skin", paints: ["Krieg Khaki"] }] }] } } };
+  const ix = indexEavy(D);
+  assert.equal(ix.byFaction.get("40k|astra-militarum").schemes[pickPage(ix, "ASTRA MILITARUM BANEBLADE", "Astra Militarum", "vehicle").first].name, "Cadian Vehicles");
+  assert.equal(ix.byFaction.get("40k|astra-militarum").schemes[pickPage(ix, "ASTRA MILITARUM: LEMAN RUSS BATTLE TANK", "Astra Militarum").first].name, "Cadian Vehicles");
+  assert.equal(ix.byFaction.get("40k|astra-militarum").schemes[pickPage(ix, "ASTRA MILITARUM: KASRKIN", "Astra Militarum").first].name, "Cadian Shock Troops");
+  const r = forProduct(ix, citadelIndex({ swatches: [] }), "ASTRA MILITARUM: KASRKIN", "Astra Militarum");
+  assert.deepEqual(r.schemes.find((s) => /Artillery/.test(s.name)).areas[0].paints.map((p) => p.name), ["Karak Stone"]);
+});
