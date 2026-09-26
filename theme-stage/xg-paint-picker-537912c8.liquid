@@ -44,6 +44,7 @@
   <div class="xg-pp__families" aria-label="Colour family"></div>
   <p class="xg-pp__count" aria-live="polite">Loading colours…</p>
   <div class="xg-pp__grid"></div>
+  <button type="button" class="xg-pp__more" hidden>Show more colours</button>
 
   <div class="xg-pp__sheet" hidden>
     <div class="xg-pp__backdrop" data-close></div>
@@ -94,6 +95,8 @@
   .xg-pp__families button i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
   .xg-pp__families button[aria-pressed="true"] { border-color: var(--xg-ink); box-shadow: 0 0 0 1px var(--xg-ink); }
   .xg-pp__count { font-size: 13px; color: var(--xg-muted); margin: 6px 0 14px; }
+  .xg-pp__more { display: block; margin: 18px auto 0; padding: 9px 18px; border: 1px solid currentColor; border-radius: 999px; background: none; color: inherit; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; opacity: .8; }
+  .xg-pp__more[hidden] { display: none; }
   .xg-pp__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 16px 10px; }
   .xg-pp__sw { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: none; border: 0; padding: 0; cursor: pointer; text-align: center; color: var(--xg-text); font: 500 12px/1.25 var(--xg-font-body); }
   .xg-pp__dot { display: block; width: 64px; height: 64px; margin: 0 auto 7px; border-radius: 50%; position: relative;
@@ -162,7 +165,12 @@
   if (!root) return;
   var $ = function (s, el) { return (el || root).querySelector(s); };
   var BRANDS = ['Citadel', 'The Army Painter', 'Vallejo'];
-  var SHORT = { 'Citadel': 'Citadel', 'The Army Painter': 'Army Painter', 'Vallejo': 'Vallejo' };
+  // Games Workshop sells these pots as "Warhammer" paint now (owner, 2026-09-26: "it shouldn't be citadel.
+  // It should say Warhammer"); the data keeps its 'Citadel' key, every label and the address say Warhammer
+  var SHORT = { 'Citadel': 'Warhammer', 'The Army Painter': 'Army Painter', 'Vallejo': 'Vallejo' };
+  var LABEL = { 'Citadel': 'Warhammer', 'The Army Painter': 'The Army Painter', 'Vallejo': 'Vallejo' };
+  var URLNAME = { 'Citadel': 'Warhammer' };
+  function fromUrl(b) { return b === 'Warhammer' ? 'Citadel' : b; }
   var HOME = { 'Citadel': 'citadel-collection', 'The Army Painter': 'all-the-army-painter', 'Vallejo': 'all-vallejo' };
   var RANGES = {
     'Citadel': ['Base', 'Layer', 'Shade', 'Contrast', 'Dry', 'Technical', 'Air', 'Spray', 'Glaze'],
@@ -174,9 +182,9 @@
     ['blue', 'Blues', '#2d5fae'], ['purple', 'Purples', '#7b3f9a'], ['pink', 'Pinks', '#d9709e'], ['brown', 'Browns', '#7a5232'],
     ['flesh', 'Skin tones', '#e0a98a'], ['grey', 'Greys, black & white', '#8d9396'], ['metal', 'Metallics', '#b9b9b9'], ['wash', 'Washes & inks', '#4a5a78']];
   var state = { brand: root.getAttribute('data-brand') || 'All', range: 'All', family: '', q: '', stock: true };
-  // "Shop by colour" links open on a brand and range: #brand=Citadel&range=Base (older links: #range=Game%20Color)
+  // "Shop by colour" links open on a brand and range: #brand=Warhammer&range=Base (older links: #brand=Citadel, #range=Game%20Color)
   function hashVal(k) { var m = new RegExp('(?:^|[#&])' + k + '=([^&]+)').exec(location.hash); return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; }
-  try { var hb = hashVal('brand'), hr = hashVal('range'); if (hb === 'All' || BRANDS.indexOf(hb) > -1) state.brand = hb; if (hr) state.range = hr; } catch (e) {}
+  try { var hb = fromUrl(hashVal('brand')), hr = hashVal('range'); if (hb === 'All' || BRANDS.indexOf(hb) > -1) state.brand = hb; if (hr) state.range = hr; } catch (e) {}
   if (state.brand !== 'All' && BRANDS.indexOf(state.brand) < 0) state.brand = 'All';
   var paints = [];
   function key(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
@@ -251,13 +259,14 @@
     if (!j || !j.ok || !j.swatches) throw new Error('no data');
     paints = j.swatches.filter(function (g) { return BRANDS.indexOf(g.b) > -1 && g.items && g.items.length; });
     paints.forEach(function (g) {
-      g.fam = family(g); g.kind = kind(g); g.dry = g.items.every(function (it) { return it.r === 'Dry'; });
+      g._i = paints.indexOf(g); g.fam = family(g); g.kind = kind(g); g.dry = g.items.every(function (it) { return it.r === 'Dry'; });
       if (g.h) { g.lab = lab(g.h); var t = hsl(g.h); g.hue = t[0]; g.l = t[2]; } else { g.hue = 999; g.l = 0; }
       g.items.sort(function (x, y) { return rangeIdx(g.b, x.r) - rangeIdx(g.b, y.r) || (parseFloat(x.s) || 0) - (parseFloat(y.s) || 0); });
     });
     var order = FAMILIES.map(function (f) { return f[0]; }).concat('other');
     paints.sort(function (a, b) { return order.indexOf(a.fam) - order.indexOf(b.fam) || a.hue - b.hue || b.l - a.l || BRANDS.indexOf(a.b) - BRANDS.indexOf(b.b); });
     drawBrands(); drawRanges(); drawFamilies(); draw();
+    if (/brand=Citadel/.test(location.hash)) setHash();   // older links: the address says Warhammer too
   }).catch(function () { $('.xg-pp__count').textContent = 'Could not load the colours - please refresh.'; });
 
   // the bottles of a colour that pass the range + stock filters
@@ -270,11 +279,11 @@
     var q = key(state.q);
     return paints.filter(function (g) {
       return (state.brand === 'All' || g.b === state.brand) && (!state.family || g.fam === state.family) && items(g).length &&
-        (!q || key(g.n + g.items.map(function (it) { return it.c; }).join('') + (state.brand === 'All' ? g.b : '')).indexOf(q) > -1);
+        (!q || key(g.n + g.items.map(function (it) { return it.c; }).join('') + (state.brand === 'All' ? SHORT[g.b] : '')).indexOf(q) > -1);
     });
   }
   function setHash() {
-    var h = state.brand === 'All' ? 'brand=All' : 'brand=' + encodeURIComponent(state.brand) + (state.range !== 'All' ? '&range=' + encodeURIComponent(state.range) : '');
+    var h = state.brand === 'All' ? 'brand=All' : 'brand=' + encodeURIComponent(URLNAME[state.brand] || state.brand) + (state.range !== 'All' ? '&range=' + encodeURIComponent(state.range) : '');
     try { history.replaceState(null, '', location.pathname + location.search + '#' + h); } catch (e) {}
   }
   function drawBrands() {
@@ -285,7 +294,7 @@
     all.hidden = state.brand === 'All';
     if (state.brand !== 'All') { all.href = '/collections/' + HOME[state.brand]; all.innerHTML = 'See every ' + esc(SHORT[state.brand]) + ' product &rsaquo;'; }
     $('.xg-pp__brands').innerHTML = ['All'].concat(BRANDS.filter(function (b) { return n[b]; })).map(function (b) {
-      return '<button type="button" data-brand="' + esc(b) + '" aria-pressed="' + (state.brand === b) + '">' + (b === 'All' ? 'All brands' : esc(b)) + '<span>' + (b === 'All' ? paints.length : n[b]) + '</span></button>';
+      return '<button type="button" data-brand="' + esc(b) + '" aria-pressed="' + (state.brand === b) + '">' + (b === 'All' ? 'All brands' : esc(LABEL[b] || b)) + '<span>' + (b === 'All' ? paints.length : n[b]) + '</span></button>';
     }).join('');
   }
   function drawRanges() {
@@ -314,15 +323,36 @@
   function dot(g, cls, first) {
     return '<span class="' + cls + (g.fam === 'metal' && g.h ? ' is-metal' : '') + (g.h ? '" style="background-color:' + g.h : ' is-photo" style="background-image:url(' + esc(thumb(first && first.i, 160)) + ')') + '"></span>';
   }
+  /* The grid draws in batches (owner, 2026-09-26: "taking a long time for it to load because it's
+     loading all the swatches at the beginning"): the first BATCH colours at once, the next batch
+     each time the end of the grid scrolls near the screen - so a phone lays out ~70 buttons and
+     loads only their bottle photos, not ~700. */
+  var BATCH = 72, drawList = [], drawn = 0, io = null;
+  function swatch(g) {
+    var its = items(g), out = !its.some(function (it) { return it.a; }), first = its[0] || g.items[0];
+    return '<button type="button" class="xg-pp__sw' + (out ? ' is-out' : '') + '" data-i="' + g._i + '" title="' + esc(SHORT[g.b] + ' ' + g.n) + '">' +
+      dot(g, 'xg-pp__dot', first) + esc(g.n) + '<span class="xg-pp__code">' + (esc(first.c) || (state.brand === 'All' ? '' : '&nbsp;')) + (its.length > 1 ? ' +' + (its.length - 1) : '') + '</span>' +
+      (state.brand === 'All' ? '<span class="xg-pp__bn">' + esc(SHORT[g.b]) + '</span>' : '') + '</button>';
+  }
+  function more() {
+    if (drawn >= drawList.length) return;
+    $('.xg-pp__grid').insertAdjacentHTML('beforeend', drawList.slice(drawn, drawn + BATCH).map(swatch).join(''));
+    drawn = Math.min(drawn + BATCH, drawList.length);
+    var m = $('.xg-pp__more');
+    m.hidden = drawn >= drawList.length;
+    // a tall screen can still show the end of the grid: the observer only fires on a change, so keep filling
+    if (!m.hidden && io && m.getBoundingClientRect().top < (window.innerHeight || 800) + 600) requestAnimationFrame(more);
+  }
   function draw() {
-    var list = visible();
-    $('.xg-pp__count').textContent = list.length + (list.length === 1 ? ' colour' : ' colours') + (state.stock ? ' in stock' : '');
-    $('.xg-pp__grid').innerHTML = list.map(function (g) {
-      var its = items(g), out = !its.some(function (it) { return it.a; }), first = its[0] || g.items[0];
-      return '<button type="button" class="xg-pp__sw' + (out ? ' is-out' : '') + '" data-i="' + paints.indexOf(g) + '" title="' + esc(SHORT[g.b] + ' ' + g.n) + '">' +
-        dot(g, 'xg-pp__dot', first) + esc(g.n) + '<span class="xg-pp__code">' + (esc(first.c) || (state.brand === 'All' ? '' : '&nbsp;')) + (its.length > 1 ? ' +' + (its.length - 1) : '') + '</span>' +
-        (state.brand === 'All' ? '<span class="xg-pp__bn">' + esc(SHORT[g.b]) + '</span>' : '') + '</button>';
-    }).join('');
+    drawList = visible(); drawn = 0;
+    $('.xg-pp__count').textContent = drawList.length + (drawList.length === 1 ? ' colour' : ' colours') + (state.stock ? ' in stock' : '');
+    $('.xg-pp__grid').innerHTML = '';
+    more();
+    var sentinel = $('.xg-pp__more');
+    if (!io && 'IntersectionObserver' in window) {
+      io = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) more(); }, { rootMargin: '600px 0px' });
+      io.observe(sentinel);
+    } else if (!io) { while (drawn < drawList.length) more(); }
   }
   // closest colour of each other brand: same kind of paint, CIEDE2000 under 12, in stock preferred
   function matches(g) {
@@ -374,7 +404,7 @@
     $('.xg-pp__match').hidden = !m.length;
     $('.xg-pp__ml').innerHTML = m.map(function (x) {
       var o = x.g, first = o.items.filter(function (it) { return it.a; })[0] || o.items[0];
-      return '<button type="button" class="xg-pp__m' + (x.stock ? '' : ' is-out') + '" data-i="' + paints.indexOf(o) + '"><i style="background:' + o.h + '"></i><div>' + esc(o.n) +
+      return '<button type="button" class="xg-pp__m' + (x.stock ? '' : ' is-out') + '" data-i="' + o._i + '"><i style="background:' + o.h + '"></i><div>' + esc(o.n) +
         '<span>' + esc(SHORT[o.b] + ' ' + first.r + (first.c ? ' · ' + first.c : '')) + '</span><span>' + (x.d < 3 ? 'Very close match' : x.d < 6 ? 'Close match' : 'Similar') + (x.stock ? '' : ' · sold out') + '</span></div></button>';
     }).join('');
     $('.xg-pp__sheet').hidden = false; $('.xg-pp__card').scrollTop = 0; $('.xg-pp__add').focus();
@@ -387,6 +417,7 @@
     if (t.hasAttribute('data-brand')) { state.brand = t.getAttribute('data-brand'); state.range = 'All'; drawBrands(); drawRanges(); setHash(); return draw(); }
     if (t.hasAttribute('data-range')) { state.range = t.getAttribute('data-range'); drawRanges(); setHash(); return draw(); }
     if (t.hasAttribute('data-fam')) { var f = t.getAttribute('data-fam'); state.family = state.family === f ? '' : f; drawFamilies(); return draw(); }
+    if (t.classList.contains('xg-pp__more')) return more();
     if (t.hasAttribute('data-i')) return open(paints[+t.getAttribute('data-i')]);
     if (t.hasAttribute('data-o') && curG) return pick(curG.items[+t.getAttribute('data-o')]);
     if (t.hasAttribute('data-q')) { var inp = $('.xg-pp__qty input'); inp.value = Math.max(1, (+inp.value || 1) + (+t.getAttribute('data-q'))); return; }

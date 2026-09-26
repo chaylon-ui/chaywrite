@@ -74,7 +74,7 @@
       '<p class="xgdbm__copy">Tap a colour to see the bottle, with the closest match from the other brands.</p>',
       '<span class="xgpcm__dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>',
       '<span class="xgpcm__brands">',
-      '<a href="' + PICK + '#brand=Citadel">Citadel</a>',
+      '<a href="' + PICK + '#brand=Warhammer">Warhammer</a>',
       '<a href="' + PICK + '#brand=The+Army+Painter">Army Painter</a>',
       '<a href="' + PICK + '#brand=Vallejo">Vallejo</a>',
       '</span>',

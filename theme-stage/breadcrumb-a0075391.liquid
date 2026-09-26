@@ -81,7 +81,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     {% if xg_bc_paints %}
     <h1 class="h3 head-title xg-bc__ptitle">Shop paints by colour</h1>
     <div class="xg-bc__brands">
-      <a class="xg-bc__brand" data-brand="Citadel" href="/collections/citadel-collection?view=paints#brand=Citadel"><img src="{{ 'DgX8B69wOApRYTQ2-300x130.png' | file_url }}" alt="Citadel (Warhammer Colour)" width="300" height="130"></a>
+      <a class="xg-bc__brand" data-brand="Citadel" href="/collections/citadel-collection?view=paints#brand=Warhammer"><img src="{{ 'DgX8B69wOApRYTQ2-300x130.png' | file_url }}" alt="Warhammer Colour" width="300" height="130"></a>
       <a class="xg-bc__brand" data-brand="The Army Painter" href="/collections/all-the-army-painter?view=paints#brand=The+Army+Painter"><img src="{{ 'Asset-1.png' | file_url }}" alt="The Army Painter" width="300" height="100"></a>
       <a class="xg-bc__brand" data-brand="Vallejo" href="/collections/all-vallejo?view=paints#brand=Vallejo"><img src="{{ 'logo_blanc.png' | file_url }}" alt="Vallejo" width="300" height="100"></a>
     </div>
@@ -102,7 +102,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
           {%- when 'vallejo-mecha-color' -%}{%- assign xg_pp_range = 'Mecha Color' -%}
         {%- endcase -%}
       {%- elsif xg_bc_key == 'citadel-collection' or xg_bc_key contains '-paints' and xg_bc_key contains 'citadel-' -%}
-        {%- assign xg_pp_brand = 'Citadel' -%}
+        {%- assign xg_pp_brand = 'Warhammer' -%}{%- comment -%} the picker reads Warhammer as its Citadel data (owner 2026-09-26: "It should say Warhammer") {%- endcomment -%}
         {%- assign xg_pp_home = 'citadel-collection' -%}
         {%- if xg_bc_key != 'citadel-collection' -%}{%- assign xg_pp_range = xg_bc_key | remove: 'citadel-' | remove: '-paints' | capitalize -%}{%- endif -%}
       {%- else -%}
