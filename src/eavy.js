@@ -217,6 +217,8 @@ export function defaultScheme(p, tw, vehicle) {
   p.schemes.forEach((s, j) => { if (!skip(s) && (rb < 0 || s.areas.length > p.schemes[rb].areas.length)) rb = j; });
   return rb < 0 ? 0 : rb;
 }
+// scenery, not the model: "Rocks", "Ash Wastes Base", "Basing"
+const BASING = /\b(rocks?|basing|ground|scenery)\b|\bbases?$/i;
 const VEHICLE_PART = /\b(tyres?|tires?|tracks?|wheels?|fuel|exhaust|hull|bike|engine|vehicles?)\b/i;
 const VEHICLE_ANY = /\b(armou?r|metals?|iron|plate|weathering|rust|chassis)\b/i;
 
@@ -227,8 +229,16 @@ export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40, kind =
   // the crawler sometimes read the NEXT scheme's name as a last paint ("Artillery", "Death Riders")
   const schemeWords = new Set(p.schemes.flatMap((s) => [key(s.name), key(s.name.split(":").pop())]));
   const order = [hit.first].concat(p.schemes.map((_, i) => i).filter((i) => i !== hit.first)).slice(0, maxSchemes);
+  // a vehicle that borrowed a named character's scheme (Trukk -> Wazdakka's bike) takes only its
+  // vehicle parts, not the rider's skin or the beast skull (owner 2026-09-26: 48 paints was too many)
+  const borrowed = isVehicle(title, kind) && CHARACTER.test(p.schemes[hit.first].name);
   const schemes = order.map((i) => {
-    const s = p.schemes[i];
+    const s = { ...p.schemes[i] };
+    s.areas = s.areas.filter((a) => !BASING.test(a.name));
+    if (i === hit.first && borrowed) {
+      const keep = s.areas.filter((a) => VEHICLE_PART.test(a.name) || VEHICLE_ANY.test(a.name) || /\b(markings?|decals?|trim)\b/i.test(a.name));
+      if (keep.length >= 2) s.areas = keep;
+    }
     const surl = p.url + "?modal=" + encodeURIComponent(s.slug);
     return {
       name: s.name, url: surl,
@@ -292,7 +302,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
   const faction = (url.searchParams.get("faction") || "").slice(0, 80);
   const kind = url.searchParams.get("kind") === "vehicle" ? "vehicle" : "";
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=5&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
+  const ck = new Request("https://cache.internal/eavy/for.json?v=6&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;

@@ -138,3 +138,15 @@ test("Ork vehicle takes the scheme with the most vehicle parts; a skin-only gene
   assert.equal(p.schemes[pickPage(ix, "WARHAMMER 40,000 ORKS TRUKK", "Orks", "vehicle").first].name, "Wazdakka");
   assert.equal(p.schemes[pickPage(ix, "WARHAMMER 40,000 ORKS: BOYZ", "Orks").first].name, "Orks (Beast Snaggas)");
 });
+
+test("a borrowed character scheme keeps only vehicle parts; basing areas never show", () => {
+  const A = (n) => ({ slug: n.toLowerCase().replace(/\W+/g, "-"), name: n, paints: ["Evil Sunz Scarlet"] });
+  const D = { pages: { u: { url: "https://e/40k/orks/", title: "Orks", game: "40k", faction: "orks", sub: "", schemes: [
+    { slug: "o", name: "Orks (General)", areas: ["40k Ork Skin"].map(A) },
+    { slug: "w", name: "Wazdakka", areas: ["Wazdakka Skin", "Red Armour", "Yellow Markings", "Copper Fuel Tank", "Bike Metals", "Tyres", "Weathering", "Beast Skull", "Rocks", "Ash Wastes Base"].map(A) }] } } };
+  const idx = citadelIndex({ swatches: [{ b: "Citadel", n: "Evil Sunz Scarlet", h: "#C01411", items: [{ r: "Layer", u: "ess", t: "x", p: "4.59", a: true, v: 2 }] }] });
+  const t = forProduct(indexEavy(D), idx, "WARHAMMER 40,000 ORKS TRUKK", "Orks", 40, "vehicle");
+  assert.deepEqual(t.schemes[0].areas.map((a) => a.name), ["Red Armour", "Yellow Markings", "Copper Fuel Tank", "Bike Metals", "Tyres", "Weathering"]);
+  const w = forProduct(indexEavy(D), idx, "WARHAMMER 40,000 ORKS: WAZDAKKA GUTSMEK", "Orks");
+  assert.deepEqual(w.schemes[0].areas.map((a) => a.name), ["Wazdakka Skin", "Red Armour", "Yellow Markings", "Copper Fuel Tank", "Bike Metals", "Tyres", "Weathering", "Beast Skull"]);
+});
