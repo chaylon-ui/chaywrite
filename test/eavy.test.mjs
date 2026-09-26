@@ -125,3 +125,16 @@ test("a tank opens on the army's vehicle scheme, a squad never does; scheme name
   const r = forProduct(ix, citadelIndex({ swatches: [] }), "ASTRA MILITARUM: KASRKIN", "Astra Militarum");
   assert.deepEqual(r.schemes.find((s) => /Artillery/.test(s.name)).areas[0].paints.map((p) => p.name), ["Karak Stone"]);
 });
+
+test("Ork vehicle takes the scheme with the most vehicle parts; a skin-only general scheme is passed over", () => {
+  const A = (n) => ({ slug: n.toLowerCase().replace(/\W+/g, "-"), name: n, paints: ["Evil Sunz Scarlet"] });
+  const D = { pages: { u: { url: "https://e/40k/orks/", title: "Orks", game: "40k", faction: "orks", sub: "", schemes: [
+    { slug: "g", name: "Ghazghkull Thraka", areas: ["Skin", "Goff Black Armour", "Red Armour & Details", "Pig Iron", "Machined Metal"].map(A) },
+    { slug: "b", name: "Orks (Beast Snaggas)", areas: ["Ork Skin", "Red Armour (Dark)", "White Armour", "Red Armour (Light)", "Dark Leather"].map(A) },
+    { slug: "o", name: "Orks (General)", areas: ["40k Ork Skin"].map(A) },
+    { slug: "s", name: "Squigs (Beast Snaggas)", areas: ["Legs", "Red Body", "Pale Bellies", "Lips"].map(A) },
+    { slug: "w", name: "Wazdakka", areas: ["Wazdakka Skin", "Red Armour", "Copper Fuel Tank", "Bike Metals", "Tyres", "Weathering"].map(A) }] } } };
+  const ix = indexEavy(D), p = ix.byFaction.get("40k|orks");
+  assert.equal(p.schemes[pickPage(ix, "WARHAMMER 40,000 ORKS TRUKK", "Orks", "vehicle").first].name, "Wazdakka");
+  assert.equal(p.schemes[pickPage(ix, "WARHAMMER 40,000 ORKS: BOYZ", "Orks").first].name, "Orks (Beast Snaggas)");
+});

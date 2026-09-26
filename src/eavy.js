@@ -192,16 +192,33 @@ export function defaultScheme(p, tw, vehicle) {
     if (score > bestScore) { best = i; bestScore = score; }
   }
   if (best >= 0) return best;
-  let i = p.schemes.findIndex((s) => /\bgeneral\b/i.test(s.name));
-  if (i >= 0) return i;
   const house = HOUSE[p.faction];
+  // a vehicle of an army with no house colours (Orks: owner 2026-09-26, the Trukk showed only skin
+  // greens): the scheme with the most vehicle parts - tyres, tracks, fuel tanks, bike metals count
+  // double, armour / metal / weathering once - characters included (Wazdakka's bike is the best
+  // Ork vehicle recipe); needs a real match (score 4+)
+  if (vehicle && !house) {
+    let vb = -1, vs = 3;
+    p.schemes.forEach((s, j) => {
+      const sc = s.areas.reduce((t, a) => t + (VEHICLE_PART.test(a.name) ? 2 : VEHICLE_ANY.test(a.name) ? 1 : 0), 0);
+      if (sc > vs) { vb = j; vs = sc; }
+    });
+    if (vb >= 0) return vb;
+  }
+  // an army's "general" scheme, when it covers more than one part (Orks (General) is skin only)
+  let i = p.schemes.findIndex((s) => /\bgeneral\b/i.test(s.name) && s.areas.length >= 3);
+  if (i >= 0) return i;
   if (house) { i = p.schemes.findIndex((s) => key(s.name) === house); if (i >= 0) return i; }
   const tk = key(p.title);
   i = p.schemes.findIndex((s) => key(s.name) === tk);
   if (i >= 0) return i;
-  i = p.schemes.findIndex((s) => !skip(s));
-  return i < 0 ? 0 : i;
+  // else the most complete scheme that is not a named character
+  let rb = -1;
+  p.schemes.forEach((s, j) => { if (!skip(s) && (rb < 0 || s.areas.length > p.schemes[rb].areas.length)) rb = j; });
+  return rb < 0 ? 0 : rb;
 }
+const VEHICLE_PART = /\b(tyres?|tires?|tracks?|wheels?|fuel|exhaust|hull|bike|engine|vehicles?)\b/i;
+const VEHICLE_ANY = /\b(armou?r|metals?|iron|plate|weathering|rust|chassis)\b/i;
 
 export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40, kind = "") {
   const hit = pickPage(ix, title, faction, kind);
@@ -275,7 +292,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
   const faction = (url.searchParams.get("faction") || "").slice(0, 80);
   const kind = url.searchParams.get("kind") === "vehicle" ? "vehicle" : "";
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=4&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
+  const ck = new Request("https://cache.internal/eavy/for.json?v=5&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
