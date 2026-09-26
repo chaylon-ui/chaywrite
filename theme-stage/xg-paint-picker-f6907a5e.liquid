@@ -139,6 +139,7 @@
   .xg-pp__link { font-size: 13px; color: var(--xg-muted); }
   .xg-pp__match { grid-column: 1 / -1; border-top: 1px solid var(--xg-border); padding: 14px 22px 18px; }
   .xg-pp__match[hidden] { display: none; }
+  .xg-pp__none { margin: 4px 0 0; font-size: 13px; opacity: .65; }
   .xg-pp__mh { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--xg-muted); font-weight: 700; }
   .xg-pp__ml { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
   .xg-pp__m { display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--xg-border); background: var(--xg-surface); color: var(--xg-ink); border-radius: 10px; padding: 8px 10px; cursor: pointer; font: 600 13px/1.25 var(--xg-font-body); }
@@ -232,9 +233,14 @@
     if (WASH.test(n) || /shade|wash/.test(r)) return 'wash';
     if (!g.h) return 'other';
     if (/flesh|skin/.test(n)) return 'flesh';
+    // a paint named as a brown is one ("Oak Brown", "Doombull Brown" are deep, saturated red-browns)
+    if (/brown|umber|hide|bark|soil|leather|earth|mud|rust|wood/.test(n)) return 'brown';
     var t = hsl(g.h), h = t[0], s = t[1], l = t[2];
     if (s < .13 || l < .09 || l > .93) return 'grey';
     if (h >= 15 && h < 48 && l < .5 && s < .75) return 'brown';
+    // muted, dark red hues read as brown, not red (owner 2026-09-26: Ruddy Umber, Tree Ancient,
+    // Dryad Brown and Wasteland Soil sat at the start of the reds)
+    if ((h < 15 || h >= 340) && s < .45 && l < .5 && !/red|crimson|scarlet|blood|burgundy|wine|maroon|gore/.test(n)) return 'brown';
     if (h < 12 || h >= 345) return 'red';
     if (h < 40) return 'orange';
     if (h < 68) return 'yellow';
@@ -260,7 +266,7 @@
     paints = j.swatches.filter(function (g) { return BRANDS.indexOf(g.b) > -1 && g.items && g.items.length; });
     paints.forEach(function (g) {
       g._i = paints.indexOf(g); g.fam = family(g); g.kind = kind(g); g.dry = g.items.every(function (it) { return it.r === 'Dry'; });
-      if (g.h) { g.lab = lab(g.h); var t = hsl(g.h); g.hue = t[0]; g.l = t[2]; } else { g.hue = 999; g.l = 0; }
+      if (g.h) { g.lab = lab(g.h); var t = hsl(g.h); g.hue = t[0]; g.sat = t[1]; g.l = t[2]; } else { g.hue = 999; g.l = 0; }
       g.items.sort(function (x, y) { return rangeIdx(g.b, x.r) - rangeIdx(g.b, y.r) || (parseFloat(x.s) || 0) - (parseFloat(y.s) || 0); });
     });
     var order = FAMILIES.map(function (f) { return f[0]; }).concat('other');
@@ -355,6 +361,10 @@
     } else if (!io) { while (drawn < drawList.length) more(); }
   }
   // closest colour of each other brand: same kind of paint, CIEDE2000 under 12, in stock preferred
+  /* Two colours that both have a hue must agree on it: CIEDE2000 alone called a pale blue
+     "Similar" to a lavender (owner 2026-09-26, Kraken Lavender -> Glacier Blue, 44 degrees apart) */
+  function chroma(g) { return g.sat > .15 && g.l > .08 && g.l < .95; }
+  function hueGap(a, b) { var x = Math.abs(a.hue - b.hue) % 360; return x > 180 ? 360 - x : x; }
   function matches(g) {
     if (!g.lab) return [];
     var out = [];
@@ -363,14 +373,15 @@
       var best = null;
       paints.forEach(function (o) {
         if (o.b !== b || !o.lab || o.kind !== g.kind) return;
+        if (chroma(g) && chroma(o) && hueGap(g, o) > 25) return;
         var d = de2000(g.lab, o.lab), stock = o.items.some(function (it) { return it.a; });
         // an in-stock paint wins over a sold-out one unless the sold-out one is clearly closer
         var score = d + (stock ? 0 : 2.5);
         // a Citadel Dry pot is for drybrushing: a plain paint is the better swap unless the Dry one is clearly closer
         if (o.dry && !g.dry) score += 3;
-        if (d < 12 && (!best || score < best.score)) best = { g: o, d: d, score: score, stock: stock };
+        if (d < 10 && (!best || score < best.score)) best = { g: o, d: d, score: score, stock: stock };
       });
-      if (best) out.push(best);
+      out.push(best || { none: b, d: 99 });
     });
     return out.sort(function (a, b) { return a.d - b.d; });
   }
@@ -403,6 +414,7 @@
     var m = matches(g);
     $('.xg-pp__match').hidden = !m.length;
     $('.xg-pp__ml').innerHTML = m.map(function (x) {
+      if (x.none) return '<p class="xg-pp__none">No close ' + esc(SHORT[x.none]) + ' match</p>';
       var o = x.g, first = o.items.filter(function (it) { return it.a; })[0] || o.items[0];
       return '<button type="button" class="xg-pp__m' + (x.stock ? '' : ' is-out') + '" data-i="' + o._i + '"><i style="background:' + o.h + '"></i><div>' + esc(o.n) +
         '<span>' + esc(SHORT[o.b] + ' ' + first.r + (first.c ? ' · ' + first.c : '')) + '</span><span>' + (x.d < 3 ? 'Very close match' : x.d < 6 ? 'Close match' : 'Similar') + (x.stock ? '' : ' · sold out') + '</span></div></button>';
