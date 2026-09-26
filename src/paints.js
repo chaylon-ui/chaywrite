@@ -172,35 +172,58 @@ async function fetchCollection(gql, handle) {
   return out;
 }
 
+/* Stale-while-revalidate (owner, 2026-09-26: the picker "taking a long time for it to load"):
+   a rebuild reads every paint collection from the Admin API and takes seconds, so the answer is
+   kept twice - FRESH for 15 minutes, a KEEP copy for 2 days. A request inside 15 minutes gets
+   the fresh copy; after that it gets the kept copy AT ONCE and the rebuild runs in the
+   background; only a colo that has never built one waits for a build. */
+const FRESH_S = 900, KEEP_S = 172800;
+const KEEP_KEY = CACHE_KEY + "&keep=1";
+
+async function buildPaints(gql) {
+  const cr = await fetch(PAINT_COLOURS_URL, { headers: { accept: "application/json" } });
+  if (!cr.ok) throw new Error("paint colours HTTP " + cr.status);
+  const chart = (await cr.json()).brands;
+  const byBrand = [];
+  for (const b of PAINT_BRANDS) {
+    const products = await fetchCollection(gql, b.collection);
+    if (b.search) {
+      const seen = new Set(products.map((p) => p.handle));
+      for (const p of await fetchSearch(gql, b.search)) if (p && !seen.has(p.handle)) { seen.add(p.handle); products.push(p); }
+    }
+    byBrand.push({ brand: b.brand, products });
+  }
+  const res = buildSwatches(chart, byBrand);
+  return { ok: true, generated: new Date().toISOString(), brands: PAINT_BRANDS.map((b) => b.brand), counts: res.counts, swatches: res.swatches };
+}
+
+const jsonRes = (text, maxAge, extra) => new Response(text, {
+  status: 200,
+  headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*", "cache-control": "public, max-age=" + maxAge, ...(extra || {}) },
+});
+
+async function rebuildInto(cache, gql) {
+  const text = JSON.stringify(await buildPaints(gql));
+  await Promise.all([cache.put(CACHE_KEY, jsonRes(text, FRESH_S)), cache.put(KEEP_KEY, jsonRes(text, KEEP_S))]);
+  return text;
+}
+
 export async function servePaints(request, env, ctx, gql) {
   const cache = caches.default;
   const hit = await cache.match(CACHE_KEY);
   if (hit) return hit;
-  let body, status = 200;
-  try {
-    const cr = await fetch(PAINT_COLOURS_URL, { headers: { accept: "application/json" } });
-    if (!cr.ok) throw new Error("paint colours HTTP " + cr.status);
-    const chart = (await cr.json()).brands;
-    const byBrand = [];
-    for (const b of PAINT_BRANDS) {
-      const products = await fetchCollection(gql, b.collection);
-      if (b.search) {
-        const seen = new Set(products.map((p) => p.handle));
-        for (const p of await fetchSearch(gql, b.search)) if (p && !seen.has(p.handle)) { seen.add(p.handle); products.push(p); }
-      }
-      byBrand.push({ brand: b.brand, products });
-    }
-    const res = buildSwatches(chart, byBrand);
-    body = { ok: true, generated: new Date().toISOString(), brands: PAINT_BRANDS.map((b) => b.brand), counts: res.counts, swatches: res.swatches };
-  } catch (e) {
-    status = 502;
-    body = { ok: false, error: String((e && e.message) || e).slice(0, 200) };
+  const kept = await cache.match(KEEP_KEY);
+  if (kept) {
+    ctx.waitUntil(rebuildInto(cache, gql).catch(() => null));
+    const text = await kept.text();
+    return jsonRes(text, 300, { "x-xg-paints": "kept" });
   }
-  const res = new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*",
-      "cache-control": status === 200 ? "public, max-age=900" : "no-store" },
-  });
-  if (status === 200) ctx.waitUntil(cache.put(CACHE_KEY, res.clone()));
-  return res;
+  try {
+    return jsonRes(await rebuildInto(cache, gql), FRESH_S);
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, error: String((e && e.message) || e).slice(0, 200) }), {
+      status: 502,
+      headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*", "cache-control": "no-store" },
+    });
+  }
 }
