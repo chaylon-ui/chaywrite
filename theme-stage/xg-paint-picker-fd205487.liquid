@@ -265,12 +265,15 @@
     if (!j || !j.ok || !j.swatches) throw new Error('no data');
     paints = j.swatches.filter(function (g) { return BRANDS.indexOf(g.b) > -1 && g.items && g.items.length; });
     paints.forEach(function (g) {
-      g._i = paints.indexOf(g); g.fam = family(g); g.kind = kind(g); g.dry = g.items.every(function (it) { return it.r === 'Dry'; });
+      g.fam = family(g); g.kind = kind(g); g.dry = g.items.every(function (it) { return it.r === 'Dry'; });
       if (g.h) { g.lab = lab(g.h); var t = hsl(g.h); g.hue = t[0]; g.sat = t[1]; g.l = t[2]; } else { g.hue = 999; g.l = 0; }
       g.items.sort(function (x, y) { return rangeIdx(g.b, x.r) - rangeIdx(g.b, y.r) || (parseFloat(x.s) || 0) - (parseFloat(y.s) || 0); });
     });
     var order = FAMILIES.map(function (f) { return f[0]; }).concat('other');
     paints.sort(function (a, b) { return order.indexOf(a.fam) - order.indexOf(b.fam) || a.hue - b.hue || b.l - a.l || BRANDS.indexOf(a.b) - BRANDS.indexOf(b.b); });
+    // each colour's index AFTER sorting: a swatch's data-i must name its own paint (owner 2026-09-26:
+    // Ruddy Umber opened Kraken Lavender - the index was taken before this sort)
+    paints.forEach(function (g, i) { g._i = i; });
     drawBrands(); drawRanges(); drawFamilies(); draw();
     if (/brand=Citadel/.test(location.hash)) setHash();   // older links: the address says Warhammer too
   }).catch(function () { $('.xg-pp__count').textContent = 'Could not load the colours - please refresh.'; });
