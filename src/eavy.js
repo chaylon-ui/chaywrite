@@ -126,7 +126,7 @@ const strongOf = (w) => w.filter((x) => !WEAK.has(x));
 
 /* Product -> { page, first } (the scheme index to show first), or null. */
 // Not model kits: nothing to paint (or a whole range of it)
-export const NOT_MODELS = /\b(codex|codexes|rulebook|rule book|core book|battletome|cards?|datacards?|dice|annual|novel|book|killzone|terrain|scenery|tokens?|templates?|objective markers?|paint set|paints?|brush(es)?|tool|glue|case|mat|playmat)\b/i;
+export const NOT_MODELS = /\b(codex|codexes|rulebook|rule book|core book|battletome|cards?|datacards?|dice|annual|novel|book|killzone|terrain|scenery|tokens?|templates?|objective markers?|paint set|paints?|brush(es)?|tool|glue|case|mat|playmat|spray|citadel|warhammer colou?r)\b/i;
 
 // BSData army names that 'Eavy Archive files under another page
 const FACTION_ALIAS = { "adeptus-custodes": "talons-of-the-emperor", "imperial-agents": "agents-of-the-imperium" };

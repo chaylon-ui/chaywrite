@@ -150,3 +150,8 @@ test("a borrowed character scheme keeps only vehicle parts; basing areas never s
   const w = forProduct(indexEavy(D), idx, "WARHAMMER 40,000 ORKS: WAZDAKKA GUTSMEK", "Orks");
   assert.deepEqual(w.schemes[0].areas.map((a) => a.name), ["Wazdakka Skin", "Red Armour", "Yellow Markings", "Copper Fuel Tank", "Bike Metals", "Tyres", "Weathering", "Beast Skull"]);
 });
+
+test("paint pots are never boxes to paint", () => {
+  const ix = indexEavy(DATA);
+  for (const t of ["WARHAMMER COLOUR MEPHISTON RED 12ML", "CITADEL MEPHISTON RED SPRAY", "BASE: MEPHISTON RED"]) assert.equal(pickPage(ix, t, ""), null, t);
+});
