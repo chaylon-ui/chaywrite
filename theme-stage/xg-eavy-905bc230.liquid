@@ -33,6 +33,14 @@
   if ptype contains 'paint' or ptype contains 'hobby' or ptype contains 'book' or ptype contains 'dice' or ptype contains 'accessor' or ptype contains 'tool'
     assign skip = true
   endif
+  comment
+    paint pots sold as "Tabletop Wargames" (WARHAMMER COLOUR ..., CITADEL ... SPRAY) are not boxes to paint;
+    they get the "Similar colours in stock" strip instead (snippets/xg-paint-similar.liquid)
+  endcomment
+  assign ptitle = product.title | upcase
+  if ptitle contains 'WARHAMMER COLOUR' or ptitle contains 'CITADEL' or ptitle contains ' SPRAY' or ptitle contains 'PAINT'
+    assign skip = true
+  endif
 -%}
 {%- unless skip -%}
 <section class="xg-eavy" hidden aria-label="Paint it like the box" data-title="{{ product.title | escape }}" data-faction="{{ faction | escape }}" data-kind="{{ kind }}">
