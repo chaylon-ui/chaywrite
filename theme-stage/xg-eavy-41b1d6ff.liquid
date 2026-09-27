@@ -101,9 +101,10 @@
     .xg-eavy .xg-eavy__ttl { font-size: 12px; letter-spacing: .06em; }
   }
 </style>
+<script src="{{ 'xg-paint-sheet.js' | asset_url }}" defer></script>
 <script>
   (function () {
-    var box = document.currentScript && document.currentScript.previousElementSibling && document.currentScript.previousElementSibling.previousElementSibling;
+    var box = document.querySelector('section.xg-eavy');   // one card per product page
     if (!box || !box.classList || !box.classList.contains('xg-eavy') || !window.fetch) return;
     var W = 'https://exor-binder.nevski.workers.dev';
     var data = null, cur = 0;
@@ -194,7 +195,16 @@
         .then(function (r) { return r.ok; }, function () { return false; });
     }
     box.addEventListener('change', function (e) { if (e.target.tagName === 'SELECT') show(+e.target.value); });
+    // a paint row opens the colour picker's bottle sheet (owner 2026-09-27): photo, bottles, price,
+    // add to cart and the closest colours from the other brands; the link is the fallback
     box.addEventListener('click', function (e) {
+      var r = e.target.closest && e.target.closest('a.xg-eavy__row');
+      if (r && window.xgPaintSheet && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();
+        var h = decodeURIComponent(r.getAttribute('href').replace('/products/', ''));
+        window.xgPaintSheet.open({ handle: h }).then(function (ok) { if (!ok) location.href = r.href; });
+        return;
+      }
       if (e.target.closest && e.target.closest('.xg-eavy__all')) {
         var on = $('.xg-eavy__list').classList.toggle('is-all');
         e.target.textContent = on ? 'Show fewer' : 'Show all ' + pots(data.schemes[cur]).ours.length + ' paints';

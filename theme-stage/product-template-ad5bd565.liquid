@@ -331,6 +331,8 @@
           <!-- </form> -->
         </div>
       </div>
+      {%- comment -%} paints: the nearest in-stock colours of every brand, right under the buy area (owner 2026-09-27) {%- endcomment -%}
+      {%- render 'xg-paint-similar', product: product -%}
 
       {% if settings.enable_productpage %}
         {% include 'reassurance' %}

@@ -1,0 +1,27 @@
+{%- comment -%}
+  "Similar colours in stock" on a paint's own product page (owner 2026-09-27: "I would also like the
+  similar colors to show on the individual paint product screens like this (sort of like the cards
+  with similar effects)", e.g. /products/base-rhinox-hide). assets/xg-paint-sheet.js finds this
+  bottle in the worker's /paints.json and fills the row with the nearest in-stock colours of every
+  brand (the colour picker's matching rules); a tile opens the picker's bottle sheet (photo, price,
+  add to cart, its own closest matches). Stays empty for anything that is not a listed paint.
+  Only paint-looking products load the script, so model kits never fetch the paint list.
+{%- endcomment -%}
+{%- liquid
+  assign t = product.title | upcase
+  assign ty = product.type | downcase
+  assign is_paint = false
+  if ty contains 'paint' or t contains 'WARHAMMER COLOUR' or t contains 'CITADEL' or t contains 'VALLEJO' or t contains 'WARPAINTS' or t contains 'SPEEDPAINT' or t contains 'ARMY PAINTER'
+    assign is_paint = true
+  endif
+-%}
+{%- if is_paint -%}
+<div class="xg-paint-similar" hidden data-handle="{{ product.handle | escape }}"></div>
+<script src="{{ 'xg-paint-sheet.js' | asset_url }}" defer></script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    var el = document.querySelector('.xg-paint-similar');
+    if (el && window.xgPaintSheet) window.xgPaintSheet.strip(el, el.getAttribute('data-handle'));
+  });
+</script>
+{%- endif -%}
