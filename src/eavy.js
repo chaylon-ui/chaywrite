@@ -325,8 +325,11 @@ export async function serveEavy(request, env, ctx, getPaints) {
   const title = (url.searchParams.get("title") || "").slice(0, 200);
   const faction = (url.searchParams.get("faction") || "").slice(0, 80);
   const kind = url.searchParams.get("kind") === "vehicle" ? "vehicle" : "";
+  // the guides go only to a card that can credit them per scheme (theme v=7+); an older card
+  // keeps its fixed 'Eavy Archive credit line, so it gets 'Eavy schemes only
+  const guides = Number(url.searchParams.get("v")) >= 7;
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=7&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
+  const ck = new Request("https://cache.internal/eavy/for.json?v=7&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind + (guides ? "&g=1" : ""));
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
@@ -334,7 +337,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
     const [dr, pp, paints] = await Promise.all([
       fetch(EAVY_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => { if (!r.ok) throw new Error("eavy data HTTP " + r.status); return r.json(); }),
       // the guides are extra: without them the card is what it was
-      fetch(PP_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      guides ? fetch(PP_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
       getPaints(),
     ]);
     body = { ...forProduct(indexEavy(dr, pp), citadelIndex(paints), title, faction, 40, kind), credit: CREDIT, source: "https://eavy-archive.com/",
