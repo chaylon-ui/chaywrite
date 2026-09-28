@@ -163,8 +163,9 @@ def parse(slug, page, names):
             strongs(b, found)
             for n in found:
                 k = key(n)
-                if k in names and names[k] not in cur["paints"]:
-                    cur["paints"].append(names[k])
+                # the guide's own spelling ("Bugman's Glow"), once per section
+                if k in names and k not in [key(x) for x in cur["paints"]]:
+                    cur["paints"].append(re.sub(r"\s+", " ", n).strip(" .,:;"))
     areas = [a for a in areas if a["paints"]]
     if not areas:
         return None, "no Citadel paints in the guide"
