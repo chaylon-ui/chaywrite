@@ -52,8 +52,8 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
 {%- endcomment -%}
 {%- assign xg_armies_40k = "Space Marines|Black Templars|Blood Angels|Dark Angels|Space Wolves|Deathwatch|Grey Knights|Adepta Sororitas|Adeptus Custodes|Adeptus Mechanicus|Astra Militarum|Imperial Knights|Agents of the Imperium|Chaos Space Marines|Chaos Knights|Chaos Daemons|Death Guard|Thousand Sons|World Eaters|Emperor's Children|Aeldari|Drukhari|Genestealer Cults|Leagues of Votann|Necrons|Orks|T'au Empire|Tyranids" | split: '|' | sort -%}
 {%- assign xg_armies_aos = "Stormcast Eternals|Cities of Sigmar|Fyreslayers|Kharadron Overlords|Lumineth Realm-lords|Idoneth Deepkin|Daughters of Khaine|Sylvaneth|Seraphon|Blades of Khorne|Disciples of Tzeentch|Maggotkin of Nurgle|Hedonites of Slaanesh|Slaves to Darkness|Skaven|Helsmiths of Hashut|Beasts of Chaos|Flesh-eater Courts|Nighthaunt|Ossiarch Bonereapers|Soulblight Gravelords|Orruk Warclans|Gloomspite Gitz|Ogor Mawtribes|Sons of Behemat" | split: '|' | sort -%}
-{%- assign xg_armies_hh = "Legiones Astartes" | split: '|' -%}
-{%- assign xg_armies_tow = "Kingdom of Bretonnia|Tomb Kings of Khemri" | split: '|' -%}
+{%- assign xg_armies_hh = "Legiones Astartes|Solar Auxilia|Mechanicum" | split: '|' -%}
+{%- assign xg_armies_tow = "Kingdom of Bretonnia|Tomb Kings of Khemri|Empire of Man|Orc & Goblin Tribes|Dwarfen Mountain Holds|High Elf Realms|Wood Elf Realms|Warriors of Chaos|Beastmen Brayherds|Grand Cathay" | split: '|' | sort -%}
 {%- assign xg_army_game = '' -%}
 {%- assign xg_army_cur = '' -%}
 {%- case xg_bc_key -%}
@@ -69,8 +69,10 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = '40k' -%}{%- endif -%}
   {%- capture xg_army_hs -%}{%- for a in xg_armies_aos -%}|{{ a | handleize | prepend: 'army-' }}{%- endfor -%}|{%- endcapture -%}
   {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = 'aos' -%}{%- endif -%}
-  {%- if xg_bc_key == 'army-legiones-astartes' -%}{%- assign xg_army_game = 'hh' -%}{%- endif -%}
-  {%- if xg_bc_key == 'army-kingdom-of-bretonnia' or xg_bc_key == 'army-tomb-kings-of-khemri' -%}{%- assign xg_army_game = 'tow' -%}{%- endif -%}
+  {%- capture xg_army_hs -%}{%- for a in xg_armies_hh -%}|{{ a | handleize | prepend: 'army-' }}{%- endfor -%}|{%- endcapture -%}
+  {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = 'hh' -%}{%- endif -%}
+  {%- capture xg_army_hs -%}{%- for a in xg_armies_tow -%}|{{ a | handleize | prepend: 'army-' }}{%- endfor -%}|{%- endcapture -%}
+  {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = 'tow' -%}{%- endif -%}
   {%- if xg_army_game != '' -%}
     {%- assign xg_army_cur = xg_bc_key -%}
     {%- assign xg_army_name = collections[xg_bc_key].title | default: collection.title -%}
