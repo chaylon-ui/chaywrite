@@ -22,6 +22,7 @@ import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
 import { serveLastSold } from "./lastsold.js";
+import { serveUpc } from "./upc.js";
 
 export { BinderRoom };
 
@@ -401,6 +402,11 @@ export default {
     // Last sale per SKU, for the Asmodee stock-check userscript (staff PIN).
     if (url.pathname === "/lastsold.json") {
       return serveLastSold(request, env, ctx, async (q) => (await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q)).data, staffOk);
+    }
+
+    // Products by barcode across the whole store, for the same userscript (public).
+    if (url.pathname === "/upc.json") {
+      return serveUpc(request, env, ctx, async (q) => (await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q)).data);
     }
 
     // Shopify's inventory webhook: stock moved on some item. The payload is
