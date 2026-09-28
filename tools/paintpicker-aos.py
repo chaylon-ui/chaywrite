@@ -29,6 +29,8 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "data", "paintpicker-aos.jso
 CHART = os.path.join(os.path.dirname(__file__), "..", "data", "paint-colours.json")
 UA = "Mozilla/5.0 (compatible; ExorGamesCatalogue/1.0; +https://exorgames.com) weekly paint list, 1 request / 4 s"
 PAUSE = 4.0
+# sections that are not the army's recipe: tips, speed/batch variants, other palettes and dynasties
+NOT_RECIPE = re.compile(r"\b(tips?|mistakes?|palettes?|batch|speed|quick|alternatives?|variants?|other|dynast(y|ies)|tribes?|colours|schemes?|bas(e|es|ing)|where to start|getting started|faq)\b", re.I)
 ALT = re.compile(r"\b(for speed|alternatively|alternative|instead|if you prefer|prefer your|swap (it )?for|or swap)\b", re.I)
 _last = [0.0]
 
@@ -48,7 +50,8 @@ def get(url):
 
 
 def key(s):
-    return re.sub(r"[^a-z0-9]", "", str(s or "").lower().replace("&", "and"))
+    # the chart keys "Bugman's Glow" as bugmanglow: drop the possessive, then everything not a-z0-9
+    return re.sub(r"[^a-z0-9]", "", re.sub(r"['\u2019]s\b", "", str(s or "").lower()))
 
 
 def citadel_names():
@@ -146,7 +149,10 @@ def parse(slug, page, names):
         tag = node[0]
         if tag in ("h2", "h3"):
             cur = {"slug": (node[1] or {}).get("id") or key(text(node)), "name": area_name(text(node)), "paints": []}
-            areas.append(cur)
+            if NOT_RECIPE.search(cur["name"]):
+                cur = None                       # read past it until the next heading
+            else:
+                areas.append(cur)
             continue
         if cur is None:
             continue
