@@ -1,0 +1,741 @@
+{
+ "source": "https://paintpicker.co.uk/factions/age-of-sigmar",
+ "credit": "Paint Picker - faction paint guides (paintpicker.co.uk)",
+ "generated": "2026-09-28T17:33:43Z",
+ "count": 13,
+ "pages": {
+  "https://paintpicker.co.uk/factions/blades-of-khorne": {
+   "url": "https://paintpicker.co.uk/factions/blades-of-khorne",
+   "title": "Blades of Khorne",
+   "game": "age-of-sigmar",
+   "faction": "blades-of-khorne",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Blades of Khorne (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-the-red",
+       "name": "Red",
+       "paints": [
+        "Khorne Red",
+        "Nuln Oil",
+        "Agrax Earthshade",
+        "Mephiston Red",
+        "Evil Sunz Scarlet",
+        "Wild Rider Red",
+        "Flesh Tearers Red",
+        "Ushabti Bone"
+       ]
+      },
+      {
+       "slug": "brass-iron-and-gore",
+       "name": "Brass, iron and gore",
+       "paints": [
+        "Warplock Bronze",
+        "Agrax Earthshade",
+        "Skullcrusher Brass",
+        "Runelord Brass",
+        "Leadbelcher",
+        "Nuln Oil",
+        "Ryza Rust",
+        "Blood For The Blood God"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/cities-of-sigmar": {
+   "url": "https://paintpicker.co.uk/factions/cities-of-sigmar",
+   "title": "Cities of Sigmar",
+   "game": "age-of-sigmar",
+   "faction": "cities-of-sigmar",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Cities of Sigmar (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-the-uniform",
+       "name": "Uniform",
+       "paints": [
+        "Macragge Blue",
+        "Nuln Oil",
+        "Drakenhof Nightshade",
+        "Altdorf Guard Blue",
+        "Calgar Blue",
+        "Talassar Blue",
+        "Grey Seer",
+        "Leadbelcher",
+        "Runefang Steel",
+        "Rhinox Hide",
+        "Skrag Brown",
+        "Zandri Dust",
+        "Agrax Earthshade",
+        "Ushabti Bone",
+        "Bugman's Glow",
+        "Reikland Fleshshade",
+        "Cadian Fleshtone",
+        "Kislev Flesh"
+       ]
+      },
+      {
+       "slug": "the-accent-that-does-the-work",
+       "name": "The accent that does the work",
+       "paints": [
+        "Mephiston Red",
+        "Nuln Oil",
+        "Evil Sunz Scarlet",
+        "Retributor Armour",
+        "Balthasar Gold",
+        "Agrax Earthshade"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/disciples-of-tzeentch": {
+   "url": "https://paintpicker.co.uk/factions/disciples-of-tzeentch",
+   "title": "Disciples of Tzeentch",
+   "game": "age-of-sigmar",
+   "faction": "disciples-of-tzeentch",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Disciples of Tzeentch (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-the-arcanites",
+       "name": "Arcanites",
+       "paints": [
+        "Thousand Sons Blue",
+        "Drakenhof Nightshade",
+        "Ahriman Blue",
+        "Teclis Blue",
+        "Talassar Blue",
+        "Grey Seer",
+        "Zandri Dust",
+        "Agrax Earthshade",
+        "Ushabti Bone",
+        "Rhinox Hide",
+        "Karak Stone",
+        "Balthasar Gold",
+        "Retributor Armour",
+        "Runefang Steel"
+       ]
+      },
+      {
+       "slug": "the-changehost",
+       "name": "The changehost",
+       "paints": [
+        "Screamer Pink",
+        "Druchii Violet",
+        "Pink Horror",
+        "Fulgrim Pink",
+        "Volupus Pink",
+        "Thousand Sons Blue",
+        "Drakenhof Nightshade",
+        "Blue Horror",
+        "Averland Sunset",
+        "Flash Gitz Yellow",
+        "Troll Slayer Orange"
+       ]
+      },
+      {
+       "slug": "warpfire-and-eyes",
+       "name": "Warpfire and eyes",
+       "paints": [
+        "Caliban Green",
+        "Kantor Blue",
+        "Warpstone Glow",
+        "Teclis Blue",
+        "Moot Green",
+        "Ulthuan Grey"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/flesh-eater-courts": {
+   "url": "https://paintpicker.co.uk/factions/flesh-eater-courts",
+   "title": "Flesh-eater Courts",
+   "game": "age-of-sigmar",
+   "faction": "flesh-eater-courts",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Flesh-eater Courts (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-ghoul-flesh",
+       "name": "Ghoul flesh",
+       "paints": [
+        "Rakarth Flesh",
+        "Druchii Violet",
+        "Agrax Earthshade",
+        "Pallid Wych Flesh",
+        "Screaming Skull",
+        "Rhinox Hide",
+        "Skrag Brown",
+        "Zandri Dust",
+        "Seraphim Sepia",
+        "Ushabti Bone"
+       ]
+      },
+      {
+       "slug": "rust-rags-and-heraldry",
+       "name": "Rust, rags and heraldry",
+       "paints": [
+        "Mephiston Red",
+        "Agrax Earthshade",
+        "Balthasar Gold",
+        "Blood For The Blood God"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/hedonites-of-slaanesh": {
+   "url": "https://paintpicker.co.uk/factions/hedonites-of-slaanesh",
+   "title": "Hedonites of Slaanesh",
+   "game": "age-of-sigmar",
+   "faction": "hedonites-of-slaanesh",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Hedonites of Slaanesh (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-daemonette-flesh",
+       "name": "Daemonette flesh",
+       "paints": [
+        "Daemonette Hide",
+        "Druchii Violet",
+        "Slaanesh Grey",
+        "Dechala Lilac",
+        "Naggaroth Night",
+        "Xereus Purple",
+        "Genestealer Purple",
+        "Screamer Pink",
+        "Pink Horror",
+        "Fulgrim Pink",
+        "Volupus Pink",
+        "Grey Seer"
+       ]
+      },
+      {
+       "slug": "silks-and-gold",
+       "name": "Silks and gold",
+       "paints": [
+        "Screamer Pink",
+        "Druchii Violet",
+        "Pink Horror",
+        "Fulgrim Pink",
+        "Balthasar Gold",
+        "Agrax Earthshade",
+        "Auric Armour Gold",
+        "Stormhost Silver",
+        "Abaddon Black",
+        "Eshin Grey",
+        "Rakarth Flesh",
+        "Reikland Fleshshade",
+        "Pallid Wych Flesh"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/helsmiths-of-hashut": {
+   "url": "https://paintpicker.co.uk/factions/helsmiths-of-hashut",
+   "title": "Helsmiths of Hashut",
+   "game": "age-of-sigmar",
+   "faction": "helsmiths-of-hashut",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Helsmiths of Hashut (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "blackened-iron-and-brass",
+       "name": "Blackened iron and brass",
+       "paints": [
+        "Leadbelcher",
+        "Nuln Oil",
+        "Ironbreaker",
+        "Runefang Steel",
+        "Typhus Corrosion",
+        "Ryza Rust",
+        "Warplock Bronze",
+        "Hashut Copper",
+        "Agrax Earthshade",
+        "Runelord Brass",
+        "Skullcrusher Brass",
+        "Khorne Red",
+        "Mephiston Red",
+        "Abaddon Black",
+        "Eshin Grey",
+        "Dawnstone",
+        "Thousand Sons Blue",
+        "Bugman's Glow",
+        "Reikland Fleshshade",
+        "Cadian Fleshtone",
+        "Hobgrot Hide"
+       ]
+      },
+      {
+       "slug": "the-molten-glow",
+       "name": "The molten glow",
+       "paints": [
+        "Abaddon Black",
+        "Khorne Red",
+        "Mephiston Red",
+        "Troll Slayer Orange",
+        "Fire Dragon Bright",
+        "Flash Gitz Yellow"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/idoneth-deepkin": {
+   "url": "https://paintpicker.co.uk/factions/idoneth-deepkin",
+   "title": "Idoneth Deepkin",
+   "game": "age-of-sigmar",
+   "faction": "idoneth-deepkin",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Idoneth Deepkin (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-sea-pale-skin",
+       "name": "Sea-pale skin",
+       "paints": [
+        "Ionrach Skin",
+        "Coelia Greenshade",
+        "Deepkin Flesh",
+        "Pallid Wych Flesh"
+       ]
+      },
+      {
+       "slug": "armour-fins-and-eels",
+       "name": "Armour, fins and eels",
+       "paints": [
+        "Runefang Steel",
+        "Akhelian Green",
+        "Terradon Turquoise",
+        "Balthasar Gold",
+        "Agrax Earthshade",
+        "Retributor Armour",
+        "Nihilakh Oxide"
+       ]
+      },
+      {
+       "slug": "aetherquartz",
+       "name": "Aetherquartz",
+       "paints": [
+        "Kantor Blue",
+        "Teclis Blue",
+        "Baharroth Blue",
+        "White Scar"
+       ]
+      },
+      {
+       "slug": "cloth-bone-and-leather",
+       "name": "Cloth, bone and leather",
+       "paints": [
+        "Zandri Dust",
+        "Agrax Earthshade",
+        "Ushabti Bone",
+        "Screaming Skull",
+        "Skeleton Horde",
+        "Wraithbone",
+        "Dryad Bark",
+        "Nuln Oil",
+        "Stormvermin Fur",
+        "Akhelian Green"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/lumineth-realm-lords": {
+   "url": "https://paintpicker.co.uk/factions/lumineth-realm-lords",
+   "title": "Lumineth Realm-lords",
+   "game": "age-of-sigmar",
+   "faction": "lumineth-realm-lords",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Lumineth Realm-lords (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "the-aether-gold",
+       "name": "The aether-gold",
+       "paints": [
+        "Retributor Armour",
+        "Reikland Fleshshade",
+        "Agrax Earthshade",
+        "Liberator Gold",
+        "Stormhost Silver"
+       ]
+      },
+      {
+       "slug": "white-cloth",
+       "name": "White cloth",
+       "paints": [
+        "White Scar",
+        "Grey Seer",
+        "Basilicanum Grey",
+        "Drakenhof Nightshade",
+        "Ulthuan Grey",
+        "Apothecary White"
+       ]
+      },
+      {
+       "slug": "skin-and-hair",
+       "name": "Skin and hair",
+       "paints": [
+        "Kislev Flesh",
+        "Reikland Fleshshade",
+        "Flayed One Flesh",
+        "Pallid Wych Flesh",
+        "Celestra Grey",
+        "Longbeard Grey",
+        "White Scar"
+       ]
+      },
+      {
+       "slug": "pastel-accents",
+       "name": "Pastel accents",
+       "paints": [
+        "Teclis Blue",
+        "White Scar",
+        "Baharroth Blue",
+        "Gauss Blaster Green",
+        "Dechala Lilac",
+        "Blue Horror"
+       ]
+      },
+      {
+       "slug": "the-vanari-the-alarith-and-the-hurakan",
+       "name": "The Vanari, the Alarith and the Hurakan",
+       "paints": [
+        "Grey Seer",
+        "Basilicanum Grey",
+        "Administratum Grey",
+        "Dawnstone",
+        "Wyldwood",
+        "Aethermatic Blue",
+        "Wraithbone"
+       ]
+      },
+      {
+       "slug": "gems-lamps-and-aetherquartz",
+       "name": "Gems, lamps and aetherquartz",
+       "paints": [
+        "Teclis Blue",
+        "Baharroth Blue",
+        "White Scar",
+        "Terradon Turquoise",
+        "Akhelian Green"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/ogor-mawtribes": {
+   "url": "https://paintpicker.co.uk/factions/ogor-mawtribes",
+   "title": "Ogor Mawtribes",
+   "game": "age-of-sigmar",
+   "faction": "ogor-mawtribes",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Ogor Mawtribes (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-ogor-skin",
+       "name": "Ogor skin",
+       "paints": [
+        "Bugman's Glow",
+        "Reikland Fleshshade",
+        "Cadian Fleshtone",
+        "Kislev Flesh"
+       ]
+      },
+      {
+       "slug": "gutplates-fur-and-iron",
+       "name": "Gutplates, fur and iron",
+       "paints": [
+        "Warplock Bronze",
+        "Agrax Earthshade",
+        "Runelord Brass",
+        "Runefang Steel",
+        "Mournfang Brown",
+        "Skrag Brown",
+        "Karak Stone",
+        "Snakebite Leather",
+        "Gore-Grunta Fur",
+        "Leadbelcher",
+        "Nuln Oil",
+        "Typhus Corrosion",
+        "Ryza Rust",
+        "Zandri Dust",
+        "Seraphim Sepia",
+        "Ushabti Bone"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/orruk-warclans": {
+   "url": "https://paintpicker.co.uk/factions/orruk-warclans",
+   "title": "Orruk Warclans",
+   "game": "age-of-sigmar",
+   "faction": "orruk-warclans",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Orruk Warclans (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "ironjawz-skin-and-plate",
+       "name": "Ironjawz: skin and plate",
+       "paints": [
+        "Waaagh! Flesh",
+        "Biel-Tan Green",
+        "Warboss Green",
+        "Skarsnik Green",
+        "Ork Flesh",
+        "Wraithbone",
+        "Leadbelcher",
+        "Nuln Oil",
+        "Typhus Corrosion",
+        "Ryza Rust",
+        "Zandri Dust",
+        "Rhinox Hide",
+        "Skrag Brown",
+        "Seraphim Sepia",
+        "Ushabti Bone"
+       ]
+      },
+      {
+       "slug": "kruleboyz-swamp-hide-and-poison",
+       "name": "Kruleboyz: swamp hide and poison",
+       "paints": [
+        "Wraithbone",
+        "Ogryn Camo",
+        "Steel Legion Drab",
+        "Militarum Green",
+        "Snakebite Leather",
+        "Leadbelcher",
+        "Nuln Oil",
+        "Caliban Green",
+        "Warpstone Glow",
+        "Moot Green",
+        "Ulthuan Grey",
+        "Waystone Green"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/slaves-to-darkness": {
+   "url": "https://paintpicker.co.uk/factions/slaves-to-darkness",
+   "title": "Slaves to Darkness",
+   "game": "age-of-sigmar",
+   "faction": "slaves-to-darkness",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Slaves to Darkness (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-the-dark-plate",
+       "name": "Dark plate",
+       "paints": [
+        "Leadbelcher",
+        "Nuln Oil",
+        "Drakenhof Nightshade",
+        "Ironbreaker",
+        "Runefang Steel",
+        "Black Templar",
+        "Warplock Bronze",
+        "Agrax Earthshade",
+        "Runelord Brass",
+        "Khorne Red",
+        "Mephiston Red",
+        "Wazdakka Red",
+        "Rhinox Hide",
+        "Skrag Brown"
+       ]
+      },
+      {
+       "slug": "the-darkoath",
+       "name": "The Darkoath",
+       "paints": [
+        "Bugman's Glow",
+        "Reikland Fleshshade",
+        "Cadian Fleshtone",
+        "Kislev Flesh",
+        "Darkoath Flesh",
+        "Wraithbone",
+        "Gore-Grunta Fur",
+        "Snakebite Leather",
+        "Zandri Dust",
+        "Agrax Earthshade",
+        "Thousand Sons Blue",
+        "Teclis Blue"
+       ]
+      },
+      {
+       "slug": "the-four-marks",
+       "name": "The four marks",
+       "paints": [
+        "Khorne Red",
+        "Warplock Bronze",
+        "Skullcrusher Brass",
+        "Thousand Sons Blue",
+        "Ahriman Blue",
+        "Retributor Armour",
+        "Death Guard Green",
+        "Athonian Camoshade",
+        "Typhus Corrosion",
+        "Ryza Rust",
+        "Screamer Pink",
+        "Fulgrim Pink",
+        "Auric Armour Gold",
+        "Stormhost Silver"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/sons-of-behemat": {
+   "url": "https://paintpicker.co.uk/factions/sons-of-behemat",
+   "title": "Sons of Behemat",
+   "game": "age-of-sigmar",
+   "faction": "sons-of-behemat",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Sons of Behemat (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "painting-skin-at-scale",
+       "name": "Skin at scale",
+       "paints": [
+        "Bugman's Glow",
+        "Reikland Fleshshade",
+        "Cadian Fleshtone",
+        "Kislev Flesh",
+        "Carroburg Crimson",
+        "Darkoath Flesh",
+        "Wraithbone",
+        "Skrag Brown",
+        "Agrax Earthshade",
+        "Karak Stone",
+        "Zandri Dust",
+        "Ushabti Bone"
+       ]
+      },
+      {
+       "slug": "scrap-rust-and-trophies",
+       "name": "Scrap, rust and trophies",
+       "paints": [
+        "Leadbelcher",
+        "Nuln Oil",
+        "Typhus Corrosion",
+        "Ryza Rust",
+        "Rhinox Hide",
+        "Karak Stone",
+        "Zandri Dust",
+        "Agrax Earthshade",
+        "Ushabti Bone",
+        "Macragge Blue",
+        "Mephiston Red"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "https://paintpicker.co.uk/factions/soulblight-gravelords": {
+   "url": "https://paintpicker.co.uk/factions/soulblight-gravelords",
+   "title": "Soulblight Gravelords",
+   "game": "age-of-sigmar",
+   "faction": "soulblight-gravelords",
+   "src": "pp",
+   "schemes": [
+    {
+     "slug": "paint-picker",
+     "name": "Soulblight Gravelords (Paint Picker guide)",
+     "areas": [
+      {
+       "slug": "skeletons-in-one-coat",
+       "name": "Skeletons in one coat",
+       "paints": [
+        "Wraithbone",
+        "Skeleton Horde",
+        "Screaming Skull"
+       ]
+      },
+      {
+       "slug": "zombies-and-wolves",
+       "name": "Zombies and wolves",
+       "paints": [
+        "Rakarth Flesh",
+        "Athonian Camoshade",
+        "Druchii Violet",
+        "Carroburg Crimson",
+        "Plaguebearer Flesh",
+        "Wraithbone",
+        "Steel Legion Drab",
+        "Agrax Earthshade",
+        "Rhinox Hide",
+        "Stormvermin Fur",
+        "Karak Stone",
+        "Pallid Wych Flesh"
+       ]
+      },
+      {
+       "slug": "vampires",
+       "name": "Vampires",
+       "paints": [
+        "Balthasar Gold",
+        "Agrax Earthshade",
+        "Retributor Armour",
+        "Stormhost Silver",
+        "Blood For The Blood God"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
