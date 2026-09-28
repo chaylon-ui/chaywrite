@@ -54,6 +54,13 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
 {%- assign xg_armies_aos = "Stormcast Eternals|Cities of Sigmar|Fyreslayers|Kharadron Overlords|Lumineth Realm-lords|Idoneth Deepkin|Daughters of Khaine|Sylvaneth|Seraphon|Blades of Khorne|Disciples of Tzeentch|Maggotkin of Nurgle|Hedonites of Slaanesh|Slaves to Darkness|Skaven|Helsmiths of Hashut|Beasts of Chaos|Flesh-eater Courts|Nighthaunt|Ossiarch Bonereapers|Soulblight Gravelords|Orruk Warclans|Gloomspite Gitz|Ogor Mawtribes|Sons of Behemat" | split: '|' | sort -%}
 {%- assign xg_armies_hh = "Legiones Astartes|Solar Auxilia|Mechanicum" | split: '|' -%}
 {%- assign xg_armies_tow = "Kingdom of Bretonnia|Tomb Kings of Khemri|Empire of Man|Orc & Goblin Tribes|Dwarfen Mountain Holds|High Elf Realms|Wood Elf Realms|Warriors of Chaos|Beastmen Brayherds|Grand Cathay" | split: '|' | sort -%}
+{%- comment -%}
+  Army icons (owner, 2026-09-28: "include this logo nicely ... for each faction/army for 40k"):
+  the owner's uploads in Shopify Files, army-<handle>.svg - single-colour silhouettes, drawn as a
+  CSS mask so they take the text colour (white on the banner, dark on the current chip). Add a
+  handle here when its file is uploaded (Adeptus Custodes and Chaos Knights have none yet).
+{%- endcomment -%}
+{%- assign xg_army_icons = "|army-adepta-sororitas|army-adeptus-mechanicus|army-aeldari|army-agents-of-the-imperium|army-astra-militarum|army-black-templars|army-blood-angels|army-chaos-daemons|army-chaos-space-marines|army-dark-angels|army-death-guard|army-deathwatch|army-drukhari|army-emperors-children|army-genestealer-cults|army-grey-knights|army-imperial-knights|army-leagues-of-votann|army-necrons|army-orks|army-space-marines|army-space-wolves|army-tau-empire|army-thousand-sons|army-tyranids|army-world-eaters|" -%}
 {%- assign xg_army_game = '' -%}
 {%- assign xg_army_cur = '' -%}
 {%- case xg_bc_key -%}
@@ -92,7 +99,8 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
       {%- assign xg_ah = a | handleize | prepend: 'army-' -%}
       {%- assign xg_an = collections[xg_ah].products_count | default: 0 -%}
       {%- if xg_an > 0 or xg_ah == xg_army_cur -%}
-      <a class="xg-bc__army-chip" href="/collections/{{ xg_ah }}"{% if xg_ah == xg_army_cur %} aria-current="page"{% endif %}>{{ a | escape }}{% if xg_an > 0 %}<small>{{ xg_an }}</small>{% endif %}</a>
+      {%- assign xg_ai = xg_ah | prepend: '|' | append: '|' -%}
+      <a class="xg-bc__army-chip" href="/collections/{{ xg_ah }}"{% if xg_ah == xg_army_cur %} aria-current="page"{% endif %}>{% if xg_army_icons contains xg_ai %}<span class="xg-bc__army-ico" style="--xg-ico:url({{ xg_ah | append: '.svg' | file_url }})" aria-hidden="true"></span>{% endif %}{{ a | escape }}{% if xg_an > 0 %}<small>{{ xg_an }}</small>{% endif %}</a>
       {%- endif -%}
     {%- endfor -%}
   {%- endcapture -%}
@@ -133,6 +141,10 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   .xg-bc__armies-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
   .xg-bc__army-chip { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 7px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.06); color: #fff !important; font: 600 13px/1.1 var(--xg-font-body, sans-serif); text-decoration: none; white-space: nowrap; transition: background .15s, border-color .15s, color .15s; }
   .xg-bc__army-chip small { font-size: 11px; font-weight: 600; opacity: .6; }
+  .xg-bc__army-ico { flex: 0 0 auto; display: inline-block; width: 18px; height: 18px; background: currentColor; -webkit-mask: var(--xg-ico) center / contain no-repeat; mask: var(--xg-ico) center / contain no-repeat; }
+  .xg-bc--logo .xg-bc__logo .xg-bc__army:has(.xg-bc__army-ico) { display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .xg-bc__army-ico--lg { width: 44px; height: 44px; filter: drop-shadow(0 3px 10px rgba(0,0,0,.55)); }
+  @media (max-width: 767px) { .xg-bc__army-ico--lg { width: 34px; height: 34px; } }
   .xg-bc__army-chip:hover, .xg-bc__army-chip:focus-visible { border-color: rgba(255,255,255,.7); background: rgba(255,255,255,.14); }
   .xg-bc__army-chip[aria-current="page"] { background: #fff; border-color: #fff; color: #14181b !important; }
   .xg-bc__army-chip--all { border-style: dashed; }
@@ -156,7 +168,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     </div>
     {% elsif xg_bc_logo != '' %}
     {%- if xg_army_cur != '' -%}
-    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{{ xg_army_gname | escape }}" width="460" height="110" fetchpriority="high"><span class="xg-bc__army">{{ xg_army_name | escape }}</span></h1>
+    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{{ xg_army_gname | escape }}" width="460" height="110" fetchpriority="high">{%- assign xg_ai = xg_army_cur | prepend: '|' | append: '|' -%}<span class="xg-bc__army">{% if xg_army_icons contains xg_ai %}<span class="xg-bc__army-ico xg-bc__army-ico--lg" style="--xg-ico:url({{ xg_army_cur | append: '.svg' | file_url }})" aria-hidden="true"></span>{% endif %}{{ xg_army_name | escape }}</span></h1>
     {%- else -%}
     <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
     {%- endif -%}
