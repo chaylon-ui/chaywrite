@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-09-27",
+  "updated": "2026-09-28",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -121,6 +121,10 @@
               "cash": 0.2,
               "credit": 0.3
             },
+            "epic": {
+              "cash": 0.2,
+              "credit": 0.3
+            },
             "legendary": {
               "cash": 0.2,
               "credit": 0.3
@@ -181,6 +185,10 @@
                   "cash": 0.2,
                   "credit": 0.3
                 },
+                "epic": {
+                  "cash": 0.2,
+                  "credit": 0.3
+                },
                 "legendary": {
                   "cash": 0.2,
                   "credit": 0.3
@@ -202,10 +210,6 @@
           ],
           "rarities": {
             "common": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "epic": {
               "cash": 0.0,
               "credit": 0.0
             },
@@ -446,10 +450,6 @@
       ],
       "rarities": {
         "common": {
-          "cash": 0.0,
-          "credit": 0.0
-        },
-        "epic": {
           "cash": 0.0,
           "credit": 0.0
         },
