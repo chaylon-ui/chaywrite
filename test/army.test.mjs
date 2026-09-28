@@ -26,9 +26,35 @@ test("paints, supplies, novels, Blood Bowl and non-GW products get none", () => 
     ["CONTRAST: ORK FLESH (18ML)", "Paint"], ["BLACK LIBRARY WARHAMMER 40,000 DA RED GOBBO COLLECTION", TT], ["HORUS HERESY: FULGRIM (PB)", TT],
     ["BLOOD BOWL: SKAVEN TEAM", TT], ["CITADEL 25MM ROUND BASES (100 PACK)", TT], ["WARHAMMER 40,000 SPACE MARINES PAINT SET", TT]])
     assert.equal(armyOf(t, GW, ty, ""), "", t);
-  assert.equal(armyOf("ORKS BOX", "Some Other Vendor", TT, ""), "");
+  assert.equal(armyOf("ORKS BOX", "Some Other Vendor", "Board Games", ""), "");   // not GW and not a wargame
 });
 test("no army in the title -> the datasheet's", () => {
   assert.equal(armyOf("WARHAMMER 40,000 CANOPTEK SPYDERS", GW, TT, "Necrons"), "Necrons");
   assert.equal(armyOf("WARHAMMER 40,000 SOMETHING", GW, TT, ""), "");
+});
+
+test("shorthands, units named without their army, Kill Team boxes, codex hardbacks", () => {
+  for (const [t, want] of [
+    ["WARHAMMER: AGE OF SIGMAR S/B GRAVELORDS: WIGHT KING ON STEED", "Soulblight Gravelords"],
+    ["WARHAMMER: AGE OF SIGMAR SOULBIGHT GRAVELORDS BATTLEFORCE - VENGORIAN COURT", "Soulblight Gravelords"],
+    ["WARHAMMER: AGE OF SIGMAR S/ETERNALS: CRYPTBORN'S STORMWING", "Stormcast Eternals"],
+    ["WARHAMMER: AGE OF SIGMAR SYLV: BELTHANOS FIRST THORN OF KURNO", "Sylvaneth"],
+    ["WARHAMMER: AGE OF SIGMAR GLOOM./GITZ: BRAGGIT'S BOTTLE-SNATCHA", "Gloomspite Gitz"],
+    ["WARHAMMER: AGE OF SIGMAR DISCIPLES/TZEENTCH: FLAMERS OF TZEENT", "Disciples of Tzeentch"],
+    ["WARHAMMER: AGE OF SIGMAR LEADBELCHERS", "Ogor Mawtribes"],
+    ["WARHAMMER: AGE OF SIGMAR ROCKGUT TROGGOTHS", "Gloomspite Gitz"],
+    ["WARHAMMER: AGE OF SIGMAR NAMARTI THRALLS", "Idoneth Deepkin"],
+    ["WARHAMMER: AGE OF SIGMAR DARKOATH SAVAGERS", "Slaves to Darkness"],
+    ["WARHAMMER 40,000 KILL TEAM: KOMMANDOS", "Orks"],
+    ["WARHAMMER 40,000 KILL TEAM: HEARTHKYN SALVAGERS", "Leagues of Votann"],
+    ["WARHAMMER 40,000 KILL TEAM: LEGIONARIES", "Chaos Space Marines"],
+    ["CODEX: THOUSAND SONS (HB) (ENGLISH)", "Thousand Sons"],
+    ["WARHAMMER: THE HORUS HERESY LEGIONES ASTARTES: MKIII TACTICAL SQUAD", "Legiones Astartes"],
+    ["WARHAMMER: THE OLD WORLD TOMB KINGS OF KHEMRI: NECROSPHINX", "Tomb Kings of Khemri"],
+  ]) assert.equal(armyOf(t, GW, TT, ""), want, t);
+  assert.equal(armyOf("WARHAMMER 40,000 ASTRA MILITARUM BANEBLADE", "Exor Games", TT, ""), "Astra Militarum");
+  assert.equal(armyOf("WARHAMMER 40,000 ULTRAMARINES CHIEF LIBRARIAN TIGURIUS", GW, TT, "Ultramarines"), "Space Marines");
+  assert.equal(armyOf("WARHAMMER 40,000 CANOPTEK THING", GW, TT, "Ultramarines"), "Space Marines");
+  for (const t of ["WARHAMMER 40K KEYCHAIN BLOOD ANGELS", "WARHAMMER 40K MUG ULTRAMARINES 320ML X2", "WARHAMMER 40,000 BL: WHITE CONSULS: CAPTAIN MESSINIUS", "BLACK LIBRARY DARK ANGELS HARDBACK"]) assert.equal(armyOf(t, GW, TT, ""), "", t);
+  assert.equal(armyOf("BATTLETECH COUNTERS PACK BATTLEFORCE", "Catalyst", TT, ""), "");
 });
