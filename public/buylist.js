@@ -1015,10 +1015,10 @@
   /* ---- staged buylists (owner, 2026-09-19): where each sent list stands ----
      The worker keeps a sent list until a staff member approves it; only
      then does it go to BinderPOS. /mine is that record, for this shopper. */
-  // Off (owner, 2026-09-22: "disable 'your recent buylists', I dont want
-  // them to have that"): the box is never filled or shown. Flip SHOW_MINE
-  // to bring it back - the /mine endpoint still answers.
-  var SHOW_MINE = false;
+  // Off 2026-09-22 ("disable 'your recent buylists'"), back on 2026-09-28
+  // (owner: "add back the last 5 trade in history"): the shopper's last five
+  // sent lists with where each stands. false hides the box again.
+  var SHOW_MINE = true;
   function loadMine() {
     if (!SHOW_MINE) { var off = $("#bl-mine"); if (off) { off.hidden = true; off.innerHTML = ""; } return; }
     api("/mine").then(function (j) {
