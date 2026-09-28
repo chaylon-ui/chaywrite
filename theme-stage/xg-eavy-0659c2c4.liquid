@@ -116,6 +116,7 @@
     if (!box || !box.classList || !box.classList.contains('xg-eavy') || !window.fetch) return;
     var W = 'https://exor-binder.nevski.workers.dev';
     var data = null, cur = 0;
+    var EAVY_CREDIT = box.querySelector('.xg-eavy__credit').innerHTML;
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function money(p) { return '$' + (Number(p) || 0).toFixed(2); }
     function $(s) { return box.querySelector(s); }
@@ -157,6 +158,10 @@
       add.hidden = !inst.length; add.disabled = false;
       add.textContent = 'Add ' + inst.length + ' in-stock paint' + (inst.length === 1 ? '' : 's') + ' · ' + money(sum);
       $('.xg-eavy__msg').textContent = '';
+      // the credit follows the scheme showing: Paint Picker's AoS guides (owner 2026-09-28) or 'Eavy Archive
+      $('.xg-eavy__credit').innerHTML = s.src === 'pp'
+        ? 'Paint list from the <a href="' + esc(s.url) + '" target="_blank" rel="noopener">Paint Picker ' + esc(data.page.title) + ' guide</a> (paintpicker.co.uk; unofficial, not endorsed by Games Workshop).'
+        : EAVY_CREDIT;
     }
     // "Don't forget the paint!" under the buy buttons; it scrolls to this card
     function tease(n) {
@@ -232,7 +237,7 @@
     });
 
     // v= changes with the worker's cache version so a browser never keeps an answer from before a fix
-    var u = W + '/eavy/for.json?v=6&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '') + '&kind=' + encodeURIComponent(box.getAttribute('data-kind') || '');
+    var u = W + '/eavy/for.json?v=7&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '') + '&kind=' + encodeURIComponent(box.getAttribute('data-kind') || '');
     fetch(u).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d || !d.ok || !d.schemes || !d.schemes.length) return;
       // a scheme is only worth showing when we sell at least one of its paints
