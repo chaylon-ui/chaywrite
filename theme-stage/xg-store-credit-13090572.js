@@ -37,7 +37,8 @@
   'use strict';
   try {
     var ID = 'xg-credit';
-    var SHOW_HISTORY = false;   // the History list under the balance (owner, 2026-09-22: off)
+    var SHOW_HISTORY = true;    // the History list under the balance (owner: off 2026-09-22, back on 2026-09-28)
+    var HISTORY_ROWS = 5;       // newest entries shown (owner, 2026-09-28: "the last 5")
     if (document.getElementById(ID + '-tab')) return;
     var cid = (window.__st && window.__st.cid != null) ? String(window.__st.cid).replace(/\D/g, '') : '';
     if (!cid) return;
@@ -139,7 +140,7 @@
         var list = el('ul', ID + '__list');
         var rows = d.history.slice().sort(function (x, y) {
           return String(y.readableUpdatedDate || '').localeCompare(String(x.readableUpdatedDate || ''));
-        });
+        }).slice(0, HISTORY_ROWS);
         rows.forEach(function (r) {
           var li = el('li', ID + '__row');
           var delta = Number(r.amountChanged) || 0;
