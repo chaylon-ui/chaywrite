@@ -1,3 +1,4 @@
+import { armyOf } from "./army.js";
 /* Game system for the collection filter (owner, 2026-09-25: "can you add
    these filters and others to the filter pane? so I can filter by say, Blood
    Bowl for example"). The Cloud Search sidebar filters on product
@@ -10,7 +11,7 @@
    DO recomputes it nightly and writes only what changed. */
 
 export const GS_QUERY = "status:active AND (vendor:'Games Workshop' OR product_type:'Tabletop Wargames')";
-export const GS_PAGE = `query($q:String!,$after:String){products(first:100,query:$q,after:$after,sortKey:ID){pageInfo{hasNextPage endCursor}nodes{id title vendor productType gs: metafield(namespace:"exor", key:"game_system"){ value }}}}`;
+export const GS_PAGE = `query($q:String!,$after:String){products(first:100,query:$q,after:$after,sortKey:ID){pageInfo{hasNextPage endCursor}nodes{id title vendor productType gs: metafield(namespace:"exor", key:"game_system"){ value } ar: metafield(namespace:"exor", key:"army"){ value } wa: metafield(namespace:"exor", key:"wh_army"){ value }}}}`;
 
 const GW = (v) => /^games workshop$/i.test(v || "");
 const WARGAME = (t) => /^tabletop wargames$/i.test(t || "");
@@ -48,7 +49,8 @@ export function parseGsPage(data) {
   const p = data && data.products;
   if (!p) return { items: [], hasNext: false, cursor: null };
   return {
-    items: p.nodes.map((n) => ({ id: n.id, title: n.title, vendor: n.vendor, type: n.productType, cur: (n.gs && n.gs.value) || "" })),
+    items: p.nodes.map((n) => ({ id: n.id, title: n.title, vendor: n.vendor, type: n.productType, cur: (n.gs && n.gs.value) || "",
+      army: (n.ar && n.ar.value) || "", whArmy: (n.wa && n.wa.value) || "" })),
     hasNext: p.pageInfo.hasNextPage,
     cursor: p.pageInfo.endCursor,
   };
@@ -64,4 +66,13 @@ export function gsPlan(it) {
   if (value === cur) return { want, set: [], del: [] };
   if (!value) return { want, set: [], del: [{ ownerId: it.id, namespace: "exor", key: "game_system" }] };
   return { want, set: [{ ownerId: it.id, namespace: "exor", key: "game_system", type: "list.single_line_text_field", value }], del: [] };
+}
+
+/* exor.army (src/army.js), planned in the same pass: set when it changed, delete when a
+   product no longer names an army. */
+export function armyPlan(it) {
+  const want = armyOf(it.title, it.vendor, it.type, it.whArmy);
+  if (want === (it.army || "")) return { want, set: [], del: [] };
+  if (!want) return { want, set: [], del: [{ ownerId: it.id, namespace: "exor", key: "army" }] };
+  return { want, set: [{ ownerId: it.id, namespace: "exor", key: "army", type: "single_line_text_field", value: want }], del: [] };
 }

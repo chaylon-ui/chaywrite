@@ -44,7 +44,7 @@ import { adminGql, throttleWait, dayOf, dateOf } from "./price-history.js";
 import { GUNPLA_QUERY, KITS_FILE_URL, indexKits, gunplaMetafields } from "./gunpla.js";
 import { PLAMOD_FILE_URL, PL_PAGE, PL_ADD_MEDIA, PL_QUERY, parsePlPage, plamodPlan } from "./plamod.js";
 import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan, WINDEX_QUERY, WINDEX_PAGE, UNIT_KINDS, parseWindexPage, likeUnits } from "./w40k.js";
-import { GS_PAGE, GS_QUERY, parseGsPage, gsPlan } from "./gamesys.js";
+import { GS_PAGE, GS_QUERY, parseGsPage, gsPlan, armyPlan } from "./gamesys.js";
 import { BT_FILE_URL, BT_PAGE, BT_QUERY, parseBtPage, btPlan } from "./bt.js";
 
 export const ENRICH_DO = "enrich";
@@ -1080,7 +1080,7 @@ export async function enrichTick(cx) {
     /* Game system for the collection filter (src/gamesys.js): exor.game_system
        on every Games Workshop / Tabletop Wargames product, from its title. */
     if (run.phase === "gamesys") {
-      if (!run.gamesys) run.gamesys = { seen: 0, tagged: 0, written: 0, cleared: 0 };
+      if (!run.gamesys) run.gamesys = { seen: 0, tagged: 0, written: 0, cleared: 0, army: 0, armyWritten: 0, armyCleared: 0 };
       let r;
       try { r = await adminGql(cx, GS_PAGE, { q: GS_QUERY, after: run.cursor }); }
       catch (e) {
@@ -1101,6 +1101,10 @@ export async function enrichTick(cx) {
         if (plan.set.length) { run.gamesys.written++; set.push(...plan.set); }
         if (plan.del.length) { run.gamesys.cleared++; del.push(...plan.del); }
         if (plan.want.length) run.gamesys.tagged++;
+        const ap = armyPlan(it);
+        if (ap.want) run.gamesys.army = (run.gamesys.army || 0) + 1;
+        if (ap.set.length) { run.gamesys.armyWritten = (run.gamesys.armyWritten || 0) + 1; set.push(...ap.set); }
+        if (ap.del.length) { run.gamesys.armyCleared = (run.gamesys.armyCleared || 0) + 1; del.push(...ap.del); }
       }
       if (set.length) {
         try { run.written += await writeMetafields(cx, set); }

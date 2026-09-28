@@ -11,6 +11,8 @@ import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
 import { servePaints } from "./paints.js";
 import { serveEavy } from "./eavy.js";
+import { serveArmyPreview } from "./army.js";
+import { GS_PAGE, GS_QUERY, parseGsPage } from "./gamesys.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
@@ -342,6 +344,14 @@ export default {
 
     // "Paint it like the box": 'Eavy Archive paint lists for a Warhammer product, each paint
     // linked to our own Citadel listing (src/eavy.js). Public storefront data only.
+    if (url.pathname === "/army/preview.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return serveArmyPreview(request, env, ctx, gql, GS_PAGE, parseGsPage, GS_QUERY);
+    }
+
     if (url.pathname === "/eavy/for.json") {
       const gql = async (q, v) => {
         const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
