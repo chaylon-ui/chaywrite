@@ -155,3 +155,39 @@ test("paint pots are never boxes to paint", () => {
   const ix = indexEavy(DATA);
   for (const t of ["WARHAMMER COLOUR MEPHISTON RED 12ML", "CITADEL MEPHISTON RED SPRAY", "BASE: MEPHISTON RED"]) assert.equal(pickPage(ix, t, ""), null, t);
 });
+
+test("Paint Picker AoS guides: merged into the army page, opened for army boxes, alone where 'Eavy has none", async () => {
+  const { indexEavy, forProduct, citadelIndex } = await import("../src/eavy.js");
+  const eavy = { pages: {
+    "https://eavy-archive.com/age-of-sigmar/skaven/": { url: "https://eavy-archive.com/age-of-sigmar/skaven/", title: "Skaven", game: "age-of-sigmar", faction: "skaven",
+      schemes: [{ slug: "clanrats", name: "Clanrats", areas: [{ slug: "fur", name: "Fur", paints: ["Rhinox Hide"] }] },
+                { slug: "skryre", name: "Clans Skryre", areas: [{ slug: "robes", name: "Robes", paints: ["Mephiston Red"] }] }] },
+  } };
+  const pp = { pages: {
+    "https://paintpicker.co.uk/factions/skaven": { url: "https://paintpicker.co.uk/factions/skaven", title: "Skaven", game: "age-of-sigmar", faction: "skaven", src: "pp",
+      schemes: [{ slug: "paint-picker", name: "Skaven (Paint Picker guide)", areas: [{ slug: "fur", name: "Fur", paints: ["Rhinox Hide", "Agrax Earthshade"] }] }] },
+    "https://paintpicker.co.uk/factions/ogor-mawtribes": { url: "https://paintpicker.co.uk/factions/ogor-mawtribes", title: "Ogor Mawtribes", game: "age-of-sigmar", faction: "ogor-mawtribes", src: "pp",
+      schemes: [{ slug: "paint-picker", name: "Ogor Mawtribes (Paint Picker guide)", areas: [{ slug: "painting-ogor-skin", name: "Ogor skin", paints: ["Bugman's Glow", "Reikland Fleshshade"] }] }] },
+  } };
+  const sw = (n, h) => ({ b: "Citadel", n, h: "#" + h, items: [{ u: n.toLowerCase().replace(/\W+/g, "-"), t: n, p: "5.50", a: true, v: 1, r: "Base" }] });
+  const idx = citadelIndex({ swatches: [sw("Rhinox Hide", "462F30"), sw("Agrax Earthshade", "5A573F"), sw("Mephiston Red", "9A1115"), sw("Bugman's Glow", "834F44"), sw("Reikland Fleshshade", "A46A4A")] });
+  const ix = indexEavy(eavy, pp);
+  // an army box: the guide first, the 'Eavy schemes after it
+  let r = forProduct(ix, idx, "WARHAMMER: AGE OF SIGMAR SKAVEN: STORMVERMIN", "");
+  assert.equal(r.schemes[0].name, "Skaven (Paint Picker guide)");
+  assert.equal(r.schemes[0].src, "pp");
+  assert.equal(r.schemes[0].url, "https://paintpicker.co.uk/factions/skaven");
+  assert.equal(r.schemes[0].areas[0].url, "https://paintpicker.co.uk/factions/skaven#fur");
+  assert.equal(r.schemes.length, 3);
+  // a box the title names keeps its box-art scheme first
+  r = forProduct(ix, idx, "WARHAMMER: AGE OF SIGMAR SKAVEN: CLANRATS", "");
+  assert.equal(r.schemes[0].name, "Clanrats");
+  // an army 'Eavy Archive does not have
+  r = forProduct(ix, idx, "WARHAMMER: AGE OF SIGMAR OGOR MAWTRIBES: LEADBELCHERS", "");
+  assert.equal(r.page.title, "Ogor Mawtribes");
+  assert.deepEqual(r.schemes[0].areas[0].paints.map((p) => p.name), ["Bugman's Glow", "Reikland Fleshshade"]);
+  // without the guides nothing changes
+  r = forProduct(indexEavy(eavy), idx, "WARHAMMER: AGE OF SIGMAR SKAVEN: STORMVERMIN", "");
+  assert.equal(r.schemes.length, 2);
+  assert.ok(!r.schemes.some((s) => s.src));
+});

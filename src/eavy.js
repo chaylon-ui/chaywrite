@@ -20,6 +20,13 @@
    VINDICTORS"). No page -> schemes [] and the card stays hidden. */
 
 export const EAVY_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/eavy-archive.json";
+/* Age of Sigmar faction guides from Paint Picker (owner, 2026-09-28: "please fill in age of
+   sigmar with the suggested paints with this guide"): data/paintpicker-aos.json
+   (tools/paintpicker-aos.py, weekly) - per faction one scheme, "<Army> (Paint Picker guide)",
+   whose areas are the guide's sections with the Citadel paints it names. Merged into the
+   army's 'Eavy Archive page (or standing alone where 'Eavy has none: Ogor Mawtribes), and the
+   scheme an AoS army box opens on unless its title names another scheme. */
+export const PP_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/paintpicker-aos.json";
 
 export const key = (s) => String(s || "").toLowerCase()
   .replace(/[‘’']s\b/g, "").replace(/&/g, " and ")
@@ -102,8 +109,22 @@ export function resolvePaint(idx, name) {
 /* data/eavy-archive.json -> lookup tables. Every page is an army page; its
    schemes include the characters and sub-factions ("Ghazghkull Thraka" on the
    Orks page, "Blood Angels" on the Space Marines page). */
-export function indexEavy(data) {
+export function mergeGuides(data, pp) {
+  const pages = Object.values((data && data.pages) || {}).map((p) => ({ ...p, schemes: (p.schemes || []).slice() }));
+  const by = new Map(pages.map((p) => [p.game + "|" + p.faction, p]));
+  for (const g of Object.values((pp && pp.pages) || {})) {
+    if (!g.schemes || !g.schemes.length) continue;
+    const s = { ...g.schemes[0], src: "pp", url: g.url };
+    const home = by.get(g.game + "|" + g.faction);
+    if (home) home.schemes.push(s);
+    else pages.push({ ...g, schemes: [s] });
+  }
+  return { pages };
+}
+
+export function indexEavy(data, pp) {
   const armies = [], schemes = [], byFaction = new Map();
+  if (pp) data = mergeGuides(data, pp);
   for (const p of Object.values((data && data.pages) || {})) {
     if (!p.schemes || !p.schemes.length) continue;
     armies.push({ p, w: words(p.title) });
@@ -192,6 +213,8 @@ export function defaultScheme(p, tw, vehicle) {
     if (score > bestScore) { best = i; bestScore = score; }
   }
   if (best >= 0) return best;
+  const guide = p.schemes.findIndex((s) => s.src === "pp");
+  if (guide >= 0 && !vehicle) return guide;
   const house = HOUSE[p.faction];
   // a vehicle of an army with no house colours (Orks: owner 2026-09-26, the Trukk showed only skin
   // greens): the scheme with the most vehicle parts - tyres, tracks, fuel tanks, bike metals count
@@ -239,11 +262,12 @@ export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40, kind =
       const keep = s.areas.filter((a) => VEHICLE_PART.test(a.name) || VEHICLE_ANY.test(a.name) || /\b(markings?|decals?|trim)\b/i.test(a.name));
       if (keep.length >= 2) s.areas = keep;
     }
-    const surl = p.url + "?modal=" + encodeURIComponent(s.slug);
+    const pp = s.src === "pp";
+    const surl = pp ? s.url : p.url + "?modal=" + encodeURIComponent(s.slug);
     return {
-      name: s.name, url: surl,
+      name: s.name, url: surl, ...(pp ? { src: "pp" } : {}),
       areas: s.areas.map((ar) => ({
-        name: ar.name, url: surl + "&block=" + encodeURIComponent(ar.slug),
+        name: ar.name, url: pp ? surl + "#" + encodeURIComponent(ar.slug) : surl + "&block=" + encodeURIComponent(ar.slug),
         paints: dedupe(ar.paints.flatMap(expand).filter((n) => n && !NOT_A_PAINT.test(n) && !schemeWords.has(key(n))).map((n) => resolveLoose(paintIdx, n)).filter(Boolean)),
       })).filter((ar) => ar.paints.length),
     };
@@ -302,16 +326,19 @@ export async function serveEavy(request, env, ctx, getPaints) {
   const faction = (url.searchParams.get("faction") || "").slice(0, 80);
   const kind = url.searchParams.get("kind") === "vehicle" ? "vehicle" : "";
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=6&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
+  const ck = new Request("https://cache.internal/eavy/for.json?v=7&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind);
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
   try {
-    const [dr, paints] = await Promise.all([
+    const [dr, pp, paints] = await Promise.all([
       fetch(EAVY_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => { if (!r.ok) throw new Error("eavy data HTTP " + r.status); return r.json(); }),
+      // the guides are extra: without them the card is what it was
+      fetch(PP_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       getPaints(),
     ]);
-    body = { ...forProduct(indexEavy(dr), citadelIndex(paints), title, faction, 40, kind), credit: CREDIT, source: "https://eavy-archive.com/" };
+    body = { ...forProduct(indexEavy(dr, pp), citadelIndex(paints), title, faction, 40, kind), credit: CREDIT, source: "https://eavy-archive.com/",
+      guideCredit: "Paint Picker faction paint guides", guideSource: "https://paintpicker.co.uk/factions/age-of-sigmar" };
   } catch (e) {
     status = 502;
     body = { ok: false, error: String((e && e.message) || e).slice(0, 200) };
