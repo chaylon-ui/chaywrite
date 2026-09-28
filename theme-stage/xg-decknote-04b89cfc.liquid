@@ -1,0 +1,177 @@
+{%- comment -%}
+  Deck-List Builder nudge above card search results (owner, 2026-09-09:
+  "add a - Check out our new Deck-List Builder... - to the top of search
+  results for cards"). Two callers:
+    - sections/search-template.liquid (the theme's own /search page) passes
+      shown: true when Liquid already sees singles in search.results;
+    - layout/theme.liquid renders it hidden on the search app's proxy page
+      (/a/search?q=...), which does NOT render our search section at all:
+      the app draws its own results header and cards. There the script
+      below slots the note above the app's filters root or results header
+      and reveals it once a rendered link carries "[Set]", the title shape
+      every single on this store has ("Lightning Bolt [Magic 2011]"), so a
+      search for sleeves or a board game never shows it.
+{%- endcomment -%}
+{%- comment -%}
+  2026-09-11: the narrow-by-game chips ride in the same box, so the app's
+  page gets them too (the owner searched from the header box, which lands
+  on /a/search, and saw no chips: they were only in the theme's own search
+  section). #xg-searchtop is what the app-page script slots above the
+  app's filters root; the chips read the words from the URL.
+{%- endcomment -%}
+{%- comment -%}
+  2026-09-14 (owner: "when I search for mana vault ... it should search for
+  the card they are typing in and bring those results up then the less
+  exact results"): both the search app's page and Shopify's own /search
+  score every field, so "mana vault" led with Omnath, Locus of MANA [From
+  the VAULT: Legends]. #xg-exact asks the worker for the published
+  products whose NAME is what was typed (/search/exact.json: exact base
+  title, then starts-with, then the words as a phrase; in stock first,
+  cheapest first) and draws them as a strip at the top of the results;
+  sold-out printings collapse to one line. Fail-silent, nothing drawn when
+  no title carries the words.
+{%- endcomment -%}
+<div id="xg-searchtop">
+<section class="xg-exact" id="xg-exact" aria-label="Top matches" data-terms="{{ search.terms | escape }}" hidden></section>
+<script>
+  (function () {
+    var box = document.getElementById('xg-exact');
+    if (!box || !window.fetch) return;
+    var qs = new URLSearchParams(location.search);
+    var raw = (qs.get('q') || box.getAttribute('data-terms') || '').trim();
+    var words = raw.replace(/\(?\s*product_type:"[^"]*"(\s+OR\s+product_type:"[^"]*")*\s*\)?/g, ' ').replace(/\s+/g, ' ').trim();
+    if (words.length < 2 || words.length > 60) return;
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var money = function (p) { var n = parseFloat(p); return isFinite(n) ? '$' + n.toFixed(2) : ''; };
+    var img = function (u) { return u ? esc(u + (u.indexOf('?') < 0 ? '?' : '&') + 'width=240') : ''; };
+    fetch('https://exor-binder.nevski.workers.dev/search/exact.json?q=' + encodeURIComponent(words), { mode: 'cors' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.items) return;
+        /* tier 3 = only the full title carries the words (a set name, say) — too loose to headline */
+        var items = d.items.filter(function (it) { return typeof it.tier !== 'number' || it.tier <= 2; });
+        var stock = items.filter(function (it) { return it.available; });
+        var gone = items.filter(function (it) { return !it.available; });
+        /* tell the sister-store band what this store has: sold out here but
+           known -> that band moves up under this strip (xg-sister-stores.js) */
+        window.xgExact = { q: words, stock: stock.length, gone: gone.length };
+        try { document.dispatchEvent(new CustomEvent('xg:exact', { detail: window.xgExact })); } catch (e) {}
+        if (!stock.length && !gone.length) return;
+        var h = '<div class="xg-exact__head"><span class="xg-exact__title">Top matches for &ldquo;' + esc(words) + '&rdquo;</span>'
+          + (stock.length ? '<span class="xg-exact__count">' + stock.length + ' in stock</span>' : '<span class="xg-exact__count xg-exact__count--none">none in stock right now</span>') + '</div>';
+        if (stock.length) {
+          h += '<div class="xg-exact__row">' + stock.slice(0, 12).map(function (it) {
+            return '<a class="xg-exact__card" href="' + esc(it.url) + '">'
+              + (it.image ? '<img src="' + img(it.image) + '" alt="" loading="lazy">' : '<span class="xg-exact__noimg"></span>')
+              + '<span class="xg-exact__name">' + esc(it.name) + '</span>'
+              + '<span class="xg-exact__set">' + esc(it.set || it.type) + '</span>'
+              + '<span class="xg-exact__price">' + money(it.price) + '</span></a>';
+          }).join('') + '</div>';
+        }
+        if (gone.length) {
+          h += '<p class="xg-exact__gone">Sold out right now: ' + gone.slice(0, 8).map(function (it) {
+            return '<a href="' + esc(it.url) + '">' + esc(it.set ? it.name + ' [' + it.set + ']' : it.title) + '</a>';
+          }).join(', ') + (gone.length > 8 ? ' and ' + (gone.length - 8) + ' more' : '') + '</p>';
+        }
+        box.innerHTML = h;
+        box.hidden = false;
+      })
+      .catch(function () {});
+  })();
+</script>
+<style>
+  .xg-exact{margin:6px 0 14px;padding:12px 14px 10px;border:1px solid var(--xg-border,#e3e6e8);border-radius:10px;background:var(--xg-surface,#fff);color:var(--xg-text,#3d454b)}
+  .xg-exact[hidden]{display:none}
+  .xg-exact__head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+  .xg-exact__title{font-family:var(--xg-font-display,"Oswald","Arial Narrow",sans-serif);font-size:18px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;color:var(--xg-ink,#171b1d)}
+  .xg-exact__count{font-size:12.5px;font-weight:700;color:#2a9d5c}
+  .xg-exact__count--none{color:var(--xg-muted,#8a9299);font-weight:600}
+  .xg-exact__row{display:flex;gap:12px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;scrollbar-width:thin}
+  .xg-exact__card{flex:0 0 124px;width:124px;scroll-snap-align:start;text-decoration:none;color:inherit;text-align:center;background:var(--xg-bg,#f6f7f8);border:1px solid var(--xg-border,#e3e6e8);border-radius:var(--xg-radius,10px);padding:8px 8px 10px;transition:border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+  .xg-exact__card:hover{border-color:#ccd2d6;box-shadow:0 10px 28px rgba(16,24,40,.12);transform:translateY(-2px);text-decoration:none;color:inherit}
+  .xg-exact__card img,.xg-exact__noimg{width:100%;aspect-ratio:.715;object-fit:contain;background:#fff;border-radius:6px;display:block}
+  .xg-exact__name{display:block;font-size:12.5px;font-weight:600;color:var(--xg-ink,#171b1d);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .xg-exact__set{display:block;font-size:11px;color:var(--xg-muted,#8a9299);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .xg-exact__price{display:block;font-size:14px;font-weight:700;color:var(--xg-ink,#171b1d);margin-top:2px;font-variant-numeric:tabular-nums}
+  .xg-exact__gone{margin:8px 0 0;font-size:12.5px;line-height:1.5;color:var(--xg-muted,#8a9299)}
+  .xg-exact__gone a{color:var(--xg-text,#3d454b);text-decoration:underline}
+</style>
+<a class="xg-decknote" id="xg-decknote" href="/pages/deck-builder"{% unless shown %} hidden{% endunless %}>
+  <span class="xg-decknote__tag">New</span>
+  <span class="xg-decknote__text"><strong>Check out our new Deck-List Builder.</strong> Copy and paste your decklist and search all cards at once.</span>
+  <span class="xg-decknote__go">Try it &rsaquo;</span>
+</a>
+<nav class="xg-sfilter" id="xg-sfilter" aria-label="Narrow the search by game" data-terms="{{ search.terms | escape }}">
+  <span class="xg-sfilter__label">Show</span>
+  <a class="xg-sfilter__chip is-on" href="#" data-types="">Everything</a>
+  <a class="xg-sfilter__chip" href="#" data-types="MTG Single|Magic: The Gathering Singles">Magic</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Pokemon Single|Pokemon Japan Singles|Pokemon Chinese Singles|Pokemon Korean Singles">Pokémon</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Yugioh Single">Yu-Gi-Oh!</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Lorcana Single">Lorcana</a>
+  <a class="xg-sfilter__chip" href="#" data-types="One Piece Single">One Piece</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Star Wars: Unlimited Single">Star Wars</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Flesh And Blood Single">Flesh and Blood</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Riftbound TCG Singles|Riftbound: League of Legends Trading Card Game Singles">Riftbound</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Magic Sealed Product|Pokemon Sealed Product|YU-GI-OH Sealed Product|Disney Lorcana Sealed Product|One Piece Card Game Sealed Product|One Piece Sealed|Star Wars Unlimited Sealed Product|Flesh and Blood Sealed Product|Riftbound Sealed Product">Sealed</a>
+  <a class="xg-sfilter__chip" href="#" data-types="Board Games|Asmodee">Board Games</a>
+</nav>
+<script>
+  (function () {
+    var nav = document.getElementById('xg-sfilter');
+    if (!nav) return;
+    var qs = new URLSearchParams(location.search);
+    var raw = (qs.get('q') || nav.getAttribute('data-terms') || '').trim();
+    // The words without any product_type clause a chip added earlier.
+    var words = raw.replace(/\(?\s*product_type:"[^"]*"(\s+OR\s+product_type:"[^"]*")*\s*\)?/g, ' ').replace(/\s+/g, ' ').trim();
+    var chips = nav.querySelectorAll('.xg-sfilter__chip');
+    var typed = (raw.match(/product_type:"([^"]*)"/) || [])[1] || '';
+    var any = false;
+    Array.prototype.forEach.call(chips, function (a) {
+      var types = (a.getAttribute('data-types') || '').split('|').filter(Boolean);
+      var on = types.length ? types.indexOf(typed) >= 0 : false;
+      if (on) any = true;
+      a.classList.toggle('is-on', on);
+      var clause = types.map(function (t) { return 'product_type:"' + t + '"'; }).join(' OR ');
+      var q = words + (clause ? ' ' + (types.length > 1 ? '(' + clause + ')' : clause) : '');
+      a.href = '/search?type=product&options%5Bprefix%5D=last&q=' + encodeURIComponent(q.trim());
+    });
+    if (!any) chips[0].classList.add('is-on');
+    if (!words) nav.hidden = true;
+  })();
+</script>
+</div>
+<style>
+  .xg-decknote{display:flex;align-items:center;gap:12px;margin:6px 0 14px;padding:10px 14px;border:1px solid var(--xg-border,#e3e6e8);border-left:4px solid var(--xg-red,#d62c28);border-radius:10px;background:var(--xg-surface,#fff);color:var(--xg-text,#3d454b);font-size:14px;line-height:1.4;text-decoration:none}
+  .xg-decknote[hidden]{display:none}
+  .xg-decknote:hover,.xg-decknote:focus{text-decoration:none;border-color:var(--xg-red,#d62c28);color:var(--xg-text,#3d454b)}
+  .xg-decknote strong{color:var(--xg-ink,#171b1d)}
+  .xg-decknote__tag{flex:0 0 auto;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--xg-red,#d62c28);color:var(--xg-inverse-text,#fff)}
+  .xg-decknote__text{flex:1 1 auto;min-width:0}
+  .xg-decknote__go{flex:0 0 auto;font-weight:700;color:var(--xg-red,#d62c28);white-space:nowrap}
+  @media (max-width:600px){.xg-decknote{flex-wrap:wrap;gap:8px 10px}.xg-decknote__go{margin-left:auto}}
+</style>
+{%- unless shown -%}
+<script>
+  (function () {
+    var note = document.getElementById('xg-decknote');
+    if (!note) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      {%- if app_page %}
+      /* the app's page: sit right above its filters root, else under its results header */
+      var box = document.getElementById('xg-searchtop') || note;
+      var root = document.getElementById('cloud_search_filters_root');
+      var header = document.querySelector('.search_page .section-header') || document.querySelector('main h1, #MainContent h1, h1');
+      if (root && box.nextElementSibling !== root) root.parentNode.insertBefore(box, root);
+      else if (!root && header && header.nextElementSibling !== box) header.insertAdjacentElement('afterend', box);
+      {%- endif %}
+      var els = document.querySelectorAll('a, h3, h4');
+      for (var i = 0; i < els.length; i++) {
+        if (/\[[^\]]{2,}\]/.test(els[i].textContent || '')) { note.hidden = false; clearInterval(timer); return; }
+      }
+      if (tries > 30) clearInterval(timer);
+    }, 400);
+  })();
+</script>
+{%- endunless -%}
