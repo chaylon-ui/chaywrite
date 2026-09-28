@@ -329,7 +329,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
   // keeps its fixed 'Eavy Archive credit line, so it gets 'Eavy schemes only
   const guides = Number(url.searchParams.get("v")) >= 7;
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=7&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind + (guides ? "&g=1" : ""));
+  const ck = new Request("https://cache.internal/eavy/for.json?v=8&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind + (guides ? "&g=1" : ""));
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
