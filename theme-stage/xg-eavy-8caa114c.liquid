@@ -14,7 +14,7 @@
   one compact shopping list - each pot once, in the order the recipe first
   uses it. Paints we do not list sit on one muted line. (The step-by-step
   link and the "Which paint goes where" breakdown were removed at the
-  owner's request; the credit line links to 'Eavy Archive.) No scheme found -> the card stays hidden.
+  owner's request; the thanks to the sources sits at the foot of the page, above the footer; the card itself says these are suggestions.) No scheme found -> the card stays hidden.
 
   Teaser (owner, same day: "add a fun little graphic up near the top to say
   don't forget the paint and maybe an arrow or something to do with Warhammer
@@ -56,7 +56,7 @@
     <button type="button" class="xg-eavy__add"></button>
   </div>
   <div class="xg-eavy__msg" role="status"></div>
-  <p class="xg-eavy__credit">Paint lists from <a href="https://eavy-archive.com/" target="_blank" rel="noopener">&lsquo;Eavy Archive</a>, box-art recipes collected by The Infernal Brush community (unofficial, not endorsed by Games Workshop).</p>
+  <p class="xg-eavy__credit">These are paint suggestions to get you started. Every model is yours to paint, so please choose the paints that are right for you.</p>
 </section>
 <style>
   .xg-eavy { --e-ink: #171b1d; --e-text: #3d454b; --e-mute: #6b757c; --e-line: #e3e7ea; --e-bg: #fff; --e-row: #f6f8f9;
@@ -101,6 +101,9 @@
   @media (prefers-reduced-motion: reduce) { .xg-eavy-tease__arrow, .xg-eavy.is-flash { animation: none; } }
   .xg-eavy__credit { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--e-mute); }
   .xg-eavy__credit a { color: inherit !important; text-decoration: underline; }
+  /* the sources, thanked once at the foot of the page (owner, 2026-09-28) */
+  .xg-eavy-thanks { max-width: 1200px; margin: 28px auto 18px; padding: 0 16px; text-align: center; font-size: 11.5px; line-height: 1.5; color: var(--xg-muted, #707a83); }
+  .xg-eavy-thanks a { color: inherit !important; text-decoration: underline; }
   @media (max-width: 560px) {
     .xg-eavy { padding: 12px 12px 10px; }
     .xg-eavy__list { grid-template-columns: 1fr; }
@@ -116,7 +119,6 @@
     if (!box || !box.classList || !box.classList.contains('xg-eavy') || !window.fetch) return;
     var W = 'https://exor-binder.nevski.workers.dev';
     var data = null, cur = 0;
-    var EAVY_CREDIT = box.querySelector('.xg-eavy__credit').innerHTML;
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function money(p) { return '$' + (Number(p) || 0).toFixed(2); }
     function $(s) { return box.querySelector(s); }
@@ -158,10 +160,22 @@
       add.hidden = !inst.length; add.disabled = false;
       add.textContent = 'Add ' + inst.length + ' in-stock paint' + (inst.length === 1 ? '' : 's') + ' · ' + money(sum);
       $('.xg-eavy__msg').textContent = '';
-      // the credit follows the scheme showing: Paint Picker's AoS guides (owner 2026-09-28) or 'Eavy Archive
-      $('.xg-eavy__credit').innerHTML = s.src === 'pp'
-        ? 'Paint list from the <a href="' + esc(s.url) + '" target="_blank" rel="noopener">Paint Picker ' + esc(data.page.title) + ' guide</a> (paintpicker.co.uk; unofficial, not endorsed by Games Workshop).'
-        : EAVY_CREDIT;
+    }
+    /* The thanks to the sources, at the foot of the page above the footer (owner, 2026-09-28:
+       "can the thanks be somewhere at bottom of page"): whichever sources this card's schemes use. */
+    function thanks(d) {
+      if (document.querySelector('.xg-eavy-thanks')) return;
+      var main = document.querySelector('main') || document.getElementById('MainContent');
+      if (!main || !main.parentNode) return;
+      var src = [];
+      if (d.schemes.some(function (s) { return s.src !== 'pp'; }))
+        src.push('<a href="https://eavy-archive.com/" target="_blank" rel="noopener">&lsquo;Eavy Archive</a> (box-art recipes collected by The Infernal Brush community)');
+      var g = d.schemes.filter(function (s) { return s.src === 'pp'; })[0];
+      if (g) src.push('the <a href="' + esc(g.url) + '" target="_blank" rel="noopener">Paint Picker ' + esc(d.page.title) + ' guide</a>');
+      var p = document.createElement('p');
+      p.className = 'xg-eavy-thanks';
+      p.innerHTML = 'Thank you to ' + src.join(' and ') + ' for the paint suggestions on this page. Unofficial, not endorsed by Games Workshop.';
+      main.parentNode.insertBefore(p, main.nextSibling);
     }
     // "Don't forget the paint!" under the buy buttons; it scrolls to this card
     function tease(n) {
@@ -249,6 +263,7 @@
       if (d.schemes.length < 2) $('.xg-eavy__pick').hidden = true;
       show(0);
       box.hidden = false;
+      thanks(d);
       tease(pots(d.schemes[0]).ours.length);
     }).catch(function () {});
   })();
