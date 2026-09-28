@@ -21,6 +21,7 @@ import { servePageEdit } from "./page-edit.js";
 import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
+import { serveLastSold } from "./lastsold.js";
 
 export { BinderRoom };
 
@@ -395,6 +396,11 @@ export default {
 
     if (url.pathname === "/qty.json") {
       return serveQty(request, env, ctx);
+    }
+
+    // Last sale per SKU, for the Asmodee stock-check userscript (staff PIN).
+    if (url.pathname === "/lastsold.json") {
+      return serveLastSold(request, env, ctx, async (q) => (await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q)).data, staffOk);
     }
 
     // Shopify's inventory webhook: stock moved on some item. The payload is

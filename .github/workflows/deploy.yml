@@ -181,6 +181,8 @@ jobs:
           curl -sS -o /dev/null -w '/deckstats.json no key : HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deckstats.json" || true
           curl -sS -o /dev/null -w '/deckstats.json bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/deckstats.json?k=smoke-wrong" || true
           curl -sS -o /dev/null -w '/deck-admin no key POST: HTTP %{http_code} (expect 403)\n' --max-time 20 -X POST "https://exor-binder.nevski.workers.dev/deck-admin?op=ban&ip=203.0.113.9" || true
+          curl -sS -o /dev/null -w '/lastsold.json no key : HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/lastsold.json?skus=824968200612" || true
+          curl -sS -o /dev/null -w '/lastsold.json bad key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/lastsold.json?skus=824968200612&k=smoke-wrong" || true
           curl -sS -o /dev/null -w 'deck-track route (public surface ignores ev=search): HTTP %{http_code}\n' --max-time 20 -X POST "https://exor-binder.nevski.workers.dev/deck-track?ev=search&game=probe" || true
           echo "=== 9Pocket by Exor: staged buylists (src/stage.js) ==="
           curl -sS -o /dev/null -w '/9pocket signed out: HTTP %{http_code} -> %{redirect_url} (expect 303 to /login, or to /setup while no account exists)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket" || true
@@ -403,7 +405,7 @@ jobs:
           node test/enrich-parse.test.mjs 2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           node test/enrich-tick.test.mjs  2>&1 | grep -vE 'MODULE_TYPELESS|Reparsing|trace-warnings' || true
           echo "=== 9Pocket: pure helpers (src/stage.js), the DO (in-memory storage), accounts (src/stage-auth.js) ==="
-          for t in test/stage.test.mjs test/stage-do.test.mjs test/stage-auth.test.mjs test/stage-sync.test.mjs test/autoprice.test.mjs test/autoprice-access.test.mjs test/hold.test.mjs test/hold-live.test.mjs test/page-edit.test.mjs test/wanted.test.mjs test/deck-sales.test.mjs test/gunpla.test.mjs test/plamod.test.mjs test/buylist-busy.test.mjs; do echo "-- $t"; node $t 2>&1 | grep -E '^# (pass|fail)|^not ok' || true; done
+          for t in test/stage.test.mjs test/stage-do.test.mjs test/stage-auth.test.mjs test/stage-sync.test.mjs test/autoprice.test.mjs test/autoprice-access.test.mjs test/hold.test.mjs test/hold-live.test.mjs test/page-edit.test.mjs test/wanted.test.mjs test/deck-sales.test.mjs test/gunpla.test.mjs test/plamod.test.mjs test/buylist-busy.test.mjs test/lastsold.test.mjs; do echo "-- $t"; node $t 2>&1 | grep -E '^# (pass|fail)|^not ok' || true; done
           W="https://exor-binder.nevski.workers.dev"
           echo "=== GET /enrich/status (tokenConfigured, next alarm, last run) ==="
           curl -sS --max-time 20 "$W/enrich/status" | python3 -m json.tool || true
