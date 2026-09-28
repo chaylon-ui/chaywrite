@@ -1,0 +1,46 @@
+name: paintpicker-aos
+# Reads Paint Picker's Age of Sigmar faction guides (paintpicker.co.uk/factions/
+# age-of-sigmar; owner, 2026-09-28) and commits data/paintpicker-aos.json: for
+# each faction, the guide's sections and ONLY the names of the Citadel paints in
+# them (checked against data/paint-colours.json), plus the link back. The worker
+# (src/eavy.js) adds each as a "Paint Picker guide" scheme on the paint card.
+# One request every 4 s.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read and print, commit nothing
+        default: "false"
+      only:
+        description: Read just this one faction slug (implies dry run)
+        default: ""
+  schedule:
+    # Tuesdays 05:50 UTC, after the 'Eavy Archive read
+    - cron: "50 5 * * 2"
+permissions:
+  contents: write
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the guides
+        env:
+          DRY: ${{ inputs.dry_run }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          ARGS=""
+          if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry"; fi
+          if [ -n "$ONLY" ]; then ARGS="$ARGS --only $ONLY"; fi
+          python3 tools/paintpicker-aos.py $ARGS
+      - name: Commit the file when it changed
+        if: ${{ inputs.dry_run != 'true' && inputs.only == '' }}
+        run: |
+          set -e
+          if [ -z "$(git status --porcelain data/paintpicker-aos.json)" ]; then echo "no change"; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/paintpicker-aos.json
+          git commit -m "paintpicker-aos: refresh $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
