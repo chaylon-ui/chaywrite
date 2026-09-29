@@ -220,6 +220,46 @@
   html[data-xg-theme="dark"] .filters-toolbar__input--filter label { color: #b8c0c6 !important; }
   html[data-xg-theme="dark"] .grid-img,
   html[data-xg-theme="dark"] .list-img { filter: invert(1); }
+  /* Dark mode for the select2 boxes and lists (owner, 2026-09-29, screenshot of the Condition
+     list: white list, pale grey options, a washed-out chosen chip). select2's own stylesheet
+     (jsdelivr, loaded above) paints everything white / #444 / #aaa and the open list is appended
+     to <body>, outside the sidebar, so the rules are global to this page and keyed on the dark
+     html attribute. Panel #1d2327, border #39434a, ink #e6ebee, muted #98a3aa, highlight the
+     site's dark red. Light mode untouched. */
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--single,
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--multiple { background-color: #101416; border-color: #39434a; }
+  html[data-xg-theme="dark"] .select2-container--default.select2-container--focus .select2-selection--multiple,
+  html[data-xg-theme="dark"] .select2-container--default.select2-container--open .select2-selection--single,
+  html[data-xg-theme="dark"] .select2-container--default.select2-container--open .select2-selection--multiple { border-color: #ff6a5e; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__rendered { color: #e6ebee; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__placeholder,
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--multiple .select2-selection__placeholder { color: #98a3aa; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__arrow b { border-top-color: #c3ccd1; }
+  html[data-xg-theme="dark"] .select2-container--default.select2-container--open .select2-selection--single .select2-selection__arrow b { border-bottom-color: #c3ccd1; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--multiple .select2-selection__choice { background-color: #2a3236; border-color: #39434a; color: #e6ebee; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--multiple .select2-selection__choice__display { color: #e6ebee; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--multiple .select2-selection__choice__remove { color: #ff6a5e; border-right-color: #39434a; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover { background-color: #39434a; color: #ffffff; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--multiple .select2-selection__clear,
+  html[data-xg-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__clear { color: #c3ccd1; }
+  html[data-xg-theme="dark"] input.select2-search__field { color: #e6ebee; background: transparent; }
+  html[data-xg-theme="dark"] input.select2-search__field::placeholder { color: #98a3aa !important; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-search--dropdown .select2-search__field { background-color: #101416; border-color: #39434a; color: #e6ebee; }
+  html[data-xg-theme="dark"] .select2-dropdown { background-color: #1d2327; border-color: #39434a; color: #e6ebee; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55); }
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__option { color: #e6ebee; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__option--highlighted.select2-results__option--selectable,
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__option--highlighted[aria-selected] { background-color: #b3201c; color: #ffffff; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__option--selected,
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__option[aria-selected="true"] { background-color: #2a3236; color: #e6ebee; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__option--disabled,
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__option[aria-disabled="true"] { color: #6b7880; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-results__group { color: #98a3aa; }
+  html[data-xg-theme="dark"] .select2-container--default .select2-results > .select2-results__options { scrollbar-color: #39434a #1d2327; }
+  /* the widget's plain inputs beside them (Search Name, Min / Max Price) */
+  html[data-xg-theme="dark"] .filters-toolbar__input--filter input[type="text"],
+  html[data-xg-theme="dark"] .filters-toolbar__input--filter input[type="number"],
+  html[data-xg-theme="dark"] .filters-toolbar__input--filter input[type="search"] { background-color: #101416; border-color: #39434a; color: #e6ebee; }
+  html[data-xg-theme="dark"] .filters-toolbar__input--filter input::placeholder { color: #98a3aa; }
 </style>
 {% schema %}
 
