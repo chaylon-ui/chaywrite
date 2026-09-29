@@ -19,8 +19,9 @@
    - Search: portal.binderpos.com products/forStore straight from the browser (CORS *,
      0.2-0.8 s for a set or a name, measured 2026-09-29), and the worker's cached copy of
      the same call (/binder/search) when that fails or stalls.
-   - State lives in the address hash (#cards?set=..&q=..), replaced rather than pushed, so
-     Back from a card page lands on the same results and the app never sees our values.
+   - State lives in the address hash (#cf-<base64url of set=..&q=..&sort=..&p=..>), replaced
+     rather than pushed, so Back from a card page lands on the same results and the app never
+     sees our values; base64url keeps it a valid selector for scripts that jQuery the hash.
    - On /a/search/<handle> the app's boxes prefill ours. With BOTH filled the shopper
      meant "this card in this set", so that search runs at once; a set alone gets a
      one-tap "in card-number order" button.
@@ -149,10 +150,14 @@
 
   /* ---------------- state ---------------- */
   function fresh() { return { g: GAME0, set: '', q: '', sort: 'num', all: false, p: 1 }; }
+  // The hash is "#cf-" + base64url of the query, so it is always a valid id selector: theme
+  // and app scripts call jQuery on location.hash at load, and "#cards?set=..." made Sizzle throw.
+  function b64e(t) { try { return btoa(unescape(encodeURIComponent(t))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { return ''; } }
+  function b64d(t) { try { return decodeURIComponent(escape(atob(String(t).replace(/-/g, '+').replace(/_/g, '/')))); } catch (e) { return ''; } }
   function fromHash() {
     var h = location.hash || '';
-    if (h.indexOf('#cards?') !== 0) return null;
-    var u = new URLSearchParams(h.slice(7)), st = fresh();
+    if (h.indexOf('#cf-') !== 0) return null;
+    var u = new URLSearchParams(b64d(h.slice(4))), st = fresh();
     var g = u.get('game');
     if (PICK && g && GAME_NAMES[g]) st.g = g;
     st.set = (u.get('set') || '').slice(0, 120);
@@ -170,7 +175,7 @@
     if (st.sort !== 'num') u.set('sort', st.sort);
     if (st.all) u.set('all', '1');
     if (st.p > 1) u.set('p', String(st.p));
-    return '#cards?' + u.toString();
+    return '#cf-' + b64e(u.toString());
   }
   function writeHash(st) {
     try { history.replaceState(history.state, '', location.pathname + location.search + (st ? hashOf(st) : '')); } catch (e) {}
