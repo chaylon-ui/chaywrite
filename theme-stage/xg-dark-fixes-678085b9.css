@@ -310,3 +310,9 @@ html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_
 html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart_total_title .cart__subtotal { color: var(--brand-secondary); }
 html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart__shipping,
 html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_calculator .cart_content_inner .cart__store-credit-info { border-top-color: #2a3236; color: #aab4ba; }
+
+/* 404 page (owner, 2026-09-29: "404 needs a dark mode adjustment its too dark"): theme.css
+   paints the big "404", the sub-title and the description #000 / #000 / #666 on the dark page. */
+html[data-xg-theme="dark"] .template-404 .empty-page .empty-page-content .home-title,
+html[data-xg-theme="dark"] .template-404 .empty-page .empty-page-content .sub-title { color: #e6ebee; }
+html[data-xg-theme="dark"] .template-404 .empty-page .empty-page-content .description { color: #b8c0c6; }
