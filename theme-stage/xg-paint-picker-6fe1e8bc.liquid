@@ -298,9 +298,14 @@
     var h = state.brand === 'All' ? 'brand=All' : 'brand=' + encodeURIComponent(URLNAME[state.brand] || state.brand) + (state.range !== 'All' ? '&range=' + encodeURIComponent(state.range) : '');
     try { history.replaceState(null, '', location.pathname + location.search + '#' + h); } catch (e) {}
   }
-  // at load, only once the page has finished loading: theme.js reads the address hash at DOM-ready
-  // and jQuery cannot parse "#brand=..." (see layout/theme.liquid), so it must not be there yet
-  function setHashSoon() { if (document.readyState === 'complete') setHash(); else window.addEventListener('load', setHash, { once: true }); }
+  // theme.js (defer) reads the address hash in jQuery's ready queue at DOMContentLoaded and cannot
+  // parse "#brand=..." (see layout/theme.liquid), so the hash goes back only once that has run:
+  // right after DOMContentLoaded (this script runs while the page is still parsing), or at load
+  var hashWanted = false, readyDone = document.readyState === 'complete';
+  function hashNow() { readyDone = true; if (hashWanted) { hashWanted = false; setHash(); } }
+  document.addEventListener('DOMContentLoaded', function () { setTimeout(hashNow, 0); });
+  window.addEventListener('load', hashNow);
+  function setHashSoon() { if (readyDone) setHash(); else hashWanted = true; }
   function drawBrands() {
     var n = {}; paints.forEach(function (g) { n[g.b] = (n[g.b] || 0) + 1; });
     // the banner's brand logos (snippets/breadcrumb.liquid) mark the brand showing
