@@ -278,7 +278,9 @@
     // Ruddy Umber opened Kraken Lavender - the index was taken before this sort)
     paints.forEach(function (g, i) { g._i = i; });
     drawBrands(); drawRanges(); drawFamilies(); draw();
-    if (/brand=Citadel/.test(pageHash())) setHashSoon();   // older links: the address says Warhammer too
+    // the layout's sanitizer took a #brand= hash off the address (window.xgHash): put it back once
+    // theme.js has read the address; older #brand=Citadel links come back saying Warhammer
+    if (window.xgHash || /brand=Citadel/.test(pageHash())) setHashSoon();
   }).catch(function () { $('.xg-pp__count').textContent = 'Could not load the colours - please refresh.'; });
 
   // the bottles of a colour that pass the range + stock filters
