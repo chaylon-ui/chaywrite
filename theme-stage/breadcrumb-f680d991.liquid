@@ -163,6 +163,9 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   .xg-bc__pp-dots i { width: 14px; height: 14px; border-radius: 50%; margin-right: -4px; border: 2px solid #fff; }
   .xg-bc__pp-dots i:nth-child(1) { background: #b3261e; } .xg-bc__pp-dots i:nth-child(2) { background: #e8a317; }
   .xg-bc__pp-dots i:nth-child(3) { background: #2f8f5b; } .xg-bc__pp-dots i:nth-child(4) { background: #2d5fae; margin-right: 0; }
+  /* the Magic logo file is 828x465 with the mark in a band across the middle: the same treatment as Warhammer's */
+  .xg-bc--logo .xg-bc__logo img[src*="b9165f_"] { max-width: min(520px, 96%); max-height: 175px; margin: -30px auto -28px; }
+  @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img[src*="b9165f_"] { max-height: 115px; margin: -20px auto -18px; } }
   /* Warhammer-logo.png is 1400x900 with the mark in a band across the middle: larger box, pulled in by negative margins */
   .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-width: min(560px, 96%); max-height: 230px; margin: -55px auto -50px; }
   @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-height: 150px; margin: -36px auto -32px; } }
