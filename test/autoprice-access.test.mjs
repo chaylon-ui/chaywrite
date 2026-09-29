@@ -128,6 +128,19 @@ test("a session made before the emailed code (no mfa) no longer opens anything",
   assert.equal(r.status, 303); assert.equal(r.location, "/autoprice/login");
 });
 
+test("the PIN switch also closes the shared auto-pricing login; 9Pocket accounts carry on", async () => {
+  const w = world();
+  await seed(w);
+  w.env.AUTOPRICE_USER = "shop"; w.env.AUTOPRICE_PASSWORD = "shared-pass";
+  const login = () => hit(w, "/autoprice/login", { form: { u: "shop", p: "shared-pass" } });
+  const on = await login();
+  assert.equal(on.status, 303); assert.equal(on.location, "/autoprice");
+  await w.env.ROOM.get(STAGE_DO).fetch(new Request("https://w.example/_stage/cfg/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ off: true, by: "admin@x.test" }) }));
+  const off = await login();
+  assert.equal(off.status, 403); assert.ok(off.text.includes("shared login is switched off") && !off.text.includes('name="u"'));
+  assert.equal((await hit(w, "/autoprice", { cookie: "np_s=" + TOKEN })).status, 200, "an admin account still opens it");
+});
+
 test("the 401 runner's door opens only with the relay bearer, lists what to search and keeps the answers", async () => {
   const w = world();
   await seed(w);

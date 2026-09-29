@@ -58,7 +58,7 @@
      ap:report     rows of the last run; ap:runs the last 30 summaries */
 
 import { adminGql, throttleWait } from "./price-history.js";
-import { currentUser } from "./stage.js";
+import { currentUser, stageCfg } from "./stage.js";
 import { apPerms } from "./stage-auth.js";
 import { sendEmail, buildNoticeEmail, emailConfigured } from "./stage-email.js";
 import { repoFetch } from "./repo-data.js";
@@ -1757,8 +1757,13 @@ export async function serveAutoprice(request, env, url, staffOk) {
     const r = await stub.fetch(new Request(url.origin + RELAY[url.pathname], init));
     return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
+  // The owner's switch on 9Pocket > Admin that turns the old staff PIN off also closes this
+  // shared login (owner, 2026-09-29: one login per person, with the emailed code).
+  let sharedOff = false;
+  try { sharedOff = !!(await stageCfg(env, url.origin)).pinOff; } catch {}
   if (url.pathname === "/autoprice/login") {
-    if (request.method !== "POST") return acctAccess ? html("", 303, { location: "/autoprice" }) : html(renderLogin({ configured, account }));
+    if (request.method !== "POST") return acctAccess ? html("", 303, { location: "/autoprice" }) : html(renderLogin({ configured, account, sharedOff }));
+    if (sharedOff) return html(renderLogin({ configured, account, sharedOff, error: "The shared login is switched off. Sign in with your own 9Pocket account." }), 403);
     let fd; try { fd = await request.formData(); } catch { fd = null; }
     const user = String((fd && fd.get("u")) || "").trim().slice(0, 80), pass = String((fd && fd.get("p")) || "").slice(0, 200);
     const ip = ipOf(request);
@@ -1774,7 +1779,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
     return html("", 303, { location: "/autoprice", "set-cookie": cookie(token, SESSION_TTL_S) });
   }
 
-  const session = acctAccess ? null : await verifySession(secret, cookieOf(request, SESSION_COOKIE));
+  const session = acctAccess || sharedOff ? null : await verifySession(secret, cookieOf(request, SESSION_COOKIE));
   const access = acctAccess || (session ? { name: session.u === "pin" ? "" : session.u, admin: true, view: true, publish: true, settings: true, config: true, maxDrop: null, maxRaise: null, legacy: true } : null);
   if (!access) {
     if (account) return html(renderLogin({ configured, account, error: "Your 9Pocket account (" + account.email + ") has no auto-pricing permission yet. Ask an admin to tick one on 9Pocket › Admin." }), 403);
@@ -1830,10 +1835,10 @@ const NEED_LABEL = { publish: "publish staged prices", settings: "per-product se
 function renderLogin(o) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
 <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font:15px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}form{background:#fff;border:1px solid #dde3e7;border-radius:14px;padding:26px 28px;width:min(380px,90vw);box-shadow:0 10px 30px rgba(0,0,0,.06)}h1{font-size:20px;margin:0 0 6px}p{margin:0 0 14px;color:#6b7780;font-size:13.5px}label{display:block;font-size:12.5px;color:#6b7780;margin:10px 0 4px}input{width:100%;box-sizing:border-box;font-size:16px;padding:9px 12px;border:1.5px solid ${o.error ? "#d62c28" : "#c9d1d6"};border-radius:10px}button{margin-top:16px;width:100%;padding:11px;font-size:15px;font-weight:700;color:#fff;background:#d62c28;border:0;border-radius:10px;cursor:pointer}.err{color:#d62c28;font-weight:600}</style></head><body>
-<form method="post" action="/autoprice/login" autocomplete="on"><h1>Sealed auto-pricing</h1><p>${o.error ? '<span class="err">' + esc(o.error) + "</span> " : ""}${o.configured ? "Sign in with the auto-pricing username and password." : "Username and password are not set up yet (add the AUTOPRICE_USER and AUTOPRICE_PASSWORD repo secrets). Until then: any username, and the showcase admin PIN as the password."}</p>
-<label>Username</label><input name="u" type="text" autocomplete="username" autofocus>
+<form method="post" action="/autoprice/login" autocomplete="on"><h1>Sealed auto-pricing</h1><p>${o.error ? '<span class="err">' + esc(o.error) + "</span> " : ""}${o.sharedOff ? "The shared login is off: sign in with your own 9Pocket account (password + emailed code)." : o.configured ? "Sign in with the auto-pricing username and password." : "Username and password are not set up yet (add the AUTOPRICE_USER and AUTOPRICE_PASSWORD repo secrets). Until then: any username, and the showcase admin PIN as the password."}</p>
+${o.sharedOff ? "" : `<label>Username</label><input name="u" type="text" autocomplete="username" autofocus>
 <label>Password</label><input name="p" type="password" autocomplete="current-password">
-<button>Sign in</button>
+<button>Sign in</button>`}
 <p style="margin:14px 0 0;text-align:center">${o.account ? `Signed in to 9Pocket as ${esc(o.account.email)} · <a href="/9pocket">back to 9Pocket</a>` : `Have a 9Pocket account? <a href="/9pocket/login?next=%2Fautoprice">Sign in with it</a> - it opens what an admin allowed.`}</p></form></body></html>`;
 }
 
