@@ -91,8 +91,8 @@ export function sleeveFit(title) {
 
 /* A game's card sets [{n, w, h, label}] -> per set the sleeves that fit, snuggest
    first: the card must go in (within 0.5 mm) and not swim (at most 3.5 mm wider and
-   4.5 mm longer). packs = how many of that product cover the set, when the count
-   is known. */
+   4.5 mm longer). A pack with a known count ranks first (its "packs" is real), then
+   the snuggest. packs = how many of that product cover the set, when the count is known. */
 export function fitSleeves(sets, sleeves) {
   return (sets || []).map((s) => {
     let w = +s.w, h = +s.h;
@@ -100,7 +100,7 @@ export function fitSleeves(sets, sleeves) {
     const fits = (sleeves || []).filter((p) => p.fit && p.fit.w + 0.5 >= w && p.fit.h + 0.5 >= h
       && p.fit.w - w <= 3.5 && p.fit.h - h <= 4.5)
       .map((p) => ({ ...p, slack: (p.fit.w - w) + (p.fit.h - h), packs: p.fit.count && s.n ? Math.ceil(s.n / p.fit.count) : null }))
-      .sort((a, b) => a.slack - b.slack || (b.stock || 0) - (a.stock || 0));
+      .sort((a, b) => (b.fit.count ? 1 : 0) - (a.fit.count ? 1 : 0) || a.slack - b.slack || (b.stock || 0) - (a.stock || 0));
     return { n: +s.n || null, w, h, label: s.label || "", sleeves: fits.slice(0, 3) };
   });
 }

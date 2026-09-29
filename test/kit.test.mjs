@@ -17,17 +17,18 @@ test("sleeve titles size by brand chart or the title's own mm", () => {
 test("fitting picks the snug sleeve, never one the card cannot enter, and counts packs", () => {
   const S = [
     { handle: "euro", title: "euro", fit: { w: 59, h: 92, count: 100 }, stock: 3 },
+    { handle: "at-large", title: "at large", fit: { w: 59, h: 92, count: null }, stock: 27 },
     { handle: "amstd", title: "am std", fit: { w: 57.5, h: 89, count: 100 }, stock: 9 },
     { handle: "mini", title: "mini", fit: { w: 41, h: 63, count: 50 }, stock: 9 },
     { handle: "xl", title: "xl", fit: { w: 65, h: 100, count: 100 }, stock: 9 },
   ];
   const [dom, ttr, amer] = fitSleeves([{ n: 500, w: 59, h: 91, label: "Cards" }, { n: 30, w: 41, h: 63 }, { n: 110, w: 89, h: 56 }], S);
-  assert.deepEqual(dom.sleeves.map((x) => x.handle), ["euro"]);
+  assert.deepEqual(dom.sleeves.map((x) => x.handle), ["euro", "at-large"]);   // a known pack count first
   assert.equal(dom.sleeves[0].packs, 5);
   assert.deepEqual(ttr.sleeves.map((x) => x.handle), ["mini"]);
   assert.equal(ttr.sleeves[0].packs, 1);
   assert.equal(amer.w, 56); assert.equal(amer.h, 89);          // turned upright
-  assert.deepEqual(amer.sleeves.map((x) => x.handle), ["amstd", "euro"]);
+  assert.deepEqual(amer.sleeves.map((x) => x.handle), ["amstd", "euro", "at-large"]);
 });
 
 test("tool rules keep real tools and drop look-alikes", () => {
