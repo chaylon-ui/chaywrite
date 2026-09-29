@@ -136,29 +136,12 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <script src="{{ 'xg-store-credit.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Store credit / trade-in nudges on product, cart and the cart dropdown (assets/xg-credit-nudge.js). {%- endcomment -%}
   <script src="{{ 'xg-credit-nudge.js' | asset_url }}" defer="defer"></script>
-  {%- comment -%} Singles pages (xCloud's filter) cannot search a set AND a card name together or sort by card number;
-      the BinderPOS Advanced Search page can, so point there (owner 2026-09-29, customer question). {%- endcomment -%}
-  <script>
-    (function () {
-      if (!/^\/a\/search\/|^\/collections\/[^\/]*singles\/?$/.test(location.pathname)) return;
-      function add() {
-        var m = document.querySelector('main') || document.getElementById('MainContent');
-        if (!m || document.querySelector('.xg-advlink')) return;
-        var d = document.createElement('p');
-        d.className = 'xg-advlink';
-        d.innerHTML = '<strong>One card from one set, or a whole set in card-number order?</strong> <a href="/pages/advanced-search">Use Advanced Search &rsaquo;</a>';
-        m.insertBefore(d, m.firstChild);
-      }
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add); else add();
-    })();
-  </script>
-  <style>
-    .xg-advlink { max-width: 1200px; margin: 12px auto; padding: 9px 14px; border-radius: 10px; background: rgba(214,44,40,.07); border: 1px solid rgba(214,44,40,.25); font-size: 13.5px; line-height: 1.45; color: var(--xg-ink, #171b1d); text-align: center; }
-    .xg-advlink a { color: var(--xg-red, #d62c28) !important; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
-    html[data-xg-theme="dark"] .xg-advlink { background: rgba(255,106,94,.09); border-color: rgba(255,106,94,.3); color: #e6ebee; }
-    html[data-xg-theme="dark"] .xg-advlink a { color: #ff6a5e !important; }
-    @media (max-width: 767px) { .xg-advlink { margin: 10px 12px; } }
-  </style>
+  {%- comment -%} Card finder at the top of the singles pages: a set AND a card name together, and a whole set in
+      card-number order - xCloud's filter boxes match either box and cannot sort by card number (owner 2026-09-29,
+      customer question). assets/xg-card-finder.js decides per collection handle whether it runs. {%- endcomment -%}
+  {%- if template.name == 'collection' or request.path contains '/a/search/' -%}
+  <script src="{{ 'xg-card-finder.js' | asset_url }}" defer="defer"></script>
+  {%- endif -%}
 
   {{ content_for_header }}
 
