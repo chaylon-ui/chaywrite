@@ -52,8 +52,13 @@
   <div class="xg-eavy__list" role="list"></div>
   <button type="button" class="xg-eavy__all" hidden></button>
   <div class="xg-eavy__more"></div>
+  <div class="xg-eavy__kit" hidden>
+    <div class="xg-eavy__kh">Complete the kit <small>Untick anything you already have</small></div>
+    <div class="xg-eavy__tools" role="list"></div>
+  </div>
   <div class="xg-eavy__act">
     <button type="button" class="xg-eavy__add"></button>
+    <button type="button" class="xg-eavy__rack"></button>
   </div>
   <div class="xg-eavy__msg" role="status"></div>
   <p class="xg-eavy__credit">These are paint suggestions to get you started. Every model is yours to paint, so please choose the paints that are right for you.</p>
@@ -67,8 +72,26 @@
   .xg-eavy__pick select { max-width: 240px; height: 30px; padding: 0 26px 0 9px; border: 1px solid var(--e-line); border-radius: 7px; background-color: var(--e-row); color: var(--e-ink); font: inherit; font-size: 13px; }
   .xg-eavy__meta { margin: 3px 0 10px; font-size: 12.5px; color: var(--e-mute); }
   .xg-eavy__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; border-top: 1px solid var(--e-line); }
-  .xg-eavy .xg-eavy__row { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 29px; padding: 3px 2px; border-bottom: 1px solid var(--e-line); color: var(--e-text) !important; text-decoration: none !important; }
-  .xg-eavy a.xg-eavy__row:hover { background: var(--e-row); }
+  .xg-eavy .xg-eavy__row { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 7px; min-height: 29px; padding: 0 2px; border-bottom: 1px solid var(--e-line); }
+  .xg-eavy .xg-eavy__lnk { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 29px; padding: 3px 2px; color: var(--e-text) !important; text-decoration: none !important; }
+  .xg-eavy .xg-eavy__lnk:hover { background: var(--e-row); }
+  /* "I have this" tick (owner 2026-09-29, My paint rack): kept in this browser by assets/xg-rack.js */
+  .xg-eavy .xg-eavy__have { position: relative; width: 18px; height: 18px; padding: 0; border: 1.5px solid var(--e-mute); border-radius: 50%; background: transparent; cursor: pointer; opacity: .75; transition: background .15s, border-color .15s, opacity .15s; }
+  .xg-eavy .xg-eavy__have:hover { opacity: 1; border-color: #1a9e6f; }
+  .xg-eavy .xg-eavy__have[aria-pressed="true"] { opacity: 1; border-color: #1a9e6f; background: #1a9e6f; }
+  .xg-eavy .xg-eavy__have[aria-pressed="true"]::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .xg-eavy__row.is-have .xg-eavy__nm { color: var(--e-mute); font-weight: 500; }
+  .xg-eavy__row.is-have .xg-eavy__pr { color: #1a9e6f; font-weight: 700; }
+  html[data-xg-theme="dark"] .xg-eavy__row.is-have .xg-eavy__pr { color: #4fd1a5; }
+  .xg-eavy .xg-eavy__row--tool .xg-eavy__lnk { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .xg-eavy__ti { width: 24px; height: 24px; border-radius: 5px; object-fit: contain; background: #fff; box-shadow: inset 0 0 0 1px var(--e-line); }
+  .xg-eavy__kit { margin: 12px 0 0; }
+  .xg-eavy__kit[hidden] { display: none; }
+  .xg-eavy__kh { margin: 0 0 4px; font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--e-ink); }
+  .xg-eavy__kh small { margin-left: 6px; font-size: 11.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--e-mute); }
+  .xg-eavy__tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; border-top: 1px solid var(--e-line); }
+  .xg-eavy .xg-eavy__rack { height: 30px; padding: 0 12px; border: 1px solid var(--e-line); border-radius: 999px; background: var(--e-row); color: var(--e-ink) !important; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .xg-eavy .xg-eavy__rack:hover { border-color: #1a9e6f; }
   .xg-eavy__dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); background: #999; }
   .xg-eavy__nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--e-ink); }
   .xg-eavy__nm small { margin-left: 5px; font-weight: 500; font-size: 11px; color: var(--e-mute); }
@@ -106,12 +129,13 @@
   .xg-eavy-thanks a { color: inherit !important; text-decoration: underline; }
   @media (max-width: 560px) {
     .xg-eavy { padding: 12px 12px 10px; }
-    .xg-eavy__list { grid-template-columns: 1fr; }
+    .xg-eavy__list, .xg-eavy__tools { grid-template-columns: 1fr; }
     .xg-eavy__top { flex-wrap: nowrap; }
     .xg-eavy__pick select { max-width: 150px; }
     .xg-eavy .xg-eavy__ttl { font-size: 12px; letter-spacing: .06em; }
   }
 </style>
+<script src="{{ 'xg-rack.js' | asset_url }}"></script>
 <script src="{{ 'xg-paint-sheet.js' | asset_url }}" defer></script>
 <script>
   (function () {
@@ -123,6 +147,25 @@
     function money(p) { return '$' + (Number(p) || 0).toFixed(2); }
     function $(s) { return box.querySelector(s); }
     function kOf(p) { return p.handle || ('?' + String(p.name).toLowerCase()); }
+    // My paint rack (assets/xg-rack.js): what this shopper already owns is ticked, and the
+    // add button leaves it out. Without the script every row simply counts as not owned.
+    var RK = window.xgRack || { has: function () { return false; }, set: function () {}, key: function (b, n) { return n; }, count: function () { return 0; }, on: function () {}, open: function () {} };
+    var tools = [];   // "Complete the kit": /kit.json?for=wh, first pick per kind
+    function pk(p) { return RK.key('Citadel', p.name); }
+    function tick(k, label, have, meta) {
+      return '<button type="button" class="xg-eavy__have" data-k="' + esc(k) + '" data-n="' + esc(meta.n || '') + '" data-b="' + esc(meta.b || '') + '" data-h="' + esc(meta.h || '') + '" data-u="' + esc(meta.u || '') + '"' +
+        ' aria-pressed="' + have + '" aria-label="I already have ' + esc(label) + '" title="' + (have ? 'In your paint rack - click to remove' : 'Tick if you already have it') + '"></button>';
+    }
+    function trow(c) {
+      var it = c.items[0], k = 'tool:' + c.key, have = RK.has(k);
+      var short = it.title.replace(/^(THE )?ARMY PAINTER:?\s*|^CITADEL:?\s*/i, '').toLowerCase().replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
+      return '<div role="listitem" class="xg-eavy__row xg-eavy__row--tool' + (have ? ' is-have' : '') + '">' + tick(k, c.label, have, { n: c.label }) +
+        '<a class="xg-eavy__lnk" data-tool="1" href="/products/' + encodeURIComponent(it.handle) + '" title="' + esc(it.title + ' - ' + c.why) + '">' +
+        (it.img ? '<img class="xg-eavy__ti" src="' + esc(it.img.replace(/(\.[a-z]+)(\?|$)/i, '_48x$1$2')) + '" alt="" loading="lazy" width="24" height="24">' : '<span class="xg-eavy__ti"></span>') +
+        '<span class="xg-eavy__nm">' + esc(c.label) + '<small>' + esc(short) + '</small></span>' +
+        '<span class="xg-eavy__pr">' + (have ? 'have it' : money(it.price)) + '</span></a></div>';
+    }
+    function kitTools() { return tools.filter(function (c) { return !RK.has('tool:' + c.key); }).map(function (c) { return c.items[0]; }); }
 
     // each pot once, in the order the recipe first uses it
     function pots(s) {
@@ -136,30 +179,42 @@
     function row(p) {
       var rng = p.r ? '<small>' + esc(p.r) + '</small>' : '';
       var was = p.was ? ' (recipe: ' + esc(p.was) + ')' : '';
-      return '<a role="listitem" class="xg-eavy__row' + (p.a ? '' : ' is-out') + '" href="/products/' + encodeURIComponent(p.handle) + '" title="' + esc(p.title) + was + '">' +
+      var have = RK.has(pk(p));
+      return '<div role="listitem" class="xg-eavy__row' + (p.a ? '' : ' is-out') + (have ? ' is-have' : '') + '">' + tick(pk(p), p.name, have, { n: p.name, b: 'Citadel', h: p.h, u: p.handle }) +
+        '<a class="xg-eavy__lnk" href="/products/' + encodeURIComponent(p.handle) + '" title="' + esc(p.title) + was + '">' +
         '<span class="xg-eavy__dot"' + (p.h ? ' style="background:' + esc(p.h) + '"' : '') + '></span>' +
         '<span class="xg-eavy__nm">' + esc(p.name) + rng + '</span>' +
-        '<span class="xg-eavy__pr">' + (p.a ? money(p.price) : 'sold out') + '</span></a>';
+        '<span class="xg-eavy__pr">' + (have ? 'have it' : p.a ? money(p.price) : 'sold out') + '</span></a></div>';
     }
     function show(i) {
+      var keepOpen = i === cur && $('.xg-eavy__list').classList.contains('is-all');
       cur = i;
       var s = data.schemes[i], pp = pots(s);
-      var inst = pp.ours.filter(function (p) { return p.a && p.v; });
-      var sum = inst.reduce(function (t, p) { return t + (Number(p.price) || 0); }, 0);
+      var owned = pp.ours.filter(function (p) { return RK.has(pk(p)); }).length;
+      var inst = pp.ours.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); });
+      var extra = kitTools();
+      var sum = inst.concat(extra).reduce(function (t, p) { return t + (Number(p.price) || 0); }, 0);
       $('.xg-eavy__pick select').value = String(i);
-      $('.xg-eavy__meta').textContent = data.page.title + ' · ' + pp.ours.length + ' paint' + (pp.ours.length === 1 ? '' : 's') + ' · ' + inst.length + ' in stock';
+      $('.xg-eavy__meta').textContent = data.page.title + ' · ' + pp.ours.length + ' paint' + (pp.ours.length === 1 ? '' : 's') + ' · ' +
+        pp.ours.filter(function (p) { return p.a; }).length + ' in stock' + (owned ? ' · you have ' + owned + ' of ' + pp.ours.length : ' · tick the ones you already own');
       var list = $('.xg-eavy__list'), all = $('.xg-eavy__all');
       list.innerHTML = pp.ours.map(row).join('');
-      list.classList.remove('is-all');
+      list.classList.toggle('is-all', keepOpen);
       // 8 rows on a phone, 12 (two columns) wider; the rest behind one toggle
       var fold = window.matchMedia && window.matchMedia('(max-width: 560px)').matches ? 8 : 12;
       all.hidden = pp.ours.length <= fold;
-      all.textContent = 'Show all ' + pp.ours.length + ' paints';
+      all.textContent = keepOpen ? 'Show fewer' : 'Show all ' + pp.ours.length + ' paints';
       $('.xg-eavy__more').textContent = pp.other.length ? 'Also used, not sold here: ' + pp.other.map(function (p) { return p.name; }).join(', ') : '';
-      var add = $('.xg-eavy__add');
-      add.hidden = !inst.length; add.disabled = false;
-      add.textContent = 'Add ' + inst.length + ' in-stock paint' + (inst.length === 1 ? '' : 's') + ' · ' + money(sum);
-      $('.xg-eavy__msg').textContent = '';
+      var kit = $('.xg-eavy__kit');
+      kit.hidden = !tools.length;
+      $('.xg-eavy__tools').innerHTML = tools.map(trow).join('');
+      var add = $('.xg-eavy__add'), n = inst.length + extra.length;
+      add.hidden = !n; add.disabled = false;
+      add.textContent = extra.length ? 'Add the kit to cart · ' + n + ' item' + (n === 1 ? '' : 's') + ' · ' + money(sum)
+        : 'Add ' + inst.length + ' in-stock paint' + (inst.length === 1 ? '' : 's') + ' · ' + money(sum);
+      var rc = RK.count();
+      $('.xg-eavy__rack').textContent = 'My paint rack' + (rc ? ' · ' + rc : '');
+      $('.xg-eavy__msg').textContent = !n && owned === pp.ours.length ? 'You already have every paint on this list.' : '';
     }
     /* The thanks to the sources, at the foot of the page above the footer (owner, 2026-09-28:
        "can the thanks be somewhere at bottom of page"): whichever sources this card's schemes use. */
@@ -225,7 +280,14 @@
     // a paint row opens the colour picker's bottle sheet (owner 2026-09-27): photo, bottles, price,
     // add to cart and the closest colours from the other brands; the link is the fallback
     box.addEventListener('click', function (e) {
-      var r = e.target.closest && e.target.closest('a.xg-eavy__row');
+      var hv = e.target.closest && e.target.closest('.xg-eavy__have');
+      if (hv) {
+        var hk = hv.getAttribute('data-k');
+        RK.set(hk, !RK.has(hk), { n: hv.getAttribute('data-n'), b: hv.getAttribute('data-b'), h: hv.getAttribute('data-h'), u: hv.getAttribute('data-u') });
+        return;   // xgRack.on() redraws the card
+      }
+      if (e.target.closest && e.target.closest('.xg-eavy__rack')) { RK.open(); return; }
+      var r = e.target.closest && e.target.closest('a.xg-eavy__lnk:not([data-tool])');
       if (r && window.xgPaintSheet && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
         e.preventDefault();
         var h = decodeURIComponent(r.getAttribute('href').replace('/products/', ''));
@@ -238,7 +300,7 @@
         return;
       }
       if (!(e.target.closest && e.target.closest('.xg-eavy__add'))) return;
-      var list = pots(data.schemes[cur]).ours.filter(function (p) { return p.a && p.v; });
+      var list = pots(data.schemes[cur]).ours.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); }).concat(kitTools());
       if (!list.length) return;
       $('.xg-eavy__add').disabled = true; $('.xg-eavy__msg').textContent = 'Adding…';
       post(list.map(function (p) { return { id: p.v, quantity: 1 }; })).then(function (ok) {
@@ -263,6 +325,11 @@
       if (d.schemes.length < 2) $('.xg-eavy__pick').hidden = true;
       show(0);
       box.hidden = false;
+      RK.on(function () { show(cur); });
+      fetch(W + '/kit.json?for=wh').then(function (r) { return r.ok ? r.json() : null; }).then(function (k) {
+        tools = (k && k.cats || []).filter(function (c) { return c.items && c.items.length && c.items[0].v; });
+        if (tools.length) show(cur);
+      }).catch(function () {});
       thanks(d);
       tease(pots(d.schemes[0]).ours.length);
     }).catch(function () {});

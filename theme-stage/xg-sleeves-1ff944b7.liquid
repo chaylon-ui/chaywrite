@@ -1,0 +1,152 @@
+{%- comment -%}
+  "Sleeve this game" on board game pages (owner, 2026-09-29: "Do the board game sleeves
+  suggestions").
+
+  With the game's card sets in exor.sleeves (JSON, entered by staff in the product's
+  metafields - e.g. [{"n": 110, "w": 59, "h": 92, "label": "Kingdom cards"}]): one line per
+  set - count and size - with the snuggest in-stock sleeve, how many packs cover it, and one
+  button that adds every set's packs.
+
+  Without it: a size picker. The shopper taps the card size printed on the box or in the
+  rulebook and gets the in-stock sleeves that fit it. No per-game numbers are shown that
+  nobody has checked (BoardGameGeek's sleeve data may not be reused commercially; the
+  Mayday / Sleeve Kings list needs their permission - see snoot-tracker NOTES 2026-09-29).
+
+  Sleeves and the card size each fits come from the worker's /kit.json?for=sleeves (chaywrite
+  src/kit.js sleeveFit); fitting here matches its fitSleeves(): the card goes in (within
+  0.5 mm) and does not swim (at most 3.5 mm wider, 4.5 mm longer); packs with a known sleeve count
+  first (so "packs needed" is real), then the snuggest.
+
+  Params: product, sets (exor.sleeves value or blank)
+{%- endcomment -%}
+<section class="xg-slv" hidden aria-label="Card sleeves for this game" data-sets='{{ sets | json | escape }}'>
+  <h3 class="xg-slv__h">Sleeve this game</h3>
+  <p class="xg-slv__lead"></p>
+  <div class="xg-slv__sizes" role="group" aria-label="Card size" hidden></div>
+  <div class="xg-slv__list"></div>
+  <div class="xg-slv__act" hidden><button type="button" class="xg-slv__all"></button></div>
+  <p class="xg-slv__msg" role="status"></p>
+</section>
+<style>
+  .xg-slv { --s-ink: #171b1d; --s-text: #3d454b; --s-mute: #6b757c; --s-line: #e3e7ea; --s-bg: #fff; --s-soft: #f6f8f9;
+    margin: 22px 0 0; padding: 14px 16px; border: 1px solid var(--s-line); border-radius: 12px; background: var(--s-bg); max-width: 720px; font-size: 14px; line-height: 1.45; color: var(--s-text); }
+  html[data-xg-theme="dark"] .xg-slv { --s-ink: #eef1f3; --s-text: #d5dbdf; --s-mute: #93a0a8; --s-line: #2f373c; --s-bg: #171c1f; --s-soft: #1e2428; }
+  .xg-slv[hidden] { display: none; }
+  .xg-slv .xg-slv__h { margin: 0 0 4px; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--s-ink); }
+  .xg-slv__lead { margin: 0 0 10px; font-size: 13px; color: var(--s-mute); }
+  .xg-slv__sizes { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+  .xg-slv__sizes[hidden] { display: none; }
+  .xg-slv .xg-slv__sz { padding: 5px 10px; border: 1px solid var(--s-line); border-radius: 999px; background: var(--s-soft); color: var(--s-ink); font: inherit; font-size: 12.5px; line-height: 1.2; cursor: pointer; text-align: left; }
+  .xg-slv .xg-slv__sz small { display: block; font-size: 10.5px; color: var(--s-mute); }
+  .xg-slv .xg-slv__sz[aria-pressed="true"] { border-color: var(--xg-red, #d62c28); background: var(--xg-red, #d62c28); color: #fff; }
+  .xg-slv .xg-slv__sz[aria-pressed="true"] small { color: rgba(255,255,255,.85); }
+  .xg-slv__set { padding: 10px 0; border-top: 1px solid var(--s-line); }
+  .xg-slv__set:first-child { border-top: 0; padding-top: 2px; }
+  .xg-slv__need { margin: 0 0 6px; font-weight: 700; color: var(--s-ink); }
+  .xg-slv__need small { margin-left: 6px; font-weight: 500; color: var(--s-mute); }
+  .xg-slv__opts { display: grid; gap: 6px; }
+  .xg-slv__o { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--s-line); border-radius: 10px; }
+  .xg-slv__o img, .xg-slv__o .xg-slv__ph { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; background: #fff; }
+  .xg-slv__o a { color: var(--s-ink) !important; text-decoration: none !important; font-weight: 600; font-size: 13px; line-height: 1.25; }
+  .xg-slv__o a:hover { text-decoration: underline !important; }
+  .xg-slv__o small { display: block; font-size: 11.5px; color: var(--s-mute); font-weight: 500; }
+  .xg-slv .xg-slv__add, .xg-slv .xg-slv__all { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--xg-red, #d62c28); color: #fff !important; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .xg-slv .xg-slv__all { height: 36px; font-size: 13.5px; padding: 0 14px; }
+  .xg-slv__act { margin: 10px 0 0; }
+  .xg-slv__act[hidden] { display: none; }
+  .xg-slv__none { margin: 0; font-size: 13px; color: var(--s-mute); }
+  .xg-slv__msg { margin: 6px 0 0; font-size: 12.5px; color: var(--s-mute); }
+  .xg-slv__msg:empty { display: none; }
+  .xg-slv__msg a { color: inherit; text-decoration: underline; }
+</style>
+<script>
+  (function () {
+    var box = document.querySelector('section.xg-slv');
+    if (!box || !window.fetch) return;
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    var sets = [];
+    try { var raw = JSON.parse(box.getAttribute('data-sets') || 'null'); if (Array.isArray(raw)) sets = raw.filter(function (s) { return s && +s.w > 0 && +s.h > 0; }); } catch (e) {}
+    // the card sizes printed on boxes and in rulebooks, smallest first
+    var SIZES = [
+      ['Mini American', 41, 63], ['Mini European', 44, 68], ['Catan size', 54, 80], ['American', 56, 87],
+      ['Standard card game', 63.5, 88], ['European', 59, 92], ['7 Wonders size', 65, 100],
+      ['Square', 70, 70], ['Tarot', 70, 120], ['Dixit size', 80, 120]
+    ];
+    var sleeves = [], lines = [];
+    function mm(v) { return String(+v).replace(/\.0$/, ''); }
+    function fit(w, h) {
+      if (w > h) { var t = w; w = h; h = t; }
+      return sleeves.filter(function (p) { return p.fit && p.fit.w + 0.5 >= w && p.fit.h + 0.5 >= h && p.fit.w - w <= 3.5 && p.fit.h - h <= 4.5; })
+        .map(function (p) { return { p: p, slack: (p.fit.w - w) + (p.fit.h - h) }; })
+        .sort(function (a, b) { return (b.p.fit.count ? 1 : 0) - (a.p.fit.count ? 1 : 0) || a.slack - b.slack || (b.p.stock || 0) - (a.p.stock || 0); })
+        .map(function (x) { return x.p; });
+    }
+    function opt(p, n, i) {
+      var packs = p.fit.count && n ? Math.ceil(n / p.fit.count) : 1;
+      var what = p.fit.count ? (n ? packs + ' pack' + (packs === 1 ? '' : 's') + ' of ' + p.fit.count + ' covers ' + n : p.fit.count + ' sleeves a pack') : 'check the pack count';
+      lines[i] = { v: p.v, q: packs };
+      return '<div class="xg-slv__o">' + (p.img ? '<img src="' + esc(p.img.replace(/(\.[a-z]+)(\?|$)/i, '_96x$1$2')) + '" alt="" loading="lazy" width="40" height="40">' : '<span class="xg-slv__ph"></span>') +
+        '<div><a href="/products/' + encodeURIComponent(p.handle) + '">' + esc(p.title) + '</a><small>Fits ' + mm(p.fit.w) + ' &times; ' + mm(p.fit.h) + ' mm · $' + esc(p.price) + ' · ' + what + '</small></div>' +
+        '<button type="button" class="xg-slv__add" data-i="' + i + '">Add' + (packs > 1 ? ' ' + packs : '') + '</button></div>';
+    }
+    function drawSets() {
+      lines = [];
+      var any = 0;
+      box.querySelector('.xg-slv__lead').textContent = 'The cards in this game and the sleeves we have that fit them.';
+      box.querySelector('.xg-slv__list').innerHTML = sets.map(function (s, k) {
+        var f = fit(+s.w, +s.h), n = +s.n || 0;
+        var head = '<p class="xg-slv__need">' + (n ? n + ' cards' : 'Cards') + ' · ' + mm(Math.min(s.w, s.h)) + ' &times; ' + mm(Math.max(s.w, s.h)) + ' mm' + (s.label ? '<small>' + esc(s.label) + '</small>' : '') + '</p>';
+        if (!f.length) return '<div class="xg-slv__set">' + head + '<p class="xg-slv__none">No sleeves in this size in stock right now - ask us in store.</p></div>';
+        any++;
+        return '<div class="xg-slv__set">' + head + '<div class="xg-slv__opts">' + opt(f[0], n, k) + '</div></div>';
+      }).join('');
+      var act = box.querySelector('.xg-slv__act');
+      act.hidden = any < 2;
+      box.querySelector('.xg-slv__all').textContent = 'Add sleeves for the whole game';
+      box.hidden = false;
+    }
+    function drawPick(i) {
+      var s = SIZES[i], f = fit(s[1], s[2]);
+      lines = [];
+      [].forEach.call(box.querySelectorAll('.xg-slv__sz'), function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-s') === i)); });
+      box.querySelector('.xg-slv__list').innerHTML = f.length
+        ? '<div class="xg-slv__opts">' + f.slice(0, 3).map(function (p, k) { return opt(p, 0, k); }).join('') + '</div>'
+        : '<p class="xg-slv__none">No ' + esc(s[0].toLowerCase()) + ' sleeves in stock right now - ask us in store.</p>';
+    }
+    function drawPicker() {
+      var have = SIZES.map(function (s, i) { return fit(s[1], s[2]).length ? i : -1; }).filter(function (i) { return i > -1; });
+      if (!have.length) return;
+      box.querySelector('.xg-slv__lead').textContent = 'Protect the cards. Find the card size on the box or in the rulebook (often listed as "sleeve size"), then pick it here.';
+      var sz = box.querySelector('.xg-slv__sizes');
+      sz.innerHTML = have.map(function (i) { var s = SIZES[i]; return '<button type="button" class="xg-slv__sz" data-s="' + i + '" aria-pressed="false">' + esc(s[0]) + '<small>' + mm(s[1]) + ' &times; ' + mm(s[2]) + ' mm</small></button>'; }).join('');
+      sz.hidden = false;
+      box.hidden = false;
+    }
+    function post(items, btn) {
+      var msg = box.querySelector('.xg-slv__msg');
+      btn.disabled = true;
+      return fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: items }) })
+        .then(function (r) { return r.ok; }, function () { return false; })
+        .then(function (ok) {
+          btn.disabled = false;
+          msg.innerHTML = ok ? 'Added to your cart. <a href="/cart">View cart</a>' : 'Could not add them - please try again.';
+          if (ok) {
+            document.dispatchEvent(new CustomEvent('cart:refresh'));
+            try { var sync = (window.Shopify && window.Shopify.adjustCartDropDown) || window.adjustCartDropDown; if (typeof sync === 'function') sync(); } catch (x) {}
+          }
+        });
+    }
+    box.addEventListener('click', function (e) {
+      var t = e.target.closest && e.target.closest('button');
+      if (!t) return;
+      if (t.classList.contains('xg-slv__sz')) return drawPick(+t.getAttribute('data-s'));
+      if (t.classList.contains('xg-slv__add')) { var l = lines[+t.getAttribute('data-i')]; if (l) post([{ id: l.v, quantity: l.q }], t); return; }
+      if (t.classList.contains('xg-slv__all')) { var all = lines.filter(Boolean).map(function (l) { return { id: l.v, quantity: l.q }; }); if (all.length) post(all, t); }
+    });
+    fetch('https://exor-binder.nevski.workers.dev/kit.json?for=sleeves').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      sleeves = (j && j.sleeves || []).filter(function (p) { return p.v && p.fit; });
+      if (!sleeves.length) return;
+      if (sets.length) drawSets(); else drawPicker();
+    }).catch(function () {});
+  })();
+</script>

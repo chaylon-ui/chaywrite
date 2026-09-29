@@ -175,6 +175,8 @@
     '.xg-ps__buy{display:flex;gap:8px}.xg-ps__qty{display:flex;border:1px solid var(--xg-border,#d5dbe0);border-radius:8px;overflow:hidden}.xg-ps__qty button{width:34px;border:0;background:var(--xg-surface,#fff);color:var(--xg-ink,#171b1d);font-size:18px;cursor:pointer}' +
     '.xg-ps__qty input{width:42px;text-align:center;border:0;background:var(--xg-surface,#fff);color:var(--xg-ink,#171b1d);-moz-appearance:textfield}.xg-ps__qty input::-webkit-inner-spin-button{-webkit-appearance:none}' +
     '.xg-ps__add{flex:1;background:var(--xg-red,#d62c28);color:#fff!important;border:0;border-radius:8px;font-weight:700;padding:11px 14px;cursor:pointer;font-family:inherit}.xg-ps__add[disabled]{background:#8a969d;cursor:not-allowed}' +
+    '.xg-ps .xg-ps__have{display:inline-flex;align-items:center;gap:6px;margin:10px 0 0;padding:6px 12px;border:1.5px solid var(--xg-border,#d5dbdf);border-radius:999px;background:none;color:inherit;font:inherit;font-size:13px;font-weight:700;cursor:pointer}.xg-ps .xg-ps__have[hidden]{display:none}' +
+    '.xg-ps .xg-ps__have:hover{border-color:#1a9e6f}.xg-ps .xg-ps__have[aria-pressed="true"]{border-color:#1a9e6f;background:#1a9e6f;color:#fff}' +
     '.xg-ps__msg{min-height:18px;font-size:13px;margin:8px 0 4px}.xg-ps__msg a{color:var(--xg-red,#d62c28);font-weight:600}.xg-ps .xg-ps__link{font-size:13px;color:var(--xg-muted,#6b757c)!important}' +
     '.xg-ps__match{grid-column:1/-1;border-top:1px solid var(--xg-border,#e3e7ea);padding:14px 22px 18px}.xg-ps__match[hidden]{display:none}' +
     '.xg-ps__mh{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--xg-muted,#6b757c);font-weight:700}' +
@@ -196,7 +198,7 @@
       '<div class="xg-ps__photo"><img alt=""></div><div class="xg-ps__info"><div class="xg-ps__chip"></div><p class="xg-ps__range"></p>' +
       '<h3 id="xg-ps-name" class="xg-ps__name"></h3><div class="xg-ps__opts" role="group" aria-label="Bottle" hidden></div><p class="xg-ps__price"></p><p class="xg-ps__avail"></p>' +
       '<div class="xg-ps__buy"><div class="xg-ps__qty"><button type="button" data-q="-1" aria-label="Less">&minus;</button><input type="number" min="1" value="1" aria-label="Quantity"><button type="button" data-q="1" aria-label="More">+</button></div>' +
-      '<button class="xg-ps__add" type="button">Add to cart</button></div><p class="xg-ps__msg" aria-live="polite"></p><a class="xg-ps__link" href="#">Full product page &rsaquo;</a></div>' +
+      '<button class="xg-ps__add" type="button">Add to cart</button></div><button class="xg-ps__have" type="button" aria-pressed="false" hidden></button><p class="xg-ps__msg" aria-live="polite"></p><a class="xg-ps__link" href="#">Full product page &rsaquo;</a></div>' +
       '<div class="xg-ps__match" hidden><p class="xg-ps__mh">Closest from other brands</p><div class="xg-ps__ml"></div></div></div>';
     document.body.appendChild(root);
     root.addEventListener('click', function (e) {
@@ -207,10 +209,23 @@
       if (t.hasAttribute('data-g')) return show(paints[+t.getAttribute('data-g')]);
       if (t.hasAttribute('data-q')) { var inp = $('.xg-ps__qty input'); inp.value = Math.max(1, (+inp.value || 1) + (+t.getAttribute('data-q'))); return; }
       if (t.classList.contains('xg-ps__add') && cur) add(t);
+      if (t.classList.contains('xg-ps__have') && curG && window.xgRack) {
+        var k = window.xgRack.key(curG.b, curG.n);
+        window.xgRack.set(k, !window.xgRack.has(k), { n: curG.n, b: curG.b, h: curG.h, u: cur && cur.u });
+        haveBtn();
+      }
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root && !root.hidden) close(); });
   }
   function close() { root.hidden = true; }
+  // My paint rack (assets/xg-rack.js, owner 2026-09-29): "I have this paint" for the colour shown
+  function haveBtn() {
+    var b = $('.xg-ps__have');
+    if (!window.xgRack || !curG) { b.hidden = true; return; }
+    var on = window.xgRack.has(window.xgRack.key(curG.b, curG.n));
+    b.hidden = false; b.setAttribute('aria-pressed', String(on));
+    b.textContent = on ? '\u2713 In my paint rack' : '+ I have this paint';
+  }
   function pick(it) {
     cur = it;
     var im = $('.xg-ps__photo img');
@@ -233,6 +248,7 @@
       return '<button type="button" data-o="' + i + '" class="' + (x.a ? '' : 'is-out') + '">' + esc(x.r + (x.s ? ' ' + x.s : '')) + '<span>' + money(x.p) + (x.a ? '' : ' · sold out') + '</span></button>';
     }).join('') : '';
     $('.xg-ps__qty input').value = 1;
+    haveBtn();
     pick(it || g.items.filter(function (x) { return x.a; })[0] || g.items[0]);
     var m = matches(g);
     $('.xg-ps__match').hidden = !m.length;

@@ -134,6 +134,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <script src="{{ 'xg-product-sisters.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Our own store-credit tab and panel over BinderPOS's data, signed-in shoppers only (assets/xg-store-credit.js). {%- endcomment -%}
   <script src="{{ 'xg-store-credit.js' | asset_url }}" defer="defer"></script>
+  {%- comment -%} Store credit / trade-in nudges on product, cart and the cart dropdown (assets/xg-credit-nudge.js). {%- endcomment -%}
+  <script src="{{ 'xg-credit-nudge.js' | asset_url }}" defer="defer"></script>
 
   {{ content_for_header }}
 

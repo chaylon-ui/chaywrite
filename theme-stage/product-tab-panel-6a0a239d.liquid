@@ -159,6 +159,7 @@
             <p class="xg-desc__note">From {% if gf.gp_bandai_url.value != blank %}<a href="{{ gf.gp_bandai_url.value }}" target="_blank" rel="noopener">Bandai's kit page</a>{% else %}Bandai's kit page{% endif %} (Bandai's own English text).</p>
           </section>
           {%- endif -%}
+          {%- if show_kit -%}{%- render 'xg-gunpla-guide', code: gf.gp_grade_code.value, grade: gf.gp_grade.value -%}{%- endif -%}
         </div>
         {%- if show_kit -%}
         <aside class="xg-class" aria-label="Kit specs">
@@ -624,6 +625,12 @@
       {%- if product.vendor == 'Games Workshop' or gf.game_system.value != blank or wu.name != blank -%}
         {%- assign eavy_kind = '' -%}{%- if wu.keywords contains 'Vehicle' -%}{%- assign eavy_kind = 'vehicle' -%}{%- endif -%}
         {%- render 'xg-eavy', product: product, faction: wu.faction, kind: eavy_kind -%}
+      {%- endif -%}
+      {%- comment -%} Card sleeves for board games (owner 2026-09-29): exor.sleeves when staff have entered
+          the game's card sets, else a size picker; both matched to the sleeves we stock. {%- endcomment -%}
+      {%- assign bgt = product.type | downcase -%}
+      {%- if bgt contains 'supplies' or bgt contains 'sleeve' -%}{%- elsif bgt contains 'board game' or bgt == 'asmodee' or gf.bgg_id.value != blank or gf.sleeves.value != blank -%}
+        {%- render 'xg-sleeves', product: product, sets: gf.sleeves.value -%}
       {%- endif -%}
     </div>
     {% endif %}

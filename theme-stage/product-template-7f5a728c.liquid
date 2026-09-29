@@ -159,6 +159,9 @@
     show the whole line-up or the display box, so say it plainly beside the price. {%- endcomment -%}
 {% if product.type == 'Blind Box' %}<div class="xg-bb" role="note"><strong>Sold individually:</strong> you get one blind box, and the figure inside is a surprise. Photos may show the whole series or its display box.</div>
 <style>.xg-bb{margin:10px 0 4px;padding:9px 12px;border-radius:10px;background:rgba(214,44,40,.08);border:1px solid rgba(214,44,40,.28);font-size:13.5px;line-height:1.45;color:var(--xg-ink,#10171a)}.xg-bb strong{color:var(--xg-red,#d62c28)}html[data-xg-theme="dark"] .xg-bb{background:rgba(255,106,94,.1);border-color:rgba(255,106,94,.35);color:#e6ebee}html[data-xg-theme="dark"] .xg-bb strong{color:#ff6a5e}</style>{% endif %}
+{%- comment -%} Store credit / trade-in line (assets/xg-credit-nudge.js, owner 2026-09-29): the shopper's
+    balance when signed in, else "pay with your cards" from $40. {%- endcomment -%}
+<div data-xg-cn data-price="{{ current_variant.price }}" hidden></div>
 {%- comment -%} "Also at our other Exor locations" (assets/xg-product-sisters.js): the card's
     name without its set bracket and the worker's game key for /sisterstock.json. {%- endcomment -%}
 {% if product.type contains 'Single' %}<div data-xg-sis data-name="{{ product.title | split: ' [' | first | escape }}" data-game="{% if product.type contains 'Pokemon' %}pokemon{% elsif product.type contains 'Yugioh' %}yugioh{% elsif product.type contains 'Lorcana' %}lorcana{% elsif product.type contains 'One Piece' %}onepiece{% elsif product.type contains 'Star Wars' %}starwars{% elsif product.type contains 'Riftbound' %}riftbound{% elsif product.type contains 'Flesh' %}fab{% elsif product.type contains 'Hockey' %}hockey{% elsif product.type contains 'Basketball' %}basketball{% else %}mtg{% endif %}" hidden></div>{% endif %}

@@ -54,6 +54,32 @@
     var base = function () { return PORTAL + '/external/shopify/' + STORE + '/storeCredit'; };
     var q = function () { return '?shopifyCustomerId=' + encodeURIComponent(cid); };
 
+    /* window.xgCredit.balance() -> Promise<number|null>: the signed-in shopper's balance for the
+       cart and product-page nudges (assets/xg-credit-nudge.js, owner 2026-09-29 "do number 3").
+       Same balance-only endpoint, asked from the shopper's own browser, kept 5 minutes in this
+       tab's sessionStorage so page views do not each ask BinderPOS again. */
+    var balP = null;
+    window.xgCredit = {
+      balance: function () {
+        if (balP) return balP;
+        var SK = 'xg-credit-bal';
+        try {
+          var c = JSON.parse(sessionStorage.getItem(SK) || 'null');
+          if (c && c.cid === cid && Date.now() - c.at < 300000 && typeof c.v === 'number') return (balP = Promise.resolve(c.v));
+        } catch (e) {}
+        readConfig();
+        balP = fetch(base() + '/forMe' + q(), { headers: { accept: 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (j) {
+            var v = j && typeof j.credit === 'number' ? j.credit : null;
+            if (v != null) { try { sessionStorage.setItem(SK, JSON.stringify({ cid: cid, v: v, at: Date.now() })); } catch (e) {} }
+            return v;
+          }, function () { return null; });
+        return balP;
+      },
+      symbol: function () { return CUR; }
+    };
+
     var state = { data: null, at: 0, loading: false, error: '' };
     var tab, scrim, panel, lastFocus = null;
 
@@ -100,6 +126,7 @@
         .then(function (j) {
           if (!j || typeof j.credit !== 'number') throw new Error('unexpected reply');
           state.data = { credit: j.credit, history: Array.isArray(j.storeCreditHistory) ? j.storeCreditHistory : [] };
+          try { sessionStorage.setItem('xg-credit-bal', JSON.stringify({ cid: cid, v: j.credit, at: Date.now() })); } catch (e) {}
           state.at = Date.now();
         })
         .catch(function (e) { state.error = (e && e.message) || 'failed'; })

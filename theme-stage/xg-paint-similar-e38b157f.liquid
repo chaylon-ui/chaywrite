@@ -17,6 +17,7 @@
 -%}
 {%- if is_paint -%}
 <div class="xg-paint-similar" hidden data-handle="{{ product.handle | escape }}"></div>
+<script src="{{ 'xg-rack.js' | asset_url }}" defer></script>
 <script src="{{ 'xg-paint-sheet.js' | asset_url }}" defer></script>
 <script>
   window.addEventListener('DOMContentLoaded', function () {
