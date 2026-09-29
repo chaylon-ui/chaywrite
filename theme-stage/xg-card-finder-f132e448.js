@@ -779,7 +779,10 @@
     var name = p.t.replace(/\s*\[[^\]]*\]\s*$/, '') || p.t;
     var url = '/products/' + encodeURIComponent(p.h);
     var vs = p.v.slice(), inStock = vs.filter(function (v) { return v.q > 0; });
-    var first = inStock[0];
+    // a price range matches any of the card's variants (BinderPOS), so the card opens on the one inside it
+    var r = cur || {}, lo = r.lo === '' || r.lo === undefined ? -1 : r.lo, hi = r.hi === '' || r.hi === undefined ? Infinity : r.hi;
+    var inRange = inStock.filter(function (v) { return v.p >= lo && v.p <= hi; });
+    var first = inRange[0] || inStock[0];
     var meta = [p.s, cap(p.r)].filter(Boolean).map(esc).join(' &middot; ');
     var no = p.no ? '<span class="xg-cf-card__no">#' + esc(p.no) + '</span>' : '';
     var buy;
@@ -788,7 +791,7 @@
     } else {
       var cond = inStock.length > 1
         ? '<select class="xg-cf-card__cond" aria-label="Condition for ' + esc(name) + '">' + inStock.map(function (v) {
-            return '<option value="' + v.id + '" data-p="' + v.p + '">' + esc(v.t) + ' &middot; ' + money(v.p) + ' (' + v.q + ')</option>';
+            return '<option value="' + v.id + '" data-p="' + v.p + '"' + (v === first ? ' selected' : '') + '>' + esc(v.t) + ' &middot; ' + money(v.p) + ' (' + v.q + ')</option>';
           }).join('') + '</select>'
         : '<span class="xg-cf-card__one">' + esc(first.t) + ' &middot; ' + first.q + ' in stock</span>';
       buy = cond + '<div class="xg-cf-card__row"><span class="xg-cf-card__price">' + money(first.p) + '</span>' +
