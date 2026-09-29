@@ -176,10 +176,15 @@
       .catch(function () { clearTimeout(t); delete listLoads[key]; return null; });
     return listLoads[key];
   }
-  function groupsOf(g) { return FILTERS[g] || null; }
+  function groupsOf(g) { return FILTERS[g] || []; }
   function copyF(o) { var r = {}; FKEYS.forEach(function (k) { if (o && o[k] && o[k].length) r[k] = o[k].slice(0, 40); }); return r; }
-  function hasF(st) { return FKEYS.some(function (k) { return st.f && st.f[k] && st.f[k].length; }); }
+  function hasF(st) { return st.lo !== '' && st.lo !== undefined || st.hi !== '' && st.hi !== undefined || FKEYS.some(function (k) { return st.f && st.f[k] && st.f[k].length; }); }
   function nF(o) { var n = 0; FKEYS.forEach(function (k) { n += (o && o[k] ? o[k].length : 0); }); return n; }
+  // "$5 to $20" / "from $5" / "up to $20"
+  function priceText(st) {
+    var lo = st.lo !== '' && st.lo !== undefined ? money(st.lo) : '', hi = st.hi !== '' && st.hi !== undefined ? money(st.hi) : '';
+    return lo && hi ? lo + ' to ' + hi : lo ? 'from ' + lo : hi ? 'up to ' + hi : '';
+  }
   // the label a value shows: a fixed chip's, the list's, or the id itself
   function labelFor(g, k, id) {
     var gr = (groupsOf(g) || []).filter(function (x) { return x.k === k; })[0];
@@ -232,7 +237,9 @@
   }
 
   /* ---------------- state ---------------- */
-  function fresh() { return { g: GAME0, set: '', q: '', sort: 'num', all: false, p: 1, f: {} }; }
+  function fresh() { return { g: GAME0, set: '', q: '', sort: 'num', all: false, p: 1, f: {}, lo: '', hi: '' }; }
+  // a price bound as typed: a number of dollars (CAD, what BinderPOS prices in) or ''
+  function priceOf(v) { v = String(v == null ? '' : v).replace(/[^0-9.]/g, ''); var n = parseFloat(v); return isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : ''; }
   // The hash is "#cf-" + base64url of the query, so it is always a valid id selector: theme
   // and app scripts call jQuery on location.hash at load, and "#cards?set=..." made Sizzle throw.
   function b64e(t) { try { return btoa(unescape(encodeURIComponent(t))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { return ''; } }
@@ -253,6 +260,7 @@
       var v = u.get(FHASH[k]);
       if (v && groups.some(function (gr) { return gr.k === k; })) st.f[k] = v.split('|').filter(Boolean).slice(0, 40);
     });
+    st.lo = priceOf(u.get('lo')); st.hi = priceOf(u.get('hi'));
     return st.set || st.q || hasF(st) ? st : null;
   }
   function hashOf(st) {
@@ -264,6 +272,8 @@
     if (st.all) u.set('all', '1');
     if (st.p > 1) u.set('p', String(st.p));
     FKEYS.forEach(function (k) { if (st.f && st.f[k] && st.f[k].length) u.set(FHASH[k], st.f[k].join('|')); });
+    if (st.lo !== '') u.set('lo', String(st.lo));
+    if (st.hi !== '') u.set('hi', String(st.hi));
     return '#cf-' + b64e(u.toString());
   }
   function writeHash(st) {
@@ -277,7 +287,7 @@
   function bodyOf(st, typeList) {
     var s = sortOf(st);
     var b = { storeUrl: STORE, game: st.g, strict: null, sortTypes: [{ type: s[0], asc: s[1], order: 1 }], variants: null,
-      title: st.q || '', priceGreaterThan: 0, priceLessThan: null, instockOnly: !st.all, limit: PER, offset: (st.p - 1) * PER };
+      title: st.q || '', priceGreaterThan: st.lo !== '' ? st.lo : 0, priceLessThan: st.hi !== '' ? st.hi : null, instockOnly: !st.all, limit: PER, offset: (st.p - 1) * PER };
     if (st.set) b.setNames = [st.set];
     FKEYS.forEach(function (k) {
       var v = st.f && st.f[k];
@@ -288,7 +298,7 @@
     return b;
   }
   // the cache key: the state, not the body (a Magic creature search sends 4,300 type lines)
-  function keyOf(st) { return JSON.stringify([st.g, st.set, st.q, st.sort, st.all, st.p, copyF(st.f)]); }
+  function keyOf(st) { return JSON.stringify([st.g, st.set, st.q, st.sort, st.all, st.p, copyF(st.f), st.lo, st.hi]); }
   // the value lists a search needs: Magic's type lines to expand a chip, and every used list so the
   // summary can name the values (a hash restore knows only the ids)
   function prep(st) {
@@ -410,7 +420,7 @@
         '</div>' +
         '<div class="xg-cf__more" id="xg-cf-more" hidden></div>' +
         '<p class="xg-cf__msg" role="status" aria-live="polite"></p>' +
-        '<p class="xg-cf__tip">Pick a set and leave the name empty to see the whole set in card-number order. Condition and price filters: <a href="/pages/advanced-search?game=' + encodeURIComponent(GAME0) + '">Advanced Search &rsaquo;</a></p>' +
+        '<p class="xg-cf__tip">Pick a set and leave the name empty to see the whole set in card-number order. Condition and printing filters: <a href="/pages/advanced-search?game=' + encodeURIComponent(GAME0) + '">Advanced Search &rsaquo;</a></p>' +
       '</div>';
     res = document.createElement('section');
     res.className = 'xg-cf-res';
@@ -457,15 +467,24 @@
     selSort.value = st.sort;
     chkStock.checked = !st.all;
     sel = copyF(st.f);
+    pLo = st.lo === undefined ? '' : st.lo; pHi = st.hi === undefined ? '' : st.hi;
     fbUpdate();
     if (more && !more.hidden) renderMore();
   }
+  var pLo = '', pHi = '';   // the price bounds, kept beside the chips (the panel may be closed or rebuilt)
+  function readPrices() {
+    var a = more && more.querySelector('[data-p="lo"]'), b = more && more.querySelector('[data-p="hi"]');
+    if (a) pLo = priceOf(a.value);
+    if (b) pHi = priceOf(b.value);
+    if (pLo !== '' && pHi !== '' && pHi < pLo) { var t = pLo; pLo = pHi; pHi = t; }
+  }
+  function nPrice() { return (pLo !== '' ? 1 : 0) + (pHi !== '' ? 1 : 0) ? 1 : 0; }
 
   /* ---------------- filter panel ---------------- */
   function fbUpdate() {
     if (!fb) return;
-    var n = nF(sel);
-    fb.hidden = !groupsOf(game());
+    var n = nF(sel) + nPrice();
+    fb.hidden = false;
     fb.innerHTML = 'Filters' + (n ? ' <b>' + n + '</b>' : '') + '<span class="xg-cf__chev" aria-hidden="true"></span>';
     fb.classList.toggle('is-on', n > 0);
     var clr = more && more.querySelector('[data-clear]');
@@ -480,15 +499,18 @@
     if (!more) return;
     var g = game(), groups = groupsOf(g), gen = ++moreGen;
     fbUpdate();
-    if (!groups) { more.hidden = true; more.innerHTML = ''; fb.setAttribute('aria-expanded', 'false'); return; }
-    more.innerHTML = groups.map(function (gr) {
+    more.innerHTML = '<fieldset class="xg-cf__grp xg-cf__grp--price"><legend>Price (CAD)</legend><div class="xg-cf__price">' +
+      '<input class="xg-cf__in xg-cf__pin" data-p="lo" type="text" inputmode="decimal" autocomplete="off" placeholder="Min" aria-label="Lowest price" value="' + (pLo === '' ? '' : pLo) + '">' +
+      '<span class="xg-cf__pto">to</span>' +
+      '<input class="xg-cf__in xg-cf__pin" data-p="hi" type="text" inputmode="decimal" autocomplete="off" placeholder="Max" aria-label="Highest price" value="' + (pHi === '' ? '' : pHi) + '">' +
+      '</div></fieldset>' + groups.map(function (gr) {
       var html = '<fieldset class="xg-cf__grp" data-k="' + gr.k + '"><legend>' + esc(gr.label) + '</legend><div class="xg-cf__chips">';
       if (gr.fixed) html += gr.fixed.map(function (f) { return chipHtml(gr.k, f[0], f[1] || f[0], picked(gr.k, f[0]), f[2]); }).join('');
       else html += '<span class="xg-cf__chips-note">Loading&hellip;</span>';
       return html + '</div></fieldset>';
     }).join('') +
-      '<div class="xg-cf__morefoot"><button type="button" class="xg-cf__clear" data-clear' + (nF(sel) ? '' : ' hidden') + '>Clear filters</button>' +
-      '<span class="xg-cf__morehint">Pick as many as you like: values in one row are &ldquo;or&rdquo;, the rows narrow each other.</span></div>';
+      '<div class="xg-cf__morefoot"><button type="button" class="xg-cf__clear" data-clear' + (nF(sel) + nPrice() ? '' : ' hidden') + '>Clear filters</button>' +
+      '<span class="xg-cf__morehint">' + (groups.length ? 'Pick as many as you like: values in one row are &ldquo;or&rdquo;, the rows narrow each other. A price matches any condition or finish of the card.' : 'A price matches any condition or finish of the card, before tax.') + '</span></div>';
     groups.forEach(function (gr) {
       if (!gr.api || gr.fixed) return;
       loadList(g, gr.api).then(function (l) {
@@ -524,7 +546,8 @@
   function refilter() {
     if (!cur) return;
     if (norm(inSet.value) !== norm(cur.set)) { submit(); return; }
-    run(Object.assign({}, cur, { q: inQ.value.trim().slice(0, 120), sort: selSort.value, all: !chkStock.checked, f: copyF(sel), p: 1 }), {});
+    readPrices();
+    run(Object.assign({}, cur, { q: inQ.value.trim().slice(0, 120), sort: selSort.value, all: !chkStock.checked, f: copyF(sel), lo: pLo, hi: pHi, p: 1 }), {});
   }
 
   /* set list (combobox) */
@@ -575,6 +598,8 @@
     var groups = groupsOf(st.g) || [];
     st.f = {};
     groups.forEach(function (gr) { if (sel[gr.k] && sel[gr.k].length) st.f[gr.k] = sel[gr.k].slice(0, 40); });
+    readPrices();
+    st.lo = pLo; st.hi = pHi;
     return st;
   }
   function submit() {
@@ -633,7 +658,7 @@
     var what = '<strong>' + n.toLocaleString('en-CA') + ' card' + (n === 1 ? '' : 's') + '</strong>' +
       (st.q ? ' named &ldquo;' + esc(st.q) + '&rdquo;' : '') +
       (st.set ? ' in <strong>' + esc(st.set) + '</strong>' : (PICK ? ' in ' + esc(GAME_NAMES[st.g]) : '')) +
-      (st.all ? '' : ', in stock') + filterText(st);
+      (st.all ? '' : ', in stock') + filterText(st) + (priceText(st) ? ', ' + esc(priceText(st)) : '');
     return what + ' <span class="xg-cf-res__by">&middot; ' + esc(s[3]) + (pages > 1 ? ' &middot; page ' + st.p + ' of ' + pages : '') + '</span>';
   }
   // ", red or green, rare or mythic" - the picked values, in the order the panel shows them
@@ -693,7 +718,7 @@
       if (st.p > 1) tips.push('<button type="button" class="xg-cf-btn" data-p="1">First page</button>');
       if (hasF(st)) tips.push('<button type="button" class="xg-cf-btn" data-clear>Clear filters</button>');
       res.innerHTML = head(st, d, extra) + '<div class="xg-cf-empty"><p>No ' + (st.all ? '' : 'in-stock ') + 'cards match' +
-        (st.q ? ' &ldquo;' + esc(st.q) + '&rdquo;' : '') + (st.set ? ' in ' + esc(st.set) : '') + filterText(st).replace(/^, /, ' with ') + '.</p>' + (tips.length ? '<p>' + tips.join(' ') + '</p>' : '') + '</div>';
+        (st.q ? ' &ldquo;' + esc(st.q) + '&rdquo;' : '') + (st.set ? ' in ' + esc(st.set) : '') + (filterText(st) + (priceText(st) ? ', ' + esc(priceText(st)) : '')).replace(/^, /, ' with ') + '.</p>' + (tips.length ? '<p>' + tips.join(' ') + '</p>' : '') + '</div>';
       after(how, res.querySelector('.xg-cf-empty p').textContent);
       return;
     }
@@ -868,15 +893,18 @@
         refilter();
         return;
       }
-      if (e.target.closest('[data-clear]')) { sel = {}; renderMore(); refilter(); }
+      if (e.target.closest('[data-clear]')) { sel = {}; pLo = pHi = ''; renderMore(); refilter(); }
     });
     more.addEventListener('change', function (e) {
+      if (e.target.closest('.xg-cf__pin')) { readPrices(); fbUpdate(); refilter(); return; }
       var s = e.target.closest('.xg-cf__add');
       if (!s || !s.value) return;
       toggleF(s.getAttribute('data-k'), s.value, true);
       renderMore();
       refilter();
     });
+    // Enter in a price box searches (the form's submit), never a stray newline
+    more.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.closest('.xg-cf__pin')) { e.preventDefault(); readPrices(); fbUpdate(); if (cur) refilter(); else submit(); } });
     quick.addEventListener('click', function (e) {
       var b = e.target.closest('[data-quick]');
       if (!b) return;
@@ -896,7 +924,7 @@
       if (t.hasAttribute('data-retry')) { run(cur, { focus: true }); return; }
       if (t.hasAttribute('data-all')) { chkStock.checked = false; run(Object.assign({}, cur, { all: true, p: 1 }), { focus: true }); return; }
       if (t.hasAttribute('data-noq')) { inQ.value = ''; run(Object.assign({}, cur, { q: '', p: 1 }), { focus: true }); return; }
-      if (t.hasAttribute('data-clear')) { sel = {}; renderMore(); run(Object.assign({}, cur, { f: {}, p: 1 }), { focus: true }); return; }
+      if (t.hasAttribute('data-clear')) { sel = {}; pLo = pHi = ''; renderMore(); run(Object.assign({}, cur, { f: {}, lo: '', hi: '', p: 1 }), { focus: true }); return; }
       if (t.hasAttribute('data-p') && t.tagName === 'BUTTON') {
         if (res.getAttribute('aria-busy') === 'true') return;   // the old pager under a pending search
         var p = parseInt(t.getAttribute('data-p'), 10);
@@ -1000,6 +1028,7 @@
       '.xg-cf button.xg-cf__chip:hover{border-color:var(--xg-red,#d62c28)}.xg-cf button.xg-cf__chip[aria-pressed="true"]{border-color:var(--xg-red,#d62c28);background:var(--xg-red,#d62c28);color:#fff}' +
       '.xg-cf__chip i{flex:none;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}' +
       '.xg-cf select.xg-cf__add{width:auto;max-width:100%;height:34px;padding-right:26px;font-size:13px}' +
+      '.xg-cf__grp--price{flex:0 1 230px}.xg-cf__price{display:flex;align-items:center;gap:8px}.xg-cf .xg-cf__in.xg-cf__pin{width:96px;height:34px;padding:0 10px;font-size:13.5px}.xg-cf__pto{color:var(--xg-muted,#707a83);font-size:13px}' +
       '.xg-cf__morefoot{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:2px}' +
       '.xg-cf button.xg-cf__clear{min-height:0;margin:0;padding:6px 14px;border:1px solid var(--xg-border,#e3e6e8);border-radius:999px;background:none;color:var(--xg-ink,#171b1d);font:inherit;font-size:13px;font-weight:700;text-transform:none;letter-spacing:normal;cursor:pointer}.xg-cf button.xg-cf__clear[hidden]{display:none}.xg-cf button.xg-cf__clear:hover{border-color:var(--xg-red,#d62c28);color:var(--xg-red,#d62c28)}' +
       '.xg-cf__morehint{color:var(--xg-muted,#707a83);font-size:12.5px}' +
@@ -1052,7 +1081,7 @@
         '.xg-cf__body{padding:0 12px 12px}.xg-cf__quick{padding:0 12px 12px}' +
         '.xg-cf__f--set,.xg-cf__f--q,.xg-cf__f--game{flex-basis:100%}.xg-cf__f--sort{flex:1 1 140px}' +
         '.xg-cf .xg-cf__in{font-size:16px}.xg-cf button.xg-cf__go{flex:1 1 100%}.xg-cf-res select.xg-cf-card__cond{font-size:16px}' +   // 16px keeps iOS from zooming on focus
-        '.xg-cf button.xg-cf__fb{flex:1 1 auto;justify-content:center}.xg-cf__more{gap:10px 16px;padding:10px 12px 8px}.xg-cf__grp{flex-basis:100%}' +
+        '.xg-cf button.xg-cf__fb{flex:1 1 auto;justify-content:center}.xg-cf__more{gap:10px 16px;padding:10px 12px 8px}.xg-cf__grp{flex-basis:100%}.xg-cf .xg-cf__in.xg-cf__pin{width:110px;font-size:16px}' +
         '.xg-cf-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.xg-cf-card{padding:8px}' +
         '.xg-cf-card__row{flex-wrap:wrap}.xg-cf-res button.xg-cf-card__add{flex:1 1 100%}' +
       '}';
