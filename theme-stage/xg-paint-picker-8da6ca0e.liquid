@@ -184,7 +184,10 @@
     ['flesh', 'Skin tones', '#e0a98a'], ['grey', 'Greys, black & white', '#8d9396'], ['metal', 'Metallics', '#b9b9b9'], ['wash', 'Washes & inks', '#4a5a78']];
   var state = { brand: root.getAttribute('data-brand') || 'All', range: 'All', family: '', q: '', stock: true };
   // "Shop by colour" links open on a brand and range: #brand=Warhammer&range=Base (older links: #brand=Citadel, #range=Game%20Color)
-  function hashVal(k) { var m = new RegExp('(?:^|[#&])' + k + '=([^&]+)').exec(location.hash); return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; }
+  // the address hash, or the one layout/theme.liquid took off the address at load (a "#brand=..."
+  // hash is not a selector, and theme.js's focus helper threw on it: white page, 2026-09-29)
+  function pageHash() { return location.hash || window.xgHash || ''; }
+  function hashVal(k) { var m = new RegExp('(?:^|[#&])' + k + '=([^&]+)').exec(pageHash()); return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; }
   try { var hb = fromUrl(hashVal('brand')), hr = hashVal('range'); if (hb === 'All' || BRANDS.indexOf(hb) > -1) state.brand = hb; if (hr) state.range = hr; } catch (e) {}
   if (state.brand !== 'All' && BRANDS.indexOf(state.brand) < 0) state.brand = 'All';
   var paints = [];
@@ -275,7 +278,7 @@
     // Ruddy Umber opened Kraken Lavender - the index was taken before this sort)
     paints.forEach(function (g, i) { g._i = i; });
     drawBrands(); drawRanges(); drawFamilies(); draw();
-    if (/brand=Citadel/.test(location.hash)) setHash();   // older links: the address says Warhammer too
+    if (/brand=Citadel/.test(pageHash())) setHash();   // older links: the address says Warhammer too
   }).catch(function () { $('.xg-pp__count').textContent = 'Could not load the colours - please refresh.'; });
 
   // the bottles of a colour that pass the range + stock filters

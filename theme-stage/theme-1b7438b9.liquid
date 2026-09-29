@@ -5,6 +5,24 @@
 <!--<![endif]-->
 
 <head>
+  <script>
+    /* A URL hash that is not a CSS selector - the colour picker's "#brand=The+Army+Painter" links -
+       makes theme.js's page-focus helper throw inside jQuery's ready queue (jQuery 2: the ready
+       callbacks after it never run), so shop.js never hides the white #siteloader and the page
+       stays blank (customer report, 2026-09-29). Keep such a hash in window.xgHash and take it
+       off the address before any script reads it; the scripts that use it (the colour picker)
+       read xgHash and put it back. And never leave the loader up past the page load. */
+    (function () {
+      var h = location.hash;
+      if (h && h.length > 1) {
+        try { document.querySelector(h); }
+        catch (e) { window.xgHash = h; try { history.replaceState(history.state, '', location.pathname + location.search); } catch (x) {} }
+      }
+      function drop() { ['siteloader', 'spin-wrapper'].forEach(function (id) { var el = document.getElementById(id); if (el && el.style.display !== 'none') el.style.display = 'none'; }); }
+      window.addEventListener('load', function () { setTimeout(drop, 1500); });
+      setTimeout(drop, 8000);
+    })();
+  </script>
 {% include 'booster-seo' %}
 <meta name="viewport" content="width=device-width, initial-scale=1">
  <script>/* start spd config */window._spt_delay_keywords=["/gtag/js,gtag(,/checkouts,/tiktok-track.js,/hotjar-,/smile-,/adoric.js,/wpm/,fbq("];/* end spd config */</script> 
