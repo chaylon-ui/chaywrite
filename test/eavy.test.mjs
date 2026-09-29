@@ -197,7 +197,9 @@ test("minimum tier: the basecoat (or its mix) and the first wash of each area ca
   const sw = (n, r) => ({ b: "Citadel", n, h: "#000000", items: [{ u: n.toLowerCase().replace(/\W+/g, "-"), t: n, p: "5", a: true, v: 1, r }] });
   const idx = citadelIndex({ swatches: [sw("Mephiston Red", "Base"), sw("Nuln Oil", "Shade"), sw("Evil Sunz Scarlet", "Layer"), sw("Wild Rider Red", "Layer"),
     sw("Dark Reaper", "Layer"), sw("Administratum Grey", "Base"), sw("White Scar", "Layer"), sw("Thunderhawk Blue", "Layer"), sw("Abaddon Black", "Base"),
-    sw("Agrax Earthshade", "Shade"), sw("Wyldwood", "Contrast"), sw("Skarsnik Green", "Layer"), sw("Averland Sunset", "Base"), sw("Warp Lightning", "Contrast")] });
+    sw("Agrax Earthshade", "Shade"), sw("Wyldwood", "Contrast"), sw("Skarsnik Green", "Layer"), sw("Averland Sunset", "Base"), sw("Warp Lightning", "Contrast"),
+    sw("Eshin Grey", "Layer"), sw("Stormhost Silver", "Layer"), sw("Corax White", "Base"), sw("Grey Seer", "Base"), sw("Basilicanum Grey", "Contrast"),
+    sw("Genestealer Purple", "Base"), sw("Deepkin Flesh", "Layer"), sw("Leadbelcher", "Base"), sw("Retributor Armour", "Base")] });
   const min = (raw) => areaPaints(raw, idx).filter((p) => p.m).map((p) => p.name);
   const all = (raw) => areaPaints(raw, idx).map((p) => p.name);
   // basecoat + wash; the layers stay in the full scheme
@@ -225,8 +227,23 @@ test("minimum tier: the basecoat (or its mix) and the first wash of each area ca
   assert.deepEqual(min(["Mephiston Red", "Evil Sunz Scarlet", "Wild Rider Red", "Previous mix", "White"]), ["Mephiston Red"]);
   // a Base Mix after four pots (one named twice) still counts
   assert.deepEqual(min(["Skarsnik Green", "Averland Sunset", "Averland", "Warp Lightning", "Base Mix", "White"]), ["Skarsnik Green", "Averland Sunset", "Warp Lightning"]);
-  // a guide section naming several materials: one basecoat each
-  assert.deepEqual(areaPaints(["Mephiston Red", "Agrax Earthshade", "Evil Sunz Scarlet", "Abaddon Black", "Nuln Oil"], idx, null, { name: "Red, black and gore", multi: true }).filter((p) => p.m).map((p) => p.name), ["Mephiston Red", "Agrax Earthshade", "Abaddon Black"]);
+  // a guide section is prose over several materials: its first pot, every Base / Contrast pot, and the Shade right after each
+  assert.deepEqual(areaPaints(["Mephiston Red", "Agrax Earthshade", "Evil Sunz Scarlet", "Abaddon Black", "Nuln Oil"], idx, null, { name: "Red, black and gore", multi: true }).filter((p) => p.m).map((p) => p.name), ["Mephiston Red", "Agrax Earthshade", "Abaddon Black", "Nuln Oil"]);
+  assert.deepEqual(areaPaints(["Evil Sunz Scarlet", "Wild Rider Red", "Leadbelcher", "Nuln Oil", "Stormhost Silver", "Retributor Armour"], idx, null, { name: "Uniform", multi: true }).filter((p) => p.m).map((p) => p.name), ["Evil Sunz Scarlet", "Leadbelcher", "Nuln Oil", "Retributor Armour"]);
+  // a Layer pot straight over the undercoat highlights its colour: the undercoat stays (black boots, black mail)
+  assert.deepEqual(areaPaints(["Black", "Eshin Grey", "Dark Reaper"], idx, null, { name: "Boots" }).filter((p) => p.m).map((p) => p.name), ["Abaddon Black", "Eshin Grey"]);
+  assert.deepEqual(areaPaints(["Black", "Stormhost Silver", "Wyldwood"], idx, null, { name: "Metal Armour" }).filter((p) => p.m).map((p) => p.name), ["Abaddon Black", "Stormhost Silver"]);
+  // two undercoats in a row are both the primer; an undercoat-only mix on a coloured part adds the first real colour
+  assert.deepEqual(areaPaints(["Corax White", "White", "Genestealer Purple", "Dark Reaper"], idx, null, { name: "Light Purple" }).filter((p) => p.m).map((p) => p.name), ["Genestealer Purple"]);
+  assert.deepEqual(areaPaints(["Black", "Basecoat Mix", "Deepkin Flesh", "Mephiston Red"], idx, null, { name: "Shelob's Flesh" }).filter((p) => p.m).map((p) => p.name), ["Abaddon Black", "Deepkin Flesh"]);
+  // an undercoat basecoat on a part named for it still takes a Contrast pot within the first three steps
+  assert.deepEqual(areaPaints(["Grey Seer", "Basilicanum Grey", "White"], idx, null, { name: "White Hair" }).filter((p) => p.m).map((p) => p.name), ["Grey Seer", "Basilicanum Grey"]);
+  assert.deepEqual(areaPaints(["Abaddon Black", "Eshin Grey", "Dark Reaper"], idx, null, { name: "Black Cloth" }).filter((p) => p.m).map((p) => p.name), ["Abaddon Black"]);
+  // a tinted basecoat mix marked late: the tint counts, the layers between do not
+  assert.deepEqual(min(["Wild Rider Red", "White Scar", "Evil Sunz Scarlet", "Dark Reaper", "Thunderhawk Blue", "Basecoat Mix", "Nuln Oil"]), ["Wild Rider Red", "White Scar", "Nuln Oil"]);
+  assert.deepEqual(min(["Wild Rider Red", "Evil Sunz Scarlet", "Dark Reaper", "Thunderhawk Blue", "Mephiston Red", "Basecoat Mix"]), ["Wild Rider Red"]);
+  // spelling slips in the data resolve to the real pot
+  assert.deepEqual(min(["Retributer Armour", "Nuln Oil"]), ["Retributor Armour", "Nuln Oil"]);
   // the range a name means, not the pot in stock: a Base pot sold out with its Spray in stock is still a basecoat
   const sprayOnly = citadelIndex({ swatches: [{ b: "Citadel", n: "Mephiston Red", h: "#960C09", items: [{ r: "Base", u: "base-mr", t: "BASE", p: "5", a: false, v: 1 }, { r: "Spray", u: "spray-mr", t: "SPRAY", p: "30", a: true, v: 2 }] }, sw("Evil Sunz Scarlet", "Layer")] });
   assert.deepEqual(areaPaints(["Evil Sunz Scarlet", "Mephiston Red"], sprayOnly).map((p) => [p.name, p.m || 0, p.r, p.r0]), [["Evil Sunz Scarlet", 1, "Layer", "Layer"], ["Mephiston Red", 1, "Spray", "Base"]]);

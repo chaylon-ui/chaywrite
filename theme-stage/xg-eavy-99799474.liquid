@@ -229,8 +229,10 @@
         tb[1].setAttribute('aria-pressed', curTier === 'full' ? 'true' : 'false');
         tb[0].querySelector('span').textContent = tierLabel(pmin.ours);
         tb[1].querySelector('span').textContent = tierLabel(pfull.ours);
+        var hasWash = pmin.ours.concat(pmin.other).some(function (p) { return (p.r0 || p.r) === 'Shade'; });
         $('.xg-eavy__tierx').textContent = curTier === 'min'
-          ? 'The basecoat for each part of the model, plus a wash where the recipe uses one: enough for a tabletop-ready army. Layers and highlights can come later.'
+          ? (hasWash ? 'The main colour of each part, plus its wash where the recipe uses one: the cheapest way to a painted army. Add the layers and highlights later.'
+            : 'The main colour of each part: the cheapest way to a painted army. Add a wash, the layers and highlights later.')
           : 'Every paint in the recipe: basecoats, washes, layers and highlights, as painted on the box.';
       }
       var pp = curTier === 'min' ? pmin : pfull;

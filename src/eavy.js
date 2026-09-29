@@ -50,7 +50,9 @@ const ALIASES = { black: "Abaddon Black", white: "White Scar", abaddonblack: "Ab
   kreigkhaki: "Krieg Khaki", druchiviolet: "Druchii Violet", cadianflesh: "Cadian Fleshtone",
   ironwarrior: "Iron Warriors", gehennasgold: "Gehenna's Gold", dawnstonegrey: "Dawnstone", xeruspurple: "Xereus Purple",
   scragbrown: "Skrag Brown", evilsunzred: "Evil Sunz Scarlet", sepraphimsepia: "Seraphim Sepia",
-  reiklandfleshadegloss: "Reikland Fleshshade Gloss", skullwhite: "White Scar", administratrumgrey: "Administratum Grey", khonrered: "Khorne Red" };
+  reiklandfleshadegloss: "Reikland Fleshshade Gloss", skullwhite: "White Scar", administratrumgrey: "Administratum Grey", khonrered: "Khorne Red",
+  retributerarmour: "Retributor Armour", retributorgold: "Retributor Armour", balthazargold: "Balthasar Gold", adminitratumgrey: "Administratum Grey",
+  stegagonscalegreen: "Stegadon Scale Green", rakrarthflesh: "Rakarth Flesh", casandorayellow: "Cassandora Yellow", drakenhoffnightshade: "Drakenhof Nightshade" };
 // the pre-2012 names: the card says which old pot the recipe named
 const RENAMED = new Set(["bleachedbone", "scorchedbrown", "codexgrey", "bestialbrown", "mithrilsilver", "chainmail", "boltgunmetal",
   "fortressgrey", "regalblue", "shininggold", "goblingreen", "elfflesh", "scabred", "tinbitz", "redgore", "burnishedgold", "devlanmud",
@@ -333,8 +335,11 @@ function dedupe(list) {
      like are later steps, never a basecoat marker. When the first paint is not a Base or
      Contrast pot and the second is a Base pot (not an undercoat), both count (an unmarked
      mix: Elysian Green + Waaagh! Flesh).
-   - A Paint Picker guide section names several materials ("Brass, iron and gore"): one
-     basecoat per material, taking the Base / Contrast pots in order.
+   - A leading undercoat followed straight by a Layer pot (Eshin Grey on black boots) keeps
+     the undercoat too; an undercoat-only basecoat on a coloured part adds the first real
+     colour, and a Contrast pot within the first three steps (Grey Seer + Basilicanum Grey).
+   - A Paint Picker guide section is prose over several materials ("Uniform", "Brass, iron
+     and gore"): its first pot, every Base / Contrast pot, and the Shade right after each.
    - The wash is the area's first Shade. Layers, highlights, drybrush and glazes are the full
      scheme only. Ranges come from r0 (what the recipe's name means, whatever pot is in
      stock). Over the archive this keeps ~6 pots of ~16 per scheme. */
@@ -342,8 +347,9 @@ const MIX_ANY = /\b(mix|mixes|previous)\b|^add\b/i;
 const MIX_BASE = /\bbase ?(coat|mix)\b|\bbase\b/i;
 const MIX_LATER = /\b(highlight|shade|glaze|final|edge|wash|dry ?brush|light)\b/i;
 const BASE_RANGES = new Set(["Base", "Contrast"]);
-const UNDERCOAT = new Set(["abaddonblack", "chaosblack", "coraxwhite", "whitescar", "wraithbone", "greyseer"]);
+const UNDERCOAT = new Set(["abaddonblack", "chaosblack", "corvusblack", "coraxwhite", "whitescar", "wraithbone", "greyseer"]);
 const PART_UNDERCOAT = /\b(black|white|bone|grey|gray|pale|cream|ivory)\b/i;
+const TINT = new Set(["whitescar", "coraxwhite", "wraithbone", "greyseer", "ushabtibone", "pallidwychflesh"]);
 export function areaPaints(raw, paintIdx, schemeWords, opts) {
   const o = opts || {};
   const steps = [];   // resolved paints in recipe order, each with the step it came from
@@ -371,20 +377,41 @@ export function areaPaints(raw, paintIdx, schemeWords, opts) {
     const limit = MIX_BASE.test(String(raw[mark])) ? 4 : 2;
     if (comp.length && comp.length <= limit && !comp.some(isShade)) main = comp;
   }
-  // 2. one basecoat per material (a guide section that bundles several)
-  const mats = o.multi ? String(o.name || "").split(/,|&|\band\b|\//).filter((x) => x.trim()).length : 1;
-  if (!main.length && mats > 1) main = seq.map((e) => e.p).filter((p) => BASE_RANGES.has(rng(p))).slice(0, mats);
-  // 3. the first paint, past a primer and past a leading wash
+  // 2. a guide section is prose over several materials ("Uniform", "Brass, iron and gore"):
+  //    its first pot and every Base / Contrast pot, so each material keeps its colour
+  if (!main.length && o.multi) main = seq.map((e) => e.p).filter((p, i) => i === 0 || BASE_RANGES.has(rng(p)));
+  // 3. the first paint, past the primer and past a leading wash
   if (!main.length) {
     let pots = seq.map((e) => e.p);
-    if (pots.length > 1 && isUnder(pots[0]) && !PART_UNDERCOAT.test(String(o.name || ""))) pots = pots.slice(1);
+    let primer = null;
+    if (!PART_UNDERCOAT.test(String(o.name || ""))) while (pots.length > 1 && isUnder(pots[0])) primer = pots.shift();
     const at = Math.max(0, pots.findIndex((p) => !isShade(p)));
     const first = pots[at], next = pots[at + 1];
     main = [first];
+    // a Layer pot straight over the undercoat (Eshin Grey on black boots, Stormhost Silver on
+    // black mail) highlights the undercoat's colour, so the undercoat stays the basecoat too
+    if (primer && !BASE_RANGES.has(rng(first))) main.unshift(primer);
     if (!BASE_RANGES.has(rng(first)) && next && rng(next) === "Base" && !isUnder(next)) main.push(next);
+    // a tinted basecoat mix marked late ("Wild Rider Red, White Scar, ... Basecoat Mix"): the tint counts
+    else if (mark >= 1 && MIX_BASE.test(String(raw[mark])) && next && TINT.has(key(next.name)) && next !== first) main.push(next);
   }
-  const wash = seq.map((e) => e.p).find((p) => isShade(p) && !main.some((m) => pk(m) === pk(p)));
-  const min = new Set(main.concat(wash ? [wash] : []).map(pk));
+  // an undercoat-only basecoat on a part not named for it (Shelob's Flesh: "Black, Basecoat Mix,
+  // Deepkin Flesh"; "Corax White, White, Genestealer Purple"): the first real colour counts too
+  if (main.every(isUnder) && !PART_UNDERCOAT.test(String(o.name || ""))) {
+    const col = seq.map((e) => e.p).find((p) => !isUnder(p) && !isShade(p));
+    if (col) main = main.concat([col]);
+  }
+  // an undercoat basecoat with a Contrast pot within the first three steps: the Contrast is what
+  // colours it (Grey Seer + Basilicanum Grey on white hair), and is basecoat and wash in one
+  if (main.every(isUnder)) {
+    const con = seq.slice(0, 3).map((e) => e.p).find((p) => rng(p) === "Contrast");
+    if (con && !main.some((m) => pk(m) === pk(con))) main = main.concat([con]);
+  }
+  // the wash: a guide section keeps the Shade right after each basecoat; otherwise the first Shade
+  let washes = [];
+  if (o.multi) washes = seq.filter((e, i) => i > 0 && isShade(e.p) && main.some((m) => pk(m) === pk(seq[i - 1].p))).map((e) => e.p);
+  if (!washes.length) { const w = seq.map((e) => e.p).find((p) => isShade(p) && !main.some((m) => pk(m) === pk(p))); if (w) washes = [w]; }
+  const min = new Set(main.concat(washes).map(pk));
   return list.map((p) => (min.has(pk(p)) ? { ...p, m: 1 } : p));
 }
 
@@ -399,7 +426,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
   // keeps its fixed 'Eavy Archive credit line, so it gets 'Eavy schemes only
   const guides = Number(url.searchParams.get("v")) >= 7;
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=9&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind + (guides ? "&g=1" : ""));
+  const ck = new Request("https://cache.internal/eavy/for.json?v=10&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind + (guides ? "&g=1" : ""));
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
