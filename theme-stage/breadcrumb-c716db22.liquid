@@ -45,6 +45,24 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   {%- when 'gunpla-master-grade-mg' -%}{%- assign xg_bc_logo = 'Gunpla_Logo_svg.webp' -%}{%- assign xg_bc_logo2 = 'MGlogo.webp' -%}
   {%- when 'gunpla-perfect-grade-pg' -%}{%- assign xg_bc_logo = 'Gunpla_Logo_svg.webp' -%}{%- assign xg_bc_logo2 = 'pg.webp' -%}
 {%- endcase -%}
+{%- comment -%}
+  Card games (owner, 2026-09-29: "possible to do these for pokemon, etc?" then the logos in Shopify
+  Files): the game's logo on every collection whose handle names it - singles, sealed, boxes,
+  decks, the whole catalogue and the search app's /a/search/<handle> pages. One Piece's manga and
+  model-kit collections are not the card game. Star Wars: Unlimited and Flesh and Blood wait for
+  their logos.
+{%- endcomment -%}
+{%- if xg_bc_logo == '' -%}
+  {%- if xg_bc_key contains 'pokemon' -%}{%- assign xg_bc_logo = 'International_Pokemon_logo_svg.webp' -%}
+  {%- elsif xg_bc_key contains 'magic' -%}{%- assign xg_bc_logo = 'b9165f_c51286b95d00424bbd601e58f49cfe4a_mv2.png' -%}
+  {%- elsif xg_bc_key contains 'yu-gi-oh' -%}{%- assign xg_bc_logo = 'Yugioh_tcg_logo_2011_thumb_2f81b115-4c63-4846-9f6c-39bd883654ce.webp' -%}
+  {%- elsif xg_bc_key contains 'lorcana' -%}{%- assign xg_bc_logo = 'Disney_Lorcana_Logo.png' -%}
+  {%- elsif xg_bc_key contains 'riftbound' -%}{%- assign xg_bc_logo = '639px-Riftbound_logo.png' -%}
+  {%- elsif xg_bc_key contains 'neopets' -%}{%- assign xg_bc_logo = 'left-logo-battledome.png' -%}
+  {%- elsif xg_bc_key contains 'one-piece' -%}
+    {%- unless xg_bc_key contains 'manga' or xg_bc_key contains 'model' -%}{%- assign xg_bc_logo = 'One_Piece_logo.png' -%}{%- endunless -%}
+  {%- endif -%}
+{%- endif -%}
 {%- comment -%} every Army Painter line (the-army-painter-warpaints, ...) and Vallejo line (vallejo-game-color, ...) {%- endcomment -%}
 {%- if xg_bc_logo == '' -%}
   {%- assign xg_bc_head = xg_bc_key | slice: 0, 17 -%}
