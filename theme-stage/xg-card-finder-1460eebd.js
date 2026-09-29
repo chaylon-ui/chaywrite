@@ -38,6 +38,7 @@
   var GAME_NAMES = { mtg: 'Magic', pokemon: 'Pokémon', yugioh: 'Yu-Gi-Oh!', lor: 'Lorcana', one: 'One Piece', swu: 'Star Wars: Unlimited', fleshAndBlood: 'Flesh and Blood', scr: 'Sorcery' };
   // collection handle -> BinderPOS game, [game, the set that collection is about], or '*' (shopper picks)
   var GAMES = {
+    'magic-the-gathering-canada': 'mtg', 'pokemon-canada': 'pokemon', 'disney-lorcana-canada': 'lor', 'yu-gi-oh-cards': 'yugioh',
     'magic-the-gathering-mtg-singles': 'mtg', 'magic-the-gathering-singles': 'mtg', 'mtg-singles': 'mtg',
     'mtg-singles-instock': 'mtg', 'magic-convention-singles': 'mtg',
     'bloomburrow-singles': ['mtg', 'Bloomburrow'], 'duskmourn-singles': ['mtg', 'Duskmourn'],

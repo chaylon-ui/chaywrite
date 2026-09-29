@@ -206,7 +206,13 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     <h1 class="h3 head-title">{{ product.title }}</h1>
     {% elsif template contains 'collection' %}
     {% if collection.title %}
-    <h1 class="h3 head-title">{{ collection.title }}</h1>
+    {%- comment -%} The whole-game catalogues are titled "... Canada" for search engines (owner, 2026-09-29,
+        of the MTG one: the big title in the promo banner "doesn't have to be there and the word Canada
+        either"): the heading stays in the page for search engines but out of sight, and the crumb
+        drops the word. {%- endcomment -%}
+    {%- assign xg_bc_plain = false -%}
+    {%- case collection.handle -%}{%- when 'magic-the-gathering-canada', 'pokemon-canada', 'disney-lorcana-canada', 'yu-gi-oh-cards' -%}{%- assign xg_bc_plain = true -%}{%- endcase -%}
+    <h1 class="h3 head-title{% if xg_bc_plain %} visually-hidden{% endif %}">{{ collection.title }}</h1>
     {% else %}
     <h1 class="h3 head-title">{{ 'collections.general.title' | t }}</h1>
     {% endif %}
@@ -244,7 +250,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     <a href="/collections/{{ xg_army_home }}">{{ xg_army_gname }}</a>
     {% endif %}
     <span class="divider">&dash;</span>
-    <span>{{ collection.title }}</span>
+    <span>{{ collection.title | remove: ' Canada' }}</span>
     {% endif %}
     {% elsif template == 'article' %}
     <span class="divider">&dash;</span>
