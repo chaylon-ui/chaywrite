@@ -17,7 +17,7 @@ import { GS_PAGE, GS_QUERY, parseGsPage } from "./gamesys.js";
 import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
-import { serveStage } from "./stage.js";
+import { serveStage, servePair } from "./stage.js";
 import { servePageEdit } from "./page-edit.js";
 import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
@@ -67,6 +67,8 @@ export default {
     if (url.pathname.startsWith("/theme-stage/")) return serveThemeStage(request, env, url);
     // What a staff page may do for whoever is looking (src/staff-access.js).
     if (url.pathname === "/staff/me.json") return serveStaffMe(request, env, url);
+    // A till tablet or the BinderPOS add-on asks for a pairing code and waits for an admin (src/stage.js).
+    if (url.pathname.startsWith("/device/pair/")) return servePair(request, env, url);
     if (url.pathname === "/repo-data/health") {
       return new Response(JSON.stringify(await repoDataHealth(env)), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Exor Kiosk Pickups — BinderPOS auto-loader
 // @namespace    https://exor-binder.nevski.workers.dev/
-// @version      1.6.0
+// @version      1.7.0
 // @description  Shows open kiosk pickup orders inside the BinderPOS till and auto-"scans" each line into the cart (card + condition exact, via BinderPOS's own variant barcodes), so staff can apply store credit and finish the sale in BinderPOS.
 // @match        https://portal.binderpos.com/*
 // @run-at       document-idle
@@ -13,8 +13,9 @@
 
 /* HOW IT WORKS
    - A small "📦 Pickups" button floats bottom-right of the BinderPOS portal.
-   - It reads the kiosk's open draft orders from the showcase worker (same
-     staff PIN as the /staff and /pickups pages; asked once, kept locally).
+   - It reads the kiosk's open draft orders from the showcase worker. The
+     first time, it shows a pairing code for an admin to type on 9Pocket ›
+     Admin › Devices and services; the key it gets is kept locally.
    - LOAD INTO CART "types" each line's barcode + Enter, paced like a fast
      scanner, so the till adds the exact card/variant/condition itself. If
      the till ignores synthetic typing, flip Mode to "wedge" in the panel —
@@ -87,7 +88,7 @@
   root.innerHTML = `<div class="epPanel"><h4>📦 Exor kiosk pickups</h4><div class="epBody">Loading…</div>
     <div class="epTiny">Mode <select class="ep" id="epMode"><option value="input">search box</option><option value="wedge">wedge (keystrokes)</option></select>
     · pace <select class="ep" id="epPace"><option>400</option><option selected>700</option><option>1100</option></select>ms
-    <button class="ep epGhost" id="epForget">forget PIN</button></div></div>
+    <button class="ep epGhost" id="epForget">forget key</button></div></div>
     <button class="epBtn" id="epToggle">📦 Pickups</button>`;
   document.body.appendChild(root);
   // The till listens for scanner keystrokes globally and steals keyboard
@@ -120,43 +121,57 @@
   root.querySelector("#epMode").onchange = (e) => LS("mode", e.target.value);
   root.querySelector("#epPace").onchange = (e) => LS("pace", e.target.value);
   if (LS("pace")) root.querySelector("#epPace").value = LS("pace");
-  root.querySelector("#epForget").onclick = () => { localStorage.removeItem("exor_pin"); refresh(); };
+  root.querySelector("#epForget").onclick = () => { if (confirm("Forget this computer's pickup key? It will need pairing again.")) { localStorage.removeItem("exor_pin"); localStorage.removeItem("exor_dk"); refresh(); } };
 
   // ---- data ----
   let ORDERS = [];
   let LOADING = false; // true while a Load-into-cart run is in progress
+  /* 1.7.0 (owner, 2026-09-29: accounts and paired devices instead of the staff PIN): the add-on
+     pairs once - it shows a code, an admin types it on 9Pocket › Admin › Devices and services, and
+     this computer gets its own key (revocable there). A PIN saved by an older version keeps working
+     until the owner switches the PIN off. */
+  let PAIR_TIMER = null;
+  async function pairUI(msg) {
+    clearTimeout(PAIR_TIMER);
+    body().innerHTML = `${msg ? `<div class="epStat">${H(msg)}</div>` : ""}<div>Getting a pairing code…</div>`;
+    let d = null;
+    try { const r = await fetch(`${BASE}/device/pair/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "binderpos-addon" }) }); d = await r.json(); if (!r.ok) throw new Error(d.error || "HTTP " + r.status); }
+    catch (e) { body().innerHTML = `<div class="epStat">⚠ ${H(e.message || e)}</div><button class="ep epLoad" id="epPairAgain">Try again</button>`; body().querySelector("#epPairAgain").onclick = () => pairUI(); return; }
+    body().innerHTML = `${msg ? `<div class="epStat">${H(msg)}</div>` : ""}<div>Pair this computer: an admin opens <b>9Pocket › Admin › Devices and services › Pair a tablet or the BinderPOS add-on</b> and types</div>
+      <div style="font:800 28px/1.2 monospace;letter-spacing:.12em;text-align:center;margin:8px 0;color:#d9822b">${H(d.code)}</div>
+      <div class="epStat">Waiting… (the code works for 10 minutes)</div>`;
+    const poll = async () => {
+      try {
+        const p = await (await fetch(`${BASE}/device/pair/poll?id=${d.id}`)).json();
+        if (p.status === "approved" && p.key) { LS("dk", p.key); localStorage.removeItem("exor_pin"); refresh(); return; }
+        if (p.status === "expired") { body().innerHTML = `<div class="epStat">The code ran out.</div><button class="ep epLoad" id="epPairAgain">Get a new code</button>`; body().querySelector("#epPairAgain").onclick = () => pairUI(); return; }
+      } catch {}
+      PAIR_TIMER = setTimeout(poll, 3000);
+    };
+    PAIR_TIMER = setTimeout(poll, 3000);
+  }
+  const authQs = () => (LS("dk") ? `dk=${LS("dk")}` : `k=${encodeURIComponent(LS("pin") || "")}`);
+
   async function refresh() {
-    const pin = LS("pin");
-    if (!pin) {
-      // Tap-pad alongside the input: the till's global key-grabbing can't
-      // interfere with clicks, so the PIN always goes in one way or another.
-      body().innerHTML = `<div>Enter the kiosk staff PIN (same as the /staff page):</div>
-        <input class="ep" id="epPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
-        <div id="epPad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:4px 0">${[1,2,3,4,5,6,7,8,9,"⌫",0,"OK"].map((k) => `<button class="ep ${k === "OK" ? "epLoad" : "epBars"}" data-k="${k}" style="margin:0;padding:10px 0;font-size:15px">${k}</button>`).join("")}</div>
-        <div class="epStat"></div>`;
-      const inp = body().querySelector("#epPin");
-      const go = () => { const v = inp.value.trim(); if (v) { LS("pin", v); refresh(); } };
-      body().querySelectorAll("#epPad button").forEach((b) => { b.onclick = () => {
-        const k = b.dataset.k;
-        if (k === "OK") return go();
-        if (k === "⌫") inp.value = inp.value.slice(0, -1);
-        else if (inp.value.length < 8) inp.value += k;
-      }; });
-      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-      setTimeout(() => inp.focus(), 100);
-      return;
-    }
+    const pin = LS("pin"), dk = LS("dk");
+    if (!pin && !dk) return pairUI();
     body().innerHTML = "Loading pickups…";
     try {
-      const r = await fetch(`${BASE}/pickups.json?k=${encodeURIComponent(pin)}`);
+      const r = await fetch(`${BASE}/pickups.json?${authQs()}`);
+      if (r.status === 403) {
+        // the key was revoked, or the old PIN was switched off: pair (again)
+        localStorage.removeItem(dk ? "exor_dk" : "exor_pin");
+        return pairUI(dk ? "This computer's key was revoked - pair it again." : "The old staff PIN no longer works - pair this computer instead.");
+      }
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
       ORDERS = (j.orders || []).filter((o) => o.kiosk);
       render();
+      if (!dk) body().insertAdjacentHTML("afterbegin", '<div class="epStat">This computer still uses the old staff PIN, which is being switched off. <a href="#" id="epPairNow" style="color:#d9822b">Pair it now</a></div>');
+      const pn = body().querySelector("#epPairNow");
+      if (pn) pn.onclick = (ev) => { ev.preventDefault(); pairUI(); };
     } catch (e) {
-      body().innerHTML = `<div class="epStat">⚠ ${H(e.message || e)}${/staff key/i.test(String(e.message)) ? ' — <a href="#" id="epRePin" style="color:#d9822b">re-enter PIN</a>' : ""}</div>`;
-      const a = body().querySelector("#epRePin");
-      if (a) a.onclick = (ev) => { ev.preventDefault(); localStorage.removeItem("exor_pin"); refresh(); };
+      body().innerHTML = `<div class="epStat">⚠ ${H(e.message || e)}</div>`;
     }
   }
   function render() {
@@ -368,7 +383,7 @@
     const b = row.querySelector(".epDone");
     if (b.dataset.arm !== "1") { b.dataset.arm = "1"; b.textContent = "Really clear it?"; setTimeout(() => { b.dataset.arm = ""; b.textContent = "✓ Mark done"; }, 4000); return; }
     try {
-      const r = await fetch(`${BASE}/pickups/done?k=${encodeURIComponent(LS("pin"))}&did=${o.did}`, { method: "POST" });
+      const r = await fetch(`${BASE}/pickups/done?${authQs()}&did=${o.did}`, { method: "POST" });
       const j = await r.json();
       if (r.ok && j.ok) { ORDERS = ORDERS.filter((x) => x.did !== o.did); render(); }
       else row.querySelector(".epStat").textContent = "⚠ " + (j.error || "couldn't clear");
@@ -414,7 +429,7 @@
   try { guardCartDeletion(); } catch {}
 
   // Refresh the badge count quietly every 90s while the till is open.
-  setInterval(() => { if (LS("pin") && !LOADING) fetch(`${BASE}/pickups.json?k=${encodeURIComponent(LS("pin"))}`).then((r) => r.json()).then((j) => {
+  setInterval(() => { if ((LS("dk") || LS("pin")) && !LOADING) fetch(`${BASE}/pickups.json?${authQs()}`).then((r) => r.json()).then((j) => {
     // Never re-render mid-load: it rebuilds the rows and wipes the live
     // "Adding n/m…" status, which looks like the run stalled.
     if (LOADING || !j || !Array.isArray(j.orders)) return;

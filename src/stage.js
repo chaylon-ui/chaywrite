@@ -54,6 +54,9 @@
      dv:<token>  a remembered device {email, at, exp, label} (DEVICE_DAYS)
      cfg         staff access settings {pinOff, pinOffBy, pinOffAt} (src/staff-access.js)
      pinuse      where the old staff PIN last opened something {route: ms}
+     pr:<id>     a device waiting to be paired {code, kind, exp, status, key?, name?} (PAIR_TTL_MS)
+     pc:<code>   the pairing code -> its pr:<id>
+     dk:<sha256> a device or service key {id, name, kind, perms, by, at, used} - only the hash is kept
    Approved and rejected records are pruned after KEEP_MS by the alarm;
    staged ones are never pruned - a forgotten list should stay visible. */
 
@@ -64,7 +67,7 @@ import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
-  newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel,
+  newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
   CODE_TTL_MS, CODE_TRIES, CODE_SENDS, CODE_RESEND_MS, CODE_STARTS, DEVICE_DAYS, DEVICE_KEEP, CHALLENGE_COOKIE } from "./stage-auth.js";
 export { safeImage };
 
@@ -79,6 +82,32 @@ const SEQ_START = 1000;                      // the first buylist is 9P-1001
 const LEGACY = "/buylist/staged";            // the page's first address; redirects
 // The staff screens a sign-in may return to (src/staff-access.js): same site, known pages only.
 const STAFF_NEXT = /^\/(staff|pickups|admin|portal\/buylists|deckstats|tv)(\?[^#\s"'<>]*)?$/;
+// Pairing (src/staff-access.js): a device shows a code, an admin types it on 9Pocket > Admin.
+const PAIR_TTL_MS = 10 * 60e3;
+const PAIR_MAX_WAITING = 20;
+const PAIR_ALPHABET = "ACDEFGHJKMNPQRTUVWXY34679";   // no 0/O, 1/I/L, 2/Z, 5/S, 8/B
+function pairCode() {
+  const a = new Uint8Array(1);
+  let out = "";
+  while (out.length < 6) { crypto.getRandomValues(a); if (a[0] < 250) out += PAIR_ALPHABET[a[0] % 25]; }   // 250 = 10 x 25: no bias
+  return out;
+}
+const DEVICE_KINDS = { "pos-tile": "POS tablet (pickups tile)", "binderpos-addon": "BinderPOS add-on", service: "Service", other: "Device" };
+const cleanKind = (k) => (DEVICE_KINDS[k] ? k : "other");
+const kindLabel = (k) => DEVICE_KINDS[cleanKind(k)];
+// A device or service may use store screens only (never admin), ticked one by one.
+function devicePerms(src) {
+  const out = {};
+  for (const p of STAFF_PERMS) {
+    const v = src && (Array.isArray(src) ? src.includes(p.key) : src[p.key] != null ? src[p.key] : src["perm_" + p.key]);
+    out[p.key] = v === true || v === "on" || v === "1" || v === "true";
+  }
+  return out;
+}
+export async function sha256Hex(s) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(s)));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 const FIRST_ADMIN_EMAIL = "chaylon@exorgames.com";   // pre-filled on the setup page (owner, 2026-09-20)
 
 const digits = (v) => String(v == null ? "" : v).replace(/\D/g, "").slice(0, 24);
@@ -582,6 +611,78 @@ export async function stageDoFetch(cx, request, url) {
     await cx.storage.put("pinuse", Object.fromEntries(keep));
     return doJson({ ok: true });
   }
+  // ---- till devices and services (src/staff-access.js): pairing, keys ----
+  if (p === "/_stage/pair/start" && post) {
+    const b = await bodyOf(request);
+    const now = cx.now();
+    const waiting = await cx.storage.list({ prefix: "pr:" });
+    const gone = [];
+    for (const [k, v] of waiting) if (!v || v.exp < now) gone.push(k, "pc:" + (v && v.code));
+    if (gone.length) await cx.storage.delete(gone.slice(0, 128));
+    if (waiting.size - gone.length / 2 >= PAIR_MAX_WAITING) return doJson({ ok: false, error: "Too many devices waiting to be paired. Try again in a few minutes." }, 429);
+    let code = "";
+    for (let i = 0; i < 5 && (!code || (await cx.storage.get("pc:" + code))); i++) code = pairCode();
+    const id = newToken();
+    await cx.storage.put("pr:" + id, { code, kind: cleanKind(b.kind), exp: now + PAIR_TTL_MS, status: "waiting" });
+    await cx.storage.put("pc:" + code, id);
+    return doJson({ ok: true, id, code: code.slice(0, 3) + "-" + code.slice(3), expiresIn: Math.round(PAIR_TTL_MS / 1000) });
+  }
+  if (p === "/_stage/pair/poll") {
+    const id = String(url.searchParams.get("id") || "");
+    const pr = /^[0-9a-f]{64}$/.test(id) ? await cx.storage.get("pr:" + id) : null;
+    if (!pr || pr.exp < cx.now()) { if (pr) await cx.storage.delete(["pr:" + id, "pc:" + pr.code]); return doJson({ ok: true, status: "expired" }); }
+    if (pr.status !== "approved") return doJson({ ok: true, status: "waiting" });
+    // handed over once, then forgotten: only the hash stays (dk:)
+    await cx.storage.delete("pr:" + id);
+    return doJson({ ok: true, status: "approved", key: pr.key, name: pr.name, perms: pr.perms });
+  }
+  if (p === "/_stage/pair/approve" && post) {
+    const b = await bodyOf(request);
+    const code = String(b.code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    const id = code.length === 6 ? await cx.storage.get("pc:" + code) : null;
+    const pr = id ? await cx.storage.get("pr:" + id) : null;
+    if (!pr || pr.exp < cx.now() || pr.status !== "waiting") return doJson({ ok: false, error: "No device is showing that code (codes last 10 minutes). Get a new code on the device and try again." });
+    const name = String(b.name || "").trim().slice(0, 60) || kindLabel(pr.kind);
+    const perms = devicePerms(b.perms);
+    if (!Object.values(perms).some(Boolean)) return doJson({ ok: false, error: "Tick at least one thing the device may do." });
+    const key = newToken();
+    const rec = { id: newToken().slice(0, 16), name, kind: pr.kind, perms, by: String(b.by || "").slice(0, 160), at: cx.now(), used: 0 };
+    await cx.storage.put("dk:" + (await sha256Hex(key)), rec);
+    Object.assign(pr, { status: "approved", key, name, perms, exp: cx.now() + PAIR_TTL_MS });
+    await cx.storage.put("pr:" + id, pr);
+    await cx.storage.delete("pc:" + code);
+    return doJson({ ok: true, id: rec.id, name });
+  }
+  if (p === "/_stage/device-key/create" && post) {
+    const b = await bodyOf(request);
+    const perms = devicePerms(b.perms);
+    if (!Object.values(perms).some(Boolean)) return doJson({ ok: false, error: "Tick at least one thing the key may do." });
+    const key = newToken();
+    const rec = { id: newToken().slice(0, 16), name: String(b.name || "").trim().slice(0, 60) || "Service", kind: "service", perms, by: String(b.by || "").slice(0, 160), at: cx.now(), used: 0 };
+    await cx.storage.put("dk:" + (await sha256Hex(key)), rec);
+    return doJson({ ok: true, key, id: rec.id, name: rec.name });
+  }
+  if (p === "/_stage/device-key") {
+    const h = String(url.searchParams.get("hash") || "");
+    const d = /^[0-9a-f]{64}$/.test(h) ? await cx.storage.get("dk:" + h) : null;
+    return d ? doJson({ ok: true, device: d }) : doJson({ ok: false }, 404);
+  }
+  if (p === "/_stage/device-key/used" && post) {
+    const h = String((await bodyOf(request)).hash || "");
+    const d = /^[0-9a-f]{64}$/.test(h) ? await cx.storage.get("dk:" + h) : null;
+    if (d) { d.used = cx.now(); await cx.storage.put("dk:" + h, d); }
+    return doJson({ ok: !!d });
+  }
+  if (p === "/_stage/device-keys") {
+    const m = await cx.storage.list({ prefix: "dk:" });
+    return doJson({ ok: true, devices: [...m.values()].filter(Boolean).sort((a, b) => (a.at || 0) - (b.at || 0)) });
+  }
+  if (p === "/_stage/device-key/revoke" && post) {
+    const id = String((await bodyOf(request)).id || "");
+    const m = await cx.storage.list({ prefix: "dk:" });
+    for (const [k, v] of m) if (v && v.id === id) { await cx.storage.delete(k); return doJson({ ok: true, name: v.name }); }
+    return doJson({ ok: false, error: "no such device" });
+  }
   if (p === "/_stage/health") {
     const all = await listAll(cx);
     const counts = {};
@@ -713,6 +814,24 @@ export async function currentUser(request, env, origin) {
 // Staff access settings for src/staff-access.js (the PIN switch, where the PIN was last used).
 export async function stageCfg(env, origin) { return doCall(env, origin, "/_stage/cfg"); }
 export async function notePinUse(env, origin, route) { return doCall(env, origin, "/_stage/pinuse", { route }); }
+// Device and service keys (src/staff-access.js): looked up by hash, never stored in the clear.
+export async function deviceByHash(env, origin, hash) { const j = await doCall(env, origin, "/_stage/device-key?hash=" + hash); return j.ok ? j.device : null; }
+export async function noteDeviceUse(env, origin, hash) { return doCall(env, origin, "/_stage/device-key/used", { hash }); }
+// GET/POST /device/pair/* (index.js): a device asks for a code, then waits for an admin to type it.
+export async function servePair(request, env, url) {
+  const cors = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type", "cache-control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+  if (url.pathname === "/device/pair/start" && request.method === "POST") {
+    let b = {}; try { b = (await request.json()) || {}; } catch {}
+    const j = await doCall(env, url.origin, "/_stage/pair/start", { kind: b.kind });
+    return Response.json(j.ok ? { id: j.id, code: j.code, expiresIn: j.expiresIn } : { error: j.error || "failed" }, { status: j.ok ? 200 : 429, headers: cors });
+  }
+  if (url.pathname === "/device/pair/poll") {
+    const j = await doCall(env, url.origin, "/_stage/pair/poll?id=" + encodeURIComponent(url.searchParams.get("id") || ""));
+    return Response.json(j.status === "approved" ? { status: "approved", key: j.key, name: j.name } : { status: j.status || "expired" }, { headers: cors });
+  }
+  return Response.json({ error: "not found" }, { status: 404, headers: cors });
+}
 
 async function startSession(env, origin, email, mfa) {
   const token = newToken();
@@ -867,12 +986,16 @@ export async function serveStage(request, env, url, staffOk, sopts) {
   if (p === BASE + "/admin" || p === BASE + "/admin/control") {
     if (!user) return toLogin();
     if (user.role !== "admin") return html(renderDenied(opts), 403);
+    let newKey = null;
     if (p === BASE + "/admin/control" && request.method === "POST") {
       const result = await adminControl(env, origin, form || {}, user);
-      return redirect(BASE + "/admin" + q(result.ok ? { msg: result.message } : { err: result.error || "failed" }));
+      // a new service key is shown once, on this answer - never in a redirect URL
+      if (!result.newKey) return redirect(BASE + "/admin" + q(result.ok ? { msg: result.message } : { err: result.error || "failed" }));
+      newKey = result.newKey; opts.msg = result.message;
     }
     const j = await doCall(env, origin, "/_stage/users");
-    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin) }));
+    const dv = await doCall(env, origin, "/_stage/device-keys");
+    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin), devices: dv.ok ? dv.devices : [], newKey, origin }));
   }
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.
@@ -1125,6 +1248,18 @@ async function adminControl(env, origin, f, admin) {
   if (action === "add") {
     const r = await createAccount(env, origin, { email: f.email, name: f.name, password: f.password, role: f.role, perms: permsFrom(f), limits: limitsFrom(f), createdBy: admin.email });
     return r.ok ? { ok: true, message: "Account created for " + email + "." } : { ok: false, error: r.error };
+  }
+  if (action === "device-pair") {
+    const r = await doCall(env, origin, "/_stage/pair/approve", { code: f.code, name: f.name, perms: f, by: admin.email });
+    return r.ok ? { ok: true, message: "Paired " + r.name + ". The device picks its key up within a few seconds." } : { ok: false, error: r.error };
+  }
+  if (action === "device-create") {
+    const r = await doCall(env, origin, "/_stage/device-key/create", { name: f.name, perms: f, by: admin.email });
+    return r.ok ? { ok: true, message: "Key created for " + r.name + ".", newKey: { name: r.name, key: r.key } } : { ok: false, error: r.error };
+  }
+  if (action === "device-revoke") {
+    const r = await doCall(env, origin, "/_stage/device-key/revoke", { id: f.id });
+    return r.ok ? { ok: true, message: "Revoked " + r.name + ". It stops working within a minute." } : { ok: false, error: r.error };
   }
   if (action === "pin-off" || action === "pin-on") {
     const r = await doCall(env, origin, "/_stage/cfg/pin", { off: action === "pin-off", by: admin.email });

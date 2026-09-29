@@ -288,6 +288,30 @@ ${(d.done || []).length ? `<div class="card"><h3>Released in the last 24 hours</
   return shell("Held stock", body, o, true);
 }
 
+// Till devices and services: each its own key instead of the PIN (src/staff-access.js).
+const KIND_LABEL = { "pos-tile": "POS tablet", "binderpos-addon": "BinderPOS add-on", service: "Service", other: "Device" };
+function deviceCard(o) {
+  const list = o.devices || [];
+  const checks = (defaults) => STAFF_PERMS.map((p) => `<label class="chk"><input type="checkbox" name="perm_${p.key}" ${defaults.includes(p.key) ? "checked" : ""}> ${esc(p.label)}</label>`).join("");
+  const can = (d) => STAFF_PERMS.filter((p) => d.perms && d.perms[p.key]).map((p) => `<span class="perm">${esc(p.label.split(":")[0].split(" (")[0])}</span>`).join("");
+  const rows = list.map((d) => `<tr><td><b>${esc(d.name)}</b><small>${esc(KIND_LABEL[d.kind] || "Device")} · added ${esc(when(d.at))}${d.by ? " by " + esc(d.by) : ""}</small></td><td>${can(d)}</td><td>${d.used ? esc(when(d.used)) : '<span class="muted">not yet</span>'}</td>
+<td class="n"><form method="post" action="${BASE}/admin/control" onsubmit="return confirm('Revoke ${esc(jsStr(d.name))}? It stops working within a minute and has to be paired again.')"><input type="hidden" name="action" value="device-revoke"><input type="hidden" name="id" value="${esc(d.id)}"><button type="submit">Revoke</button></form></td></tr>`).join("");
+  const nk = o.newKey ? `<div class="okmsg"><b>Key for ${esc(o.newKey.name)}</b> - copy it now, it is not shown again:<br><code style="user-select:all;word-break:break-all;font-size:13px">${esc(o.newKey.key)}</code>
+<br><span class="muted">Shopify Flow's order alerts: set the HTTP request's URL to</span> <code style="user-select:all;word-break:break-all;font-size:12px">${esc((o.origin || "") + "/alert?dk=" + o.newKey.key)}</code></div>` : "";
+  return `<div class="card"><h3>Devices and services</h3>
+<p class="muted">Till tablets, the BinderPOS add-on and services such as Shopify Flow get their own key instead of the staff PIN - each can be revoked on its own. A tablet or the add-on shows a pairing code: type it here. A service with no screen gets a key to paste in.</p>
+${nk}
+${list.length ? `<table class="users"><thead><tr><th>Device</th><th>May use</th><th>Last used</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="muted">Nothing paired yet.</p>`}
+<details style="margin-top:10px"><summary class="btn" style="cursor:pointer">Pair a tablet or the BinderPOS add-on</summary>
+<form method="post" action="${BASE}/admin/control" autocomplete="off" style="margin:10px 0"><input type="hidden" name="action" value="device-pair">
+<div class="act"><input class="text" name="code" placeholder="code on the device, e.g. 7Q4-K9M" required autocomplete="off" style="text-transform:uppercase;letter-spacing:.1em"><input class="text" name="name" placeholder="name, e.g. Front till iPad"></div>
+<div class="pg">${checks(["pickups"])}</div><div class="act"><button class="ok" type="submit">Pair</button></div></form></details>
+<details style="margin-top:6px"><summary class="btn" style="cursor:pointer">Create a key for a service (Shopify Flow)</summary>
+<form method="post" action="${BASE}/admin/control" autocomplete="off" style="margin:10px 0"><input type="hidden" name="action" value="device-create">
+<div class="act"><input class="text" name="name" placeholder="name, e.g. Shopify Flow order alerts" required></div>
+<div class="pg">${checks(["alerts"])}</div><div class="act"><button class="ok" type="submit">Create key</button><span class="muted">The key is shown once, on the next page.</span></div></form></details></div>`;
+}
+
 // The old staff PIN: its switch, and what still used it lately (src/staff-access.js).
 const PIN_ROUTES = { "/pickups.json": "pickup list (the /pickups page, the POS tile or the BinderPOS add-on)", "/pickups/done": "finishing a pickup (the POS tile)",
   "/alert": "order alerts sent in (Shopify Flow, or the /staff page's test)", "/ws?role=staff": "the /staff order-alerts page", "/ws?role=remote": "a TV remote",
@@ -334,6 +358,7 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 <div class="act"><input class="text" type="email" name="email" placeholder="email (their sign-in name)" required autocomplete="off"><input class="text" name="name" placeholder="name" autocomplete="off"><input class="text" type="password" name="password" placeholder="password (8+)" minlength="8" required autocomplete="new-password"><select class="text" name="role" style="flex:0 1 140px"><option value="staff">staff</option><option value="admin">admin</option></select></div>
 <div style="margin:8px 0"><span class="muted">Permissions (staff only; admins have all):</span>${permChecks(null)}</div>
 <div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>
+${deviceCard(o)}
 ${pinCard(o.cfg)}`;
   return shell("Accounts", body, o, true);
 }

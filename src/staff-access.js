@@ -8,24 +8,27 @@
      1. a signed-in account (a session made through the emailed code, see
         src/stage-auth.js) with the screen's permission - PERM "admin" means
         admin accounts only;
-     2. the automation key: `Authorization: Bearer <STAFF_AUTOMATION_KEY>`, a
+     2. a device or service key (?dk= or `x-exor-device`): a till tablet or the
+        BinderPOS add-on paired on 9Pocket > Admin, or a service key made
+        there (Shopify Flow). Store screens only, never admin; revocable one by
+        one (a revoke reaches every isolate within DEVICE_TTL_MS);
+     3. the automation key: `Authorization: Bearer <STAFF_AUTOMATION_KEY>`, a
         worker + GitHub secret for the deploy smoke and the runner workflows;
-     3. the old staff PIN (?k= / pin), ONLY while an admin has not switched it
+     4. the old staff PIN (?k= / pin), ONLY while an admin has not switched it
         off on 9Pocket > Admin. Each use is noted (route + time) so the admin
         page can show what still leans on it before the switch goes off.
-   Paired till devices (the POS tile, the BinderPOS add-on, Shopify Flow) come
-   in as their own key once pairing exists.
 
    The worker strips INTERNAL_HEADER from every request it receives; it adds
    it only to a request it forwards to a room after an account passed, so the
    room can take it in place of the PIN. */
 
-import { currentUser, stageCfg, notePinUse } from "./stage.js";
+import { currentUser, stageCfg, notePinUse, deviceByHash, noteDeviceUse, sha256Hex } from "./stage.js";
 import { can, sameHex } from "./stage-auth.js";
 
 export const INTERNAL_HEADER = "x-exor-staff";
 const CFG_TTL_MS = 20e3;
 const PIN_NOTE_MS = 10 * 60e3;
+const DEVICE_TTL_MS = 60e3;
 
 // What each staff screen needs. Admin accounts pass every one.
 export const SCREEN_PERM = {
@@ -45,7 +48,7 @@ export function stripInternal(request) {
 }
 
 let cfgCache = { at: 0, cfg: null };
-export function _resetStaffCache() { cfgCache = { at: 0, cfg: null }; pinNoted.clear(); }
+export function _resetStaffCache() { cfgCache = { at: 0, cfg: null }; pinNoted.clear(); devCache.clear(); }
 async function cfgOf(env, origin) {
   if (cfgCache.cfg && Date.now() - cfgCache.at < CFG_TTL_MS) return cfgCache.cfg;
   let c = null;
@@ -67,6 +70,29 @@ function bearerOf(request) {
   return String(request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
 }
 
+const devCache = new Map();   // sha256(key) -> { at, d }
+async function deviceOf(env, url, key, ctx) {
+  const hash = await sha256Hex(key);
+  let c = devCache.get(hash);
+  if (!c || Date.now() - c.at > DEVICE_TTL_MS) {
+    let d = null;
+    try { d = await deviceByHash(env, url.origin, hash); } catch { d = c ? c.d : null; }
+    c = { at: Date.now(), d, noted: c ? c.noted : 0 };
+    devCache.set(hash, c);
+  }
+  if (c.d && Date.now() - (c.noted || 0) > PIN_NOTE_MS) {
+    c.noted = Date.now();
+    const p = noteDeviceUse(env, url.origin, hash).catch(() => {});
+    if (ctx && ctx.waitUntil) ctx.waitUntil(p);
+  }
+  return c.d;
+}
+function devicePasses(d, perm) {
+  if (!d || perm === "admin") return false;
+  if (Array.isArray(perm)) return perm.some((p) => devicePasses(d, p));
+  return !!(d.perms && d.perms[perm]);
+}
+
 const pinNoted = new Map();
 function notePin(env, url, route, ctx) {
   const last = pinNoted.get(route) || 0;
@@ -82,6 +108,11 @@ export async function staffAccess(request, env, url, perm, k, opts) {
   let user = null;
   try { user = await currentUser(request, env, url.origin); } catch {}
   if (allows(user, perm)) return { ok: true, via: "account", user, who: user.name || user.email };
+  const dk = String(request.headers.get("x-exor-device") || url.searchParams.get("dk") || "").trim();
+  if (/^[0-9a-f]{64}$/.test(dk) && env && env.ROOM) {
+    const d = await deviceOf(env, url, dk, o.ctx);
+    if (devicePasses(d, perm)) return { ok: true, via: "device", user: null, who: d.name, device: d };
+  }
   const auto = String((env && env.STAFF_AUTOMATION_KEY) || "").trim();
   const bearer = bearerOf(request);
   if (auto.length >= 24 && bearer && sameHex(bearer, auto)) return { ok: true, via: "automation", user: null, who: "automation" };

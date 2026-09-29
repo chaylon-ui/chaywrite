@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stageDoFetch, serveStage, STAGE_DO } from "../src/stage.js";
+import { stageDoFetch, serveStage, servePair, STAGE_DO } from "../src/stage.js";
 import { hashPassword } from "../src/stage-auth.js";
 import { staffAccess, staffGate, serveStaffMe, stripInternal, allows, INTERNAL_HEADER, _resetStaffCache } from "../src/staff-access.js";
 
@@ -20,7 +20,8 @@ class MemStorage {
 const PIN = "4321";
 async function world() {
   _resetStaffCache();
-  const cx = { storage: new MemStorage(), now: () => Date.now(), log: () => {}, mem: {} };
+  const clock = { skew: 0 };
+  const cx = { storage: new MemStorage(), now: () => Date.now() + clock.skew, log: () => {}, mem: {} };
   const checks = [];
   const room = { fetch: async (req) => { const u = new URL(req.url); checks.push(u.pathname); return Response.json({ ok: u.searchParams.get("k") === PIN }); } };
   const env = { ROOM: { idFromName: (n) => n, get: (n) => (n === STAGE_DO ? { fetch: (req) => stageDoFetch(cx, req, new URL(req.url)) } : room) } };
@@ -35,7 +36,7 @@ async function world() {
   await put("/_stage/session/put", { token: tok.pat, email: "pat@x.test", mfa: true });
   await put("/_stage/session/put", { token: tok.vee, email: "vee@x.test", mfa: true });
   await put("/_stage/session/put", { token: tok.old, email: "ada@x.test" });   // before the emailed code: does not count
-  return { env, cx, put, tok, checks };
+  return { env, cx, put, tok, checks, clock };
 }
 const req = (path, o) => {
   const headers = {};
@@ -149,4 +150,89 @@ test("sign-in may return to a staff screen, never off the site", async () => {
   }
   const tv = new URL("https://w.example/9pocket/login?next=" + encodeURIComponent("/tv?room=sports&remote=1"));
   assert.ok((await (await serveStage(new Request(tv), w.env, tv, async () => false)).text()).includes('value="/tv?room=sports&amp;remote=1"'));
+});
+
+// ---------- till devices and services ----------
+const adminPost = async (w, body) => {
+  const url = new URL("https://w.example/9pocket/admin/control");
+  const r = await serveStage(new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", cookie: "np_s=" + w.tok.ada }, body: new URLSearchParams(body).toString() }), w.env, url, async () => false);
+  return { status: r.status, location: decodeURIComponent(String(r.headers.get("location") || "").replace(/\+/g, " ")), text: await r.text() };
+};
+const pair = async (w, path, body, method) => {
+  const url = new URL("https://w.example" + path);
+  const init = method === "OPTIONS" ? { method } : body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {};
+  const r = await servePair(new Request(url, init), w.env, url);
+  return { status: r.status, cors: r.headers.get("access-control-allow-origin"), j: r.status === 204 ? null : await r.json().catch(() => null) };
+};
+
+test("pairing: the device shows a code, an admin types it, the device gets its own key once", async () => {
+  const w = await world();
+  const st = await pair(w, "/device/pair/start", { kind: "pos-tile" });
+  assert.equal(st.status, 200); assert.equal(st.cors, "*");
+  assert.match(st.j.code, /^[ACDEFGHJKMNPQRTUVWXY34679]{3}-[ACDEFGHJKMNPQRTUVWXY34679]{3}$/);
+  assert.match(st.j.id, /^[0-9a-f]{64}$/);
+  assert.equal((await pair(w, "/device/pair/poll?id=" + st.j.id)).j.status, "waiting");
+  // a wrong code, a staff account: refused
+  assert.match((await adminPost(w, { action: "device-pair", code: "AAA-AAA", name: "x", perm_pickups: "on" })).location, /No device is showing that code/);
+  const url = new URL("https://w.example/9pocket/admin/control");
+  const staff = await serveStage(new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", cookie: "np_s=" + w.tok.pat }, body: "action=device-pair&code=" + st.j.code }), w.env, url, async () => false);
+  assert.equal(staff.status, 403);
+  // no permission ticked: refused; then the admin pairs it (lower case, no dash is fine)
+  assert.match((await adminPost(w, { action: "device-pair", code: st.j.code, name: "Front iPad" })).location, /Tick at least one/);
+  const ok = await adminPost(w, { action: "device-pair", code: st.j.code.replace("-", "").toLowerCase(), name: "Front iPad", perm_pickups: "on" });
+  assert.match(ok.location, /Paired Front iPad/);
+  const got = await pair(w, "/device/pair/poll?id=" + st.j.id);
+  assert.equal(got.j.status, "approved"); assert.match(got.j.key, /^[0-9a-f]{64}$/); assert.equal(got.j.name, "Front iPad");
+  assert.equal((await pair(w, "/device/pair/poll?id=" + st.j.id)).j.status, "expired", "handed over once");
+  // only the hash is kept
+  const stored = [...(await w.cx.storage.list({ prefix: "dk:" })).entries()];
+  assert.equal(stored.length, 1); assert.ok(!JSON.stringify(stored).includes(got.j.key));
+  // the key opens pickups (as ?dk= or the header), nothing else, never admin; its use is noted
+  const dev = (path, perm, how) => { const r = new Request("https://w.example" + path + (how === "header" ? "" : (path.includes("?") ? "&" : "?") + "dk=" + got.j.key), how === "header" ? { headers: { "x-exor-device": got.j.key } } : {}); return staffAccess(r, w.env, new URL(r.url), perm, ""); };
+  const a = await dev("/pickups.json", "pickups");
+  assert.equal(a.ok, true); assert.equal(a.via, "device"); assert.equal(a.who, "Front iPad");
+  assert.equal((await dev("/pickups.json", "pickups", "header")).ok, true);
+  assert.equal((await dev("/portal/buylists.json", "portal")).ok, false);
+  assert.equal((await dev("/admin/page-edit.json", "admin")).ok, false);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.ok(stored[0] && (await w.cx.storage.get(stored[0][0])).used > 0, "last used noted");
+  // the admin page lists it; revoke it and it stops (after the isolate cache)
+  const page = await serveStage(new Request("https://w.example/9pocket/admin", { headers: { cookie: "np_s=" + w.tok.ada } }), w.env, new URL("https://w.example/9pocket/admin"), async () => false);
+  const html = await page.text();
+  assert.ok(html.includes("Front iPad") && html.includes("POS tablet") && html.includes("Devices and services"));
+  const id = html.match(/name="id" value="([0-9a-f]{16})"/)[1];
+  assert.match((await adminPost(w, { action: "device-revoke", id })).location, /Revoked Front iPad/);
+  _resetStaffCache();
+  assert.equal((await dev("/pickups.json", "pickups")).ok, false);
+});
+
+test("pairing codes expire after 10 minutes, and at most 20 devices wait at once", async () => {
+  const w = await world();
+  const st = await pair(w, "/device/pair/start", { kind: "binderpos-addon" });
+  w.clock.skew = 10 * 60e3 + 1;
+  assert.match((await adminPost(w, { action: "device-pair", code: st.j.code, perm_pickups: "on" })).location, /No device is showing that code/);
+  assert.equal((await pair(w, "/device/pair/poll?id=" + st.j.id)).j.status, "expired");
+  w.clock.skew = 0;
+  for (let i = 0; i < 20; i++) assert.equal((await pair(w, "/device/pair/start", { kind: "other" })).status, 200);
+  const full = await pair(w, "/device/pair/start", {});
+  assert.equal(full.status, 429); assert.equal(full.cors, "*");
+  w.clock.skew = 10 * 60e3 + 1;
+  assert.equal((await pair(w, "/device/pair/start", {})).status, 200, "expired ones make room");
+  const pre = await pair(w, "/device/pair/start", null, "OPTIONS");
+  assert.equal(pre.status, 200); assert.equal(pre.cors, "*");
+});
+
+test("a service key (Shopify Flow) is shown once, on the page, never in a URL, and opens only what was ticked", async () => {
+  const w = await world();
+  const r = await adminPost(w, { action: "device-create", name: "Shopify Flow order alerts", perm_alerts: "on" });
+  assert.equal(r.status, 200, "rendered, not redirected");
+  const key = r.text.match(/user-select:all;word-break:break-all;font-size:13px">([0-9a-f]{64})</)[1];
+  assert.ok(r.text.includes("https://w.example/alert?dk=" + key));
+  const req2 = new Request("https://w.example/alert?dk=" + key, { method: "POST" });
+  const a = await staffAccess(req2, w.env, new URL(req2.url), "alerts", "");
+  assert.equal(a.ok, true); assert.equal(a.who, "Shopify Flow order alerts");
+  assert.equal((await staffAccess(req2, w.env, new URL(req2.url), "pickups", "")).ok, false);
+  // the page afterwards no longer shows it
+  const again = await (await serveStage(new Request("https://w.example/9pocket/admin", { headers: { cookie: "np_s=" + w.tok.ada } }), w.env, new URL("https://w.example/9pocket/admin"), async () => false)).text();
+  assert.ok(!again.includes(key) && again.includes("Shopify Flow order alerts"));
 });

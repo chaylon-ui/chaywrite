@@ -117,6 +117,8 @@ jobs:
       # this step is where the real upstream shapes and live responses become
       # visible (in the Action log). Failures here never fail the deploy.
       - name: Smoke-test similar endpoints (log-only)
+        env:
+          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
         run: |
           sleep 8   # let the new Worker version propagate before probing
           echo "=== EDHREC raw, first 900 chars ==="
@@ -217,8 +219,12 @@ jobs:
           const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
           const K = m ? m[1] : '';
           const W = 'https://exor-binder.nevski.workers.dev';
+          // the automation key (secret STAFF_AUTOMATION_KEY) rides on every call to the worker; the PIN
+          // above still goes along until the owner switches it off (src/staff-access.js)
+          const AK = process.env.STAFF_AUTOMATION_KEY || '';
+          if (AK) { const f0 = globalThis.fetch; globalThis.fetch = (u, i) => f0(u, String(u).startsWith(W) ? { ...(i || {}), headers: { ...((i && i.headers) || {}), authorization: 'Bearer ' + AK } } : i); }
           (async () => {
-            if (!K) { console.log('bp-plan: no DEFAULT_PIN; skipped'); return; }
+            if (!K && !AK) { console.log('bp-plan: no DEFAULT_PIN; skipped'); return; }
             const li = await fetch(W + '/9pocket.json?k=' + K + '&status=approved&days=90').then((r) => r.json()).catch((e) => ({ error: String(e) }));
             const recs = (li.records || []).filter((r) => r.bp && r.bp.number).sort((a, b) => b.ts - a.ts);
             console.log('bp-plan: approved with a BinderPOS number:', recs.length, li.error ? '| error ' + li.error : '');
@@ -433,6 +439,8 @@ jobs:
       # with customer names and emails masked. If the owner has changed the
       # PIN in /admin the gated part just reports 403 and stops.
       - name: Smoke-test /portal buylists (log-only)
+        env:
+          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
         run: |
           set +e
           W=https://exor-binder.nevski.workers.dev
@@ -445,9 +453,13 @@ jobs:
           const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
           const K = m ? m[1] : '';
           const W = 'https://exor-binder.nevski.workers.dev';
+          // the automation key (secret STAFF_AUTOMATION_KEY) rides on every call to the worker; the PIN
+          // above still goes along until the owner switches it off (src/staff-access.js)
+          const AK = process.env.STAFF_AUTOMATION_KEY || '';
+          if (AK) { const f0 = globalThis.fetch; globalThis.fetch = (u, i) => f0(u, String(u).startsWith(W) ? { ...(i || {}), headers: { ...((i && i.headers) || {}), authorization: 'Bearer ' + AK } } : i); }
           const mask = (s) => String(s).replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>').replace(/("(name|email|phone|notes)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
           (async () => {
-            if (!K) { console.log('no DEFAULT_PIN found in src/config.js; gated probes skipped'); return; }
+            if (!K && !AK) { console.log('no DEFAULT_PIN found in src/config.js; gated probes skipped'); return; }
             const j = async (p) => { const r = await fetch(W + p + (p.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(K)); return { status: r.status, body: await r.json().catch(() => null) }; };
             const st = await j('/portal/status.json');
             console.log('status.json:', st.status, JSON.stringify(st.body));
@@ -638,6 +650,8 @@ jobs:
           done
 
       - name: Smoke-test /discord shelf drops (log-only)
+        env:
+          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
         run: |
           set +e
           W=https://exor-binder.nevski.workers.dev
@@ -648,8 +662,12 @@ jobs:
           const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
           const K = m ? m[1] : '';
           const W = 'https://exor-binder.nevski.workers.dev';
+          // the automation key (secret STAFF_AUTOMATION_KEY) rides on every call to the worker; the PIN
+          // above still goes along until the owner switches it off (src/staff-access.js)
+          const AK = process.env.STAFF_AUTOMATION_KEY || '';
+          if (AK) { const f0 = globalThis.fetch; globalThis.fetch = (u, i) => f0(u, String(u).startsWith(W) ? { ...(i || {}), headers: { ...((i && i.headers) || {}), authorization: 'Bearer ' + AK } } : i); }
           (async () => {
-            if (!K) { console.log('no DEFAULT_PIN found; discord preview skipped'); return; }
+            if (!K && !AK) { console.log('no DEFAULT_PIN found; discord preview skipped'); return; }
             const r = await fetch(W + '/discord/preview.json?k=' + encodeURIComponent(K));
             const b = await r.json().catch(() => null);
             if (!b) { console.log('discord preview: HTTP ' + r.status + ', no JSON'); return; }
