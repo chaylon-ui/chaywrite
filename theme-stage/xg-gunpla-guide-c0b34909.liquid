@@ -171,11 +171,14 @@
     var box = document.querySelector('[data-xg-gtools]');
     if (!box || !window.fetch) return;
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-    // "MR BASIC NIPPER II" -> "Mr Basic Nipper II"; words with digits (GM301) and roman numerals stay capitals
+    // ALL-CAPS titles read better as "Mr Basic Nipper II"; codes (GM301, GP01) and roman numerals stay
+    // capitals. A title that already has lower case ("Kamiyasu-Sanding Stick 3mm") is left as it is.
     function nice(t) {
-      return String(t).split(/(\s+)/).map(function (w) {
-        if (/\d/.test(w) || /^(I|II|III|IV|V|VI)$/i.test(w)) return w.toUpperCase();
-        return w.toLowerCase().replace(/(^|[\-(\/])\S/g, function (x) { return x.toUpperCase(); });
+      t = String(t);
+      if (/[a-z]/.test(t)) return t;
+      return t.split(/(\s+)/).map(function (w) {
+        if (/^\W*[A-Z]*\d+[A-Z]*\W*$/.test(w) || /^\W*(I|II|III|IV|V|VI)\W*$/.test(w)) return w;
+        return w.toLowerCase().replace(/(^|[\-(\/\["'])[a-z]/g, function (x) { return x.toUpperCase(); });
       }).join('');
     }
     var picks = [];
