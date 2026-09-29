@@ -38,6 +38,7 @@ jobs:
           ref: claude/shopify-site-improvements-ztgdt8
       - name: Edit the page through the worker
         env:
+          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
           PAGE_ID: ${{ inputs.page_id }}
           FIND_START: ${{ inputs.find_start }}
           FIND_END: ${{ inputs.find_end }}
@@ -49,8 +50,12 @@ jobs:
           const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
           const K = m ? m[1] : '';
           const W = 'https://exor-binder.nevski.workers.dev';
+          // the automation key (secret STAFF_AUTOMATION_KEY) rides on every call to the worker; the PIN
+          // above still goes along until the owner switches it off (src/staff-access.js)
+          const AK = process.env.STAFF_AUTOMATION_KEY || '';
+          if (AK) { const f0 = globalThis.fetch; globalThis.fetch = (u, i) => f0(u, String(u).startsWith(W) ? { ...(i || {}), headers: { ...((i && i.headers) || {}), authorization: 'Bearer ' + AK } } : i); }
           (async () => {
-            if (!K) { console.log('no DEFAULT_PIN in src/config.js; stopped'); process.exit(1); }
+            if (!K && !AK) { console.log('no DEFAULT_PIN in src/config.js; stopped'); process.exit(1); }
             const body = { k: K, page_id: process.env.PAGE_ID, find_start: process.env.FIND_START, find_end: process.env.FIND_END || '', replace_b64: process.env.REPLACE_B64, dry: String(process.env.DRY) !== 'false' };
             const r = await fetch(W + '/admin/page-edit.json', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
             const j = await r.json().catch(() => ({ ok: false, error: 'no JSON, HTTP ' + r.status }));

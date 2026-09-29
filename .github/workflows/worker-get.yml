@@ -38,6 +38,7 @@ jobs:
           PATHS: ${{ inputs.paths }}
           PIN: ${{ inputs.pin }}
           N: ${{ inputs.chars }}
+          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
         run: |
           node <<'EOF'
           const fs = require('fs');
@@ -53,11 +54,14 @@ jobs:
             K = m ? m[1] : '';
             console.log('staff PIN from src/config.js:', K ? 'found' : 'NOT found');
           }
+          // with pin=true the automation key (secret STAFF_AUTOMATION_KEY) rides along too; it keeps
+          // working after the owner switches the PIN off (src/staff-access.js)
+          const AK = String(process.env.PIN) === 'true' ? process.env.STAFF_AUTOMATION_KEY || '' : '';
           (async () => {
             for (const raw of String(process.env.PATHS || '').split(',').map(s => s.trim()).filter(Boolean)) {
               if (!raw.startsWith('/')) { console.log('skipping (must start with /):', raw); continue; }
               const url = W + raw + (K ? (raw.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(K) : '');
-              const r = await fetch(url, { headers: { accept: 'application/json, text/html;q=0.5' } }).catch(e => ({ status: 0, text: async () => 'fetch failed: ' + e.message, headers: new Map() }));
+              const r = await fetch(url, { headers: { accept: 'application/json, text/html;q=0.5', ...(AK ? { authorization: 'Bearer ' + AK } : {}) } }).catch(e => ({ status: 0, text: async () => 'fetch failed: ' + e.message, headers: new Map() }));
               const text = await r.text();
               console.log('=== GET ' + raw + ' -> ' + r.status + ' | bytes ' + text.length + ' | ' + (r.headers.get ? r.headers.get('content-type') : '') + ' ===');
               console.log(mask(text).slice(0, n));

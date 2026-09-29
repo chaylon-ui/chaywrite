@@ -28,6 +28,7 @@ jobs:
           ref: claude/shopify-site-improvements-ztgdt8
       - name: Push the prices
         env:
+          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
           NUMBER: ${{ inputs.number }}
           CONFIRM: ${{ inputs.confirm }}
           DRY: ${{ inputs.dry }}
@@ -37,8 +38,12 @@ jobs:
           const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
           const K = m ? m[1] : '';
           const W = 'https://exor-binder.nevski.workers.dev';
+          // the automation key (secret STAFF_AUTOMATION_KEY) rides on every call to the worker; the PIN
+          // above still goes along until the owner switches it off (src/staff-access.js)
+          const AK = process.env.STAFF_AUTOMATION_KEY || '';
+          if (AK) { const f0 = globalThis.fetch; globalThis.fetch = (u, i) => f0(u, String(u).startsWith(W) ? { ...(i || {}), headers: { ...((i && i.headers) || {}), authorization: 'Bearer ' + AK } } : i); }
           (async () => {
-            if (!K) { console.log('no DEFAULT_PIN in src/config.js; stopped'); return; }
+            if (!K && !AK) { console.log('no DEFAULT_PIN in src/config.js; stopped'); return; }
             const number = String(process.env.NUMBER || '').trim(), confirm = String(process.env.CONFIRM || '').trim(), dry = String(process.env.DRY) === 'true';
             const li = await fetch(W + '/9pocket.json?k=' + K + '&status=approved&days=365').then((r) => r.json());
             const rec = (li.records || []).find((r) => r.number === number);
