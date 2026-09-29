@@ -465,6 +465,17 @@
     drawBrands(); drawRanges(); setHashSoon(); draw();
     root.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+  // a header-menu brand link on this very page (same path and query, a new #brand=) is a
+  // same-document hash change - no reload, so read the hash again and redraw (2026-09-29)
+  window.addEventListener('hashchange', function () {
+    if (!paints.length) return;
+    var b = fromUrl(hashVal('brand')) || 'All', r = hashVal('range') || 'All';
+    if (b !== 'All' && BRANDS.indexOf(b) < 0) return;
+    if (b === state.brand && r === state.range) return;
+    state.brand = b; state.range = r;
+    drawBrands(); drawRanges(); draw();
+    root.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   $('.xg-pp__q').addEventListener('input', function (e) { state.q = e.target.value; draw(); });
   $('.xg-pp__stock input').addEventListener('change', function (e) { state.stock = e.target.checked; draw(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
