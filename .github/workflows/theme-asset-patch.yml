@@ -1,0 +1,83 @@
+name: theme-asset-patch
+# Patch a large theme asset that is not in the theme mirror (snoot-tracker)
+# without hand-copying it: download the served file, refuse unless its md5 is
+# the one the Admin API reports, replace exactly one literal string (and
+# optionally prepend a snippet from this repo), then commit the result to
+# theme-stage/ on main under a name carrying its md5, ready for
+# themeFilesUpsert with body {type: URL} from raw.githubusercontent.com.
+# Prints both md5s and the unified diff. Uploading stays a separate, verified
+# step (never to the MAIN theme).
+on:
+  workflow_dispatch:
+    inputs:
+      src:
+        description: URL of the served asset to start from
+        required: true
+      expect_md5:
+        description: md5 the downloaded file must have (Admin API checksumMd5)
+        required: true
+      find:
+        description: Literal text that must occur exactly once
+        required: true
+      replace:
+        description: Literal replacement
+        required: true
+      prepend:
+        description: Optional repo path of a snippet to put at the top of the file
+        required: false
+        default: ""
+      out:
+        description: Base name in theme-stage/ (the md5 is added before the extension)
+        required: true
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: download, check, patch
+        env:
+          SRC: ${{ inputs.src }}
+          EXPECT: ${{ inputs.expect_md5 }}
+          FIND: ${{ inputs.find }}
+          REPLACE: ${{ inputs.replace }}
+          PREPEND: ${{ inputs.prepend }}
+          OUT: ${{ inputs.out }}
+        run: |
+          python3 - <<'EOF'
+          import os, hashlib, urllib.request, difflib
+          req = urllib.request.Request(os.environ["SRC"], headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/127.0 ExorThemePatch/1.0"})
+          raw = urllib.request.urlopen(req, timeout=30).read()
+          got = hashlib.md5(raw).hexdigest()
+          print("downloaded", len(raw), "bytes md5", got)
+          if got != os.environ["EXPECT"].strip():
+              raise SystemExit("md5 differs from the expected " + os.environ["EXPECT"] + " - not patching")
+          src = raw.decode("utf-8")
+          find, rep = os.environ["FIND"], os.environ["REPLACE"]
+          n = src.count(find)
+          if n != 1: raise SystemExit("find text occurs %d times, need exactly 1" % n)
+          out = src.replace(find, rep)
+          pre = os.environ.get("PREPEND", "").strip()
+          if pre:
+              out = open(pre, encoding="utf-8").read().rstrip("\n") + "\n" + out
+          data = out.encode("utf-8")
+          md5 = hashlib.md5(data).hexdigest()
+          base, ext = os.path.splitext(os.environ["OUT"])
+          path = "theme-stage/%s-%s%s" % (base, md5[:8], ext)
+          os.makedirs("theme-stage", exist_ok=True)
+          open(path, "wb").write(data)
+          print("wrote", path, len(data), "bytes md5", md5)
+          for l in difflib.unified_diff(src.replace(";", ";\n").splitlines(), out.replace(";", ";\n").splitlines(), "before", "after", n=1, lineterm=""):
+              print(l[:300])
+          open(os.environ["GITHUB_ENV"], "a").write("PATCHED=%s\n" % path)
+          EOF
+      - name: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$PATCHED"
+          git commit -m "theme-asset-patch: $PATCHED"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
+          echo "committed $PATCHED"
