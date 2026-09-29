@@ -151,7 +151,7 @@ async function md5Hex(buf) {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const plain = (status, text) => new Response(text + "\n", { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
+const plain = (status, text) => new Response(text + "\n", { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store, no-transform", "x-content-type-options": "nosniff" } });
 
 export async function serveThemeStage(request, env, url, opts) {
   const o = opts || {};
@@ -173,7 +173,9 @@ export async function serveThemeStage(request, env, url, opts) {
     headers: {
       "content-type": IMAGE_TYPES[m[3]] || "text/plain; charset=utf-8",
       "content-length": String(buf.byteLength),
-      "cache-control": "no-store",
+      // no-transform: Cloudflare would otherwise zstd/brotli the text and drop the length,
+      // and Shopify's fetcher then stores nothing (2026-09-29: two URL upserts, file unchanged)
+      "cache-control": "no-store, no-transform",
       "x-content-type-options": "nosniff",
       "content-security-policy": "default-src 'none'; sandbox",
       "x-content-md5": md5,

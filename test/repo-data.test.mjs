@@ -155,6 +155,8 @@ test("theme-stage serves a hash-named file whose md5 matches, as inert text", as
   assert.equal(r.headers.get("x-content-type-options"), "nosniff");
   assert.match(r.headers.get("content-security-policy"), /sandbox/);
   assert.equal(r.headers.get("x-content-md5"), JS_MD5);
+  // sent as-is: no edge compression, the length kept (Shopify's fetcher needs both)
+  assert.match(r.headers.get("cache-control"), /no-transform/);
   assert.equal(r.headers.get("content-length"), String(Buffer.byteLength(JS)));
 });
 
