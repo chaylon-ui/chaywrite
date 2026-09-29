@@ -1,0 +1,74 @@
+name: autoprice-401
+# 401 Games prices for the sealed auto-pricer (src/autoprice.js, worker
+# branch). The pricer holds staged prices to 401's in-stock price, but 401's
+# store refuses the worker's Cloudflare egress: every lookup of the 2026-09-27
+# nightly answered HTTP 429, while the same 22 searches fired back-to-back
+# from a runner all answered 200 (pyprobe 36594294879, 2026-09-29). So the
+# searches run here: this asks the worker what to look up
+# (/autoprice/comp-feed.json, bearer = AUTOPRICE_NTFY_TOKEN, the digest
+# relay's secret), searches 401's public predictive search half a second
+# apart, and posts the answers back. The worker keeps them per product and
+# uses them whenever its own lookup is refused (for up to 48 hours).
+# 12:05 and 22:05 UTC - the pricing run is at 22:30 UTC. Run it by hand after
+# adding products. It prints search words, 401 titles and prices (public shop
+# data) and never a secret.
+on:
+  schedule:
+    - cron: "5 12,22 * * *"
+  workflow_dispatch:
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TOKEN: ${{ secrets.AUTOPRICE_NTFY_TOKEN }}
+      WORKER: https://exor-binder.nevski.workers.dev
+    steps:
+      - name: deps
+        run: python3 -m pip install -q requests
+      - name: look up 401 Games for the listed products
+        run: |
+          python3 - <<'EOF'
+          import os, json, time, requests
+          token = os.environ.get("TOKEN", "").strip()
+          worker = os.environ["WORKER"]
+          if not token:
+              print("AUTOPRICE_NTFY_TOKEN not set - nothing to do"); raise SystemExit(0)
+          # Cloudflare's browser-integrity check on workers.dev answers 403
+          # "error code: 1010" to library user agents; name ourselves.
+          W = {"User-Agent": "Exor401Feed/1.0 (+https://github.com/chaylon-ui/chaywrite)", "Accept": "application/json", "Authorization": "Bearer " + token}
+          r = requests.get(worker + "/autoprice/comp-feed.json", headers=W, timeout=30)
+          print("GET comp-feed ->", r.status_code)
+          if r.status_code != 200:
+              print(" body:", r.text[:300]); raise SystemExit(1)
+          j = r.json()
+          qs = j.get("queries") or []
+          print(len(qs), "products to look up; last copy:", j.get("last"))
+          s = requests.Session()
+          rows, codes = [], {}
+          for i, q in enumerate(qs):
+              if i: time.sleep(0.5)
+              st, results = 0, []
+              try:
+                  a = s.get(q["url"], headers={"Accept": "application/json"}, timeout=15)
+                  st = a.status_code
+                  if st == 200:
+                      results = ((a.json().get("resources") or {}).get("results") or {}).get("products") or []
+              except Exception as e:
+                  print("  error:", str(e)[:120])
+              codes[st] = codes.get(st, 0) + 1
+              keep = [{"title": x.get("title"), "handle": x.get("handle"), "available": bool(x.get("available")), "price": x.get("price"),
+                       "variants": [{"price": v.get("price"), "available": bool(v.get("available")), "barcode": v.get("barcode")} for v in (x.get("variants") or [])[:3]]}
+                      for x in results[:10]]
+              rows.append({"id": q["id"], "q": q["q"], "status": st, "results": keep})
+              top = "; ".join("%s $%s %s" % ((x["title"] or "")[:60], x["price"], "in" if x["available"] else "out") for x in keep[:2])
+              print("%d %-44s | %s" % (st, q["q"][:44], top))
+          p = requests.post(worker + "/autoprice/comp-feed.json", headers={**W, "Content-Type": "application/json"},
+                            data=json.dumps({"op": "put", "at": int(time.time() * 1000), "rows": rows}), timeout=30)
+          print("POST comp-feed ->", p.status_code, p.text[:200])
+          print("401 answers by HTTP status:", codes)
+          if p.status_code != 200: raise SystemExit(1)
+          # every lookup refused from here too: fail so it shows in the Actions list
+          if rows and not codes.get(200): raise SystemExit(1)
+          EOF
