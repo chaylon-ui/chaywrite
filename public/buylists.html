@@ -85,6 +85,7 @@
 </head>
 <body>
 <div class="wrap" id="page"></div>
+<script src="/staff-auth.js"></script>
 <script>
 /* Buylists — our own read-only window on BinderPOS's online buylists and
    in-store buy carts (owner, 2026-09-09/10). The worker (src/portal.js)
@@ -93,7 +94,7 @@
    decline / complete are links into BinderPOS itself; nothing on this page
    writes anywhere and nothing moves stock. */
 (function () {
-  var K = '';
+  var K = '', ME = null, ACCT = false;   // ACCT: a signed-in account with the buylists permission - no PIN sent
   try { K = localStorage.getItem('xgdk') || ''; } catch (e) {}
   var page = document.getElementById('page');
   var TABS = [['pending', 'Pending'], ['approved', 'Approved'], ['completed', 'Completed'], ['carts', 'In-store buys']];
@@ -156,7 +157,7 @@
   function saveView() { try { localStorage.setItem('xgbl', JSON.stringify({ status: S.status, days: S.days, cartDays: S.cartDays })); } catch (e) {} }
 
   function api(path) {
-    return fetch(path + (path.indexOf('?') > -1 ? '&' : '?') + 'k=' + encodeURIComponent(K), { cache: 'no-store' })
+    return fetch(K ? path + (path.indexOf('?') > -1 ? '&' : '?') + 'k=' + encodeURIComponent(K) : path, { cache: 'no-store' })
       .then(function (r) {
         if (r.status === 403) throw new Error('pin');
         return r.json().catch(function () { return {}; }).then(function (j) {
@@ -170,11 +171,12 @@
   function showLogin(msg) {
     page.innerHTML =
       '<div class="login"><h1>Buylists</h1>' +
-      '<p class="sub">Enter your staff PIN (same one as the staff, pickups and Deck Builder screens).</p>' +
-      '<input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="24">' +
+      '<p class="sub">' + (ME ? XGStaff.line(ME) + (ME.allowed ? '' : '<br>' + XGStaff.signin(ME)) : '') + '</p>' +
+      (ME && ME.allowed ? '' : ME && !ME.pinOn ? '' : '<p class="sub">Or enter the staff PIN while it still works.</p><input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="24">') +
       (msg ? '<p class="err">' + esc(msg) + '</p>' : '') +
       '<button class="btn-main" id="go">Open</button></div>';
     var input = document.getElementById('pin');
+    if (!input) { var g0 = document.getElementById('go'); if (g0) g0.style.display = 'none'; return; }
     input.focus();
     function go() {
       K = input.value.trim();
@@ -192,11 +194,11 @@
     document.getElementById('go').addEventListener('click', go);
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
   }
-  function pinLost() { K = ''; showLogin('Wrong PIN. Too many tries locks this out for 10 minutes.'); }
+  function pinLost() { K = ''; ACCT = false; XGStaff.me('portal').then(function (m) { ME = m; ACCT = !!m.allowed; showLogin(ACCT ? '' : m.signedIn ? '' : 'Signed out, or the PIN no longer works. Sign in again.'); }); }
 
   /* ---------------- routing ---------------- */
   function route() {
-    if (!K) return showLogin();
+    if (!K && !ACCT) return showLogin();
     var b = location.hash.match(/^#\/b\/(\d+)/);
     var c = location.hash.match(/^#\/c\/(\d{4}-\d{2}-\d{2})\/(\d+)/);
     if (b) loadDetail(b[1]);
@@ -505,7 +507,11 @@
     window.scrollTo(0, 0);
   }
 
-  route();
+  XGStaff.me('portal').then(function (m) {
+    ME = m; ACCT = !!m.allowed;
+    if (ACCT || !m.pinOn) { K = ''; try { localStorage.removeItem('xgdk'); } catch (e) {} }   // signed in (or no PIN any more): no PIN kept or sent
+    route();
+  });
 })();
 </script>
 </body>

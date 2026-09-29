@@ -72,13 +72,15 @@
 </head>
 <body>
 <div class="wrap" id="page"></div>
+<script src="/staff-auth.js"></script>
 <script>
 (function () {
   var LABELS = { mtg: 'Magic: The Gathering', pokemon: 'Pokémon', yugioh: 'Yu-Gi-Oh!',
                  starwars: 'Star Wars: Unlimited', onepiece: 'One Piece', riftbound: 'Riftbound', lorcana: 'Disney Lorcana', other: 'Other' };
-  var K = '';
+  var K = '', ME = null, ACCT = false;   // ACCT: a signed-in account with the Deck Builder permission - no PIN sent
   try { K = localStorage.getItem('xgdk') || ''; } catch (e) {}
   var page = document.getElementById('page');
+  var kq = function (sep) { return K ? sep + 'k=' + encodeURIComponent(K) : ''; };
   var overview = null, orders = null, ws = null, wsTimer = null;
 
   function money(cents) { return '$' + ((cents || 0) / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -123,7 +125,7 @@
   }
 
   function api(op) {
-    return fetch('/deckstats.json?k=' + encodeURIComponent(K) + (op ? '&op=' + op : ''), { cache: 'no-store' })
+    return fetch('/deckstats.json?' + (op ? 'op=' + op : '') + kq(op ? '&' : ''), { cache: 'no-store' })
       .then(function (r) {
         if (r.status === 403) throw new Error('pin');
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -136,11 +138,12 @@
     stopLive();
     page.innerHTML =
       '<div class="login"><h1 style="font-size:20px">Deck Builder Admin</h1>' +
-      '<p class="sub">Enter your staff PIN (same one as the staff and pickups screens).</p>' +
-      '<input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="24">' +
+      '<p class="sub">' + (ME ? XGStaff.line(ME) + (ME.allowed ? '' : '<br>' + XGStaff.signin(ME)) : '') + '</p>' +
+      (ME && ME.allowed ? '' : ME && !ME.pinOn ? '' : '<p class="sub">Or enter the staff PIN while it still works.</p><input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="24">') +
       (msg ? '<p class="err">' + esc(msg) + '</p>' : '') +
       '<button class="btn-main" id="go">Open</button></div>';
     var input = document.getElementById('pin');
+    if (!input) { document.getElementById('go').style.display = 'none'; return; }
     input.focus();
     function go() {
       K = input.value.trim();
@@ -163,7 +166,7 @@
   function startLive() {
     stopLive();
     try {
-      ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=staff&k=' + encodeURIComponent(K));
+      ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=staff' + kq('&'));
       ws.onopen = function () { setDot(true); };
       ws.onclose = function () { setDot(false); wsTimer = setTimeout(startLive, 5000); };
       ws.onmessage = function (m) {
@@ -385,7 +388,7 @@
   function adminPost(op, params) {
     var qs = '';
     Object.keys(params || {}).forEach(function (k2) { qs += '&' + k2 + '=' + encodeURIComponent(params[k2]); });
-    fetch('/deck-admin?op=' + op + qs + '&k=' + encodeURIComponent(K), { method: 'POST' })
+    fetch('/deck-admin?op=' + op + qs + kq('&'), { method: 'POST' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function () { refresh(); })
       .catch(function () { alert('That did not go through. Refresh and try again.'); });
@@ -482,17 +485,21 @@
         feedRows.forEach(function (r) { nf.appendChild(r); });
       }
     }).catch(function (e) {
-      if (e.message === 'pin') showLogin('Your PIN stopped working. Enter it again.');
+      if (e.message === 'pin') { K = ''; ACCT = false; showLogin(ME && ME.allowed ? 'You were signed out. Sign in again.' : 'Your PIN stopped working. Sign in, or enter it again.'); }
     });
   }
 
-  if (K) {
-    api('').then(function (d) { overview = d; renderAll(); startLive(); loadOrders(); })
-      .catch(function () { showLogin(); });
-  } else {
-    showLogin();
-  }
-  setInterval(function () { if (K && overview) refresh(); }, 45000);
+  XGStaff.me('decks').then(function (m) {
+    ME = m; ACCT = !!m.allowed;
+    if (ACCT || !m.pinOn) { K = ''; try { localStorage.removeItem('xgdk'); } catch (e) {} }   // signed in (or no PIN any more): no PIN kept or sent
+    if (K || ACCT) {
+      api('').then(function (d) { overview = d; renderAll(); startLive(); loadOrders(); })
+        .catch(function () { showLogin(); });
+    } else {
+      showLogin();
+    }
+  });
+  setInterval(function () { if ((K || ACCT) && overview) refresh(); }, 45000);
 })();
 </script>
 </body>

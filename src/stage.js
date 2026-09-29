@@ -52,6 +52,8 @@
      mf:<id>     a sign-in waiting for its emailed code {email, hash, exp, tries, sends, sentAt}
      mfr:<email> codes asked for {n, at} (CODE_STARTS per LOCK_MS)
      dv:<token>  a remembered device {email, at, exp, label} (DEVICE_DAYS)
+     cfg         staff access settings {pinOff, pinOffBy, pinOffAt} (src/staff-access.js)
+     pinuse      where the old staff PIN last opened something {route: ms}
    Approved and rejected records are pruned after KEEP_MS by the alarm;
    staged ones are never pruned - a forgotten list should stay visible. */
 
@@ -75,6 +77,8 @@ const STATUSES = ["staged", "approved", "rejected"];
 export const PAYMENT_TYPES = ["Cash", "Store Credit"];
 const SEQ_START = 1000;                      // the first buylist is 9P-1001
 const LEGACY = "/buylist/staged";            // the page's first address; redirects
+// The staff screens a sign-in may return to (src/staff-access.js): same site, known pages only.
+const STAFF_NEXT = /^\/(staff|pickups|admin|portal\/buylists|deckstats|tv)(\?[^#\s"'<>]*)?$/;
 const FIRST_ADMIN_EMAIL = "chaylon@exorgames.com";   // pre-filled on the setup page (owner, 2026-09-20)
 
 const digits = (v) => String(v == null ? "" : v).replace(/\D/g, "").slice(0, 24);
@@ -557,6 +561,27 @@ export async function stageDoFetch(cx, request, url) {
     }
     return doJson({ ok: false });
   }
+  // ---- staff access (src/staff-access.js): the old staff PIN's switch, and where it was last used ----
+  if (p === "/_stage/cfg") {
+    const c = (await cx.storage.get("cfg")) || {};
+    return doJson({ ok: true, pinOff: c.pinOff === true, pinOffBy: c.pinOffBy || "", pinOffAt: c.pinOffAt || null, pinUse: (await cx.storage.get("pinuse")) || {} });
+  }
+  if (p === "/_stage/cfg/pin" && post) {
+    const b = await bodyOf(request);
+    const c = (await cx.storage.get("cfg")) || {};
+    Object.assign(c, { pinOff: b.off === true, pinOffBy: String(b.by || "").slice(0, 160), pinOffAt: cx.now() });
+    await cx.storage.put("cfg", c);
+    return doJson({ ok: true, pinOff: c.pinOff });
+  }
+  if (p === "/_stage/pinuse" && post) {
+    const route = String((await bodyOf(request)).route || "").replace(/[^\w./ -]/g, "").slice(0, 60);
+    if (!route) return doJson({ ok: false, error: "route required" }, 400);
+    const u = (await cx.storage.get("pinuse")) || {};
+    u[route] = cx.now();
+    const keep = Object.entries(u).sort((a, b) => b[1] - a[1]).slice(0, 40);
+    await cx.storage.put("pinuse", Object.fromEntries(keep));
+    return doJson({ ok: true });
+  }
   if (p === "/_stage/health") {
     const all = await listAll(cx);
     const counts = {};
@@ -685,6 +710,10 @@ export async function currentUser(request, env, origin) {
   return publicUser(u.user);
 }
 
+// Staff access settings for src/staff-access.js (the PIN switch, where the PIN was last used).
+export async function stageCfg(env, origin) { return doCall(env, origin, "/_stage/cfg"); }
+export async function notePinUse(env, origin, route) { return doCall(env, origin, "/_stage/pinuse", { route }); }
+
 async function startSession(env, origin, email, mfa) {
   const token = newToken();
   await doCall(env, origin, "/_stage/session/put", { token, email, mfa: mfa === true });
@@ -751,11 +780,12 @@ export async function serveStage(request, env, url, staffOk, sopts) {
     else { try { const fd = await request.formData(); form = {}; for (const [a, b] of fd) form[a] = b; } catch { form = {}; } }
   }
   const k = String((form && form.k) || url.searchParams.get("k") || "");
-  const pinOk = k ? await staffOk(env, origin, k) : false;
+  // the staff key while it is on, or the automation key (src/staff-access.js); "pinOk" for short
+  const pinOk = k || request.headers.has("authorization") ? await staffOk(env, origin, k) : false;
   const q = (o) => { const s = new URLSearchParams(); for (const [a, b] of Object.entries(o)) if (b) s.set(a, b); const t = s.toString(); return t ? "?" + t : ""; };
   // Where to land after signing in: a 9Pocket page, or the auto-pricer
   // (its login page sends 9Pocket accounts here).
-  const nextOf = () => { const n = String((form && form.next) || url.searchParams.get("next") || ""); return (n.startsWith(BASE) && !n.startsWith(BASE + "/login")) || /^\/autoprice(\?|$)/.test(n) ? n : BASE; };
+  const nextOf = () => { const n = String((form && form.next) || url.searchParams.get("next") || ""); return (n.startsWith(BASE) && !n.startsWith(BASE + "/login")) || /^\/autoprice(\?|$)/.test(n) || STAFF_NEXT.test(n) ? n : BASE; };
 
   // ---- sign in / out / first account ----
   if (p === BASE + "/login") {
@@ -842,7 +872,7 @@ export async function serveStage(request, env, url, staffOk, sopts) {
       return redirect(BASE + "/admin" + q(result.ok ? { msg: result.message } : { err: result.error || "failed" }));
     }
     const j = await doCall(env, origin, "/_stage/users");
-    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [] }));
+    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin) }));
   }
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.
@@ -1095,6 +1125,10 @@ async function adminControl(env, origin, f, admin) {
   if (action === "add") {
     const r = await createAccount(env, origin, { email: f.email, name: f.name, password: f.password, role: f.role, perms: permsFrom(f), limits: limitsFrom(f), createdBy: admin.email });
     return r.ok ? { ok: true, message: "Account created for " + email + "." } : { ok: false, error: r.error };
+  }
+  if (action === "pin-off" || action === "pin-on") {
+    const r = await doCall(env, origin, "/_stage/cfg/pin", { off: action === "pin-off", by: admin.email });
+    return r.ok ? { ok: true, message: action === "pin-off" ? "The staff PIN is off. Screens open with an account now (it can take up to a minute everywhere)." : "The staff PIN works again." } : { ok: false, error: r.error || "failed" };
   }
   if (!validEmail(email)) return { ok: false, error: "Which account? The email is missing." };
   const self = email === admin.email;

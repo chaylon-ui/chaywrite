@@ -17,7 +17,7 @@
    Markup only here; every decision is made in stage.js. What a page shows
    follows the signed-in account's permissions (src/stage-auth.js can()). */
 
-import { PERMS, AP_PERMS, LIMITS, can, apPerms } from "./stage-auth.js";
+import { PERMS, AP_PERMS, STAFF_PERMS, LIMITS, can, apPerms } from "./stage-auth.js";
 
 export const BASE = "/9pocket";
 export const BRAND = "9Pocket by Exor";
@@ -288,19 +288,35 @@ ${(d.done || []).length ? `<div class="card"><h3>Released in the last 24 hours</
   return shell("Held stock", body, o, true);
 }
 
+// The old staff PIN: its switch, and what still used it lately (src/staff-access.js).
+const PIN_ROUTES = { "/pickups.json": "pickup list (the /pickups page, the POS tile or the BinderPOS add-on)", "/pickups/done": "finishing a pickup (the POS tile)",
+  "/alert": "order alerts sent in (Shopify Flow, or the /staff page's test)", "/ws?role=staff": "the /staff order-alerts page", "/ws?role=remote": "a TV remote",
+  "/admin/api": "TV and kiosk settings (/admin)", "/alog": "TV usage (/admin)", "/fblist": "kiosk comments (/admin)", "/deckstats.json": "Deck Builder stats", "/deck-admin": "Deck Builder bans",
+  "/portal/buylists.json": "BinderPOS buylists screen", "/admin/page-edit.json": "page edits (a runner workflow)", "/portal": "BinderPOS buylists screen", "/9pocket.json": "9Pocket list (the deploy check)" };
+function pinCard(cfg) {
+  const c = cfg || {};
+  const use = Object.entries(c.pinUse || {}).sort((a, b) => b[1] - a[1]);
+  const rows = use.map(([r, at]) => `<tr><td>${esc(PIN_ROUTES[r] || PIN_ROUTES[r.replace(/\/[^/]*$/, "")] || r)}<small>${esc(r)}</small></td><td>${esc(when(at))}</td></tr>`).join("");
+  const state = c.pinOff ? `<span class="sw">OFF</span> <span class="muted">since ${esc(when(c.pinOffAt))}${c.pinOffBy ? " by " + esc(c.pinOffBy) : ""}</span>` : `<span class="sw on">ON</span> <span class="muted">anyone with the PIN still gets in</span>`;
+  return `<div class="card"><div class="hz"><h3 style="margin:0">Old staff PIN</h3>${state}</div>
+<p class="muted">Every staff screen now opens with an account (the permissions under <b>Store screens</b>). The PIN keeps working until you switch it off here - it has been readable in the public code, so switch it off once nothing below still needs it. It can be switched back on.</p>
+${use.length ? `<table class="users"><thead><tr><th>Still opened with the PIN</th><th>Last</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="muted">Nothing has used the PIN since this list started.</p>`}
+<form method="post" action="${BASE}/admin/control" onsubmit="return ${c.pinOff ? "true" : "confirm('Switch the staff PIN off? Every screen, device and workflow still using it stops working until it signs in or is paired.')"}"><input type="hidden" name="action" value="${c.pinOff ? "pin-on" : "pin-off"}"><div class="act"><button class="${c.pinOff ? "" : "ok"}" type="submit">${c.pinOff ? "Switch the PIN back on" : "Switch the PIN off"}</button></div></form></div>`;
+}
+
 export function renderAdmin(o) {
   const users = o.users || [];
   const me = o.user;
   const checks = (list, u) => list.map((p) => `<label class="chk"><input type="checkbox" name="perm_${p.key}" ${u && u.perms && u.perms[p.key] ? "checked" : ""}> ${esc(p.label)}</label>`).join("");
   const limitFields = (u) => LIMITS.map((l) => { const val = u && u.limits && u.limits[l.key] != null ? u.limits[l.key] : ""; return `<label class="chk">${esc(l.label)} <input type="number" class="p" name="${l.key}" min="0" max="${l.max}" step="0.5" value="${esc(val)}" placeholder="no limit"> %</label>`; }).join("");
   // Two groups: the buylist worksheet, then the auto-pricer with its brakes.
-  const permChecks = (u) => `<div class="pg"><b>9Pocket buylists</b><br>${checks(PERMS, u)}</div><div class="pg"><b>Auto-pricing</b> <span class="muted">(any of these opens /autoprice)</span><br>${checks(AP_PERMS, u)}<br>${limitFields(u)}<span class="muted">Limits are in percent of today's price; blank = no limit. Admins are never limited.</span></div>`;
+  const permChecks = (u) => `<div class="pg"><b>Store screens</b> <span class="muted">(they used to open with the staff PIN)</span><br>${checks(STAFF_PERMS, u)}</div><div class="pg"><b>9Pocket buylists</b><br>${checks(PERMS, u)}</div><div class="pg"><b>Auto-pricing</b> <span class="muted">(any of these opens /autoprice)</span><br>${checks(AP_PERMS, u)}<br>${limitFields(u)}<span class="muted">Limits are in percent of today's price; blank = no limit. Admins are never limited.</span></div>`;
   const limitChips = (u) => LIMITS.filter((l) => u.limits && u.limits[l.key] != null).map((l) => `<span class="perm lim">${l.key === "apMaxDropPct" ? "drop" : "raise"} ≤ ${esc(u.limits[l.key])}%</span>`).join("");
   const userRow = (u) => {
     const self = me && u.email === me.email;
     return `<tr><td><b>${esc(u.email)}</b><small>${esc(u.name || "")}${u.createdAt ? " · added " + esc(when(u.createdAt)) + (u.createdBy ? " by " + esc(u.createdBy) : "") : ""}</small></td>
 <td><span class="tag tag-${u.role === "admin" ? "admin" : "staff"}">${u.role === "admin" ? "admin" : "staff"}</span>${u.disabled ? ' <span class="tag tag-rejected">disabled</span>' : ""}</td>
-<td>${u.role === "admin" ? '<span class="muted">everything</span>' : (PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm">${esc(p.label)}</span>`).join("") || '<span class="muted">buylists: view only</span>') + (AP_PERMS.some((p) => u.perms && u.perms[p.key]) ? "<br>" + AP_PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm ap">${esc(p.label)}</span>`).join("") + limitChips(u) : "")}</td>
+<td>${u.role === "admin" ? '<span class="muted">everything</span>' : (PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm">${esc(p.label)}</span>`).join("") || '<span class="muted">buylists: view only</span>') + (AP_PERMS.some((p) => u.perms && u.perms[p.key]) ? "<br>" + AP_PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm ap">${esc(p.label)}</span>`).join("") + limitChips(u) : "") + (STAFF_PERMS.some((p) => u.perms && u.perms[p.key]) ? "<br>" + STAFF_PERMS.filter((p) => u.perms && u.perms[p.key]).map((p) => `<span class="perm">${esc(p.label.split(":")[0].split(" (")[0])}</span>`).join("") : "")}</td>
 <td class="n"><details><summary class="btn" style="cursor:pointer">Edit</summary>
 <form method="post" action="${BASE}/admin/control" style="text-align:left;margin:10px 0;display:block"><input type="hidden" name="action" value="update"><input type="hidden" name="email" value="${esc(u.email)}">
 <div class="act"><input class="text" name="name" value="${esc(u.name || "")}" placeholder="name"><select class="text" name="role" style="flex:0 1 140px" ${self ? "disabled" : ""}><option value="staff" ${u.role !== "admin" ? "selected" : ""}>staff</option><option value="admin" ${u.role === "admin" ? "selected" : ""}>admin</option></select>${self ? '<input type="hidden" name="role" value="admin">' : ""}</div>
@@ -317,6 +333,7 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 <form method="post" action="${BASE}/admin/control" autocomplete="off"><input type="hidden" name="action" value="add">
 <div class="act"><input class="text" type="email" name="email" placeholder="email (their sign-in name)" required autocomplete="off"><input class="text" name="name" placeholder="name" autocomplete="off"><input class="text" type="password" name="password" placeholder="password (8+)" minlength="8" required autocomplete="new-password"><select class="text" name="role" style="flex:0 1 140px"><option value="staff">staff</option><option value="admin">admin</option></select></div>
 <div style="margin:8px 0"><span class="muted">Permissions (staff only; admins have all):</span>${permChecks(null)}</div>
-<div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>`;
+<div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>
+${pinCard(o.cfg)}`;
   return shell("Accounts", body, o, true);
 }

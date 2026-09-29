@@ -78,8 +78,9 @@ a.tvlink:hover{color:var(--ember)}
     <label for="roomSel">Screen</label>
     <select id="roomSel"></select>
     <input id="roomNew" type="text" class="hide" maxlength="32" placeholder="new screen name (e.g. totem)" style="margin-top:.5rem">
-    <label style="margin-top:.8rem;display:block">Enter PIN</label>
-    <div class="pinrow"><input id="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••"></div>
+    <div class="msg" id="acctLine" style="margin-top:.8rem">Checking who is signed in…</div>
+    <div id="pinBox" class="hide"><label style="margin-top:.8rem;display:block">Or enter the screen's PIN (while it still works)</label>
+    <div class="pinrow"><input id="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••"></div></div>
     <button class="btn btn-primary" id="unlock">Unlock</button>
     <div class="msg" id="loginMsg"></div>
   </div>
@@ -311,8 +312,9 @@ a.tvlink:hover{color:var(--ember)}
     </div>
   </div>
 </div>
+<script src="/staff-auth.js"></script>
 <script>
-let PIN="";
+let PIN="",ACCT=false,ME=null; // ACCT: a signed-in account with the TV permission - no PIN sent at all
 const $=id=>document.getElementById(id);
 /* Each TV is a room (?room=…) with fully independent settings. The room is
    picked from the screen dropdown at login (?room= in the URL just preselects
@@ -394,7 +396,8 @@ async function loadSettings(){try{const s=await (await fetch('/settings?v=1'+RQ,
 }catch(e){}}
 async function post(patch){const r=await fetch('/admin/api?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,patch})});
   const j=await r.json().catch(()=>({error:'network'}));return{ok:r.ok,j};}
-$('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
+const remoteHref=()=>'/tv?room='+ROOM+'&remote=1'+(PIN?'&k='+encodeURIComponent(PIN):'');
+$('unlock').onclick=async()=>{const pin=ACCT?'':$('pin').value.trim();if(!pin&&!ACCT){$('loginMsg').textContent=ME&&!ME.pinOn?'Sign in with your staff account first.':'Sign in, or enter the PIN.';$('loginMsg').className='msg bad';return;}
   let r=$('roomSel').value;
   if(r==='__new'){r=$('roomNew').value.trim().toLowerCase();
     if(!ROOM_OK.test(r)){$('loginMsg').textContent='Screen names: letters, numbers and dashes (start with a letter or number)';$('loginMsg').className='msg bad';return;}}
@@ -402,9 +405,9 @@ $('unlock').onclick=async()=>{const pin=$('pin').value.trim();if(!pin){return;}
   $('loginMsg').textContent='Checking…';$('loginMsg').className='msg';PIN=pin;
   const {ok,j}=await post({}); // empty patch = harmless PIN check
   if(ok){$('login').classList.add('hide');$('form').classList.remove('hide');$('saveMsg').textContent='';
-    $('remoteLink').href='/tv?room='+ROOM+'&remote=1&k='+encodeURIComponent(PIN); // live mirror + control of this screen
+    $('remoteLink').href=remoteHref(); // live mirror + control of this screen
     loadSettings();loadUsage();}
-  else{PIN='';$('loginMsg').textContent=(j.error||'Incorrect PIN')+(r==='default'?'':' — each screen can have its own PIN');$('loginMsg').className='msg bad';}};
+  else{PIN='';$('loginMsg').textContent=ACCT?(j.error||'Not allowed')+' — sign in again, or ask an admin for the TV permission.':(j.error||'Incorrect PIN')+(r==='default'?'':' — each screen can have its own PIN');$('loginMsg').className='msg bad';}};
 $('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('unlock').click();});
 $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').className='msg';
   const tabs=GAME_TABS.map(g=>({label:g.label,theme:g.theme,game:g.game,enabled:$(g.enable).checked,
@@ -422,7 +425,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   const np=$('newPin').value.trim();if(np)patch.newPin=np;
   const {ok,j}=await post(patch);
   if(ok){$('saveMsg').textContent='Saved ✓ (the TV and phone update live)';$('saveMsg').className='msg ok';
-    if(np){PIN=np;$('newPin').value='';$('remoteLink').href='/tv?room='+ROOM+'&remote=1&k='+encodeURIComponent(PIN);}}
+    if(np){if(!ACCT)PIN=np;$('newPin').value='';$('remoteLink').href=remoteHref();}}
   else{$('saveMsg').textContent=j.error||'Save failed';$('saveMsg').className='msg bad';}};
 /* ---- Kiosk usage viewer: /alog groups a day's touch-screen events into
    sessions. Days follow store (Atlantic) time; kept 14 days per screen. ---- */
@@ -432,7 +435,7 @@ $('save').onclick=async()=>{$('saveMsg').textContent='Saving…';$('saveMsg').cl
   if(i===0){const a=document.createElement('option');a.value='all';a.textContent='Last 14 days — summary';sel.appendChild(a);}}})();
 const EVL={ss:'walked up',tap:'looked at',q:'searched',add:'added to cart',rm:'removed',qr:'checkout QR shown',send:'sent to counter',ord:'draft order',to:'cart timed out',se:'walked away'};
 $('usageLoad').onclick=()=>loadUsage();
-async function loadUsage(){if(!PIN)return;$('usageSum').innerHTML='<span class="uchip">Loading…</span>';$('usageKpi').innerHTML='';$('usageSess').innerHTML='';
+async function loadUsage(){if(!PIN&&!ACCT)return;$('usageSum').innerHTML='<span class="uchip">Loading…</span>';$('usageKpi').innerHTML='';$('usageSess').innerHTML='';
  const r=await fetch('/alog?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,day:$('usageDay').value})}).catch(()=>null);
  const j=r?await r.json().catch(()=>null):null;
  if(!r||!r.ok||!j){$('usageSum').innerHTML='<span class="uchip">'+((j&&j.error)||'Could not load usage')+'</span>';return;}
@@ -518,7 +521,7 @@ function showQrPop(i){const url=UQR[i];if(!url)return;
  ov.style.display='flex';}
 /* Review-gate comments: PIN-guarded list, per screen. 4-5★ rows have no
    comment (those customers were sent on to Google). */
-$('fbLoad').onclick=async()=>{if(!PIN){$('fbSum').innerHTML='<span class="uchip">Unlock with your PIN first</span>';return;}
+$('fbLoad').onclick=async()=>{if(!PIN&&!ACCT){$('fbSum').innerHTML='<span class="uchip">Unlock with your PIN first</span>';return;}
  $('fbSum').innerHTML='<span class="uchip">Loading…</span>';$('fbList').innerHTML='';
  const r=await fetch('/fblist?v=1'+RQ,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN})}).catch(()=>null);
  const j=r?await r.json().catch(()=>null):null;
@@ -531,12 +534,16 @@ $('fbLoad').onclick=async()=>{if(!PIN){$('fbSum').innerHTML='<span class="uchip"
   :'<div class="hint" style="margin-top:.5rem">No ratings yet — they’ll appear as customers use the star popup.</div>';};
 /* Stats overlay: the 📊 button opens usage + comments in one panel and
    loads both fresh. Tap the dark backdrop or ✕ to close. */
-$('statsBtn').onclick=()=>{if(!PIN)return;
+$('statsBtn').onclick=()=>{if(!PIN&&!ACCT)return;
  $('statsRoom').textContent='screen “'+ROOM+'”';
  document.getElementById('statsOv').classList.add('open');
  loadUsage();$('fbLoad').onclick();};
 $('statsClose').onclick=()=>document.getElementById('statsOv').classList.remove('open');
 document.getElementById('statsOv').addEventListener('click',e=>{if(e.target===document.getElementById('statsOv'))e.target.classList.remove('open');});
 loadSettings(); // prefill (read-only until unlocked)
+(async()=>{ME=await XGStaff.me('tv');ACCT=!!ME.allowed;
+  $('acctLine').innerHTML=XGStaff.line(ME)+(ME.allowed?'':' '+XGStaff.signin(ME));
+  $('pinBox').classList.toggle('hide',ACCT||!ME.pinOn);
+  $('unlock').textContent=ACCT?'Open this screen':'Unlock';})();
 </script>
 </body></html>

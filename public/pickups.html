@@ -48,16 +48,19 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 <div class="grid" id="grid"></div>
 <div class="empty" id="empty" style="display:none">No open draft orders right now — all caught up! 🎉</div>
 
-<div class="arm" id="arm">
-  <input class="keyin" id="keyin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" onkeydown="if(event.key==='Enter')ARM()">
-  <button class="armbtn" onclick="ARM()">OPEN THE BOARD</button>
+<div class="arm off" id="arm">
+  <p class="armwarn" id="acctline" style="display:block;color:inherit">Checking who is signed in…</p>
+  <input class="keyin" id="keyin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" onkeydown="if(event.key==='Enter')ARM()" style="display:none">
+  <button class="armbtn" id="armbtn" onclick="ARM()" style="display:none">OPEN THE BOARD</button>
   <p class="armwarn" id="armwarn"></p>
 </div>
 
+<script src="/staff-auth.js"></script>
 <script>
-/* Same staff key as the alerts page (the DEFAULT screen's admin PIN) — if
-   it was entered there, this page opens without asking again. */
-let KEY = '';
+/* A signed-in staff account with the pickups permission opens the board by
+   itself (the session cookie). Until an admin switches the old PIN off, the
+   alerts page's staff key still works too. */
+let KEY = '', ME = null;
 try { KEY = localStorage.getItem('exorStaffKey') || ''; } catch {}
 const esc = (x) => String(x ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const age = (iso) => {
@@ -68,8 +71,8 @@ let TIMER = null;
 async function LOAD(manual){
   const err = document.getElementById('err');
   try {
-    const r = await fetch('/pickups.json?k=' + encodeURIComponent(KEY), { cache: 'no-store' });
-    if (r.status === 403) { document.getElementById('arm').classList.remove('off'); return; }
+    const r = await fetch('/pickups.json' + (KEY ? '?k=' + encodeURIComponent(KEY) : ''), { cache: 'no-store' });
+    if (r.status === 403) { ME = await XGStaff.me('pickups'); if (!ME.allowed) KEY = ''; showAcct(); document.getElementById('arm').classList.remove('off'); return; }
     const j = await r.json();
     if (!r.ok) { err.textContent = j.error || 'Could not load'; return; }
     err.textContent = '';
@@ -97,6 +100,12 @@ function render(orders){
   }).join('');
 }
 function warn(m){ const w = document.getElementById('armwarn'); w.textContent = m; w.style.display = 'block'; }
+function showAcct(){
+  document.getElementById('acctline').innerHTML = XGStaff.line(ME) + (ME.allowed ? '' : '<br>' + XGStaff.signin(ME));
+  const pin = !ME.allowed && ME.pinOn;
+  document.getElementById('keyin').style.display = pin ? '' : 'none';
+  document.getElementById('armbtn').style.display = pin ? '' : 'none';
+}
 async function ARM(){
   const k = document.getElementById('keyin').value.trim();
   if (!k) { warn('Enter the admin PIN first.'); return; }
@@ -107,10 +116,14 @@ async function ARM(){
   document.getElementById('arm').classList.add('off');
   LOAD(true);
 }
-(function boot(){
-  if (KEY) { document.getElementById('arm').classList.add('off'); LOAD(true); }
-  else document.getElementById('keyin').focus();
-  TIMER = setInterval(() => LOAD(false), 20000);
+(async function boot(){
+  ME = await XGStaff.me('pickups');
+  if (ME.allowed) { KEY = ''; try { localStorage.removeItem('exorStaffKey'); } catch {} }   // signed in: no PIN kept or sent
+  else if (!ME.pinOn) KEY = '';
+  showAcct();
+  if (ME.allowed || KEY) LOAD(true);
+  else { document.getElementById('arm').classList.remove('off'); if (ME.pinOn) document.getElementById('keyin').focus(); }
+  TIMER = setInterval(() => { if (ME && (ME.allowed || KEY)) LOAD(false); }, 20000);
 })();
 </script>
 </body>

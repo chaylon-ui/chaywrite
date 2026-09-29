@@ -43,7 +43,17 @@ export const AP_PERMS = [
   { key: "ap_settings", label: "Per-product settings; add and remove products" },
   { key: "ap_config", label: "Page rules, mode, run now, test push" },
 ];
-export const ALL_PERMS = [...PERMS, ...AP_PERMS];
+// The store's staff screens, once behind the one staff PIN (src/staff-access.js).
+// Owner, 2026-09-29: accounts with 2FA instead of the PIN. Page edits, BinderPOS
+// price saves, Discord, holds and last-sold stay admin-only.
+export const STAFF_PERMS = [
+  { key: "pickups", label: "Kiosk pickups: see and finish them (customer names)" },
+  { key: "alerts", label: "Order alerts (/staff)" },
+  { key: "tv", label: "TV and kiosk settings, usage, comments" },
+  { key: "portal", label: "BinderPOS buylists screen (customer contact details)" },
+  { key: "decks", label: "Deck Builder stats and bans" },
+];
+export const ALL_PERMS = [...PERMS, ...AP_PERMS, ...STAFF_PERMS];
 
 // Per-account brakes on what a publish may do to a price, in percent of
 // today's price. Blank means no limit. Admins are never limited.

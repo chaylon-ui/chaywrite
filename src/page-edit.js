@@ -67,7 +67,8 @@ export async function servePageEdit(request, env, url, staffOk, adminUser) {
   if (request.method !== "POST") return Response.json({ error: "POST" }, { status: 405, headers: noStore });
   let b = {}; try { b = (await request.json()) || {}; } catch {}
   const k = String(b.k || url.searchParams.get("k") || "");
-  const okKey = k ? await staffOk(env, url.origin, k) : false;
+  // an admin account, the automation key, or the staff key while it is on (src/staff-access.js)
+  const okKey = await staffOk(env, url.origin, k);
   if (!okKey && !adminUser) return Response.json({ error: "staff key or admin sign-in required" }, { status: 403, headers: noStore });
   let out;
   try { out = await editPage(env, { pageId: b.page_id || b.pageId, findStart: b.find_start || b.findStart, findEnd: b.find_end || b.findEnd, replaceB64: b.replace_b64 || b.replaceB64, replacement: b.replacement, dry: !(b.dry === false || b.dry === "false") }); }

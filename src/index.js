@@ -25,6 +25,7 @@ import { serveDiscord, discordTick } from "./discord.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
+import { stripInternal, staffGate, staffAccess, serveStaffMe, pinAllowed, INTERNAL_HEADER } from "./staff-access.js";
 
 export { BinderRoom };
 
@@ -48,18 +49,13 @@ async function deckBanned(env, origin, ip) {
   } catch { return false; }
 }
 
-// Staff-PIN check against the default room (same lockout as /staff, /pickups).
-async function staffOk(env, origin, k) {
-  try {
-    const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
-      .fetch(new Request(origin + "/staff-check?k=" + encodeURIComponent(k || "")));
-    return !!(await chk.json()).ok;
-  } catch { return false; }
-}
-
 export default {
   async fetch(request, env, ctx) {
+    // x-exor-staff is ours alone: set only below, after an account passed (src/staff-access.js)
+    request = stripInternal(request);
     const url = new URL(request.url);
+    // staffOk(env, origin, k) for one screen: account with its permission, automation key, or the PIN while it is on
+    const gate = (perm, opts) => staffGate(request, env, url, perm, { ctx, ...(opts || {}) });
     const rq = String(url.searchParams.get("room") || "").toLowerCase();
     // The search-cache DO shares the BinderRoom class; its name is not a screen.
     const roomName = ROOM_RE.test(rq) && rq !== CACHE_DO ? rq : "default";
@@ -69,6 +65,8 @@ export default {
     // This repo's own files, read with GITHUB_DATA_TOKEN so the repo can be private
     // (src/repo-data.js): the theme uploads Shopify fetches by URL, and a health check.
     if (url.pathname.startsWith("/theme-stage/")) return serveThemeStage(request, env, url);
+    // What a staff page may do for whoever is looking (src/staff-access.js).
+    if (url.pathname === "/staff/me.json") return serveStaffMe(request, env, url);
     if (url.pathname === "/repo-data/health") {
       return new Response(JSON.stringify(await repoDataHealth(env)), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
     }
@@ -123,14 +121,21 @@ export default {
       // The room DO applies a lockout against brute force either way.
       const wsRole = url.pathname === "/ws" ? (url.searchParams.get("role") || "") : "";
       if (url.pathname === "/alert" || wsRole === "staff" || wsRole === "remote") {
-        const k = url.searchParams.get("k") || "";
-        const gate = wsRole === "remote" ? room : env.ROOM.get(env.ROOM.idFromName("default"));
-        let ok = false;
-        try {
-          const chk = await gate.fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
-          ok = !!(await chk.json()).ok;
-        } catch {}
-        if (!ok) return Response.json({ error: "staff key required" }, { status: 403 });
+        const a = await staffAccess(request, env, url, wsRole === "remote" ? "tv" : url.pathname === "/alert" ? "alerts" : ["alerts", "decks"], url.searchParams.get("k") || "", { ctx, pinRoom: wsRole === "remote" ? roomName : "default", route: url.pathname + (wsRole ? "?role=" + wsRole : "") });
+        if (!a.ok) return Response.json({ error: "sign in, or the staff key" }, { status: 403 });
+      }
+      // TV settings, usage log, comments: the room checks the PIN in the body; an account
+      // with the TV permission goes in with the internal header instead.
+      if ((url.pathname === "/admin/api" || url.pathname === "/alog" || url.pathname === "/fblist") && request.method === "POST") {
+        let pin = "";
+        try { pin = String(((await request.clone().json()) || {}).pin || ""); } catch {}
+        const a = await staffAccess(request, env, url, "tv", pin, { ctx, pinRoom: roomName });
+        if (!a.ok) return Response.json({ error: (await pinAllowed(env, url.origin)) ? "Incorrect PIN" : "Sign in with your staff account (the PIN is switched off)." }, { status: 403 });
+        if (a.via !== "pin") {
+          const h = new Headers(request.headers);
+          h.set(INTERNAL_HEADER, "1");
+          return room.fetch(new Request(request, { headers: h }));
+        }
       }
       if (roomName !== "default" && url.pathname !== "/status") {
         ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
@@ -181,7 +186,7 @@ export default {
       return serveAsset(env, "/deckstats.html", request);
     }
     if (url.pathname === "/deckstats.json") {
-      if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
+      if (!(await gate("decks")(env, url.origin, url.searchParams.get("k")))) {
         return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
       }
       const opIn = url.searchParams.get("op") || "overview";
@@ -191,7 +196,7 @@ export default {
       return new Response(res.body, { status: res.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
     }
     if (url.pathname === "/deck-admin" && request.method === "POST") {
-      if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
+      if (!(await gate("decks")(env, url.origin, url.searchParams.get("k")))) {
         return Response.json({ error: "staff key required" }, { status: 403 });
       }
       const op = url.searchParams.get("op");
@@ -259,15 +264,15 @@ export default {
     // Sealed auto-pricing (src/autoprice.js): staff page, report, controls.
     // Opt-in by the auto-price tag; shadow mode until switched on the page.
     if (url.pathname === "/autoprice" || url.pathname === "/autoprice/login" || url.pathname === "/autoprice/logout" || url.pathname === "/autoprice/report.json" || url.pathname === "/autoprice/status" || url.pathname === "/autoprice/control" || url.pathname === "/autoprice/digest.json" || url.pathname === "/autoprice/comp-feed.json") {
-      return serveAutoprice(request, env, url, staffOk);
+      return serveAutoprice(request, env, url, gate("admin"));
     }
     // One-span edit of a Shopify page body (src/page-edit.js): staff key,
     // dry unless told otherwise, verified by a re-read. Owner-asked edits only.
-    if (url.pathname === "/admin/page-edit.json") return servePageEdit(request, env, url, staffOk, null);
+    if (url.pathname === "/admin/page-edit.json") return servePageEdit(request, env, url, gate("admin"), null);
     if (url.pathname === "/hold/health") return serveHoldPage(request, env, url);
-    if (url.pathname === "/hold/control" && request.method === "POST") return serveHoldControl(request, env, url, staffOk);
+    if (url.pathname === "/hold/control" && request.method === "POST") return serveHoldControl(request, env, url, gate("admin"));
     if (url.pathname === "/hold/shadow" || url.pathname === "/hold/shadow.json") {
-      if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) {
+      if (!(await gate("admin")(env, url.origin, url.searchParams.get("k")))) {
         return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
       }
       return serveHoldPage(request, env, url);
@@ -279,7 +284,7 @@ export default {
     // their data and the approve / reject / edit / email control, behind the
     // staff PIN. /buylist/staged* was the page's first address and redirects.
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
-      return serveStage(request, env, url, staffOk);
+      return serveStage(request, env, url, gate("admin"));
     }
 
     // Round 32: our own read-only view of BinderPOS's online buylists
@@ -290,7 +295,7 @@ export default {
       return serveAsset(env, "/buylists.html", request);
     }
     if (url.pathname.startsWith("/portal/") && url.pathname.endsWith(".json")) {
-      return servePortal(request, env, url, staffOk);
+      return servePortal(request, env, url, gate("portal"));
     }
 
     if (url.pathname === "/buyprice.json") {
@@ -300,7 +305,7 @@ export default {
     // Homepage reviews band: Google reviews proxied + curated server-side
     // (5-star only, text sentiment-screened) so the key stays private.
     // Shelf drops to Discord: staff preview / test / post-now (src/discord.js).
-    if (url.pathname.startsWith("/discord/")) return serveDiscord(request, env, url, staffOk);
+    if (url.pathname.startsWith("/discord/")) return serveDiscord(request, env, url, gate("admin"));
 
     if (url.pathname === "/reviews.json") {
       return serveReviews(request, env, ctx);
@@ -420,7 +425,7 @@ export default {
 
     // Last sale per SKU, for the Asmodee stock-check userscript (staff PIN).
     if (url.pathname === "/lastsold.json") {
-      return serveLastSold(request, env, ctx, async (q) => (await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q)).data, staffOk);
+      return serveLastSold(request, env, ctx, async (q) => (await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q)).data, gate("admin"));
     }
 
     // Products by barcode across the whole store, for the same userscript (public).
@@ -477,13 +482,7 @@ export default {
       // "wrong PIN" apart from "network down".
       const cors = { "access-control-allow-origin": "*" };
       if (request.method === "OPTIONS") return new Response(null, { headers: cors });
-      const k = url.searchParams.get("k") || "";
-      let ok = false;
-      try {
-        const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
-          .fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
-        ok = !!(await chk.json()).ok;
-      } catch {}
+      const ok = await gate("pickups")(env, url.origin, url.searchParams.get("k") || "");
       if (!ok) return Response.json({ error: "staff key required" }, { status: 403, headers: cors });
       return servePickups(env);
     }
@@ -493,13 +492,7 @@ export default {
       const cors = { "access-control-allow-origin": "*", "access-control-allow-methods": "POST, OPTIONS" };
       if (request.method === "OPTIONS") return new Response(null, { headers: cors });
       if (request.method !== "POST") return Response.json({ error: "POST only" }, { status: 405, headers: cors });
-      const k = url.searchParams.get("k") || "";
-      let ok = false;
-      try {
-        const chk = await env.ROOM.get(env.ROOM.idFromName("default"))
-          .fetch(new Request(url.origin + "/staff-check?k=" + encodeURIComponent(k)));
-        ok = !!(await chk.json()).ok;
-      } catch {}
+      const ok = await gate("pickups")(env, url.origin, url.searchParams.get("k") || "");
       if (!ok) return Response.json({ error: "staff key required" }, { status: 403, headers: cors });
       const did = (url.searchParams.get("did") || "").replace(/\D/g, "").slice(0, 24);
       if (!did) return Response.json({ error: "did required" }, { status: 400, headers: cors });

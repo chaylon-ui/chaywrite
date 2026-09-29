@@ -1247,7 +1247,9 @@ export class BinderRoom {
       } catch {
         return Response.json({ error: "bad json" }, { status: 400 });
       }
-      if (String(body.pin || "") !== String(this.pin)) {
+      // x-exor-staff: the worker let a signed-in account through (src/staff-access.js); it strips
+      // the header from everything it receives, so only the worker can set it
+      if (request.headers.get("x-exor-staff") !== "1" && String(body.pin || "") !== String(this.pin)) {
         return Response.json({ error: "Incorrect PIN" }, { status: 403 });
       }
       const err = await this.applyAdminPatch(body.patch);
@@ -1317,7 +1319,7 @@ export class BinderRoom {
     // day (14) aggregated.
     if (url.pathname.endsWith("/alog") && request.method === "POST") {
       let b; try { b = await request.json(); } catch { return Response.json({ error: "bad json" }, { status: 400 }); }
-      if (String((b && b.pin) || "") !== String(this.pin)) return Response.json({ error: "Incorrect PIN" }, { status: 403 });
+      if (request.headers.get("x-exor-staff") !== "1" && String((b && b.pin) || "") !== String(this.pin)) return Response.json({ error: "Incorrect PIN" }, { status: 403 });
       let day, rows;
       if ((b && b.day) === "all") {
         day = "all"; rows = [];
@@ -1412,7 +1414,7 @@ export class BinderRoom {
     // Admin viewer for the comments (PIN-guarded, same as /alog).
     if (url.pathname.endsWith("/fblist") && request.method === "POST") {
       let b; try { b = await request.json(); } catch { return Response.json({ error: "bad json" }, { status: 400 }); }
-      if (String((b && b.pin) || "") !== String(this.pin)) return Response.json({ error: "Incorrect PIN" }, { status: 403 });
+      if (request.headers.get("x-exor-staff") !== "1" && String((b && b.pin) || "") !== String(this.pin)) return Response.json({ error: "Incorrect PIN" }, { status: 403 });
       const items = (await this.state.storage.get("feedback")) || [];
       return Response.json({ items }, { headers: { "cache-control": "no-store" } });
     }

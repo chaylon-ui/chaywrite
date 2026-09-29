@@ -48,12 +48,14 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
 <div class="log" id="log"><div class="hint" id="hint">Waiting for counter orders…</div></div>
 
 <div class="arm" id="arm">
-  <input class="keyin" id="keyin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" onkeydown="if(event.key==='Enter')ARM()">
+  <p class="armp" id="acctline">Checking who is signed in…</p>
+  <input class="keyin" id="keyin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" onkeydown="if(event.key==='Enter')ARM()" style="display:none">
   <button class="armbtn" id="armbtn" onclick="ARM()">🔔 ENABLE ALERTS</button>
-  <p class="armp">Enter the showcase <b>admin PIN</b> (the main screen's), then one click lets Chrome show pop-up notifications and play the chime. If Chrome asks for permission, choose <b>Allow</b>.</p>
+  <p class="armp"><span id="pinp" style="display:none">Or enter the showcase <b>admin PIN</b> (the main screen's) while it still works. </span>One click lets Chrome show pop-up notifications and play the chime. If Chrome asks for permission, choose <b>Allow</b>.</p>
   <p class="armwarn" id="armwarn"></p>
 </div>
 
+<script src="/staff-auth.js"></script>
 <script>
 /* Watches every screen (room) over the same websocket the TVs use, but with
    role=staff: receive-only. Alerts arrive two ways — counter_order straight
@@ -62,7 +64,7 @@ h1{font-family:'Bangers',cursive;font-size:clamp(1.8rem,4vw,2.6rem);letter-spaci
    order that ALSO triggers Flow only rings once. */
 const QROOMS = (new URLSearchParams(location.search).get('rooms') || '').toLowerCase()
   .split(',').map(s => s.trim()).filter(s => /^[a-z0-9][a-z0-9-]{0,31}$/.test(s));
-let ROOMS = [], SOCKS = {}, SEEN = new Set(), NROWS = 0, ACTX = null, KEY = '';
+let ROOMS = [], SOCKS = {}, SEEN = new Set(), NROWS = 0, ACTX = null, KEY = '', ME = null, FAILS = {};
 try { KEY = localStorage.getItem('exorStaffKey') || ''; } catch {}
 
 function chipBar(){
@@ -78,15 +80,22 @@ function chipBar(){
 }
 
 function connect(room){
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=staff&room=' + room + '&k=' + encodeURIComponent(KEY));
+  // signed in: the session cookie opens it, no PIN in the address
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=staff&room=' + room + (KEY ? '&k=' + encodeURIComponent(KEY) : ''));
   SOCKS[room] = ws;
-  ws.onopen = chipBar;
+  let opened = false;
+  ws.onopen = () => { opened = true; FAILS[room] = 0; chipBar(); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.type === 'counter_order') onAlert(room, m.data || {}, 'kiosk');
     else if (m.type === 'staff_alert') onAlert(room, m.data || {}, 'flow');
   };
-  ws.onclose = () => { chipBar(); setTimeout(() => { if (SOCKS[room] === ws) connect(room); }, 4000); };
+  ws.onclose = () => {
+    chipBar();
+    // three refusals in a row: signed out (the session lapsed) or the PIN switched off - say so loudly
+    if (!opened && (FAILS[room] = (FAILS[room] || 0) + 1) >= 3) { recheck(); return; }
+    setTimeout(() => { if (SOCKS[room] === ws) connect(room); }, 4000);
+  };
 }
 
 /* Sources: counter orders are the kiosk's own; Flow-posted alerts carry a
@@ -160,16 +169,33 @@ function chime(){
 
 function warn(msg){ const w = document.getElementById('armwarn'); w.textContent = msg; w.style.display = 'block'; }
 
+async function recheck(){
+  ME = await XGStaff.me('alerts');
+  if (ME.allowed || (KEY && ME.pinOn)) { Object.keys(SOCKS).forEach(r => { FAILS[r] = 0; connect(r); }); return; }
+  showAcct();
+  document.getElementById('arm').classList.remove('off');
+  warn('Alerts stopped: this page is signed out. Sign in again to keep getting them.');
+  try { new Notification('🛎 Counter alerts stopped', { body: 'The alerts page was signed out - sign in again.', requireInteraction: true }); } catch {}
+}
+
+function showAcct(){
+  document.getElementById('acctline').innerHTML = XGStaff.line(ME) + (ME.allowed ? '' : '<br>' + XGStaff.signin(ME));
+  const pin = !ME.allowed && ME.pinOn;
+  document.getElementById('keyin').style.display = pin ? '' : 'none';
+  document.getElementById('pinp').style.display = pin ? '' : 'none';
+}
+
 async function ARM(){
-  const k = document.getElementById('keyin').value.trim();
-  if (!k) { warn('Enter the admin PIN first.'); return; }
+  const signed = ME && ME.allowed;
+  const k = signed ? '' : document.getElementById('keyin').value.trim();
+  if (!signed && !k) { warn(ME && !ME.pinOn ? 'Sign in with your staff account first.' : 'Sign in with your staff account, or enter the admin PIN.'); return; }
   // Validate the key with an empty POST to /alert — the worker 403s a bad
   // PIN and the room treats an empty body as a probe (nothing rings).
   let r = null;
-  try { r = await fetch('/alert?k=' + encodeURIComponent(k), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch {}
-  if (!r || !r.ok) { warn(r && r.status === 403 ? 'Wrong PIN — use the admin PIN for the main screen. Too many tries locks it for 10 minutes.' : 'Could not reach the showcase server — check the connection and try again.'); return; }
+  try { r = await fetch('/alert' + (k ? '?k=' + encodeURIComponent(k) : ''), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch {}
+  if (!r || !r.ok) { warn(r && r.status === 403 ? (k ? 'Wrong PIN — use the admin PIN for the main screen. Too many tries locks it for 10 minutes.' : 'This account may not use order alerts, or it was signed out — sign in again, or ask an admin.') : 'Could not reach the showcase server — check the connection and try again.'); return; }
   KEY = k;
-  try { localStorage.setItem('exorStaffKey', k); } catch {}
+  try { if (k) localStorage.setItem('exorStaffKey', k); else localStorage.removeItem('exorStaffKey'); } catch {}
   try { ACTX = ACTX || new (window.AudioContext || window.webkitAudioContext)(); ACTX.resume(); } catch {}
   let perm = ('Notification' in window) ? Notification.permission : 'denied';
   if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch {} }
@@ -199,7 +225,13 @@ async function boot(){
     } catch {}
   }, 300000);
 }
-if (KEY) document.getElementById('keyin').value = KEY; // remembered from last time — still one click to arm sound
+(async () => {
+  ME = await XGStaff.me('alerts');
+  if (ME.allowed) { KEY = ''; try { localStorage.removeItem('exorStaffKey'); } catch {} }   // signed in: no PIN kept or sent
+  else if (!ME.pinOn) KEY = '';
+  showAcct();
+  if (KEY) document.getElementById('keyin').value = KEY; // remembered from last time — still one click to arm sound
+})();
 </script>
 </body>
 </html>
