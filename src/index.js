@@ -24,6 +24,7 @@ import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
+import { serveThemeStage, repoDataHealth } from "./repo-data.js";
 
 export { BinderRoom };
 
@@ -64,6 +65,13 @@ export default {
     const roomName = ROOM_RE.test(rq) && rq !== CACHE_DO ? rq : "default";
     const id = env.ROOM.idFromName(roomName);
     const room = env.ROOM.get(id);
+
+    // This repo's own files, read with GITHUB_DATA_TOKEN so the repo can be private
+    // (src/repo-data.js): the theme uploads Shopify fetches by URL, and a health check.
+    if (url.pathname.startsWith("/theme-stage/")) return serveThemeStage(request, env, url);
+    if (url.pathname === "/repo-data/health") {
+      return new Response(JSON.stringify(await repoDataHealth(env)), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+    }
 
     // Cached proxy for the advanced-search widget's BinderPOS product POST
     // (binder-search.js): global DO store + cron pre-warm, CORS for the

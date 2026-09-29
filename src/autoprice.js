@@ -61,6 +61,7 @@ import { adminGql, throttleWait } from "./price-history.js";
 import { currentUser } from "./stage.js";
 import { apPerms } from "./stage-auth.js";
 import { sendEmail, buildNoticeEmail, emailConfigured } from "./stage-email.js";
+import { repoFetch } from "./repo-data.js";
 
 export const AUTOPRICE_DO = "autoprice";
 export const TAG = "auto-price";
@@ -994,7 +995,7 @@ async function phaseIndex(cx, run) {
   const cat = ix.cats[ix.ci++];
   let data = null;
   try {
-    const r = await cx.fetch(TCG_DATA + "tcg-" + cat + ".json", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+    const r = await repoFetch(cx.env, TCG_DATA + "tcg-" + cat + ".json", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000) }, { fetchFn: cx.fetch });
     if (r.ok) data = await r.json();
     else run.errors.push("tcg data " + cat + ": HTTP " + r.status + (r.status === 404 ? " (autoprice-tcg.yml has not built this category yet)" : ""));
   } catch (e) { run.errors.push("tcg data " + cat + ": " + msg(e)); }

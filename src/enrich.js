@@ -46,6 +46,7 @@ import { PLAMOD_FILE_URL, PL_PAGE, PL_ADD_MEDIA, PL_QUERY, parsePlPage, plamodPl
 import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan, WINDEX_QUERY, WINDEX_PAGE, UNIT_KINDS, parseWindexPage, likeUnits } from "./w40k.js";
 import { GS_PAGE, GS_QUERY, parseGsPage, gsPlan, armyPlan } from "./gamesys.js";
 import { BT_FILE_URL, BT_PAGE, BT_QUERY, parseBtPage, btPlan } from "./bt.js";
+import { repoFetch } from "./repo-data.js";
 
 export const ENRICH_DO = "enrich";
 
@@ -806,7 +807,7 @@ async function seriesFile(cx) {
   if (cx.mem && cx.mem.seriesFile) return cx.mem.seriesFile;
   let idx = {};
   try {
-    const r = await cx.fetch(SERIES_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    const r = await repoFetch(cx.env, SERIES_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) }, { fetchFn: cx.fetch });
     if (r.ok) {
       const j = await r.json();
       idx = indexSeriesFile(j);
@@ -862,7 +863,7 @@ async function plamodFile(cx) {
   if (cx.mem && cx.mem.plamod !== undefined) return cx.mem.plamod;
   let file = null;
   try {
-    const r = await cx.fetch(PLAMOD_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    const r = await repoFetch(cx.env, PLAMOD_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) }, { fetchFn: cx.fetch });
     if (r.ok) { file = await r.json(); cx.log("enrich: plamod file loaded, " + ((file && file.count) || 0) + " barcodes, generated " + ((file && file.generated) || "?")); }
     else cx.log("enrich: plamod file HTTP " + r.status + " - PLAMOD phase skipped");
   } catch (e) { cx.log("enrich: plamod file fetch failed: " + msg(e)); }
@@ -875,7 +876,7 @@ async function w40kFile(cx) {
   if (cx.mem && cx.mem.w40k !== undefined) return cx.mem.w40k;
   let file = null;
   try {
-    const r = await cx.fetch(W40K_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(30000) });
+    const r = await repoFetch(cx.env, W40K_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(30000) }, { fetchFn: cx.fetch });
     if (r.ok) { file = await r.json(); cx.log("enrich: w40k file loaded, " + ((file && file.count) || 0) + " products, generated " + ((file && file.generated) || "?")); }
     else cx.log("enrich: w40k file HTTP " + r.status + " - Warhammer phase skipped");
   } catch (e) { cx.log("enrich: w40k file fetch failed: " + msg(e)); }
@@ -887,7 +888,7 @@ async function btFile(cx) {
   if (cx.mem && cx.mem.bt !== undefined) return cx.mem.bt;
   let file = null;
   try {
-    const r = await cx.fetch(BT_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(30000) });
+    const r = await repoFetch(cx.env, BT_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(30000) }, { fetchFn: cx.fetch });
     if (r.ok) { file = await r.json(); cx.log("enrich: battletech file loaded, " + ((file && file.count) || 0) + " products, generated " + ((file && file.generated) || "?")); }
     else cx.log("enrich: battletech file HTTP " + r.status + " - BattleTech phase skipped");
   } catch (e) { cx.log("enrich: battletech file fetch failed: " + msg(e)); }
@@ -899,7 +900,7 @@ async function kitsIndex(cx) {
   if (cx.mem && cx.mem.kits) return cx.mem.kits;
   let idx = indexKits(null);
   try {
-    const r = await cx.fetch(KITS_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) });
+    const r = await repoFetch(cx.env, KITS_FILE_URL, { headers: { accept: "application/json", "user-agent": BGG_UA }, signal: AbortSignal.timeout(20000) }, { fetchFn: cx.fetch });
     if (r.ok) {
       const j = await r.json();
       idx = indexKits(j);

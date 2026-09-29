@@ -19,6 +19,8 @@
    it, otherwise from an army name in the title ("STORMCAST ETERNALS:
    VINDICTORS"). No page -> schemes [] and the card stays hidden. */
 
+import { repoFetch } from "./repo-data.js";
+
 export const EAVY_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/eavy-archive.json";
 /* Age of Sigmar faction guides from Paint Picker (owner, 2026-09-28: "please fill in age of
    sigmar with the suggested paints with this guide"): data/paintpicker-aos.json
@@ -432,9 +434,9 @@ export async function serveEavy(request, env, ctx, getPaints) {
   let body, status = 200;
   try {
     const [dr, pp, paints] = await Promise.all([
-      fetch(EAVY_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => { if (!r.ok) throw new Error("eavy data HTTP " + r.status); return r.json(); }),
+      repoFetch(env, EAVY_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }, { ttl: 3600, ctx }).then((r) => { if (!r.ok) throw new Error("eavy data HTTP " + r.status); return r.json(); }),
       // the guides are extra: without them the card is what it was
-      guides ? fetch(PP_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
+      guides ? repoFetch(env, PP_URL, { cf: { cacheTtl: 3600, cacheEverything: true } }, { ttl: 3600, ctx }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
       getPaints(),
     ]);
     body = { ...forProduct(indexEavy(dr, pp), citadelIndex(paints), title, faction, 40, kind), credit: CREDIT, source: "https://eavy-archive.com/",

@@ -12,6 +12,8 @@
    chart does not know keep a swatch (h null - the page shows the bottle photo); sets,
    mediums, varnishes and tools are left out. */
 
+import { repoFetch } from "./repo-data.js";
+
 export const PAINT_COLOURS_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/paint-colours.json";
 const CACHE_KEY = "https://cache.internal/paints.json?v=3";
 
@@ -180,8 +182,8 @@ async function fetchCollection(gql, handle) {
 const FRESH_S = 900, KEEP_S = 172800;
 const KEEP_KEY = CACHE_KEY + "&keep=1";
 
-async function buildPaints(gql) {
-  const cr = await fetch(PAINT_COLOURS_URL, { headers: { accept: "application/json" } });
+async function buildPaints(gql, env) {
+  const cr = await repoFetch(env, PAINT_COLOURS_URL, { headers: { accept: "application/json" } }, { ttl: 600 });
   if (!cr.ok) throw new Error("paint colours HTTP " + cr.status);
   const chart = (await cr.json()).brands;
   const byBrand = [];
@@ -202,8 +204,8 @@ const jsonRes = (text, maxAge, extra) => new Response(text, {
   headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*", "cache-control": "public, max-age=" + maxAge, ...(extra || {}) },
 });
 
-async function rebuildInto(cache, gql) {
-  const text = JSON.stringify(await buildPaints(gql));
+async function rebuildInto(cache, gql, env) {
+  const text = JSON.stringify(await buildPaints(gql, env));
   await Promise.all([cache.put(CACHE_KEY, jsonRes(text, FRESH_S)), cache.put(KEEP_KEY, jsonRes(text, KEEP_S))]);
   return text;
 }
@@ -214,12 +216,12 @@ export async function servePaints(request, env, ctx, gql) {
   if (hit) return hit;
   const kept = await cache.match(KEEP_KEY);
   if (kept) {
-    ctx.waitUntil(rebuildInto(cache, gql).catch(() => null));
+    ctx.waitUntil(rebuildInto(cache, gql, env).catch(() => null));
     const text = await kept.text();
     return jsonRes(text, 300, { "x-xg-paints": "kept" });
   }
   try {
-    return jsonRes(await rebuildInto(cache, gql), FRESH_S);
+    return jsonRes(await rebuildInto(cache, gql, env), FRESH_S);
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String((e && e.message) || e).slice(0, 200) }), {
       status: 502,
