@@ -32,6 +32,19 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   {%- when 'all-the-army-painter' -%}{%- assign xg_bc_logo = 'Asset-1.png' -%}
   {%- when 'all-vallejo' -%}{%- assign xg_bc_logo = 'logo_blanc.png' -%}
 {%- endcase -%}
+{%- comment -%}
+  Gunpla (owner, 2026-09-29, after uploading the grade logos to Shopify Files: "add it to the
+  header where we added warhammer logos ... for the different gunpla kits? each should get the
+  gunpla logo too"): the Gunpla mark on every kit collection, the grade's own logo beside it.
+{%- endcomment -%}
+{%- assign xg_bc_logo2 = '' -%}
+{%- case xg_bc_key -%}
+  {%- when 'all-gunpla' -%}{%- assign xg_bc_logo = 'Gunpla_Logo_svg.webp' -%}
+  {%- when 'gunpla-high-grade-hg' -%}{%- assign xg_bc_logo = 'Gunpla_Logo_svg.webp' -%}{%- assign xg_bc_logo2 = 'HG_Logo.webp' -%}
+  {%- when 'gunpla-real-grade-rg' -%}{%- assign xg_bc_logo = 'Gunpla_Logo_svg.webp' -%}{%- assign xg_bc_logo2 = 'RGlogonew.webp' -%}
+  {%- when 'gunpla-master-grade-mg' -%}{%- assign xg_bc_logo = 'Gunpla_Logo_svg.webp' -%}{%- assign xg_bc_logo2 = 'MGlogo.webp' -%}
+  {%- when 'gunpla-perfect-grade-pg' -%}{%- assign xg_bc_logo = 'Gunpla_Logo_svg.webp' -%}{%- assign xg_bc_logo2 = 'pg.webp' -%}
+{%- endcase -%}
 {%- comment -%} every Army Painter line (the-army-painter-warpaints, ...) and Vallejo line (vallejo-game-color, ...) {%- endcomment -%}
 {%- if xg_bc_logo == '' -%}
   {%- assign xg_bc_head = xg_bc_key | slice: 0, 17 -%}
@@ -121,6 +134,11 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
   .xg-bc--logo .xg-bc__logo img { display: block; margin: 0 auto; width: auto; height: auto; max-width: min(460px, 90%); max-height: 110px; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .55)); }
   @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img { max-height: 72px; } }
+  /* Gunpla: the Gunpla mark and the grade's logo side by side */
+  .xg-bc--logo .head-title.xg-bc__logo--pair { display: flex; align-items: center; justify-content: center; gap: 30px; }
+  .xg-bc--logo .xg-bc__logo--pair img { margin: 0; max-width: min(330px, 48%); max-height: 86px; }
+  .xg-bc--logo .xg-bc__logo--pair img.xg-bc__logo2 { max-width: min(250px, 38%); max-height: 100px; }
+  @media (max-width: 767px) { .xg-bc--logo .head-title.xg-bc__logo--pair { gap: 16px; } .xg-bc--logo .xg-bc__logo--pair img { max-height: 54px; } .xg-bc--logo .xg-bc__logo--pair img.xg-bc__logo2 { max-height: 64px; } }
   .xg-bc__pp { display: inline-flex; align-self: center; flex: 0 0 auto; width: auto; max-width: max-content; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 8px 16px 8px 10px; border-radius: 999px; background: #fff; color: #14181b !important; font: 700 13px/1 var(--xg-font-body, sans-serif); letter-spacing: .02em; text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
   .xg-bc__pp:hover { background: #d62c28; color: #fff !important; }
   .xg-bc__pp-dots { display: inline-flex; }
@@ -170,7 +188,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     {%- if xg_army_cur != '' -%}
     <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{{ xg_army_gname | escape }}" width="460" height="110" fetchpriority="high">{%- assign xg_ai = xg_army_cur | prepend: '|' | append: '|' -%}<span class="xg-bc__army">{% if xg_army_icons contains xg_ai %}<span class="xg-bc__army-ico xg-bc__army-ico--lg" style="--xg-ico:url({{ xg_army_cur | append: '.svg' | file_url }})" aria-hidden="true"></span>{% endif %}{{ xg_army_name | escape }}</span></h1>
     {%- else -%}
-    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
+    <h1 class="h3 head-title xg-bc__logo{% if xg_bc_logo2 != '' %} xg-bc__logo--pair{% endif %}"><img src="{{ xg_bc_logo | file_url }}" alt="{% if xg_bc_logo2 != '' %}Gunpla{% elsif collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high">{% if xg_bc_logo2 != '' %}<img class="xg-bc__logo2" src="{{ xg_bc_logo2 | file_url }}" alt="{{ collection.title | escape }}" width="360" height="190" fetchpriority="high">{% endif %}</h1>
     {%- endif -%}
     {%- comment -%} Paint brands: a way into the colour picker (owner, 2026-09-25: "how is it accessed", then Citadel + Army Painter: "Sure"). A range collection opens the picker on that range. {%- endcomment -%}
     {%- assign xg_pp_brand = '' -%}
