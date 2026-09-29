@@ -161,50 +161,76 @@
       foot.appendChild(document.createTextNode(' '));
       foot.appendChild(rf);
       body.appendChild(foot);
-      earnMore(body);
     }
 
     /* How to get more (owner, 2026-09-28: "say how you can get more store
        credit and showing the banner for video games for Mallow"). The three
        card routes of the sell page, then the Mallow Games band in Mallow's
-       colours as on that page. Links only; nothing is fetched. */
+       colours as on that page. Links only; nothing is fetched.
+       Owner, same day: "more eye popping but not tacky ... make the buttons a
+       bit smaller and stay at the bottom of the store credit even when they
+       scroll through their store credit history" - built once into the
+       panel's footer (.xg-credit__more), which stays put while the balance and
+       history scroll above it. */
+    var ICONS = {
+      list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01" stroke-width="3"/>',
+      store: '<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M4.5 9.5V20h15V9.5"/><path d="M3.5 9.5a2.8 2.8 0 0 0 5.6 0 2.9 2.9 0 0 0 5.8 0 2.8 2.8 0 0 0 5.6 0"/><path d="M10 20v-5h4v5"/>',
+      box: '<path d="M3.5 7.5 12 3.5l8.5 4v9L12 20.5l-8.5-4z"/><path d="m3.5 7.5 8.5 4 8.5-4M12 11.5v9"/>'
+    };
     var WAYS = [
-      ['Build a buylist', 'Pick the cards you want to sell online and choose store credit - it pays a better rate than cash.', '/pages/selling-to-exor-games-buylist'],
-      ['Bring them in', 'Trade in at any of our six stores and the credit goes straight onto your account.', '/pages/selling-to-exor-games-in-store-selling'],
-      ['Send in bulk', 'Unsorted boxes are welcome. Take the payout as store credit.', '/pages/bulk-selling']
+      ['Build a buylist', 'Sell cards online. Credit pays more than cash.', '/pages/selling-to-exor-games-buylist', 'list'],
+      ['Bring them in', 'Trade in at any of our six stores.', '/pages/selling-to-exor-games-in-store-selling', 'store'],
+      ['Send in bulk', 'Unsorted boxes are welcome.', '/pages/bulk-selling', 'box']
     ];
     var MALLOW_IMG = 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/mallow_240x240.jpg?v=1787947354';
-    function earnMore(body) {
-      body.appendChild(el('h3', ID + '__h', 'Get more store credit'));
+    function icon(name) {
+      var i = el('span', ID + '__wayi');
+      i.setAttribute('aria-hidden', 'true');
+      i.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + '</svg>';
+      return i;
+    }
+    function earnMore(box) {
+      var top = el('div', ID + '__morehead');
+      var h = el('h3', ID + '__moreh');
+      var badge = el('span', ID + '__plus', '+');
+      badge.setAttribute('aria-hidden', 'true');
+      h.appendChild(badge);
+      h.appendChild(document.createTextNode('Get more store credit'));
+      top.appendChild(h);
+      var all = el('a', ID + '__link ' + ID + '__all', 'All the ways to sell');
+      all.href = '/pages/sell-to-exor-games-bulk-or-create-a-list';
+      top.appendChild(all);
+      box.appendChild(top);
+
       var ways = el('ul', ID + '__ways');
       WAYS.forEach(function (w) {
         var li = el('li', ID + '__way');
         var a = el('a', ID + '__wayl');
         a.href = w[2];
+        a.appendChild(icon(w[3]));
         a.appendChild(el('span', ID + '__wayt', w[0]));
         a.appendChild(el('span', ID + '__wayd', w[1]));
         li.appendChild(a);
         ways.appendChild(li);
       });
-      body.appendChild(ways);
-      var all = el('a', ID + '__link ' + ID + '__all', 'All the ways to sell to us');
-      all.href = '/pages/sell-to-exor-games-bulk-or-create-a-list';
-      body.appendChild(all);
+      box.appendChild(ways);
 
       var band = el('a', ID + '__mallow');
       band.href = 'https://mallowgames.com/sell-your-games/';
       band.target = '_blank';
       band.rel = 'noopener';
       var img = el('img', ID + '__mallow-art');
-      img.src = MALLOW_IMG; img.alt = 'Mallow Games'; img.width = 72; img.height = 72; img.loading = 'lazy';
+      img.src = MALLOW_IMG; img.alt = 'Mallow Games'; img.width = 52; img.height = 52; img.loading = 'lazy';
       band.appendChild(img);
       var txt = el('span', ID + '__mallow-body');
-      txt.appendChild(el('span', ID + '__mallow-tag', 'Video games'));
-      txt.appendChild(el('span', ID + '__mallow-h', 'Got video games? Sell them to Mallow Games'));
-      txt.appendChild(el('span', ID + '__mallow-p', 'Games, consoles and accessories go to Mallow Games, our sister shop. Take the payout as store credit and spend it here at Exor Games on cards.'));
-      txt.appendChild(el('span', ID + '__mallow-btn', 'Sell your games at Mallow Games'));
+      var ht = el('span', ID + '__mallow-h');
+      ht.appendChild(el('span', ID + '__mallow-tag', 'Video games'));
+      ht.appendChild(document.createTextNode(' Sell them to Mallow Games'));
+      txt.appendChild(ht);
+      txt.appendChild(el('span', ID + '__mallow-p', 'Our sister shop buys games, consoles and accessories. Take store credit and spend it here.'));
       band.appendChild(txt);
-      body.appendChild(band);
+      band.appendChild(el('span', ID + '__mallow-btn', 'Sell games'));
+      box.appendChild(band);
     }
 
     function build() {
@@ -234,6 +260,9 @@
       head.appendChild(x);
       panel.appendChild(head);
       panel.appendChild(el('div', ID + '__body'));
+      var more = el('div', ID + '__more');
+      earnMore(more);
+      panel.appendChild(more);
 
       document.body.appendChild(tab);
       document.body.appendChild(scrim);
