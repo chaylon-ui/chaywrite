@@ -251,10 +251,11 @@ test("report rows print our margin under today's price and under the suggested p
     { id: "gid://shopify/Product/3", title: "Box C", handle: "box-c", type: "MTG Sealed", stock: 0, ...decide({ price: 50, cost: null, tcgMarket: 30 }, { ...DEFAULT_CONFIG }, FX) },
   ];
   const page = renderPage({ mode: "shadow", config: DEFAULT_CONFIG }, { rows }, { configured: true });
-  assert.match(page, /\$219\.95<\/b><div class="muted">cost \$150\.00<\/div><div class="muted mg" [^>]*>margin \$69\.95 · 31\.8%<\/div>/);
-  assert.match(page, new RegExp("\\$" + d.suggested.toFixed(2) + "</b><div class=\"muted mg\" [^>]*>margin \\$" + d.marginSuggested.amount.toFixed(2) + " · " + d.marginSuggested.pct + "%</div>"));
-  assert.match(page, /class="muted mg neg"[^>]*>margin \$-10\.00 · -10%<\/div>/);   // Box B is priced under cost today: red
-  assert.match(page, /cost —<\/div><div class="muted" title="No unit cost[^"]*">margin: no cost<\/div>/);   // Box C has no cost
+  // on the line: today's price with its margin (cost in the tooltip), the suggestion with its move and margin
+  assert.match(page, /data-l="Today"><b>\$219\.95<\/b><div class="sub mg" title="price \$219\.95 − cost \$150\.00: \$69\.95 profit, 31\.8% of the price">margin \$69\.95 · 31\.8%<\/div>/);
+  assert.match(page, new RegExp("\\$" + d.suggested.toFixed(2) + "</b> <span class=\"chg up\">\\+[0-9.]+%</span><div class=\"sub mg\" [^>]*>margin \\$" + d.marginSuggested.amount.toFixed(2) + " · " + d.marginSuggested.pct + "%</div>"));
+  assert.match(page, /class="sub mg neg"[^>]*>margin \$-10\.00 · -10%<\/div>/);   // Box B is priced under cost today: red
+  assert.match(page, /cost —<\/span><\/div><div class="sub" title="No unit cost[^"]*">margin: no cost<\/div>/);   // Box C has no cost (in its panel)
 });
 
 test("follow 401 Games: their in-stock price is the price; out of stock alerts and falls back to TCGplayer", () => {
@@ -298,10 +299,10 @@ test("the report flags follow-mode products that fell back to TCGplayer", async 
     { id: "gid://shopify/Product/1", title: "Box A", handle: "a", type: "MTG Sealed", stock: 0, ...decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: true, handle: "a" } }, follow, FX) },
     { id: "gid://shopify/Product/2", title: "Box B", handle: "b", type: "MTG Sealed", stock: 0, ...decide({ price: 229.95, cost: 149.76, tcgMarket: 189.07, comp: { price: 199.95, available: false } }, follow, FX) },
   ];
-  const page = renderPage({ mode: "shadow", config: follow }, { rows }, { configured: true });
-  assert.match(page, /<div class="alert"><b>⚠ 1 product set to follow 401 Games is priced from TCGplayer instead<\/b>/);
+  const page = renderPage({ mode: "shadow", config: follow }, { rows }, { configured: true, view: "all" });   // Box A (a plain shadow drop) is not in "Needs you"
+  assert.match(page, /<details class="banner warn"><summary><b>⚠ 1 product set to follow 401 Games is priced from TCGplayer instead<\/b>/);
   assert.match(page, /Box B<\/a> · 401 Games is out of stock: priced from TCGplayer instead · now \$229\.95 → \$309\.95/);
-  assert.match(page, /<tr class="a-raise alerted">/);
+  assert.match(page, /<article class="item s-up alerted"/);
   assert.match(page, /<div class="warn">⚠ 401 Games is out of stock: priced from TCGplayer instead<\/div>/);
   assert.match(page, /<b>401 Games \$199\.95<\/b><div class="muted">followed · TCGplayer not used: TCG \$189\.07 US = \$262\.98 CAD<\/div>/);
   assert.match(page, /<option value="follow" selected>/);
@@ -517,10 +518,19 @@ test("one tab per game with the error count in brackets and a price alert marker
     { id: "gid://shopify/Product/4", title: "D", handle: "d", type: "Magic Sealed Product", stock: 0, current: 100, suggested: 109.95, action: "raise" },
   ];
   const page = renderPage({ mode: "apply", config: DEFAULT_CONFIG }, { rows }, { configured: true, game: "Pokemon" });
-  assert.match(page, /<div class="tabs"><a href="\/autoprice" class=" warn" title="4 listed, 1 not priced, 1 price alert">All <span class="n">4<\/span> <span class="err">\(1 error\)<\/span> <span class="al">⚠ 1<\/span><\/a>/);
-  assert.match(page, /<a href="\/autoprice\?game=Magic" class="" title="1 listed">Magic <span class="n">1<\/span><\/a>/);
-  assert.match(page, /<a href="\/autoprice\?game=Pokemon" class="on warn" title="3 listed, 1 not priced, 1 price alert">Pokemon <span class="n">3<\/span> <span class="err">\(1 error\)<\/span> <span class="al">⚠ 1<\/span><\/a>/);
+  assert.match(page, /<nav class="tabs"><a href="\/autoprice" class="tab warn" title="4 listed, 1 not priced, 1 price alert">All games <span class="n">4<\/span> <span class="err">\(1 error\)<\/span> <span class="al">⚠ 1<\/span><\/a>/);
+  assert.match(page, /<a href="\/autoprice\?game=Magic" class="tab" title="1 listed">Magic <span class="n">1<\/span><\/a>/);
+  assert.match(page, /<a href="\/autoprice\?game=Pokemon" class="tab on warn" title="3 listed, 1 not priced, 1 price alert">Pokemon <span class="n">3<\/span> <span class="err">\(1 error\)<\/span> <span class="al">⚠ 1<\/span><\/a>/);
   assert.equal(page.includes("chips"), false);
+  // it opens on what needs a person: the skip and the alert, not the plain raise; "All" is a click away
+  assert.match(page, /<a class="seg on" href="\/autoprice\?game=Pokemon&amp;view=todo">Needs you <span class="n">2<\/span><\/a><a class="seg" href="\/autoprice\?game=Pokemon&amp;view=all">All <span class="n">3<\/span><\/a>/);
+  assert.ok(page.includes('data-q="b pokemon"') && page.includes('data-q="c pokemon"') && !page.includes('data-q="a pokemon"'));
+  const allView = renderPage({ mode: "apply", config: DEFAULT_CONFIG }, { rows }, { configured: true, game: "Pokemon", view: "all" });
+  assert.ok(allView.includes('data-q="a pokemon"') && allView.includes('<a class="seg on" href="/autoprice?game=Pokemon&amp;view=all">'));
+  assert.ok(allView.includes('<a href="/autoprice?game=Magic&amp;view=all" class="tab"'));   // the tabs keep the view
+  // nothing to do: the list says so and offers everything
+  const calm = renderPage({ mode: "apply", config: DEFAULT_CONFIG }, { rows: [rows[0]] }, { configured: true, view: "todo" });
+  assert.match(calm, /Nothing needs you right now: 1 product is priced\. <a href="\/autoprice\?view=all">Show all<\/a>/);
 });
 
 import { parseGraded, gradeField, pcPickGraded, isGradedType } from "../src/autoprice.js";
@@ -658,16 +668,17 @@ test("staged rows wait on the page with an editable price, and publishing writes
   const d = decide({ price: 219.95, cost: 150, tcgMarket: 198.98 }, { ...DEFAULT_CONFIG }, FX);
   const rows = [{ id: "gid://shopify/Product/1", title: "Box A", handle: "box-a", type: "MTG Sealed", stock: 2, variantId: "gid://shopify/ProductVariant/1", ...d, awaiting: true }];
   const page = renderPage({ mode: "stage", config: { ...DEFAULT_CONFIG, mode: "stage" } }, { rows, stage: true }, { configured: true });
-  assert.match(page, /class="stagebox"><b>⏳ 1 price waiting for you<\/b>/);
+  assert.match(page, /class="pubbar"><span><b>⏳ 1 price waiting for you<\/b>/);
+  assert.match(page, /class="inl" onsubmit="return confirm\('Publish 1 price at the suggested price\?[^>]*><input type="hidden" name="action" value="publish-all">/);   // publish-all asks first
   assert.match(page, new RegExp('name="price" value="' + d.suggested.toFixed(2) + '"'));
-  assert.match(page, /<button class="go">Publish<\/button>/);
+  assert.match(page, /<button class="btn go">Publish<\/button>/);
   assert.match(page, /Keep \$219\.95/);
   assert.match(page, /STAGED/);
   assert.match(page, /tcgplayer\.com\/search\/all\/product\?q=Box%20A/);   // manual review link
   assert.match(page, /LH_Sold=1/);
   // shadow and apply keep the old shape: no box, nothing waiting
   const plain = renderPage({ mode: "apply", config: DEFAULT_CONFIG }, { rows: [{ ...rows[0], awaiting: false }] }, { configured: true });
-  assert.doesNotMatch(plain, /class="stagebox"/);
+  assert.doesNotMatch(plain, /class="pubbar"/);
   assert.doesNotMatch(plain, /name="price"/);
 });
 
@@ -839,7 +850,7 @@ test("the page draws only what the viewer may press", () => {
     { id: "gid://shopify/Product/2", title: "Box B", handle: "box-b", type: "Sealed", game: "Magic", current: 100, suggested: 95, awaiting: true, action: "lower", reason: "market", stock: 2, variants: 1 }];
   const full = renderPage(status, { rows }, { user: "Ada", perms: { name: "Ada", admin: true, view: true, publish: true, settings: true, config: true, maxDrop: null, maxRaise: null } });
   assert.ok(full.includes("Run now") && full.includes('value="publish-all"') && full.includes('value="remove"') && full.includes("Add products") && full.includes("admin: everything"));
-  assert.ok(full.includes("<h2>Activity</h2>") && full.includes("published $100.00 → $90.00") && full.includes('action="/9pocket/logout"'));
+  assert.ok(full.includes("<summary>Activity") && full.includes("published $100.00 → $90.00") && full.includes('action="/9pocket/logout"'));
   const staff = renderPage(status, { rows }, { user: "Sam", perms: { name: "Sam", admin: false, view: true, publish: true, settings: false, config: false, maxDrop: 10, maxRaise: null } });
   assert.ok(!staff.includes("Run now") && !staff.includes('value="mode"') && !staff.includes('value="remove"') && !staff.includes("Add products") && !staff.includes('value="config"'));
   assert.ok(staff.includes("may publish · drop at most 10%") && staff.includes('value="publish-all"'));
@@ -938,4 +949,136 @@ test("publishDigest: both channels good, and a failed email leaves the ntfy rela
   const g2 = (await digestOp(sad, null)).digest;
   assert.equal(g2.sent, false);
   assert.equal(g2.email.status, "failed");
+});
+
+/* ---- 401 Games refused the worker (2026-09-27..29): every lookup HTTP 429,
+   the cap silently off, 12 staged raises above prices already AT 401's. ---- */
+import { phaseComp, compFeedOp, compFromResults, trimCompResult, COMP_DIRECT_GIVEUP, COMP_FEED_MAX_AGE_MS } from "../src/autoprice.js";
+
+test("401 unknown: a raise waits, a drop goes through, the floor still wins, follow holds both ways", () => {
+  const fx = 1.4145;   // the 2026-09-27 run
+  // MTG SPIDER-MAN COLLECTOR BOOSTER BOX, 09-27: TCG $400.35 US -> $659.95; 401 had it at $549.95 in stock
+  const spider = { price: 549.95, cost: 440.06, tcgMarket: 400.35 };
+  const blind = decide({ ...spider }, { ...DEFAULT_CONFIG }, fx);
+  assert.equal(blind.suggested, 659.95);                       // what the page offered with the lookup failing
+  const capped = decide({ ...spider, comp: { price: 549.95, available: true } }, { ...DEFAULT_CONFIG }, fx);
+  assert.equal(capped.suggested, 549.95); assert.equal(capped.action, "hold");   // what the cap would have said
+  const down = decide({ ...spider, compDown: "HTTP 429, no GitHub copy yet" }, { ...DEFAULT_CONFIG }, fx);
+  assert.equal(down.action, "hold");
+  assert.equal(down.suggested, 549.95);
+  assert.equal(down.held, 659.95);
+  assert.equal(down.compDown, "HTTP 429, no GitHub copy yet");
+  assert.match(down.reason, /^raise to \$659\.95 held: 401 Games could not be checked \(HTTP 429/);
+  assert.match(down.alert, /401 Games could not be checked .*the raise to \$659\.95 waits/);
+  assert.equal(down.marginSuggested.amount, 109.89);
+  // a drop can never go over 401's price: it goes through, unflagged
+  const drop = decide({ price: 889.95, cost: 349.98, tcgMarket: 529.46, compDown: "HTTP 429" }, { ...DEFAULT_CONFIG }, fx);
+  assert.equal(drop.action, "lower"); assert.equal(drop.suggested, 869.95); assert.equal(drop.held, null); assert.equal(drop.alert, null);
+  // under the floor the price still goes up to it
+  const fl = decide({ price: 100, cost: 110, tcgMarket: 100, compDown: "HTTP 429" }, { ...DEFAULT_CONFIG }, fx);
+  assert.equal(fl.action, "raise"); assert.equal(fl.suggested, 124.95); assert.equal(fl.held, 164.95);
+  assert.match(fl.reason, /^floor \(401 Games could not be checked/);
+  // following 401: without their price any move is a guess, so a drop waits too
+  const follow = { ...DEFAULT_CONFIG, compMode: "follow" };
+  const fd = decide({ price: 400, cost: 100, tcgMarket: 200, compDown: "HTTP 429" }, follow, fx);
+  assert.equal(fd.action, "hold"); assert.equal(fd.suggested, 400); assert.equal(fd.held, 329.95);
+  assert.doesNotMatch(fd.alert, /does not list it/);
+  // show-only and skip never hold anything; a real 401 answer beats a stale flag
+  assert.equal(decide({ ...spider, compDown: "HTTP 429" }, { ...DEFAULT_CONFIG, compMode: "off" }, fx).suggested, 659.95);
+  assert.equal(decide({ ...spider, compMode: "off", compDown: "HTTP 429" }, { ...DEFAULT_CONFIG }, fx).held, null);
+  assert.equal(decide({ ...spider, compDown: "HTTP 429", comp: { price: 549.95, available: true } }, { ...DEFAULT_CONFIG }, fx).compDown, null);
+  // no price today: nothing to hold against
+  assert.equal(decide({ price: null, cost: 440.06, tcgMarket: 400.35, compDown: "HTTP 429" }, { ...DEFAULT_CONFIG }, fx).action, "set");
+});
+
+class Mem {
+  constructor() { this.m = new Map(); }
+  async get(k) { return this.m.get(k); }
+  async put(k, v) { this.m.set(k, JSON.parse(JSON.stringify(v))); }
+  async delete(k) { for (const x of Array.isArray(k) ? k : [k]) this.m.delete(x); }
+  async list(o) { const out = new Map(); for (const k of [...this.m.keys()].sort()) if (!o || !o.prefix || k.startsWith(o.prefix)) out.set(k, this.m.get(k)); return out; }
+}
+const SPIDER_401 = { title: "MTG - Universes Beyond: Marvel's Spider-Man - Collector Booster Box", handle: "spider-cbb", price: "549.95", available: true, variants: [{ price: "549.95", available: true }], body: "x".repeat(500) };
+
+test("401 lookups: direct first, the runner's copy when refused, and a product nobody could check is flagged", async () => {
+  const T = 1_790_000_000_000;
+  const storage = new Mem();
+  const prod = (n, title) => ({ id: "gid://shopify/Product/" + n, title, upc: "", handle: "h" + n });
+  await storage.put("ap:cf:gid://shopify/Product/1", { at: T - 3600e3, status: 200, q: "spider man collector booster box", results: [trimCompResult(SPIDER_401)] });
+  await storage.put("ap:cf:gid://shopify/Product/3", { at: T - COMP_FEED_MAX_AGE_MS - 1, status: 200, results: [] });
+  await storage.put("ap:cf:gid://shopify/Product/4", { at: T - 60e3, status: 429, results: [] });
+  const run = { products: [prod(1, "MTG SPIDER-MAN COLLECTOR BOOSTER BOX (LIMIT 2)"), prod(2, "POKEMON ME05 PITCH BLACK BOOSTER BOX"), prod(3, "MTG THE HOBBIT PLAY BOOSTER BOX"),
+    prod(4, "MTG THE HOBBIT PLAY BOOSTER PACK"), { ...prod(5, "Charmeleon Graded PSA 10"), graded: { grader: "PSA", grade: 10 } }], errors: [] };
+  let calls = 0;
+  const cx = { storage, now: () => T, sleep: async () => {}, fetch: async () => { calls++; return { ok: false, status: 429, json: async () => ({}) }; } };
+  await phaseComp(cx, run, { ...DEFAULT_CONFIG }, T + 60e3);
+  assert.equal(run.phase, "decide");
+  assert.equal(calls, COMP_DIRECT_GIVEUP);                        // it stops asking after three refusals in a row
+  const [a, b, c, d, e] = run.products;
+  assert.deepEqual({ price: a.comp.price, available: a.comp.available, via: a.comp.via, at: a.comp.at }, { price: 549.95, available: true, via: "runner", at: T - 3600e3 });
+  assert.equal(b.compDown, "HTTP 429, no GitHub copy yet");
+  assert.equal(b.compMiss, "could not check: HTTP 429, no GitHub copy yet");
+  assert.equal(c.compDown, "HTTP 429, GitHub copy too old");
+  assert.equal(d.compDown, "HTTP 429, GitHub copy failed too (HTTP 429)");
+  assert.equal(e.compDown, undefined); assert.match(e.compMiss, /graded/);
+  // and the feed row prices like a direct one: the cap holds the Spider-Man box at 401's price
+  assert.equal(decide({ price: 549.95, cost: 440.06, tcgMarket: 400.35, comp: a.comp }, { ...DEFAULT_CONFIG }, 1.4145).suggested, 549.95);
+  // a direct answer is used as before and resets the refusal count
+  const run2 = { products: [prod(1, "MTG SPIDER-MAN COLLECTOR BOOSTER BOX (LIMIT 2)")], errors: [] };
+  const ok = { ...cx, fetch: async (u) => { assert.match(u, /^https:\/\/store\.401games\.ca\/search\/suggest\.json\?q=spider%20man%20collector%20booster%20box&/); return { ok: true, status: 200, json: async () => ({ resources: { results: { products: [SPIDER_401] } } }) }; } };
+  await phaseComp(ok, run2, { ...DEFAULT_CONFIG }, T + 60e3);
+  assert.equal(run2.products[0].comp.via, "direct"); assert.equal(run2.compRefused, 0);
+  // a runner answer that lists something else is "not carried", not "could not check"
+  assert.match(compFromResults({ title: "MTG THE HOBBIT PLAY BOOSTER BOX" }, [trimCompResult(SPIDER_401)], T).miss, /^no title match among 1/);
+  assert.equal(trimCompResult(SPIDER_401).body, undefined);
+});
+
+test("the runner's door: what to search, and its answers kept per listed product", async () => {
+  const T = 1_790_000_000_000;
+  const storage = new Mem();
+  await storage.put("ap:report", { rows: [
+    { id: "gid://shopify/Product/1", title: "MTG SPIDER-MAN COLLECTOR BOOSTER BOX (LIMIT 2)", type: "Magic Sealed Product", settings: {} },
+    { id: "gid://shopify/Product/2", title: "Charmeleon (SV7/SV94) Graded PSA 10", type: "Pokemon Single Graded", settings: {} },
+    { id: "gid://shopify/Product/3", title: "MTG EDGE OF ETERNITIES PLAY BOOSTER PACK", type: "Magic Sealed Product", settings: { comp: "skip" } },
+    { id: "gid://shopify/Product/4", title: "POKEMON ME05 PITCH BLACK BOOSTER BOX", type: "Pokemon Sealed Product", settings: { comp: "off" } } ] });
+  await storage.put("ap:cf:gid://shopify/Product/77", { at: T - 86400e3, status: 200, results: [] });   // taken off the list since
+  const cx = { storage, now: () => T };
+  const g = await compFeedOp(cx, null);
+  assert.deepEqual(g.queries.map((q) => [q.id.slice(-1), q.q]), [["1", "spider man collector booster box"], ["4", "pitch black booster box"]]);   // graded and "skip" are not searched; "show only" still is
+  assert.match(g.queries[0].url, /^https:\/\/store\.401games\.ca\/search\/suggest\.json\?q=spider%20man/);
+  assert.equal(g.last, null);
+  const put = await compFeedOp(cx, { op: "put", at: T + 5000, rows: [
+    { id: "gid://shopify/Product/1", q: "spider man collector booster box", status: 200, results: [SPIDER_401] },
+    { id: "gid://shopify/Product/4", status: 429, results: [] },
+    { id: "gid://shopify/Product/99", status: 200, results: [SPIDER_401] },   // not in the list: ignored
+    { id: "javascript:alert(1)", status: 200, results: [] } ] });
+  assert.deepEqual({ stored: put.stored, ok: put.ok, at: put.at }, { stored: 2, ok: 1, at: T });   // a future "at" is clamped to now
+  const kept = await storage.get("ap:cf:gid://shopify/Product/1");
+  assert.equal(kept.status, 200); assert.equal(kept.results[0].price, "549.95"); assert.equal(kept.results[0].body, undefined);
+  assert.equal(await storage.get("ap:cf:gid://shopify/Product/99"), undefined);
+  assert.equal(await storage.get("ap:cf:gid://shopify/Product/77"), undefined);   // pruned
+  assert.deepEqual((await compFeedOp(cx, null)).last, { at: T, received: T, stored: 2, ok: 1 });
+});
+
+test("a failed 401 lookup never reads as 'not carried', whatever the rule", () => {
+  const row = { id: "gid://shopify/Product/1", title: "Box", handle: "b", type: "Magic Sealed Product", game: "Magic", stock: 1, current: 11.95, suggested: 11.95, action: "hold", reason: "already at the suggested price", compMiss: "could not check: HTTP 429, no GitHub copy yet", settings: { comp: "off" } };
+  const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows: [row] }, { configured: true, view: "all" });
+  assert.match(page, /<div class="warn-t">could not check<\/div><div class="sub">HTTP 429, no GitHub copy yet<\/div>/);
+  assert.doesNotMatch(page, /not carried/);
+});
+
+test("digest: products held because 401 could not be checked are one line, not one each", async () => {
+  const held = (t, from, to) => ({ title: t, current: from, suggested: from, action: "hold", held: to, compDown: "HTTP 429, no GitHub copy yet", alert: "401 Games could not be checked (HTTP 429): the raise to $" + to + " waits" });
+  const run = { startedAt: 1, apply: false, priced: 6, written: 0, skipped: 0, errors: [], rows: [
+    held("Spider-Man Collector Box", 549.95, 659.95), held("Pitch Black Booster Box", 249.95, 309.95), held("Perfect Order Booster Box", 249.95, 289.95),
+    held("Chaos Rising Booster Box", 269.95, 309.95), held("Hobbit Play Booster Box", 249.95, 259.95),
+    { title: "Celebrations PC ETB", current: 889.95, suggested: 869.95, action: "lower", awaiting: true } ] };
+  const d = buildDigest(run, { ...DEFAULT_CONFIG, mode: "stage" });
+  assert.equal(d.title, "Auto-pricing (staged): 1 waiting to publish, 401 Games not checked");
+  assert.equal(d.held, 5);
+  const lines = d.body.split("\n");
+  assert.equal(lines.filter((l) => /401/.test(l)).length, 1);
+  assert.ok(lines.includes("⚠ 401 Games could not be checked (HTTP 429): 5 price changes held until it can - Spider-Man Collector Box, Pitch Black Booster Box, Perfect Order Booster Box, Chaos Rising Booster Box and 1 more"));
+  const quiet = buildDigest({ ...run, rows: run.rows.slice(0, 1) }, { ...DEFAULT_CONFIG, mode: "stage" });
+  assert.equal(quiet.worth, true); assert.equal(quiet.priority, 3); assert.deepEqual(quiet.tags, ["warning"]);
 });

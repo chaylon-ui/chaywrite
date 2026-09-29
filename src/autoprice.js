@@ -473,7 +473,12 @@ export function decide(p, cfg, fx) {
   if (p.pcNew > 0) srcs.push({ name: "pricecharting", usd: p.pcNew, label: p.pcGrade ? p.pcGrade.label : null });
   const mode = p.compMode || cfg.compMode;
   const compPct = Number(cfg.compPct) || 0;
-  const comp = p.comp && p.comp.price > 0 ? { price: p.comp.price, available: !!p.comp.available, handle: p.comp.handle || null, title: p.comp.title || null, used: false } : null;
+  const comp = p.comp && p.comp.price > 0 ? { price: p.comp.price, available: !!p.comp.available, handle: p.comp.handle || null, title: p.comp.title || null, used: false, via: p.comp.via || null, at: p.comp.at || null } : null;
+  // 401 Games could not be asked at all (and the runner's copy was no help):
+  // their price is UNKNOWN, which is not the same as "not carried". Under cap
+  // or follow a price change that their price would have limited waits (see
+  // the end of this function) instead of going through unchecked.
+  const down = !comp && p.compDown && (mode === "cap" || mode === "follow") ? String(p.compDown) : null;
   // "follow": 401 Games' in-stock price (+compPct%) IS the price and
   // TCGplayer is bypassed. Out of stock or not carried there, the product
   // falls back to the market path below and the row carries an alert
@@ -482,7 +487,7 @@ export function decide(p, cfg, fx) {
   const follow = mode === "follow";
   const followOk = follow && !!comp && comp.available;
   const thin = thinPc(p, cfg.minSales);
-  const followAlert = follow && !followOk ? (comp ? COMP.name + " is out of stock: priced from TCGplayer instead" : COMP.name + " does not list it: priced from TCGplayer instead") : null;
+  const followAlert = follow && !followOk && !down ? (comp ? COMP.name + " is out of stock: priced from TCGplayer instead" : COMP.name + " does not list it: priced from TCGplayer instead") : null;
   const alert = thin || followAlert;
   // A hand-set price tracks the source by ratio and stands in for the markup.
   const anchor = p.anchor && p.anchor.price > 0 && p.anchor.market > 0 ? p.anchor : null;
@@ -527,12 +532,35 @@ export function decide(p, cfg, fx) {
   if (floor > 0 && suggested < floor) suggested = niceUp(floor, p.round);
   const action = !current ? "set" : suggested > current ? "raise" : suggested < current ? "lower" : "hold";
   const compNote = comp ? COMP.name + (followOk ? " at " : " has it at ") + money2(comp.price) + " in stock" + (compPct ? " (+" + compPct + "%)" : "") : "";
-  return {
+  const res = {
     ...out, marketUsd: marketUsd == null ? null : round2(marketUsd), marketCad: marketCad == null ? null : round2(marketCad), raw: round2(raw), compPct,
     floor: round2(floor), floorSrc, capped, target: round2(target), suggested, action, marginSuggested: margin(suggested, cost),
     anchorMovePct: ratio && anchor ? pctMove(anchor.market, followOk ? comp.price : marketCad) : null,
     reason: action === "hold" ? "already at the suggested price" : capped ? "capped at " + cfg.maxMovePct + "% per run" : target === floor && raw < floor ? "floor" + (followOk ? " (" + COMP.name + " is lower)" : "") : ratio ? anchorNote(anchor, followOk ? comp.price : marketCad) : followOk ? "following " + compNote : comp && comp.used ? compNote : "market",
+    compDown: down, held: null,
   };
+  /* 401 unknown (2026-09-29): every nightly lookup had been answering HTTP 429
+     and the cap silently did nothing, so 12 staged raises sat above prices
+     that were already AT 401's. A raise is what the cap limits, so a raise
+     waits; a drop can never go over their price, so a drop goes through -
+     except when FOLLOWING them, where their price is the price and any move
+     without it is a guess. The floor still wins: under it, the price goes up
+     to it regardless. */
+  if (down && current && (action === "raise" || (follow && action === "lower"))) {
+    const what = action === "raise" ? "raise" : "drop";
+    res.held = suggested;
+    const floorNeed = floor > 0 && current < floor ? niceUp(floor, p.round) : null;
+    if (floorNeed && floorNeed > current) {
+      res.suggested = floorNeed; res.action = "raise";
+      res.reason = "floor (" + COMP.name + " could not be checked: " + down + ")";
+    } else {
+      res.suggested = current; res.action = "hold";
+      res.reason = what + " to " + money2(suggested) + " held: " + COMP.name + " could not be checked (" + down + ")";
+    }
+    res.marginSuggested = margin(res.suggested, cost);
+    res.alert = res.alert || COMP.name + " could not be checked (" + down + "): the " + what + " to " + money2(suggested) + " waits until their price can be compared";
+  }
+  return res;
 }
 
 /* ---- run state machine ---- */
@@ -641,13 +669,18 @@ export function buildDigest(run, cfg, opts) {
     if (r.lastChange && r.lastChange.by === "hand" && r.lastChange.at >= (run.startedAt || 0)) changes.push({ title: r.title, from: r.lastChange.from, to: r.lastChange.to, pct: pctMove(r.lastChange.from, r.lastChange.to), by: "hand" });
   }
   const drastic = changes.filter((c) => alertPct > 0 && c.pct != null && Math.abs(c.pct) >= alertPct);
-  const alerts = rows.filter((r) => r.alert).map((r) => ({ title: r.title, alert: r.alert, action: r.action, reason: r.reason }));
+  // Rows held because 401 Games could not be checked are one line, not one
+  // warning each: it is one outage, and a nightly list of 12 identical lines
+  // would bury everything else in the push.
+  const held = rows.filter((r) => r.held != null && r.compDown);
+  const alerts = rows.filter((r) => r.alert && !held.includes(r)).map((r) => ({ title: r.title, alert: r.alert, action: r.action, reason: r.reason }));
   const line = (c) => (drastic.includes(c) ? "⚠ " : "") + (c.from == null ? "set " : c.to > c.from ? "↑ " : "↓ ") + (c.pct != null ? (c.pct > 0 ? "+" : "") + c.pct + "%  " : "") + c.title + ": " + (c.from == null ? "" : fmtMoney(c.from) + " → ") + fmtMoney(c.to) + (c.by === "hand" ? " (by hand)" : c.by === "shadow" ? " (not written: shadow)" : "");
   const ordered = [...drastic, ...changes.filter((c) => !drastic.includes(c))];
   const lines = [];
   const MAX = 30;
   for (const c of ordered.slice(0, MAX)) lines.push(line(c));
   if (ordered.length > MAX) lines.push("…and " + (ordered.length - MAX) + " more on the page");
+  if (held.length) lines.push("⚠ " + COMP.name + " could not be checked (" + [...new Set(held.map((r) => String(r.compDown).split(",")[0]))].join(", ") + "): " + held.length + " price change" + (held.length === 1 ? "" : "s") + " held until it can - " + held.slice(0, 4).map((r) => r.title).join(", ") + (held.length > 4 ? " and " + (held.length - 4) + " more" : ""));
   for (const a of alerts) lines.push("⚠ " + a.title + ": " + a.alert + (a.action === "skip" ? " (skipped: " + a.reason + ")" : ""));
   if (run.error) lines.push("✖ run failed: " + run.error);
   else if ((run.errors || []).length) lines.push("✖ " + run.errors.length + " error" + (run.errors.length === 1 ? "" : "s") + ": " + run.errors.slice(0, 2).join("; ").slice(0, 200));
@@ -656,11 +689,11 @@ export function buildDigest(run, cfg, opts) {
   const waiting = rows.filter((r) => r.awaiting).length;
   if (waiting) lines.unshift("⏳ " + waiting + " price" + (waiting === 1 ? "" : "s") + " waiting for you to publish — nothing is live");
   const mode = (cfg && cfg.mode) || (apply ? "apply" : "shadow");
-  const title = (mode === "stage" ? "Auto-pricing (staged)" : apply ? "Auto-pricing" : "Auto-pricing (shadow)") + ": " + (run.error ? "run failed" : waiting ? waiting + " waiting to publish" : n === 0 ? "no price changes" : n + " price change" + (n === 1 ? "" : "s")) + (drastic.length ? ", " + drastic.length + " of " + alertPct + "% or more" : "") + (alerts.length ? ", " + alerts.length + " 401 alert" + (alerts.length === 1 ? "" : "s") : "");
+  const title = (mode === "stage" ? "Auto-pricing (staged)" : apply ? "Auto-pricing" : "Auto-pricing (shadow)") + ": " + (run.error ? "run failed" : waiting ? waiting + " waiting to publish" : n === 0 ? "no price changes" : n + " price change" + (n === 1 ? "" : "s")) + (drastic.length ? ", " + drastic.length + " of " + alertPct + "% or more" : "") + (alerts.length ? ", " + alerts.length + " 401 alert" + (alerts.length === 1 ? "" : "s") : "") + (held.length ? ", 401 Games not checked" : "");
   const counts = rows.length + " listed · " + (run.priced || 0) + " priced · " + (run.written || 0) + " written · " + (run.skipped || 0) + " skipped" + (run.fx ? " · FX " + run.fx : "");
   const body = (lines.length ? lines.join("\n") + "\n" : "") + counts;
-  const worth = n > 0 || waiting > 0 || drastic.length > 0 || alerts.length > 0 || !!run.error || (run.errors || []).length > 0;
-  return { title, body: body.length > 3900 ? body.slice(0, 3880) + "…" : body, priority: drastic.length || run.error ? 4 : n || waiting ? 3 : 2, tags: drastic.length || run.error ? ["rotating_light"] : waiting ? ["hourglass"] : n ? ["moneybag"] : ["zzz"], click: o.click || PAGE_URL, changes, drastic, alerts, waiting, worth };
+  const worth = n > 0 || waiting > 0 || drastic.length > 0 || alerts.length > 0 || held.length > 0 || !!run.error || (run.errors || []).length > 0;
+  return { title, body: body.length > 3900 ? body.slice(0, 3880) + "…" : body, priority: drastic.length || run.error ? 4 : n || waiting || held.length ? 3 : 2, tags: drastic.length || run.error ? ["rotating_light"] : waiting ? ["hourglass"] : held.length ? ["warning"] : n ? ["moneybag"] : ["zzz"], click: o.click || PAGE_URL, changes, drastic, alerts, held: held.length, waiting, worth };
 }
 
 // Where to publish: "topic" -> ntfy.sh, or a full https://server/topic URL.
@@ -1095,8 +1128,53 @@ export function pickComp(title, ourUpc, results) {
   }
   return best ? best.r : null;
 }
-async function phaseComp(cx, run, cfg, deadline) {
-  if (run.compI == null) run.compI = 0;
+/* 401 Games refuses the worker. From 2026-09-27 (at least) every lookup the
+   nightly run made answered HTTP 429, while the same 22 searches fired
+   back-to-back from a GitHub runner all answered 200 (pyprobe 36594294879,
+   2026-09-29) - so it is the worker's Cloudflare egress they turn away, not
+   the rate. The failure was also invisible: the 401 column read "not
+   carried", no row was flagged, and the cap quietly did nothing - 12 staged
+   raises sat above 401's in-stock price on products that were already priced
+   AT 401. So:
+     - .github/workflows/autoprice-401.yml (main; 12:05 and 22:05 UTC, before
+       the 22:30 run) asks the worker what to look up, runs the same searches
+       from a runner and posts the answers to /autoprice/comp-feed.json (the
+       digest relay's bearer). They are kept per product as ap:cf:<id>.
+     - A lookup is still tried directly first (it worked until mid-September
+       and may again); a refusal falls back to the runner's copy while it is
+       under COMP_FEED_MAX_AGE_MS old, and after COMP_DIRECT_GIVEUP refusals
+       in a row the run stops asking directly.
+     - When neither answers, the product carries compDown and decide() holds
+       the price change that 401's price would have limited. */
+export const COMP_FEED_MAX_AGE_MS = 48 * 3600e3;
+export const COMP_DIRECT_GIVEUP = 3;
+export function compSearchUrl(q) { return COMP.base + "/search/suggest.json?q=" + encodeURIComponent(q) + "&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=last"; }
+
+// The fields of a predictive-search product this job reads, and nothing more
+// (the runner's copy is stored per product in the room).
+export function trimCompResult(r) {
+  const vs = Array.isArray(r && r.variants) ? r.variants.slice(0, 3) : [];
+  return { title: String((r && r.title) || "").slice(0, 200), handle: String((r && r.handle) || "").slice(0, 200), available: !!(r && r.available), price: r && r.price != null ? r.price : null,
+    variants: vs.map((v) => ({ price: v && v.price != null ? v.price : null, available: !!(v && v.available), barcode: v && v.barcode ? String(v.barcode).slice(0, 20) : null })) };
+}
+
+// One product's 401 Games entry from one predictive-search answer, whoever
+// fetched it: {comp} or {miss}.
+export function compFromResults(p, results, at) {
+  const list = results || [];
+  const hit = pickComp(p.title, p.upc, list);
+  if (!hit) return { miss: list.length ? "no title match among " + list.length + " (first: " + String((list[0] || {}).title || "").slice(0, 60) + ")" : "nothing found" };
+  // The predictive-search row carries price and availability (their
+  // /products/<handle>.js answers 403 to Workers, 2026-09-15).
+  const v = (hit.variants || [])[0] || {};
+  const rawPrice = v.price != null ? v.price : hit.price;   // suggest: "199.95" (dollars); product JSON would be cents
+  const price = typeof rawPrice === "string" ? Number(rawPrice) : Number(rawPrice) / 100;
+  if (!(price > 0)) return { miss: "no price on their listing" };
+  return { comp: { price, available: !!(hit.available || v.available), handle: hit.handle, title: hit.title, barcode: v.barcode || null, at } };
+}
+
+export async function phaseComp(cx, run, cfg, deadline) {
+  if (run.compI == null) { run.compI = 0; run.compRefused = 0; }
   // Page-level "skip" still looks up the products whose own setting needs 401.
   if (cfg.compMode === "skip" && !run.products.some((p) => p.compMode && p.compMode !== "skip")) { run.phase = "decide"; return; }
   while (run.compI < run.products.length && cx.now() < deadline - 2500) {
@@ -1105,24 +1183,71 @@ async function phaseComp(cx, run, cfg, deadline) {
     if (p.compMode === "skip" || (cfg.compMode === "skip" && !p.compMode)) { p.compMiss = "skipped for this product"; continue; }
     const q = compQuery(p.title);
     if (!q) continue;
-    try {
-      const u = COMP.base + "/search/suggest.json?q=" + encodeURIComponent(q) + "&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=last";
-      const r = await cx.fetch(u, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12000) });
-      if (!r.ok) { p.compMiss = "HTTP " + r.status; continue; }
-      const j = await r.json();
-      const results = (((j.resources || {}).results || {}).products) || [];
-      const hit = pickComp(p.title, p.upc, results);
-      if (!hit) { p.compMiss = results.length ? "no title match among " + results.length + " (first: " + String((results[0] || {}).title || "").slice(0, 60) + ")" : "nothing found"; continue; }
-      // The predictive-search row carries price and availability (their
-      // /products/<handle>.js answers 403 to Workers, 2026-09-15).
-      const v = (hit.variants || [])[0] || {};
-      const rawPrice = v.price != null ? v.price : hit.price;   // suggest: "199.95" (dollars); product JSON would be cents
-      const price = typeof rawPrice === "string" ? Number(rawPrice) : Number(rawPrice) / 100;
-      p.comp = { price, available: !!(hit.available || v.available), handle: hit.handle, title: hit.title, barcode: v.barcode || null, at: cx.now() };
-    } catch (e) { p.compMiss = msg(e); }
+    let failed = run.compLastFail || "not asked";
+    if ((run.compRefused || 0) < COMP_DIRECT_GIVEUP) {
+      try {
+        const r = await cx.fetch(compSearchUrl(q), { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12000) });
+        if (r.ok) {
+          const j = await r.json();
+          const res = compFromResults(p, (((j.resources || {}).results || {}).products) || [], cx.now());
+          run.compRefused = 0;
+          if (res.comp) p.comp = { ...res.comp, via: "direct" }; else p.compMiss = res.miss;
+          continue;
+        }
+        failed = "HTTP " + r.status;
+      } catch (e) { failed = msg(e).slice(0, 80); }
+      run.compRefused = (run.compRefused || 0) + 1;
+      run.compLastFail = failed;
+    }
+    const fed = await cx.storage.get("ap:cf:" + p.id);
+    if (fed && fed.status === 200 && cx.now() - Number(fed.at) < COMP_FEED_MAX_AGE_MS) {
+      const res = compFromResults(p, fed.results || [], Number(fed.at));
+      if (res.comp) p.comp = { ...res.comp, via: "runner" }; else p.compMiss = res.miss;
+      continue;
+    }
+    p.compDown = failed + (fed ? fed.status === 200 ? ", GitHub copy too old" : ", GitHub copy failed too (HTTP " + fed.status + ")" : ", no GitHub copy yet");
+    p.compMiss = "could not check: " + p.compDown;
   }
   if (run.compI < run.products.length) { await yieldTick(cx, deadline); return; }
   run.phase = "decide";
+}
+
+// The runner's side of the 401 lookups (/autoprice/comp-feed.json, bearer =
+// AUTOPRICE_NTFY_TOKEN). GET: what to search, one line per listed product
+// that is compared with 401. POST {op:"put", at, rows:[{id, q, status,
+// results}]}: the answers, kept per product for the next runs.
+export async function compFeedOp(cx, b) {
+  const rep = (await cx.storage.get("ap:report")) || { rows: [] };
+  if (b && b.op === "put") {
+    const at = Number(b.at) > 0 ? Math.min(Number(b.at), cx.now()) : cx.now();
+    const listed = new Set((rep.rows || []).map((r) => r.id));
+    let stored = 0, ok = 0;
+    for (const row of (Array.isArray(b.rows) ? b.rows : []).slice(0, 500)) {
+      const id = String((row && row.id) || "");
+      if (!/^gid:\/\/shopify\/Product\/\d+$/.test(id) || !listed.has(id)) continue;
+      const status = Number(row.status) || 0;
+      await cx.storage.put("ap:cf:" + id, { at, status, q: String(row.q || "").slice(0, 200), results: (Array.isArray(row.results) ? row.results : []).slice(0, 10).map(trimCompResult) });
+      stored++; if (status === 200) ok++;
+    }
+    // A product taken off the list does not keep its copy forever.
+    try {
+      const old = [...(await cx.storage.list({ prefix: "ap:cf:" })).keys()].filter((k) => !listed.has(k.slice(6)));
+      if (old.length) await cx.storage.delete(old);
+    } catch {}
+    const meta = { at, received: cx.now(), stored, ok };
+    await cx.storage.put("ap:cf-meta", meta);
+    return { ok: true, ...meta };
+  }
+  const cfg = await configOf(cx);
+  const queries = [];
+  for (const r of rep.rows || []) {
+    if (r.graded || isGradedType(r.type)) continue;
+    const own = (r.settings && r.settings.comp) || "";
+    if (own === "skip" || (!own && cfg.compMode === "skip")) continue;
+    const q = compQuery(r.title);
+    if (q) queries.push({ id: r.id, q, url: compSearchUrl(q) });
+  }
+  return { ok: true, queries, last: (await cx.storage.get("ap:cf-meta")) || null };
 }
 
 async function phaseDecide(cx, run, cfg, deadline) {
@@ -1429,10 +1554,10 @@ async function setListed(cx, id, on, b) {
 /* ---- DO routes ---- */
 
 export async function statusOf(cx) {
-  const [run, cfg, report, runs, fx, audit] = await Promise.all([cx.storage.get("ap:run"), configOf(cx), cx.storage.get("ap:report"), cx.storage.get("ap:runs"), cx.storage.get("ap:fx"), cx.storage.get("ap:audit")]);
+  const [run, cfg, report, runs, fx, audit, compFeed] = await Promise.all([cx.storage.get("ap:run"), configOf(cx), cx.storage.get("ap:report"), cx.storage.get("ap:runs"), cx.storage.get("ap:fx"), cx.storage.get("ap:audit"), cx.storage.get("ap:cf-meta")]);
   let alarmAt = null; try { alarmAt = await cx.storage.getAlarm(); } catch {}
   return { ok: true, mode: cfg.mode, config: cfg, tokenConfigured: !!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN), pricecharting: !!(cx.env && cx.env.PRICECHARTING_TOKEN), ntfy: !!ntfyTarget(cx.env && cx.env.AUTOPRICE_NTFY),
-    emailDigest: digestEmailTo(cx.env),
+    emailDigest: digestEmailTo(cx.env), compFeed: compFeed || null,
     fx, alarmAt, run: run ? { startedAt: run.startedAt, finishedAt: run.finishedAt || null, phase: run.phase, done: !!run.done, ticks: run.ticks, products: run.products.length, priced: run.priced, written: run.written, skipped: run.skipped, errors: run.errors.slice(-8), error: run.error || null, apply: run.apply } : null,
     lastReportAt: report ? report.at : null, runs: runs || [], audit: (audit || []).slice(0, 40) };
 }
@@ -1529,6 +1654,7 @@ export async function autopriceDoFetch(cx, request, url) {
   // count only - the deploy smoke prints this, and a digest stored before
   // the email channel existed must not read as "no key").
   if (url.pathname === "/_ap/digest") return doJson({ ...(await digestOp(cx, request.method === "POST" ? await bodyOf(request) : null)), mode: cfg0.mode, emailTo: digestEmailTo(cx.env).length });
+  if (url.pathname === "/_ap/comp-feed") return doJson(await compFeedOp(cx, request.method === "POST" ? await bodyOf(request) : null));
   if (url.pathname === "/_ap/auth" && request.method === "POST") return doJson(await authOp(cx, await bodyOf(request)));
   return doJson({ ok: false, error: "not found" }, 404);
 }
@@ -1618,14 +1744,16 @@ export async function serveAutoprice(request, env, url, staffOk) {
   let account = null;
   try { account = await currentUser(request, env, url.origin); } catch {}
   const acctAccess = apPerms(account);
-  // The relay's door: bearer = AUTOPRICE_NTFY_TOKEN (a secret both the
-  // worker and the GitHub workflow hold), never the login session.
-  if (url.pathname === "/autoprice/digest.json") {
+  // The runners' door: bearer = AUTOPRICE_NTFY_TOKEN (a secret both the
+  // worker and the GitHub workflows hold), never the login session. The
+  // digest relay uses digest.json; the 401 Games runner comp-feed.json.
+  const RELAY = { "/autoprice/digest.json": "/_ap/digest", "/autoprice/comp-feed.json": "/_ap/comp-feed" };
+  if (RELAY[url.pathname]) {
     const bearer = String(request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
     const ok = !!env.AUTOPRICE_NTFY_TOKEN && !!bearer && (await safeEqual(bearer, String(env.AUTOPRICE_NTFY_TOKEN).trim()));
     if (!ok) return Response.json({ error: "relay token required" }, { status: 401, headers: { "cache-control": "no-store" } });
     const init = request.method === "POST" ? { method: "POST", headers: { "content-type": "application/json" }, body: await request.text() } : {};
-    const r = await stub.fetch(new Request(url.origin + "/_ap/digest", init));
+    const r = await stub.fetch(new Request(url.origin + RELAY[url.pathname], init));
     return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
   if (url.pathname === "/autoprice/login") {
@@ -1668,7 +1796,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
     // publish and record who did what.
     const need = CONTROL_NEEDS[String(body.action || "")];
     const keepQ = body.q && body.action !== "add" && body.action !== "remove";
-    const qsBase = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : ""].filter(Boolean);
+    const qsBase = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : "", body.view === "all" || body.view === "todo" ? "view=" + body.view : ""].filter(Boolean);
     if (need && !access[need]) {
       const why = "Your account may not do that (" + NEED_LABEL[need] + "). An admin can grant it on 9Pocket › Admin.";
       if (form) return html("", 303, { location: "/autoprice?" + [...qsBase, "flash=" + encodeURIComponent(why)].join("&") });
@@ -1687,10 +1815,11 @@ export async function serveAutoprice(request, env, url, staffOk) {
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
   const q = (url.searchParams.get("q") || "").slice(0, 120), game = (url.searchParams.get("game") || "").slice(0, 60), flash = (url.searchParams.get("flash") || "").slice(0, 200);
+  const pageView = /^(all|todo)$/.test(url.searchParams.get("view") || "") ? url.searchParams.get("view") : "";
   const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
-  return html(renderPage(status, report, { q, game, found, user: access.name, perms: access, configured, flash }));
+  return html(renderPage(status, report, { q, game, view: pageView, found, user: access.name, perms: access, configured, flash }));
 }
 
 // Which permission each control action needs (src/stage-auth.js AP_PERMS).
@@ -1711,6 +1840,22 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&"
 const when = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", hour12: false }) : "";
 const money = (n) => n == null ? "" : "$" + Number(n).toFixed(2);
 
+/* The staff page. Redesigned 2026-09-29 (owner: "the UI is a little bulky I
+   would like it redesigned to be easier to look at and work with"). What
+   changed, and why:
+     - It opens on what needs a person: the "Needs you" view lists staged
+       prices, alerts, variant choices and failed writes; "All" is one click.
+     - One line per product - today, suggested with its move, status, and
+       Publish / Keep right there. Everything else (the market working, 401
+       Games, the last change, the review links, the settings, PriceCharting's
+       shortlist) is one click down, in the row's own panel.
+     - Run now, Add products, page settings and the explanation are small
+       drop-downs in one row instead of four stacked sections; Activity and
+       Runs sit closed at the bottom.
+     - Warnings are one line each with the list folded under them.
+     - Light and dark, from the device setting; a phone gets cards.
+   Every form, field name and permission check is the same as before: the
+   room's control actions did not change. */
 export function renderPage(s, rep, view) {
   const cfg = s.config || DEFAULT_CONFIG;
   const v = view || {};
@@ -1721,15 +1866,32 @@ export function renderPage(s, rep, view) {
   const limitNote = [P.maxDrop != null ? "drop at most " + P.maxDrop + "%" : "", P.maxRaise != null ? "raise at most " + P.maxRaise + "%" : ""].filter(Boolean).join(", ");
   const all = (rep.rows || []).map((r) => ({ ...r, game: r.game || gameOf(r.type) }));
   const games = [...new Set(all.map((r) => r.game))].sort((a, b) => a.localeCompare(b));
-  const rows = all.filter((r) => !v.game || r.game === v.game).sort((a, b) => a.game.localeCompare(b.game) || (a.action === "skip") - (b.action === "skip") || String(a.title).localeCompare(String(b.title)));
-  const counts = {};
-  for (const r of rows) counts[r.action] = (counts[r.action] || 0) + 1;
-  // Two different warnings: a 401 follow that fell back, and a graded price
-  // PriceCharting cannot really support. They read nothing alike, so they get
-  // their own banners.
-  const alerted = rows.filter((r) => r.alert && !r.thin);
-  const thin = rows.filter((r) => r.thin);
-  const waiting = rows.filter((r) => r.awaiting);
+  const inGame = all.filter((r) => !v.game || r.game === v.game);
+  // "Needs you": a price waiting to be published, a warning, a variant to
+  // choose, a product no source could price, or a write that failed.
+  const needsYou = (r) => !!(r.awaiting || r.alert || r.action === "review" || r.action === "skip" || r.writeError);
+  const todo = inGame.filter(needsYou);
+  const viewMode = v.view === "all" || v.view === "todo" ? v.view : todo.length ? "todo" : "all";
+  const rank = (r) => (r.awaiting || r.action === "pending" ? 0 : r.alert || r.action === "review" || r.writeError ? 1 : r.action === "skip" ? 2 : 3);
+  const rows = inGame.filter((r) => viewMode === "all" || needsYou(r))
+    .sort((a, b) => a.game.localeCompare(b.game) || rank(a) - rank(b) || String(a.title).localeCompare(String(b.title)));
+  const waiting = inGame.filter((r) => r.awaiting);
+  // Three different warnings, each one line with its list folded under it:
+  // 401 Games could not be checked, a graded price PriceCharting cannot
+  // really support, and a 401 follow that fell back to TCGplayer.
+  const down = inGame.filter((r) => r.compDown);
+  const heldRows = down.filter((r) => r.held != null);
+  const thin = inGame.filter((r) => r.thin);
+  const alerted = inGame.filter((r) => r.alert && !r.thin && r.held == null);
+  const q = (s2) => encodeURIComponent(String(s2 || "").slice(0, 120));
+  const qs = (o) => { const p = Object.entries(o).filter(([, x]) => x).map(([k, x]) => k + "=" + encodeURIComponent(x)); return "/autoprice" + (p.length ? "?" + p.join("&") : ""); };
+  const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
+  const keepView = () => (v.game ? hidden("game", v.game) : "") + (v.q ? hidden("q", v.q) : "") + (v.view ? hidden("view", v.view) : "");
+  const ctlForm = (action, extra, label, cls, attrs) => `<form method="post" action="/autoprice/control" class="inl"${attrs || ""}>${hidden("action", action)}${keepView()}${extra}<button class="${cls || ""}">${label}</button></form>`;
+  const admin = (id) => "https://admin.shopify.com/store/most-wanted-ca/products/" + String(id || "").replace(/\D/g, "");
+  const whenShort = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+  const pctText = (x) => (x > 0 ? "+" : "") + x + "%";
+
   // One tab per game (owner, 2026-09-15): the count, then in brackets how
   // many rows could not be priced or written, and a warning when a row
   // carries a price alert (a 401 follow fell back, a write failed, or a
@@ -1740,25 +1902,22 @@ export function renderPage(s, rep, view) {
     return { n: list.length, errors, alerts, wait: list.filter((r) => r.awaiting).length };
   };
   const tab = (game, label, list) => {
-    const s = tabStats(list);
+    const t = tabStats(list);
     const on = (game == null && !v.game) || v.game === game;
-    return `<a href="/autoprice${game == null ? "" : "?game=" + encodeURIComponent(game)}" class="${on ? "on" : ""}${s.alerts ? " warn" : ""}" title="${s.n} listed${s.wait ? ", " + s.wait + " waiting to be published" : ""}${s.errors ? ", " + s.errors + " not priced" : ""}${s.alerts ? ", " + s.alerts + " price alert" + (s.alerts === 1 ? "" : "s") : ""}">${esc(label)} <span class="n">${s.n}</span>${s.wait ? ` <span class="wt">⏳ ${s.wait}</span>` : ""}${s.errors ? ` <span class="err">(${s.errors} error${s.errors === 1 ? "" : "s"})</span>` : ""}${s.alerts ? ` <span class="al">⚠ ${s.alerts}</span>` : ""}</a>`;
+    return `<a href="${esc(qs({ game: game || "", view: v.view || "" }))}" class="tab${on ? " on" : ""}${t.alerts ? " warn" : ""}" title="${t.n} listed${t.wait ? ", " + t.wait + " waiting to be published" : ""}${t.errors ? ", " + t.errors + " not priced" : ""}${t.alerts ? ", " + t.alerts + " price alert" + (t.alerts === 1 ? "" : "s") : ""}">${esc(label)} <span class="n">${t.n}</span>${t.wait ? ` <span class="wt" title="waiting to be published">⏳${t.wait}</span>` : ""}${t.errors ? ` <span class="err">(${t.errors} error${t.errors === 1 ? "" : "s"})</span>` : ""}${t.alerts ? ` <span class="al">⚠ ${t.alerts}</span>` : ""}</a>`;
   };
-  const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
-  const ctlForm = (action, extra, label, cls) => `<form method="post" action="/autoprice/control" class="inl">${hidden("action", action)}${v.game ? hidden("game", v.game) : ""}${v.q ? hidden("q", v.q) : ""}${extra}<button class="${cls || ""}">${label}</button></form>`;
-  // "2026-09-15, 18:05:12" -> "2026-09-15, 18:05" (slice(0,16) cut a digit off the minute).
-  const shortWhen = (ms) => esc(when(ms).replace(/:\d\d$/, ""));
-  const change = (c) => c ? `<span title="${esc(when(c.at))}">${shortWhen(c.at)}</span><div class="muted">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto" : c.who ? "by " + esc(c.who) : "by hand"}</div>` : '<span class="muted">—</span>';
-  const admin = (id) => "https://admin.shopify.com/store/most-wanted-ca/products/" + String(id || "").replace(/\D/g, "");
+
   // Owner: "add our margin to the line for each item based off its price and
   // suggested price" - profit and share of the price, under each of the two.
-  const marginLine = (m, price) => m ? `<div class="muted mg${m.amount < 0 ? " neg" : ""}" title="price ${money(price)} − cost: ${money(m.amount)} profit, ${m.pct}% of the price">margin ${money(m.amount)} · ${m.pct}%</div>` : price != null ? '<div class="muted" title="No unit cost on the variant in Shopify">margin: no cost</div>' : "";
+  const marginLine = (m, price, cost) => m ? `<div class="sub mg${m.amount < 0 ? " neg" : ""}" title="price ${money(price)} − cost ${money(cost)}: ${money(m.amount)} profit, ${m.pct}% of the price">margin ${money(m.amount)} · ${m.pct}%</div>` : price != null ? '<div class="sub" title="No unit cost on the variant in Shopify">margin: no cost</div>' : "";
   const srcLine = (x) => x.name === "tcgplayer" ? "TCG " + (x.kind && x.kind !== "market" ? x.kind + " " : "") + money(x.usd) + " US" : "PriceCharting " + (x.label ? x.label + " " : "") + money(x.usd) + " US";
-  // Settings, collapsed to one line that names only what differs from the
-  // page default; click opens the form (owner: "a little hard to look at").
-  const settingsBlock = (r) => {
+  const change = (c) => c ? `<div>${esc(whenShort(c.at))}</div><div class="sub">${money(c.from)} → ${money(c.to)} · ${c.by === "auto" ? "auto" : c.who ? "by " + esc(c.who) : c.by === "approved" ? "approved" : "by hand"}</div>` : '<div class="sub">no change seen yet</div>';
+
+  // Per-item settings (owner 2026-09-15: "alterations to the auto pricing
+  // settings on the per-item line"), named only where they differ from the
+  // page default.
+  const settingsSummary = (r) => {
     const st = r.settings || {};
-    const sel = (name, cur, opts) => `<select name="${name}">${opts.map(([val, l]) => `<option value="${esc(val)}"${String(cur == null ? "" : cur) === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
     const custom = [];
     if (r.anchor) custom.push("your price " + money(r.anchor.price) + " (×" + r.anchor.ratio + " of the market)");
     if (st.floor) custom.push("floor " + money(st.floor));
@@ -1767,44 +1926,44 @@ export function renderPage(s, rep, view) {
     if (st.comp) custom.push("401 " + ({ cap: "hold", off: "show only", skip: "skip", follow: "follow" }[st.comp] || st.comp));
     // the TCGplayer id is stored by every run, so it is not a "custom" setting here
     if (r.variantChosen && r.variantTitle) custom.push("variant " + r.variantTitle);
-    const summary = custom.length ? custom.join(" · ") : "page defaults";
-    if (!P.settings) return `<div class="muted" title="Per-item settings (your account cannot change them)">⚙ ${esc(summary)}</div>`;
+    return custom;
+  };
+  const settingsForm = (r) => {
+    const st = r.settings || {};
+    const sel = (name, cur, opts) => `<select name="${name}">${opts.map(([val, l]) => `<option value="${esc(val)}"${String(cur == null ? "" : cur) === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
     const vlist = r.variantList || [];
     // Which variant the price is for. Only shown when there is a choice to
     // make; "not chosen" keeps the row in review rather than pricing a
     // variant nobody picked.
     const variantField = vlist.length > 1
-      ? `<label title="This product has ${vlist.length} variants. The auto price is written to the one you pick here.">Price which variant ${sel("variant", st.variant, [["", "not chosen — leave in review"], ...vlist.map((x) => [x.id, (x.title || "variant") + (x.price != null ? " · " + money(x.price) : "") + " · stock " + x.stock])])}</label>`
+      ? `<label class="wide" title="This product has ${vlist.length} variants. The auto price is written to the one you pick here."><span>Price which variant</span>${sel("variant", st.variant, [["", "not chosen — leave in review"], ...vlist.map((x) => [x.id, (x.title || "variant") + (x.price != null ? " · " + money(x.price) : "") + " · stock " + x.stock])])}</label>`
       : "";
-    return `<details class="cfg"${vlist.length > 1 && !r.variantChosen ? " open" : ""}><summary title="Per-item settings: click to change">⚙ ${esc(summary)}</summary>
-<form method="post" action="/autoprice/control" class="setf">${hidden("action", "settings")}${hidden("id", r.id)}${v.game ? hidden("game", v.game) : ""}
+    return `<form method="post" action="/autoprice/control" class="setf">${hidden("action", "settings")}${hidden("id", r.id)}${keepView()}
 ${variantField}
-<label>Floor $<input type="number" step="0.01" min="0" name="floor" value="${esc(st.floor == null ? "" : st.floor)}" placeholder="cost+${esc(cfg.minMarginPct)}%"></label>
-<label>Markup %<input type="number" step="0.5" min="0" name="markupPct" value="${esc(st.markupPct == null ? "" : st.markupPct)}" placeholder="${esc(cfg.markupPct)}"${r.anchor ? " disabled title=\"Your own price is set, so the markup is not used\"" : ""}></label>
-<label title="Your own price for this card. It is pegged to today's market price and then moves with it: if the source falls 10%, so does this. Blank clears it and the markup takes over again.">Your price $<input type="number" step="0.01" min="0" name="anchor" value="${esc(st.anchor == null ? "" : st.anchor)}" placeholder="tracks market"></label>
-<label>Rounding ${sel("round", st.round, [["", "auto"], ["1", "$1 steps"], ["5", "$5 steps"], ["10", "$10 steps"], ["25", "$25 steps"], ["50", "$50 steps"], ["100", "$100 steps"], ["none", "none"]])}</label>
-<label>401 Games ${sel("comp", st.comp, [["", "page setting"], ["follow", "follow their price" + (cfg.compPct ? " +" + cfg.compPct + "%" : "") + " (TCGplayer only if they are out)"], ["cap", "hold to at most " + (cfg.compPct || 0) + "% above"], ["off", "show only"], ["skip", "skip"]])}</label>
-<label>TCGplayer id <input type="text" inputmode="numeric" name="tcgId" value="${esc(st.tcgId == null ? "" : st.tcgId)}" placeholder="auto" style="width:80px"></label>
-${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numeric" name="pcId" value="${esc(st.pcId == null ? "" : st.pcId)}" placeholder="auto" style="width:90px"></label>` : ""}
-<button class="sm">Save &amp; reprice</button><span class="muted">blank = page default</span></form></details>`;
+<label><span>Floor $</span><input type="number" step="0.01" min="0" name="floor" value="${esc(st.floor == null ? "" : st.floor)}" placeholder="cost+${esc(cfg.minMarginPct)}%"></label>
+<label><span>Markup %</span><input type="number" step="0.5" min="0" name="markupPct" value="${esc(st.markupPct == null ? "" : st.markupPct)}" placeholder="${esc(cfg.markupPct)}"${r.anchor ? " disabled title=\"Your own price is set, so the markup is not used\"" : ""}></label>
+<label title="Your own price for this product. It is pegged to today's market price and then moves with it: if the source falls 10%, so does this. Blank clears it and the markup takes over again."><span>Your price $</span><input type="number" step="0.01" min="0" name="anchor" value="${esc(st.anchor == null ? "" : st.anchor)}" placeholder="tracks market"></label>
+<label><span>Rounding</span>${sel("round", st.round, [["", "auto"], ["1", "$1 steps"], ["5", "$5 steps"], ["10", "$10 steps"], ["25", "$25 steps"], ["50", "$50 steps"], ["100", "$100 steps"], ["none", "none"]])}</label>
+<label class="wide"><span>401 Games</span>${sel("comp", st.comp, [["", "page setting"], ["follow", "follow their price" + (cfg.compPct ? " +" + cfg.compPct + "%" : "") + " (TCGplayer only if they are out)"], ["cap", "hold to at most " + (cfg.compPct || 0) + "% above"], ["off", "show only"], ["skip", "skip"]])}</label>
+<label><span>TCGplayer id</span><input type="text" inputmode="numeric" name="tcgId" value="${esc(st.tcgId == null ? "" : st.tcgId)}" placeholder="auto"></label>
+${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inputmode="numeric" name="pcId" value="${esc(st.pcId == null ? "" : st.pcId)}" placeholder="auto"></label>` : ""}
+<div class="wide formend"><button class="btn">Save &amp; reprice</button><span class="sub">blank = page default</span></div></form>`;
   };
   // Where to check a price by hand (owner 2026-09-16: "it should also open
   // somehow to the TCGplayer site for manual review"). TCGplayer by matched
   // id when there is one, else a search; PriceCharting's own page for the
-  // matched card; eBay's SOLD listings, which is what a graded price is
-  // really made of.
-  const q = (s2) => encodeURIComponent(String(s2 || "").slice(0, 120));
+  // matched card (its sales table carries the DATE of every sold copy per
+  // grade, which the API does not - owner 2026-09-22); eBay's SOLD listings,
+  // which is what a graded price is really made of.
   const reviewLinks = (r) => {
     const l = [];
     l.push(`<a href="${r.tcgId ? "https://www.tcgplayer.com/product/" + esc(r.tcgId) : "https://www.tcgplayer.com/search/all/product?q=" + q(r.title)}" target="_blank" rel="noopener">TCGplayer ↗</a>`);
-    // The matched card's own page when there is an id (pricecharting.com/game/<id>
-    // redirects to it, probe 35736867710): its sales table carries the DATE
-    // of every sold copy per grade, which the API does not (owner 2026-09-22:
-    // "warn if the date of the sold slab is old"). A search otherwise.
     if (r.pcId) l.push(`<a href="https://www.pricecharting.com/game/${esc(String(r.pcId).replace(/\D/g, ""))}" target="_blank" rel="noopener" title="PriceCharting's page for the matched card: sale dates per grade are under its price table">PriceCharting sales ↗</a>`);
     else if (r.pcName || r.graded) l.push(`<a href="https://www.pricecharting.com/search-products?type=prices&q=${q(r.pcName ? r.pcName.split(" · ")[0].replace(/^[^/]*\//, "") : r.title)}" target="_blank" rel="noopener">PriceCharting ↗</a>`);
     l.push(`<a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a>`);
-    return `<div class="links muted">check: ${l.join(" · ")}</div>`;
+    if (!r.graded) l.push(`<a href="${esc(COMP.base + (r.comp && r.comp.handle ? "/products/" + r.comp.handle : "/search?q=" + q(compQuery(r.title))))}" target="_blank" rel="noopener">${esc(COMP.name)} ↗</a>`);
+    l.push(`<a href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener">our page ↗</a>`);
+    return `<div class="links">${l.join("")}</div>`;
   };
   // The cards PriceCharting offered for a graded title, the chosen one first.
   // One click pins a different card and reprices, which is the fix when the
@@ -1812,28 +1971,15 @@ ${s.pricecharting ? `<label>PriceCharting id <input type="text" inputmode="numer
   const pcPicker = (r) => {
     const c = r.pcCandidates || [];
     if (!c.length) return "";
-    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="muted">' + esc(x.volume) + ' sales</span>' : ''}${x.chosen ? '<span class="pill">using</span>' : P.settings ? `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${v.game ? hidden("game", v.game) : ""}<button class="sm">use this</button></form>` : ""}</li>`;
+    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="sub">' + esc(x.volume) + " sales</span>" : ""}${x.chosen ? '<span class="badge b-hold">using</span>' : P.settings ? `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${keepView()}<button class="btn sm">use this</button></form>` : ""}</li>`;
     return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"}><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""}</summary><ul>${c.map(line).join("")}</ul></details>`;
-  };
-  // The staged change itself: the suggested price in a box the owner can
-  // type over, then Publish writes THAT number to the variant. Keep leaves
-  // today's price and remembers the refusal.
-  const publishBox = (r) => {
-    if (!r.awaiting) return r.kept ? `<div class="muted">kept ${money(r.current)}${r.kept.price ? " over " + money(r.kept.price) : ""}</div>` : "";
-    if (!P.publish) return '<div class="muted">waiting for someone who may publish</div>';
-    const lim = overLimit(r.current, r.suggested, P);
-    if (lim) return `<div class="muted neg" title="${esc(limitText(lim))}">${money(r.suggested)} is a ${Math.abs(lim.pct)}% ${lim.kind}: over your ${lim.limit}% limit, so an admin has to publish it</div>${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep " + money(r.current), "sm")}`;
-    return `<div class="pub"><form method="post" action="/autoprice/control" class="pubf">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${v.game ? hidden("game", v.game) : ""}
-<label>$<input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}"></label><button class="go">Publish</button>
-<label class="trk" title="Peg this price to today's market and let it move with the source from here: if the source falls 10%, this price falls 10% too."><input type="checkbox" name="anchor" value="1"${r.anchor ? " checked" : ""}> keep tracking from my price</label></form>
-${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep " + money(r.current), "sm")}</div>`;
   };
   // A hand-set price has to show its working: what it was pegged to, and how
   // far the source has moved since.
   const anchorLine = (r) => r.anchor
     ? `<div class="anch">your ${money(r.anchor.price)} pegged to ${money(r.anchor.market)}${r.anchorMovePct != null && Math.abs(r.anchorMovePct) >= 0.05 ? ` · source ${r.anchorMovePct > 0 ? "+" : ""}${r.anchorMovePct}% since` : " · source unchanged"}${r.raw != null ? ` → ${money(r.raw)}` : ""}</div>`
     : "";
-  const floorLine = (r) => `<div class="muted">${r.floor ? "floor " + money(r.floor) + " (" + esc(r.floorSrc) + ")" : ""}</div>`;
+  const floorLine = (r) => r.floor ? `<div class="muted">floor ${money(r.floor)} (${esc(r.floorSrc)})</div>` : "";
   const srcLines = (r) => (r.sources || []).map(srcLine).map(esc).join("<br>");
   // What is behind a graded number: how many sales PriceCharting has seen and
   // what it says the card is worth ungraded. A grade at or under the ungraded
@@ -1841,54 +1987,172 @@ ${ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep "
   const pcDepth = (r) => r.graded && (r.pcVolume != null || r.pcLoose != null)
     ? `<div class="muted${r.thin ? " neg" : ""}">${r.pcVolume != null ? esc(r.pcVolume) + " recorded sale" + (r.pcVolume === 1 ? "" : "s") : "sales unknown"}${r.pcLoose ? " · ungraded " + money(r.pcLoose) + " US" : ""}</div>`
     : "";
-  // Following 401 Games: their price leads the cell and TCGplayer is shown
-  // as not used; otherwise the market path as before.
+  // Following 401 Games: their price leads and TCGplayer is shown as not
+  // used; otherwise the market path.
   const mktCell = (r) => r.priceFrom === COMP.key && r.comp
     ? `<b>${esc(COMP.name)} ${money(r.comp.price)}</b>${r.compPct && !r.anchor ? " +" + r.compPct + "% = " + money(r.raw) : ""}<div class="muted">followed · TCGplayer not used${(r.sources || []).length ? ": " + srcLines(r).replace(/<br>/g, ", ") + (r.marketCad != null ? " = " + money(r.marketCad) + " CAD" : "") : " (no match)"}</div>${anchorLine(r)}${floorLine(r)}`
     : (r.sources || []).length ? srcLines(r) + pcDepth(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${anchorLine(r)}${floorLine(r)}` : '<span class="muted">no source</span>';
-  const row = (r) => `<tr class="a-${esc(r.action)}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}">
-<td class="prod"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> <a class="muted" href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener" title="storefront page">site ↗</a>
-<div class="muted">stock ${r.stock}${r.variantChosen && r.variantTitle ? " · variant: " + esc(r.variantTitle) : r.variants > 1 ? " · " + r.variants + " variants" : ""}${r.tcgName ? " · matched: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : ""}${r.pcName ? " · PC: " + esc(r.pcName) : ""}</div>${r.action === "pending" ? "" : reviewLinks(r) + pcPicker(r) + settingsBlock(r)}</td>
-<td class="num c-today" data-l="Today"><b>${money(r.current)}</b><div class="muted">cost ${r.cost != null ? money(r.cost) : "—"}</div>${marginLine(r.marginNow, r.current)}</td>
-<td class="mkt c-mkt" data-l="Market">${mktCell(r)}</td>
-<td class="num sug c-sug" data-l="Suggested">${r.suggested != null ? "<b>" + money(r.suggested) + "</b>" : '<span class="muted">—</span>'}${marginLine(r.marginSuggested, r.suggested)}</td>
-<td class="c-act" data-l="Action"><span class="pill">${r.awaiting ? "waiting" : esc(r.action)}${r.applied ? " ✓" : ""}</span>${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}<div class="muted">${esc(r.reason)}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>${publishBox(r)}</td>
-<td class="num c-comp" data-l="${esc(COMP.name)}">${r.comp ? `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener">${money(r.comp.price)}</a><div class="muted">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</div>` : `<span class="muted" title="${esc(r.compMiss || "")}">${r.compMiss ? (/^skipped/.test(r.compMiss) ? "skipped" : "not carried") : "—"}</span>`}</td>
-<td class="c-last" data-l="Last change">${change(r.lastChange)}</td>
-<td class="rm">${P.settings ? ctlForm("remove", hidden("id", r.id), "×", "sm x") : ""}</td></tr>`;
-  let groupRows = "", lastGame = null;
+  const matchLine = (r) => [r.tcgName ? "TCGplayer: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : "", r.pcName ? "PriceCharting: " + esc(r.pcName) : ""].filter(Boolean).map((x) => `<div class="muted">${x}</div>`).join("");
+  const compCell = (r) => {
+    if (r.comp) return `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener"><b>${money(r.comp.price)}</b></a> <span class="sub">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</span>${r.comp.via === "runner" && r.comp.at ? `<div class="sub">checked from GitHub ${esc(whenShort(r.comp.at))}</div>` : ""}`;
+    const couldNot = r.compDown || (/^could not check: /.test(r.compMiss || "") ? r.compMiss.replace(/^could not check: /, "") : "");
+    if (couldNot) return `<div class="warn-t">could not check</div><div class="sub">${esc(couldNot)}</div>`;
+    return `<div class="sub" title="${esc(r.compMiss || "")}">${r.compMiss ? (/^skipped|^graded/.test(r.compMiss) ? "not compared" : "not carried") : "—"}</div>`;
+  };
+  // The staged change itself: the suggested price in a box the owner can
+  // type over, then Publish writes THAT number to the variant. Keep leaves
+  // today's price and remembers the refusal.
+  const lim = (r) => r.awaiting && P.publish ? overLimit(r.current, r.suggested, P) : null;
+  const quickAct = (r) => {
+    if (!r.awaiting) return r.kept ? `<div class="sub">kept ${money(r.current)}${r.kept.price ? " over " + money(r.kept.price) : ""}</div>` : "";
+    if (!P.publish) return '<div class="sub">waiting for someone who may publish</div>';
+    const l = lim(r);
+    const keep = ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep " + money(r.current), "btn ghost sm", ` title="Leave today's price; ${esc(money(r.suggested))} will not be offered again"`);
+    if (l) return `<div class="sub neg" title="${esc(limitText(l))}">${money(r.suggested)} is a ${Math.abs(l.pct)}% ${l.kind}: over your ${l.limit}% limit, so an admin has to publish it</div>${keep}`;
+    return `<form method="post" action="/autoprice/control" class="pubf">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${keepView()}<label class="px"><span>$</span><input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}" aria-label="Price to publish"></label><button class="btn go">Publish</button></form>${keep}`;
+  };
+  // In the panel: the same Publish, with the option to keep tracking the
+  // source from the published price (owner, 2026-09-17).
+  const trackAct = (r) => {
+    if (!r.awaiting || !P.publish || lim(r)) return "";
+    return `<form method="post" action="/autoprice/control" class="pubf track">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${keepView()}<span>Publish at</span><label class="px"><span>$</span><input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}"></label><label class="trk" title="Peg this price to today's market and let it move with the source from here: if the source falls 10%, this price falls 10% too."><input type="checkbox" name="anchor" value="1"${r.anchor ? " checked" : ""}> keep tracking from my price</label><button class="btn go">Publish</button></form>`;
+  };
+  const status = (r) => r.awaiting ? ["wait", "Waiting"] : r.action === "pending" ? ["pend", "Pricing…"] : r.writeError ? ["bad", "Write failed"] : r.action === "skip" ? ["skip", "Skipped"]
+    : r.action === "review" ? ["skip", "Choose variant"] : r.kept ? ["hold", "Kept"] : r.applied ? ["ok", "Published ✓"] : r.held != null ? ["skip", "Held"]
+    : r.action === "raise" ? ["up", "Raise"] : r.action === "lower" ? ["down", "Lower"] : r.action === "set" ? ["up", "Set"] : r.alert ? ["skip", "Check"] : ["hold", "No change"];
+  // A row that is already right says so once, not three times.
+  const upToDate = (r) => !r.awaiting && !r.kept && r.held == null && r.suggested != null && r.current > 0 && Math.abs(r.suggested - r.current) < 0.005;
+  // The line's one-line "why": the sources behind a suggestion rather than
+  // the bare word "market"; the full reason is in the panel.
+  const why = (r) => {
+    if (r.held != null) return (r.held > r.current ? "raise" : "drop") + " to " + money(r.held) + " waits for " + COMP.name;
+    if (upToDate(r) && !r.applied) return "";
+    if (r.reason === "market") return (r.sources || []).map((x) => x.name === "tcgplayer" ? "TCGplayer" + (x.kind && x.kind !== "market" ? " " + x.kind : "") : "PriceCharting" + (x.label ? " " + x.label : "")).join(" + ") + (r.markupPct ? " +" + r.markupPct + "%" : "");
+    return r.reason || "";
+  };
+  const sugCell = (r) => {
+    if (upToDate(r)) return `<span class="sub" title="${esc(r.reason || "")}">up to date</span>`;
+    if (r.held != null) return `<b class="same">${money(r.suggested)}</b><div class="sub" title="The market alone says ${esc(money(r.held))}; that waits until ${esc(COMP.name)} can be compared">held</div>`;
+    if (r.suggested == null) return '<span class="sub">—</span>';
+    const d = r.current > 0 && Math.abs(r.suggested - r.current) > 0.004 ? pctMove(r.current, r.suggested) : null;
+    if (d == null && r.current > 0) return `<b class="same">${money(r.suggested)}</b><div class="sub">no change</div>`;
+    return `<b>${money(r.suggested)}</b>${d != null ? ` <span class="chg ${d > 0 ? "up" : "down"}">${pctText(d)}</span>` : ""}${marginLine(r.marginSuggested, r.suggested, r.cost)}`;
+  };
+  const item = (r) => {
+    const [sk, sl] = status(r);
+    const custom = settingsSummary(r);
+    const meta = [
+      !v.game && games.length > 1 ? esc(r.game) : "",
+      "stock " + esc(r.stock == null ? "?" : r.stock),
+      r.variantChosen && r.variantTitle ? "variant " + esc(r.variantTitle) : r.variants > 1 ? esc(r.variants) + " variants" : "",
+      r.comp && !r.graded ? esc(COMP.name) + " " + money(r.comp.price) + (r.comp.available ? "" : " (out)") : r.compDown ? '<span class="warn-t">401 not checked</span>' : "",
+      custom.length ? `<span title="${esc(custom.join(" · "))}">⚙ ${esc(custom[0])}${custom.length > 1 ? " +" + (custom.length - 1) : ""}</span>` : "",
+    ].filter(Boolean).join(" · ");
+    const pending = r.action === "pending";
+    const openPanel = !pending && (r.variantList || []).length > 1 && !r.variantChosen;
+    const panel = pending ? "" : `<details class="more"${openPanel ? " open" : ""}><summary title="Details, settings and links"><svg class="chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="vh">Details</span></summary><div class="panel">
+<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}${r.reason && r.reason !== "market" || r.writeError ? `<div class="muted rsn">${r.reason && r.reason !== "market" ? esc(r.reason) : ""}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>` : ""}${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}</section>
+<section><h4>Today</h4><div><b>${money(r.current)}</b> <span class="sub">cost ${r.cost != null ? money(r.cost) : "—"}</span></div>${marginLine(r.marginNow, r.current, r.cost)}<h4>${esc(COMP.name)}</h4>${compCell(r)}<h4>Last change</h4>${change(r.lastChange)}<h4>Check by hand</h4>${reviewLinks(r)}</section>
+<section class="setsec"><h4>Settings <span class="sub">${esc(custom.length ? custom.join(" · ") : "page defaults")}</span></h4>${P.settings ? settingsForm(r) : '<div class="sub">your account cannot change them</div>'}</section>
+${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
+</div></details>`;
+    return `<article class="item s-${sk}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}" data-q="${esc(String(r.title + " " + r.game).toLowerCase())}">
+<div class="line"><div class="c-prod"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div>
+<div class="c-now num" data-l="Today"><b>${money(r.current)}</b>${marginLine(r.marginNow, r.current, r.cost)}</div>
+<div class="c-sug num" data-l="Suggested">${sugCell(r)}</div>
+<div class="c-st" data-l="Status">${upToDate(r) && !r.applied && !r.alert ? "" : `<span class="badge b-${sk}">${esc(sl)}</span><div class="sub two" title="${esc(r.reason || "")}">${esc(why(r))}</div>`}</div>
+<div class="c-act">${quickAct(r)}</div></div>${panel}</article>`;
+  };
+  let list = "", lastGame = null;
+  const grouped = !v.game && games.length > 1;
   for (const r of rows) {
-    if (r.game !== lastGame) { lastGame = r.game; groupRows += `<tr class="grp"><td colspan="8">${esc(r.game)} <span class="muted">· ${rows.filter((x) => x.game === r.game).length}</span></td></tr>`; }
-    groupRows += row(r);
+    if (grouped && r.game !== lastGame) { lastGame = r.game; list += `<h3 class="grp">${esc(r.game)} <span>${rows.filter((x) => x.game === r.game).length}</span></h3>`; }
+    list += item(r);
   }
+  if (!rows.length) list = `<div class="empty">${viewMode === "todo" && inGame.length ? `Nothing needs you right now: ${inGame.length} product${inGame.length === 1 ? " is" : "s are"} priced. <a href="${esc(qs({ game: v.game || "", view: "all" }))}">Show all</a>` : "No products yet." + (P.settings ? " Use <b>＋ Add products</b> above" + (P.config ? ", then Run now." : ".") : "")}</div>`;
+
   const run = s.run || {};
   const found = v.found;
-  const foundRows = found && found.results ? found.results.map((f) => `<tr><td><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="muted">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${f.stock}</div></td><td>${money(f.price)}</td><td>${f.listed ? '<span class="pill">in the list</span>' : !P.settings ? "" : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add to auto-pricing", "add")}</td></tr>`).join("") : "";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sealed auto-pricing</title>
-<style>body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;color:#1d2327;background:#f4f6f7}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}.muted{color:#6b7780;font-size:12px}.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#fde68a;color:#5b4300;font-weight:600;font-size:12px;vertical-align:middle;margin-left:8px}.tag.apply{background:#fecaca;color:#7f1d1d}table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde3e7;border-radius:10px;overflow:hidden;font-size:13px}th{text-align:left;padding:8px 10px;background:#eef2f4;font-weight:600}td{padding:7px 10px;border-top:1px solid #eef2f4;vertical-align:top}tr.grp td{background:#f8fafb;font-weight:700;font-size:13.5px;padding:9px 10px}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#e5e7eb;font-weight:600;font-size:12px}tr.a-raise .pill{background:#dcfce7;color:#14532d}tr.a-lower .pill{background:#fee2e2;color:#7f1d1d}tr.a-skip .pill,tr.a-review .pill{background:#fef3c7;color:#78350f}tr.a-pending .pill{background:#dbeafe;color:#1e3a8a}table.rep{table-layout:fixed}table.rep th:nth-child(1){width:30%}table.rep th:nth-child(2),table.rep th:nth-child(4){width:8%}table.rep th:nth-child(3){width:16%}table.rep th:nth-child(5){width:14%}table.rep th:nth-child(6){width:9%}table.rep th:nth-child(7){width:11%}table.rep th:nth-child(8){width:4%}table.rep td{padding:9px 10px;line-height:1.35}table.rep tbody tr:nth-child(even):not(.grp) td{background:#fafbfc}td.num{white-space:nowrap}td.sug b{font-size:15px}.mg{margin-top:2px}.mg.neg{color:#b91c1c;font-weight:600}.warn{color:#b45309;font-weight:600;font-size:12px;margin-top:3px}tr.alerted td:first-child{box-shadow:inset 4px 0 #f59e0b}.alert{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.tag.stage{background:#dbeafe;color:#1e3a8a}.stagebox{background:#eff6ff;border:1px solid #60a5fa;color:#1e3a8a;border-radius:10px;padding:10px 14px;margin:8px 0 12px}.stageact{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}button.go{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}button.go:hover{background:#0a6650}tr.awaiting .pill{background:#dbeafe;color:#1e3a8a}.pub{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pubf{display:flex;gap:6px;align-items:center;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 6px}.pubf input{width:92px;font-size:14px;padding:3px 5px}.pubf label{display:flex;gap:2px;align-items:center;font-weight:700;color:#1e3a8a}.anch{margin-top:3px;color:#1e3a8a;font-size:12px;font-weight:600}.trk{display:flex;gap:5px;align-items:center;font-size:12px;color:#4b5563;font-weight:600}.trk input{margin:0}.links{margin-top:3px}.links a{font-size:12px}details.cands{margin-top:4px}details.cands summary{cursor:pointer;font-size:12px;color:#6b7780}details.cands ul{margin:5px 0 0;padding:0;list-style:none;font-size:12px}details.cands li{padding:3px 0;border-top:1px solid #eef2f4;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}details.cands li.on{font-weight:600}details.cands .cn{color:#6b7780}.tabs a .wt{display:inline-block;padding:0 7px;border-radius:99px;background:#dbeafe;color:#1e3a8a;font-size:12px;font-weight:700}.alert ul{margin:6px 0 0;padding-left:20px}.alert a{color:#78350f}.flash{background:#dcfce7;border:1px solid #16a34a;color:#14532d;border-radius:10px;padding:8px 12px;margin:8px 0;font-weight:600}.flash.bad{background:#fee2e2;border-color:#dc2626;color:#7f1d1d}.who{margin:4px 0 10px;font-size:13px;color:#4b5563}.muted.neg{color:#b91c1c;font-weight:600}button.lnk{border:0;background:transparent;color:#0d7a5f;font:inherit;padding:0;cursor:pointer;text-decoration:underline}.ctl form.inl{display:inline;border:0;background:transparent;padding:0}td.prod .ttl{font-weight:600;color:#0d7a5f}td.prod .muted{margin-top:2px}details.cfg{margin-top:5px}details.cfg summary{cursor:pointer;font-size:12px;color:#6b7780;list-style:none}details.cfg summary::-webkit-details-marker{display:none}details.cfg summary:hover{color:#1d2327}details.cfg[open] summary{color:#1d2327;margin-bottom:6px}.setf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:#4b5563;background:#f4f6f7;border-radius:8px;padding:8px 10px}.setf input[type=number]{width:80px}.setf select{font-size:12.5px}button.x{border:0;background:transparent;color:#9aa4ab;font-size:18px;line-height:1;cursor:pointer}button.x:hover{color:#d62c28}.mkt{font-size:12.5px}.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}.ctl form,.box{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #dde3e7;border-radius:10px;padding:8px 10px}input[type=number]{width:70px}input[type=search]{flex:1;min-width:220px;padding:7px 10px;border:1px solid #c9d1d6;border-radius:8px;font-size:14px}a{color:#0d7a5f}.wrap{max-width:1360px;margin:0 auto}.inl{display:inline}button.sm{font-size:12px;padding:2px 8px}button.add{background:#0d7a5f;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 0;border-bottom:2px solid #dde3e7}.tabs a{display:inline-block;padding:8px 14px;margin-bottom:-2px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:10px 10px 0 0;color:#4b5563;text-decoration:none;font-size:14px;font-weight:600}.tabs a:hover{background:#eef2f4}.tabs a.on{background:#fff;color:#1d2327;border-color:#dde3e7 #dde3e7 #fff}.tabs a .n{color:#6b7780;font-weight:500}.tabs a .err{color:#b91c1c;font-weight:600;font-size:12.5px}.tabs a .al{display:inline-block;padding:0 7px;border-radius:99px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}.tabs a.warn:not(.on){border-bottom-color:#f59e0b}table.rep{border-top-left-radius:0}.how,.setbox{margin:0 0 10px}.how>summary,.setbox>summary{cursor:pointer;list-style:none;display:inline-block;padding:5px 12px;border:1px solid #dde3e7;border-radius:999px;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600}.how>summary::-webkit-details-marker,.setbox>summary::-webkit-details-marker{display:none}.how>summary::after,.setbox>summary::after{content:" \\25be"}.how[open]>summary::after,.setbox[open]>summary::after{content:" \\25b4"}.how>p{margin:8px 0 0}.setwrap{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.setbox{flex:1 1 100%}/* Phones (owner, 2026-09-15: the eight-column report was unreadable on a phone - headings overlapped and values broke one character per line). Each row becomes a card: title across the top, today beside suggested, then what was decided, the market working, the competitor and the last change. Other tables scroll sideways. */@media (max-width:760px){body{padding:12px 12px 28px}.wrap{max-width:none}h1{font-size:19px;line-height:1.3}h2{font-size:15px;margin:18px 0 6px}.tag{display:inline-block;margin:6px 6px 0 0}.ctl form,.box{flex-wrap:wrap;width:100%;box-sizing:border-box}.ctl form label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}input[type=search]{min-width:0;width:100%;font-size:16px}.tabs{border-bottom:0;gap:6px;margin:10px 0 12px}.tabs a{margin:0;padding:7px 12px;border:1px solid #dde3e7;border-radius:999px;font-size:13px}.tabs a.on{background:#1d2327;color:#fff;border-color:#1d2327}.tabs a.on .n{color:rgba(255,255,255,.75)}.tabs a.on .err{color:#fca5a5}.tabs a.on .al{background:rgba(255,255,255,.18);color:#fde68a}.tabs a.warn:not(.on){border-color:#f59e0b}table:not(.rep){display:block;overflow-x:auto;white-space:nowrap}table.rep,table.rep tbody{display:block;table-layout:auto;border:0;background:transparent;border-radius:0;overflow:visible}table.rep thead{display:none}table.rep tr{display:block}table.rep tr.grp{background:transparent;padding:6px 2px 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7780}table.rep tr.grp td{display:block;padding:0;border:0;background:transparent!important}table.rep tr:not(.grp){position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:#fff;border:1px solid #dde3e7;border-radius:12px;margin:0 0 10px;padding:12px 14px}table.rep tr.alerted:not(.grp){border-left:4px solid #f59e0b}table.rep tbody tr:nth-child(even):not(.grp) td{background:transparent}table.rep td{display:block;min-width:0;padding:0;border:0;white-space:normal;text-align:left;background:transparent}table.rep td[data-l]::before{content:attr(data-l);display:block;margin-bottom:1px;color:#6b7780;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}table.rep td.prod{grid-column:1/-1;order:1;padding:0 26px 8px 0;border-bottom:1px solid #eef2f4}table.rep td.c-today{order:2}table.rep td.c-sug{order:3}table.rep td.c-act{grid-column:1/-1;order:4}table.rep td.c-mkt{grid-column:1/-1;order:5;font-size:12.5px}table.rep td.c-comp{order:6}table.rep td.c-last{order:7}table.rep td.rm{position:absolute;top:8px;right:10px;order:8}table.rep tr.alerted td:first-child{box-shadow:none}td.prod .ttl{font-size:15px;line-height:1.3}td.sug b{font-size:16px}.setf label{display:flex;gap:8px;align-items:center;width:100%;justify-content:space-between}.alert ul{padding-left:18px}.pub{gap:8px}.pubf{flex:1 1 100%;justify-content:space-between;padding:6px 8px}.pubf input{width:100%;font-size:16px}.pubf label{flex:1}button.go{padding:8px 14px}.stageact form,.stageact button{width:100%}details.cands li{gap:4px}}</style></head><body><div class="wrap">
-<h1>Sealed auto-pricing <span class="tag ${esc(s.mode)}">${esc(MODE_LABEL[s.mode] || s.mode)}</span>${v.configured ? "" : '<span class="tag" style="background:#fee2e2;color:#7f1d1d">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
-<details class="how"><summary>How this works</summary><p class="muted"><b>Staged</b> is the safe mode: a run works out every price, writes nothing, and parks each change here with its number in a box — correct it, then Publish, and only then does it reach the shop. <b>Keep</b> leaves today's price and that suggestion is not offered again until it moves. <b>Apply</b> writes prices itself; <b>shadow</b> writes nothing at all. Only products in the list (the <b>auto-price</b> tag) are read. Per-product settings live on the product page under Metafields: Auto-price floor, markup %, rounding, and the matched TCGplayer / PriceCharting ids. Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ntfy digest ${s.ntfy ? "on: every nightly run pushes its price changes, moves of " + esc(cfg.alertPct) + "% or more first and at high priority; when ntfy.sh refuses the worker (free plan, shared IP) the GitHub relay sends it at 22:50 UTC" : "off (add the AUTOPRICE_NTFY repo secret: a topic name on ntfy.sh, or a full topic URL; AUTOPRICE_NTFY_TOKEN if the server needs one)"}. Email digest ${(s.emailDigest || []).length ? "on: the same digest goes to " + esc((s.emailDigest || []).join(", ")) + " as soon as the run finishes, so nothing waits on ntfy" : "off (it needs the RESEND_API_KEY repo secret, the one 9Pocket's customer mail uses; AUTOPRICE_EMAIL_TO chooses who gets it, otherwise it goes to the store's admin address)"}.</p></details>
+  const foundRows = found && found.results ? found.results.map((f) => `<li><div><a href="${esc(admin(f.id))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="sub">${esc(f.type)} · UPC ${esc(f.barcode || "none")} · stock ${esc(f.stock)} · ${money(f.price)}</div></div>${f.listed ? '<span class="badge b-hold">in the list</span>' : !P.settings ? "" : ctlForm("add", hidden("id", f.id) + hidden("title", f.title) + hidden("handle", f.handle) + hidden("type", f.type) + hidden("price", f.price == null ? "" : f.price) + hidden("stock", f.stock == null ? "" : f.stock), "Add", "btn go sm")}</li>`).join("") : "";
+  const runErrors = run.errors || [];
+  const runLine = run.startedAt ? `Last run ${esc(whenShort(run.startedAt))}${run.done ? "" : " · running (" + esc(run.phase) + ")"} · ${esc(run.products)} listed · ${esc(run.priced)} priced${run.written ? " · " + esc(run.written) + " written" : ""}${run.skipped ? " · " + esc(run.skipped) + " skipped" : ""}` : "No run yet";
+  const nextLine = s.alarmAt ? " · next " + esc(whenShort(s.alarmAt)) : "";
+  const fxLine = s.fx ? ` · FX ${esc(s.fx.rate)}` : "";
+  const modeName = { stage: "Staged", shadow: "Shadow", apply: "Apply" }[s.mode] || s.mode;
+  const modeTip = MODE_LABEL[s.mode] || s.mode;
+  const feed = s.compFeed;
+  const help = `<p><b>Staged</b> is the safe mode: a run works out every price, writes nothing, and parks each change here with its number in a box — correct it, then Publish, and only then does it reach the shop. <b>Keep</b> leaves today's price and that suggestion is not offered again until it moves. <b>Apply</b> writes prices itself; <b>shadow</b> writes nothing at all.</p><p>Only products in the list (the <b>auto-price</b> tag) are read. A price is the TCGplayer market (PriceCharting for graded cards) in CAD, plus the markup, never under the floor (cost + ${esc(cfg.minMarginPct)}% unless a product sets its own), held to ${esc(COMP.name)}'s in-stock price when the page says so, then rounded to a price ending in .95. Click a row for its working, its settings and links to check it by hand.</p><p>Nightly at 19:30 Atlantic, after TCGplayer's data refreshes. FX ${s.fx ? esc(s.fx.rate) + " (Bank of Canada, " + esc(s.fx.date) + ")" : "not fetched yet"}. PriceCharting ${s.pricecharting ? "on" : "off (no PRICECHARTING_TOKEN secret; TCGplayer only)"}. ${esc(COMP.name)} prices come straight from their site when it answers, otherwise from the GitHub check at 08:05 and 18:05 Atlantic${feed && feed.at ? " (last: " + esc(whenShort(feed.at)) + ", " + esc(feed.ok) + " of " + esc(feed.stored) + " answered)" : ""}. ntfy digest ${s.ntfy ? "on" : "off (add the AUTOPRICE_NTFY repo secret)"}. Email digest ${(s.emailDigest || []).length ? "on, to " + esc((s.emailDigest || []).join(", ")) : "off (needs the RESEND_API_KEY repo secret)"}.</p>`;
+  const pageSettings = P.config ? `<details class="drop right"><summary class="btn ghost">Page settings</summary><div class="dd">
+<form method="post" action="/autoprice/control" class="modef" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product itself, with nothing waiting for you.')">${hidden("action", "mode")}${keepView()}<label title="Staged is the safe middle: the run works out every price and parks it here until you publish it."><span>Mode</span><select name="mode"><option value="stage"${s.mode === "stage" ? " selected" : ""}>staged — I publish each change</option><option value="shadow"${s.mode === "shadow" ? " selected" : ""}>shadow — report only</option><option value="apply"${s.mode === "apply" ? " selected" : ""}>apply — write prices automatically</option></select></label><button class="btn">Save mode</button></form>
+<form method="post" action="/autoprice/control" class="setf">${hidden("action", "config")}${keepView()}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own markup overrides it."><span>Markup on top of market %</span><input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher."><span>Min margin over cost %</span><input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit."><span>Max move per run % (0 = off)</span><input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label class="wide" title="Follow: 401 Games' in-stock price (plus the percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged. Hold: the TCGplayer price is held to at most the percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up."><span>401 Games</span><select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select></label><label title="The percent above their in-stock price (hold) or on top of it (follow)."><span>% above their in-stock price</span><input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"></label><label title="Price moves of at least this percent are flagged first in the digest and lift it to high priority. 0 = never flag."><span>Flag moves of % or more</span><input type="number" step="1" name="alertPct" value="${esc(cfg.alertPct == null ? 10 : cfg.alertPct)}"></label><label title="A graded card whose PriceCharting entry has fewer recorded sales than this is flagged: their grade ladder for a thinly traded card is estimated, not sold. 0 = never flag."><span>Flag graded cards under N sales</span><input type="number" step="1" name="minSales" value="${esc(cfg.minSales == null ? 25 : cfg.minSales)}"></label><div class="wide formend"><button class="btn">Save</button></div></form>
+${s.ntfy || (s.emailDigest || []).length ? ctlForm("ntfy-test", "", "Send test digest", "btn ghost sm") : ""}</div></details>` : "";
+  const addPanel = P.settings ? `<details class="drop"${v.q ? " open" : ""}><summary class="btn ghost">＋ Add products</summary><div class="dd">
+<h2 class="vh">Add products</h2><form method="get" action="/autoprice" class="find">${v.game ? hidden("game", v.game) : ""}${v.view ? hidden("view", v.view) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name"><button class="btn">Search</button></form>
+${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing matched "' + esc(found.q) + '"</li>'}</ul><p class="sub">Add prices the product straight away; it shows in the list within a few seconds.</p>` : `<p class="sub">search failed: ${esc(found.error)}</p>`) : '<p class="sub">Sealed and graded products only. Digits search the barcode.</p>'}</div></details>` : "";
+  const banner = (cls, title, items) => `<details class="banner ${cls}"><summary>${title}</summary><ul>${items}</ul></details>`;
+  const downBanner = down.length ? banner("warn", `<b>⚠ ${esc(COMP.name)} could not be checked for ${down.length} product${down.length === 1 ? "" : "s"}</b>${heldRows.length ? " — " + heldRows.length + " price change" + (heldRows.length === 1 ? " is" : "s are") + " held until it can, so none of them goes above their price unseen" : ""}`,
+    down.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.compDown)}${r.held != null ? " · held at " + money(r.current) + " (market alone says " + money(r.held) + ")" : ""}</li>`).join("")) : "";
+  const thinBanner = thin.length ? banner("warn", `<b>⚠ ${thin.length} graded card${thin.length === 1 ? "" : "s"} priced from a PriceCharting estimate</b> — for a thinly traded card they model the grades off the ungraded price, so check the sold listings`,
+    thin.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.suggested != null ? " · suggested " + money(r.suggested) : ""} · <a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a></li>`).join("")) : "";
+  const followBanner = alerted.length ? banner("warn", `<b>⚠ ${alerted.length} product${alerted.length === 1 ? "" : "s"} set to follow ${esc(COMP.name)} ${alerted.length === 1 ? "is" : "are"} priced from TCGplayer instead</b> (out of stock or not listed there)`,
+    alerted.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.action === "skip" ? " · <b>skipped: " + esc(r.reason) + "</b>" : r.suggested != null ? " · now " + money(r.current) + " → " + money(r.suggested) : ""}</li>`).join("")) : "";
+  const pubAll = waiting.length && P.publish ? ctlForm("publish-all", "", "Publish all " + waiting.length, "btn go", ` onsubmit="return confirm('Publish ${waiting.length} price${waiting.length === 1 ? "" : "s"} at the suggested price? They go live in the shop at once.')" title="Every waiting price${v.game ? " in the " + esc(v.game) + " tab" : ""} at its suggested number, up to 25 a press${limitNote ? "; moves over your limit (" + esc(limitNote) + ") are left waiting" : ""}"`) : "";
+  const chip = (key, label, n) => `<a class="seg${viewMode === key ? " on" : ""}" href="${esc(qs({ game: v.game || "", view: key }))}">${label} <span class="n">${n}</span></a>`;
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark"><title>Auto-pricing</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#16191d;--mut:#667085;--line:#e4e7ec;--soft:#f2f4f7;--acc:#0d7a5f;--acc2:#0a6650;--on-acc:#fff;--wait:#1d4ed8;--wait-bg:#e8efff;--up:#067647;--up-bg:#dcfae6;--down:#b42318;--down-bg:#fee4e2;--warn:#b54708;--warn-bg:#fffaeb;--warn-line:#fedf89;--shadow:0 1px 2px rgba(16,24,40,.05)}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1113;--card:#161a1e;--ink:#e6e9ec;--mut:#98a2b3;--line:#262c32;--soft:#1d2328;--acc:#2fbf8f;--acc2:#27a67c;--on-acc:#06140f;--wait:#93b4ff;--wait-bg:#18233d;--up:#6ce9a6;--up-bg:#10301f;--down:#fda29b;--down-bg:#3a1a17;--warn:#fec84b;--warn-bg:#2a2210;--warn-line:#5c4712;--shadow:none}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}a{color:var(--acc)}.wrap{max-width:1280px;margin:0 auto;padding:18px 20px 40px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.sub,.muted{color:var(--mut);font-size:12px}.neg{color:var(--down)!important;font-weight:600}.one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.num{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;gap:6px;font:600 13px/1 inherit;font-family:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap;list-style:none}.btn:hover{border-color:var(--mut)}.btn.go{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}.btn.go:hover{background:var(--acc2)}.btn.ghost{background:transparent}.btn.sm{padding:5px 9px;font-size:12px}.btn.danger{color:var(--down)}summary.btn::-webkit-details-marker{display:none}
+.inl{display:inline}input,select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 8px}input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.top h1{font-size:20px;margin:0;display:flex;align-items:center;gap:10px}.mode{font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--soft);color:var(--mut)}.mode.m-stage{background:var(--wait-bg);color:var(--wait)}.mode.m-apply{background:var(--down-bg);color:var(--down)}.who{font-size:12.5px;color:var(--mut);text-align:right}.who form{display:inline}.who button{border:0;background:none;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-decoration:underline}
+.tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 4px}.tools .runl{margin-left:auto;font-size:12.5px;color:var(--mut)}.tools .runl details{display:inline}.tools .runl summary{cursor:pointer;color:var(--down)}
+.drop{position:relative}.drop>.dd{position:absolute;z-index:30;top:calc(100% + 6px);left:0;width:min(680px,calc(100vw - 40px));background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(16,24,40,.14);padding:14px}.drop.right>.dd{left:auto;right:0}.drop>.dd p{margin:8px 0 0}.drop[open]>summary{border-color:var(--acc)}
+.find{display:flex;gap:8px}.find input{flex:1;min-width:0;font-size:15px}.found{list-style:none;margin:10px 0 0;padding:0;max-height:52vh;overflow:auto}.found li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.setf{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px 14px;margin-top:10px}.setf label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut)}.setf label span{font-weight:600}.setf .wide{grid-column:1/-1}.setf input,.setf select{width:100%}.formend{display:flex;align-items:center;gap:10px}.modef{display:flex;align-items:end;gap:10px;flex-wrap:wrap}.modef label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut);font-weight:600}
+.flash{margin:10px 0;padding:10px 14px;border-radius:10px;background:var(--up-bg);color:var(--up);font-weight:600}.flash.bad{background:var(--down-bg);color:var(--down)}
+.banner{margin:8px 0;border:1px solid var(--warn-line);background:var(--warn-bg);color:var(--ink);border-radius:10px;padding:9px 14px;font-size:13px}.banner>summary{cursor:pointer}.banner b{color:var(--warn)}.banner ul{margin:8px 0 2px;padding-left:18px}.banner li{margin:3px 0}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 8px}.segs{display:inline-flex;background:var(--soft);border-radius:9px;padding:3px}.seg{padding:6px 12px;border-radius:7px;color:var(--mut);text-decoration:none;font-weight:600;font-size:13px}.seg.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}.seg .n{font-weight:500;color:var(--mut)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tab{padding:5px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mut);text-decoration:none;font-size:12.5px;font-weight:600;background:var(--card)}.tab.on{background:var(--ink);color:var(--card);border-color:var(--ink)}.tab.warn:not(.on){border-color:var(--warn-line)}.tab .n{font-weight:500;opacity:.8}.tab .wt{color:var(--wait)}.tab.on .wt{color:inherit}.tab .err{color:var(--down)}.tab .al{color:var(--warn)}.tab.on .err,.tab.on .al{color:inherit}
+.bar .filt{margin-left:auto;width:220px}.pubbar{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:10px 14px;border-radius:10px;background:var(--wait-bg);color:var(--wait);font-size:13px}.pubbar b{font-weight:700}.pubbar form{margin-left:auto}
+.grp{margin:18px 2px 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.grp span{font-weight:500}
+.list{display:flex;flex-direction:column;gap:6px}.item{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}.item.alerted{border-left:3px solid var(--warn)}.item.awaiting{border-left:3px solid var(--wait)}.item.alerted.awaiting{border-left-color:var(--warn)}
+.line,.lhead{display:grid;grid-template-columns:minmax(0,1fr) 150px 170px 150px 230px;gap:14px;align-items:center;padding:10px 44px 10px 14px}.lhead{padding-top:0;padding-bottom:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.lhead span:nth-child(2),.lhead span:nth-child(3){text-align:right}.mg{white-space:nowrap}.two{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.c-prod .ttl{font-weight:600;color:var(--ink);text-decoration:none}.c-prod .ttl:hover{color:var(--acc);text-decoration:underline}.meta{font-size:12px;color:var(--mut);margin-top:2px}.warn{color:var(--warn);font-size:12px;font-weight:600;margin-top:3px}.warn-t{color:var(--warn);font-weight:600}
+.c-now,.c-sug{text-align:right}.c-now b,.c-sug b{font-size:15px}.c-sug b.same{color:var(--mut);font-weight:600}.chg{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px}.chg.up{background:var(--up-bg);color:var(--up)}.chg.down{background:var(--down-bg);color:var(--down)}
+.badge{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--soft);color:var(--mut)}.b-wait{background:var(--wait-bg);color:var(--wait)}.b-up,.b-ok{background:var(--up-bg);color:var(--up)}.b-down,.b-bad{background:var(--down-bg);color:var(--down)}.b-skip{background:var(--warn-bg);color:var(--warn)}.b-pend{background:var(--wait-bg);color:var(--wait)}.c-st .sub{margin-top:3px}
+.c-act{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}.pubf{display:inline-flex;align-items:center;gap:6px}.px{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--card);padding-left:8px;color:var(--mut)}.px input{border:0;width:86px;padding:6px 8px 6px 3px;font-weight:700;font-variant-numeric:tabular-nums;background:transparent}.px:focus-within{outline:2px solid var(--acc)}
+.more>summary{position:absolute;top:10px;right:8px;width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;list-style:none;color:var(--mut)}.more>summary::-webkit-details-marker{display:none}.more>summary:hover{background:var(--soft)}.chev{transition:transform .15s}.more[open]>summary .chev{transform:rotate(180deg)}
+.panel{display:grid;grid-template-columns:1.2fr 1fr 1.4fr;gap:14px 22px;padding:12px 14px 14px;border-top:1px solid var(--line);background:var(--soft);border-radius:0 0 12px 12px;font-size:13px}.panel h4{margin:10px 0 3px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.panel h4:first-child{margin-top:0}.panel h4 .sub{text-transform:none;letter-spacing:0;font-weight:500}.panel .full{grid-column:1/-1}.panel .end{display:flex;justify-content:flex-end}.rsn{margin-top:6px}.anch{margin-top:3px;color:var(--wait);font-size:12px;font-weight:600}.links{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px}.pubf.track{flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}.trk{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mut)}
+.cands>summary{cursor:pointer;font-size:12.5px;color:var(--mut)}.cands ul{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cands li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line)}.cands li.on{font-weight:600}.cands .cn{color:var(--mut)}
+.empty{padding:28px;text-align:center;color:var(--mut);background:var(--card);border:1px dashed var(--line);border-radius:12px}
+.hist{margin-top:26px}.hist>details{margin:8px 0;background:var(--card);border:1px solid var(--line);border-radius:12px}.hist>details>summary{cursor:pointer;padding:10px 14px;font-weight:600}.hist table{width:100%;border-collapse:collapse;font-size:12.5px}.hist th{text-align:left;padding:6px 14px;color:var(--mut);font-weight:600;border-top:1px solid var(--line)}.hist td{padding:6px 14px;border-top:1px solid var(--line);vertical-align:top}.hist .scroll{overflow-x:auto}.foot{margin-top:14px;font-size:12px;color:var(--mut)}
+@media (max-width:1000px){.lhead{display:none}.line{grid-template-columns:minmax(0,1fr) 110px 140px;row-gap:8px}.c-prod{grid-column:1/-1}.c-now{text-align:left}.c-sug{text-align:left}.c-act{grid-column:1/-1;justify-content:flex-start}.c-now::before,.c-sug::before,.c-st::before{content:attr(data-l);display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.c-act:empty,.c-st:empty{display:none}.panel{grid-template-columns:1fr 1fr}.panel .setsec{grid-column:1/-1}}
+@media (max-width:640px){.wrap{padding:12px 12px 32px}.top h1{font-size:18px}.who{text-align:left}.tools .runl{margin-left:0;width:100%}.drop{position:static}.drop>.dd{left:12px!important;right:12px!important;width:auto}.bar .filt{margin-left:0;width:100%}.tabs{flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:2px;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tab{flex:none}.line{grid-template-columns:1fr 1fr;padding:12px 42px 12px 12px}.c-st{grid-column:1/-1}.panel{grid-template-columns:1fr}.pubf{flex:1}.pubf .px{flex:1}.px input{width:100%;font-size:16px}.c-act .inl{flex:0}.pubbar{flex-wrap:wrap}.pubbar form{margin-left:0;width:100%}.pubbar .btn{width:100%;justify-content:center}}
+</style></head><body><div class="wrap">
+<header class="top"><h1>Auto-pricing <span class="mode m-${esc(s.mode)}" title="${esc(modeTip)}">${esc(modeName)}</span>${v.configured ? "" : '<span class="mode m-apply">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
+<div class="who">${v.perms && !P.legacy ? `Signed in as <b>${esc(P.name || P.email || "")}</b>${P.admin ? ' · admin: everything · <a href="/9pocket/admin">accounts and permissions</a>' : " · may " + [P.publish ? "publish" : "", P.settings ? "change product settings" : "", P.config ? "change page rules" : ""].filter(Boolean).join(", ").replace(/^$/, "view only") + (limitNote ? " · " + limitNote : "")} · <a href="/9pocket">9Pocket</a> · <form method="post" action="/9pocket/logout"><button>sign out</button></form>` : `<a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>`}</div></header>
+<div class="tools">${P.config ? ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "↻ Run now", "btn", ` title="${s.mode === "apply" ? "Prices are written by this run" : s.mode === "stage" ? "Changes are queued here for you to publish" : "Shadow: report only"}"`) : ""}${addPanel}${pageSettings}<details class="drop right"><summary class="btn ghost">How it works</summary><div class="dd">${help}</div></details>
+<div class="runl">${runLine}${runErrors.length ? ` · <details><summary>${runErrors.length} error${runErrors.length === 1 ? "" : "s"}</summary><div class="sub">${runErrors.map(esc).join("<br>")}</div></details>` : ""}${run.error ? ' · <span class="neg">failed: ' + esc(run.error) + "</span>" : ""}${nextLine}${fxLine}</div></div>
 ${v.flash ? `<p class="flash${/may not|Not published|over your limit|failed/i.test(v.flash) ? " bad" : ""}">${esc(v.flash)}</p>` : ""}
-${v.perms && !P.legacy ? `<p class="who">Signed in as <b>${esc(P.name || P.email || "")}</b>${P.admin ? " · admin: everything" : " · may " + [P.publish ? "publish" : "", P.settings ? "change product settings" : "", P.config ? "change page rules" : ""].filter(Boolean).join(", ").replace(/^$/, "view only") + (limitNote ? " · " + limitNote : "")}${P.admin ? ' · <a href="/9pocket/admin">accounts and permissions</a>' : ""}</p>` : ""}
-${P.settings ? `<h2>Add products</h2>
-<form method="get" action="/autoprice" class="box">${v.game ? hidden("game", v.game) : ""}<input type="search" name="q" value="${esc(v.q || "")}" placeholder="UPC, or part of a product name (sealed products only)" autofocus><button>Search</button></form>
-${found ? (found.ok ? `<table style="margin-top:8px"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody>${foundRows || '<tr><td colspan="3" class="muted">nothing matched "' + esc(found.q) + '"</td></tr>'}</tbody></table><p class="muted">Add starts a pricing run for the whole list straight away (in APPLY mode that writes the prices now, not at 7:30 pm); the new product shows in the report below within a few seconds.</p>` : `<p class="muted">search failed: ${esc(found.error)}</p>`) : ""}` : ""}
-<h2>Controls</h2>
-<div class="ctl">
-${P.config ? ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "Run now (" + (s.mode === "apply" ? "writes prices" : s.mode === "stage" ? "queues changes for you" : "shadow") + ")") : `<span class="box muted">Mode: ${esc(MODE_LABEL[s.mode] || s.mode)} · runs nightly at 19:30 Atlantic</span>`}
-${P.config ? `<form method="post" action="/autoprice/control" onsubmit="return this.mode.value!=='apply'||confirm('Switch to APPLY? Every nightly run will then change the price of every listed product itself, with nothing waiting for you.')">${hidden("action", "mode")}<label title="Staged is the safe middle: the run works out every price and parks it here until you publish it.">Mode <select name="mode"><option value="stage"${s.mode === "stage" ? " selected" : ""}>staged — I publish each change</option><option value="shadow"${s.mode === "shadow" ? " selected" : ""}>shadow — report only</option><option value="apply"${s.mode === "apply" ? " selected" : ""}>apply — write prices automatically</option></select></label><button>Save mode</button></form>
-<details class="setbox"><summary>Settings</summary><div class="setwrap"><form method="post" action="/autoprice/control">${hidden("action", "config")}<label title="Added on top of the market price from TCGplayer / PriceCharting, after CAD conversion. A product's own Auto-price markup metafield overrides it.">Markup on top of market % <input type="number" step="0.5" name="markupPct" value="${esc(cfg.markupPct)}"></label><label title="The price never goes under cost plus this, unless the product's own floor is higher.">Min margin over cost % <input type="number" step="0.5" name="minMarginPct" value="${esc(cfg.minMarginPct)}"></label><label title="Optional brake: the most a price may move in one run. 0 = no limit.">Max move per run % (0 = off) <input type="number" step="1" name="maxMovePct" value="${esc(cfg.maxMovePct)}"></label><label title="Follow: 401 Games' in-stock price (plus this percent) is the price and TCGplayer is bypassed; when they are out of stock or do not list it, the product is priced from TCGplayer and flagged at the top of the report. Hold: the TCGplayer price is held to at most this percent above theirs (0 = match them). Off: shown but not used. Skip: not looked up.">401 Games <select name="compMode"><option value="follow"${cfg.compMode === "follow" ? " selected" : ""}>follow their price (TCGplayer only if they are out)</option><option value="cap"${cfg.compMode === "cap" ? " selected" : ""}>hold to at most</option><option value="off"${cfg.compMode === "off" ? " selected" : ""}>show only</option><option value="skip"${cfg.compMode === "skip" ? " selected" : ""}>skip</option></select> <input type="number" step="1" name="compPct" value="${esc(cfg.compPct == null ? 0 : cfg.compPct)}"> % above their in-stock price</label><label title="Price moves of at least this percent are flagged first in the ntfy digest and lift it to high priority. 0 = never flag.">Flag moves of <input type="number" step="1" name="alertPct" value="${esc(cfg.alertPct == null ? 10 : cfg.alertPct)}"> % or more</label><label title="A graded card whose PriceCharting entry has fewer recorded sales than this is flagged: their grade ladder for a thinly traded card is estimated from the ungraded price, not from sold graded copies. 0 = never flag.">Flag graded cards under <input type="number" step="1" name="minSales" value="${esc(cfg.minSales == null ? 25 : cfg.minSales)}"> recorded sales</label><button>Save</button></form>
-${s.ntfy || (s.emailDigest || []).length ? ctlForm("ntfy-test", "", "Send test digest") : ""}</div></details>` : ""}
-<a href="/autoprice">refresh</a> · <a href="/autoprice/report.json">json</a> · ${v.perms && !P.legacy ? `<a href="/9pocket">9Pocket</a> · <form method="post" action="/9pocket/logout" class="inl"><button class="lnk">sign out${v.user ? " (" + esc(v.user) + ")" : ""}</button></form>` : `<a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>`}
+${downBanner}${thinBanner}${followBanner}
+<div class="bar"><div class="segs">${chip("todo", "Needs you", todo.length)}${chip("all", "All", inGame.length)}</div><nav class="tabs">${tab(null, "All games", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</nav><input type="search" class="filt" id="filt" placeholder="Filter this list  ( / )" aria-label="Filter the list by name"></div>
+${waiting.length ? `<div class="pubbar"><span><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting${P.publish ? " for you" : ""}</b> — none of them is live${P.publish ? ". Correct a box if the sources got it wrong, then Publish." : ". Your account cannot publish; someone with that permission will."}</span>${pubAll}</div>` : ""}
+<main class="list" id="list">${rows.length ? '<div class="lhead" aria-hidden="true"><span>Product</span><span>Today</span><span>Suggested</span><span>Status</span><span></span></div>' : ""}${list}</main>
+<section class="hist">${(s.audit || []).length ? `<details><summary>Activity <span class="sub">· ${(s.audit || []).length} recent</span></summary><div class="scroll"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Product</th></tr></thead><tbody>${s.audit.map((e) => `<tr><td>${esc(whenShort(e.at))}</td><td>${esc(e.who || "—")}</td><td>${e.action === "publish" ? "published " + (e.from != null ? money(e.from) + " → " : "") + money(e.to) + (e.anchored ? " (tracking from there)" : "") : esc(e.detail || e.action)}</td><td>${esc(e.title || "")}</td></tr>`).join("")}</tbody></table></div></details>` : ""}
+<details><summary>Runs <span class="sub">· last ${(s.runs || []).length}</span></summary><div class="scroll"><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Digest</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(whenShort(r.startedAt))}${r.nightly ? "" : ' <span class="sub">manual</span>'}</td><td>${r.apply ? "apply" : "no writes"}</td><td>${esc(r.products)}</td><td>${esc(r.priced)}</td><td>${esc(r.written)}</td><td>${esc(r.skipped)}</td><td>${esc(r.fx || "")}</td><td class="sub">${esc(r.notify || "—")}</td><td class="sub">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="9" class="sub">none</td></tr>'}</tbody></table></div></details>
+<p class="foot">Report ${rep.at ? esc(whenShort(rep.at)) : "not built yet"} · <a href="/autoprice/report.json">json</a></p></section>
 </div>
-<p class="muted">Last run: ${run.startedAt ? esc(when(run.startedAt)) + " · " + (run.done ? "done" : "running, phase " + esc(run.phase)) + " · " + run.products + " listed, " + run.priced + " priced, " + run.written + " written, " + run.skipped + " skipped, " + (run.errors || []).length + " errors" : "never"}${run.error ? " · failed: " + esc(run.error) : ""}${(run.errors || []).length ? "<br>" + run.errors.map(esc).join("<br>") : ""}</p>
-<h2>Report ${rep.at ? "· " + esc(when(rep.at)) : ""} <span class="muted">· ${Object.keys(counts).map((a) => a + " " + counts[a]).join(" · ") || "no rows yet: add products above and press Run now"}</span></h2>
-${waiting.length ? `<div class="stagebox"><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting${P.publish ? " for you" : ""}</b> — none of them is live. ${P.publish ? `Each row below has its suggested price in a box: correct it if the sources got it wrong, then Publish.<div class="stageact">${ctlForm("publish-all", "", "Publish all " + waiting.length + " at the suggested price", "go")}<span class="muted">${v.game ? esc(v.game) + " tab" : "every game"} · up to 25 a press${limitNote ? " · moves over your limit (" + esc(limitNote) + ") are left waiting" : ""}</span></div>` : "Your account cannot publish; someone with that permission will."}</div>` : ""}
-${thin.length ? `<div class="alert"><b>⚠ ${thin.length} graded card${thin.length === 1 ? "" : "s"} priced from a PriceCharting estimate</b> — for a thinly traded card they model the grades off the ungraded price instead of sold graded copies, so treat these as a starting point and check the sold listings:<ul>${thin.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.suggested != null ? " · suggested " + money(r.suggested) : ""} · <a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a></li>`).join("")}</ul></div>` : ""}
-${alerted.length ? `<div class="alert"><b>⚠ ${alerted.length} product${alerted.length === 1 ? "" : "s"} set to follow ${esc(COMP.name)} ${alerted.length === 1 ? "is" : "are"} priced from TCGplayer instead</b> (out of stock or not listed there):<ul>${alerted.map((r) => `<li><a href="${esc(admin(r.id))}" target="_blank" rel="noopener">${esc(r.title)}</a> · ${esc(r.alert)}${r.action === "skip" ? " · <b>skipped: " + esc(r.reason) + "</b>" : r.suggested != null ? " · now " + money(r.current) + " → " + money(r.suggested) : ""}</li>`).join("")}</ul></div>` : ""}
-<div class="tabs">${tab(null, "All", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</div>
-<table class="rep"><thead><tr><th>Product</th><th>Today</th><th>Market</th><th>Suggested</th><th>Action</th><th>401 Games</th><th>Last change</th><th></th></tr></thead><tbody>${groupRows || '<tr><td colspan="8" class="muted">nothing yet</td></tr>'}</tbody></table>
-${(s.audit || []).length ? `<h2>Activity</h2><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Product</th></tr></thead><tbody>${s.audit.map((e) => `<tr><td>${shortWhen(e.at)}</td><td>${esc(e.who || "—")}</td><td>${e.action === "publish" ? "published " + (e.from != null ? money(e.from) + " → " : "") + money(e.to) + (e.anchored ? " (tracking from there)" : "") : esc(e.detail || e.action)}</td><td>${esc(e.title || "")}</td></tr>`).join("")}</tbody></table>` : ""}
-<h2>Runs</h2><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Digest</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(when(r.startedAt))}${r.nightly ? "" : ' <span class="muted">manual</span>'}</td><td>${r.apply ? "apply" : "shadow"}</td><td>${r.products}</td><td>${r.priced}</td><td>${r.written}</td><td>${r.skipped}</td><td>${esc(r.fx || "")}</td><td class="muted">${esc(r.notify || "—")}</td><td class="muted">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">none</td></tr>'}</tbody></table>
-</div></body></html>`;
+<script>
+(function(){var f=document.getElementById("filt"),items=[].slice.call(document.querySelectorAll(".item")),grps=[].slice.call(document.querySelectorAll(".grp"));
+function apply(){var t=(f.value||"").trim().toLowerCase();items.forEach(function(it){it.hidden=!!t&&it.getAttribute("data-q").indexOf(t)<0});grps.forEach(function(g){var n=g.nextElementSibling,any=false;while(n&&!n.classList.contains("grp")){if(n.classList.contains("item")&&!n.hidden)any=true;n=n.nextElementSibling}g.hidden=!any})}
+if(f)f.addEventListener("input",apply);
+document.addEventListener("keydown",function(e){if(e.key==="/"&&f&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="SELECT"&&document.activeElement.tagName!=="TEXTAREA"){e.preventDefault();f.focus()}});
+// a click on the empty part of a row opens its panel
+document.addEventListener("click",function(e){var line=e.target.closest(".line");if(!line||e.target.closest("a,button,input,select,label,form,summary"))return;var d=line.parentNode.querySelector(".more");if(d)d.open=!d.open});
+// one drop-down open at a time
+[].slice.call(document.querySelectorAll("details.drop")).forEach(function(d){d.addEventListener("toggle",function(){if(d.open)[].slice.call(document.querySelectorAll("details.drop")).forEach(function(o){if(o!==d)o.open=false})})});
+})();
+</script></body></html>`;
 }

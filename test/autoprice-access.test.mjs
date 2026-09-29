@@ -85,7 +85,7 @@ test("the auto-pricer opens for 9Pocket accounts by their permissions: admin eve
   assert.equal(denied.status, 303); assert.ok(/flash=Your\+account\+may\+not\+do\+that/.test(denied.location.replace(/%20/g, "+")) || /may%20not%20do%20that/.test(denied.location));
   // the activity table shows the admin's mode change under her name
   const after = await hit(w, "/autoprice", { cookie: "np_s=" + TOKEN });
-  assert.ok(after.text.includes("<h2>Activity</h2>") && after.text.includes("<td>Ada</td><td>mode → shadow</td>"));
+  assert.ok(after.text.includes("<summary>Activity") && after.text.includes("<td>Ada</td><td>mode → shadow</td>"));
   // the row is still waiting: nothing was written
   const rep = await w.env.ROOM.get(AUTOPRICE_DO).fetch(new Request("https://w.example/_ap/report")).then((r) => r.json());
   assert.equal(rep.rows[0].awaiting, true); assert.equal(rep.rows[0].current, 100);
@@ -107,4 +107,29 @@ test("9Pocket sign-in still works and can land on the auto-pricer (the helpers a
   const list = new URL("https://w.example/9pocket");
   const lr = await serveStage(new Request(list, { headers: { cookie: "np_s=" + m[1] } }), w.env, list, staffOk);
   assert.equal(lr.status, 200); assert.ok((await lr.text()).includes('href="/autoprice"'));
+});
+
+test("the 401 runner's door opens only with the relay bearer, lists what to search and keeps the answers", async () => {
+  const w = world();
+  await seed(w);
+  w.env.AUTOPRICE_NTFY_TOKEN = "relay-secret";
+  const call = async (method, bearer, body) => {
+    const url = new URL("https://w.example/autoprice/comp-feed.json");
+    const init = { method, headers: {} };
+    if (bearer) init.headers.authorization = "Bearer " + bearer;
+    if (body) { init.headers["content-type"] = "application/json"; init.body = JSON.stringify(body); }
+    const r = await serveAutoprice(new Request(url, init), w.env, url, staffOk);
+    return { status: r.status, j: await r.json() };
+  };
+  assert.equal((await call("GET")).status, 401);
+  assert.equal((await call("GET", "wrong")).status, 401);
+  assert.equal((await call("GET", "", null)).status, 401);
+  const g = await call("GET", "relay-secret");
+  assert.equal(g.status, 200);
+  assert.deepEqual(g.j.queries.map((q) => q.q), ["box"]);   // "a" is filler, as in every title match
+  const p = await call("POST", "relay-secret", { op: "put", rows: [{ id: "gid://shopify/Product/1", q: "box a", status: 200, results: [{ title: "Box A", handle: "box-a", price: "95.00", available: true }] }] });
+  assert.equal(p.status, 200); assert.equal(p.j.stored, 1);
+  assert.equal((await w.rooms[AUTOPRICE_DO].storage.get("ap:cf:gid://shopify/Product/1")).results[0].price, "95.00");
+  // a session cookie is not the runner's key
+  assert.equal((await call("POST", "", { op: "put", rows: [] })).status, 401);
 });
