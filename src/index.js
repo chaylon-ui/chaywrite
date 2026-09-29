@@ -12,6 +12,7 @@ import { serveBtTargets } from "./bt.js";
 import { servePaints } from "./paints.js";
 import { serveEavy } from "./eavy.js";
 import { serveKit } from "./kit.js";
+import { serveCardSearch } from "./cardsearch.js";
 import { serveArmyPreview } from "./army.js";
 import { GS_PAGE, GS_QUERY, parseGsPage } from "./gamesys.js";
 import { serveEnrich } from "./enrich.js";
@@ -357,6 +358,16 @@ export default {
 
     // In-stock add-ons for a product page: hobby tools for Warhammer boxes and Gunpla kits,
     // board-game sleeves with the card size each fits (src/kit.js). Public storefront data only.
+    // Our own singles search: set + card name combined (AND), sorted by card number from the
+    // SKU (src/cardsearch.js). Public storefront data only.
+    if (url.pathname === "/cards/search.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return serveCardSearch(request, env, ctx, gql);
+    }
+
     if (url.pathname === "/kit.json") {
       const gql = async (q, v) => {
         const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
