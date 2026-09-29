@@ -11,6 +11,7 @@ import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
 import { servePaints } from "./paints.js";
 import { serveEavy } from "./eavy.js";
+import { serveKit } from "./kit.js";
 import { serveArmyPreview } from "./army.js";
 import { GS_PAGE, GS_QUERY, parseGsPage } from "./gamesys.js";
 import { serveEnrich } from "./enrich.js";
@@ -352,6 +353,16 @@ export default {
         return r && r.data;
       };
       return serveArmyPreview(request, env, ctx, gql, GS_PAGE, parseGsPage, GS_QUERY);
+    }
+
+    // In-stock add-ons for a product page: hobby tools for Warhammer boxes and Gunpla kits,
+    // board-game sleeves with the card size each fits (src/kit.js). Public storefront data only.
+    if (url.pathname === "/kit.json") {
+      const gql = async (q, v) => {
+        const r = await adminGql({ env, fetch: (a, b) => fetch(a, b) }, q, v);
+        return r && r.data;
+      };
+      return serveKit(request, env, ctx, gql);
     }
 
     if (url.pathname === "/eavy/for.json") {
