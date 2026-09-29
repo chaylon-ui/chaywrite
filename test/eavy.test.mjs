@@ -191,3 +191,35 @@ test("Paint Picker AoS guides: merged into the army page, opened for army boxes,
   assert.equal(r.schemes.length, 2);
   assert.ok(!r.schemes.some((s) => s.src));
 });
+
+test("minimum tier: the basecoat (or its mix) and the first wash of each area carry m:1", async () => {
+  const { areaPaints } = await import("../src/eavy.js");
+  const sw = (n, r) => ({ b: "Citadel", n, h: "#000000", items: [{ u: n.toLowerCase().replace(/\W+/g, "-"), t: n, p: "5", a: true, v: 1, r }] });
+  const idx = citadelIndex({ swatches: [sw("Mephiston Red", "Base"), sw("Nuln Oil", "Shade"), sw("Evil Sunz Scarlet", "Layer"), sw("Wild Rider Red", "Layer"),
+    sw("Dark Reaper", "Layer"), sw("Administratum Grey", "Base"), sw("White Scar", "Layer"), sw("Thunderhawk Blue", "Layer"), sw("Abaddon Black", "Base"),
+    sw("Agrax Earthshade", "Shade"), sw("Wyldwood", "Contrast"), sw("Skarsnik Green", "Layer"), sw("Averland Sunset", "Base"), sw("Warp Lightning", "Contrast")] });
+  const min = (raw) => areaPaints(raw, idx).filter((p) => p.m).map((p) => p.name);
+  const all = (raw) => areaPaints(raw, idx).map((p) => p.name);
+  // basecoat + wash; the layers stay in the full scheme
+  assert.deepEqual(min(["Mephiston Red", "Nuln Oil", "Evil Sunz Scarlet", "Wild Rider Red"]), ["Mephiston Red", "Nuln Oil"]);
+  assert.deepEqual(all(["Mephiston Red", "Nuln Oil", "Evil Sunz Scarlet", "Wild Rider Red"]), ["Mephiston Red", "Nuln Oil", "Evil Sunz Scarlet", "Wild Rider Red"]);
+  // a marked mix: every component, then the wash
+  assert.deepEqual(min(["Dark Reaper", "Administratum Grey", "Base Mix", "White Scar"]), ["Dark Reaper", "Administratum Grey"]);
+  assert.deepEqual(min(["Skarsnik Green", "Averland Sunset", "Warp Lightning", "Base Mix", "Agrax Earthshade", "White"]), ["Skarsnik Green", "Averland Sunset", "Warp Lightning", "Agrax Earthshade"]);
+  assert.deepEqual(min(["Administratum Grey", "White", "Add White to base mix"]), ["Administratum Grey", "White Scar"]);
+  // a Layer pot as the basecoat: alone when the next is a Layer too, with a Base pot second (an unmarked mix)
+  assert.deepEqual(min(["Thunderhawk Blue", "Dark Reaper", "Black", "White"]), ["Thunderhawk Blue"]);
+  assert.deepEqual(min(["Evil Sunz Scarlet", "Mephiston Red", "Black", "White"]), ["Evil Sunz Scarlet", "Mephiston Red"]);
+  // a Contrast pot is a basecoat; a Shade among the "mix" components means no mix
+  assert.deepEqual(min(["Wyldwood", "Agrax Earthshade", "White"]), ["Wyldwood", "Agrax Earthshade"]);
+  assert.deepEqual(min(["Mephiston Red", "Nuln Oil", "Previous mix", "Evil Sunz Scarlet"]), ["Mephiston Red", "Nuln Oil"]);
+  // a Base pot first never pulls the second in
+  assert.deepEqual(min(["Abaddon Black", "Administratum Grey", "White"]), ["Abaddon Black"]);
+  assert.deepEqual(areaPaints(["Highlight Mix"], idx), []);
+  // through forProduct the flags ride on the area's paints
+  const D = { pages: { u: { url: "https://e/40k/orks/", title: "Orks", game: "40k", faction: "orks", sub: "",
+    schemes: [{ slug: "g", name: "Orks (General)", areas: [{ slug: "a", name: "Skin", paints: ["Mephiston Red", "Nuln Oil", "Evil Sunz Scarlet"] }] }] } } };
+  const r = forProduct(indexEavy(D), idx, "WARHAMMER 40,000 ORKS: BOYZ", "Orks");
+  assert.deepEqual(r.schemes[0].areas[0].paints.map((p) => [p.name, p.m || 0]), [["Mephiston Red", 1], ["Nuln Oil", 1], ["Evil Sunz Scarlet", 0]]);
+});
+

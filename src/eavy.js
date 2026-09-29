@@ -268,7 +268,7 @@ export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40, kind =
       name: s.name, url: surl, ...(pp ? { src: "pp" } : {}),
       areas: s.areas.map((ar) => ({
         name: ar.name, url: pp ? surl + "#" + encodeURIComponent(ar.slug) : surl + "&block=" + encodeURIComponent(ar.slug),
-        paints: dedupe(ar.paints.flatMap(expand).filter((n) => n && !NOT_A_PAINT.test(n) && !schemeWords.has(key(n))).map((n) => resolveLoose(paintIdx, n)).filter(Boolean)),
+        paints: areaPaints(ar.paints, paintIdx, schemeWords),
       })).filter((ar) => ar.paints.length),
     };
   });
@@ -318,6 +318,46 @@ function dedupe(list) {
   return out.filter((p, i) => p.handle || !full.some((f, j) => j !== i && f !== full[i] && f.startsWith(full[i] + " ")));
 }
 
+/* The MINIMUM tier (owner, 2026-09-29: customers find the full recipe "overkill and cost
+   prohibitive ... too many paints to achieve a painted army"): per area, the basecoat and its
+   wash, flagged m:1 on the paints; the card offers "Minimum" (those) and "Full scheme" (all).
+   The basecoat is the recipe's first paint. When a mix marker ("Base Mix", "Previous mix",
+   "Add X to ...") follows the first one to three paints, all of them are the basecoat (the
+   mix) - unless one is a Shade, which no basecoat mix holds. When the first paint is not a
+   Base or Contrast pot and the second is a Base pot, both count (an unmarked mix: Elysian
+   Green + Waaagh! Flesh). The wash is the area's first Shade. Layers, highlights, drybrush and
+   glazes are the full scheme only. Over the archive this keeps ~6 pots of ~16 per scheme. */
+const MIX_MARK = /\b(mix|mixes|basecoat|base coat|previous)\b|^add\b/i;
+const BASE_RANGES = new Set(["Base", "Contrast"]);
+export function areaPaints(raw, paintIdx, schemeWords) {
+  const steps = [];   // resolved paints in recipe order, each with the step it came from
+  (raw || []).forEach((r, i) => {
+    for (const n of expand(r)) {
+      if (!n || NOT_A_PAINT.test(n) || (schemeWords && schemeWords.has(key(n)))) continue;
+      const p = resolveLoose(paintIdx, n);
+      if (p) steps.push({ i, p });
+    }
+  });
+  const list = dedupe(steps.map((e) => e.p));
+  if (!list.length) return list;
+  const pk = (p) => p.handle || key(p.name);
+  const rng = (p) => p.r || "";
+  let main = [];
+  const mark = (raw || []).findIndex((r) => MIX_MARK.test(String(r || "")));
+  if (mark >= 1 && mark <= 3) {
+    const comp = steps.filter((e) => e.i < mark).map((e) => e.p);
+    if (comp.length && !comp.some((p) => rng(p) === "Shade")) main = comp;
+  }
+  if (!main.length) {
+    main = [steps[0].p];
+    const second = steps[1] && steps[1].p;
+    if (!BASE_RANGES.has(rng(steps[0].p)) && second && rng(second) === "Base" && pk(second) !== pk(steps[0].p)) main.push(second);
+  }
+  const wash = steps.map((e) => e.p).find((p) => rng(p) === "Shade" && !main.some((m) => pk(m) === pk(p)));
+  const min = new Set(main.concat(wash ? [wash] : []).map(pk));
+  return list.map((p) => (min.has(pk(p)) ? { ...p, m: 1 } : p));
+}
+
 const CREDIT = "Box-art recipes from 'Eavy Archive, collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)";
 
 export async function serveEavy(request, env, ctx, getPaints) {
@@ -329,7 +369,7 @@ export async function serveEavy(request, env, ctx, getPaints) {
   // keeps its fixed 'Eavy Archive credit line, so it gets 'Eavy schemes only
   const guides = Number(url.searchParams.get("v")) >= 7;
   const cache = caches.default;
-  const ck = new Request("https://cache.internal/eavy/for.json?v=8&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind + (guides ? "&g=1" : ""));
+  const ck = new Request("https://cache.internal/eavy/for.json?v=9&t=" + encodeURIComponent(key(title)) + "&f=" + encodeURIComponent(key(faction)) + "&k=" + kind + (guides ? "&g=1" : ""));
   const hit = await cache.match(ck);
   if (hit) return hit;
   let body, status = 200;
