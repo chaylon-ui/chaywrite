@@ -47,18 +47,23 @@
      seq         the last buylist number handed out
      u:<email>   an account {email, name, role, perms, hash, salt, iter,
                  disabled, createdAt, createdBy}
-     s:<token>   a session {email, at, exp}
+     s:<token>   a session {email, at, exp, mfa} - mfa: made through the emailed code
      la:<email>  failed-login counter {n, at}
+     mf:<id>     a sign-in waiting for its emailed code {email, hash, exp, tries, sends, sentAt}
+     mfr:<email> codes asked for {n, at} (CODE_STARTS per LOCK_MS)
+     dv:<token>  a remembered device {email, at, exp, label} (DEVICE_DAYS)
    Approved and rejected records are pruned after KEEP_MS by the alarm;
    staged ones are never pruned - a forgotten list should stay visible. */
 
 import { repriceCards, submitToBinderPos, cleanCards, conditionsFor } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
-import { buildEmail, buildDecisionEmail, sendEmail, emailConfigured } from "./stage-email.js";
+import { buildEmail, buildDecisionEmail, buildCodeEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
-import { BASE, renderLoginForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
-import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD } from "./stage-auth.js";
+import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
+import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
+  newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel,
+  CODE_TTL_MS, CODE_TRIES, CODE_SENDS, CODE_RESEND_MS, CODE_STARTS, DEVICE_DAYS, DEVICE_KEEP, CHALLENGE_COOKIE } from "./stage-auth.js";
 export { safeImage };
 
 export const STAGE_DO = "buylist-stage";
@@ -445,7 +450,8 @@ export async function stageDoFetch(cx, request, url) {
     if (!b.create && !cur) return doJson({ ok: false, error: "no such account" }, 404);
     const next = { ...(cur || { createdAt: cx.now() }), ...u, email };
     await cx.storage.put("u:" + email, next);
-    if (next.disabled) await dropSessions(cx, email);
+    // disabled, or a new password: signed out everywhere, remembered devices forgotten
+    if (next.disabled || (cur && u.hash && u.hash !== cur.hash)) await dropSessions(cx, email);
     return doJson({ ok: true, user: publicUser(next) });
   }
   if (p === "/_stage/user/del" && post) {
@@ -459,7 +465,7 @@ export async function stageDoFetch(cx, request, url) {
     const b = await bodyOf(request);
     const token = String(b.token || ""), email = normEmail(b.email);
     if (!/^[0-9a-f]{64}$/.test(token) || !email) return doJson({ ok: false, error: "bad session" }, 400);
-    await cx.storage.put("s:" + token, { email, at: cx.now(), exp: cx.now() + SESSION_DAYS * 86400e3 });
+    await cx.storage.put("s:" + token, { email, at: cx.now(), exp: cx.now() + SESSION_DAYS * 86400e3, mfa: b.mfa === true });
     return doJson({ ok: true });
   }
   if (p === "/_stage/session") {
@@ -467,7 +473,7 @@ export async function stageDoFetch(cx, request, url) {
     const s = /^[0-9a-f]{64}$/.test(token) ? await cx.storage.get("s:" + token) : null;
     if (!s) return doJson({ ok: false, error: "no session" }, 404);
     if (s.exp < cx.now()) { await cx.storage.delete("s:" + token); return doJson({ ok: false, error: "expired" }, 404); }
-    return doJson({ ok: true, email: s.email });
+    return doJson({ ok: true, email: s.email, mfa: s.mfa === true });
   }
   if (p === "/_stage/session/del" && post) {
     const token = String((await bodyOf(request)).token || "");
@@ -491,6 +497,66 @@ export async function stageDoFetch(cx, request, url) {
     const cur = await cx.storage.get("la:" + normEmail(url.searchParams.get("email")));
     return doJson({ ok: true, locked: !!(cur && cur.n >= LOCK_AFTER && cx.now() - cur.at < LOCK_MS) });
   }
+  // ---- the emailed sign-in code and remembered devices (src/stage-auth.js) ----
+  if (p === "/_stage/2fa/start" && post) {
+    const email = normEmail((await bodyOf(request)).email);
+    if (!email) return doJson({ ok: false, error: "email required" }, 400);
+    const now = cx.now(), rk = "mfr:" + email;
+    const r0 = (await cx.storage.get(rk)) || { n: 0, at: 0 };
+    const r = now - r0.at > LOCK_MS ? { n: 0, at: now } : r0;
+    if (r.n >= CODE_STARTS) return doJson({ ok: false, error: "Too many sign-in codes asked for. Try again in 15 minutes." }, 429);
+    r.n += 1;
+    await cx.storage.put(rk, r);
+    const id = newToken(), code = newCode();
+    await cx.storage.put("mf:" + id, { email, hash: await codeHash(id, code), exp: now + CODE_TTL_MS, tries: 0, sends: 1, sentAt: now });
+    return doJson({ ok: true, id, code, email });
+  }
+  if (p === "/_stage/2fa/resend" && post) {
+    const id = String((await bodyOf(request)).id || "");
+    const key = "mf:" + id, now = cx.now();
+    const c = /^[0-9a-f]{64}$/.test(id) ? await cx.storage.get(key) : null;
+    if (!c || c.exp < now) { if (c) await cx.storage.delete(key); return doJson({ ok: false, gone: true, error: "That sign-in has expired. Enter your password again." }); }
+    if (c.sends >= CODE_SENDS) return doJson({ ok: false, email: c.email, error: "No more codes for this sign-in. Use the last one, or start again." });
+    if (now - c.sentAt < CODE_RESEND_MS) return doJson({ ok: false, email: c.email, error: "The last code went out a moment ago - give it a minute to arrive." });
+    const code = newCode();
+    Object.assign(c, { hash: await codeHash(id, code), exp: now + CODE_TTL_MS, sends: c.sends + 1, sentAt: now });
+    await cx.storage.put(key, c);
+    return doJson({ ok: true, code, email: c.email });
+  }
+  if (p === "/_stage/2fa/check" && post) {
+    const b = await bodyOf(request);
+    const id = String(b.id || ""), key = "mf:" + id, now = cx.now();
+    const c = /^[0-9a-f]{64}$/.test(id) ? await cx.storage.get(key) : null;
+    if (!c || c.exp < now) { if (c) await cx.storage.delete(key); return doJson({ ok: false, gone: true, error: "That code has expired. Enter your password again for a new one." }); }
+    // counted before comparing, so guesses sent side by side still count
+    c.tries += 1;
+    await cx.storage.put(key, c);
+    const code = cleanCode(b.code);
+    if (code.length === 6 && sameHex(await codeHash(id, code), c.hash)) { await cx.storage.delete(key); return doJson({ ok: true, email: c.email }); }
+    if (c.tries >= CODE_TRIES) { await cx.storage.delete(key); return doJson({ ok: false, gone: true, error: "Too many wrong codes. Enter your password again for a new one." }); }
+    const left = CODE_TRIES - c.tries;
+    return doJson({ ok: false, email: c.email, left, error: "That code is not right - " + left + " tr" + (left === 1 ? "y" : "ies") + " left." });
+  }
+  if (p === "/_stage/device/put" && post) {
+    const b = await bodyOf(request);
+    const token = String(b.token || ""), email = normEmail(b.email);
+    if (!/^[0-9a-f]{64}$/.test(token) || !email) return doJson({ ok: false, error: "bad device" }, 400);
+    await cx.storage.put("dv:" + token, { email, at: cx.now(), exp: cx.now() + DEVICE_DAYS * 86400e3, label: String(b.label || "").slice(0, 60) });
+    return doJson({ ok: true });
+  }
+  if (p === "/_stage/device/match" && post) {
+    // Is one of this browser's remembered tokens this account's?
+    const b = await bodyOf(request);
+    const email = normEmail(b.email), now = cx.now();
+    for (const t of (Array.isArray(b.tokens) ? b.tokens : []).slice(0, DEVICE_KEEP)) {
+      if (!/^[0-9a-f]{64}$/.test(String(t))) continue;
+      const d = await cx.storage.get("dv:" + t);
+      if (!d) continue;
+      if (d.exp < now) { await cx.storage.delete("dv:" + t); continue; }
+      if (d.email === email) return doJson({ ok: true });
+    }
+    return doJson({ ok: false });
+  }
   if (p === "/_stage/health") {
     const all = await listAll(cx);
     const counts = {};
@@ -502,10 +568,13 @@ export async function stageDoFetch(cx, request, url) {
 }
 
 async function dropSessions(cx, email) {
-  const m = await cx.storage.list({ prefix: "s:" });
   const gone = [];
-  for (const [k, v] of m) if (v && v.email === email) gone.push(k);
-  if (gone.length) await cx.storage.delete(gone);
+  for (const prefix of ["s:", "dv:"]) {
+    const m = await cx.storage.list({ prefix });
+    for (const [k, v] of m) if (v && v.email === email) gone.push(k);
+  }
+  // storage.delete takes at most 128 keys at a time
+  for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
 }
 
 async function nextNumber(cx) {
@@ -609,20 +678,22 @@ export async function currentUser(request, env, origin) {
   const t = parseCookies(request)[COOKIE] || "";
   if (!/^[0-9a-f]{64}$/.test(t)) return null;
   const s = await doCall(env, origin, "/_stage/session?token=" + t);
-  if (!s.ok) return null;
+  // only a session made through the emailed code counts (older ones sign in again)
+  if (!s.ok || !s.mfa) return null;
   const u = await doCall(env, origin, "/_stage/user?email=" + encodeURIComponent(s.email));
   if (!u.ok || !u.user || u.user.disabled) return null;
   return publicUser(u.user);
 }
 
-async function startSession(env, origin, email) {
+async function startSession(env, origin, email, mfa) {
   const token = newToken();
-  await doCall(env, origin, "/_stage/session/put", { token, email });
+  await doCall(env, origin, "/_stage/session/put", { token, email, mfa: mfa === true });
   return token;
 }
 
-// Email + password -> a session token, or the reason not.
-async function login(env, origin, email, password) {
+// Email + password -> the account, or the reason not. The session comes
+// after the second step (the emailed code, or a device that remembers it).
+async function checkPassword(env, origin, email, password) {
   email = normEmail(email);
   if (!validEmail(email) || !password) return { ok: false, error: "Enter your email address and password." };
   const locked = await doCall(env, origin, "/_stage/locked?email=" + encodeURIComponent(email));
@@ -631,7 +702,13 @@ async function login(env, origin, email, password) {
   const good = u.ok && u.user && !u.user.disabled && (await verifyPassword(password, u.user));
   const a = await doCall(env, origin, "/_stage/attempt", { email, ok: good });
   if (!good) return { ok: false, error: a.locked ? "Too many attempts. Try again in 15 minutes." : (u.ok && u.user && u.user.disabled ? "That account is disabled." : "That email and password were not accepted.") };
-  return { ok: true, token: await startSession(env, origin, email), user: publicUser(u.user) };
+  return { ok: true, email, user: publicUser(u.user) };
+}
+
+// The code to the account's own address. Internal mail: no reply-to.
+async function emailCode(env, request, to, code, name, fetchFn) {
+  if (!emailConfigured(env)) return { ok: false, error: "email is not set up on the worker (RESEND_API_KEY)" };
+  return sendEmail(env, to, buildCodeEmail({ code, name, device: deviceLabel(request.headers.get("user-agent")) }), { replyTo: null, fetchFn });
 }
 
 async function createAccount(env, origin, { email, name, password, role, perms, limits, createdBy }) {
@@ -649,10 +726,11 @@ async function createAccount(env, origin, { email, name, password, role, perms, 
 // (preview), /9pocket.json, /9pocket/control, /9pocket/health,
 // /9pocket/login|logout|setup, /9pocket/admin(+/control); the old
 // /buylist/staged addresses redirect here.
-export async function serveStage(request, env, url, staffOk) {
+export async function serveStage(request, env, url, staffOk, sopts) {
   const noStore = { "cache-control": "no-store" };
   const html = (s, status, extra) => new Response(s, { status: status || 200, headers: { "content-type": "text/html; charset=utf-8", ...noStore, ...(extra || {}) } });
   const redirect = (to, extra) => new Response(null, { status: 303, headers: { location: to, ...noStore, ...(extra || {}) } });
+  const redirectCookies = (to, cookies) => { const h = new Headers({ location: to, ...noStore }); for (const c of cookies) h.append("set-cookie", c); return new Response(null, { status: 303, headers: h }); };
   const origin = url.origin, p = url.pathname;
   if (p === LEGACY || p.startsWith(LEGACY + "/") || p === LEGACY + ".json") {
     const to = p === LEGACY + ".json" ? BASE + ".json" : p === LEGACY ? BASE : BASE + p.slice(LEGACY.length);
@@ -683,11 +761,42 @@ export async function serveStage(request, env, url, staffOk) {
   if (p === BASE + "/login") {
     if (!(await usersExist(env, origin))) return html(renderSetup({ k: pinOk ? k : "", err: pinOk ? "" : "No account exists yet. Open this page with the staff key (?k=...) to create the first admin account.", email: FIRST_ADMIN_EMAIL, noPin: !pinOk }), pinOk ? 200 : 403);
     if (request.method === "POST") {
-      const r = await login(env, origin, form.email, form.password);
+      const r = await checkPassword(env, origin, form.email, form.password);
       if (!r.ok) return html(renderLoginForm({ err: r.error, email: String(form.email || ""), next: nextOf() }), 403);
-      return redirect(nextOf(), { "set-cookie": sessionCookie(r.token, SESSION_DAYS * 86400) });
+      // a browser this account ticked "remember" on skips the code
+      const dts = deviceTokens(request);
+      if (dts.length && (await doCall(env, origin, "/_stage/device/match", { email: r.email, tokens: dts })).ok) {
+        return redirect(nextOf(), { "set-cookie": sessionCookie(await startSession(env, origin, r.email, true), SESSION_DAYS * 86400) });
+      }
+      const st = await doCall(env, origin, "/_stage/2fa/start", { email: r.email });
+      if (!st.ok) return html(renderLoginForm({ err: st.error || "Could not start the sign-in.", email: r.email, next: nextOf() }), 429);
+      const sent = await emailCode(env, request, r.email, st.code, r.user && r.user.name, sopts && sopts.fetchFn);
+      if (!sent.ok) return html(renderLoginForm({ err: "Your password is right, but the sign-in code could not be emailed (" + (sent.error || "send failed") + "). Ask an admin to check your account's email address.", email: r.email, next: nextOf() }), 502);
+      return html(renderCodeForm({ masked: maskEmail(r.email), next: nextOf() }), 200, { "set-cookie": challengeCookie(st.id, Math.round(CODE_TTL_MS / 1000)) });
     }
     return html(renderLoginForm({ err: url.searchParams.get("err") || "", msg: url.searchParams.get("msg") || "", email: "", next: nextOf() }));
+  }
+  if (p === BASE + "/login/code" && request.method === "POST") {
+    const id = String(parseCookies(request)[CHALLENGE_COOKIE] || "");
+    const next = nextOf();
+    const again = (err) => redirect(BASE + "/login" + q({ err, next: next === BASE ? "" : next }), { "set-cookie": challengeCookie("", 0) });
+    if (!/^[0-9a-f]{64}$/.test(id)) return again("That sign-in has expired. Enter your password again.");
+    if (form.resend) {
+      const rs = await doCall(env, origin, "/_stage/2fa/resend", { id });
+      if (!rs.ok) return rs.gone ? again(rs.error) : html(renderCodeForm({ masked: maskEmail(rs.email), err: rs.error, next }), 429);
+      const u = await doCall(env, origin, "/_stage/user?email=" + encodeURIComponent(rs.email));
+      const sent = await emailCode(env, request, rs.email, rs.code, u.ok && u.user && u.user.name, sopts && sopts.fetchFn);
+      return html(renderCodeForm({ masked: maskEmail(rs.email), msg: sent.ok ? "A new code is on its way." : "", err: sent.ok ? "" : "The new code could not be emailed (" + (sent.error || "send failed") + ").", next }), sent.ok ? 200 : 502);
+    }
+    const c = await doCall(env, origin, "/_stage/2fa/check", { id, code: form.code });
+    if (!c.ok) return c.gone ? again(c.error) : html(renderCodeForm({ masked: maskEmail(c.email), err: c.error, next, remember: !!form.remember }), 403);
+    const cookies = [sessionCookie(await startSession(env, origin, c.email, true), SESSION_DAYS * 86400), challengeCookie("", 0)];
+    if (form.remember) {
+      const t = newToken();
+      await doCall(env, origin, "/_stage/device/put", { token: t, email: c.email, label: deviceLabel(request.headers.get("user-agent")) });
+      cookies.push(deviceCookie([t, ...deviceTokens(request)].slice(0, DEVICE_KEEP), DEVICE_DAYS * 86400));
+    }
+    return redirectCookies(next, cookies);
   }
   if (p === BASE + "/logout" && request.method === "POST") {
     const t = parseCookies(request)[COOKIE] || "";
@@ -701,7 +810,7 @@ export async function serveStage(request, env, url, staffOk) {
       if (String(form.password || "") !== String(form.password2 || "")) return html(renderSetup({ k, err: "The two passwords differ.", email: String(form.email || FIRST_ADMIN_EMAIL) }), 400);
       const r = await createAccount(env, origin, { email: form.email, name: form.name, password: form.password, role: "admin", perms: ["edit", "prices", "add", "approve", "email"], createdBy: "setup" });
       if (!r.ok) return html(renderSetup({ k, err: r.error, email: String(form.email || FIRST_ADMIN_EMAIL) }), 400);
-      const token = await startSession(env, origin, normEmail(form.email));
+      const token = await startSession(env, origin, normEmail(form.email), true);   // the staff key stood in for the second step
       return redirect(BASE + "?msg=" + encodeURIComponent("Welcome - your admin account is ready."), { "set-cookie": sessionCookie(token, SESSION_DAYS * 86400) });
     }
     return html(renderSetup({ k, err: "", email: FIRST_ADMIN_EMAIL }));

@@ -148,3 +148,61 @@ export function apPerms(user) {
   return { name: user.name || user.email, email: user.email, admin, view, publish, settings, config,
     maxDrop: lim.apMaxDropPct == null ? null : lim.apMaxDropPct, maxRaise: lim.apMaxRaisePct == null ? null : lim.apMaxRaisePct };
 }
+
+/* ---------------- the second step: a code by email ----------------
+   Owner, 2026-09-29: "can we instead change it to a user name and password
+   with 2fa?" -> one login per person, the code by email. After the
+   password, a 6-digit code goes to the account's own address; it works for
+   CODE_TTL_MS and CODE_TRIES guesses. "Remember this device" keeps a random
+   token in an HttpOnly cookie for DEVICE_DAYS, so the code is asked once per
+   device and browser, not every shift. A shared till remembers up to
+   DEVICE_KEEP accounts. A password reset, disable or delete forgets that
+   account's devices and signs it out everywhere. Only sessions made through
+   this step count (s:<token>.mfa); older ones sign in again. */
+export const CODE_TTL_MS = 10 * 60e3;
+export const CODE_TRIES = 5;
+export const CODE_SENDS = 5;            // codes per sign-in (the first + 4 re-sends)
+export const CODE_RESEND_MS = 30e3;
+export const CODE_STARTS = 8;           // sign-ins that may ask for a code, per address per LOCK_MS
+export const DEVICE_DAYS = 30;
+export const DEVICE_KEEP = 5;
+export const DEVICE_COOKIE = "np_d";
+export const CHALLENGE_COOKIE = "np_c";
+
+// 000000-999999 without modulo bias (4294000000 is a multiple of 10^6).
+export function newCode() {
+  const a = new Uint32Array(1);
+  for (;;) { crypto.getRandomValues(a); if (a[0] < 4294000000) return String(a[0] % 1000000).padStart(6, "0"); }
+}
+export const cleanCode = (c) => String(c == null ? "" : c).replace(/\D/g, "").slice(0, 6);
+export async function codeHash(id, code) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(id) + ":" + cleanCode(code)));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+export function sameHex(a, b) {
+  a = String(a || ""); b = String(b || "");
+  if (a.length !== b.length || !a.length) return false;
+  let x = 0;
+  for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return x === 0;
+}
+// "ch•••@exorgames.com": enough to know which inbox, not the whole address.
+export function maskEmail(e) {
+  const [u, d] = normEmail(e).split("@");
+  if (!u || !d) return "";
+  return (u.length <= 2 ? u[0] + "•" : u.slice(0, 2) + "•••") + "@" + d;
+}
+// The remembered-device cookie holds up to DEVICE_KEEP tokens (one per
+// account that ticked "remember" on this browser), newest first.
+export function deviceTokens(request) {
+  return String(parseCookies(request)[DEVICE_COOKIE] || "").split(".").filter((t) => /^[0-9a-f]{64}$/.test(t)).slice(0, DEVICE_KEEP);
+}
+export const deviceCookie = (tokens, maxAgeSec) => `${DEVICE_COOKIE}=${tokens.join(".")}; Path=/9pocket; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSec}`;
+export const challengeCookie = (id, maxAgeSec) => `${CHALLENGE_COOKIE}=${id}; Path=/9pocket/login; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSec}`;
+// "iPhone · Safari" for the code email, so a stranger's sign-in stands out.
+export function deviceLabel(ua) {
+  ua = String(ua || "");
+  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X|Macintosh/.test(ua) ? "Mac" : /CrOS/.test(ua) ? "Chromebook" : /Linux/.test(ua) ? "Linux" : "";
+  const br = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
+  return [os, br].filter(Boolean).join(" · ") || "an unknown browser";
+}

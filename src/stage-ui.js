@@ -76,12 +76,25 @@ const plain = (title, inner) => `<!doctype html><html lang="en"><head><meta char
 /* ---------------- sign in, first account ---------------- */
 
 export function renderLoginForm(o) {
-  return plain("Sign in", `<form class="login" method="post" action="${BASE}/login"><h1>${brandMark()}</h1><p class="muted">Sign in with your staff account.</p>
+  return plain("Sign in", `<form class="login" method="post" action="${BASE}/login"><h1>${brandMark()}</h1><p class="muted">Sign in with your staff account. On a new device we also email you a code.</p>
 ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
 <input type="hidden" name="next" value="${esc(o.next || BASE)}">
 <label>Email</label><input type="email" name="email" value="${esc(o.email || "")}" autocomplete="username" autofocus required>
 <label>Password</label><input type="password" name="password" autocomplete="current-password" required>
 <button class="ok" type="submit">Sign in</button></form>`);
+}
+
+// The second step: the code emailed after the password (src/stage-auth.js).
+export function renderCodeForm(o) {
+  const next = `<input type="hidden" name="next" value="${esc(o.next || BASE)}">`;
+  return plain("Sign-in code", `<form class="login" method="post" action="${BASE}/login/code"><h1>${brandMark()}</h1>
+<p class="muted">We emailed a 6-digit code to <b>${esc(o.masked || "your address")}</b>. It works for 10 minutes.</p>
+${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}${next}
+<label>Code</label><input type="text" name="code" inputmode="numeric" pattern="[0-9 ]*" maxlength="7" autocomplete="one-time-code" autofocus required style="font-size:22px;letter-spacing:.2em;text-align:center">
+<label style="display:flex;gap:8px;align-items:flex-start;font-weight:400"><input type="checkbox" name="remember" value="1"${o.remember === false ? "" : " checked"} style="width:auto;margin:3px 0 0"> <span>Remember this device for 30 days<br><small class="muted">Untick on a computer other people use with their own logins.</small></span></label>
+<button class="ok" type="submit">Sign in</button></form>
+<form method="post" action="${BASE}/login/code" style="max-width:400px;margin:-48px auto 0;text-align:center;font-size:14px">${next}<input type="hidden" name="resend" value="1">
+<button type="submit" style="background:none;border:0;color:#1d4ed8;text-decoration:underline;cursor:pointer;font:inherit;padding:0">Email me a new code</button> · <a href="${BASE}/login">Start again</a></form>`);
 }
 
 export function renderSetup(o) {

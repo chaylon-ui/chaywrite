@@ -37,9 +37,10 @@ async function seed(w) {
   await put("/_stage/user/put", { create: true, user: { email: "admin@x.test", name: "Ada", role: "admin", perms: {}, ...h } });
   await put("/_stage/user/put", { create: true, user: { email: "sam@x.test", name: "Sam", role: "staff", perms: { ap_publish: true }, limits: { apMaxDropPct: 10, apMaxRaisePct: null }, ...h } });
   await put("/_stage/user/put", { create: true, user: { email: "vee@x.test", name: "Vee", role: "staff", perms: { edit: true }, ...h } });
-  await put("/_stage/session/put", { token: TOKEN, email: "admin@x.test" });
-  await put("/_stage/session/put", { token: TOKEN2, email: "sam@x.test" });
-  await put("/_stage/session/put", { token: TOKEN3, email: "vee@x.test" });
+  // sessions made through the emailed code (mfa); an older kind is refused (test below)
+  await put("/_stage/session/put", { token: TOKEN, email: "admin@x.test", mfa: true });
+  await put("/_stage/session/put", { token: TOKEN2, email: "sam@x.test", mfa: true });
+  await put("/_stage/session/put", { token: TOKEN3, email: "vee@x.test", mfa: true });
   // one staged row in the auto-pricer's report: $100 today, $80 suggested
   const ap = w.rooms[AUTOPRICE_DO] || (await w.env.ROOM.get(AUTOPRICE_DO).fetch(new Request("https://w.example/_ap/status")), w.rooms[AUTOPRICE_DO]);
   await ap.storage.put("ap:report", { at: now.t, rows: [{ id: "gid://shopify/Product/1", variantId: "gid://shopify/ProductVariant/11", title: "Box A", handle: "box-a", type: "Sealed", game: "Magic", current: 100, suggested: 80, awaiting: true, action: "lower", reason: "market", stock: 2, variants: 1 }] });
@@ -94,19 +95,37 @@ test("the auto-pricer opens for 9Pocket accounts by their permissions: admin eve
 test("9Pocket sign-in still works and can land on the auto-pricer (the helpers a refactor once dropped)", async () => {
   const w = world();
   await seed(w);
+  // the second step emails a code: capture it instead of calling Resend
+  w.env.RESEND_API_KEY = "test-key";
+  const mail = [];
+  const fetchFn = async (u, init) => { mail.push(JSON.parse(init.body)); return new Response(JSON.stringify({ id: "m1" }), { status: 200 }); };
   const url = new URL("https://w.example/9pocket/login");
-  const r = await serveStage(new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ email: "sam@x.test", password: "password-1", next: "/autoprice" }).toString() }), w.env, url, staffOk);
+  const r1 = await serveStage(new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ email: "sam@x.test", password: "password-1", next: "/autoprice" }).toString() }), w.env, url, staffOk, { fetchFn });
+  assert.equal(r1.status, 200); assert.ok(!String(r1.headers.get("set-cookie")).includes("np_s="), "no session before the code");
+  const cid = String(r1.headers.get("set-cookie")).match(/np_c=([0-9a-f]{64})/)[1];
+  const code = mail[0].subject.match(/^(\d{6}) /)[1];
+  const cu = new URL("https://w.example/9pocket/login/code");
+  const r = await serveStage(new Request(cu, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", cookie: "np_c=" + cid }, body: new URLSearchParams({ code, next: "/autoprice" }).toString() }), w.env, cu, staffOk, { fetchFn });
   assert.equal(r.status, 303); assert.equal(r.headers.get("location"), "/autoprice");
   const cookie = String(r.headers.get("set-cookie") || "");
   const m = cookie.match(/np_s=([0-9a-f]{64})/);
   assert.ok(m, "a session cookie");
   const page = await hit(w, "/autoprice", { cookie: "np_s=" + m[1] });
   assert.equal(page.status, 200); assert.ok(page.text.includes("Signed in as <b>Sam</b>"));
-  const bad = await serveStage(new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ email: "sam@x.test", password: "wrong" }).toString() }), w.env, url, staffOk);
-  assert.equal(bad.status, 403);
+  const bad = await serveStage(new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ email: "sam@x.test", password: "wrong" }).toString() }), w.env, url, staffOk, { fetchFn });
+  assert.equal(bad.status, 403); assert.equal(mail.length, 1, "a wrong password emails nothing");
   const list = new URL("https://w.example/9pocket");
   const lr = await serveStage(new Request(list, { headers: { cookie: "np_s=" + m[1] } }), w.env, list, staffOk);
   assert.equal(lr.status, 200); assert.ok((await lr.text()).includes('href="/autoprice"'));
+});
+
+test("a session made before the emailed code (no mfa) no longer opens anything", async () => {
+  const w = world();
+  await seed(w);
+  const old = "d".repeat(64);
+  await w.env.ROOM.get(STAGE_DO).fetch(new Request("https://w.example/_stage/session/put", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: old, email: "admin@x.test" }) }));
+  const r = await hit(w, "/autoprice", { cookie: "np_s=" + old });
+  assert.equal(r.status, 303); assert.equal(r.location, "/autoprice/login");
 });
 
 test("the 401 runner's door opens only with the relay bearer, lists what to search and keeps the answers", async () => {

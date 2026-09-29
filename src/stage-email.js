@@ -215,6 +215,31 @@ ${n.click ? `<tr><td style="padding:16px 28px 26px"><a href="${esc(n.click)}" st
   return { subject, html, text };
 }
 
+/* The sign-in code (src/stage-auth.js, the second step). The code leads the
+   subject so a phone's notification shows it; the body says where and when
+   the password was used, so a sign-in that was not theirs stands out. */
+export function buildCodeEmail(o) {
+  const code = String(o.code || "");
+  const when = (o.when || new Date()).toLocaleString("en-CA", { timeZone: "America/Halifax", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const who = o.name ? "Hi " + String(o.name).trim().split(/\s+/)[0] + "," : "Hi,";
+  const subject = code + " is your Exor Games staff sign-in code";
+  const where = "Your password was just used to sign in (" + (o.device || "an unknown browser") + ", " + when + " Atlantic).";
+  const notYou = "Not you? Do not share this code, and ask an admin to change your password.";
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:${PAPER};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${INK};font-size:15px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:${INK};padding:16px 28px"><img src="${LOGO}" width="132" alt="Exor Games" style="display:block;border:0;height:auto"></td></tr>
+<tr><td style="padding:24px 28px 8px"><p style="margin:0 0 12px">${esc(who)}</p><p style="margin:0 0 10px">Your staff sign-in code:</p>
+<p style="margin:0 0 14px;font-size:34px;font-weight:800;letter-spacing:.18em;font-family:Menlo,Consolas,monospace;color:${INK}">${esc(code)}</p>
+<p style="margin:0 0 14px;color:${MUTED};font-size:13px">It works for 10 minutes.</p>
+<p style="margin:0 0 6px;font-size:13px;line-height:1.5">${esc(where)}</p><p style="margin:0 0 20px;font-size:13px;line-height:1.5"><b>${esc(notYou)}</b></p></td></tr>
+<tr><td style="background:${PAPER};padding:14px 28px;font-size:12px;color:${MUTED};line-height:1.6">Sent by the Exor Games worker to a staff account. Customers never get this email.</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [who, "", "Your staff sign-in code: " + code, "It works for 10 minutes.", "", where, notYou].join("\n");
+  return { subject, html, text };
+}
+
 /* Resend's send call. Returns what the record keeps: never the key.
    `to` is one address or a list of them (staff notices go to a few).
    opts: { replyTo: null } drops the customer reply-to for internal mail,
