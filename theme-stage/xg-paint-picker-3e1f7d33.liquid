@@ -278,7 +278,7 @@
     // Ruddy Umber opened Kraken Lavender - the index was taken before this sort)
     paints.forEach(function (g, i) { g._i = i; });
     drawBrands(); drawRanges(); drawFamilies(); draw();
-    if (/brand=Citadel/.test(pageHash())) setHash();   // older links: the address says Warhammer too
+    if (/brand=Citadel/.test(pageHash())) setHashSoon();   // older links: the address says Warhammer too
   }).catch(function () { $('.xg-pp__count').textContent = 'Could not load the colours - please refresh.'; });
 
   // the bottles of a colour that pass the range + stock filters
@@ -298,6 +298,9 @@
     var h = state.brand === 'All' ? 'brand=All' : 'brand=' + encodeURIComponent(URLNAME[state.brand] || state.brand) + (state.range !== 'All' ? '&range=' + encodeURIComponent(state.range) : '');
     try { history.replaceState(null, '', location.pathname + location.search + '#' + h); } catch (e) {}
   }
+  // at load, only once the page has finished loading: theme.js reads the address hash at DOM-ready
+  // and jQuery cannot parse "#brand=..." (see layout/theme.liquid), so it must not be there yet
+  function setHashSoon() { if (document.readyState === 'complete') setHash(); else window.addEventListener('load', setHash, { once: true }); }
   function drawBrands() {
     var n = {}; paints.forEach(function (g) { n[g.b] = (n[g.b] || 0) + 1; });
     // the banner's brand logos (snippets/breadcrumb.liquid) mark the brand showing
@@ -459,7 +462,7 @@
     e.preventDefault();
     var b = a.getAttribute('data-brand');
     state.brand = state.brand === b ? 'All' : b; state.range = 'All';
-    drawBrands(); drawRanges(); setHash(); draw();
+    drawBrands(); drawRanges(); setHashSoon(); draw();
     root.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   $('.xg-pp__q').addEventListener('input', function (e) { state.q = e.target.value; draw(); });
