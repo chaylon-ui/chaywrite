@@ -1052,12 +1052,12 @@ test("the runner's door: what to search, and its answers kept per listed product
     { id: "gid://shopify/Product/4", status: 429, results: [] },
     { id: "gid://shopify/Product/99", status: 200, results: [SPIDER_401] },   // not in the list: ignored
     { id: "javascript:alert(1)", status: 200, results: [] } ] });
-  assert.deepEqual({ stored: put.stored, ok: put.ok, at: put.at }, { stored: 2, ok: 1, at: T });   // a future "at" is clamped to now
+  assert.deepEqual({ ok: put.ok, stored: put.stored, answered: put.answered, at: put.at }, { ok: true, stored: 2, answered: 1, at: T });   // a future "at" is clamped to now
   const kept = await storage.get("ap:cf:gid://shopify/Product/1");
   assert.equal(kept.status, 200); assert.equal(kept.results[0].price, "549.95"); assert.equal(kept.results[0].body, undefined);
   assert.equal(await storage.get("ap:cf:gid://shopify/Product/99"), undefined);
   assert.equal(await storage.get("ap:cf:gid://shopify/Product/77"), undefined);   // pruned
-  assert.deepEqual((await compFeedOp(cx, null)).last, { at: T, received: T, stored: 2, ok: 1 });
+  assert.deepEqual((await compFeedOp(cx, null)).last, { at: T, received: T, stored: 2, answered: 1 });
 });
 
 test("a failed 401 lookup never reads as 'not carried', whatever the rule", () => {
