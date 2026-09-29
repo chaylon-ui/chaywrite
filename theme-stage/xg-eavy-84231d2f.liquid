@@ -49,6 +49,11 @@
     <label class="xg-eavy__pick"><span class="visually-hidden">Colour scheme</span><select></select></label>
   </div>
   <div class="xg-eavy__meta"></div>
+  <div class="xg-eavy__tier" role="group" aria-label="How many paints" hidden>
+    <button type="button" class="xg-eavy__tb" data-tier="min" aria-pressed="true"><strong>Minimum</strong><span></span></button>
+    <button type="button" class="xg-eavy__tb" data-tier="full" aria-pressed="false"><strong>Full scheme</strong><span></span></button>
+  </div>
+  <p class="xg-eavy__tierx" hidden></p>
   <div class="xg-eavy__list" role="list"></div>
   <button type="button" class="xg-eavy__all" hidden></button>
   <div class="xg-eavy__more"></div>
@@ -71,6 +76,16 @@
   .xg-eavy .xg-eavy__ttl { margin: 0; white-space: nowrap; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--e-ink) !important; }
   .xg-eavy__pick select { max-width: 240px; height: 30px; padding: 0 26px 0 9px; border: 1px solid var(--e-line); border-radius: 7px; background-color: var(--e-row); color: var(--e-ink); font: inherit; font-size: 13px; }
   .xg-eavy__meta { margin: 3px 0 10px; font-size: 12.5px; color: var(--e-mute); }
+  /* Minimum / Full scheme (owner 2026-09-29: the full recipe is "overkill and cost prohibitive" for some) */
+  .xg-eavy__tier { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 0 0 8px; padding: 4px; border: 1px solid var(--e-line); border-radius: 10px; background: var(--e-row); }
+  .xg-eavy__tier[hidden], .xg-eavy__tierx[hidden] { display: none; }
+  .xg-eavy .xg-eavy__tb { display: flex; flex-direction: column; align-items: center; gap: 1px; min-height: 0; margin: 0; padding: 7px 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--e-text) !important; font: inherit; font-size: 12px; line-height: 1.25; text-transform: none; letter-spacing: normal; cursor: pointer; }
+  .xg-eavy .xg-eavy__tb strong { font-size: 13.5px; font-weight: 800; color: var(--e-ink); }
+  .xg-eavy .xg-eavy__tb span { font-variant-numeric: tabular-nums; color: var(--e-mute); }
+  .xg-eavy .xg-eavy__tb[aria-pressed="true"] { background: var(--e-bg); border-color: var(--xg-red, #d62c28); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .xg-eavy .xg-eavy__tb[aria-pressed="true"] strong { color: var(--xg-red, #d62c28); }
+  html[data-xg-theme="dark"] .xg-eavy .xg-eavy__tb[aria-pressed="true"] strong { color: #ff6a5e; }
+  .xg-eavy__tierx { margin: 0 0 8px; font-size: 12px; line-height: 1.4; color: var(--e-mute); }
   .xg-eavy__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; border-top: 1px solid var(--e-line); }
   .xg-eavy .xg-eavy__row { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 7px; min-height: 29px; padding: 0 2px; border-bottom: 1px solid var(--e-line); }
   .xg-eavy .xg-eavy__lnk { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 29px; padding: 3px 2px; color: var(--e-text) !important; text-decoration: none !important; }
@@ -143,6 +158,10 @@
     if (!box || !box.classList || !box.classList.contains('xg-eavy') || !window.fetch) return;
     var W = 'https://exor-binder.nevski.workers.dev';
     var data = null, cur = 0;
+    // Minimum (the basecoat and wash of each part, flagged m by the worker) or the full scheme;
+    // the choice is remembered on this device. curTier is what the card shows right now.
+    var tier = 'min', curTier = 'min';
+    try { if (localStorage.getItem('xg-eavy-tier') === 'full') tier = 'full'; } catch (e) {}
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function money(p) { return '$' + (Number(p) || 0).toFixed(2); }
     function $(s) { return box.querySelector(s); }
@@ -167,14 +186,23 @@
     }
     function kitTools() { return tools.filter(function (c) { return !RK.has('tool:' + c.key); }).map(function (c) { return c.items[0]; }); }
 
-    // each pot once, in the order the recipe first uses it
-    function pots(s) {
-      var seen = {}, ours = [], other = [];
+    // each pot once, in the order the recipe first uses it; t 'min' keeps only the basecoat and
+    // wash of each part (the worker flags those m), 'full' everything
+    function pots(s, t) {
+      var seen = {}, ours = [], other = [], min = (t || curTier) === 'min';
       s.areas.forEach(function (ar) { ar.paints.forEach(function (p) {
+        if (min && !p.m) return;
         var k = kOf(p); if (seen[k]) return; seen[k] = 1;
         (p.handle ? ours : other).push(p);
       }); });
       return { ours: ours, other: other };
+    }
+    // what the in-stock pots the shopper does not own come to
+    function cost(list) { return list.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); }).reduce(function (t, p) { return t + (Number(p.price) || 0); }, 0); }
+    // "5 paints · $31.20 for 4": the price covers the in-stock pots the shopper does not own
+    function tierLabel(list) {
+      var buy = list.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); }), c = cost(list);
+      return list.length + ' paint' + (list.length === 1 ? '' : 's') + (c ? ' · ' + money(c) + (buy.length < list.length ? ' for ' + buy.length : '') : '');
     }
     function row(p) {
       var rng = p.r ? '<small>' + esc(p.r) + '</small>' : '';
@@ -189,7 +217,23 @@
     function show(i) {
       var keepOpen = i === cur && $('.xg-eavy__list').classList.contains('is-all');
       cur = i;
-      var s = data.schemes[i], pp = pots(s);
+      var s = data.schemes[i], pmin = pots(s, 'min'), pfull = pots(s, 'full');
+      // two tiers only when the minimum is a real saving
+      var twoTiers = pmin.ours.length > 0 && pmin.ours.length < pfull.ours.length;
+      curTier = twoTiers ? tier : 'full';
+      var tb = box.querySelectorAll('.xg-eavy__tb');
+      $('.xg-eavy__tier').hidden = !twoTiers;
+      $('.xg-eavy__tierx').hidden = !twoTiers;
+      if (twoTiers) {
+        tb[0].setAttribute('aria-pressed', curTier === 'min' ? 'true' : 'false');
+        tb[1].setAttribute('aria-pressed', curTier === 'full' ? 'true' : 'false');
+        tb[0].querySelector('span').textContent = tierLabel(pmin.ours);
+        tb[1].querySelector('span').textContent = tierLabel(pfull.ours);
+        $('.xg-eavy__tierx').textContent = curTier === 'min'
+          ? 'The basecoat for each part of the model, plus a wash where the recipe uses one: enough for a tabletop-ready army. Layers and highlights can come later.'
+          : 'Every paint in the recipe: basecoats, washes, layers and highlights, as painted on the box.';
+      }
+      var pp = curTier === 'min' ? pmin : pfull;
       var owned = pp.ours.filter(function (p) { return RK.has(pk(p)); }).length;
       var inst = pp.ours.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); });
       var extra = kitTools();
@@ -233,7 +277,7 @@
       main.parentNode.insertBefore(p, main.nextSibling);
     }
     // "Don't forget the paint!" under the buy buttons; it scrolls to this card
-    function tease(n) {
+    function tease(n, full) {
       if (document.querySelector('.xg-eavy-tease')) return;
       var meta = document.querySelector('.product-single-right .product-single__meta') || document.querySelector('.product-single__meta');
       if (!meta) return;
@@ -250,7 +294,7 @@
           '<path d="M28.3 31.5a3.8 3.8 0 0 0 3 3.9" fill="none" stroke="#b3201c" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>' +
         '</svg>' +
         '<span class="xg-eavy-tease__strip"><span class="xg-eavy-tease__txt"><span class="xg-eavy-tease__t">Don\u2019t forget the paint!</span>' +
-          '<span class="xg-eavy-tease__s">' + n + ' paint' + (n === 1 ? '' : 's') + ' to paint it like the box</span></span>' +
+          '<span class="xg-eavy-tease__s">' + (full > n ? n + ' paints minimum · ' + full + ' for the full box art' : n + ' paint' + (n === 1 ? '' : 's') + ' to paint it like the box') + '</span></span>' +
           '<svg class="xg-eavy-tease__arrow" viewBox="0 0 22 26" aria-hidden="true"><path d="M3 4l8 7 8-7M3 13l8 7 8-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
       var form = meta.querySelector('.product-selection') || meta.querySelector('form[action*="/cart/add"]');
       if (form && form.parentNode === meta) meta.insertBefore(b, form.nextSibling); else meta.appendChild(b);
@@ -294,6 +338,13 @@
         window.xgPaintSheet.open({ handle: h }).then(function (ok) { if (!ok) location.href = r.href; });
         return;
       }
+      var tbtn = e.target.closest && e.target.closest('.xg-eavy__tb');
+      if (tbtn) {
+        tier = tbtn.getAttribute('data-tier') === 'full' ? 'full' : 'min';
+        try { localStorage.setItem('xg-eavy-tier', tier); } catch (err) {}
+        show(cur);
+        return;
+      }
       if (e.target.closest && e.target.closest('.xg-eavy__all')) {
         var on = $('.xg-eavy__list').classList.toggle('is-all');
         e.target.textContent = on ? 'Show fewer' : 'Show all ' + pots(data.schemes[cur]).ours.length + ' paints';
@@ -313,7 +364,7 @@
     });
 
     // v= changes with the worker's cache version so a browser never keeps an answer from before a fix
-    var u = W + '/eavy/for.json?v=7&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '') + '&kind=' + encodeURIComponent(box.getAttribute('data-kind') || '');
+    var u = W + '/eavy/for.json?v=8&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '') + '&kind=' + encodeURIComponent(box.getAttribute('data-kind') || '');
     fetch(u).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d || !d.ok || !d.schemes || !d.schemes.length) return;
       // a scheme is only worth showing when we sell at least one of its paints
@@ -331,7 +382,8 @@
         if (tools.length) show(cur);
       }).catch(function () {});
       thanks(d);
-      tease(pots(d.schemes[0]).ours.length);
+      var t0 = pots(d.schemes[0], 'min').ours.length, f0 = pots(d.schemes[0], 'full').ours.length;
+      tease(t0 && t0 < f0 ? t0 : f0, f0);
     }).catch(function () {});
   })();
 </script>
