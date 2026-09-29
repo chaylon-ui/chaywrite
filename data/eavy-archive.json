@@ -1,7 +1,7 @@
 {
 "source": "https://eavy-archive.com/",
 "credit": "'Eavy Archive - box-art recipes collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)",
-"generated": "2026-09-25T22:59:57Z",
+"generated": "2026-09-29T11:27:16Z",
 "count": 52,
 "pages": {
 "https://eavy-archive.com/40k/adepta-sororitas/": {
@@ -1106,12 +1106,9 @@
 "name": "Red Robes",
 "paints": [
 "Evil Sunz Scarlet",
-"Mephiston Red*",
 "Mephiston Red",
-"Incubi Darkness*",
-"Evil Sunz Scarlet*",
-"Wildrider Red*",
-"Troll Slayer Orange*",
+"Incubi Darkness",
+"Wildrider Red",
 "Troll Slayer Orange",
 "Tau Light Ochre",
 "Ushabti Bone"
@@ -1123,10 +1120,8 @@
 "paints": [
 "Screaming Skull",
 "Ushabti Bone",
-"XV88 *",
-"Screaming Skull**",
-"White",
 "XV88",
+"White",
 "Rhinox Hide",
 "Ulthwe"
 ]
@@ -1569,7 +1564,6 @@
 "Abaddon Black",
 "Kantor Blue",
 "Barak-Nar",
-"Dark Reaper :1",
 "Dark Reaper",
 "Grey Seer"
 ]
@@ -1668,10 +1662,9 @@
 "Warpstone Glow",
 "Warboss Green",
 "Kabalite Green",
-"Moot Green :1",
+"Moot Green",
 "Incubi Darkness",
 "Basecoat Mix",
-"Moot Green",
 "Elysian Green",
 "Previous mix",
 "Dorn Yellow",
@@ -2074,12 +2067,11 @@
 "Cadian Fleshtone",
 "Krieg Khaki",
 "Ionrach Skin",
-"Corax White :",
+"Corax White",
 "Base Mix",
 "Sons of Horus Green",
 "Gal Vorbak Red",
-"Doombull Brown",
-"Corax White"
+"Doombull Brown"
 ]
 },
 {
@@ -2556,7 +2548,6 @@
 "Sotek Green",
 "Kabalite Green",
 "Kantor Blue",
-"Black :1",
 "Black",
 "Previous Mix",
 "Sybarite Green",
@@ -3147,12 +3138,11 @@
 "Daemonette Hide",
 "Rakarth Flesh",
 "Kislev Flesh",
-"White :1",
+"White",
 "Bugman's Glow",
 "Dryad Bark",
 "Naggaroth Night",
-"Basecoat Mix",
-"White"
+"Basecoat Mix"
 ]
 },
 {
@@ -3476,7 +3466,6 @@
 "name": "Renegade Fatigues 1",
 "paints": [
 "Tallarn Sand",
-"Rhinox Hide1:1",
 "Rhinox Hide",
 "Screaming Skull"
 ]
@@ -4078,9 +4067,8 @@
 "Cadian Fleshtone",
 "Ushabti Bone",
 "White",
-"Slaanesh Grey :1",
-"Druchi Violet",
-"Slaanesh Grey"
+"Slaanesh Grey",
+"Druchi Violet"
 ]
 },
 {
@@ -6183,7 +6171,6 @@
 "paints": [
 "Black",
 "Kantor Blue",
-"Black1:1",
 "Thunderhawk Blue",
 "Fenrisian Grey",
 "Blue Horror"
@@ -6769,7 +6756,7 @@
 "Sons of Horus Green",
 "Krieg Khaki",
 "Rakarth Flesh",
-"White :1"
+"White"
 ]
 }
 ]
@@ -9860,7 +9847,7 @@
 "Pallid Flesh",
 "Squig Orange",
 "Wazdakka Red",
-"Druchii Violet :1",
+"Druchii Violet",
 "Add Druchii Violet to Basecoat",
 "Add Pallid Flesh to Basecoat"
 ]
@@ -10045,7 +10032,7 @@
 "Black",
 "Incubi Darkness",
 "Wraithbone",
-"White :3"
+"White"
 ]
 },
 {
@@ -10322,7 +10309,7 @@
 "Deepkin Flesh",
 "Death Korps Drab",
 "White",
-"White 1:1Base rim: Stormvermin Fur"
+"White Base rim: Stormvermin Fur"
 ]
 }
 ]
@@ -11072,11 +11059,10 @@
 "Cadian Fleshtone",
 "Screaming Skull",
 "Grey Seer",
-"White :1",
+"White",
 "Basecoat Mix",
 "Doombull Brown",
-"Rhinox Hide",
-"White"
+"Rhinox Hide"
 ]
 },
 {
@@ -11677,7 +11663,7 @@
 "Blue Horror",
 "White",
 "Incubi Darkness mixed with Blue Horror",
-"Lahmian Medium :1"
+"Lahmian Medium"
 ]
 }
 ]
@@ -15672,7 +15658,6 @@
 "Scab Red",
 "Scorched Brown",
 "Chaos Black",
-"Dark Flesh :1",
 "Dark Flesh",
 "Highlight Mix",
 "Bleached Bone",
