@@ -50,7 +50,7 @@ const ALIASES = { black: "Abaddon Black", white: "White Scar", abaddonblack: "Ab
   kreigkhaki: "Krieg Khaki", druchiviolet: "Druchii Violet", cadianflesh: "Cadian Fleshtone",
   ironwarrior: "Iron Warriors", gehennasgold: "Gehenna's Gold", dawnstonegrey: "Dawnstone", xeruspurple: "Xereus Purple",
   scragbrown: "Skrag Brown", evilsunzred: "Evil Sunz Scarlet", sepraphimsepia: "Seraphim Sepia",
-  reiklandfleshadegloss: "Reikland Fleshshade Gloss", skullwhite: "White Scar", administratrumgrey: "Administratum Grey" };
+  reiklandfleshadegloss: "Reikland Fleshshade Gloss", skullwhite: "White Scar", administratrumgrey: "Administratum Grey", khonrered: "Khorne Red" };
 // the pre-2012 names: the card says which old pot the recipe named
 const RENAMED = new Set(["bleachedbone", "scorchedbrown", "codexgrey", "bestialbrown", "mithrilsilver", "chainmail", "boltgunmetal",
   "fortressgrey", "regalblue", "shininggold", "goblingreen", "elfflesh", "scabred", "tinbitz", "redgore", "burnishedgold", "devlanmud",

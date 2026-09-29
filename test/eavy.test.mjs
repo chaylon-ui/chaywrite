@@ -215,6 +215,9 @@ test("minimum tier: the basecoat (or its mix) and the first wash of each area ca
   assert.deepEqual(min(["Mephiston Red", "Nuln Oil", "Previous mix", "Evil Sunz Scarlet"]), ["Mephiston Red", "Nuln Oil"]);
   // a Base pot first never pulls the second in
   assert.deepEqual(min(["Abaddon Black", "Administratum Grey", "White"]), ["Abaddon Black"]);
+  // a misspelt first entry is the same pot as the second (Bloodreavers: "Khonre Red", "Khorne Red"), not a mix
+  const kr = (n) => ({ b: "Citadel", n, h: "#000000", items: [{ u: "khorne-red", t: n, p: "5", a: true, v: 1, r: "Base" }] });
+  assert.deepEqual(areaPaints(["Khonre Red", "Khorne Red", "Abaddon Black", "Mephiston Red"], citadelIndex({ swatches: [kr("Khorne Red"), sw("Abaddon Black", "Base")] })).map((p) => [p.name, p.m || 0]), [["Khorne Red", 1], ["Abaddon Black", 0], ["Mephiston Red", 0]]);
   assert.deepEqual(areaPaints(["Highlight Mix"], idx), []);
   // through forProduct the flags ride on the area's paints
   const D = { pages: { u: { url: "https://e/40k/orks/", title: "Orks", game: "40k", faction: "orks", sub: "",
