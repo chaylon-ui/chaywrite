@@ -69,6 +69,35 @@
     price: ['price', true, 'Price, low to high', 'price, low to high'],
     name: ['title', true, 'Name, A to Z', 'name']
   };
+  /* Filters (owner, 2026-09-29: "in the find a card, is it possible to add color, rarity and type
+     filters there?"): BinderPOS forStore takes colors / rarities / types / monsterTypes as lists
+     of the ids its /api/cards/<game>/<list> endpoints give (case does not matter); the values in
+     one list are OR, the lists AND each other (pyprobe 36628955795). Lorcana, One Piece and Star
+     Wars: Unlimited ignore them (36629179767), so only Magic, Pokémon and Yu-Gi-Oh! get the panel.
+     Magic's "types" are exact type lines ("Legendary Creature - Elf Rogue"), so a chip stands for
+     every line carrying that word; "Creature" is 4,300 lines: fast inside a set (0.5 s), slow across
+     every set (22 s, 36629383484). */
+  var MTG_COLOURS = [['W', 'White', '#f3ecd2'], ['U', 'Blue', '#2f7bd2'], ['B', 'Black', '#2b2530'], ['R', 'Red', '#d3312d'], ['G', 'Green', '#2f8f4e'],
+    ['Multicolor', 'Multicolour', 'linear-gradient(135deg,#d9a520,#2f7bd2 50%,#d3312d)'], ['Colorless', 'Colourless', '#b9bec2']];
+  var FILTERS = {
+    mtg: [
+      { k: 'colors', label: 'Colour', fixed: MTG_COLOURS },
+      { k: 'rarities', label: 'Rarity', api: 'rarities' },
+      { k: 'types', label: 'Type', api: 'types', expand: true, fixed: [['Creature'], ['Instant'], ['Sorcery'], ['Enchantment'], ['Artifact'], ['Planeswalker'], ['Land'], ['Battle']] }
+    ],
+    pokemon: [
+      { k: 'rarities', label: 'Rarity', api: 'rarities', prefer: ['Common', 'Uncommon', 'Rare', 'Double Rare', 'Ultra Rare', 'Illustration Rare', 'Special Illustration Rare', 'Hyper Rare', 'Secret Rare', 'Holo Rare', 'Promo'] },
+      { k: 'types', label: 'Type', api: 'types', prefer: ['Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighting', 'Darkness', 'Metal', 'Fairy', 'Dragon', 'Colorless', 'Item', 'Supporter', 'Stadium', 'Pokémon Tool', 'Energy'] }
+    ],
+    yugioh: [
+      { k: 'colors', label: 'Attribute', api: 'colors', keep: /^[A-Z]+$/ },
+      { k: 'rarities', label: 'Rarity', api: 'rarities', prefer: ['Common', 'Rare', 'Super Rare', 'Ultra Rare', 'Secret Rare', 'Ultimate Rare', 'Quarter Century Secret Rare', 'Starlight Rare', "Collector's Rare", 'Gold Rare', 'Short Print', 'Promo'] },
+      { k: 'types', label: 'Card type', api: 'types', prefer: [] },
+      { k: 'monsterTypes', label: 'Monster type', api: 'monsterTypes', prefer: [] }
+    ]
+  };
+  var FKEYS = ['colors', 'rarities', 'types', 'monsterTypes'];
+  var FHASH = { colors: 'c', rarities: 'r', types: 't', monsterTypes: 'm' };
   var ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M10.5 17a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zm4.8-1.7L20 20"/></svg>';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -118,6 +147,59 @@
     return setLoads[g];
   }
   function index(l) { return l.map(function (name) { return { name: name, n: norm(name) }; }); }
+
+  /* ---------------- filter value lists ---------------- */
+  // each entry a string (id = label) or [id, label]; kept a day in sessionStorage per game + list
+  var lists = {}, listLoads = {};
+  function idOf(e) { return typeof e === 'string' ? e : e[0]; }
+  function labelOf(e) { return typeof e === 'string' ? e : e[1]; }
+  function loadList(g, api) {
+    var key = g + '/' + api;
+    if (lists[key]) return Promise.resolve(lists[key]);
+    if (listLoads[key]) return listLoads[key];
+    var kept = ss('xg-cf-l-' + key);
+    if (kept && kept.at > Date.now() - 864e5 && Array.isArray(kept.l)) return Promise.resolve(lists[key] = kept.l);
+    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 15000);
+    listLoads[key] = fetch(SETS_URL + encodeURIComponent(g) + '/' + api, { signal: ctl.signal, headers: { Accept: 'application/json' } })
+      .then(function (r) { if (!r.ok) throw new Error(api + ' ' + r.status); return r.json(); })
+      .then(function (a) {
+        clearTimeout(t);
+        var l = (Array.isArray(a) ? a : []).map(function (x) {
+          if (typeof x === 'string') return x;
+          if (!x || x.id == null) return null;
+          var id = String(x.id), lab = String(x.value || x.id);
+          return id === lab ? id : [id, lab];
+        }).filter(Boolean);
+        ss('xg-cf-l-' + key, { at: Date.now(), l: l });
+        return (lists[key] = l);
+      })
+      .catch(function () { clearTimeout(t); delete listLoads[key]; return null; });
+    return listLoads[key];
+  }
+  function groupsOf(g) { return FILTERS[g] || null; }
+  function copyF(o) { var r = {}; FKEYS.forEach(function (k) { if (o && o[k] && o[k].length) r[k] = o[k].slice(0, 40); }); return r; }
+  function hasF(st) { return FKEYS.some(function (k) { return st.f && st.f[k] && st.f[k].length; }); }
+  function nF(o) { var n = 0; FKEYS.forEach(function (k) { n += (o && o[k] ? o[k].length : 0); }); return n; }
+  // the label a value shows: a fixed chip's, the list's, or the id itself
+  function labelFor(g, k, id) {
+    var gr = (groupsOf(g) || []).filter(function (x) { return x.k === k; })[0];
+    if (!gr) return id;
+    var f = gr.fixed && gr.fixed.filter(function (x) { return x[0].toLowerCase() === id.toLowerCase(); })[0];
+    if (f) return f[1] || f[0];
+    var l = gr.api && lists[g + '/' + gr.api];
+    var e = l && l.filter(function (x) { return idOf(x).toLowerCase() === id.toLowerCase(); })[0];
+    return e ? labelOf(e) : id;
+  }
+  // Magic: a chip word -> every type line carrying that word ("Creature" -> "Legendary Creature - Elf", ...)
+  function expandTypes(words, list) {
+    var out = [], seen = {};
+    words.forEach(function (w) {
+      var re = new RegExp('(^|[^a-z])' + w.replace(/[^a-z]/gi, '') + '([^a-z]|$)', 'i');
+      list.forEach(function (e) { var id = idOf(e); if (re.test(id) && !seen[id]) { seen[id] = 1; out.push(id); } });
+    });
+    return out.length ? out : words;
+  }
+  function isHeavy(st) { return st.g === 'mtg' && !st.set && !!(st.f && st.f.types && st.f.types.some(function (t) { return /^creature$/i.test(t); })); }
   // best first: exact, starts with, every word starts a word, contains anywhere
   function candidates(list, text) {
     var n = norm(text);
@@ -150,7 +232,7 @@
   }
 
   /* ---------------- state ---------------- */
-  function fresh() { return { g: GAME0, set: '', q: '', sort: 'num', all: false, p: 1 }; }
+  function fresh() { return { g: GAME0, set: '', q: '', sort: 'num', all: false, p: 1, f: {} }; }
   // The hash is "#cf-" + base64url of the query, so it is always a valid id selector: theme
   // and app scripts call jQuery on location.hash at load, and "#cards?set=..." made Sizzle throw.
   function b64e(t) { try { return btoa(unescape(encodeURIComponent(t))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { return ''; } }
@@ -166,7 +248,12 @@
     st.sort = SORTS[u.get('sort')] ? u.get('sort') : 'num';
     st.all = u.get('all') === '1';
     st.p = Math.max(1, Math.min(999, parseInt(u.get('p'), 10) || 1));
-    return st.set || st.q ? st : null;
+    var groups = groupsOf(st.g) || [];
+    FKEYS.forEach(function (k) {
+      var v = u.get(FHASH[k]);
+      if (v && groups.some(function (gr) { return gr.k === k; })) st.f[k] = v.split('|').filter(Boolean).slice(0, 40);
+    });
+    return st.set || st.q || hasF(st) ? st : null;
   }
   function hashOf(st) {
     var u = new URLSearchParams();
@@ -176,6 +263,7 @@
     if (st.sort !== 'num') u.set('sort', st.sort);
     if (st.all) u.set('all', '1');
     if (st.p > 1) u.set('p', String(st.p));
+    FKEYS.forEach(function (k) { if (st.f && st.f[k] && st.f[k].length) u.set(FHASH[k], st.f[k].join('|')); });
     return '#cf-' + b64e(u.toString());
   }
   function writeHash(st) {
@@ -186,12 +274,27 @@
     if (!st.set && (st.sort === 'num' || st.sort === 'num-desc')) return SORTS.name;
     return SORTS[st.sort] || SORTS.num;
   }
-  function bodyOf(st) {
+  function bodyOf(st, typeList) {
     var s = sortOf(st);
     var b = { storeUrl: STORE, game: st.g, strict: null, sortTypes: [{ type: s[0], asc: s[1], order: 1 }], variants: null,
       title: st.q || '', priceGreaterThan: 0, priceLessThan: null, instockOnly: !st.all, limit: PER, offset: (st.p - 1) * PER };
     if (st.set) b.setNames = [st.set];
+    FKEYS.forEach(function (k) {
+      var v = st.f && st.f[k];
+      if (!v || !v.length) return;
+      if (k === 'types' && st.g === 'mtg' && typeList) v = expandTypes(v, typeList);
+      b[k] = v;
+    });
     return b;
+  }
+  // the cache key: the state, not the body (a Magic creature search sends 4,300 type lines)
+  function keyOf(st) { return JSON.stringify([st.g, st.set, st.q, st.sort, st.all, st.p, copyF(st.f)]); }
+  // the value lists a search needs: Magic's type lines to expand a chip, and every used list so the
+  // summary can name the values (a hash restore knows only the ids)
+  function prep(st) {
+    var groups = groupsOf(st.g) || [], jobs = [];
+    groups.forEach(function (gr) { if (gr.api && st.f && st.f[gr.k] && st.f[gr.k].length) jobs.push(loadList(st.g, gr.api)); });
+    return Promise.all(jobs).then(function () { return bodyOf(st, st.g === 'mtg' ? lists['mtg/types'] : null); });
   }
 
   /* ---------------- search ---------------- */
@@ -238,7 +341,7 @@
     intent++;
     if (live) live.abort();
     var my = ++seq, ctl = live = new AbortController();
-    var body = bodyOf(st), key = JSON.stringify(body);
+    var key = keyOf(st);
     cur = st;
     writeHash(st);
     open(true);
@@ -246,24 +349,30 @@
     if (hit) { draw(st, hit, how); return; }
     busy(st, true);
     if (how.scroll) toBar();   // the wait, an error or an empty page all land in view
-    post(BP, body, 15000, ctl.signal)
-      .catch(function (e) {
-        if (my !== seq) throw e;
-        return post(WORKER, body, 50000, ctl.signal);
-      })
-      .then(function (j) {
-        if (my !== seq) return;
-        var d = slim(j);
-        cachePut(key, d);
-        draw(st, d, how);
-      }, function () {
-        if (my !== seq) return;
-        failed(st, how);
-      });
+    var heavy = isHeavy(st);
+    if (heavy) { var hs = res.querySelector('.xg-cf-res__sum'); if (hs) hs.innerHTML = 'Searching every set for creatures takes a while&hellip; pick a set for a quick answer.'; }
+    prep(st).then(function (body) {
+      if (my !== seq) return null;
+      return post(BP, body, heavy ? 45000 : 15000, ctl.signal)
+        .catch(function (e) {
+          if (my !== seq) throw e;
+          return post(WORKER, body, 50000, ctl.signal);
+        });
+    }).then(function (j) {
+      if (my !== seq || !j) return;
+      var d = slim(j);
+      cachePut(key, d);
+      draw(st, d, how);
+    }, function () {
+      if (my !== seq) return;
+      failed(st, how);
+    });
   }
 
   /* ---------------- DOM ---------------- */
-  var col, bar, res, inSet, inQ, selSort, selGame, chkStock, list, msg, quick;
+  var col, bar, res, inSet, inQ, selSort, selGame, chkStock, list, msg, quick, fb, more;
+  var sel = {};             // the filter values picked in the panel, by list
+  var moreGen = 0;          // bumped on every panel render, so a late list load draws nothing stale
   var chosen = '';          // the set name picked from the list (exact)
   var active = -1;          // highlighted row in the list
 
@@ -296,10 +405,12 @@
           '<div class="xg-cf__f xg-cf__f--sort"><label for="xg-cf-sort">Sort by</label><select id="xg-cf-sort" class="xg-cf__in">' +
             Object.keys(SORTS).map(function (k) { return '<option value="' + k + '">' + esc(SORTS[k][2]) + '</option>'; }).join('') + '</select></div>' +
           '<label class="xg-cf__chk"><input type="checkbox" checked> In stock only</label>' +
+          '<button type="button" class="xg-cf__fb" aria-expanded="false" aria-controls="xg-cf-more" hidden>Filters</button>' +
           '<button type="submit" class="xg-cf__go">Search</button>' +
         '</div>' +
+        '<div class="xg-cf__more" id="xg-cf-more" hidden></div>' +
         '<p class="xg-cf__msg" role="status" aria-live="polite"></p>' +
-        '<p class="xg-cf__tip">Pick a set and leave the name empty to see the whole set in card-number order. <a href="/pages/advanced-search?game=' + encodeURIComponent(GAME0) + '">Colour, rarity and type filters &rsaquo;</a></p>' +
+        '<p class="xg-cf__tip">Pick a set and leave the name empty to see the whole set in card-number order. Condition and price filters: <a href="/pages/advanced-search?game=' + encodeURIComponent(GAME0) + '">Advanced Search &rsaquo;</a></p>' +
       '</div>';
     res = document.createElement('section');
     res.className = 'xg-cf-res';
@@ -315,7 +426,10 @@
     list = bar.querySelector('.xg-cf__list');
     msg = bar.querySelector('.xg-cf__msg');
     quick = bar.querySelector('.xg-cf__quick');
+    fb = bar.querySelector('.xg-cf__fb');
+    more = bar.querySelector('.xg-cf__more');
     sr = bar.querySelector('.xg-cf__sr');
+    fbUpdate();
     expand(window.matchMedia ? window.matchMedia('(min-width: 768px)').matches : true);
     wire();
     // the app and the theme re-render around us; put the bar back if it is ever dropped
@@ -342,6 +456,75 @@
     inQ.value = st.q || '';
     selSort.value = st.sort;
     chkStock.checked = !st.all;
+    sel = copyF(st.f);
+    fbUpdate();
+    if (more && !more.hidden) renderMore();
+  }
+
+  /* ---------------- filter panel ---------------- */
+  function fbUpdate() {
+    if (!fb) return;
+    var n = nF(sel);
+    fb.hidden = !groupsOf(game());
+    fb.innerHTML = 'Filters' + (n ? ' <b>' + n + '</b>' : '') + '<span class="xg-cf__chev" aria-hidden="true"></span>';
+    fb.classList.toggle('is-on', n > 0);
+    var clr = more && more.querySelector('[data-clear]');
+    if (clr) clr.hidden = !n;
+  }
+  function chipHtml(k, id, label, on, swatch) {
+    return '<button type="button" class="xg-cf__chip" data-k="' + esc(k) + '" data-v="' + esc(id) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+      (swatch ? '<i style="background:' + esc(swatch) + '"></i>' : '') + esc(label) + '</button>';
+  }
+  function picked(k, id) { return (sel[k] || []).some(function (c) { return c.toLowerCase() === String(id).toLowerCase(); }); }
+  function renderMore() {
+    if (!more) return;
+    var g = game(), groups = groupsOf(g), gen = ++moreGen;
+    fbUpdate();
+    if (!groups) { more.hidden = true; more.innerHTML = ''; fb.setAttribute('aria-expanded', 'false'); return; }
+    more.innerHTML = groups.map(function (gr) {
+      var html = '<fieldset class="xg-cf__grp" data-k="' + gr.k + '"><legend>' + esc(gr.label) + '</legend><div class="xg-cf__chips">';
+      if (gr.fixed) html += gr.fixed.map(function (f) { return chipHtml(gr.k, f[0], f[1] || f[0], picked(gr.k, f[0]), f[2]); }).join('');
+      else html += '<span class="xg-cf__chips-note">Loading&hellip;</span>';
+      return html + '</div></fieldset>';
+    }).join('') +
+      '<div class="xg-cf__morefoot"><button type="button" class="xg-cf__clear" data-clear' + (nF(sel) ? '' : ' hidden') + '>Clear filters</button>' +
+      '<span class="xg-cf__morehint">Pick as many as you like: values in one row are &ldquo;or&rdquo;, the rows narrow each other.</span></div>';
+    groups.forEach(function (gr) {
+      if (!gr.api || gr.fixed) return;
+      loadList(g, gr.api).then(function (l) {
+        if (gen !== moreGen) return;
+        var box = more.querySelector('.xg-cf__grp[data-k="' + gr.k + '"] .xg-cf__chips');
+        if (!box) return;
+        if (!l) { box.innerHTML = '<span class="xg-cf__chips-note">The list did not load - try again in a moment.</span>'; return; }
+        if (gr.keep) l = l.filter(function (e) { return gr.keep.test(idOf(e)); });
+        var byN = {};
+        l.forEach(function (e) { byN[norm(idOf(e))] = e; });
+        var shown = gr.prefer ? gr.prefer.map(function (x) { return byN[norm(x)]; }).filter(Boolean) : (l.length <= 16 ? l.slice() : l.slice(0, 16));
+        var ids = {};
+        shown.forEach(function (e) { ids[idOf(e).toLowerCase()] = 1; });
+        (sel[gr.k] || []).forEach(function (id) {
+          if (ids[id.toLowerCase()]) return;
+          var e = l.filter(function (x) { return idOf(x).toLowerCase() === id.toLowerCase(); })[0];
+          shown.push(e || id); ids[id.toLowerCase()] = 1;
+        });
+        var rest = l.filter(function (e) { return !ids[idOf(e).toLowerCase()]; });
+        box.innerHTML = shown.map(function (e) { return chipHtml(gr.k, idOf(e), labelOf(e), picked(gr.k, idOf(e))); }).join('') +
+          (rest.length ? '<select class="xg-cf__in xg-cf__add" data-k="' + gr.k + '" aria-label="Add a ' + esc(gr.label.toLowerCase()) + '"><option value="">' + (shown.length ? 'More' : 'Choose') + '&hellip;</option>' +
+            rest.map(function (e) { return '<option value="' + esc(idOf(e)) + '">' + esc(labelOf(e)) + '</option>'; }).join('') + '</select>' : '');
+      });
+    });
+  }
+  function toggleF(k, id, on) {
+    var a = (sel[k] || []).filter(function (c) { return c.toLowerCase() !== String(id).toLowerCase(); });
+    if (on) a.push(id);
+    if (a.length) sel[k] = a; else delete sel[k];
+  }
+  // results already showing: a changed filter re-runs the search from page 1, with whatever the
+  // name, sort and stock boxes say now; a retyped set goes through the normal submit (it must resolve)
+  function refilter() {
+    if (!cur) return;
+    if (norm(inSet.value) !== norm(cur.set)) { submit(); return; }
+    run(Object.assign({}, cur, { q: inQ.value.trim().slice(0, 120), sort: selSort.value, all: !chkStock.checked, f: copyF(sel), p: 1 }), {});
   }
 
   /* set list (combobox) */
@@ -389,12 +572,15 @@
     st.q = inQ.value.trim().slice(0, 120);
     st.sort = selSort.value;
     st.all = !chkStock.checked;
+    var groups = groupsOf(st.g) || [];
+    st.f = {};
+    groups.forEach(function (gr) { if (sel[gr.k] && sel[gr.k].length) st.f[gr.k] = sel[gr.k].slice(0, 40); });
     return st;
   }
   function submit() {
     var st = readForm(), text = inSet.value.trim();
     hideQuick();
-    if (!text && !st.q) { note('Type a card name, pick a set, or both.', true); inSet.focus(); return; }
+    if (!text && !st.q && !hasF(st)) { note('Type a card name, pick a set, or both.', true); inSet.focus(); return; }
     if (text && chosen && norm(chosen) === norm(text)) { st.set = chosen; go(st); return; }
     var my = ++intent;
     if (text && !setLists[st.g]) note('Checking the set name…');
@@ -447,8 +633,16 @@
     var what = '<strong>' + n.toLocaleString('en-CA') + ' card' + (n === 1 ? '' : 's') + '</strong>' +
       (st.q ? ' named &ldquo;' + esc(st.q) + '&rdquo;' : '') +
       (st.set ? ' in <strong>' + esc(st.set) + '</strong>' : (PICK ? ' in ' + esc(GAME_NAMES[st.g]) : '')) +
-      (st.all ? '' : ', in stock');
+      (st.all ? '' : ', in stock') + filterText(st);
     return what + ' <span class="xg-cf-res__by">&middot; ' + esc(s[3]) + (pages > 1 ? ' &middot; page ' + st.p + ' of ' + pages : '') + '</span>';
+  }
+  // ", red or green, rare or mythic" - the picked values, in the order the panel shows them
+  function filterText(st) {
+    if (!hasF(st)) return '';
+    return (groupsOf(st.g) || []).map(function (gr) {
+      var v = st.f[gr.k];
+      return v && v.length ? v.map(function (id) { return esc(labelFor(st.g, gr.k, id)); }).join(' or ') : '';
+    }).filter(Boolean).map(function (t) { return ', ' + t; }).join('');
   }
   function head(st, d, extra) {
     return '<div class="xg-cf-res__head"><p class="xg-cf-res__sum">' + (d ? summary(st, d) : 'Searching&hellip;') + '</p>' +
@@ -497,12 +691,14 @@
       if (!st.all) tips.push('<button type="button" class="xg-cf-btn" data-all>Include sold-out cards</button>');
       if (st.q && st.set) tips.push('<button type="button" class="xg-cf-btn" data-noq>All of ' + esc(st.set) + '</button>');
       if (st.p > 1) tips.push('<button type="button" class="xg-cf-btn" data-p="1">First page</button>');
+      if (hasF(st)) tips.push('<button type="button" class="xg-cf-btn" data-clear>Clear filters</button>');
       res.innerHTML = head(st, d, extra) + '<div class="xg-cf-empty"><p>No ' + (st.all ? '' : 'in-stock ') + 'cards match' +
-        (st.q ? ' &ldquo;' + esc(st.q) + '&rdquo;' : '') + (st.set ? ' in ' + esc(st.set) : '') + '.</p>' + (tips.length ? '<p>' + tips.join(' ') + '</p>' : '') + '</div>';
+        (st.q ? ' &ldquo;' + esc(st.q) + '&rdquo;' : '') + (st.set ? ' in ' + esc(st.set) : '') + filterText(st).replace(/^, /, ' with ') + '.</p>' + (tips.length ? '<p>' + tips.join(' ') + '</p>' : '') + '</div>';
       after(how, res.querySelector('.xg-cf-empty p').textContent);
       return;
     }
     res.innerHTML = head(st, d, extra) + '<ul class="xg-cf-grid">' + d.items.map(card).join('') + '</ul>' + pager(st.p, Math.ceil(d.count / PER));
+    checkListed();
     var back = ss('xg-cf-y');
     if (how.restore && back && back.h === location.hash) {
       // saved relative to the results, so the form being open or folded makes no difference
@@ -510,6 +706,48 @@
       requestAnimationFrame(function () { window.scrollTo(0, Math.max(0, window.pageYOffset + res.getBoundingClientRect().top + back.y)); });
       after({}, res.querySelector('.xg-cf-res__sum').textContent);
     } else after(how, res.querySelector('.xg-cf-res__sum').textContent);
+  }
+  /* BinderPOS answers from its card catalogue, so a sold-out card can be one the store never
+     listed: its /products/ page is a 404 (owner, 2026-09-29: Elspeth, Sun's Champion [Reality
+     Fracture Commander], "I get a 404 when I click on See card"). Ask the storefront for each
+     sold-out card on the page (a HEAD on /products/<handle>.js, remembered a day) and turn the
+     links of the unlisted ones into "Not listed online". */
+  var listed = ss('xg-cf-listed') || {};
+  function checkListed() {
+    var cards = res.querySelectorAll('.xg-cf-card[data-chk]');
+    if (!cards.length) return;
+    var now = Date.now(), pending = [];
+    [].forEach.call(cards, function (li) {
+      var h = li.getAttribute('data-chk'), k = listed[h];
+      if (k && k.at > now - 864e5) { if (!k.ok) unlist(li); return; }
+      pending.push(h);
+    });
+    if (!pending.length) return;
+    Promise.all(pending.map(function (h) {
+      return fetch('/products/' + encodeURIComponent(h) + '.js', { method: 'HEAD', credentials: 'same-origin' })
+        .then(function (r) { return r.status === 404 ? false : true; }, function () { return null; })
+        .then(function (ok) { if (ok !== null) listed[h] = { ok: ok, at: now }; });
+    })).then(function () {
+      var keep = {}, n = 0;
+      Object.keys(listed).forEach(function (h) { if (listed[h].at > now - 864e5 && n++ < 400) keep[h] = listed[h]; });
+      listed = keep;
+      ss('xg-cf-listed', listed);
+      [].forEach.call(res.querySelectorAll('.xg-cf-card[data-chk]'), function (li) {
+        var k = listed[li.getAttribute('data-chk')];
+        if (k && !k.ok) unlist(li);
+      });
+    });
+  }
+  function unlist(li) {
+    if (li.hasAttribute('data-unlisted')) return;
+    li.setAttribute('data-unlisted', '');
+    [].forEach.call(li.querySelectorAll('a'), function (a) {
+      var el = document.createElement(a.classList.contains('xg-cf-card__see') ? 'span' : 'span');
+      el.className = a.className;
+      if (a.classList.contains('xg-cf-card__see')) el.textContent = 'Not listed online';
+      else el.innerHTML = a.innerHTML;
+      a.parentNode.replaceChild(el, a);
+    });
   }
   function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
   function card(p) {
@@ -531,7 +769,7 @@
       buy = cond + '<div class="xg-cf-card__row"><span class="xg-cf-card__price">' + money(first.p) + '</span>' +
         '<button type="button" class="xg-cf-card__add" data-id="' + first.id + '">Add to cart</button></div>';
     }
-    return '<li class="xg-cf-card' + (first ? '' : ' xg-cf-card--out') + '">' +
+    return '<li class="xg-cf-card' + (first ? '' : ' xg-cf-card--out') + '"' + (first ? '' : ' data-chk="' + esc(p.h) + '"') + '>' +
       '<a class="xg-cf-card__img" href="' + url + '" tabindex="-1" aria-hidden="true">' +
         (p.i ? '<img src="' + esc(p.i) + '" alt="" loading="lazy" decoding="async" width="244" height="340" onerror="this.style.visibility=\'hidden\'">' : '') + no + '</a>' +
       '<a class="xg-cf-card__nm" href="' + url + '">' + esc(name) + '</a>' +
@@ -613,7 +851,32 @@
       e.preventDefault();
       if (o) pickSet(o.getAttribute('data-set'));
     });
-    if (selGame) selGame.addEventListener('change', function () { intent++; inSet.value = chosen = ''; hideList(); loadSets(game()); });
+    if (selGame) selGame.addEventListener('change', function () { intent++; inSet.value = chosen = ''; hideList(); loadSets(game()); sel = {}; renderMore(); });
+    fb.addEventListener('click', function () {
+      var show = more.hidden;
+      more.hidden = !show;
+      fb.setAttribute('aria-expanded', show ? 'true' : 'false');
+      if (show) renderMore();
+    });
+    more.addEventListener('click', function (e) {
+      var c = e.target.closest('.xg-cf__chip');
+      if (c) {
+        var on = c.getAttribute('aria-pressed') !== 'true';
+        toggleF(c.getAttribute('data-k'), c.getAttribute('data-v'), on);
+        c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        fbUpdate();
+        refilter();
+        return;
+      }
+      if (e.target.closest('[data-clear]')) { sel = {}; renderMore(); refilter(); }
+    });
+    more.addEventListener('change', function (e) {
+      var s = e.target.closest('.xg-cf__add');
+      if (!s || !s.value) return;
+      toggleF(s.getAttribute('data-k'), s.value, true);
+      renderMore();
+      refilter();
+    });
     quick.addEventListener('click', function (e) {
       var b = e.target.closest('[data-quick]');
       if (!b) return;
@@ -633,6 +896,7 @@
       if (t.hasAttribute('data-retry')) { run(cur, { focus: true }); return; }
       if (t.hasAttribute('data-all')) { chkStock.checked = false; run(Object.assign({}, cur, { all: true, p: 1 }), { focus: true }); return; }
       if (t.hasAttribute('data-noq')) { inQ.value = ''; run(Object.assign({}, cur, { q: '', p: 1 }), { focus: true }); return; }
+      if (t.hasAttribute('data-clear')) { sel = {}; renderMore(); run(Object.assign({}, cur, { f: {}, p: 1 }), { focus: true }); return; }
       if (t.hasAttribute('data-p') && t.tagName === 'BUTTON') {
         if (res.getAttribute('aria-busy') === 'true') return;   // the old pager under a pending search
         var p = parseInt(t.getAttribute('data-p'), 10);
@@ -724,6 +988,21 @@
       '.xg-cf__chk input{width:17px;height:17px;margin:0;accent-color:var(--xg-red,#d62c28)}' +
       '.xg-cf button.xg-cf__go{height:40px;min-height:0;margin:0;padding:0 24px;border:0;border-radius:8px;background:var(--xg-red,#d62c28);color:#fff;font:inherit;font-size:14px;font-weight:800;letter-spacing:normal;text-transform:none;box-shadow:none;cursor:pointer}' +
       '.xg-cf button.xg-cf__go:hover{filter:brightness(1.08)}' +
+      '.xg-cf button.xg-cf__fb{display:inline-flex;align-items:center;gap:8px;height:40px;min-height:0;margin:0;padding:0 14px;border:1px solid var(--xg-border,#e3e6e8);border-radius:8px;background:var(--xg-bg,#f5f6f7);color:var(--xg-ink,#171b1d);font:inherit;font-size:13.5px;font-weight:700;letter-spacing:normal;text-transform:none;box-shadow:none;cursor:pointer}' +
+      '.xg-cf button.xg-cf__fb[hidden]{display:none}.xg-cf button.xg-cf__fb.is-on,.xg-cf button.xg-cf__fb[aria-expanded="true"]{border-color:var(--xg-red,#d62c28)}' +
+      '.xg-cf__fb b{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 6px;border-radius:999px;background:var(--xg-red,#d62c28);color:#fff;font-size:11.5px;font-weight:800;line-height:1}' +
+      '.xg-cf__fb .xg-cf__chev{margin:0 0 3px 2px}.xg-cf button.xg-cf__fb[aria-expanded="true"] .xg-cf__chev{transform:rotate(-135deg);margin:3px 0 0 2px}' +
+      '.xg-cf__more{display:flex;flex-wrap:wrap;gap:12px 24px;margin:12px 0 0;padding:12px 14px 10px;border:1px solid var(--xg-border,#e3e6e8);border-radius:10px;background:rgba(127,127,127,.06)}.xg-cf__more[hidden]{display:none}' +
+      '.xg-cf__grp{flex:1 1 230px;min-width:0;margin:0;padding:0;border:0}' +
+      '.xg-cf__grp legend{display:block;margin:0 0 6px;padding:0;color:var(--xg-muted,#707a83);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;line-height:1.2}' +
+      '.xg-cf__chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.xg-cf__chips-note{color:var(--xg-muted,#707a83);font-size:12.5px}' +
+      '.xg-cf button.xg-cf__chip{display:inline-flex;align-items:center;gap:7px;min-height:0;margin:0;padding:6px 11px;border:1px solid var(--xg-border,#e3e6e8);border-radius:999px;background:var(--xg-surface,#fff);color:var(--xg-ink,#171b1d);font:inherit;font-size:13px;font-weight:600;line-height:1.2;letter-spacing:normal;text-transform:none;box-shadow:none;cursor:pointer}' +
+      '.xg-cf button.xg-cf__chip:hover{border-color:var(--xg-red,#d62c28)}.xg-cf button.xg-cf__chip[aria-pressed="true"]{border-color:var(--xg-red,#d62c28);background:var(--xg-red,#d62c28);color:#fff}' +
+      '.xg-cf__chip i{flex:none;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}' +
+      '.xg-cf select.xg-cf__add{width:auto;max-width:100%;height:34px;padding-right:26px;font-size:13px}' +
+      '.xg-cf__morefoot{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:2px}' +
+      '.xg-cf button.xg-cf__clear{min-height:0;margin:0;padding:6px 14px;border:1px solid var(--xg-border,#e3e6e8);border-radius:999px;background:none;color:var(--xg-ink,#171b1d);font:inherit;font-size:13px;font-weight:700;text-transform:none;letter-spacing:normal;cursor:pointer}.xg-cf button.xg-cf__clear[hidden]{display:none}.xg-cf button.xg-cf__clear:hover{border-color:var(--xg-red,#d62c28);color:var(--xg-red,#d62c28)}' +
+      '.xg-cf__morehint{color:var(--xg-muted,#707a83);font-size:12.5px}' +
       '.xg-cf__list{position:absolute;z-index:40;top:100%;left:0;right:0;max-height:300px;margin:4px 0 0;padding:4px 0;overflow:auto;list-style:none;border:1px solid var(--xg-border,#e3e6e8);border-radius:10px;background:var(--xg-surface,#fff);box-shadow:0 14px 34px rgba(0,0,0,.28)}' +
       '.xg-cf__list[hidden]{display:none}' +
       '.xg-cf__li{margin:0;padding:8px 12px;color:var(--xg-ink,#171b1d);font-size:14px;cursor:pointer}.xg-cf__li:hover,.xg-cf__li[aria-selected="true"]{background:rgba(214,44,40,.14)}' +
@@ -755,6 +1034,7 @@
       '.xg-cf-res button.xg-cf-card__add{height:34px;min-height:0;margin:0;padding:0 12px;border:0;border-radius:8px;background:var(--xg-red,#d62c28);color:#fff;font:inherit;font-size:13px;font-weight:800;text-transform:none;letter-spacing:normal;white-space:nowrap;cursor:pointer}' +
       '.xg-cf-res button.xg-cf-card__add.is-ok{background:var(--xg-success,#17784a)}.xg-cf-res button.xg-cf-card__add.is-bad{background:#6b7378}' +
       '.xg-cf-card__out{color:var(--xg-muted,#707a83);font-size:13px;font-weight:700}.xg-cf-res a.xg-cf-card__see{color:var(--xg-red,#d62c28)!important;font-size:13px;font-weight:700}' +
+      '.xg-cf-res span.xg-cf-card__see{color:var(--xg-muted,#707a83);font-size:13px;font-weight:700}.xg-cf-card[data-unlisted] span.xg-cf-card__nm{display:-webkit-box;margin:9px 0 2px;overflow:hidden;color:var(--xg-muted,#707a83);font-size:14px;font-weight:700;line-height:1.3;-webkit-line-clamp:2;-webkit-box-orient:vertical}.xg-cf-card[data-unlisted] span.xg-cf-card__img{position:relative;display:block;aspect-ratio:63/88;border-radius:8px;overflow:hidden;background:rgba(127,127,127,.1)}' +
       '.xg-cf-pg{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:20px 0 0}' +
       '.xg-cf-res button.xg-cf-pg__b{min-width:38px;height:38px;min-height:0;margin:0;padding:0 10px;border:1px solid var(--xg-border,#e3e6e8);border-radius:8px;background:var(--xg-surface,#fff);color:var(--xg-ink,#171b1d);font:inherit;font-size:14px;font-weight:700;cursor:pointer}' +
       '.xg-cf-res button.xg-cf-pg__b[aria-current]{border-color:var(--xg-red,#d62c28);background:var(--xg-red,#d62c28);color:#fff}.xg-cf-res button.xg-cf-pg__b[disabled]{opacity:.4;cursor:default}' +
@@ -772,6 +1052,7 @@
         '.xg-cf__body{padding:0 12px 12px}.xg-cf__quick{padding:0 12px 12px}' +
         '.xg-cf__f--set,.xg-cf__f--q,.xg-cf__f--game{flex-basis:100%}.xg-cf__f--sort{flex:1 1 140px}' +
         '.xg-cf .xg-cf__in{font-size:16px}.xg-cf button.xg-cf__go{flex:1 1 100%}.xg-cf-res select.xg-cf-card__cond{font-size:16px}' +   // 16px keeps iOS from zooming on focus
+        '.xg-cf button.xg-cf__fb{flex:1 1 auto;justify-content:center}.xg-cf__more{gap:10px 16px;padding:10px 12px 8px}.xg-cf__grp{flex-basis:100%}' +
         '.xg-cf-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.xg-cf-card{padding:8px}' +
         '.xg-cf-card__row{flex-wrap:wrap}.xg-cf-res button.xg-cf-card__add{flex:1 1 100%}' +
       '}';
