@@ -1,0 +1,323 @@
+{% comment %}
+Documentation -
+website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/support/your-website/navigation/creating-a-breadcrumb-navigation
+{% endcomment %}
+
+{% unless template == 'index' or template contains 'product' %}
+{%- comment -%}
+  Game logo banners (owner, 2026-09-25: "can you add these as headers replacing
+  that rainbow header at the top for the sections"): the Warhammer collections
+  show their game's logo (Shopify Files) on a dark backdrop instead of the
+  rainbow image and the title text. The title stays as the logo's alt text.
+{%- endcomment -%}
+{%- assign xg_bc_logo = '' -%}
+{%- assign xg_bc_key = collection.handle -%}
+{%- comment -%} the search app's collection pages (/a/search/<handle>) carry no collection object {%- endcomment -%}
+{%- if xg_bc_key == blank and request.path contains '/a/search/' -%}{%- assign xg_bc_key = request.path | split: '/' | last -%}{%- endif -%}
+{%- case xg_bc_key -%}
+  {%- when 'all-warhammer-40-000' -%}{%- assign xg_bc_logo = 'Warhammer-logo.png' -%}
+  {%- when 'all-warhammer-age-of-sigmar' -%}{%- assign xg_bc_logo = 'warhammeraos.png' -%}
+  {%- when 'all-warhammer-kill-team' -%}{%- assign xg_bc_logo = 'killteam-logo.png' -%}
+  {%- when 'all-warhammer-the-horus-heresy' -%}{%- assign xg_bc_logo = 'warhammer_thehorusheresy.png' -%}
+  {%- when 'all-warhammer-the-old-world' -%}{%- assign xg_bc_logo = 'ToW_Logo.png' -%}
+  {%- when 'all-necromunda' -%}{%- assign xg_bc_logo = 'necromunda-logo.png' -%}
+  {%- when 'all-blood-bowl' -%}{%- assign xg_bc_logo = 'Bloodbowl_logo.png' -%}
+  {%- when 'all-legions-imperialis' -%}{%- assign xg_bc_logo = 'legions-imperialis-logo-2x.png' -%}
+  {%- when 'all-middle-earth' -%}{%- assign xg_bc_logo = 'Middle-Earth_Strategy_Battle_Game_logo.webp' -%}
+  {%- when 'all-bolt-action' -%}{%- assign xg_bc_logo = 'Bolt-Action-final-600x283.png' -%}
+  {%- when 'battletech-miniatures-and-accessories' -%}{%- assign xg_bc_logo = 'BattleTech_2018.webp' -%}
+  {%- when 'all-ak-interactive' -%}{%- assign xg_bc_logo = 'blanco_logo-02-copia.png' -%}
+  {%- when 'citadel-collection' -%}{%- assign xg_bc_logo = 'DgX8B69wOApRYTQ2-300x130.png' -%}
+  {%- when 'all-battle-systems' -%}{%- assign xg_bc_logo = 'battle-systems_1200x1200_57d44751-bbb7-4aa7-a4fe-a39d6ca47b90.webp' -%}
+  {%- when 'all-the-army-painter' -%}{%- assign xg_bc_logo = 'Asset-1.png' -%}
+  {%- when 'all-vallejo' -%}{%- assign xg_bc_logo = 'logo_blanc.png' -%}
+{%- endcase -%}
+{%- comment -%} every Army Painter line (the-army-painter-warpaints, ...) and Vallejo line (vallejo-game-color, ...) {%- endcomment -%}
+{%- if xg_bc_logo == '' -%}
+  {%- assign xg_bc_head = xg_bc_key | slice: 0, 17 -%}
+  {%- if xg_bc_head == 'the-army-painter-' -%}{%- assign xg_bc_logo = 'Asset-1.png' -%}{%- endif -%}
+  {%- assign xg_bc_head = xg_bc_key | slice: 0, 8 -%}
+  {%- if xg_bc_head == 'vallejo-' -%}{%- assign xg_bc_logo = 'logo_blanc.png' -%}{%- endif -%}
+{%- endif -%}
+{%- comment -%} Warhammer Colour logo on every Citadel paint line (citadel-base-paints, citadel-contrast-paints, ...) {%- endcomment -%}
+{%- assign xg_bc_head = xg_bc_key | slice: 0, 8 -%}
+{%- if xg_bc_logo == '' and xg_bc_head == 'citadel-' and xg_bc_key contains '-paints' -%}{%- assign xg_bc_logo = 'DgX8B69wOApRYTQ2-300x130.png' -%}{%- endif -%}
+{%- comment -%}
+  Shop by army (owner, 2026-09-28: "Is there a way for us to filter warhammer by army type?" ->
+  a collection per army): army-<label> smart collections match the exor.army product field,
+  which the worker's nightly run writes from the title (chaywrite src/army.js - the labels
+  below must match its ARMIES labels exactly). The game pages list their armies as chips; an
+  army page shows its game's logo, the army name and the same chips with the army marked.
+  Only armies with products show.
+{%- endcomment -%}
+{%- assign xg_armies_40k = "Space Marines|Black Templars|Blood Angels|Dark Angels|Space Wolves|Deathwatch|Grey Knights|Adepta Sororitas|Adeptus Custodes|Adeptus Mechanicus|Astra Militarum|Imperial Knights|Agents of the Imperium|Chaos Space Marines|Chaos Knights|Chaos Daemons|Death Guard|Thousand Sons|World Eaters|Emperor's Children|Aeldari|Drukhari|Genestealer Cults|Leagues of Votann|Necrons|Orks|T'au Empire|Tyranids" | split: '|' | sort -%}
+{%- assign xg_armies_aos = "Stormcast Eternals|Cities of Sigmar|Fyreslayers|Kharadron Overlords|Lumineth Realm-lords|Idoneth Deepkin|Daughters of Khaine|Sylvaneth|Seraphon|Blades of Khorne|Disciples of Tzeentch|Maggotkin of Nurgle|Hedonites of Slaanesh|Slaves to Darkness|Skaven|Helsmiths of Hashut|Beasts of Chaos|Flesh-eater Courts|Nighthaunt|Ossiarch Bonereapers|Soulblight Gravelords|Orruk Warclans|Gloomspite Gitz|Ogor Mawtribes|Sons of Behemat" | split: '|' | sort -%}
+{%- assign xg_armies_hh = "Legiones Astartes|Solar Auxilia|Mechanicum" | split: '|' -%}
+{%- assign xg_armies_tow = "Kingdom of Bretonnia|Tomb Kings of Khemri|Empire of Man|Orc & Goblin Tribes|Dwarfen Mountain Holds|High Elf Realms|Wood Elf Realms|Warriors of Chaos|Beastmen Brayherds|Grand Cathay" | split: '|' | sort -%}
+{%- comment -%}
+  Army icons (owner, 2026-09-28: "include this logo nicely ... for each faction/army for 40k"):
+  the owner's uploads in Shopify Files, army-<handle>.svg - single-colour silhouettes, drawn as a
+  CSS mask so they take the text colour (white on the banner, dark on the current chip). Add a
+  handle here when its file is uploaded (Adeptus Custodes and Chaos Knights have none yet).
+{%- endcomment -%}
+{%- assign xg_army_icons = "|army-adepta-sororitas|army-adeptus-mechanicus|army-aeldari|army-agents-of-the-imperium|army-astra-militarum|army-black-templars|army-blood-angels|army-chaos-daemons|army-chaos-space-marines|army-dark-angels|army-death-guard|army-deathwatch|army-drukhari|army-emperors-children|army-genestealer-cults|army-grey-knights|army-imperial-knights|army-leagues-of-votann|army-necrons|army-orks|army-space-marines|army-space-wolves|army-tau-empire|army-thousand-sons|army-tyranids|army-world-eaters|" -%}
+{%- assign xg_army_game = '' -%}
+{%- assign xg_army_cur = '' -%}
+{%- case xg_bc_key -%}
+  {%- when 'all-warhammer-40-000', 'all-warhammer-kill-team' -%}{%- assign xg_army_game = '40k' -%}
+  {%- when 'all-warhammer-age-of-sigmar' -%}{%- assign xg_army_game = 'aos' -%}
+  {%- when 'all-warhammer-the-horus-heresy' -%}{%- assign xg_army_game = 'hh' -%}
+  {%- when 'all-warhammer-the-old-world' -%}{%- assign xg_army_game = 'tow' -%}
+{%- endcase -%}
+{%- assign xg_bc_head = xg_bc_key | slice: 0, 5 -%}
+{%- if xg_bc_head == 'army-' -%}
+  {%- assign xg_army_needle = xg_bc_key | prepend: '|' | append: '|' -%}
+  {%- capture xg_army_hs -%}{%- for a in xg_armies_40k -%}|{{ a | handleize | prepend: 'army-' }}{%- endfor -%}|{%- endcapture -%}
+  {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = '40k' -%}{%- endif -%}
+  {%- capture xg_army_hs -%}{%- for a in xg_armies_aos -%}|{{ a | handleize | prepend: 'army-' }}{%- endfor -%}|{%- endcapture -%}
+  {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = 'aos' -%}{%- endif -%}
+  {%- capture xg_army_hs -%}{%- for a in xg_armies_hh -%}|{{ a | handleize | prepend: 'army-' }}{%- endfor -%}|{%- endcapture -%}
+  {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = 'hh' -%}{%- endif -%}
+  {%- capture xg_army_hs -%}{%- for a in xg_armies_tow -%}|{{ a | handleize | prepend: 'army-' }}{%- endfor -%}|{%- endcapture -%}
+  {%- if xg_army_hs contains xg_army_needle -%}{%- assign xg_army_game = 'tow' -%}{%- endif -%}
+  {%- if xg_army_game != '' -%}
+    {%- assign xg_army_cur = xg_bc_key -%}
+    {%- assign xg_army_name = collections[xg_bc_key].title | default: collection.title -%}
+  {%- endif -%}
+{%- endif -%}
+{%- case xg_army_game -%}
+  {%- when '40k' -%}{%- assign xg_army_list = xg_armies_40k -%}{%- assign xg_army_home = 'all-warhammer-40-000' -%}{%- assign xg_army_gname = 'Warhammer 40,000' -%}{%- assign xg_army_logo = 'Warhammer-logo.png' -%}
+  {%- when 'aos' -%}{%- assign xg_army_list = xg_armies_aos -%}{%- assign xg_army_home = 'all-warhammer-age-of-sigmar' -%}{%- assign xg_army_gname = 'Warhammer Age of Sigmar' -%}{%- assign xg_army_logo = 'warhammeraos.png' -%}
+  {%- when 'hh' -%}{%- assign xg_army_list = xg_armies_hh -%}{%- assign xg_army_home = 'all-warhammer-the-horus-heresy' -%}{%- assign xg_army_gname = 'The Horus Heresy' -%}{%- assign xg_army_logo = 'warhammer_thehorusheresy.png' -%}
+  {%- when 'tow' -%}{%- assign xg_army_list = xg_armies_tow -%}{%- assign xg_army_home = 'all-warhammer-the-old-world' -%}{%- assign xg_army_gname = 'Warhammer: The Old World' -%}{%- assign xg_army_logo = 'ToW_Logo.png' -%}
+{%- endcase -%}
+{%- if xg_army_cur != '' -%}{%- assign xg_bc_logo = xg_army_logo -%}{%- endif -%}
+{%- assign xg_army_chips = '' -%}
+{%- if xg_army_game != '' and template.suffix != 'paints' -%}
+  {%- capture xg_army_chips -%}
+    {%- for a in xg_army_list -%}
+      {%- assign xg_ah = a | handleize | prepend: 'army-' -%}
+      {%- assign xg_an = collections[xg_ah].products_count | default: 0 -%}
+      {%- if xg_an > 0 or xg_ah == xg_army_cur -%}
+      {%- assign xg_ai = xg_ah | prepend: '|' | append: '|' -%}
+      <a class="xg-bc__army-chip" href="/collections/{{ xg_ah }}"{% if xg_ah == xg_army_cur %} aria-current="page"{% endif %}>{% if xg_army_icons contains xg_ai %}<span class="xg-bc__army-ico" style="--xg-ico:url({{ xg_ah | append: '.svg' | file_url }})" aria-hidden="true"></span>{% endif %}{{ a | escape }}{% if xg_an > 0 %}<small>{{ xg_an }}</small>{% endif %}</a>
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endcapture -%}
+  {%- assign xg_army_chips = xg_army_chips | strip -%}
+{%- endif -%}
+{%- comment -%}
+  The colour picker view (?view=paints) covers every paint brand, so it gets its own banner
+  instead of the logo of whichever collection it was opened from (owner, 2026-09-25: the
+  Vallejo logo + "All Vallejo" crumb over the picker "is not proper anymore with other
+  brands"): a title, the three brand logos (each switches the picker's brand tab; the picker
+  marks the one showing) and a "Shop by colour" crumb.
+{%- endcomment -%}
+{%- assign xg_bc_paints = false -%}
+{%- if template.suffix == 'paints' -%}{%- assign xg_bc_paints = true -%}{%- assign xg_bc_logo = '' -%}{%- endif -%}
+{%- if xg_bc_logo != '' or xg_bc_paints -%}
+<style>
+  .breadcrumb-container.xg-bc--logo { background: radial-gradient(ellipse at 50% 45%, #2b3137 0%, #171b1f 55%, #0e1113 100%) !important; }
+  .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
+  .xg-bc--logo .xg-bc__logo img { display: block; margin: 0 auto; width: auto; height: auto; max-width: min(460px, 90%); max-height: 110px; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .55)); }
+  @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img { max-height: 72px; } }
+  .xg-bc__pp { display: inline-flex; align-self: center; flex: 0 0 auto; width: auto; max-width: max-content; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 8px 16px 8px 10px; border-radius: 999px; background: #fff; color: #14181b !important; font: 700 13px/1 var(--xg-font-body, sans-serif); letter-spacing: .02em; text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  .xg-bc__pp:hover { background: #d62c28; color: #fff !important; }
+  .xg-bc__pp-dots { display: inline-flex; }
+  .xg-bc__pp-dots i { width: 14px; height: 14px; border-radius: 50%; margin-right: -4px; border: 2px solid #fff; }
+  .xg-bc__pp-dots i:nth-child(1) { background: #b3261e; } .xg-bc__pp-dots i:nth-child(2) { background: #e8a317; }
+  .xg-bc__pp-dots i:nth-child(3) { background: #2f8f5b; } .xg-bc__pp-dots i:nth-child(4) { background: #2d5fae; margin-right: 0; }
+  /* Warhammer-logo.png is 1400x900 with the mark in a band across the middle: larger box, pulled in by negative margins */
+  .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-width: min(560px, 96%); max-height: 230px; margin: -55px auto -50px; }
+  @media (max-width: 767px) { .xg-bc--logo .xg-bc__logo img[src*="Warhammer-logo"] { max-height: 150px; margin: -36px auto -32px; } }
+  .xg-bc--logo .head-title.xg-bc__ptitle { color: #fff; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 12px; }
+  .xg-bc__brands { display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 8px; margin: 0 auto 10px; width: max-content; max-width: 100%; }
+  .xg-bc__brand { flex: 0 0 128px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 128px; height: 52px; padding: 6px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); opacity: .6; transition: opacity .15s, border-color .15s, background .15s; }
+  .xg-bc__brand img { display: block; max-height: 34px; max-width: 100%; width: auto; height: auto; object-fit: contain; filter: drop-shadow(0 3px 8px rgba(0,0,0,.5)); }
+  .xg-bc__brand:hover, .xg-bc__brand:focus-visible, .xg-bc__brand[aria-current="true"] { opacity: 1; border-color: rgba(255,255,255,.7); background: rgba(255,255,255,.08); }
+  .xg-bc--logo .xg-bc__logo .xg-bc__army { display: block; margin: 4px 0 0; text-align: center; color: #fff; font: 800 clamp(20px, 2.6vw, 30px)/1.15 var(--xg-font-heading, var(--xg-font-body, sans-serif)); letter-spacing: .06em; text-transform: uppercase; text-shadow: 0 3px 12px rgba(0,0,0,.6); }
+  .xg-bc__armies { margin: 14px auto 0; text-align: center; }
+  .xg-bc__armies-h { display: block; margin: 0 0 8px; color: rgba(255,255,255,.7); font: 700 11px/1 var(--xg-font-body, sans-serif); letter-spacing: .16em; text-transform: uppercase; }
+  .xg-bc__armies-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .xg-bc__army-chip { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 7px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.06); color: #fff !important; font: 600 13px/1.1 var(--xg-font-body, sans-serif); text-decoration: none; white-space: nowrap; transition: background .15s, border-color .15s, color .15s; }
+  .xg-bc__army-chip small { font-size: 11px; font-weight: 600; opacity: .6; }
+  .xg-bc__army-ico { flex: 0 0 auto; display: inline-block; width: 18px; height: 18px; background: currentColor; -webkit-mask: var(--xg-ico) center / contain no-repeat; mask: var(--xg-ico) center / contain no-repeat; }
+  .xg-bc--logo .xg-bc__logo .xg-bc__army:has(.xg-bc__army-ico) { display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .xg-bc__army-ico--lg { width: 44px; height: 44px; filter: drop-shadow(0 3px 10px rgba(0,0,0,.55)); }
+  @media (max-width: 767px) { .xg-bc__army-ico--lg { width: 34px; height: 34px; } }
+  .xg-bc__army-chip:hover, .xg-bc__army-chip:focus-visible { border-color: rgba(255,255,255,.7); background: rgba(255,255,255,.14); }
+  .xg-bc__army-chip[aria-current="page"] { background: #fff; border-color: #fff; color: #14181b !important; }
+  .xg-bc__army-chip--all { border-style: dashed; }
+  @media (max-width: 767px) {
+    .xg-bc__armies-row { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 16px 6px; margin: 0 -16px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 24px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 24px), transparent 100%); }
+    .xg-bc__armies-row::-webkit-scrollbar { display: none; }
+  }
+  @media (max-width: 767px) { .xg-bc__brands { gap: 6px; } .xg-bc__brand { flex-basis: 30vw; width: 30vw; max-width: 112px; height: 44px; padding: 5px 8px; } .xg-bc__brand img { max-height: 28px; } }
+</style>
+{%- endif -%}
+<div class="breadcrumb-container{% if xg_bc_logo != '' or xg_bc_paints %} xg-bc--logo{% endif %}" style="{% if xg_bc_logo != '' or xg_bc_paints %}{% elsif settings.breadcrumb != blank %}background-image: url('{{ settings.breadcrumb | img_url: 'master' }}');{% else %}background-color: {{ settings.breadcrumb_background }};{% endif %}">
+  <nav class="breadcrumbs page-width {% unless settings.show_product_breadcrumb %}breadcrumbs-empty{% endunless %}">
+    <p class="h3 banner-secondary mb-0">We Buy Collections of any size!</p>
+  <div class="banner-title-container">
+    {% if xg_bc_paints %}
+    <h1 class="h3 head-title xg-bc__ptitle">Shop paints by colour</h1>
+    <div class="xg-bc__brands">
+      <a class="xg-bc__brand" data-brand="Citadel" href="/collections/citadel-collection?view=paints&brand=Warhammer"><img src="{{ 'DgX8B69wOApRYTQ2-300x130.png' | file_url }}" alt="Warhammer Colour" width="300" height="130"></a>
+      <a class="xg-bc__brand" data-brand="The Army Painter" href="/collections/all-the-army-painter?view=paints&brand=The+Army+Painter"><img src="{{ 'Asset-1.png' | file_url }}" alt="The Army Painter" width="300" height="100"></a>
+      <a class="xg-bc__brand" data-brand="Vallejo" href="/collections/all-vallejo?view=paints&brand=Vallejo"><img src="{{ 'logo_blanc.png' | file_url }}" alt="Vallejo" width="300" height="100"></a>
+    </div>
+    {% elsif xg_bc_logo != '' %}
+    {%- if xg_army_cur != '' -%}
+    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{{ xg_army_gname | escape }}" width="460" height="110" fetchpriority="high">{%- assign xg_ai = xg_army_cur | prepend: '|' | append: '|' -%}<span class="xg-bc__army">{% if xg_army_icons contains xg_ai %}<span class="xg-bc__army-ico xg-bc__army-ico--lg" style="--xg-ico:url({{ xg_army_cur | append: '.svg' | file_url }})" aria-hidden="true"></span>{% endif %}{{ xg_army_name | escape }}</span></h1>
+    {%- else -%}
+    <h1 class="h3 head-title xg-bc__logo"><img src="{{ xg_bc_logo | file_url }}" alt="{% if collection.title != blank %}{{ collection.title | escape }}{% else %}{{ xg_bc_key | replace: '-', ' ' | capitalize }}{% endif %}" width="460" height="110" fetchpriority="high"></h1>
+    {%- endif -%}
+    {%- comment -%} Paint brands: a way into the colour picker (owner, 2026-09-25: "how is it accessed", then Citadel + Army Painter: "Sure"). A range collection opens the picker on that range. {%- endcomment -%}
+    {%- assign xg_pp_brand = '' -%}
+    {%- assign xg_pp_range = '' -%}
+    {%- if template.suffix != 'paints' -%}
+      {%- if xg_bc_logo == 'logo_blanc.png' -%}
+        {%- assign xg_pp_brand = 'Vallejo' -%}
+        {%- assign xg_pp_home = 'all-vallejo' -%}
+        {%- case xg_bc_key -%}
+          {%- when 'vallejo-game-color' -%}{%- assign xg_pp_range = 'Game Color' -%}
+          {%- when 'vallejo-game-air' -%}{%- assign xg_pp_range = 'Game Air' -%}
+          {%- when 'vallejo-model-color' -%}{%- assign xg_pp_range = 'Model Color' -%}
+          {%- when 'vallejo-model-air' -%}{%- assign xg_pp_range = 'Model Air' -%}
+          {%- when 'vallejo-mecha-color' -%}{%- assign xg_pp_range = 'Mecha Color' -%}
+        {%- endcase -%}
+      {%- elsif xg_bc_key == 'citadel-collection' or xg_bc_key contains '-paints' and xg_bc_key contains 'citadel-' -%}
+        {%- assign xg_pp_brand = 'Warhammer' -%}{%- comment -%} the picker reads Warhammer as its Citadel data (owner 2026-09-26: "It should say Warhammer") {%- endcomment -%}
+        {%- assign xg_pp_home = 'citadel-collection' -%}
+        {%- if xg_bc_key != 'citadel-collection' -%}{%- assign xg_pp_range = xg_bc_key | remove: 'citadel-' | remove: '-paints' | capitalize -%}{%- endif -%}
+      {%- else -%}
+        {%- case xg_bc_key -%}
+          {%- when 'all-the-army-painter', 'the-army-painter-warpaints' -%}{%- assign xg_pp_brand = 'The Army Painter' -%}
+          {%- when 'the-army-painter-quickshade' -%}{%- assign xg_pp_brand = 'The Army Painter' -%}{%- assign xg_pp_range = 'Quickshade Washes Set' -%}
+          {%- when 'the-army-painter-spray' -%}{%- assign xg_pp_brand = 'The Army Painter' -%}{%- assign xg_pp_range = 'Warpaints Primer' -%}
+        {%- endcase -%}
+        {%- assign xg_pp_home = 'all-the-army-painter' -%}
+      {%- endif -%}
+    {%- endif -%}
+    {%- if xg_pp_brand != '' -%}
+    <a class="xg-bc__pp" href="/collections/{{ xg_pp_home }}?view=paints&brand={{ xg_pp_brand | url_encode }}{% if xg_pp_range != '' %}&range={{ xg_pp_range | url_encode }}{% endif %}"><span class="xg-bc__pp-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Shop by colour</a>
+    {%- endif -%}
+    {% elsif template contains 'product' %}
+    <h1 class="h3 head-title">{{ product.title }}</h1>
+    {% elsif template contains 'collection' %}
+    {% if collection.title %}
+    <h1 class="h3 head-title">{{ collection.title }}</h1>
+    {% else %}
+    <h1 class="h3 head-title">{{ 'collections.general.title' | t }}</h1>
+    {% endif %}
+    {% elsif template contains 'page' %}
+    <h1 class="h3 head-title">{{ page.title }}</h1>
+    {% elsif template contains 'blog' %}
+    <h1 class="h3 head-title">{{ blog.title }}</h1>
+    {% elsif template contains 'article' %}
+    <h1 class="h3 head-title">{{ article.title }}</h1>
+    {% else %}
+    <h1 class="h3 head-title">{{ template | split: '.' | first }} </h1>
+    {% endif %}
+    <p>
+    <a href="/" title="Back to the frontpage">{{ shop.name }}</a>
+    {% if template contains 'product' %}
+    {% if collection %}
+    <span class="divider">&dash;</span>
+    {% if collection.handle %}
+    {% capture url %}/collections/{{ collection.handle }}{% endcapture %}
+    {{ collection.title | link_to: url }}
+    {% endif %}
+    {% endif %}
+
+    {% elsif xg_bc_paints %}
+    <span class="divider">&dash;</span>
+    <span>Shop by colour</span>
+    {% elsif template contains 'collection' and collection.handle %}
+    {% if current_tags %}
+    <span class="divider">&dash;</span>
+    {% capture url %}/collections/{{ collection.handle }}{% endcapture %}
+    {{ collection.title | link_to: url }}
+    {% else %}
+    {% if xg_army_cur != '' %}
+    <span class="divider">&dash;</span>
+    <a href="/collections/{{ xg_army_home }}">{{ xg_army_gname }}</a>
+    {% endif %}
+    <span class="divider">&dash;</span>
+    <span>{{ collection.title }}</span>
+    {% endif %}
+    {% elsif template == 'article' %}
+    <span class="divider">&dash;</span>
+    {{ blog.title | link_to: blog.url }}
+    <span class="divider">&dash;</span>
+    <span>{{ article.title }}</span>
+
+    {% elsif template contains 'page' %}
+    <span class="divider"></span>
+
+
+    {% else %}
+    {%- comment -%}
+      Search results (the search app's /a/search proxy page included) have no
+      title of their own: page_title is the shop name there, so this crumb
+      read "Exor Games Charlottetown ‐ Exor Games Charlottetown" (owner,
+      2026-09-09). Name the search instead, and never repeat the shop name
+      on any other page that lacks a title.
+    {%- endcomment -%}
+    {%- if template contains 'search' or request.path contains '/a/search' -%}
+    <span class="divider">&dash;</span>
+    <span>{% if request.locale.iso_code contains 'fr' %}Recherche{% else %}Search{% endif %}</span>
+    {%- elsif page_title != blank and page_title != shop.name -%}
+    <span class="divider">&dash;</span>
+    <span>{{ page_title }}</span>
+    {%- endif -%}
+    {% endif %}
+    </p>
+        </div>
+    <p class="h3 banner-secondary mb-0">We pay cash or credit for cards</p>
+  </nav>
+  {%- if xg_army_chips != '' -%}
+  <nav class="xg-bc__armies page-width" aria-label="Shop by army">
+    <span class="xg-bc__armies-h">Shop by army</span>
+    <div class="xg-bc__armies-row">
+      {%- if xg_army_cur != '' -%}<a class="xg-bc__army-chip xg-bc__army-chip--all" href="/collections/{{ xg_army_home }}">All {{ xg_army_gname | escape }}</a>{%- endif -%}
+      {{ xg_army_chips }}
+    </div>
+  </nav>
+  {%- endif -%}
+</div>
+{%- if xg_bc_logo != '' -%}
+<script>
+  /* The search app's collection pages (/a/search/<handle>) rewrite the banner
+     title with the collection's name after load, which drops the logo. Put
+     it back whenever the title loses its image. */
+  (function () {
+    var box = document.currentScript && document.currentScript.previousElementSibling;
+    if (!box || !box.classList.contains('xg-bc--logo')) return;
+    var src = {{ xg_bc_logo | file_url | json }};
+    function fix() {
+      var h = box.querySelector('.head-title') || box.querySelector('h1');
+      if (!h || h.querySelector('img')) return;
+      var alt = (h.textContent || '').trim();
+      var img = document.createElement('img');
+      img.src = src; img.alt = alt; img.width = 460; img.height = 110;
+      h.classList.add('xg-bc__logo');
+      h.textContent = '';
+      h.appendChild(img);
+      {%- if xg_army_cur != '' %}
+      img.alt = {{ xg_army_gname | json }};
+      var sp = document.createElement('span');
+      sp.className = 'xg-bc__army'; sp.textContent = {{ xg_army_name | json }};
+      h.appendChild(sp);
+      {%- endif %}
+    }
+    fix();
+    if (window.MutationObserver) new MutationObserver(fix).observe(box, { childList: true, subtree: true, characterData: true });
+    /* phones: the army chips scroll sideways - bring the current army into view */
+    var cur = box.querySelector('.xg-bc__army-chip[aria-current]');
+    if (cur && cur.parentNode.scrollWidth > cur.parentNode.clientWidth) cur.parentNode.scrollLeft = cur.offsetLeft - 16;
+  })();
+</script>
+{%- endif -%}
+
+{% endunless %}
