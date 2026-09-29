@@ -185,6 +185,13 @@ html[data-xg-theme="dark"] .bl__card[role="button"]:focus-visible,
 .bl__set { margin: 0; font-size: 13px; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .bl__set span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bl__seticon { width: 18px; height: 18px; vertical-align: middle; flex: 0 0 auto; }
+/* On a desktop the result's set symbol is large enough to hold up against the one printed on
+   the card in the shopper's hand (owner, 2026-09-29: "a bit small"). The group heads and the
+   picker keep their small one. */
+@media (min-width: 861px) {
+  .bl__hit .bl__set { gap: 10px; }
+  .bl__hit .bl__set .bl__seticon { width: 34px; height: 34px; }
+}
 /* The offers grid: four aligned columns, every cell centred on its row —
    condition (left), cash, credit, action. Tabular figures keep the prices
    in a straight line. */
