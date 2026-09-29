@@ -69,7 +69,9 @@ export function citadelIndex(paints) {
   for (const s of (paints && paints.swatches) || []) {
     if (s.b !== "Citadel") continue;
     for (const it of s.items || []) {
-      const cand = { handle: it.u, title: it.t, price: it.p, a: !!it.a, v: it.v, i: it.i || null, h: s.h || null, r: it.r, n: s.n };
+      // r0: the range a recipe means by this name (Base before Spray), whatever pot is in stock
+      const r0 = (s.items || []).map((x) => x.r).sort((x, y) => rank(x) - rank(y))[0] || it.r;
+      const cand = { handle: it.u, title: it.t, price: it.p, a: !!it.a, v: it.v, i: it.i || null, h: s.h || null, r: it.r, r0, n: s.n };
       const k = key(s.n), prev = best.get(k);
       // in stock first, then the pot a recipe means (Base before Spray)
       if (!prev || (cand.a && !prev.a) || (cand.a === prev.a && rank(cand.r) < rank(prev.r))) best.set(k, cand);
@@ -268,7 +270,7 @@ export function forProduct(ix, paintIdx, title, faction, maxSchemes = 40, kind =
       name: s.name, url: surl, ...(pp ? { src: "pp" } : {}),
       areas: s.areas.map((ar) => ({
         name: ar.name, url: pp ? surl + "#" + encodeURIComponent(ar.slug) : surl + "&block=" + encodeURIComponent(ar.slug),
-        paints: areaPaints(ar.paints, paintIdx, schemeWords),
+        paints: areaPaints(ar.paints, paintIdx, schemeWords, { name: ar.name, multi: pp }),
       })).filter((ar) => ar.paints.length),
     };
   });
@@ -321,15 +323,29 @@ function dedupe(list) {
 /* The MINIMUM tier (owner, 2026-09-29: customers find the full recipe "overkill and cost
    prohibitive ... too many paints to achieve a painted army"): per area, the basecoat and its
    wash, flagged m:1 on the paints; the card offers "Minimum" (those) and "Full scheme" (all).
-   The basecoat is the recipe's first paint. When a mix marker ("Base Mix", "Previous mix",
-   "Add X to ...") follows the first one to three paints, all of them are the basecoat (the
-   mix) - unless one is a Shade, which no basecoat mix holds. When the first paint is not a
-   Base or Contrast pot and the second is a Base pot, both count (an unmarked mix: Elysian
-   Green + Waaagh! Flesh). The wash is the area's first Shade. Layers, highlights, drybrush and
-   glazes are the full scheme only. Over the archive this keeps ~6 pots of ~16 per scheme. */
-const MIX_MARK = /\b(mix|mixes|basecoat|base coat|previous)\b|^add\b/i;
+   - The basecoat is the recipe's first paint. A leading undercoat (Black, White, Wraithbone,
+     Grey Seer) on a coloured part is the primer, so the next paint is the basecoat; on a
+     black / white / grey part it IS the basecoat. A leading Shade (a wash over a coloured
+     spray) is the wash, and the first pot after it the basecoat.
+   - A basecoat mix: when "Base Mix" / "Basecoat" follows the first one to four pots, or
+     "Previous mix" / "Add X to ..." follows the first one or two, all of them are the
+     basecoat - unless one is a Shade, which no basecoat mix holds. "Highlight Mix" and the
+     like are later steps, never a basecoat marker. When the first paint is not a Base or
+     Contrast pot and the second is a Base pot (not an undercoat), both count (an unmarked
+     mix: Elysian Green + Waaagh! Flesh).
+   - A Paint Picker guide section names several materials ("Brass, iron and gore"): one
+     basecoat per material, taking the Base / Contrast pots in order.
+   - The wash is the area's first Shade. Layers, highlights, drybrush and glazes are the full
+     scheme only. Ranges come from r0 (what the recipe's name means, whatever pot is in
+     stock). Over the archive this keeps ~6 pots of ~16 per scheme. */
+const MIX_ANY = /\b(mix|mixes|previous)\b|^add\b/i;
+const MIX_BASE = /\bbase ?(coat|mix)\b|\bbase\b/i;
+const MIX_LATER = /\b(highlight|shade|glaze|final|edge|wash|dry ?brush|light)\b/i;
 const BASE_RANGES = new Set(["Base", "Contrast"]);
-export function areaPaints(raw, paintIdx, schemeWords) {
+const UNDERCOAT = new Set(["abaddonblack", "chaosblack", "coraxwhite", "whitescar", "wraithbone", "greyseer"]);
+const PART_UNDERCOAT = /\b(black|white|bone|grey|gray|pale|cream|ivory)\b/i;
+export function areaPaints(raw, paintIdx, schemeWords, opts) {
+  const o = opts || {};
   const steps = [];   // resolved paints in recipe order, each with the step it came from
   (raw || []).forEach((r, i) => {
     for (const n of expand(r)) {
@@ -341,19 +357,33 @@ export function areaPaints(raw, paintIdx, schemeWords) {
   const list = dedupe(steps.map((e) => e.p));
   if (!list.length) return list;
   const pk = (p) => p.handle || key(p.name);
-  const rng = (p) => p.r || "";
+  const rng = (p) => p.r0 || p.r || "";
+  const isShade = (p) => rng(p) === "Shade";
+  const isUnder = (p) => UNDERCOAT.has(key(p.name));
+  // the pots in recipe order, each once
+  const seen = new Set(), seq = [];
+  for (const e of steps) if (!seen.has(pk(e.p))) { seen.add(pk(e.p)); seq.push(e); }
   let main = [];
-  const mark = (raw || []).findIndex((r) => MIX_MARK.test(String(r || "")));
-  if (mark >= 1 && mark <= 3) {
-    const comp = steps.filter((e) => e.i < mark).map((e) => e.p);
-    if (comp.length && !comp.some((p) => rng(p) === "Shade")) main = comp;
+  // 1. a marked basecoat mix
+  const mark = (raw || []).findIndex((r, i) => i >= 1 && MIX_ANY.test(String(r || "")) && !MIX_LATER.test(String(r || "")));
+  if (mark >= 1) {
+    const comp = seq.filter((e) => e.i < mark).map((e) => e.p);
+    const limit = MIX_BASE.test(String(raw[mark])) ? 4 : 2;
+    if (comp.length && comp.length <= limit && !comp.some(isShade)) main = comp;
   }
+  // 2. one basecoat per material (a guide section that bundles several)
+  const mats = o.multi ? String(o.name || "").split(/,|&|\band\b|\//).filter((x) => x.trim()).length : 1;
+  if (!main.length && mats > 1) main = seq.map((e) => e.p).filter((p) => BASE_RANGES.has(rng(p))).slice(0, mats);
+  // 3. the first paint, past a primer and past a leading wash
   if (!main.length) {
-    main = [steps[0].p];
-    const second = steps[1] && steps[1].p;
-    if (!BASE_RANGES.has(rng(steps[0].p)) && second && rng(second) === "Base" && pk(second) !== pk(steps[0].p)) main.push(second);
+    let pots = seq.map((e) => e.p);
+    if (pots.length > 1 && isUnder(pots[0]) && !PART_UNDERCOAT.test(String(o.name || ""))) pots = pots.slice(1);
+    const at = Math.max(0, pots.findIndex((p) => !isShade(p)));
+    const first = pots[at], next = pots[at + 1];
+    main = [first];
+    if (!BASE_RANGES.has(rng(first)) && next && rng(next) === "Base" && !isUnder(next)) main.push(next);
   }
-  const wash = steps.map((e) => e.p).find((p) => rng(p) === "Shade" && !main.some((m) => pk(m) === pk(p)));
+  const wash = seq.map((e) => e.p).find((p) => isShade(p) && !main.some((m) => pk(m) === pk(p)));
   const min = new Set(main.concat(wash ? [wash] : []).map(pk));
   return list.map((p) => (min.has(pk(p)) ? { ...p, m: 1 } : p));
 }

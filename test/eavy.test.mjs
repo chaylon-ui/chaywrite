@@ -213,8 +213,23 @@ test("minimum tier: the basecoat (or its mix) and the first wash of each area ca
   // a Contrast pot is a basecoat; a Shade among the "mix" components means no mix
   assert.deepEqual(min(["Wyldwood", "Agrax Earthshade", "White"]), ["Wyldwood", "Agrax Earthshade"]);
   assert.deepEqual(min(["Mephiston Red", "Nuln Oil", "Previous mix", "Evil Sunz Scarlet"]), ["Mephiston Red", "Nuln Oil"]);
-  // a Base pot first never pulls the second in
-  assert.deepEqual(min(["Abaddon Black", "Administratum Grey", "White"]), ["Abaddon Black"]);
+  // a Base pot first never pulls the second in; Black on a black part is the basecoat
+  assert.deepEqual(areaPaints(["Abaddon Black", "Administratum Grey", "White"], idx, null, { name: "Black" }).filter((p) => p.m).map((p) => p.name), ["Abaddon Black"]);
+  // ... but on a coloured part it is the primer: the next paint is the basecoat
+  assert.deepEqual(areaPaints(["Black", "Mephiston Red", "Evil Sunz Scarlet"], idx, null, { name: "Red Armour" }).filter((p) => p.m).map((p) => p.name), ["Mephiston Red"]);
+  assert.deepEqual(areaPaints(["Wraithbone", "Wyldwood", "Agrax Earthshade"], idx, null, { name: "Robes" }).filter((p) => p.m).map((p) => p.name), ["Wyldwood", "Agrax Earthshade"]);
+  // a wash first (over a coloured spray): the wash, then the first pot after it
+  assert.deepEqual(min(["Agrax Earthshade", "Mephiston Red", "Evil Sunz Scarlet"]), ["Agrax Earthshade", "Mephiston Red"]);
+  // a highlight mix is not a basecoat marker; "Previous mix" after three steps neither
+  assert.deepEqual(min(["Mephiston Red", "Evil Sunz Scarlet", "Highlight Mix", "White"]), ["Mephiston Red"]);
+  assert.deepEqual(min(["Mephiston Red", "Evil Sunz Scarlet", "Wild Rider Red", "Previous mix", "White"]), ["Mephiston Red"]);
+  // a Base Mix after four pots (one named twice) still counts
+  assert.deepEqual(min(["Skarsnik Green", "Averland Sunset", "Averland", "Warp Lightning", "Base Mix", "White"]), ["Skarsnik Green", "Averland Sunset", "Warp Lightning"]);
+  // a guide section naming several materials: one basecoat each
+  assert.deepEqual(areaPaints(["Mephiston Red", "Agrax Earthshade", "Evil Sunz Scarlet", "Abaddon Black", "Nuln Oil"], idx, null, { name: "Red, black and gore", multi: true }).filter((p) => p.m).map((p) => p.name), ["Mephiston Red", "Agrax Earthshade", "Abaddon Black"]);
+  // the range a name means, not the pot in stock: a Base pot sold out with its Spray in stock is still a basecoat
+  const sprayOnly = citadelIndex({ swatches: [{ b: "Citadel", n: "Mephiston Red", h: "#960C09", items: [{ r: "Base", u: "base-mr", t: "BASE", p: "5", a: false, v: 1 }, { r: "Spray", u: "spray-mr", t: "SPRAY", p: "30", a: true, v: 2 }] }, sw("Evil Sunz Scarlet", "Layer")] });
+  assert.deepEqual(areaPaints(["Evil Sunz Scarlet", "Mephiston Red"], sprayOnly).map((p) => [p.name, p.m || 0, p.r, p.r0]), [["Evil Sunz Scarlet", 1, "Layer", "Layer"], ["Mephiston Red", 1, "Spray", "Base"]]);
   // a misspelt first entry is the same pot as the second (Bloodreavers: "Khonre Red", "Khorne Red"), not a mix
   const kr = (n) => ({ b: "Citadel", n, h: "#000000", items: [{ u: "khorne-red", t: n, p: "5", a: true, v: 1, r: "Base" }] });
   assert.deepEqual(areaPaints(["Khonre Red", "Khorne Red", "Abaddon Black", "Mephiston Red"], citadelIndex({ swatches: [kr("Khorne Red"), sw("Abaddon Black", "Base")] })).map((p) => [p.name, p.m || 0]), [["Khorne Red", 1], ["Abaddon Black", 0], ["Mephiston Red", 0]]);
