@@ -7,9 +7,10 @@ name: plamod-sync
 # looks our barcodes up and commits data/plamod.json (PLAMOD's public photo
 # URLs, release date, series, brand - never prices, stock or descriptions).
 # The worker's nightly sweep (src/plamod.js) adds the photos and facts to the
-# products. Every 4 hours: the first pass over ~2000 products takes several
-# runs; after that a run only looks at new products (a miss is retried after
-# 14 days, a match re-checked after 30).
+# products. Twice a day (was every 4 hours while the first pass over ~2000
+# products took several runs; owner, 2026-09-29, making the repo private, where
+# Actions minutes count): a run only looks at new products (a miss is retried
+# after 14 days, a match re-checked after 30).
 on:
   workflow_dispatch:
     inputs:
@@ -23,7 +24,7 @@ on:
         description: Only these barcodes (comma list)
         default: ""
   schedule:
-    - cron: "25 */4 * * *"
+    - cron: "25 5,17 * * *"
 permissions:
   contents: write
 concurrency:
