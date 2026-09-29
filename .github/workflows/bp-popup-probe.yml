@@ -69,7 +69,7 @@ jobs:
               if (block.some((b) => req.url().includes(b))) { console.log('BLOCKED', req.url().slice(0, 140)); return req.abort(); }
               req.continue();
             });
-            page.on('pageerror', (e) => console.log('PAGEERROR', String(e && e.message || e).slice(0, 300)));
+            page.on('pageerror', (e) => console.log('PAGEERROR', String(e && e.message || e).slice(0, 300), '| stack:', String(e && e.stack || '').replace(/\s+/g, ' ').slice(0, 700)));
             page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) console.log('CONSOLE-' + m.type().toUpperCase(), m.text().slice(0, 240)); });
             page.on('requestfailed', (req) => { if (/binderpos/.test(req.url())) console.log('NET-FAIL', req.failure() && req.failure().errorText, /shopifyCustomerId|forMe|customer/i.test(req.url()) ? '(customer request)' : req.url().slice(0, 180)); });
             page.on('response', async (res) => {
