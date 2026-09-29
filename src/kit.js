@@ -14,7 +14,7 @@
    up to MAX picks, best first: a preferred brand / wording, then the most stock.
    Edge-cached for 30 minutes per list. */
 
-const KIT_V = "1";
+const KIT_V = "2";
 const TTL_S = 1800;
 const MAX = 4;
 
@@ -29,7 +29,7 @@ export const RULES = {
   wh: [
     { key: "clippers", label: "Clippers", why: "Cut the parts off the frame cleanly.",
       q: "title:*clipper* OR title:*cutter* OR title:*nipper*",
-      re: /clipper|cutter|nipper/i, not: /\bmat\b|glass|knife|blade|refill|replacement/i, prefer: /citadel|army painter|plastic/i },
+      re: /clipper|cutter|nipper/i, not: /\bmat\b|glass|knife|blade|refill|replacement|foam|hot ?wire|\bwire\b|circle|tape/i, prefer: /citadel|plastic cutter|sprue|clipper/i },
     { key: "glue", label: "Plastic glue", why: "Welds the plastic parts together.",
       q: "title:*glue* OR title:*cement*",
       re: /plastic glue|plastic cement|thin cement|quick cement/i, not: /refill|250 ?ml|basing|super|cyano|magnet|crystal|applicator/i, prefer: /citadel|army painter/i },

@@ -35,6 +35,8 @@ test("tool rules keep real tools and drop look-alikes", () => {
   const ok = (rule, t) => rule.re.test(t) && (!rule.also || rule.also.test(t)) && !(rule.not && rule.not.test(t));
   assert.ok(ok(r("wh", "clippers"), "CITADEL FINE DETAIL CUTTERS"));
   assert.ok(!ok(r("wh", "clippers"), "GodHand - Glass Cutter Mat"));
+  assert.ok(!ok(r("wh", "clippers"), "THE ARMY PAINTER GAMEMASTER: HOT WIRE FOAM CUTTER"));
+  assert.ok(ok(r("wh", "clippers"), "MINIATURE & MODEL TOOLS: PLASTIC CUTTER"));
   assert.ok(ok(r("wh", "glue"), "CITADEL PLASTIC GLUE"));
   assert.ok(!ok(r("wh", "glue"), "ARMY PAINTER SUPER GLUE 20GM"));
   assert.ok(ok(r("wh", "primer"), "THE ARMY PAINTER COLOUR PRIMER: MATTE BLACK SPRAY"));
