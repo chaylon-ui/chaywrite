@@ -66,7 +66,6 @@
     var attr = img.getAttribute('src') ? 'src' : (img.getAttribute('data-src') ? 'data-src' : '');
     if (!attr) return;
     var src = img.getAttribute(attr);
-    if (src === img.__xgSet) return;
     var r = rendition(src);
     if (!r) return;
     var box = boxWidth(img);
@@ -79,7 +78,8 @@
     if (target <= r.width) return;
     var next = r.make(target);
     if (!next || next === src) return;
-    img.__xgSet = next;
+    // a picture measured before its grid settled is re-checked on the next pass (the
+    // src change itself triggers one): each pass only ever asks for a bigger rendition
     img.setAttribute(attr, next);
     if (attr === 'data-src' && img.getAttribute('src') === src) img.setAttribute('src', next);
   }
@@ -108,8 +108,10 @@
         }
       }, 50);
     }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'data-src'] });
-    // lazy pictures get their size once they are laid out
-    window.addEventListener('load', function () { sweep(document); });
+    // lazy pictures get their size once they are laid out; a resize can ask for more
+    window.addEventListener('load', function () { sweep(document); setTimeout(function () { sweep(document); }, 1500); });
+    var rt = 0;
+    window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { sweep(document); }, 250); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

@@ -12,8 +12,9 @@
    (owner, 2026-09-30: "people will read 0 results and move on quickly" - the big line
    says the answer, a small line under it keeps "0 results for <words>"), the name
    linking to the app's search for the exact name, where every printing and condition
-   shows; with store hits but no single card the heading reads "Closest matches for
-   <words>". The app's "did not yield any results" sentence is hidden then.
+   shows; with store hits but no single card the heading reads "Did you mean one of
+   these?" (owner: "remove the 'word for word', and keep it simple at Did you mean?").
+   The app's "did not yield any results" sentence is hidden then.
    Loaded from layout/theme.liquid on every page but runs only on /a/search (the
    app's page is built on the live theme, where a Liquid path test did not fire).
    Nothing runs when the app found anything. */
@@ -132,8 +133,8 @@
     while (anchor && anchor.parentNode !== root) anchor = anchor.parentNode;
     if (head && (name || list.length)) {
       head.classList.add('xg-sf__head');
-      head.innerHTML = (name ? 'Did you mean <a class="xg-sf__mean" href="' + esc(appq) + '">' + esc(name) + '</a>?' : 'Closest matches for &ldquo;' + esc(q) + '&rdquo;') +
-        '<small class="xg-sf__sub">0 results for &ldquo;' + esc(q) + '&rdquo;' + (name ? '' : ' word for word') + '</small>';
+      head.innerHTML = (name ? 'Did you mean <a class="xg-sf__mean" href="' + esc(appq) + '">' + esc(name) + '</a>?' : 'Did you mean one of these?') +
+        '<small class="xg-sf__sub">0 results for &ldquo;' + esc(q) + '&rdquo;</small>';
       var note = noteOf(root);
       if (note) note.style.display = 'none';
     }
@@ -144,11 +145,11 @@
       h += '<a class="xg-sf__all" href="' + esc(appq) + '">See every listing of &ldquo;' + esc(name) + '&rdquo; &rsaquo;</a> ' +
         '<a class="xg-sf__all xg-sf__all--2" href="' + esc(all) + '">All results for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
     } else if (list.length) {
-      if (!head) h += '<h2 class="xg-sf__h">Nothing matched &ldquo;' + esc(q) + '&rdquo; word for word. Our store search found these:</h2>';
+      if (!head) h += '<h2 class="xg-sf__h xg-sf__h--card">Did you mean one of these?</h2>';
       h += cards(list);
       h += '<a class="xg-sf__all" href="' + esc(all) + '">See all results for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
     } else {
-      h += '<h2 class="xg-sf__h">Nothing matched &ldquo;' + esc(q) + '&rdquo; word for word.</h2>';
+      h += '<h2 class="xg-sf__h">No results for &ldquo;' + esc(q) + '&rdquo;.</h2>';
       h += '<a class="xg-sf__all" href="' + esc(all) + '">Try the store search for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
     }
     h += '</section>';
