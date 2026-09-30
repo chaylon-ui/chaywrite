@@ -44,7 +44,7 @@ test("public users carry no hash; admins can do everything, staff only what they
 test("permissions come from form checkboxes or a list", () => {
   // the store screens (owner, 2026-09-29: accounts instead of the staff PIN) are permissions too
   const none = { edit: false, prices: false, add: false, approve: false, email: false, ap_view: false, ap_publish: false, ap_settings: false, ap_config: false, release: false,
-    pickups: false, alerts: false, tv: false, portal: false, decks: false };
+    pickups: false, alerts: false, tv: false, portal: false, decks: false, requests: false };
   assert.deepEqual(permsFrom({ perm_edit: "on", perm_prices: "on" }), { ...none, edit: true, prices: true });
   assert.deepEqual(permsFrom({ perm_pickups: "on", perm_decks: "on" }), { ...none, pickups: true, decks: true });
   assert.deepEqual(permsFrom({ perms: ["add", "email", "ap_publish"] }), { ...none, add: true, email: true, ap_publish: true });
