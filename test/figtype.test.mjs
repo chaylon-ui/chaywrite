@@ -21,6 +21,13 @@ test("franchise: the quoted series at the end of a Bandai title, then the title 
   assert.equal(franchiseOf({ series: "", title: "(RERELEASE) NENDOROID HATSUNE MIKU SYMPHONY 5TH ANNIVERSARY VER." }), "Hatsune Miku");
   assert.equal(franchiseOf({ series: "", title: '2.5" NINTENDO ARTICULATED FIGURE' }), "Nintendo");
   assert.equal(franchiseOf({ series: "", title: "Some Unknown Thing" }), "");
+  // loose 40K words once caught other franchises (owner, 2026-09-30: a Haikyu!! figure under Warhammer)
+  assert.equal(franchiseOf({ series: "Haikyu!!", title: "HAIKYU!! PETATTO CLOCKWORK FIGURE VOL.2 BOX VER." }), "Haikyu!!");
+  assert.equal(franchiseOf({ series: "", title: "HAIKYU!! PETATTO CLOCKWORK FIGURE VOL.2 BOX VER." }), "Haikyu!!");
+  assert.equal(franchiseOf({ series: "", title: "Kaiju No. 8 Pop Up Parade Kafka Hibino" }), "Kaiju No. 8");
+  assert.equal(franchiseOf({ series: "", title: "Joy Toy Imperial Fists Intercessors" }), "Warhammer 40K");
+  assert.equal(franchiseOf({ series: "", title: "JOYTOY BLOOD ANGELS SANGUINIUS PRIMARCH OF THE IXTH LEGION" }), "Warhammer 40K");
+  assert.equal(franchiseOf({ series: "", title: "Some Clockwork Orange Figure" }), "");
 });
 
 test("line: the brand fact, the title, the product type", () => {
