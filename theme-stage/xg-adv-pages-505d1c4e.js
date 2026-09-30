@@ -165,3 +165,94 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch);
   else watch();
 })();
+
+/* Wishlist heart on the advanced search cards (owner, 2026-09-30: "Advanced search is
+   missing the Wishlist button, but the regular search has the wishlist button").
+   The widget draws its own cards without the theme's wishlist-icon snippet, and the
+   theme's heart handler (theme.js) binds only to the hearts on the page at load, so
+   this draws the same heart into each card's button row and does the same work: the
+   theme keeps the wishlist in the "wishlistList" cookie (product handles joined by "__",
+   14 days, path /; assets/wishlist.js reads it on /pages/wishlist) - a click appends
+   the handle and the heart turns into the "View Wishlist" link, as on every other card.
+   A card whose handle is already in the cookie opens in that state. */
+(function () {
+  'use strict';
+  var COOKIE = 'wishlistList';
+  var OUTLINE = 'M511.825,170.191c-0.14-1.786-0.298-3.155-0.44-4.095C504.22,84.955,444.691,20.73,367.434,20.73c-44.758,0-85.66,21.18-112.442,55.516C228.835,41.679,189.491,20.73,144.97,20.73C67.976,20.73,8.584,84.52,0.937,166.557c-0.147,0.956-0.295,2.12-0.43,3.489C-0.8,183.3,0.287,200.862,5.338,222.26c10.732,45.463,35.828,86.871,71.224,118.958l164.828,144.92c8.028,7.059,20.042,7.085,28.101,0.062l166.037-144.683c39.134-40.728,62.393-77.366,71.616-119.584C511.771,200.731,512.848,183.284,511.825,170.191z M465.46,212.833c-7.254,33.204-26.552,63.603-59.352,97.843L255.545,441.771l-150.569-132.38c-28.881-26.184-49.406-60.051-58.113-96.933c-3.953-16.747-4.747-29.585-3.895-38.225c0.075-0.764,0.393-3.072,0.393-3.072C48.849,109.384,91.478,63.397,144.97,63.397c39.823,0,73.704,24.287,90.17,63.294c7.338,17.382,31.97,17.382,39.308,0c16.136-38.225,52.419-63.294,92.986-63.294c53.494,0,96.121,45.99,101.609,107.786c0.147,1.242,0.187,1.586,0.245,2.333C469.993,182.541,469.174,195.811,465.46,212.833z';
+  var FULL = 'M511.489,167.372c-7.573-84.992-68.16-146.667-144.107-146.667c-44.395,0-85.483,20.928-112.427,55.488c-26.475-34.923-66.155-55.488-110.037-55.488c-75.691,0-136.171,61.312-144.043,145.856c-0.811,5.483-2.795,25.045,4.395,55.68C15.98,267.532,40.62,308.663,76.759,341.41l164.608,144.704c4.011,3.541,9.067,5.312,14.08,5.312c4.992,0,10.005-1.749,14.016-5.248L436.865,340.13c24.704-25.771,58.859-66.048,70.251-118.251C514.391,188.514,511.66,168.268,511.489,167.372z';
+
+  function read() {
+    var m = document.cookie.match(/(?:^|;\s*)wishlistList=([^;]*)/);
+    try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return m ? m[1] : ''; }
+  }
+  function has(h) { return read().split('__').indexOf(h) !== -1; }
+  function add(h) {
+    if (has(h)) return;
+    var v = read();
+    v = (v && v !== '__' ? v : '') + '__' + h;
+    document.cookie = COOKIE + '=' + encodeURIComponent(v) + '; expires=' + new Date(Date.now() + 14 * 864e5).toUTCString() + '; path=/';
+  }
+  // the theme's own <symbol>s, once, when no card on the page brought them
+  function symbols() {
+    if (document.getElementById('wishlist-outline') && document.getElementById('wishlist')) return;
+    var box = document.createElement('div');
+    box.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">' +
+      (document.getElementById('wishlist-outline') ? '' : '<symbol id="wishlist-outline" viewBox="0 0 1200 1200"><path d="' + OUTLINE + '"/></symbol>') +
+      (document.getElementById('wishlist') ? '' : '<symbol id="wishlist" viewBox="0 0 1200 1200"><path d="' + FULL + '"/></symbol>') + '</svg>';
+    document.body.appendChild(box.firstChild);
+  }
+  function icon(id) { return '<svg class="icon" viewBox="0 0 30 30" aria-label="wishlist"><use xlink:href="#' + id + '" x="30%" y="30%"></use></svg>'; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function markup(h) {
+    var on = has(h);
+    return '<div class="add-to-wishlist xg-adv-wish"><div class="show">' +
+      '<div class="default-wishbutton-' + esc(h) + ' loading"' + (on ? ' style="display:none"' : '') + '><a class="add-in-wishlist-js btn" href="#" data-href="' + esc(h) + '">' + icon('wishlist-outline') + '<i class="fa fa-heart-o"></i><span class="tooltip-label">Add to wishlist</span></a></div>' +
+      '<div class="added-wishbutton-' + esc(h) + ' loading"' + (on ? '' : ' style="display:none"') + '><a class="added-wishlist btn add_to_wishlist" href="/pages/wishlist">' + icon('wishlist') + '<i class="fa fa-heart"></i><span class="tooltip-label">View Wishlist</span></a></div>' +
+      '</div></div>';
+  }
+  function handleOf(card) {
+    var a = card.querySelector('a[href*="/products/"]');
+    if (!a) return '';
+    var m = String(a.getAttribute('href') || '').match(/\/products\/([^/?#]+)/);
+    return m ? m[1] : '';
+  }
+  function apply() {
+    var cards = document.querySelectorAll('#shopify-section-advanced_search .products-display .grid-view-item');
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      if (card.querySelector('.add-to-wishlist')) continue;
+      var row = card.querySelector('.thumbnail-buttons');
+      var h = handleOf(card);
+      if (!row || !h) continue;
+      symbols();
+      var box = document.createElement('div');
+      box.innerHTML = markup(h);
+      var el = box.firstChild;
+      var cart = row.querySelector('.product-block-hover');
+      if (cart) row.insertBefore(el, cart); else row.appendChild(el);
+    }
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('.xg-adv-wish .add-in-wishlist-js');
+    if (!a) return;
+    e.preventDefault();
+    var h = a.getAttribute('data-href') || '';
+    if (!h) return;
+    add(h);
+    var wrap = a.closest('.xg-adv-wish');
+    var d = wrap.querySelector('[class*="default-wishbutton-"]'), ad = wrap.querySelector('[class*="added-wishbutton-"]');
+    if (d) d.style.display = 'none';
+    if (ad) ad.style.display = '';
+  });
+  function start() {
+    var sec = document.getElementById('shopify-section-advanced_search');
+    if (!sec) return;
+    apply();
+    if (window.MutationObserver) {
+      var t = 0;
+      new MutationObserver(function () { if (t) return; t = setTimeout(function () { t = 0; apply(); }, 40); }).observe(sec, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
