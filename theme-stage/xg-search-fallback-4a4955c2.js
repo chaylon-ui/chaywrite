@@ -129,8 +129,11 @@
     var all = '/search?q=' + encodeURIComponent(q) + '&type=product';
     var appq = name ? '/a/search?type=product&q=' + encodeURIComponent(name) : '';
     var head = headOf(root);
+    // the app nests a floated .normal_main_content inside the outer one: the strip must
+    // sit in the box that holds the heading, or it flows beside the float (2026-09-30)
+    var box = (head && head.closest('.normal_main_content')) || root;
     var anchor = head;                       // the heading's block: the strip goes right under it
-    while (anchor && anchor.parentNode !== root) anchor = anchor.parentNode;
+    while (anchor && anchor.parentNode !== box) anchor = anchor.parentNode;
     if (head && (name || list.length)) {
       head.classList.add('xg-sf__head');
       head.innerHTML = (name ? 'Did you mean <a class="xg-sf__mean" href="' + esc(appq) + '">' + esc(name) + '</a>?' : 'Did you mean one of these?') +
@@ -156,7 +159,7 @@
 
     var style = document.createElement('style');
     style.textContent =
-      '.xg-sf{margin:18px 0 26px;padding:18px 18px 16px;border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fafafa}' +
+      '.xg-sf{clear:both;margin:18px 0 26px;padding:18px 18px 16px;border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fafafa}' +
       '.xg-sf__h{margin:0 0 14px;font-size:17px;line-height:1.3;font-weight:700}' +
       '.xg-sf__h--card{font-size:20px}.xg-sf__mean{text-decoration:underline;color:inherit}' +
       '.xg-sf__head .xg-sf__mean{color:inherit}' +
@@ -177,20 +180,20 @@
       'html[data-xg-theme="dark"] .xg-sf__all{color:#e6ebee}';
     document.head.appendChild(style);
 
-    var box = document.createElement('div');
-    box.innerHTML = h;
-    var sec = box.firstChild;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = h;
+    var sec = tmp.firstChild;
     // right under the app's own "0 results" header block when it can be found, else at the end
     if (!anchor) {
-      var els = root.querySelectorAll('h1,h2,h3,p,div,span'), hit = null;
+      var els = box.querySelectorAll('h1,h2,h3,p,div,span'), hit = null;
       for (var k = 0; k < els.length; k++) {
         if (/(^|\s)0\s+results?\b/i.test(els[k].textContent || '') && els[k].children.length < 6) hit = els[k];
       }
       anchor = hit;
-      while (anchor && anchor.parentNode !== root) anchor = anchor.parentNode;
+      while (anchor && anchor.parentNode !== box) anchor = anchor.parentNode;
     }
-    if (anchor && anchor.nextSibling) root.insertBefore(sec, anchor.nextSibling);
-    else root.appendChild(sec);
+    if (anchor && anchor.nextSibling) box.insertBefore(sec, anchor.nextSibling);
+    else box.appendChild(sec);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', poll);
