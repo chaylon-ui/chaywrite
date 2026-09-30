@@ -402,7 +402,7 @@
       '<p class="xg-cf__sr" role="status" aria-live="polite" aria-atomic="true"></p>' +
       '<button type="button" class="xg-cf__top" aria-expanded="false" aria-controls="xg-cf-body">' +
         '<span class="xg-cf__ic">' + ICON + '</span>' +
-        '<span class="xg-cf__tt"><strong>Find a card</strong> <span>by set and name together, or a whole set in card-number order</span></span>' +
+        '<span class="xg-cf__tt"><strong>Find a card</strong></span>' +
         '<span class="xg-cf__chev" aria-hidden="true"></span></button>' +
       '<div class="xg-cf__quick" hidden></div>' +
       '<div class="xg-cf__body" id="xg-cf-body">' +
@@ -415,12 +415,11 @@
           '<div class="xg-cf__f xg-cf__f--sort"><label for="xg-cf-sort">Sort by</label><select id="xg-cf-sort" class="xg-cf__in">' +
             Object.keys(SORTS).map(function (k) { return '<option value="' + k + '">' + esc(SORTS[k][2]) + '</option>'; }).join('') + '</select></div>' +
           '<label class="xg-cf__chk"><input type="checkbox" checked> In stock only</label>' +
-          '<button type="button" class="xg-cf__fb" aria-expanded="false" aria-controls="xg-cf-more" hidden>Filters</button>' +
+          '<button type="button" class="xg-cf__fb" aria-expanded="false" aria-controls="xg-cf-more" hidden>More Filters</button>' +
           '<button type="submit" class="xg-cf__go">Search</button>' +
         '</div>' +
         '<div class="xg-cf__more" id="xg-cf-more" hidden></div>' +
         '<p class="xg-cf__msg" role="status" aria-live="polite"></p>' +
-        '<p class="xg-cf__tip">Pick a set and leave the name empty to see the whole set in card-number order. Condition and printing filters: <a href="/pages/advanced-search?game=' + encodeURIComponent(GAME0) + '">Advanced Search &rsaquo;</a></p>' +
       '</div>';
     res = document.createElement('section');
     res.className = 'xg-cf-res';
@@ -485,7 +484,7 @@
     if (!fb) return;
     var n = nF(sel) + nPrice();
     fb.hidden = false;
-    fb.innerHTML = 'Filters' + (n ? ' <b>' + n + '</b>' : '') + '<span class="xg-cf__chev" aria-hidden="true"></span>';
+    fb.innerHTML = 'More Filters' + (n ? ' <b>' + n + '</b>' : '') + '<span class="xg-cf__chev" aria-hidden="true"></span>';
     fb.classList.toggle('is-on', n > 0);
     var clr = more && more.querySelector('[data-clear]');
     if (clr) clr.hidden = !n;
@@ -509,8 +508,7 @@
       else html += '<span class="xg-cf__chips-note">Loading&hellip;</span>';
       return html + '</div></fieldset>';
     }).join('') +
-      '<div class="xg-cf__morefoot"><button type="button" class="xg-cf__clear" data-clear' + (nF(sel) + nPrice() ? '' : ' hidden') + '>Clear filters</button>' +
-      '<span class="xg-cf__morehint">' + (groups.length ? 'Pick as many as you like: values in one row are &ldquo;or&rdquo;, the rows narrow each other. A price matches any condition or finish of the card.' : 'A price matches any condition or finish of the card, before tax.') + '</span></div>';
+      '<div class="xg-cf__morefoot"><button type="button" class="xg-cf__clear" data-clear' + (nF(sel) + nPrice() ? '' : ' hidden') + '>Clear filters</button></div>';
     groups.forEach(function (gr) {
       if (!gr.api || gr.fixed) return;
       loadList(g, gr.api).then(function (l) {
@@ -564,7 +562,7 @@
   function hideList() { list.hidden = true; inSet.setAttribute('aria-expanded', 'false'); inSet.removeAttribute('aria-activedescendant'); active = -1; }
   function refreshList() {
     var t = inSet.value, g = game();
-    if (!norm(t)) { showList([], 'Type part of a set name'); return; }
+    if (!norm(t)) { hideList(); return; }   // an empty box shows no list: a note there sat over the Search button
     var hadList = !!setLists[g];
     if (!hadList) showList([], 'Loading sets…');
     loadSets(g).then(function (l) {
@@ -1032,7 +1030,7 @@
       '.xg-cf__chip i{flex:none;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}' +
       '.xg-cf select.xg-cf__add{width:auto;max-width:100%;height:34px;padding-right:26px;font-size:13px}' +
       '.xg-cf__grp--price{flex:0 1 230px}.xg-cf__price{display:flex;align-items:center;gap:8px}.xg-cf .xg-cf__in.xg-cf__pin{width:96px;height:34px;padding:0 10px;font-size:13.5px}.xg-cf__pto{color:var(--xg-muted,#707a83);font-size:13px}' +
-      '.xg-cf__morefoot{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:2px}' +
+      '.xg-cf__morefoot{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:2px}.xg-cf__morefoot:has(.xg-cf__clear[hidden]){display:none}' +
       '.xg-cf button.xg-cf__clear{min-height:0;margin:0;padding:6px 14px;border:1px solid var(--xg-border,#e3e6e8);border-radius:999px;background:none;color:var(--xg-ink,#171b1d);font:inherit;font-size:13px;font-weight:700;text-transform:none;letter-spacing:normal;cursor:pointer}.xg-cf button.xg-cf__clear[hidden]{display:none}.xg-cf button.xg-cf__clear:hover{border-color:var(--xg-red,#d62c28);color:var(--xg-red,#d62c28)}' +
       '.xg-cf__morehint{color:var(--xg-muted,#707a83);font-size:12.5px}' +
       '.xg-cf__list{position:absolute;z-index:40;top:100%;left:0;right:0;max-height:300px;margin:4px 0 0;padding:4px 0;overflow:auto;list-style:none;border:1px solid var(--xg-border,#e3e6e8);border-radius:10px;background:var(--xg-surface,#fff);box-shadow:0 14px 34px rgba(0,0,0,.28)}' +
