@@ -28,6 +28,10 @@ on:
         default: '[{"wait":3000},{"dump":true},{"click":"a[href=\"#buylist\"]"},{"wait":3000},{"shot":"open"},{"dump":true}]'
       width:
         default: "1280"
+      dpr:
+        description: Device pixel ratio (1 = plain screen, 2 = Retina / 200% Windows)
+        required: false
+        default: "1"
       bodies:
         description: Print the head of BinderPOS JSON answers ("true"); never for anything carrying a customer id or a saved list
         default: "false"
@@ -50,6 +54,7 @@ jobs:
           BLOCK: ${{ inputs.block }}
           PLAN: ${{ inputs.plan }}
           W: ${{ inputs.width }}
+          DPR: ${{ inputs.dpr }}
           RUN: ${{ github.run_id }}
           BODIES: ${{ inputs.bodies }}
         run: |
@@ -62,7 +67,7 @@ jobs:
             const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
             const page = await browser.newPage();
             const w = parseInt(process.env.W || '1280', 10) || 1280;
-            await page.setViewport({ width: w, height: 900, isMobile: w < 700, hasTouch: w < 700 });
+            await page.setViewport({ width: w, height: 900, deviceScaleFactor: parseFloat(process.env.DPR || '1') || 1, isMobile: w < 700, hasTouch: w < 700 });
             const block = (process.env.BLOCK || '').split(',').map((s) => s.trim()).filter(Boolean);
             await page.setRequestInterception(true);
             page.on('request', (req) => {
