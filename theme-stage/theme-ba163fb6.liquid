@@ -148,6 +148,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <script src="{{ 'xg-search-fallback.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Sharp product pictures on high-density screens: a 2x rendition for every small CDN image without a srcset, the search app's grid included (assets/xg-sharp-images.js). {%- endcomment -%}
   <script src="{{ 'xg-sharp-images.js' | asset_url }}" defer="defer"></script>
+  {%- comment -%} Price filter without prices: hides the search app's price slider and blanks its min/max placeholders to 0 / 100,000 (assets/xg-price-filter.js, owner 2026-09-30). {%- endcomment -%}
+  <script src="{{ 'xg-price-filter.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Personalised homepage: which game this page is about (assets/xg-personal.js);
       "Also at our other Exor locations" on single-card pages (assets/xg-product-sisters.js). {%- endcomment -%}
   <meta name="xg-game" content="{% if product %}{{ product.type | escape }}{% elsif collection %}{{ collection.handle }} {{ collection.title | escape }}{% endif %}">
