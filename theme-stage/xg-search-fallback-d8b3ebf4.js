@@ -6,8 +6,13 @@
    when the app's page settles on "0 results" this asks the store's predictive
    search (/search/suggest.json) for the same words and shows what it found under
    the app's search box, with a link to the full store search page (/search?q=).
-   Loaded only on /a/search (layout/theme.liquid). Nothing runs when the app found
-   anything. */
+   Single cards (owner, 2026-09-30: "Liliana dread horse" 0 results, the card is Liliana,
+   Dreadhorde General): the store search finds the card (it forgives typos), and when
+   most of its hits are one card the strip opens with "Did you mean <card>?" linking
+   to the app's search for the exact name, where every printing and condition shows.
+   Loaded from layout/theme.liquid on every page but runs only on /a/search (the
+   app's page is built on the live theme, where a Liquid path test did not fire).
+   Nothing runs when the app found anything. */
 (function () {
   'use strict';
   if (!/^\/a\/search(\/|$)/.test(location.pathname)) return;
@@ -37,18 +42,34 @@
     if (++tries < 60) setTimeout(poll, 250);
   }
 
-  function run(root) {
-    var url = '/search/suggest.json?q=' + encodeURIComponent(q) +
+  function suggest(words) {
+    var url = '/search/suggest.json?q=' + encodeURIComponent(words) +
       '&resources[type]=product&resources[limit]=10' +
       '&resources[options][unavailable_products]=hide' +
       '&resources[options][fields]=title,product_type,variants.title,vendor,tag';
-    fetch(url, { headers: { accept: 'application/json' }, credentials: 'same-origin' })
+    return fetch(url, { headers: { accept: 'application/json' }, credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-        var list = (j && j.resources && j.resources.results && j.resources.results.products) || [];
-        render(root, list);
-      })
-      .catch(function () { render(root, []); });
+      .then(function (j) { return (j && j.resources && j.resources.results && j.resources.results.products) || []; })
+      .catch(function () { return []; });
+  }
+  function fold(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+  // the card most of the hits are: single titles read "<card> [<set>]" or "<card> (Foil) [<set>]",
+  // so the part before the first bracket names the card; null unless one name covers at
+  // least two hits and half the list, or when it is just what was typed
+  function cardName(list) {
+    var n = {}, best = '', bestN = 0;
+    for (var i = 0; i < list.length; i++) {
+      var t = String(list[i].title || '').split(/\s+[\[(]/)[0].trim();
+      if (!t || !/[\[(]/.test(String(list[i].title || ''))) continue;
+      n[t] = (n[t] || 0) + 1;
+      if (n[t] > bestN) { bestN = n[t]; best = t; }
+    }
+    if (bestN < 2 || bestN * 2 < list.length || fold(best) === fold(q)) return null;
+    return best;
+  }
+
+  function run(root) {
+    suggest(q).then(function (list) { render(root, list, cardName(list)); });
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -64,22 +85,32 @@
     return '$' + v.toFixed(2);
   }
 
-  function render(root, list) {
+  function cards(list) {
+    var h = '<ul class="xg-sf__grid">';
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i], im = img(p), pr = money(p);
+      h += '<li class="xg-sf__item"><a class="xg-sf__card" href="' + esc(p.url || ('/products/' + p.handle)) + '">' +
+        '<span class="xg-sf__pic">' + (im ? '<img src="' + esc(im) + '" alt="" loading="lazy">' : '') + '</span>' +
+        '<span class="xg-sf__title">' + esc(p.title) + '</span>' +
+        (pr ? '<span class="xg-sf__price">' + esc(pr) + '</span>' : '') +
+        '</a></li>';
+    }
+    return h + '</ul>';
+  }
+
+  function render(root, list, name) {
     if (document.querySelector('.xg-sf')) return;
     var all = '/search?q=' + encodeURIComponent(q) + '&type=product';
     var h = '<section class="xg-sf" aria-label="Results from the store search">';
-    if (list.length) {
+    if (name) {
+      var appq = '/a/search?type=product&q=' + encodeURIComponent(name);
+      h += '<h2 class="xg-sf__h xg-sf__h--card">Did you mean <a class="xg-sf__mean" href="' + esc(appq) + '">' + esc(name) + '</a>?</h2>';
+      h += cards(list);
+      h += '<a class="xg-sf__all" href="' + esc(appq) + '">See every listing of &ldquo;' + esc(name) + '&rdquo; &rsaquo;</a> ' +
+        '<a class="xg-sf__all xg-sf__all--2" href="' + esc(all) + '">All results for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
+    } else if (list.length) {
       h += '<h2 class="xg-sf__h">Nothing matched &ldquo;' + esc(q) + '&rdquo; word for word. Our store search found these:</h2>';
-      h += '<ul class="xg-sf__grid">';
-      for (var i = 0; i < list.length; i++) {
-        var p = list[i], im = img(p), pr = money(p);
-        h += '<li class="xg-sf__item"><a class="xg-sf__card" href="' + esc(p.url || ('/products/' + p.handle)) + '">' +
-          '<span class="xg-sf__pic">' + (im ? '<img src="' + esc(im) + '" alt="" loading="lazy">' : '') + '</span>' +
-          '<span class="xg-sf__title">' + esc(p.title) + '</span>' +
-          (pr ? '<span class="xg-sf__price">' + esc(pr) + '</span>' : '') +
-          '</a></li>';
-      }
-      h += '</ul>';
+      h += cards(list);
       h += '<a class="xg-sf__all" href="' + esc(all) + '">See all results for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
     } else {
       h += '<h2 class="xg-sf__h">Nothing matched &ldquo;' + esc(q) + '&rdquo; word for word.</h2>';
@@ -91,6 +122,8 @@
     style.textContent =
       '.xg-sf{margin:18px 0 26px;padding:18px 18px 16px;border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fafafa}' +
       '.xg-sf__h{margin:0 0 14px;font-size:17px;line-height:1.3;font-weight:700}' +
+      '.xg-sf__h--card{font-size:20px}.xg-sf__mean{text-decoration:underline;color:inherit}' +
+      '.xg-sf__all--2{margin-left:18px;font-weight:600;opacity:.85}' +
       '.xg-sf__grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}' +
       '.xg-sf__item{margin:0}' +
       '.xg-sf__card{display:block;text-decoration:none;color:inherit}' +
