@@ -42,8 +42,9 @@
     /* One add-to-cart per card (owner, 2026-09-30: "Two add to cart buttons on card
        viewing"): where this button is on the picture, the theme's own cart button in
        the row under the card (.product-block-hover) is hidden; the row keeps quick view
-       and the wishlist heart. The hidden form is still what the variant id is read from. */
-    '.grid-view-item.xg-has-qa .thumbnail-buttons .product-block-hover{display:none}';
+       and the wishlist heart. The hidden form is still what the variant id is read from
+       (!important: the theme shows the row's blocks with its own !important rule). */
+    '.grid-view-item.xg-has-qa .thumbnail-buttons .product-block-hover{display:none!important}';
   var st = document.createElement('style');
   st.textContent = css;
   document.head.appendChild(st);
