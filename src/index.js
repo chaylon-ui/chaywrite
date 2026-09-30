@@ -18,6 +18,7 @@ import { serveEnrich } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
 import { serveStage, servePair } from "./stage.js";
+import { serveRequests, REQUESTS_DO } from "./requests.js";
 import { servePageEdit } from "./page-edit.js";
 import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
@@ -285,6 +286,9 @@ export default {
     // 9Pocket by Exor (src/stage.js): the staff buylist list and worksheets,
     // their data and the approve / reject / edit / email control, behind the
     // staff PIN. /buylist/staged* was the page's first address and redirects.
+    // Item requests (src/requests.js): the store's pages post sold-out and
+    // special-order requests here; /requests/health for the deploy smoke.
+    if (url.pathname.startsWith("/requests/api/") || url.pathname === "/requests/health") return serveRequests(request, env, url, ctx);
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"));
     }
@@ -444,6 +448,9 @@ export default {
       const item = String((b && b.inventory_item_id) || "").replace(/\D/g, "").slice(0, 24);
       if (item) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName("default"))
         .fetch(new Request(url.origin + "/inv-hint", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item }) })));
+      // ... and wakes the item-requests stock check (src/requests.js).
+      if (item) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName(REQUESTS_DO))
+        .fetch(new Request(url.origin + "/_req/inv", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })));
       // The same hint feeds the hold-on-arrival shadow log (src/hold.js).
       if (item) ctx.waitUntil(env.ROOM.get(env.ROOM.idFromName(HOLD_DO))
         .fetch(new Request(url.origin + "/_hold/inv", { method: "POST", headers: { "content-type": "application/json" },

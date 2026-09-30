@@ -7,6 +7,7 @@ import { buyCartsBetween, completedBuylists, buylistLines } from "./portal.js";
 import { deckSaleOf } from "./deck-sales.js";
 import { STAGE_DO, stageDoFetch, stageDoAlarm } from "./stage.js";
 import { AUTOPRICE_DO, autopriceDoFetch, autopriceDoAlarm } from "./autoprice.js";
+import { REQUESTS_DO, requestsDoFetch, requestsDoAlarm } from "./requests.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -62,6 +63,9 @@ export class BinderRoom {
     // And for the sealed auto-pricing job (src/autoprice.js): /_ap/* only.
     this.isAutoDo = false;
     try { this.isAutoDo = !!env.ROOM?.idFromName(AUTOPRICE_DO)?.equals?.(state.id); } catch {}
+    // And for item requests (src/requests.js): /_req/* only.
+    this.isReqDo = false;
+    try { this.isReqDo = !!env.ROOM?.idFromName(REQUESTS_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -672,6 +676,11 @@ export class BinderRoom {
     };
   }
 
+  reqCx() {
+    if (!this.reqMem) this.reqMem = {};
+    return { storage: this.state.storage, env: this.env, adminGql: (q, v) => this.adminGql(q, v), now: () => Date.now(), log: (s) => console.log(s), mem: this.reqMem };
+  }
+
   stageCx() {
     if (!this.stageMem) this.stageMem = {};
     return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s), mem: this.stageMem };
@@ -729,6 +738,7 @@ export class BinderRoom {
     if (this.isHoldDo) { await holdDoAlarm(this.holdCx()); return; }
     if (this.isStageDo) { await stageDoAlarm(this.stageCx()); return; }
     if (this.isAutoDo) { await autopriceDoAlarm(this.autoCx()); return; }
+    if (this.isReqDo) { await requestsDoAlarm(this.reqCx()); return; }
     if (!this.isCacheDo) return;
     try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
     let r = null;
@@ -765,7 +775,11 @@ export class BinderRoom {
       if (url.pathname.startsWith("/_ap/")) return autopriceDoFetch(this.autoCx(), request, url);
       return new Response(null, { status: 404 });
     }
-    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/")) return new Response(null, { status: 404 });
+    if (this.isReqDo) {
+      if (url.pathname.startsWith("/_req/")) return requestsDoFetch(this.reqCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/") || url.pathname.startsWith("/_req/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });

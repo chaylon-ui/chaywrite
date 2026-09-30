@@ -65,6 +65,7 @@ import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, buildDecisionEmail, buildCodeEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
+import { serveRequestsStaff } from "./requests.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
@@ -968,6 +969,10 @@ export async function serveStage(request, env, url, staffOk, sopts) {
   const user = await currentUser(request, env, origin);
   const opts = { user, on: stagingOn(env), emailOn: emailConfigured(env), err: url.searchParams.get("err") || "", msg: url.searchParams.get("msg") || "" };
   const toLogin = () => redirect(BASE + "/login" + q({ next: p + (url.search && request.method === "GET" ? url.search : "") }));
+  // Item requests (src/requests.js): the list, one request, its control.
+  if (p === BASE + "/requests" || p === BASE + "/requests.json" || p.startsWith(BASE + "/requests/")) {
+    return serveRequestsStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts });
+  }
 
   if (p === BASE + ".json") {
     if (!user && !pinOk) return Response.json({ error: "sign in or staff key required" }, { status: 403, headers: noStore });

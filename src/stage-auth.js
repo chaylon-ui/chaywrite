@@ -30,6 +30,7 @@ export const PERMS = [
   { key: "approve", label: "Approve and reject" },
   { key: "email", label: "Send the customer email" },
   { key: "release", label: "Release held stock (hold on arrival)" },
+  { key: "requests", label: "Item requests: see them, reply, mark, switch a product off" },
 ];
 
 // The sealed auto-pricer (/autoprice) is opened by the same accounts.
