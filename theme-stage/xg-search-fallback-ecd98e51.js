@@ -8,8 +8,12 @@
    the app's search box, with a link to the full store search page (/search?q=).
    Single cards (owner, 2026-09-30: "Liliana dread horse" 0 results, the card is Liliana,
    Dreadhorde General): the store search finds the card (it forgives typos), and when
-   its leading hits are one card the strip opens with "Did you mean <card>?" linking
-   to the app's search for the exact name, where every printing and condition shows.
+   its leading hits are one card the page's own heading becomes "Did you mean <card>?"
+   (owner, 2026-09-30: "people will read 0 results and move on quickly" - the big line
+   says the answer, a small line under it keeps "0 results for <words>"), the name
+   linking to the app's search for the exact name, where every printing and condition
+   shows; with store hits but no single card the heading reads "Closest matches for
+   <words>". The app's "did not yield any results" sentence is hidden then.
    Loaded from layout/theme.liquid on every page but runs only on /a/search (the
    app's page is built on the live theme, where a Liquid path test did not fire).
    Nothing runs when the app found anything. */
@@ -107,18 +111,40 @@
     return h + '</ul>';
   }
 
+  // the page's own "0 results" heading and its "did not yield" sentence
+  function headOf(root) {
+    var hs = root.querySelectorAll('h1,h2,h3');
+    for (var i = 0; i < hs.length; i++) if (/^\s*0\s+results?\b/i.test(hs[i].textContent || '') && !hs[i].closest('[class*="xg-"]')) return hs[i];
+    return null;
+  }
+  function noteOf(root) {
+    var ps = root.querySelectorAll('p');
+    for (var i = 0; i < ps.length; i++) if (/did not yield/i.test(ps[i].textContent || '') && !ps[i].closest('[class*="xg-"]')) return ps[i];
+    return null;
+  }
+
   function render(root, list, name) {
     if (document.querySelector('.xg-sf')) return;
     var all = '/search?q=' + encodeURIComponent(q) + '&type=product';
+    var appq = name ? '/a/search?type=product&q=' + encodeURIComponent(name) : '';
+    var head = headOf(root);
+    var anchor = head;                       // the heading's block: the strip goes right under it
+    while (anchor && anchor.parentNode !== root) anchor = anchor.parentNode;
+    if (head && (name || list.length)) {
+      head.classList.add('xg-sf__head');
+      head.innerHTML = (name ? 'Did you mean <a class="xg-sf__mean" href="' + esc(appq) + '">' + esc(name) + '</a>?' : 'Closest matches for &ldquo;' + esc(q) + '&rdquo;') +
+        '<small class="xg-sf__sub">0 results for &ldquo;' + esc(q) + '&rdquo;' + (name ? '' : ' word for word') + '</small>';
+      var note = noteOf(root);
+      if (note) note.style.display = 'none';
+    }
     var h = '<section class="xg-sf" aria-label="Results from the store search">';
     if (name) {
-      var appq = '/a/search?type=product&q=' + encodeURIComponent(name);
-      h += '<h2 class="xg-sf__h xg-sf__h--card">Did you mean <a class="xg-sf__mean" href="' + esc(appq) + '">' + esc(name) + '</a>?</h2>';
+      if (!head) h += '<h2 class="xg-sf__h xg-sf__h--card">Did you mean <a class="xg-sf__mean" href="' + esc(appq) + '">' + esc(name) + '</a>?</h2>';
       h += cards(list);
       h += '<a class="xg-sf__all" href="' + esc(appq) + '">See every listing of &ldquo;' + esc(name) + '&rdquo; &rsaquo;</a> ' +
         '<a class="xg-sf__all xg-sf__all--2" href="' + esc(all) + '">All results for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
     } else if (list.length) {
-      h += '<h2 class="xg-sf__h">Nothing matched &ldquo;' + esc(q) + '&rdquo; word for word. Our store search found these:</h2>';
+      if (!head) h += '<h2 class="xg-sf__h">Nothing matched &ldquo;' + esc(q) + '&rdquo; word for word. Our store search found these:</h2>';
       h += cards(list);
       h += '<a class="xg-sf__all" href="' + esc(all) + '">See all results for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
     } else {
@@ -132,6 +158,8 @@
       '.xg-sf{margin:18px 0 26px;padding:18px 18px 16px;border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fafafa}' +
       '.xg-sf__h{margin:0 0 14px;font-size:17px;line-height:1.3;font-weight:700}' +
       '.xg-sf__h--card{font-size:20px}.xg-sf__mean{text-decoration:underline;color:inherit}' +
+      '.xg-sf__head .xg-sf__mean{color:inherit}' +
+      '.xg-sf__sub{display:block;margin-top:6px;font:500 14px/1.3 var(--xg-font-body,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif);text-transform:none;letter-spacing:0;opacity:.75}' +
       '.xg-sf__all--2{margin-left:18px;font-weight:600;opacity:.85}' +
       '.xg-sf__grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}' +
       '.xg-sf__item{margin:0}' +
@@ -152,12 +180,14 @@
     box.innerHTML = h;
     var sec = box.firstChild;
     // right under the app's own "0 results" header block when it can be found, else at the end
-    var head = null, els = root.querySelectorAll('h1,h2,h3,p,div,span');
-    for (var k = 0; k < els.length; k++) {
-      if (/(^|\s)0\s+results?\b/i.test(els[k].textContent || '') && els[k].children.length < 6) head = els[k];
+    if (!anchor) {
+      var els = root.querySelectorAll('h1,h2,h3,p,div,span'), hit = null;
+      for (var k = 0; k < els.length; k++) {
+        if (/(^|\s)0\s+results?\b/i.test(els[k].textContent || '') && els[k].children.length < 6) hit = els[k];
+      }
+      anchor = hit;
+      while (anchor && anchor.parentNode !== root) anchor = anchor.parentNode;
     }
-    var anchor = head;
-    while (anchor && anchor.parentNode !== root) anchor = anchor.parentNode;
     if (anchor && anchor.nextSibling) root.insertBefore(sec, anchor.nextSibling);
     else root.appendChild(sec);
   }
