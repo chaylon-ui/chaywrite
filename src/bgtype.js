@@ -39,9 +39,10 @@ export const BG_TYPES = [
 export const BG_LABELS = BG_TYPES.map((t) => t[0]);
 export const tagOf = (label) => TAG_PREFIX + label;
 
-// Liquid `handleize`: lower-case, runs of anything but a-z0-9 become one "-", trimmed
+// Liquid `handleize`: lower-case, apostrophes dropped ("Emperor's" -> "emperors"),
+// runs of anything else but a-z0-9 become one "-", trimmed
 export function handleize(s) {
-  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 export const collectionHandle = (label) => "board-games-" + handleize(label);
 

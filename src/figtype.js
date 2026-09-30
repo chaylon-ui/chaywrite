@@ -34,7 +34,7 @@ export const FRANCHISES = [
   ["Chainsaw Man", /chainsaw/i],
   ["Spy x Family", /spy\s*[x×]\s*family/i],
   ["Hatsune Miku", /hatsune|\bmiku\b|vocaloid|piapro/i],
-  ["Pokémon", /pok[eé]mon/i],
+  ["Pokemon", /pok[eé]mon/i],   // no accent: the label is the collection handle and the tag
   ["Sailor Moon", /sailor moon/i],
   ["Frieren", /frieren/i],
   ["Attack on Titan", /attack on titan|shingeki/i],

@@ -9,7 +9,7 @@ test("franchise: PLAMOD series first, folded onto one label", () => {
   assert.equal(franchiseOf({ series: "Demon Slayer: Kimetsu no Yaiba", title: "x" }), "Demon Slayer");
   assert.equal(franchiseOf({ series: "Frieren: Beyond Journey's End", title: "x" }), "Frieren");
   assert.equal(franchiseOf({ series: "Mobile Suit Gundam: The Witch from Mercury", title: "x" }), "Gundam");
-  assert.equal(franchiseOf({ series: "Pokémon", title: "x" }), "Pokémon");
+  assert.equal(franchiseOf({ series: "Pokémon", title: "x" }), "Pokemon");
 });
 
 test("franchise: the quoted series at the end of a Bandai title, then the title itself", () => {
@@ -53,8 +53,8 @@ test("plan: only fig:/figline: tags are added or removed", () => {
 });
 
 test("handles and labels: Liquid handleize, no duplicate labels", () => {
-  assert.equal(franchiseCollection("JoJo's Bizarre Adventure"), "figures-jojo-s-bizarre-adventure");
-  assert.equal(franchiseCollection("Pokémon"), "figures-pok-mon");
+  assert.equal(franchiseCollection("JoJo's Bizarre Adventure"), "figures-jojos-bizarre-adventure", "Liquid drops the apostrophe");
+  assert.equal(franchiseCollection("Pokemon"), "figures-pokemon");
   assert.equal(lineCollection("S.H.Figuarts"), "figure-line-s-h-figuarts");
   assert.equal(lineCollection("Funko Pop!"), "figure-line-funko-pop");
   assert.equal(new Set(FIG_LABELS).size, FRANCHISES.length);
