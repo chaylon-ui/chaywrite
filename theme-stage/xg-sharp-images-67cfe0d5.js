@@ -61,8 +61,21 @@
     return w || 0;
   }
 
+  // the widest rendition a srcset names, or -1 when a candidate cannot be read
+  function srcsetWidth(ss) {
+    var best = 0, parts = String(ss).split(',');
+    for (var i = 0; i < parts.length; i++) {
+      var u = parts[i].trim().split(/\s+/)[0];
+      if (!u) continue;
+      var r = rendition(u);
+      if (!r) return -1;
+      if (r.width > best) best = r.width;
+    }
+    return best;
+  }
+
   function sharpen(img) {
-    if (img.getAttribute('srcset') || img.getAttribute('data-srcset')) return;
+    if (img.getAttribute('data-srcset')) return;
     var attr = img.getAttribute('src') ? 'src' : (img.getAttribute('data-src') ? 'data-src' : '');
     if (!attr) return;
     var src = img.getAttribute(attr);
@@ -71,6 +84,14 @@
     var box = boxWidth(img);
     if (!box) return;                       // not laid out yet: the observer sees it again when it changes
     var need = Math.ceil(box * dpr);
+    // a srcset of its own is trusted, unless every file it names is too small as well
+    // (Shopify's old img_url filter answers "_small" for some AVIF uploads, 2026-09-30)
+    var ss = img.getAttribute('srcset');
+    if (ss) {
+      var sw = srcsetWidth(ss);
+      if (sw < 0 || sw >= need) return;
+      if (sw > r.width) return;
+    }
     if (r.width >= need) return;
     var target = 0;
     for (var i = 0; i < STEPS.length; i++) if (STEPS[i] >= need) { target = STEPS[i]; break; }
@@ -80,6 +101,7 @@
     if (!next || next === src) return;
     // a picture measured before its grid settled is re-checked on the next pass (the
     // src change itself triggers one): each pass only ever asks for a bigger rendition
+    if (ss) { img.removeAttribute('srcset'); img.removeAttribute('sizes'); }
     img.setAttribute(attr, next);
     if (attr === 'data-src' && img.getAttribute('src') === src) img.setAttribute('src', next);
   }

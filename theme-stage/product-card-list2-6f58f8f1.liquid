@@ -10,9 +10,9 @@
         <a href="{{ product.url | within: collection }}">
           <div class="image-inner">
             <div class="reveal">
-              <img alt="{{ product.featured_image.alt | escape }}" class="grid-view-item__image lazyload {% unless product.images[1] == blank %} main-img {% endunless %}" loading="lazy" src="{{ product.featured_image | img_url: '370x480' }}" srcset="{{ product.featured_image | img_url: '370x480' }} 1x, {{ product.featured_image | img_url: '740x960' }} 2x"/>
+              <img alt="{{ product.featured_image.alt | escape }}" class="grid-view-item__image lazyload {% unless product.images[1] == blank %} main-img {% endunless %}" loading="lazy" src="{{ product.featured_image | image_url: width: 370 }}" srcset="{{ product.featured_image | image_url: width: 370 }} 1x, {{ product.featured_image | image_url: width: 740 }} 2x"/>
               {% unless product.images[1] == blank %}
-              <img alt="{{ product.images[1].alt | escape }}" class="extra-img" loading="lazy" src="{{ product.images[1] | img_url: '370x480' }}" srcset="{{ product.images[1] | img_url: '370x480' }} 1x, {{ product.images[1] | img_url: '740x960' }} 2x"/>
+              <img alt="{{ product.images[1].alt | escape }}" class="extra-img" loading="lazy" src="{{ product.images[1] | image_url: width: 370 }}" srcset="{{ product.images[1] | image_url: width: 370 }} 1x, {{ product.images[1] | image_url: width: 740 }} 2x"/>
               {% endunless %}
               <span id="tag-container"></span>
             </div>
