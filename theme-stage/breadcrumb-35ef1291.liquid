@@ -166,6 +166,46 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   {%- assign xg_bg_chips = xg_bg_chips | strip -%}
 {%- endif -%}
 {%- comment -%}
+  Figures (owner, 2026-09-30: "make a filtering system for them"): "Shop by series" and
+  "Shop by line" rows on All Figures / All Blind Box / Funko and on every series or line
+  page. The labels below must match chaywrite src/figtype.js FRANCHISES / LINES (the
+  nightly figtype phase tags products fig:<series> / figline:<line>); the collections
+  are figures-<handleized label> and figure-line-<handleized label>. Only labels whose
+  collection has products show.
+{%- endcomment -%}
+{%- assign xg_fig_series = "One Piece|Dragon Ball|Demon Slayer|Naruto|Jujutsu Kaisen|My Hero Academia|Chainsaw Man|Spy x Family|Hatsune Miku|Pokemon|Sailor Moon|Frieren|Attack on Titan|Hunter x Hunter|JoJo's Bizarre Adventure|Evangelion|Gundam|Star Wars|Marvel|DC Comics|Warhammer 40K|Digimon|Yu-Gi-Oh!|Kirby|The Legend of Zelda|Sonic the Hedgehog|Street Fighter|Final Fantasy|Persona|Re:Zero|Overlord|Berserk|Transformers|Godzilla|Haikyu!!|Disney|Teenage Mutant Ninja Turtles|Power Rangers|Tokyo Revengers|Elden Ring" | split: '|' -%}
+{%- assign xg_fig_lines = "Nendoroid|Pop Up Parade|figma|S.H.Figuarts|FiguartsZERO|Ichibansho|Banpresto|SEGA Prize|FuRyu|Taito|Funko Pop!|JoyToy|ARTFX|MegaHouse|Good Smile|Bandai Spirits|Shokugan|Scale figures|Blind box|Statues & busts|Plush" | split: '|' -%}
+{%- assign xg_fig_on = false -%}
+{%- assign xg_fig_cur = '' -%}
+{%- assign xg_fig_home = 'all-figures' -%}
+{%- if xg_bc_key == 'all-figures' or xg_bc_key == 'all-blind-box' or xg_bc_key == 'funko-pops' -%}{%- assign xg_fig_on = true -%}{%- assign xg_fig_home = xg_bc_key -%}{%- endif -%}
+{%- capture xg_fig_hs -%}{%- for a in xg_fig_series -%}|{{ a | handleize | prepend: 'figures-' }}{%- endfor -%}{%- for a in xg_fig_lines -%}|{{ a | handleize | prepend: 'figure-line-' }}{%- endfor -%}|{%- endcapture -%}
+{%- if xg_fig_hs contains xg_bg_needle -%}{%- assign xg_fig_on = true -%}{%- assign xg_fig_cur = xg_bc_key -%}{%- endif -%}
+{%- assign xg_fig_chips = '' -%}
+{%- assign xg_figl_chips = '' -%}
+{%- if xg_fig_on -%}
+  {%- capture xg_fig_chips -%}
+    {%- for a in xg_fig_series -%}
+      {%- assign xg_fh = a | handleize | prepend: 'figures-' -%}
+      {%- assign xg_fn = collections[xg_fh].products_count | default: 0 -%}
+      {%- if xg_fn > 0 or xg_fh == xg_fig_cur -%}
+      <a class="xg-bc__army-chip" href="/collections/{{ xg_fh }}"{% if xg_fh == xg_fig_cur %} aria-current="page"{% endif %}>{{ a | escape }}{% if xg_fn > 0 %}<small>{{ xg_fn }}</small>{% endif %}</a>
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endcapture -%}
+  {%- assign xg_fig_chips = xg_fig_chips | strip -%}
+  {%- capture xg_figl_chips -%}
+    {%- for a in xg_fig_lines -%}
+      {%- assign xg_fh = a | handleize | prepend: 'figure-line-' -%}
+      {%- assign xg_fn = collections[xg_fh].products_count | default: 0 -%}
+      {%- if xg_fn > 0 or xg_fh == xg_fig_cur -%}
+      <a class="xg-bc__army-chip" href="/collections/{{ xg_fh }}"{% if xg_fh == xg_fig_cur %} aria-current="page"{% endif %}>{{ a | escape }}{% if xg_fn > 0 %}<small>{{ xg_fn }}</small>{% endif %}</a>
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endcapture -%}
+  {%- assign xg_figl_chips = xg_figl_chips | strip -%}
+{%- endif -%}
+{%- comment -%}
   The colour picker view (?view=paints) covers every paint brand, so it gets its own banner
   instead of the logo of whichever collection it was opened from (owner, 2026-09-25: the
   Vallejo logo + "All Vallejo" crumb over the picker "is not proper anymore with other
@@ -174,7 +214,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
 {%- endcomment -%}
 {%- assign xg_bc_paints = false -%}
 {%- if template.suffix == 'paints' -%}{%- assign xg_bc_paints = true -%}{%- assign xg_bc_logo = '' -%}{%- endif -%}
-{%- if xg_bc_logo != '' or xg_bc_paints or xg_bg_on -%}
+{%- if xg_bc_logo != '' or xg_bc_paints or xg_bg_on or xg_fig_on -%}
 <style>
   .breadcrumb-container.xg-bc--logo { background: radial-gradient(ellipse at 50% 45%, #2b3137 0%, #171b1f 55%, #0e1113 100%) !important; }
   .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
@@ -364,6 +404,23 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     <div class="xg-bc__armies-row">
       {%- if xg_bg_cur != '' -%}<a class="xg-bc__army-chip xg-bc__army-chip--all" href="/collections/board-games">All Board Games</a>{%- endif -%}
       {{ xg_bg_chips }}
+    </div>
+  </nav>
+  {%- endif -%}
+  {%- if xg_fig_chips != '' -%}
+  <nav class="xg-bc__armies xg-bc__types page-width" aria-label="Shop by series">
+    <span class="xg-bc__armies-h">Shop by series</span>
+    <div class="xg-bc__armies-row">
+      {%- if xg_fig_cur != '' -%}<a class="xg-bc__army-chip xg-bc__army-chip--all" href="/collections/all-figures">All Figures</a>{%- endif -%}
+      {{ xg_fig_chips }}
+    </div>
+  </nav>
+  {%- endif -%}
+  {%- if xg_figl_chips != '' -%}
+  <nav class="xg-bc__armies xg-bc__types page-width" aria-label="Shop by line">
+    <span class="xg-bc__armies-h">Shop by line</span>
+    <div class="xg-bc__armies-row">
+      {{ xg_figl_chips }}
     </div>
   </nav>
   {%- endif -%}
