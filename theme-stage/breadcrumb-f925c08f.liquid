@@ -136,6 +136,34 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     {%- endfor -%}
   {%- endcapture -%}
   {%- assign xg_army_chips = xg_army_chips | strip -%}
+{%- comment -%}
+  Shop by type (owner, 2026-09-30: "add filters to board games like we did with warhammer"):
+  board-games-<type> smart collections match the bg:<label> product tags the worker's nightly
+  run writes from the BoardGameGeek facts and the title (chaywrite src/bgtype.js - the labels
+  below must match its BG_TYPES labels exactly; handles are `handleize` of the label). The
+  Board Games page lists the types as chips; a type page shows the same chips with its own
+  marked and an "All Board Games" chip. Only types with products show.
+{%- endcomment -%}
+{%- assign xg_bg_types = "Party Games|Family & Kids|Strategy|Card Games|Co-op|2-Player|Solo Friendly|Dice Games|Deduction & Bluffing|Puzzles & Escape Rooms|Chess & Classics|Trivia & Word|Expansions" | split: '|' -%}
+{%- assign xg_bg_cur = '' -%}
+{%- assign xg_bg_on = false -%}
+{%- if xg_bc_key == 'board-games' -%}{%- assign xg_bg_on = true -%}{%- endif -%}
+{%- capture xg_bg_hs -%}{%- for a in xg_bg_types -%}|{{ a | handleize | prepend: 'board-games-' }}{%- endfor -%}|{%- endcapture -%}
+{%- assign xg_bg_needle = xg_bc_key | prepend: '|' | append: '|' -%}
+{%- if xg_bg_hs contains xg_bg_needle -%}{%- assign xg_bg_on = true -%}{%- assign xg_bg_cur = xg_bc_key -%}{%- endif -%}
+{%- assign xg_bg_chips = '' -%}
+{%- if xg_bg_on -%}
+  {%- capture xg_bg_chips -%}
+    {%- for a in xg_bg_types -%}
+      {%- assign xg_bh = a | handleize | prepend: 'board-games-' -%}
+      {%- assign xg_bn = collections[xg_bh].products_count | default: 0 -%}
+      {%- if xg_bn > 0 or xg_bh == xg_bg_cur -%}
+      <a class="xg-bc__army-chip" href="/collections/{{ xg_bh }}"{% if xg_bh == xg_bg_cur %} aria-current="page"{% endif %}>{{ a | escape }}{% if xg_bn > 0 %}<small>{{ xg_bn }}</small>{% endif %}</a>
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endcapture -%}
+  {%- assign xg_bg_chips = xg_bg_chips | strip -%}
+{%- endif -%}
 {%- endif -%}
 {%- comment -%}
   The colour picker view (?view=paints) covers every paint brand, so it gets its own banner
@@ -327,6 +355,15 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     <div class="xg-bc__armies-row">
       {%- if xg_army_cur != '' -%}<a class="xg-bc__army-chip xg-bc__army-chip--all" href="/collections/{{ xg_army_home }}">All {{ xg_army_gname | escape }}</a>{%- endif -%}
       {{ xg_army_chips }}
+    </div>
+  </nav>
+  {%- endif -%}
+  {%- if xg_bg_chips != '' -%}
+  <nav class="xg-bc__armies xg-bc__types page-width" aria-label="Shop by type">
+    <span class="xg-bc__armies-h">Shop by type</span>
+    <div class="xg-bc__armies-row">
+      {%- if xg_bg_cur != '' -%}<a class="xg-bc__army-chip xg-bc__army-chip--all" href="/collections/board-games">All Board Games</a>{%- endif -%}
+      {{ xg_bg_chips }}
     </div>
   </nav>
   {%- endif -%}
