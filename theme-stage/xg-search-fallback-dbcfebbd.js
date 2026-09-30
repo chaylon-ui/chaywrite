@@ -27,7 +27,10 @@
   function state() {
     var r = document.querySelector(ROOT);
     if (!r) return null;
-    if (r.querySelector('a[href*="/products/"]')) return false;
+    // product links from the app itself: our own blocks inside the box (the "Also at our
+    // other Exor locations" strip, this strip) do not count
+    var links = r.querySelectorAll('a[href*="/products/"]');
+    for (var i = 0; i < links.length; i++) if (!links[i].closest('[class*="xg-"]')) return false;
     return /(^|\s)0\s+results?\b/i.test(r.textContent || '') ? r : null;
   }
   function poll() {
