@@ -21,7 +21,7 @@ function storage() {
 // A world: books pages, game pages, and canned BGG answers.
 function world(opts) {
   const w = {
-    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [], gs: opts.gs || [], bt: opts.bt || [], bg: opts.bg || [], tagged: [], untagged: [],
+    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [], gs: opts.gs || [], bt: opts.bt || [], bg: opts.bg || [], fig: opts.fig || [], tagged: [], untagged: [],
     written: [], deleted: [], mediaAdds: [], plCalls: 0, adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
@@ -39,7 +39,8 @@ function world(opts) {
           bgg: p.bggId ? { value: String(p.bggId) } : null,
           gsig: p.gpSig ? { value: p.gpSig } : null,
           variants: { nodes: [{ barcode: p.barcode || '' }] },
-          productType: p.type || '',
+          productType: p.type || p.productType || '',
+          series: p.series || null, brand: p.brand || null, maker: p.maker || null,
           media: { nodes: (p.media || []).map((u) => ({ image: { url: u } })) },
           added: p.plAdded ? { value: p.plAdded } : null,
           psig: p.plSig ? { value: p.plSig } : null,
@@ -81,7 +82,7 @@ function world(opts) {
           data = { metafieldsDelete: { userErrors: [] } };
         } else {
           const q = body.variables.q;
-          data = page(q.includes("status:active AND product_type:'Board Games'") ? (w.bg || []) : q.includes('Books') ? w.books : q.includes("vendor:'Games Workshop'") ? (w.gs || []) : q.includes('battletech') ? (w.bt || []) : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
+          data = page(q.includes("product_type:Figures") ? (w.fig || []) : q.includes("status:active AND product_type:'Board Games'") ? (w.bg || []) : q.includes('Books') ? w.books : q.includes("vendor:'Games Workshop'") ? (w.gs || []) : q.includes('battletech') ? (w.bt || []) : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
         }
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
@@ -609,7 +610,7 @@ async function drain(w, maxTicks = 60) {
   const w = world({ books: [], games: [], bggStatus: 401, bg });
   await drain(w);
   const last = await w.cx.storage.get('en:last');
-  eq('bgtype phase ran after gamesys', [last.phase, last.bgtype && last.bgtype.seen], ['bgtype', 6]);
+  eq('bgtype phase ran after gamesys (figtype closes the run)', [last.phase, last.bgtype && last.bgtype.seen], ['figtype', 6]);
   const added = (id) => (w.tagged.find((t) => t.id === 'gid://shopify/Product/' + id) || { tags: [] }).tags;
   const removed = (id) => (w.untagged.find((t) => t.id === 'gid://shopify/Product/' + id) || { tags: [] }).tags;
   eq('Smash Up: card game', added(21), ['bg:Card Games']);
@@ -633,6 +634,39 @@ async function drain(w, maxTicks = 60) {
   eq('dice + 2-Player not (max 6)', w.tagged[0].tags, ['bg:Dice Games']);
   const k2 = await kickRun(world({}).cx, 'nonsense');
   eq('unknown phase starts at books', k2.phase, 'books');
+}
+
+// ---------- 5h. Figure franchise + line tags (owner, 2026-09-30: "make a filtering system for them") ----------
+{
+  const fig = [
+    { id: 'gid://shopify/Product/41', title: 'Bandai Spirits Ichibansho Figure Shanks (Film Red) "One Piece"', productType: 'Figures', series: { value: 'ONE PIECE' }, brand: { value: 'Ichibansho' }, maker: { value: 'BANDAI SPIRITS' } },
+    { id: 'gid://shopify/Product/42', title: 'POP UP PARADE Zodd L Size', productType: 'Figures', series: { value: 'Berserk' }, brand: { value: 'POP UP PARADE' }, tags: ['fig:Berserk', 'figline:Pop Up Parade', 'new'] },   // already right
+    { id: 'gid://shopify/Product/43', title: 'Funko POP! Animation: Naruto Shippuden - Kakashi', productType: 'Funko', tags: ['fig:One Piece'] },   // wrong franchise tag out
+    { id: 'gid://shopify/Product/44', title: 'Some Mystery Thing', productType: 'Blind Box' },
+    { id: 'gid://shopify/Product/45', title: 'Nothing Known', productType: 'Figures' },
+  ];
+  const w = world({ books: [], games: [], bggStatus: 401, fig });
+  const k = await kickRun(w.cx, 'figtype');
+  eq('kick at figtype', [k.started, k.phase], [true, 'figtype']);
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('figtype ran last', [last.phase, last.figtype && last.figtype.seen], ['figtype', 5]);
+  const added = (id) => (w.tagged.find((t) => t.id === 'gid://shopify/Product/' + id) || { tags: [] }).tags;
+  const removed = (id) => (w.untagged.find((t) => t.id === 'gid://shopify/Product/' + id) || { tags: [] }).tags;
+  eq('Shanks: One Piece + Ichibansho', added(41), ['fig:One Piece', 'figline:Ichibansho']);
+  eq('Zodd already right', [added(42), removed(42)], [[], []]);
+  eq('Kakashi: Naruto + Funko, One Piece out', [added(43), removed(43)], [['fig:Naruto', 'figline:Funko Pop!'], ['fig:One Piece']]);
+  eq('blind box gets its line only', added(44), ['figline:Blind box']);
+  eq('unknown untouched', [added(45), removed(45)], [[], []]);
+  eq('counts', [last.figtype.typed, last.figtype.added, last.figtype.removed, last.figtype.errors], [4, 3, 1, 0]);
+}
+{
+  // the full chain: bgtype hands over to figtype and the run finishes there
+  const w = world({ books: [], games: [], bggStatus: 401, bg: [], fig: [{ id: 'gid://shopify/Product/51', title: 'NENDOROID HATSUNE MIKU SYMPHONY', productType: 'Figures' }] });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('the nightly run ends at figtype', [last.phase, last.done, last.figtype.added], ['figtype', true, 1]);
+  eq('Miku: Hatsune Miku + Nendoroid', w.tagged[0].tags, ['fig:Hatsune Miku', 'figline:Nendoroid']);
 }
 
 // ---------- kickRun: an open run whose ticks stopped is resumed, a live one is left alone ----------

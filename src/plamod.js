@@ -128,6 +128,22 @@ export function parsePlPage(data) {
 }
 
 // One product + its PLAMOD entry -> what to do: { media, metafields } (both may be empty).
+// Description text from PLAMOD (owner, 2026-09-30: "is there more information we can
+// grab for figures? like descriptions etc"): sentences that talk about cases, cartons
+// or pack counts are dropped, the rest is kept as paragraphs, capped.
+export function okDesc(s, max) {
+  const paras = String(s || "").split(/\n{2,}|\r\n\r\n/).map((p) => p.replace(/[ \t]+/g, " ").trim()).filter(Boolean);
+  const out = [];
+  for (const p of paras) {
+    const kept = p.split(/(?<=[.!?])\s+(?=[A-Z0-9"(])/).filter((sent) => !CASE_WORDS.test(sent)).join(" ").trim();
+    if (kept) out.push(kept);
+  }
+  let t = out.join("\n\n");
+  if (t.length > max) { t = t.slice(0, max); const cut = t.lastIndexOf(". "); if (cut > max * 0.6) t = t.slice(0, cut + 1); }
+  return t;
+}
+export const okOrigin = (s) => (/^[A-Z]{2}$/.test(String(s || "").trim()) ? String(s).trim() : "");
+
 export function plamodPlan(it, entry) {
   const out = { media: [], metafields: [], newKeys: [] };
   if (!it || !entry || !entry.found) return out;
@@ -145,6 +161,17 @@ export function plamodPlan(it, entry) {
     const f = okFact(v);
     if (f) facts.push(MF(it.id, k, "single_line_text_field", f));
   }
+  const short = okDesc(entry.short, 600);
+  let desc = okDesc(entry.desc, 4000);
+  // PLAMOD's "Full Description" is often just the name again: then the short one stands alone
+  if (desc && (desc.length < 40 || desc.toLowerCase() === String(it.title || "").toLowerCase().trim())) desc = "";
+  if (desc && short && desc.startsWith(short)) desc = desc.slice(short.length).trim();
+  if (short) facts.push(MF(it.id, "pl_short", "multi_line_text_field", short));
+  if (desc) facts.push(MF(it.id, "pl_desc", "multi_line_text_field", desc));
+  const cats = okFact(String(entry.cats || "").slice(0, 80));
+  if (cats) facts.push(MF(it.id, "pl_cats", "single_line_text_field", cats));
+  const origin = okOrigin(entry.origin);
+  if (origin) facts.push(MF(it.id, "pl_origin", "single_line_text_field", origin));
   const s = sig(facts);
   if (s !== it.plSig) out.metafields.push(...facts, MF(it.id, "pl_sig", "single_line_text_field", s));
   if (out.newKeys.length) out.metafields.push(MF(it.id, "pl_added", "json", JSON.stringify([...(it.added || []), ...out.newKeys])));

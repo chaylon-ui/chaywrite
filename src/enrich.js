@@ -47,6 +47,7 @@ import { W40K_FILE_URL, W40K_PAGE, W40K_QUERY, parseW40kPage, w40kPlan, WINDEX_Q
 import { GS_PAGE, GS_QUERY, parseGsPage, gsPlan, armyPlan } from "./gamesys.js";
 import { BT_FILE_URL, BT_PAGE, BT_QUERY, parseBtPage, btPlan } from "./bt.js";
 import { BG_PAGE, BG_QUERY, parseBgPage, bgPlan, tagMutation, tagErrors, TAG_BATCH } from "./bgtype.js";
+import { FIG_PAGE, FIG_QUERY, parseFigPage, figPlan } from "./figtype.js";
 import { repoFetch } from "./repo-data.js";
 
 export const ENRICH_DO = "enrich";
@@ -924,6 +925,7 @@ const newRun = (day, now) => ({
   bt: { seen: 0, matched: 0, written: 0, cleared: 0 },
   gamesys: { seen: 0, tagged: 0, written: 0, cleared: 0 },
   bgtype: { seen: 0, typed: 0, added: 0, removed: 0, errors: 0 },
+  figtype: { seen: 0, typed: 0, added: 0, removed: 0, errors: 0 },
 });
 
 async function arm(cx, at, why) {
@@ -945,7 +947,7 @@ async function finish(cx, run, error) {
   cx.log("enrich: run " + dateOf(run.day) + (error ? " FAILED: " + error : " finished") +
     " seen=" + run.seen + " written=" + run.written + " ok=" + run.ok +
     " ambiguous=" + run.ambiguous + " notfound=" + run.notfound +
-    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + (run.bt ? " bt=" + JSON.stringify(run.bt) : "") + (run.gamesys ? " gamesys=" + JSON.stringify(run.gamesys) : "") + (run.bgtype ? " bgtype=" + JSON.stringify(run.bgtype) : "") + " " + run.ms + "ms");
+    (run.gunpla ? " gunpla=" + JSON.stringify(run.gunpla) : "") + (run.plamod ? " plamod=" + JSON.stringify(run.plamod) : "") + (run.w40k ? " w40k=" + JSON.stringify(run.w40k) : "") + (run.bt ? " bt=" + JSON.stringify(run.bt) : "") + (run.gamesys ? " gamesys=" + JSON.stringify(run.gamesys) : "") + (run.bgtype ? " bgtype=" + JSON.stringify(run.bgtype) : "") + (run.figtype ? " figtype=" + JSON.stringify(run.figtype) : "") + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   refreshGamesIndexLater(cx);   // the "games like this" index picks up tonight's facts
   refreshUnitsIndexLater(cx);   // and the Warhammer "units like this" one
@@ -1024,8 +1026,8 @@ export async function enrichTick(cx) {
     }
 
     if (!run.hasNext) {
-      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla" || run.phase === "plamod" || run.phase === "w40k" || run.phase === "bt" || run.phase === "gamesys") {
-        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : run.phase === "gunpla" ? "plamod" : run.phase === "plamod" ? "w40k" : run.phase === "w40k" ? "bt" : run.phase === "bt" ? "gamesys" : "bgtype";
+      if (run.phase === "books" || run.phase === "games" || run.phase === "gunpla" || run.phase === "plamod" || run.phase === "w40k" || run.phase === "bt" || run.phase === "gamesys" || run.phase === "bgtype") {
+        run.phase = run.phase === "books" ? "games" : run.phase === "games" ? "gunpla" : run.phase === "gunpla" ? "plamod" : run.phase === "plamod" ? "w40k" : run.phase === "w40k" ? "bt" : run.phase === "bt" ? "gamesys" : run.phase === "gamesys" ? "bgtype" : "figtype";
         run.cursor = null;
         run.hasNext = true;
         await st.put("en:run", run);
@@ -1160,6 +1162,52 @@ export async function enrichTick(cx) {
           } catch (e) {
             if (e && e.throttled) { run.throttled++; await cx.sleep(1500); i -= TAG_BATCH; continue; }
             run.errors++; run.bgtype.errors += chunk.length; cx.log("enrich: bgtype " + kind + " failed: " + msg(e));
+          }
+        }
+      }
+      await st.put("en:run", run);
+      const wait = throttleWait(r.cost, 40);
+      if (wait > 0) return arm(cx, cx.now() + wait, "throttle pacing");
+      continue;
+    }
+
+    /* Figure franchise + line tags for the "Shop by series" / "Shop by line" rows (src/figtype.js): one bg:<label> tag
+       per type a board game belongs to, from its BGG facts and title; only our own
+       bg: tags are ever added or removed. */
+    if (run.phase === "figtype") {
+      if (!run.figtype) run.figtype = { seen: 0, typed: 0, added: 0, removed: 0, errors: 0 };
+      let r;
+      try { r = await adminGql(cx, FIG_PAGE, { q: FIG_QUERY, after: run.cursor }); }
+      catch (e) {
+        if (e && e.throttled) { run.throttled++; await st.put("en:run", run); return arm(cx, cx.now() + 1500, "throttled"); }
+        run.errors++; run.errStreak++; await st.put("en:run", run);
+        if (run.errStreak >= 5) return finish(cx, run, msg(e));
+        return arm(cx, cx.now() + 5000, "page error");
+      }
+      run.errStreak = 0;
+      run.pages++;
+      const page = parseFigPage(r.data);
+      run.cursor = page.cursor;
+      run.hasNext = page.hasNext;
+      const adds = [], removes = [];
+      for (const it of page.items) {
+        run.figtype.seen++;
+        const plan = figPlan(it);
+        if (plan.want.length) run.figtype.typed++;
+        if (plan.add.length) adds.push({ id: it.id, tags: plan.add });
+        if (plan.remove.length) removes.push({ id: it.id, tags: plan.remove });
+      }
+      for (const [kind, list] of [["add", adds], ["remove", removes]]) {
+        for (let i = 0; i < list.length; i += TAG_BATCH) {
+          const chunk = list.slice(i, i + TAG_BATCH);
+          try {
+            const tr = await adminGql(cx, tagMutation(kind, chunk), {});
+            const errs = tagErrors(tr.data, chunk);
+            if (errs.length) { run.figtype.errors += errs.length; cx.log("enrich: figtype " + kind + " errors: " + errs.join(" | ").slice(0, 300)); }
+            run.figtype[kind === "add" ? "added" : "removed"] += chunk.length - errs.length;
+          } catch (e) {
+            if (e && e.throttled) { run.throttled++; await cx.sleep(1500); i -= TAG_BATCH; continue; }
+            run.errors++; run.figtype.errors += chunk.length; cx.log("enrich: figtype " + kind + " failed: " + msg(e));
           }
         }
       }
@@ -1403,6 +1451,7 @@ function publicRun(run, now) {
     bt: run.bt || null,
     gamesys: run.gamesys || null,
     bgtype: run.bgtype || null,
+    figtype: run.figtype || null,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,
     error: run.error,
@@ -1428,7 +1477,7 @@ export async function statusOf(cx) {
 }
 
 const STALL_MS = 10 * 60 * 1000;
-export const KICK_PHASES = ["books", "games", "gunpla", "plamod", "w40k", "bt", "gamesys", "bgtype"];
+export const KICK_PHASES = ["books", "games", "gunpla", "plamod", "w40k", "bt", "gamesys", "bgtype", "figtype"];
 export async function kickRun(cx, phase) {
   const now = cx.now();
   phase = KICK_PHASES.indexOf(phase) > 0 ? phase : "books";
