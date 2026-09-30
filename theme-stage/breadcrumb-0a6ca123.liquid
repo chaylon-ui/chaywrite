@@ -136,6 +136,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
     {%- endfor -%}
   {%- endcapture -%}
   {%- assign xg_army_chips = xg_army_chips | strip -%}
+{%- endif -%}
 {%- comment -%}
   Shop by type (owner, 2026-09-30: "add filters to board games like we did with warhammer"):
   board-games-<type> smart collections match the bg:<label> product tags the worker's nightly
@@ -164,7 +165,6 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
   {%- endcapture -%}
   {%- assign xg_bg_chips = xg_bg_chips | strip -%}
 {%- endif -%}
-{%- endif -%}
 {%- comment -%}
   The colour picker view (?view=paints) covers every paint brand, so it gets its own banner
   instead of the logo of whichever collection it was opened from (owner, 2026-09-25: the
@@ -174,7 +174,7 @@ website/navigation/creating-a-breadcrumb-navigation">http://docs.shopify.com/sup
 {%- endcomment -%}
 {%- assign xg_bc_paints = false -%}
 {%- if template.suffix == 'paints' -%}{%- assign xg_bc_paints = true -%}{%- assign xg_bc_logo = '' -%}{%- endif -%}
-{%- if xg_bc_logo != '' or xg_bc_paints -%}
+{%- if xg_bc_logo != '' or xg_bc_paints or xg_bg_on -%}
 <style>
   .breadcrumb-container.xg-bc--logo { background: radial-gradient(ellipse at 50% 45%, #2b3137 0%, #171b1f 55%, #0e1113 100%) !important; }
   .xg-bc--logo .head-title.xg-bc__logo { margin: 0 0 6px; line-height: 0; }
