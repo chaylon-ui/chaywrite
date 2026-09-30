@@ -15,10 +15,14 @@
        that is the same picture as a photo the product already has (compared
        by a 64-bit difference hash, so our renamed or resized box art counts);
      - release date, series and brand - and nothing that talks about cases,
-       cartons, display boxes or pack counts.
-   NEVER records or prints prices, stock, descriptions, cookies or the
-   secrets: this repo and its logs are public. Only navigates; never clicks
-   cart / preorder / notify.
+       cartons, display boxes or pack counts;
+     - since 2026-09-30 (owner: "is there more information we can grab for
+       figures? like descriptions etc"): country of origin, the category
+       words, and the portal's Short / Full Description text (the worker
+       drops any sentence with case wording before it reaches the store).
+   NEVER records or prints prices or stock, never prints descriptions, and
+   never prints cookies or the secrets: the Actions logs are readable.
+   Only navigates; never clicks cart / preorder / notify.
 
    Incremental: a found product is re-checked after 30 days, a miss after 14,
    so after the first pass a run only looks at new products. Time budget per
@@ -75,7 +79,8 @@ async function main() {
   const tj = await (await fetch(W + "/plamod/targets.json", { signal: AbortSignal.timeout(400000) })).json();
   if (!tj.items) throw new Error("targets: " + JSON.stringify(tj).slice(0, 200));
   const now = Date.now();
-  const stale = (e) => !e || !e.checked || now - Date.parse(e.checked) > (e.found ? 30 : 14) * DAY;
+  // a found entry from before descriptions were captured (no "desc" key) is due now
+  const stale = (e) => !e || !e.checked || (e.found && e.desc === undefined) || now - Date.parse(e.checked) > (e.found ? 30 : 14) * DAY;
   let todo = tj.items.filter((t) => t.barcode && (ONLY.length ? ONLY.includes(t.barcode) : stale(items[t.barcode])));
   log("targets", tj.count, "| in the file", Object.keys(items).length, "| to look up", todo.length);
   if (LIMIT > 0) todo = todo.slice(0, LIMIT);
@@ -126,6 +131,7 @@ async function main() {
         await sleep(800);
         const info = await page.evaluate(() => ({
           text: document.body.innerText.replace(/\s+/g, " "),
+          raw: document.body.innerText.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n"),
           imgs: [...document.querySelectorAll("img")].map((i) => i.currentSrc || i.src).filter((u) => /images\.plamod\.com/.test(u)),
         }));
         if (!info.text.includes("Barcode " + t.barcode)) { tally.ambiguous++; items[t.barcode] = { found: false, checked: new Date().toISOString(), why: "barcode not on the product page" }; continue; }
@@ -157,6 +163,9 @@ async function main() {
           series: fact(pick(/Series (.+?) Categories/)),
           brand: fact(pick(/Manufacturer Brand (.+?) Release Date/)),
           maker: fact(pick(/Manufacturer (.+?) Manufacturer Brand/)),
+          origin: (pick(/Country of Origin (\S+) Series/) || "").slice(0, 2),
+          cats: pick(/Categories (.+?) (?:Short Description|Full Description|Pricing & Inventory)/).slice(0, 80),
+          ...descriptions(info.raw),
         };
         items[t.barcode] = entry;
         tally.found++; tally.photos += photos.length; tally.sameAsOurs += dup.length;
@@ -167,6 +176,16 @@ async function main() {
       }
       if (!DRY && tally.looked - saved >= 100) { save(); saved = tally.looked; }
     }
+  }
+  // The portal's two description fields, paragraphs kept (the raw text keeps its
+  // line breaks). Never logged. Empty strings when the page has none.
+  function descriptions(raw) {
+    const t = String(raw || "");
+    const grab = (re) => { const m = t.match(re); return m ? m[1].replace(/^\s+|\s+$/g, "").slice(0, 6000) : ""; };
+    return {
+      short: grab(/Short Description\s*\n?([\s\S]+?)\n\s*(?:Full Description|Pricing & Inventory)/),
+      desc: grab(/Full Description\s*\n?([\s\S]+?)\n\s*Pricing & Inventory/),
+    };
   }
   function save() {
     const out = { source: "https://www.plamod.com/retailer", generated: new Date().toISOString(), count: Object.keys(items).length, items: Object.fromEntries(Object.entries(items).sort()) };
