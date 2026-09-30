@@ -606,6 +606,7 @@
     if (existing) existing.quantity = String(Math.min(qty(existing) + 1, maxOf(existing)));
     else cart.push(card);
     renderCart();
+    reveal(existing ? cart.indexOf(existing) : cart.length - 1);
     persist();
     var what = card.cardName + " · " + card.conditionName + (card.type && card.type !== "Normal" ? " · " + card.type : "");
     setMsg(what + " added.");
@@ -616,6 +617,27 @@
     }
   }
   function maxOf(c) { return maxByKey[keyOf(c)] || 99; }
+  // Bring the line just added into view inside the panel and flash it (owner,
+  // 2026-09-30: "auto scroll the list down as cards are added so they can see
+  // the most current card they added"). Only the panel's own scroll boxes
+  // move - never the page, so the results under the cursor stay put.
+  function reveal(i) {
+    var line = $('#bl-lines .bl__line[data-line="' + i + '"]');
+    if (!line) return;
+    var el = line.parentElement, aside = $(".bl__cart");
+    while (el && el !== root) {
+      var oy = getComputedStyle(el).overflowY;
+      if (oy === "auto" || oy === "scroll") {
+        var lr = line.getBoundingClientRect(), br = el.getBoundingClientRect(), pad = 12;
+        if (lr.bottom > br.bottom - pad) el.scrollTop += lr.bottom - br.bottom + pad;
+        else if (lr.top < br.top + pad) el.scrollTop -= br.top + pad - lr.top;
+      }
+      if (el === aside) break;
+      el = el.parentElement;
+    }
+    line.classList.add("bl__line--new");
+    setTimeout(function () { line.classList.remove("bl__line--new"); }, 1600);
+  }
   function totalQty() { return cart.reduce(function (s, c) { return s + qty(c); }, 0); }
 
   function renderCart() {
@@ -639,7 +661,7 @@
           '<span class="bl__muted">' + seticon(c0.setName) + esc(c0.setName) + '</span></div></div>' +
           g.rows.map(function (i) {
             var c = cart[i];
-            return '<div class="bl__line bl__line--in"><span class="bl__cond">' + esc(c.conditionName) +
+            return '<div class="bl__line bl__line--in" data-line="' + i + '"><span class="bl__cond">' + esc(c.conditionName) +
               (c.type && c.type !== "Normal" ? '<span class="bl__pill">' + esc(c.type) + '</span>' : '') +
               '<small>' + money(c.cashBuyPrice) + ' cash · ' + money(c.storeCreditBuyPrice) + ' credit</small></span>' +
               '<div class="bl__qtywrap"><button type="button" class="bl__btn bl__dec" data-i="' + i + '" aria-label="Fewer">&minus;</button>' +

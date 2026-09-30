@@ -53,7 +53,8 @@ html[data-xg-theme="dark"] .xg-buylist .bl__seticon { filter: invert(1); }
 .bl { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
 
 /* ---- search toolbar ----------------------------------------------- */
-.bl__bar { display: grid; grid-template-columns: 200px minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; margin: 0; padding: 10px; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); }
+/* The bar stays in view while the results scroll (owner, 2026-09-30: "so they dont have to keep scrolling back up to type a new card"): sticky under the fixed header, like the panel. */
+.bl__bar { position: sticky; top: calc(var(--xg-fixed-bottom, 0px) + 14px); z-index: 40; display: grid; grid-template-columns: 200px minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; margin: 0; padding: 10px; background: var(--bl-surface); border: 1px solid var(--bl-line); border-radius: var(--bl-radius); box-shadow: var(--bl-shadow); }
 .bl__input, .bl__select { min-width: 0; width: 100%; height: 46px; margin: 0; padding: 0 14px; font: inherit; font-size: 16px; line-height: 1.3; border: 1px solid var(--bl-line-strong); border-radius: 12px; background: var(--bl-surface-2); color: var(--bl-ink); box-shadow: none; -webkit-appearance: none; appearance: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
 .bl__input::placeholder { color: var(--bl-muted); opacity: 1; }
 .bl__input:focus, .bl__select:focus { border-color: var(--bl-accent); box-shadow: 0 0 0 3px var(--bl-accent-soft); outline: none; }
@@ -296,6 +297,8 @@ html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.
 .bl__group-head .bl__muted { display: block; font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bl__group-head .bl__seticon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
 .bl__line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 5px 0 5px 46px; }
+.bl__line--new { animation: bl-line-new 1.6s ease-out; }
+@keyframes bl-line-new { 0%, 35% { background: var(--bl-accent-soft); box-shadow: inset 3px 0 0 var(--bl-accent); } 100% { background: transparent; box-shadow: none; } }
 .bl__cond { min-width: 0; font-size: 13px; line-height: 1.3; color: var(--bl-ink); font-weight: 600; }
 .bl__cond small { display: block; margin: 1px 0 0; font-size: 12px; font-weight: 500; color: var(--bl-muted); font-variant-numeric: tabular-nums; }
 .bl__cond .bl__pill { margin-left: 5px; }
