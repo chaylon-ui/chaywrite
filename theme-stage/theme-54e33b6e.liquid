@@ -146,6 +146,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <script src="{{ 'xg-price-history.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Zero-results fallback on the Cloud Search page: the store's own search results under the app's "0 results" (assets/xg-search-fallback.js; it gates itself on /a/search - request.path did not see the app-proxy path, 2026-09-30). {%- endcomment -%}
   <script src="{{ 'xg-search-fallback.js' | asset_url }}" defer="defer"></script>
+  {%- comment -%} Sharp product pictures on high-density screens: a 2x rendition for every small CDN image without a srcset, the search app's grid included (assets/xg-sharp-images.js). {%- endcomment -%}
+  <script src="{{ 'xg-sharp-images.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Personalised homepage: which game this page is about (assets/xg-personal.js);
       "Also at our other Exor locations" on single-card pages (assets/xg-product-sisters.js). {%- endcomment -%}
   <meta name="xg-game" content="{% if product %}{{ product.type | escape }}{% elsif collection %}{{ collection.handle }} {{ collection.title | escape }}{% endif %}">
