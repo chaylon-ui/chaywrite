@@ -8,7 +8,7 @@
    the app's search box, with a link to the full store search page (/search?q=).
    Single cards (owner, 2026-09-30: "Liliana dread horse" 0 results, the card is Liliana,
    Dreadhorde General): the store search finds the card (it forgives typos), and when
-   most of its hits are one card the strip opens with "Did you mean <card>?" linking
+   its leading hits are one card the strip opens with "Did you mean <card>?" linking
    to the app's search for the exact name, where every printing and condition shows.
    Loaded from layout/theme.liquid on every page but runs only on /a/search (the
    app's page is built on the live theme, where a Liquid path test did not fire).
@@ -56,19 +56,25 @@
       .catch(function () { return []; });
   }
   function fold(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
-  // the card most of the hits are: single titles read "<card> [<set>]" or "<card> (Foil) [<set>]",
-  // so the part before the first bracket names the card; null unless one name covers at
-  // least two hits and half the list, or when it is just what was typed
+  // the card the store search leads with: single titles read "<card> [<set>]" or
+  // "<card> (Foil) [<set>]", so the part before the first bracket names the card; the
+  // hits come best match first, so a run of one card at the top (3+, or every hit when
+  // there are only two) means the words meant that card; null otherwise, or when the
+  // name is just what was typed
   function cardName(list) {
-    var n = {}, best = '', bestN = 0;
+    var lead = '', run = 0;
     for (var i = 0; i < list.length; i++) {
-      var t = String(list[i].title || '').split(/\s+[\[(]/)[0].trim();
-      if (!t || !/[\[(]/.test(String(list[i].title || ''))) continue;
-      n[t] = (n[t] || 0) + 1;
-      if (n[t] > bestN) { bestN = n[t]; best = t; }
+      var title = String(list[i].title || '');
+      if (!/[\[(]/.test(title)) break;
+      var t = title.split(/\s+[\[(]/)[0].trim();
+      if (!t) break;
+      if (!lead) lead = t;
+      if (t !== lead) break;
+      run++;
     }
-    if (bestN < 2 || bestN * 2 < list.length || fold(best) === fold(q)) return null;
-    return best;
+    if (!lead || run < 3 && !(run === list.length && run >= 2)) return null;
+    if (fold(lead) === fold(q)) return null;
+    return lead;
   }
 
   function run(root) {
