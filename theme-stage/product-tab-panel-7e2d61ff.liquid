@@ -145,6 +145,20 @@
           {%- else -%}
             {{ product.description }}
           {%- endif -%}
+          {%- comment -%}
+            Figures, blind boxes and model kits: the maker's description as our
+            distributor lists it (exor.pl_short / pl_desc, chaywrite src/plamod.js;
+            owner 2026-09-30: "is there more information we can grab for figures?
+            like descriptions etc"). Sentences about cases and cartons never reach
+            the store; the text is escaped, paragraphs kept.
+          {%- endcomment -%}
+          {%- if show_pl -%}{%- if gf.pl_short.value != blank or gf.pl_desc.value != blank -%}
+          <section class="xg-kitinfo xg-plinfo" aria-label="About this product">
+            {%- if gf.pl_short.value != blank -%}<p class="xg-kitinfo__intro">{{ gf.pl_short.value | escape | newline_to_br }}</p>{%- endif -%}
+            {%- if gf.pl_desc.value != blank -%}<div class="xg-plinfo__body">{{ gf.pl_desc.value | escape | newline_to_br }}</div>{%- endif -%}
+            <p class="xg-desc__note">Product information from the manufacturer, via our distributor.</p>
+          </section>
+          {%- endif -%}{%- endif -%}
           {%- if show_kit and show_gpi -%}
           <section class="xg-kitinfo" aria-label="Kit features from Bandai">
             {%- if gpi.intro != blank -%}<p class="xg-kitinfo__intro">{{ gpi.intro | escape }}</p>{%- endif -%}
@@ -187,7 +201,10 @@
             {%- if product.type == 'Blind Box' -%}<dt>Sold as</dt><dd>One blind box (contents are random)</dd>{%- endif -%}
             {%- if gf.pl_brand.value != blank -%}<dt>Brand</dt><dd>{{ gf.pl_brand.value | escape }}</dd>{%- endif -%}
             {%- if gf.pl_series.value != blank -%}<dt>Series</dt><dd>{{ gf.pl_series.value | escape }}</dd>{%- endif -%}
+            {%- if gf.pl_maker.value != blank -%}<dt>Maker</dt><dd>{{ gf.pl_maker.value | escape }}</dd>{%- endif -%}
+            {%- if gf.pl_cats.value != blank -%}<dt>Category</dt><dd>{{ gf.pl_cats.value | escape }}</dd>{%- endif -%}
             {%- if pl_when != blank -%}<dt>Released</dt><dd>{{ pl_when }}</dd>{%- endif -%}
+            {%- if gf.pl_origin.value != blank -%}<dt>Made in</dt><dd>{%- case gf.pl_origin.value -%}{%- when 'JP' -%}Japan{%- when 'CN' -%}China{%- when 'US' -%}United States{%- when 'KR' -%}South Korea{%- when 'TW' -%}Taiwan{%- when 'VN' -%}Vietnam{%- when 'TH' -%}Thailand{%- when 'HK' -%}Hong Kong{%- else -%}{{ gf.pl_origin.value | escape }}{%- endcase -%}</dd>{%- endif -%}
           </dl>
         </aside>
         {%- endif -%}
@@ -323,6 +340,8 @@
         .xg-kitinfo__list li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 6px; height: 6px; border-radius: 2px; background: var(--xg-red, #d62c28); }
         .xg-kitinfo__list--box { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
         .xg-kitinfo .xg-desc__note { margin-top: 12px; }
+        .xg-plinfo__body { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--xg-text, #3d454b); }
+        html[data-xg-theme="dark"] .xg-plinfo__body { color: #cfd6db; }
         .xg-class { padding: 16px 18px; background: var(--xg-bg, #f1f4f6); border-radius: var(--xg-radius, 14px); }
         /* dark: the theme's own h3 colour outranks --xg-ink here and left the card
            titles ("Kit specs", "Product specs", "Classification") dark on dark */
