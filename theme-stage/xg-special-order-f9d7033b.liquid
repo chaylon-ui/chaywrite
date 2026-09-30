@@ -1,0 +1,50 @@
+{%- comment -%}
+  Special orders (owner, 2026-09-30: "anything that it hasn't carried they can still
+  contact the store to special order it if possible"). templates/page.special-order.json
+  renders this on /pages/special-order. The form itself is drawn by assets/xg-requests.js
+  into the mount below and posts to the worker (chaywrite src/requests.js), which emails
+  the store and confirms to the customer; staff see it on 9Pocket > Requests. Copy is
+  section settings, so the owner edits it in the theme editor.
+{%- endcomment -%}
+<section class="xg-so">
+  <div class="xg-container xg-so__inner">
+    {%- if section.settings.kicker != blank -%}<p class="xg-so__kicker">{{ section.settings.kicker }}</p>{%- endif -%}
+    <h1 class="xg-so__title">{{ section.settings.title | default: page.title }}</h1>
+    {%- if section.settings.lead != blank -%}<div class="xg-so__lead">{{ section.settings.lead }}</div>{%- endif -%}
+    <div class="xg-so__grid">
+      <div class="xg-so__form">
+        <div data-xg-req-special{% if customer %} data-email="{{ customer.email | escape }}" data-name="{{ customer.name | escape }}" data-cid="{{ customer.id }}"{% endif %} hidden>
+          <noscript><p>Email <a href="mailto:charlottetown@exorgames.com">charlottetown@exorgames.com</a> with what you are looking for.</p></noscript>
+        </div>
+      </div>
+      <aside class="xg-so__aside">
+        {%- if section.settings.aside_title != blank -%}<h2>{{ section.settings.aside_title }}</h2>{%- endif -%}
+        {{ section.settings.aside }}
+      </aside>
+    </div>
+  </div>
+</section>
+<style>
+.xg-so{padding:28px 0 48px;color:var(--xg-ink,#171b1d)}.xg-so__inner{max-width:1100px;margin:0 auto;padding:0 16px}
+.xg-so__kicker{margin:0 0 4px;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--xg-red,#d62c28)}
+.xg-so__title{margin:0 0 10px;font-size:32px;line-height:1.1}.xg-so__lead{max-width:640px;font-size:16px;line-height:1.5;margin-bottom:22px}
+.xg-so__grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:28px;align-items:start}@media(max-width:780px){.xg-so__grid{grid-template-columns:1fr}}
+.xg-so__aside{padding:16px 18px;border-radius:12px;background:rgba(0,0,0,.04);font-size:14px;line-height:1.5}.xg-so__aside h2{margin:0 0 8px;font-size:16px}.xg-so__aside p{margin:0 0 10px}
+html[data-xg-theme="dark"] .xg-so{color:#e6ebee}html[data-xg-theme="dark"] .xg-so__aside{background:#181d20}
+</style>
+{% schema %}
+{
+  "name": "Special orders",
+  "tag": "section",
+  "class": "xg-so-section",
+  "enabled_on": { "templates": ["page"] },
+  "settings": [
+    { "type": "text", "id": "kicker", "label": "Kicker", "default": "Exor Games" },
+    { "type": "text", "id": "title", "label": "Title", "default": "Special orders" },
+    { "type": "richtext", "id": "lead", "label": "Lead", "default": "<p>Looking for a game, kit, set or single we do not list? Tell us what it is and how many you want. We check with our distributors and email you back - nothing is charged or reserved until we have talked.</p>" },
+    { "type": "text", "id": "aside_title", "label": "Side box title", "default": "How it works" },
+    { "type": "richtext", "id": "aside", "label": "Side box", "default": "<p><strong>1.</strong> Send the request with as much detail as you have.</p><p><strong>2.</strong> We look for it and email you a price and an arrival estimate.</p><p><strong>3.</strong> You say yes, we order it, and you pick it up in store or we ship it.</p><p>Sold-out items on our site have their own <em>Request this item</em> button - use that one so we can tell you when it is back.</p>" }
+  ],
+  "presets": [{ "name": "Special orders" }]
+}
+{% endschema %}

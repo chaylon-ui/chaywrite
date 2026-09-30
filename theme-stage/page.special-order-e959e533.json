@@ -1,0 +1,9 @@
+{
+  "sections": {
+    "main": {
+      "type": "xg-special-order",
+      "settings": {}
+    }
+  },
+  "order": ["main"]
+}

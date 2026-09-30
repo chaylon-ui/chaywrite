@@ -155,6 +155,7 @@
       h += '<h2 class="xg-sf__h">No results for &ldquo;' + esc(q) + '&rdquo;.</h2>';
       h += '<a class="xg-sf__all" href="' + esc(all) + '">Try the store search for &ldquo;' + esc(q) + '&rdquo; &rsaquo;</a>';
     }
+    h += '<p class="xg-sf__so">Looking for something we do not carry? <a href="/pages/special-order">Ask us to special order it &rsaquo;</a></p>';
     h += '</section>';
 
     var style = document.createElement('style');
@@ -173,6 +174,7 @@
       '.xg-sf__title{display:block;margin:8px 0 2px;font-size:13px;line-height:1.3;font-weight:600;overflow-wrap:anywhere}' +
       '.xg-sf__price{display:block;font-size:13px;opacity:.8}' +
       '.xg-sf__all{display:inline-block;margin-top:14px;font-weight:700;text-decoration:underline}' +
+      '.xg-sf__so{margin:14px 0 0;font-size:13px;opacity:.85}.xg-sf__so a{font-weight:700;text-decoration:underline;color:inherit}' +
       'html[data-xg-theme="dark"] .xg-sf{background:#181d20;border-color:#2a3236;color:#e6ebee}' +
       'html[data-xg-theme="dark"] .xg-sf__pic{background:#1d2327;border-color:#2a3236}' +
       'html[data-xg-theme="dark"] .xg-sf__card{color:#e6ebee}' +

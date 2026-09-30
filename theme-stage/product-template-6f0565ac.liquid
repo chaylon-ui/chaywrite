@@ -332,6 +332,9 @@
 {% endif %}
           {% endform %}
           <!-- </form> -->
+          {%- comment -%} "Request this item" while the chosen variant is sold out (assets/xg-requests.js,
+              owner 2026-09-30): quantity + email to the store; hidden until the worker says requests are on. {%- endcomment -%}
+          <div data-xg-req data-product-id="{{ product.id }}" data-image="{{ product.featured_image | image_url: width: 240 }}"{% if customer %} data-email="{{ customer.email | escape }}" data-name="{{ customer.name | escape }}" data-cid="{{ customer.id }}"{% endif %} hidden></div>
         </div>
       </div>
       {%- comment -%} paints: the nearest in-stock colours of every brand, right under the buy area (owner 2026-09-27) {%- endcomment -%}
