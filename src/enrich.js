@@ -1402,6 +1402,7 @@ function publicRun(run, now) {
     w40k: run.w40k || null,
     bt: run.bt || null,
     gamesys: run.gamesys || null,
+    bgtype: run.bgtype || null,
     pending: run.pending ? run.pending.length : 0,
     ageMs: run.tickAt ? now - run.tickAt : null,
     error: run.error,
