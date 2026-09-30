@@ -170,7 +170,7 @@
       '.xg-sf__card{display:block;text-decoration:none;color:inherit}' +
       '.xg-sf__pic{display:block;aspect-ratio:1/1;border-radius:8px;overflow:hidden;background:#fff;border:1px solid rgba(0,0,0,.08)}' +
       '.xg-sf__pic img{width:100%;height:100%;object-fit:contain;display:block}' +
-      '.xg-sf__title{display:block;margin:8px 0 2px;font-size:13px;line-height:1.3;font-weight:600}' +
+      '.xg-sf__title{display:block;margin:8px 0 2px;font-size:13px;line-height:1.3;font-weight:600;overflow-wrap:anywhere}' +
       '.xg-sf__price{display:block;font-size:13px;opacity:.8}' +
       '.xg-sf__all{display:inline-block;margin-top:14px;font-weight:700;text-decoration:underline}' +
       'html[data-xg-theme="dark"] .xg-sf{background:#181d20;border-color:#2a3236;color:#e6ebee}' +
