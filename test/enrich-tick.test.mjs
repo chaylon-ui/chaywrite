@@ -21,7 +21,7 @@ function storage() {
 // A world: books pages, game pages, and canned BGG answers.
 function world(opts) {
   const w = {
-    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [], gs: opts.gs || [], bt: opts.bt || [],
+    books: opts.books || [], games: opts.games || [], gunpla: opts.gunpla || [], w40k: opts.w40k || [], gs: opts.gs || [], bt: opts.bt || [], bg: opts.bg || [], tagged: [], untagged: [],
     written: [], deleted: [], mediaAdds: [], plCalls: 0, adminCalls: 0, bggCalls: 0, olCalls: 0, alCalls: 0, kitCalls: 0,
     now: Date.UTC(2026, 8, 4, 6, 0, 0),
   };
@@ -47,6 +47,10 @@ function world(opts) {
           vendor: p.vendor || '',
           bsig: p.btSig ? { value: p.btSig } : null,
           gs: p.gsVal ? { value: p.gsVal } : null,
+          tags: p.tags || [],
+          cat: p.cat ? { value: p.cat } : null, mech: p.mech ? { value: p.mech } : null,
+          pmin: p.pmin ? { value: String(p.pmin) } : null, pmax: p.pmax ? { value: String(p.pmax) } : null,
+          age: p.age ? { value: String(p.age) } : null, wt: p.wt ? { value: String(p.wt) } : null, base: p.base ? { value: p.base } : null,
         })),
       },
     };
@@ -68,12 +72,16 @@ function world(opts) {
         } else if (/productUpdate/.test(body.query)) {
           w.mediaAdds.push({ id: body.variables.product.id, media: body.variables.media });
           data = { productUpdate: { product: { id: body.variables.product.id }, userErrors: w.mediaError ? [{ field: ['media'], message: 'bad image' }] : [] } };
+        } else if (/^mutation \{ t0: tags(Add|Remove)/.test(body.query)) {
+          data = {};
+          const kind = /tagsRemove/.test(body.query) ? 'untagged' : 'tagged';
+          body.query.replace(/(t\d+): tags\w+\(id: ("[^"]+"), tags: (\[[^\]]*\])\)/g, (m, a, id, tags) => { w[kind].push({ id: JSON.parse(id), tags: JSON.parse(tags) }); data[a] = { userErrors: w.tagError && JSON.parse(id) === w.tagError ? [{ message: 'nope' }] : [] }; });
         } else if (/metafieldsDelete/.test(body.query)) {
           w.deleted.push(...body.variables.m);
           data = { metafieldsDelete: { userErrors: [] } };
         } else {
           const q = body.variables.q;
-          data = page(q.includes('Books') ? w.books : q.includes("vendor:'Games Workshop'") ? (w.gs || []) : q.includes('battletech') ? (w.bt || []) : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
+          data = page(q.includes("status:active AND product_type:'Board Games'") ? (w.bg || []) : q.includes('Books') ? w.books : q.includes("vendor:'Games Workshop'") ? (w.gs || []) : q.includes('battletech') ? (w.bt || []) : q.includes('Tabletop Wargames') ? w.w40k : q.includes('Gunpla') ? w.gunpla : w.games, body.variables.after, body.variables.n || (q.includes('Tabletop Wargames') ? 50 : undefined));
         }
         return new Response(JSON.stringify({ data, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 2000, restoreRate: 100 } } } }), { status: 200 });
       }
@@ -585,6 +593,46 @@ async function drain(w, maxTicks = 60) {
   eq('offset past the end is empty, count kept', [likeUnits(U, 'army', 'orks', '', '', 5, 99).units.length, likeUnits(U, 'army', 'orks', '', '', 5, 99).count], [0, likeUnits(U, 'army', 'orks', '', '').count]);
   eq('unknown kind', likeUnits(U, 'colour', 'x', '', '').count, 0);
   eq('answer shape', JSON.stringify(likeUnits(U, 'datasheet', 'Rhino', '', '').units[0]), JSON.stringify({ handle: 'rhino', title: 'SM RHINO', url: '/products/rhino', image: null, price: '0.00', qty: 3, variant: null, army: 'Space Marines', datasheet: 'Rhino', size: '1', points: 75 }));
+}
+
+// ---------- 5g. Board game types for the "Shop by type" row (owner, 2026-09-30:
+// "add filters to board games like we did with warhammer") ----------
+{
+  const bg = [
+    { id: 'gid://shopify/Product/21', title: 'SMASH UP', cat: '["Card Game","Humor"]', mech: '["Hand Management"]', pmin: 2, pmax: 4, age: 12, wt: 2.06 },                       // new: Card Games only (Humor needs 5+)
+    { id: 'gid://shopify/Product/22', title: 'PANDEMIC', cat: '["Medical"]', mech: '["Cooperative Game","Hand Management"]', pmin: 2, pmax: 4, age: 8, wt: 2.0, tags: ['bg:Co-op', 'bg:Family & Kids', 'staff pick'] }, // unchanged
+    { id: 'gid://shopify/Product/23', title: 'MANTIS FALLS', cat: '["Bluffing","Deduction"]', mech: '["Hidden Roles","Cooperative Game"]', pmin: 2, pmax: 3, age: 14, wt: 2.74, tags: ['bg:Party Games'] }, // stale tag goes, new ones come
+    { id: 'gid://shopify/Product/24', title: 'ESCAPE ROOM THE GAME FAMILY ED 3', tags: ['seasonal'] },                                                                                   // no BGG facts: title only
+    { id: 'gid://shopify/Product/25', title: 'SOME ABSTRACT THING', cat: '["Abstract Strategy"]', pmin: 2, pmax: 2, wt: 3.1, tags: ['bg:Trivia & Word'] },
+    { id: 'gid://shopify/Product/26', title: 'NOTHING KNOWN' },                                                                                                                          // no type: untouched
+  ];
+  const w = world({ books: [], games: [], bggStatus: 401, bg });
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('bgtype phase ran after gamesys', [last.phase, last.bgtype && last.bgtype.seen], ['bgtype', 6]);
+  const added = (id) => (w.tagged.find((t) => t.id === 'gid://shopify/Product/' + id) || { tags: [] }).tags;
+  const removed = (id) => (w.untagged.find((t) => t.id === 'gid://shopify/Product/' + id) || { tags: [] }).tags;
+  eq('Smash Up: card game', added(21), ['bg:Card Games']);
+  eq('Pandemic already right: nothing sent', [added(22), removed(22)], [[], []]);
+  eq('Mantis Falls: stale Party tag out, real types in', [added(23), removed(23)], [['bg:Strategy', 'bg:Co-op', 'bg:Deduction & Bluffing'], ['bg:Party Games']]);
+  eq('escape room by title', added(24), ['bg:Family & Kids', 'bg:Puzzles & Escape Rooms']);
+  eq('abstract: strategy + 2-player + classics; wrong tag out', [added(25), removed(25)], [['bg:Strategy', 'bg:2-Player', 'bg:Chess & Classics'], ['bg:Trivia & Word']]);
+  eq('unknown game untouched', [added(26), removed(26)], [[], []]);
+  eq("other tags never touched", w.untagged.some((t) => t.tags.some((x) => !x.startsWith('bg:'))), false);
+  eq('counts', [last.bgtype.typed, last.bgtype.added, last.bgtype.removed, last.bgtype.errors], [5, 4, 2, 0]);
+}
+{
+  // a run started at the bgtype phase does only that phase
+  const bg = [{ id: 'gid://shopify/Product/31', title: 'DICE THRONE', cat: '["Dice","Fighting"]', pmin: 2, pmax: 6 }];
+  const w = world({ books: [{ id: 'gid://shopify/Product/1', title: 'A BOOK', barcode: '9780000000000' }], games: [], bggStatus: 401, bg });
+  const k = await kickRun(w.cx, 'bgtype');
+  eq('kick at a phase', [k.started, k.phase], [true, 'bgtype']);
+  await drain(w);
+  const last = await w.cx.storage.get('en:last');
+  eq('only board games seen', [last.seen, last.bgtype.seen, last.bgtype.added], [0, 1, 1]);
+  eq('dice + 2-Player not (max 6)', w.tagged[0].tags, ['bg:Dice Games']);
+  const k2 = await kickRun(world({}).cx, 'nonsense');
+  eq('unknown phase starts at books', k2.phase, 'books');
 }
 
 // ---------- kickRun: an open run whose ticks stopped is resumed, a live one is left alone ----------
