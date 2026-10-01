@@ -37,6 +37,8 @@ jobs:
           console.log('login ->', r.status, cookie ? 'cookie set' : 'NO COOKIE');
           if (!cookie) process.exit(1);
           const H = { cookie };
+          // a page load touches the room (stall recovery) before the status is read
+          const pg = await fetch(W + '/autoprice', { headers: H }); console.log('page ->', pg.status);
           const st = await (await fetch(W + '/autoprice/status', { headers: H })).json();
           const mask = (s) => s ? String(s).charAt(0).toUpperCase() + '.' : '-';
           console.log('mode', st.mode, '| pricecharting', st.pricecharting, '| alarmAt', st.alarmAt ? new Date(st.alarmAt).toISOString() : null);
