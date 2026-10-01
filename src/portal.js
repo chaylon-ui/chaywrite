@@ -386,7 +386,7 @@ export async function buylistDetail(env, id) {
    pure buy cart has no Shopify order at all. Read-only, like the rest. */
 const PORTAL_DO = "portal-cache";
 const DO_ORIGIN = "https://" + PORTAL_DO + ".internal"; // the DO only reads the path
-const CARTS_VER = "v3";   // v3: per-unit paid from actualPrice (2026-10-01)
+const CARTS_VER = "v4";   // v3: per-unit paid from actualPrice; v4: pricedPaid / unpricedCards (2026-10-01)
 const DAY_MS = 86400e3;
 export const PORTAL_CART = "https://portal.binderpos.com/#/pointOfSale/carts/";
 
@@ -473,13 +473,17 @@ function trimCart(c) {
     if (a < 0) { payout[b] += -a; payout.total += -a; } else { taken[b] += a; taken.total += a; }
   }
   for (const k of Object.keys(payout)) { payout[k] = round2(payout[k]); taken[k] = round2(taken[k]); }
-  const bought = { lines: 0, cards: 0, total: 0, sells: 0 };
+  // sells / pricedPaid cover only the lines that carry a sell price, so the
+  // "bought at X% of sell price" figure compares like with like; a graded
+  // slab or a custom item with no catalogue price (owner 2026-10-01: a
+  // window read "bought at 165%") is counted in unpricedCards instead.
+  const bought = { lines: 0, cards: 0, total: 0, sells: 0, pricedPaid: 0, unpricedCards: 0 };
   const sold = { lines: 0, cards: 0, total: 0 };
   for (const l of lines) {
-    if (l.buying) { bought.lines++; bought.cards += l.qty; bought.total += (l.paid || 0) * l.qty; if (l.sell != null) bought.sells += l.sell * l.qty; }
+    if (l.buying) { bought.lines++; bought.cards += l.qty; bought.total += (l.paid || 0) * l.qty; if (l.sell > 0) { bought.sells += l.sell * l.qty; bought.pricedPaid += (l.paid || 0) * l.qty; } else bought.unpricedCards += l.qty; }
     else { sold.lines++; sold.cards += l.qty; sold.total += (l.price || 0) * l.qty; }
   }
-  bought.total = round2(bought.total); bought.sells = round2(bought.sells); sold.total = round2(sold.total);
+  bought.total = round2(bought.total); bought.sells = round2(bought.sells); bought.pricedPaid = round2(bought.pricedPaid); sold.total = round2(sold.total);
   const cu = c.customer || null;
   const submittedMs = Date.parse(c.dateSubmitted || "") || 0;
   return {
@@ -663,9 +667,9 @@ export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
   const all = perDay.flat()
     .filter((c) => (Date.parse(c.submitted || "") || 0) >= since)
     .sort((a, b) => (Date.parse(b.submitted || "") || 0) - (Date.parse(a.submitted || "") || 0));
-  const totals = { carts: all.length, cards: 0, paid: 0, cash: 0, credit: 0, sells: 0 };
-  for (const c of all) { totals.cards += c.bought.cards; totals.paid += c.bought.total; totals.cash += c.payout.cash; totals.credit += c.payout.credit; totals.sells += c.bought.sells; }
-  for (const k of ["paid", "cash", "credit", "sells"]) totals[k] = round2(totals[k]);
+  const totals = { carts: all.length, cards: 0, paid: 0, cash: 0, credit: 0, sells: 0, pricedPaid: 0, unpricedCards: 0 };
+  for (const c of all) { totals.cards += c.bought.cards; totals.paid += c.bought.total; totals.cash += c.payout.cash; totals.credit += c.payout.credit; totals.sells += c.bought.sells; totals.pricedPaid += c.bought.pricedPaid || 0; totals.unpricedCards += c.bought.unpricedCards || 0; }
+  for (const k of ["paid", "cash", "credit", "sells", "pricedPaid"]) totals[k] = round2(totals[k]);
   totals.flagged = all.reduce((n, c) => { const f = cartFlags(c); return n + (f.creditNoCustomer || f.lowMargin ? 1 : 0); }, 0);
   return { ok: true, days, take, skip, total: all.length, totals, partial, rows: all.slice(skip, skip + take).map(cartSummary), more: skip + take < all.length };
 }
