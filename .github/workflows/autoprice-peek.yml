@@ -1,0 +1,55 @@
+# Auto-pricer peek (2026-10-01): signs in to the worker's /autoprice page
+# with the AUTOPRICE_USER / AUTOPRICE_PASSWORD repo secrets and prints the
+# run status plus one product's report row, so a "why is this row stuck"
+# question can be answered without the owner's screen. Prints no
+# credentials; audit "who" values are reduced to an initial.
+name: autoprice-peek
+on:
+  workflow_dispatch:
+    inputs:
+      product:
+        description: "Shopify product id (digits) whose report row to print; empty = none"
+        required: false
+        default: ""
+      rows:
+        description: "Also print the first N report rows (title, game, action, reason)"
+        required: false
+        default: "0"
+jobs:
+  peek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sign in and print status + row
+        env:
+          U: ${{ secrets.AUTOPRICE_USER }}
+          P: ${{ secrets.AUTOPRICE_PASSWORD }}
+          PID: ${{ inputs.product }}
+          ROWS: ${{ inputs.rows }}
+        run: |
+          if [ -z "$U" ] || [ -z "$P" ]; then echo "AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets not set"; exit 1; fi
+          cat > /tmp/peek.mjs <<'JS'
+          const W = 'https://exor-binder.nevski.workers.dev';
+          const body = new URLSearchParams({ u: process.env.U, p: process.env.P }).toString();
+          const r = await fetch(W + '/autoprice/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body, redirect: 'manual' });
+          const sc = r.headers.get('set-cookie') || '';
+          const cookie = sc.split(';')[0];
+          console.log('login ->', r.status, cookie ? 'cookie set' : 'NO COOKIE');
+          if (!cookie) process.exit(1);
+          const H = { cookie };
+          const st = await (await fetch(W + '/autoprice/status', { headers: H })).json();
+          const mask = (s) => s ? String(s).charAt(0).toUpperCase() + '.' : '-';
+          console.log('mode', st.mode, '| pricecharting', st.pricecharting, '| alarmAt', st.alarmAt ? new Date(st.alarmAt).toISOString() : null);
+          if (st.run) console.log('run', JSON.stringify({ ...st.run, startedAt: st.run.startedAt && new Date(st.run.startedAt).toISOString(), finishedAt: st.run.finishedAt && new Date(st.run.finishedAt).toISOString() }));
+          console.log('lastReportAt', st.lastReportAt ? new Date(st.lastReportAt).toISOString() : null);
+          for (const x of (st.runs || []).slice(0, 4)) console.log('  past run', JSON.stringify({ ...x, startedAt: new Date(x.startedAt).toISOString(), finishedAt: x.finishedAt && new Date(x.finishedAt).toISOString() }).slice(0, 400));
+          for (const a of (st.audit || []).slice(0, 8)) console.log('  audit', new Date(a.at).toISOString(), mask(a.who), a.action, (a.detail || ''), '|', String(a.title || '').slice(0, 70));
+          const rep = await (await fetch(W + '/autoprice/report.json', { headers: H })).json();
+          const rows = rep.rows || [];
+          console.log('report rows', rows.length, 'at', rep.at ? new Date(rep.at).toISOString() : null, 'games', JSON.stringify([...new Set(rows.map((x) => x.game))]));
+          const pid = process.env.PID && 'gid://shopify/Product/' + process.env.PID;
+          if (pid) { const row = rows.find((x) => x.id === pid); console.log('ROW', row ? JSON.stringify(row).slice(0, 3000) : 'not in the report'); }
+          const n = parseInt(process.env.ROWS, 10) || 0;
+          for (const x of rows.slice(0, n)) console.log('  row', x.game, '|', x.action, '|', String(x.title).slice(0, 60), '|', String(x.reason || '').slice(0, 80));
+          JS
+          node /tmp/peek.mjs
