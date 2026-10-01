@@ -58,6 +58,7 @@
   .card { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 13px 15px; }
   .card .k { color: var(--dim); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
   .card .v { font-size: 22px; font-weight: 700; margin-top: 2px; line-height: 1.25; }
+  .card .v .sub { font-size: 12px; font-weight: 500; color: var(--mut, #8a9299); margin-left: 4px; }
   .card .d { color: var(--dim); font-size: 13px; margin-top: 3px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 8px; }
   .notes { background: rgba(255,122,47,.1); border: 1px solid rgba(255,122,47,.35); border-radius: 12px; padding: 10px 14px; margin: 12px 0; }
@@ -270,9 +271,14 @@
     }
     if (isCarts() && S.totals && !S.busy) {
       var t = S.totals;
-      html += '<div class="grid"><div class="card"><div class="k">Buy carts in this window</div><div class="v">' + esc(t.carts) + '</div><div class="d">' + esc(t.cards) + ' cards bought</div></div>' +
-        '<div class="card"><div class="k">Paid for cards</div><div class="v">' + money(t.paid) + '</div><div class="d">' + money(t.cash) + ' cash out · ' + money(t.credit) + ' credit issued</div></div>' +
-        '<div class="card"><div class="k">They sell for</div><div class="v">' + money(t.sells) + '</div><div class="d">' + (t.sells && (t.pricedPaid || t.paid) ? 'bought at ' + Math.round((t.pricedPaid != null ? t.pricedPaid : t.paid) / t.sells * 100) + '% of sell price' : 'catalogue cards only') + (t.unpricedCards ? ' · ' + t.unpricedCards + ' card' + (t.unpricedCards === 1 ? '' : 's') + ' with no sell price on file (' + money(t.paid - (t.pricedPaid || 0)) + ' paid) not counted' : '') + '</div></div></div>' +
+      // Three boxes that compare like with like (owner 2026-10-01: "it still
+      // looks like we paid 7100 for 433 in cards"): the catalogue cards get
+      // their own paid / sell pair and percentage; hand-keyed items with no
+      // shelf price are shown as a separate amount, never against a sell value.
+      var pp = t.pricedPaid != null ? t.pricedPaid : t.paid, up = Math.max(0, (t.paid || 0) - pp), uc = t.unpricedCards || 0;
+      html += '<div class="grid"><div class="card"><div class="k">Buy carts in this window</div><div class="v">' + esc(t.carts) + '</div><div class="d">' + esc(t.cards) + ' cards bought · ' + money(t.cash) + ' cash out · ' + money(t.credit) + ' credit issued</div></div>' +
+        '<div class="card"><div class="k">Catalogue cards</div><div class="v">' + money(pp) + ' <span class="sub">paid</span></div><div class="d">' + (t.sells ? 'they sell for ' + money(t.sells) + ' · bought at ' + Math.round(pp / t.sells * 100) + '% of sell price' : 'none in this window') + '</div></div>' +
+        '<div class="card"><div class="k">Items with no shelf price</div><div class="v">' + money(up) + ' <span class="sub">paid</span></div><div class="d">' + (uc ? uc + ' hand-keyed item' + (uc === 1 ? '' : 's') + ' (sealed lots, bulk, cards we do not list): BinderPOS has no sell price for these, so they are not in the percentage' : 'none in this window') + '</div></div></div>' +
         (t.flagged ? '<div class="flagnote"><b>' + esc(t.flagged) + ' cart' + (t.flagged === 1 ? '' : 's') + ' need' + (t.flagged === 1 ? 's' : '') + ' a look</b> · store credit paid to no customer, or cards bought above 75% of their sell price. Marked in red below.</div>' : '');
     }
     if (S.busy && !S.rows.length) html += '<div class="empty">Loading ' + (isCarts() ? 'in-store buys (a fresh day takes a few seconds)' : esc(S.status) + ' buylists') + '…</div>';
