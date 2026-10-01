@@ -900,10 +900,12 @@ async function phaseFx(cx, run) {
 }
 
 const PRODUCTS_Q = `query($after: String) { products(first: 50, after: $after, query: "tag:${TAG} status:active") { edges { node { id title handle productType tags
+  media(first: 3) { edges { node { ... on MediaImage { image { url altText } } } } }
   variants(first: 10) { edges { node { id title price barcode sku inventoryQuantity inventoryItem { unitCost { amount } } } } }
   mf: metafields(first: 30, namespace: "exor") { edges { node { key value } } } } } pageInfo { hasNextPage endCursor } } }`;
 
 const PRODUCT_BY_ID_Q = `query($id: ID!) { product(id: $id) { id title handle productType tags
+  media(first: 3) { edges { node { ... on MediaImage { image { url altText } } } } }
   variants(first: 10) { edges { node { id title price barcode sku inventoryQuantity inventoryItem { unitCost { amount } } } } }
   mf: metafields(first: 30, namespace: "exor") { edges { node { key value } } } } }`;
 
@@ -929,6 +931,28 @@ export function readAnchor(raw) {
   return { price: round2(price), market: round2(market), basis: String((a && a.basis) || "market"), at: Number(a && a.at) || null };
 }
 
+/* Product photos (owner 2026-10-01: "on the auto price tool it should show the
+   photos of the graded card that I can click on and zoom in"). Up to three per
+   product, stored without the shop's CDN prefix so ap:report stays small; the
+   page puts the prefix back and asks the CDN for the size it needs. */
+export const CDN_PREFIX = "https://cdn.shopify.com/s/files/1/0467/3083/8169/";
+export function readImages(node) {
+  const out = [];
+  for (const e of (node.media && node.media.edges) || []) {
+    const im = e && e.node && e.node.image;
+    if (!im || !im.url) continue;
+    const u = String(im.url);
+    out.push({ u: u.startsWith(CDN_PREFIX) ? u.slice(CDN_PREFIX.length) : u, a: String(im.altText || "").slice(0, 120) });
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+export function imageUrl(im, width) {
+  const u = im && im.u ? (/^https?:/.test(im.u) ? im.u : CDN_PREFIX + im.u) : "";
+  if (!u) return "";
+  return width ? u + (u.includes("?") ? "&" : "?") + "width=" + width : u;
+}
+
 export function readProduct(node) {
   const vs = ((node.variants && node.variants.edges) || []).map((e) => e.node);
   const mf = {};
@@ -950,6 +974,7 @@ export function readProduct(node) {
     compMode: /^(cap|off|skip|follow)$/.test(String(mf.ap_comp || "")) ? String(mf.ap_comp) : null,
     anchor: readAnchor(mf.ap_anchor),
     graded: isGradedType(node.productType) ? parseGraded(node.title) : null,
+    images: readImages(node),
   };
 }
 
@@ -1260,7 +1285,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     // names one, that variant is priced like any single-variant product.
     if (p.variants > 1 && !p.variantChosen && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: choose which one this price is for"; }
     if (p.match && !p.tcgId && !p.graded && d.action === "skip") d.reason = p.match;   // never explain a graded skip with TCGplayer
-    rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId,
+    rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId, images: p.images || [],
       variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
       pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null,
@@ -1862,6 +1887,19 @@ const money = (n) => n == null ? "" : "$" + Number(n).toFixed(2);
      - Light and dark, from the device setting; a phone gets cards.
    Every form, field name and permission check is the same as before: the
    room's control actions did not change. */
+/* Photos on a row: a 56px thumbnail by the title and a strip of every photo in
+   the panel; each opens the zoom viewer (data-zoom carries the big rendition). */
+function photoThumb(r) {
+  const im = (r.images || [])[0];
+  if (!im) return "";
+  return `<a class="thumb" href="${esc(imageUrl(im))}" data-zoom="${esc(imageUrl(im, 1600))}" data-ttl="${esc(r.title)}" title="Zoom in"><img src="${esc(imageUrl(im, 120))}" alt="${esc(im.a || r.title)}" loading="lazy" width="56" height="56"></a>`;
+}
+function photoStrip(r) {
+  const ims = r.images || [];
+  if (!ims.length) return "";
+  return `<section class="full pics"><h4>Photos <span class="sub">click to zoom</span></h4><div class="strip">${ims.map((im, i) => `<a class="thumb lg" href="${esc(imageUrl(im))}" data-zoom="${esc(imageUrl(im, 1600))}" data-ttl="${esc(r.title)}" title="Zoom in"><img src="${esc(imageUrl(im, 320))}" alt="${esc(im.a || r.title + " photo " + (i + 1))}" loading="lazy"></a>`).join("")}</div></section>`;
+}
+
 export function renderPage(s, rep, view) {
   const cfg = s.config || DEFAULT_CONFIG;
   const v = view || {};
@@ -2057,13 +2095,13 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
     const pending = r.action === "pending";
     const openPanel = !pending && (r.variantList || []).length > 1 && !r.variantChosen;
     const panel = pending ? "" : `<details class="more"${openPanel ? " open" : ""}><summary title="Details, settings and links"><svg class="chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="vh">Details</span></summary><div class="panel">
-<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}${r.reason && r.reason !== "market" || r.writeError ? `<div class="muted rsn">${r.reason && r.reason !== "market" ? esc(r.reason) : ""}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>` : ""}${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}</section>
+${photoStrip(r)}<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}${r.reason && r.reason !== "market" || r.writeError ? `<div class="muted rsn">${r.reason && r.reason !== "market" ? esc(r.reason) : ""}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>` : ""}${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}</section>
 <section><h4>Today</h4><div><b>${money(r.current)}</b> <span class="sub">cost ${r.cost != null ? money(r.cost) : "—"}</span></div>${marginLine(r.marginNow, r.current, r.cost)}<h4>${esc(COMP.name)}</h4>${compCell(r)}<h4>Last change</h4>${change(r.lastChange)}<h4>Check by hand</h4>${reviewLinks(r)}</section>
 <section class="setsec"><h4>Settings <span class="sub">${esc(custom.length ? custom.join(" · ") : "page defaults")}</span></h4>${P.settings ? settingsForm(r) : '<div class="sub">your account cannot change them</div>'}</section>
 ${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
 </div></details>`;
     return `<article class="item s-${sk}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}" data-q="${esc(String(r.title + " " + r.game).toLowerCase())}">
-<div class="line"><div class="c-prod"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div>
+<div class="line"><div class="c-prod${(r.images || []).length ? " has-pic" : ""}">${photoThumb(r)}<div class="c-txt"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div></div>
 <div class="c-now num" data-l="Today"><b>${money(r.current)}</b>${marginLine(r.marginNow, r.current, r.cost)}</div>
 <div class="c-sug num" data-l="Suggested">${sugCell(r)}</div>
 <div class="c-st" data-l="Status">${upToDate(r) && !r.applied && !r.alert ? "" : `<span class="badge b-${sk}">${esc(sl)}</span><div class="sub two" title="${esc(r.reason || "")}">${esc(why(r))}</div>`}</div>
@@ -2126,6 +2164,8 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .grp{margin:18px 2px 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.grp span{font-weight:500}
 .list{display:flex;flex-direction:column;gap:6px}.item{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}.item.alerted{border-left:3px solid var(--warn)}.item.awaiting{border-left:3px solid var(--wait)}.item.alerted.awaiting{border-left-color:var(--warn)}
 .line,.lhead{display:grid;grid-template-columns:minmax(0,1fr) 150px 170px 150px 230px;gap:14px;align-items:center;padding:10px 44px 10px 14px}.lhead{padding-top:0;padding-bottom:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.lhead span:nth-child(2),.lhead span:nth-child(3){text-align:right}.mg{white-space:nowrap}.two{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.c-prod .ttl{font-weight:600;color:var(--ink);text-decoration:none}.c-prod .ttl:hover{color:var(--acc);text-decoration:underline}.meta{font-size:12px;color:var(--mut);margin-top:2px}.warn{color:var(--warn);font-size:12px;font-weight:600;margin-top:3px}.warn-t{color:var(--warn);font-weight:600}
+.c-prod.has-pic{display:flex;gap:10px;align-items:flex-start;min-width:0}.c-prod .c-txt{min-width:0;flex:1}.thumb{display:block;flex:none;width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--soft);border:1px solid var(--line);cursor:zoom-in}.thumb img{width:100%;height:100%;object-fit:cover;display:block}.thumb.lg{width:120px;height:160px}.strip{display:flex;gap:8px;flex-wrap:wrap}
+.zoom{position:fixed;inset:0;z-index:100;background:rgba(8,10,12,.92);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:zoom-in}.zoom[hidden]{display:none}.zoom img{max-width:94vw;max-height:88vh;object-fit:contain;transition:transform .12s;transform-origin:center;user-select:none}.zoom.in{cursor:zoom-out}.zoom.in img{transform:scale(2.5)}.zoom .cap{position:absolute;left:0;right:0;bottom:12px;text-align:center;color:#e6e9ec;font-size:13px;pointer-events:none}.zoom .x{position:absolute;top:10px;right:14px;color:#fff;font:700 26px/1 inherit;background:none;border:0;cursor:pointer}
 .c-now,.c-sug{text-align:right}.c-now b,.c-sug b{font-size:15px}.c-sug b.same{color:var(--mut);font-weight:600}.chg{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px}.chg.up{background:var(--up-bg);color:var(--up)}.chg.down{background:var(--down-bg);color:var(--down)}
 .badge{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--soft);color:var(--mut)}.b-wait{background:var(--wait-bg);color:var(--wait)}.b-up,.b-ok{background:var(--up-bg);color:var(--up)}.b-down,.b-bad{background:var(--down-bg);color:var(--down)}.b-skip{background:var(--warn-bg);color:var(--warn)}.b-pend{background:var(--wait-bg);color:var(--wait)}.c-st .sub{margin-top:3px}
 .c-act{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}.pubf{display:inline-flex;align-items:center;gap:6px}.px{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--card);padding-left:8px;color:var(--mut)}.px input{border:0;width:86px;padding:6px 8px 6px 3px;font-weight:700;font-variant-numeric:tabular-nums;background:transparent}.px:focus-within{outline:2px solid var(--acc)}
@@ -2150,7 +2190,13 @@ ${waiting.length ? `<div class="pubbar"><span><b>⏳ ${waiting.length} price${wa
 <details><summary>Runs <span class="sub">· last ${(s.runs || []).length}</span></summary><div class="scroll"><table><thead><tr><th>Started</th><th>Mode</th><th>Listed</th><th>Priced</th><th>Written</th><th>Skipped</th><th>FX</th><th>Digest</th><th>Errors</th></tr></thead><tbody>${(s.runs || []).map((r) => `<tr><td>${esc(whenShort(r.startedAt))}${r.nightly ? "" : ' <span class="sub">manual</span>'}</td><td>${r.apply ? "apply" : "no writes"}</td><td>${esc(r.products)}</td><td>${esc(r.priced)}</td><td>${esc(r.written)}</td><td>${esc(r.skipped)}</td><td>${esc(r.fx || "")}</td><td class="sub">${esc(r.notify || "—")}</td><td class="sub">${esc((r.errors || []).join("; ") + (r.error ? " · " + r.error : ""))}</td></tr>`).join("") || '<tr><td colspan="9" class="sub">none</td></tr>'}</tbody></table></div></details>
 <p class="foot">Report ${rep.at ? esc(whenShort(rep.at)) : "not built yet"} · <a href="/autoprice/report.json">json</a></p></section>
 </div>
+<div class="zoom" id="zoom" hidden><button class="x" type="button" aria-label="Close">×</button><img alt=""><div class="cap"></div></div>
 <script>
+(function(){var z=document.getElementById("zoom"),zi=z.querySelector("img"),zc=z.querySelector(".cap");
+function closeZoom(){z.hidden=true;z.classList.remove("in");zi.src="";document.body.style.overflow=""}
+document.addEventListener("click",function(e){var a=e.target.closest("a[data-zoom]");if(!a)return;e.preventDefault();zi.src=a.getAttribute("data-zoom");zi.alt=a.getAttribute("data-ttl")||"";zc.textContent=(a.getAttribute("data-ttl")||"")+" · click to zoom, Esc to close";z.hidden=false;z.classList.remove("in");document.body.style.overflow="hidden"});
+z.addEventListener("click",function(e){if(e.target.closest(".x")){closeZoom();return}if(e.target===zi){var r=zi.getBoundingClientRect();zi.style.transformOrigin=((e.clientX-r.left)/r.width*100)+"% "+((e.clientY-r.top)/r.height*100)+"%";z.classList.toggle("in")}else closeZoom()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!z.hidden)closeZoom()});})();
 (function(){var f=document.getElementById("filt"),items=[].slice.call(document.querySelectorAll(".item")),grps=[].slice.call(document.querySelectorAll(".grp"));
 function apply(){var t=(f.value||"").trim().toLowerCase();items.forEach(function(it){it.hidden=!!t&&it.getAttribute("data-q").indexOf(t)<0});grps.forEach(function(g){var n=g.nextElementSibling,any=false;while(n&&!n.classList.contains("grp")){if(n.classList.contains("item")&&!n.hidden)any=true;n=n.nextElementSibling}g.hidden=!any})}
 if(f)f.addEventListener("input",apply);

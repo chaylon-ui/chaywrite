@@ -1082,3 +1082,28 @@ test("digest: products held because 401 could not be checked are one line, not o
   const quiet = buildDigest({ ...run, rows: run.rows.slice(0, 1) }, { ...DEFAULT_CONFIG, mode: "stage" });
   assert.equal(quiet.worth, true); assert.equal(quiet.priority, 3); assert.deepEqual(quiet.tags, ["warning"]);
 });
+
+test("product photos: three at most, stored without the CDN prefix, drawn at the size the page asks for", async () => {
+  const { readProduct, readImages, imageUrl, CDN_PREFIX, renderPage } = await import("../src/autoprice.js");
+  const img = (n) => ({ node: { image: { url: CDN_PREFIX + "files/slab-" + n + ".jpg?v=17901", altText: n === 1 ? "front" : "" } } });
+  const node = { id: "gid://shopify/Product/5", title: "Charizard VMAX PSA 10", handle: "slab", productType: "Pokemon Graded", tags: ["auto-price"],
+    media: { edges: [img(1), img(2), img(3), img(4), { node: {} }] },
+    variants: { edges: [{ node: { id: "gid://shopify/ProductVariant/9", title: "Default Title", price: "899.95", inventoryQuantity: 1 } }] }, mf: { edges: [] } };
+  const p = readProduct(node);
+  assert.equal(p.images.length, 3);
+  assert.deepEqual(p.images[0], { u: "files/slab-1.jpg?v=17901", a: "front" });
+  assert.equal(imageUrl(p.images[0], 120), CDN_PREFIX + "files/slab-1.jpg?v=17901&width=120");
+  assert.equal(imageUrl({ u: "https://elsewhere.example/x.png", a: "" }, 320), "https://elsewhere.example/x.png?width=320");
+  assert.deepEqual(readImages({}), []);
+  // the page: a thumbnail by the title that opens the zoom viewer on the 1600px rendition, every photo in the panel, no thumb on a row without photos
+  const d = decide({ price: 899.95, cost: 600, tcgMarket: 700 }, { ...DEFAULT_CONFIG }, FX);
+  const rows = [
+    { id: p.id, title: p.title, handle: p.handle, type: p.type, game: "Pokemon", stock: 1, images: p.images, ...d },
+    { id: "gid://shopify/Product/6", title: "Box B", handle: "box-b", type: "MTG Sealed", stock: 3, ...d },
+  ];
+  const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows }, { configured: true });
+  assert.match(page, /<div class="c-prod has-pic"><a class="thumb" href="[^"]*slab-1\.jpg\?v=17901" data-zoom="[^"]*slab-1\.jpg\?v=17901&amp;width=1600" data-ttl="Charizard VMAX PSA 10" title="Zoom in"><img src="[^"]*slab-1\.jpg\?v=17901&amp;width=120" alt="front" loading="lazy" width="56" height="56"><\/a><div class="c-txt"><a class="ttl"/);
+  assert.equal((page.match(/class="thumb lg"/g) || []).length, 3);
+  assert.match(page, /<div class="c-prod"><div class="c-txt"><a class="ttl"[^>]*>Box B</);
+  assert.match(page, /<div class="zoom" id="zoom" hidden>/);
+});
