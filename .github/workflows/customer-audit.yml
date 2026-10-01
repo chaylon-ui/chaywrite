@@ -1,0 +1,166 @@
+# Customer audit: every buylist and in-store buy cart of ONE BinderPOS
+# customer id, each bought line judged against the sell price recorded ON
+# THAT DAY (buylist lines carry storeSellPrice as quoted at submission; cart
+# items carry shopifyPrice as it was when the cart was rung up), so a line
+# from six months ago is judged by that day's price, not today's.
+# Owner, 2026-10-01: "Can you see if this happened with other ... carts and
+# buylists like this? Keep in mind that the selling prices change ...".
+# Prints ids, card names and numbers only - never the customer's name,
+# email or phone. Read-only.
+name: customer-audit
+on:
+  workflow_dispatch:
+    inputs:
+      customer:
+        description: "BinderPOS customer id (the number on the cart's customer, e.g. 2780648)"
+        required: true
+      days:
+        description: "How far back to look (carts are scanned day by day; 180 takes ~6 min)"
+        required: false
+        default: "180"
+      pct:
+        description: "Flag a bought line when we paid more than this % of its sell price that day"
+        required: false
+        default: "75"
+      carts:
+        description: "Scan in-store carts too (true/false; buylists are quick, carts are the slow part)"
+        required: false
+        default: "true"
+permissions: {}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Audit (masked, read-only)
+        env:
+          EMAIL: ${{ secrets.BINDERPOS_LOGIN_EMAIL }}
+          PASS: ${{ secrets.BINDERPOS_LOGIN_PASSWORD }}
+          CUSTOMER: ${{ inputs.customer }}
+          DAYS: ${{ inputs.days }}
+          PCT: ${{ inputs.pct }}
+          CARTS: ${{ inputs.carts }}
+        run: |
+          if [ -z "$EMAIL" ] || [ -z "$PASS" ]; then echo "BINDERPOS_LOGIN_EMAIL / BINDERPOS_LOGIN_PASSWORD secrets not set"; exit 1; fi
+          node <<'EOF'
+          const KEY = ['AIzaSyDYmFPRKRkVFM9SQ', 'vbtCAT8oWKh4RhBGXg'].join('');   // BinderPOS's public web key (see portal-get.yml)
+          const API = 'https://api.binderpos.com', PORTAL = 'https://portal.binderpos.com';
+          const ID = String(process.env.CUSTOMER || '').replace(/\D/g, '');
+          const DAYS = Math.max(1, Math.min(730, parseInt(process.env.DAYS, 10) || 180));
+          const PCT = Math.max(1, parseInt(process.env.PCT, 10) || 75);
+          const SCAN_CARTS = String(process.env.CARTS) !== 'false';
+          if (!ID) { console.log('customer id missing'); process.exit(1); }
+          const money = (n) => n == null ? '—' : '$' + Number(n).toFixed(2);
+          const day = (s) => String(s || '').slice(0, 10);
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          let H = null;
+          async function signIn() {
+            const r = await fetch('https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=' + KEY, {
+              method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email: process.env.EMAIL, password: process.env.PASS, returnSecureToken: true }) });
+            const j = await r.json().catch(() => ({}));
+            if (!j.idToken) { console.log('sign-in failed:', r.status); process.exit(1); }
+            H = { authorization: 'Bearer ' + j.idToken, accept: 'application/json', 'content-type': 'application/json', origin: PORTAL, referer: PORTAL + '/' };
+          }
+          async function get(p, tries = 3) {
+            for (let i = 1; i <= tries; i++) {
+              try {
+                const r = await fetch(API + p, { headers: H, signal: AbortSignal.timeout(40000) });
+                if (r.status === 401 && i < tries) { await signIn(); continue; }
+                if (r.status >= 500 && i < tries) { await sleep(1500 * i); continue; }
+                const t = await r.text();
+                try { return { status: r.status, body: JSON.parse(t) }; } catch { return { status: r.status, body: null }; }
+              } catch (e) { if (i === tries) return { status: 0, body: null, error: e.message }; await sleep(1500 * i); }
+            }
+          }
+          async function gql(query, variables) {
+            const r = await fetch(API + '/graphql', { method: 'POST', headers: H, body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(40000) });
+            return r.json();
+          }
+          const since = Date.now() - DAYS * 86400e3;
+          const worst = [];   // every flagged line, for the final table
+          const note = (where, ref, when, l) => worst.push({ where, ref, when, ...l });
+          const judge = (card, qty, paid, sell) => {
+            const pct = sell > 0 && paid != null ? Math.round(paid / sell * 100) : null;
+            return { card, qty, paid, sell, pct, low: pct != null && pct > PCT };
+          };
+
+          (async () => {
+            await signIn();
+            console.log(`customer ${ID} · last ${DAYS} days · flag when paid > ${PCT}% of that day's sell price\n`);
+
+            // ---- buylists: list by customer, then each one's lines ----
+            const bl = await gql(`query($w: ShopifyCustomerBuylistWhereInput) { ShopifyCustomerBuylist(take: 500, where: $w, orderBy: [{ dateSubmitted: desc }]) { id dateSubmitted dateCompleted paymentType approved completed } }`,
+              { w: { ShopifyCustomer: { is: { id: { equals: Number(ID) } } } } });
+            const lists = ((bl.data || {}).ShopifyCustomerBuylist || []).filter((b) => Date.parse(b.dateSubmitted || '') >= since);
+            console.log(`== BUYLISTS: ${lists.length} submitted in the period${bl.errors ? ' (errors: ' + JSON.stringify(bl.errors).slice(0, 200) + ')' : ''}`);
+            const bt = { lists: 0, lines: 0, cards: 0, paid: 0, sell: 0, flagged: 0, cash: 0, credit: 0, unpriced: 0 };
+            for (const b of lists) {
+              const d = await get('/api/buylist/byId/' + b.id + '/details');
+              const det = d.body || {};
+              const fin = Array.isArray(det.finalBuylistDetails) && det.finalBuylistDetails.length ? det.finalBuylistDetails : null;
+              const raw = fin || (Array.isArray(det.shopifyCustomerBuylistDetails) ? det.shopifyCustomerBuylistDetails : []);
+              const credit = /credit/i.test(String(b.paymentType || ''));
+              let paidT = 0, sellT = 0, cards = 0, flagged = 0, unpriced = 0;
+              const rows = [];
+              for (const l of raw) {
+                const qty = Math.max(0, Number(l.quantity) || 0);
+                const paid = credit ? Number(l.storeCreditBuyPrice) : Number(l.cashBuyPrice);
+                const sell = Number(l.storeSellPrice);
+                const j = judge(`${l.cardName || l.name} [${l.setName || ''}] ${l.variantName || ''}${l.foil ? ' foil' : ''}`.replace(/\s+/g, ' ').trim(), qty, Number.isFinite(paid) ? paid : null, Number.isFinite(sell) ? sell : 0);
+                cards += qty;
+                if (j.paid != null) paidT += j.paid * qty;
+                if (j.sell > 0) sellT += j.sell * qty; else unpriced++;
+                if (j.low) { flagged++; rows.push(j); note('buylist', b.id, day(b.dateSubmitted), j); }
+              }
+              bt.lists++; bt.lines += raw.length; bt.cards += cards; bt.paid += paidT; bt.sell += sellT; bt.flagged += flagged; bt.unpriced += unpriced;
+              if (credit) bt.credit += paidT; else bt.cash += paidT;
+              const overall = sellT > 0 ? Math.round(paidT / sellT * 100) + '%' : 'n/a';
+              console.log(`buylist ${b.id} · ${day(b.dateSubmitted)} · ${b.paymentType} · ${b.completed ? 'completed' : b.approved ? 'approved' : 'pending'}${fin ? ' (final lines)' : ''} · ${raw.length} lines / ${cards} cards · paid ${money(paidT)} vs sell-that-day ${money(sellT)} = ${overall}${flagged ? ` · ${flagged} FLAGGED` : ''}${unpriced ? ` · ${unpriced} unpriced` : ''}`);
+              for (const r of rows.sort((a, b2) => b2.pct - a.pct).slice(0, 12)) console.log(`    ${r.pct}%  ${r.card}  x${r.qty}  paid ${money(r.paid)} / sell ${money(r.sell)}`);
+              await sleep(150);
+            }
+            console.log(`buylists total: ${bt.lists} lists, ${bt.lines} lines, ${bt.cards} cards, paid ${money(bt.paid)} (credit ${money(bt.credit)}, cash ${money(bt.cash)}) vs sell-that-day ${money(bt.sell)} = ${bt.sell > 0 ? Math.round(bt.paid / bt.sell * 100) + '%' : 'n/a'}, ${bt.flagged} flagged line(s), ${bt.unpriced} unpriced\n`);
+
+            // ---- in-store carts: no customer filter exists, so scan the days in 2-hour windows ----
+            const ct = { carts: 0, lines: 0, cards: 0, paid: 0, sell: 0, flagged: 0, unpriced: 0, windows: 0, failed: 0 };
+            if (SCAN_CARTS) {
+              console.log(`== IN-STORE BUY CARTS (scanning ${DAYS} days in 2-hour windows)`);
+              const seen = new Set();
+              const end = Date.now();
+              for (let t = end; t > since; t -= 2 * 3600e3) {
+                const a = new Date(Math.max(since, t - 2 * 3600e3)).toISOString(), z = new Date(t).toISOString();
+                const r = await get(`/api/pos/carts/all?limit=200&offset=0&submitted=true&startDate=${encodeURIComponent(a)}&endDate=${encodeURIComponent(z)}`);
+                ct.windows++;
+                if (!Array.isArray(r.body)) { ct.failed++; continue; }
+                for (const c of r.body) {
+                  if (!c || seen.has(c.id) || !c.customer || String(c.customer.id) !== ID) continue;
+                  seen.add(c.id);
+                  const items = Array.isArray(c.cartItems) ? c.cartItems : [];
+                  const buys = items.filter((i) => i && i.buying);
+                  if (!buys.length) continue;
+                  let paidT = 0, sellT = 0, cards = 0, flagged = 0, unpriced = 0;
+                  const rows = [];
+                  for (const i of buys) {
+                    const qty = Math.max(0, Number(i.quantity) || 0);
+                    const j = judge(`${i.productTitle} ${i.variantTitle || ''}`.replace(/\s+/g, ' ').trim(), qty, Number.isFinite(Number(i.price)) ? Math.abs(Number(i.price)) : null, Number(i.shopifyPrice) || 0);
+                    cards += qty;
+                    if (j.paid != null) paidT += j.paid * qty;
+                    if (j.sell > 0) sellT += j.sell * qty; else unpriced++;
+                    if (j.low) { flagged++; rows.push(j); note('cart', String(c.id), day(c.dateSubmitted), j); }
+                  }
+                  const tenders = (Array.isArray(c.tenders) ? c.tenders : []).map((x) => `${x.type} ${money(Math.abs(Number(x.amount) || 0))}`).join(', ');
+                  ct.carts++; ct.lines += buys.length; ct.cards += cards; ct.paid += paidT; ct.sell += sellT; ct.flagged += flagged; ct.unpriced += unpriced;
+                  console.log(`cart ${c.id} · ${day(c.dateSubmitted)} · ${c.cartType || (items.some((i) => !i.buying) ? 'trade' : 'buy')} · ${tenders || 'no tender'} · ${buys.length} lines / ${cards} cards · paid ${money(paidT)} vs sell-that-day ${money(sellT)} = ${sellT > 0 ? Math.round(paidT / sellT * 100) + '%' : 'n/a'}${flagged ? ` · ${flagged} FLAGGED` : ''}${unpriced ? ` · ${unpriced} unpriced` : ''} · ${PORTAL}/#/pointOfSale/carts/${c.id}`);
+                  for (const r2 of rows.sort((a2, b2) => b2.pct - a2.pct).slice(0, 12)) console.log(`    ${r2.pct}%  ${r2.card}  x${r2.qty}  paid ${money(r2.paid)} / sell ${money(r2.sell)}`);
+                }
+                if (ct.windows % 120 === 0) console.log(`  ... ${ct.windows} windows scanned, ${ct.carts} carts of this customer so far`);
+              }
+              console.log(`carts total: ${ct.carts} buy carts (${ct.windows} windows, ${ct.failed} failed), ${ct.lines} lines, ${ct.cards} cards, paid ${money(ct.paid)} vs sell-that-day ${money(ct.sell)} = ${ct.sell > 0 ? Math.round(ct.paid / ct.sell * 100) + '%' : 'n/a'}, ${ct.flagged} flagged line(s), ${ct.unpriced} unpriced\n`);
+            }
+
+            console.log(`== WORST LINES (paid > ${PCT}% of that day's sell price), top 40 of ${worst.length}`);
+            for (const w of worst.sort((a, b) => b.pct - a.pct).slice(0, 40)) console.log(`${String(w.pct).padStart(4)}%  ${w.where} ${w.ref} ${w.when}  ${w.card}  x${w.qty}  paid ${money(w.paid)} / sell ${money(w.sell)}`);
+            console.log('\nAUDIT DONE');
+          })().catch((e) => { console.log('audit error:', e && e.message); process.exit(1); });
+          EOF
