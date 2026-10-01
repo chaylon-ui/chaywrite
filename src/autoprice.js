@@ -1549,7 +1549,10 @@ async function saveSettings(cx, b) {
   }
   const rep = await cx.storage.get("ap:report");
   if (rep && rep.rows) {
-    for (const row of rep.rows) if (row.id === pid) { row.settings = { ...(row.settings || {}), ...saved }; row.action = "pending"; row.reason = "settings saved: repricing now"; }
+    // The old suggestion is stale the moment a setting changes: the row reads
+    // "Pricing..." (not "Waiting" with the previous number, owner 2026-10-01)
+    // until the kicked run prices it again.
+    for (const row of rep.rows) if (row.id === pid) { row.settings = { ...(row.settings || {}), ...saved }; row.action = "pending"; row.awaiting = false; row.suggested = null; row.edited = null; row.reason = "settings saved: repricing now"; }
     await cx.storage.put("ap:report", rep);
   }
   const cfg = await configOf(cx);
@@ -2102,7 +2105,10 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
     ].filter(Boolean).join(" · ");
     const pending = r.action === "pending";
     const openPanel = !pending && (r.variantList || []).length > 1 && !r.variantChosen;
-    const panel = pending ? "" : `<details class="more"${openPanel ? " open" : ""}><summary title="Details, settings and links"><svg class="chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="vh">Details</span></summary><div class="panel">
+    // A row that was priced before keeps its details and settings while it
+    // is repriced (owner 2026-10-01: "the arrow is missing"); only a row
+    // just added, with nothing to show yet, has no panel.
+    const panel = pending && !(r.sources || []).length && !r.pcId && !r.tcgId ? "" : `<details class="more"${openPanel ? " open" : ""}><summary title="Details, settings and links"><svg class="chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="vh">Details</span></summary><div class="panel">
 ${photoStrip(r)}<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}${r.reason && r.reason !== "market" || r.writeError ? `<div class="muted rsn">${r.reason && r.reason !== "market" ? esc(r.reason) : ""}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>` : ""}${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}</section>
 <section><h4>Today</h4><div><b>${money(r.current)}</b> <span class="sub">cost ${r.cost != null ? money(r.cost) : "—"}</span></div>${marginLine(r.marginNow, r.current, r.cost)}<h4>${esc(COMP.name)}</h4>${compCell(r)}<h4>Last change</h4>${change(r.lastChange)}<h4>Check by hand</h4>${reviewLinks(r)}</section>
 <section class="setsec"><h4>Settings <span class="sub">${esc(custom.length ? custom.join(" · ") : "page defaults")}</span></h4>${P.settings ? settingsForm(r) : '<div class="sub">your account cannot change them</div>'}</section>
