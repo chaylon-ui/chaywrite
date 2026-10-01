@@ -454,7 +454,7 @@ test("an add during a running run queues one more run instead of being lost", as
   store.set("ap:run", { startedAt: 90000, tickAt: 99000, done: false, phase: "comp" });
   const r = await kickRun(cx, { apply: true });
   assert.deepEqual(r, { ok: true, started: false, running: true, queued: true });
-  assert.deepEqual(store.get("ap:again"), { apply: true, at: 100000 });
+  assert.deepEqual(store.get("ap:again"), { apply: true, at: 100000, only: null });
   assert.equal(store.get("ap:run").phase, "comp");   // the running run is untouched
   // once the run is done (or stale), a kick starts a fresh one
   store.set("ap:run", { startedAt: 90000, tickAt: 99000, done: true });
@@ -1128,4 +1128,25 @@ test("armAlarm: a stalled run re-arms now even when a far alarm exists; a fresh 
   await armAlarm(t.cx); assert.equal(t.calls.length, 1); assert.ok(t.calls[0] > now + 1000);   // no alarm, nothing running -> nightly
   t = mk(null, { done: false, tickAt: now - 300e3, startedAt: now - 300e3 }, now);
   await armAlarm(t.cx); assert.deepEqual(t.calls, [now + 1000]);                  // no alarm, stalled -> now
+});
+
+// 2026-10-01: a quick run prices only the products named; quick kicks during
+// a run pool their ids, a full kick already queued stays full.
+test("kickRun only: quick runs pool while a run is going; a fresh kick carries only", async () => {
+  const store = new Map();
+  const cx = { storage: { get: async (k) => store.get(k), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); }, setAlarm: async () => {} }, now: () => 100000, log: () => {} };
+  store.set("ap:run", { startedAt: 90000, tickAt: 99000, done: false, phase: "comp" });
+  await kickRun(cx, { apply: false, only: ["gid://shopify/Product/1"] });
+  assert.deepEqual(store.get("ap:again").only, ["gid://shopify/Product/1"]);
+  await kickRun(cx, { apply: false, only: ["gid://shopify/Product/2", "gid://shopify/Product/1"] });
+  assert.deepEqual(store.get("ap:again").only, ["gid://shopify/Product/1", "gid://shopify/Product/2"]);
+  await kickRun(cx, { apply: true });                       // a full kick wins
+  assert.equal(store.get("ap:again").only, null);
+  assert.equal(store.get("ap:again").apply, true);
+  await kickRun(cx, { apply: false, only: ["gid://shopify/Product/3"] });   // and stays full
+  assert.equal(store.get("ap:again").only, null);
+  store.set("ap:run", { done: true });
+  await kickRun(cx, { apply: false, only: ["gid://shopify/Product/9"] });
+  assert.deepEqual(store.get("ap:run").only, ["gid://shopify/Product/9"]);
+  assert.equal(store.get("ap:run").phase, "fx");
 });

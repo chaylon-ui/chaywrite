@@ -624,14 +624,22 @@ export async function autopriceDoAlarm(cx) {
   }
 }
 
+/* opts.only = [product ids]: a QUICK run that prices just those products and
+   merges their rows into the report (owner 2026-10-01: "this takes a long
+   time" - an add or a settings save used to reprice the whole list, four to
+   five minutes, for one card). */
 export async function kickRun(cx, opts) {
   const run = await cx.storage.get("ap:run");
+  const only = opts && Array.isArray(opts.only) && opts.only.length ? opts.only.map(String) : null;
   if (run && !run.done && cx.now() - (run.tickAt || 0) < 120e3) {
     // A run is going: queue one more right after it (a product added mid-run
     // is past the products phase, 2026-09-15: the Celebrations Pokemon Center
     // ETB was tagged one second into a run and never priced). Its own key -
-    // the running tick holds a copy of ap:run and writes it back.
-    await cx.storage.put("ap:again", { apply: !!(opts && opts.apply), at: cx.now() });
+    // the running tick holds a copy of ap:run and writes it back. Quick
+    // kicks pool their ids; a full kick already queued stays full.
+    const prev = (await cx.storage.get("ap:again")) || null;
+    const nextOnly = only && (!prev || prev.only) ? [...new Set([...((prev && prev.only) || []), ...only])] : null;
+    await cx.storage.put("ap:again", { apply: !!(opts && opts.apply) || !!(prev && prev.apply), at: cx.now(), only: nextOnly });
     return { ok: true, started: false, running: true, queued: true };
   }
   await cx.storage.put("ap:run", newRun(cx.now(), opts));
@@ -641,6 +649,7 @@ export async function kickRun(cx, opts) {
 
 function newRun(now, opts) {
   return { startedAt: now, tickAt: now, phase: "fx", done: false, ticks: 0, apply: !!(opts && opts.apply),
+    only: opts && Array.isArray(opts.only) && opts.only.length ? opts.only.map(String) : null,
     products: [], cursor: null, pcCalls: 0, errors: [], written: 0, priced: 0, skipped: 0, index: null, tcgMeta: {} };
 }
 
@@ -819,6 +828,7 @@ export async function digestOp(cx, b) {
 
 async function notifyRun(cx, run, cfg) {
   if (run.notify) return;
+  if (run.only) { run.notify = "skipped (quick reprice of " + run.only.length + ")"; return; }
   const d = buildDigest(run, cfg);
   if (!run.nightly && !d.worth) { run.notify = "skipped (nothing to report)"; return; }
   try {
@@ -861,12 +871,12 @@ async function tick(cx) {
     await cx.storage.put("ap:run", run);
   }
   if (run.done) {
-    await noteRun(cx, run);
+    if (!run.only) await noteRun(cx, run);
     cx.log("autoprice: run done " + JSON.stringify({ products: run.products.length, priced: run.priced, written: run.written, skipped: run.skipped, errors: run.errors.length, ticks: run.ticks }));
     const again = await cx.storage.get("ap:again");
     if (again) {
       await cx.storage.delete("ap:again");
-      await cx.storage.put("ap:run", newRun(cx.now(), { apply: !!again.apply && cfg.mode === "apply" }));
+      await cx.storage.put("ap:run", newRun(cx.now(), { apply: !!again.apply && cfg.mode === "apply", only: again.only || null }));
       await arm(cx, cx.now() + 1500, "again");
     } else await arm(cx, nextRunAt(cx.now()), "done");
   } else {
@@ -985,6 +995,21 @@ export function readProduct(node) {
 }
 
 async function phaseProducts(cx, run) {
+  if (run.only) {
+    for (const id of run.only) {
+      try {
+        const r2 = await adminGql(cx, PRODUCT_BY_ID_Q, { id });
+        const n = r2.data.product;
+        if (n && (n.tags || []).includes(TAG)) run.products.push(readProduct(n));
+        else run.errors.push("product " + id + " is not in the list any more");
+      } catch (e) { run.errors.push("product " + id + ": " + msg(e)); }
+    }
+    const cats = {};
+    for (const p of run.products) if (p.category) cats[p.category] = 1;
+    run.index = { cats: Object.keys(cats).map(Number), ci: 0 };
+    run.phase = "index";
+    return;
+  }
   const r = await adminGql(cx, PRODUCTS_Q, { after: run.cursor });
   const conn = r.data.products;
   for (const e of conn.edges) {
@@ -1362,8 +1387,18 @@ async function phaseWrite(cx, run, cfg, deadline) {
   // Rows added while this run was past its products phase stay "pending" in
   // the report until the queued follow-up run prices them.
   const prev = (await cx.storage.get("ap:report")) || {};
-  const pending = (prev.rows || []).filter((r) => r.action === "pending" && !run.rows.some((x) => x.id === r.id));
-  await cx.storage.put("ap:report", { at: cx.now(), fx: run.fx, fxDate: run.fxDate, apply, stage, rows: [...run.rows.map((r) => ({ ...r, sources: r.sources })), ...pending] });
+  const mine = run.rows.map((r) => ({ ...r, sources: r.sources }));
+  let rows;
+  if (run.only) {
+    // Quick run: its rows replace the same products' rows; everything else
+    // in the report (and its timestamp) stays as the last full run left it.
+    const ids = new Set([...run.only, ...mine.map((r) => r.id)]);
+    rows = [...(prev.rows || []).filter((r) => !ids.has(r.id)), ...mine];
+  } else {
+    const pending = (prev.rows || []).filter((r) => r.action === "pending" && !run.rows.some((x) => x.id === r.id));
+    rows = [...mine, ...pending];
+  }
+  await cx.storage.put("ap:report", { at: run.only && prev.at ? prev.at : cx.now(), fx: run.fx, fxDate: run.fxDate, apply: run.only && prev.rows ? prev.apply : apply, stage: run.only && prev.rows ? prev.stage : stage, rows });
   run.done = true; run.finishedAt = cx.now();
   run.phase = "done";
 }
@@ -1556,7 +1591,7 @@ async function saveSettings(cx, b) {
     await cx.storage.put("ap:report", rep);
   }
   const cfg = await configOf(cx);
-  const kicked = await kickRun(cx, { apply: cfg.mode === "apply", delayMs: 1500 });
+  const kicked = await kickRun(cx, { apply: cfg.mode === "apply", delayMs: 1500, only: [pid] });
   return { ok: true, id: pid, saved, kicked };
 }
 
@@ -1582,7 +1617,7 @@ async function setListed(cx, id, on, b) {
   }
   await cx.storage.put("ap:report", rep);
   let kicked = null;
-  if (on) { const cfg = await configOf(cx); kicked = await kickRun(cx, { apply: cfg.mode === "apply", delayMs: 3000 }); }
+  if (on) { const cfg = await configOf(cx); kicked = await kickRun(cx, { apply: cfg.mode === "apply", delayMs: 1500, only: [pid] }); }
   return { ok: true, id: pid, listed: !!on, kicked };
 }
 
