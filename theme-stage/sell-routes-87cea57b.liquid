@@ -1,0 +1,411 @@
+{%- comment -%}
+  "Sell to Exor Games" page, 2026 rebuild.
+
+  Replaces a page body that was a <table> layout with inline pixel heights
+  (height: 662.525px), 240x240 raster icons and every paragraph wrapped in
+  <strong>. That markup lives in the Shopify admin's rich-text editor, which
+  rewrites anything complex the next time the owner opens it - so the design
+  moves here into a section, where it is code-owned and version-controlled,
+  and the page body is left untouched as a rollback.
+
+  Everything visible is a section setting or a block, so the owner edits copy,
+  links and order in the theme editor without touching Liquid. Built only on
+  the --xg- tokens, which xg-dark.css redefines under html[data-xg-theme=
+  "dark"], so dark mode needs no separate rules here.
+{%- endcomment -%}
+
+{%- liquid
+  assign routes = section.blocks | where: 'type', 'route'
+  assign steps = section.blocks | where: 'type', 'step'
+-%}
+
+<section class="xg-sell">
+  <header class="xg-sell__hero">
+    <div class="xg-container xg-sell__hero-inner">
+      {%- if section.settings.kicker != blank -%}
+        <p class="xg-sell__kicker">{{ section.settings.kicker | escape }}</p>
+      {%- endif -%}
+      <h1 class="xg-sell__title">{{ section.settings.heading | escape }}</h1>
+      {%- if section.settings.lede != blank -%}
+        <p class="xg-sell__lede">{{ section.settings.lede | escape }}</p>
+      {%- endif -%}
+      <div class="xg-sell__actions">
+        {%- if section.settings.cta1_label != blank -%}
+          <a class="xg-btn xg-btn--primary xg-btn--lg" href="{{ section.settings.cta1_link }}">{{ section.settings.cta1_label | escape }}</a>
+        {%- endif -%}
+        {%- if section.settings.cta2_label != blank -%}
+          <a class="xg-btn xg-btn--ghost xg-btn--lg" href="{{ section.settings.cta2_link }}">{{ section.settings.cta2_label | escape }}</a>
+        {%- endif -%}
+      </div>
+      <div class="xg-sell__meta">
+        {%- if section.settings.policy_link != blank -%}
+          <a class="xg-sell__metalink" href="{{ section.settings.policy_link }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+            <span>{{ section.settings.policy_label | escape }}</span>
+          </a>
+        {%- endif -%}
+        {%- if section.settings.grading_link != blank -%}
+          <a class="xg-sell__metalink" href="{{ section.settings.grading_link }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            <span>{{ section.settings.grading_label | escape }}</span>
+          </a>
+        {%- endif -%}
+      </div>
+    </div>
+  </header>
+
+  {%- comment -%}
+    Three ways to get paid (owner 2026-10-01, recommendation 6): the payout
+    choice in one strip before the routes, so a seller sees cash vs store
+    credit vs trade-on-the-spot before picking how to send cards. Every
+    string is a section setting; the "about 40% more" figure comes from the
+    buylist and till rates (credit ~70% of sell vs cash ~50%) and is editable.
+  {%- endcomment -%}
+  {%- if section.settings.pay_show -%}
+    <div class="xg-container">
+      <div class="xg-sell__pay" aria-label="{{ section.settings.pay_heading | escape }}">
+        {%- if section.settings.pay_heading != blank -%}<h2 class="xg-sell__payhead">{{ section.settings.pay_heading | escape }}</h2>{%- endif -%}
+        <div class="xg-sell__paygrid">
+          <div class="xg-sell__paycard">
+            <span class="xg-sell__payicon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 12h.01M17 12h.01"/></svg></span>
+            <h3 class="xg-sell__paytitle">{{ section.settings.pay1_title | escape }}</h3>
+            <p class="xg-sell__paybody">{{ section.settings.pay1_body | escape }}</p>
+          </div>
+          <div class="xg-sell__paycard xg-sell__paycard--best">
+            {%- if section.settings.pay2_tag != blank -%}<span class="xg-sell__tag">{{ section.settings.pay2_tag | escape }}</span>{%- endif -%}
+            <span class="xg-sell__payicon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.5 5 3 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3"/></svg></span>
+            <h3 class="xg-sell__paytitle">{{ section.settings.pay2_title | escape }}</h3>
+            <p class="xg-sell__paybody">{{ section.settings.pay2_body | escape }}</p>
+          </div>
+          <div class="xg-sell__paycard">
+            <span class="xg-sell__payicon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h12l-3-3"/><path d="M20 17H8l3 3"/></svg></span>
+            <h3 class="xg-sell__paytitle">{{ section.settings.pay3_title | escape }}</h3>
+            <p class="xg-sell__paybody">{{ section.settings.pay3_body | escape }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  {%- endif -%}
+
+  {%- if routes.size > 0 -%}
+    <div class="xg-container">
+      <div class="xg-sell__routes">
+        {%- for block in routes -%}
+          {%- assign r = block.settings -%}
+          <article class="xg-sell__route" {{ block.shopify_attributes }}>
+            <span class="xg-sell__icon" aria-hidden="true">
+              {%- case r.icon -%}
+                {%- when 'bulk' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+                {%- when 'list' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h3"/></svg>
+                {%- when 'store' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 4.5 4h15L21 9"/><path d="M4 9v11h16V9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M10 20v-5h4v5"/></svg>
+                {%- when 'games' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12a4 4 0 0 1 4 4v3a3 3 0 0 1-5.4 1.8L15 15H9l-1.6 1.8A3 3 0 0 1 2 15v-3a4 4 0 0 1 4-4Z"/><path d="M7 12h4"/><path d="M9 10v4"/><path d="M16 11h.01"/><path d="M18 13h.01"/></svg>
+                {%- when 'sports' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v6a5 5 0 0 1-10 0Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3"/><path d="M7 5H4v2a3 3 0 0 0 3 3"/><path d="M10 15h4l1 5H9Z"/></svg>
+                {%- else -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              {%- endcase -%}
+            </span>
+            {%- if r.tag != blank -%}<span class="xg-sell__tag">{{ r.tag | escape }}</span>{%- endif -%}
+            <h2 class="xg-sell__routetitle">{{ r.title | escape }}</h2>
+            {%- if r.body != blank -%}<p class="xg-sell__routebody">{{ r.body | escape }}</p>{%- endif -%}
+            {%- if r.cta_label != blank and r.cta_link != blank -%}
+              <a class="xg-sell__routecta" href="{{ r.cta_link }}">
+                <span>{{ r.cta_label | escape }}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+              </a>
+            {%- endif -%}
+          </article>
+        {%- endfor -%}
+        {%- comment -%}
+          Video games go to Mallow Games, the sister shop, and the payout can
+          be Exor Games store credit (owner, 2026-09-11: "add a section about
+          selling your Video Games to MallowGames.com for store credit you can
+          use at ExorGames.com ... same buylist process"). A built-in card
+          with its own settings, so it needs no block in the page template.
+        {%- endcomment -%}
+        {%- if section.settings.mallow_show -%}
+          <article class="xg-sell__route xg-sell__route--mallow">
+            <span class="xg-sell__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12a4 4 0 0 1 4 4v3a3 3 0 0 1-5.4 1.8L15 15H9l-1.6 1.8A3 3 0 0 1 2 15v-3a4 4 0 0 1 4-4Z"/><path d="M7 12h4"/><path d="M9 10v4"/><path d="M16 11h.01"/><path d="M18 13h.01"/></svg>
+            </span>
+            {%- if section.settings.mallow_tag != blank -%}<span class="xg-sell__tag">{{ section.settings.mallow_tag | escape }}</span>{%- endif -%}
+            <h2 class="xg-sell__routetitle">{{ section.settings.mallow_title | escape }}</h2>
+            {%- if section.settings.mallow_body != blank -%}<p class="xg-sell__routebody">{{ section.settings.mallow_body | escape }}</p>{%- endif -%}
+            {%- if section.settings.mallow_cta_label != blank and section.settings.mallow_cta_link != blank -%}
+              <a class="xg-sell__routecta" href="{{ section.settings.mallow_cta_link | escape }}" target="_blank" rel="noopener">
+                <span>{{ section.settings.mallow_cta_label | escape }}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+              </a>
+            {%- endif -%}
+          </article>
+        {%- endif -%}
+      </div>
+    </div>
+  {%- endif -%}
+
+  {%- if steps.size > 0 -%}
+    <div class="xg-sell__how">
+      <div class="xg-container">
+        {%- if section.settings.steps_heading != blank -%}
+          <h2 class="xg-sell__howtitle">{{ section.settings.steps_heading | escape }}</h2>
+        {%- endif -%}
+        <ol class="xg-sell__steps">
+          {%- for block in steps -%}
+            <li class="xg-sell__step" {{ block.shopify_attributes }}>
+              <span class="xg-sell__stepnum" aria-hidden="true">{{ forloop.index }}</span>
+              <div>
+                <h3 class="xg-sell__steptitle">{{ block.settings.title | escape }}</h3>
+                {%- if block.settings.body != blank -%}<p class="xg-sell__stepbody">{{ block.settings.body | escape }}</p>{%- endif -%}
+              </div>
+            </li>
+          {%- endfor -%}
+        </ol>
+      </div>
+    </div>
+  {%- endif -%}
+</section>
+
+<style>
+  /* Full-bleed hero on a ground that is dark in BOTH themes, so it uses the
+     charcoal token (which xg-dark.css deliberately does not flip) with the
+     inverse text tokens rather than --xg-ink. Everything below the hero is
+     token-driven and therefore dark-mode correct with no extra rules. */
+  .xg-sell__hero {
+    background:
+      radial-gradient(1200px 380px at 50% -140px, rgba(214, 44, 40, 0.22), transparent 70%),
+      var(--xg-charcoal-deep, #1c2322);
+    padding: clamp(38px, 6vw, 66px) 0 clamp(34px, 5vw, 54px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .xg-sell__hero-inner { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .xg-sell__kicker {
+    font-family: var(--xg-font-body);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--xg-accent, #ffd800); margin: 0 0 10px;
+  }
+  .xg-sell__title {
+    font-family: var(--xg-font-display);
+    font-size: clamp(30px, 5.2vw, 54px); font-weight: 600; line-height: 1.04;
+    text-transform: uppercase; letter-spacing: 0.01em;
+    color: var(--xg-inverse-text, #f4f6f6); margin: 0; max-width: 18ch;
+  }
+  .xg-sell__lede {
+    font-family: var(--xg-font-body);
+    font-size: clamp(14.5px, 1.6vw, 17px); line-height: 1.55;
+    color: var(--xg-inverse-muted, #b9c2c1); margin: 14px 0 0; max-width: 62ch;
+  }
+  .xg-sell__actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 22px; }
+  .xg-sell__meta { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; margin-top: 20px; }
+  .xg-sell__metalink {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--xg-font-body); font-size: 13px; font-weight: 600;
+    color: var(--xg-inverse-muted, #b9c2c1); text-decoration: none;
+    border-bottom: 1px solid transparent; transition: color var(--xg-fast) var(--xg-ease), border-color var(--xg-fast) var(--xg-ease);
+  }
+  .xg-sell__metalink:hover, .xg-sell__metalink:focus-visible {
+    color: var(--xg-inverse-text, #f4f6f6); border-bottom-color: currentColor;
+  }
+  .xg-sell__metalink svg { width: 15px; height: 15px; flex: 0 0 15px; }
+
+  /* Four routes: auto-fit means they land 4 / 2 / 1 across without a
+     hardcoded column count, so adding a fifth route in the editor just
+     works. minmax(0,...) keeps a long word from widening a track. */
+  .xg-sell__pay { margin: 26px 0 6px; }
+  .xg-sell__payhead { margin: 0 0 12px; font-family: var(--xg-font-head, inherit); font-size: 20px; font-weight: 800; letter-spacing: -.01em; color: var(--xg-ink); }
+  .xg-sell__paygrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .xg-sell__paycard { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 14px; border: 1px solid var(--xg-border); border-radius: var(--xg-radius, 12px); background: var(--xg-surface); }
+  .xg-sell__paycard--best { border-color: var(--xg-red); box-shadow: 0 0 0 1px var(--xg-red) inset; }
+  .xg-sell__paycard .xg-sell__tag { position: absolute; top: 12px; right: 12px; margin: 0; }
+  .xg-sell__payicon { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 9px; background: var(--xg-red-soft); color: var(--xg-red); }
+  .xg-sell__payicon svg { width: 20px; height: 20px; }
+  .xg-sell__paytitle { margin: 4px 0 0; font-family: var(--xg-font-head, inherit); font-size: 16px; font-weight: 800; color: var(--xg-ink); }
+  .xg-sell__paybody { margin: 0; font-size: 14px; line-height: 1.5; color: var(--xg-text); }
+  @media (max-width: 767px) { .xg-sell__paygrid { grid-template-columns: 1fr; } }
+  .xg-sell__routes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(258px, 100%), 1fr));
+    gap: 14px;
+    margin: clamp(26px, 4vw, 44px) 0 0;
+  }
+  .xg-sell__route {
+    position: relative;
+    display: flex; flex-direction: column; align-items: flex-start;
+    padding: 22px 20px 20px;
+    background: var(--xg-surface);
+    border: 1px solid var(--xg-border);
+    border-radius: var(--xg-radius-lg, 16px);
+    box-shadow: var(--xg-shadow-1);
+    transition: border-color var(--xg-fast) var(--xg-ease), box-shadow var(--xg-fast) var(--xg-ease), transform var(--xg-fast) var(--xg-ease);
+  }
+  .xg-sell__route:hover { border-color: var(--xg-red); box-shadow: var(--xg-shadow-2); transform: translateY(-2px); }
+  .xg-sell__icon {
+    display: grid; place-items: center;
+    width: 44px; height: 44px; flex: 0 0 44px;
+    border-radius: 12px;
+    background: var(--xg-red-soft);
+    color: var(--xg-red);
+    margin-bottom: 14px;
+  }
+  .xg-sell__icon svg { width: 22px; height: 22px; }
+  .xg-sell__tag {
+    position: absolute; top: 18px; right: 18px;
+    font-family: var(--xg-font-body); font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--xg-muted);
+    background: rgba(0, 0, 0, 0.035);
+    border: 1px solid var(--xg-border);
+    border-radius: 999px; padding: 3px 9px;
+  }
+  .xg-sell__routetitle {
+    font-family: var(--xg-font-display);
+    font-size: 20px; font-weight: 600; line-height: 1.15; text-transform: uppercase;
+    letter-spacing: 0.01em; color: var(--xg-ink); margin: 0;
+  }
+  .xg-sell__routebody {
+    font-family: var(--xg-font-body);
+    font-size: 13.5px; line-height: 1.6; color: var(--xg-text);
+    margin: 9px 0 0;
+  }
+  /* Pushes the CTA to the card's bottom edge so every card's link sits on
+     the same line regardless of how long its copy runs. */
+  .xg-sell__routecta {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: auto; padding-top: 16px;
+    font-family: var(--xg-font-body); font-size: 13.5px; font-weight: 700;
+    color: var(--xg-red); text-decoration: none;
+  }
+  .xg-sell__routecta svg { width: 15px; height: 15px; transition: transform var(--xg-fast) var(--xg-ease); }
+  .xg-sell__route:hover .xg-sell__routecta svg { transform: translateX(3px); }
+  .xg-sell__routecta:hover span, .xg-sell__routecta:focus-visible span { text-decoration: underline; }
+  /* The card is not itself a link (it can hold more than one), so stretch
+     the CTA's hit area over the whole card - the whole tile stays clickable
+     while screen readers still get one labelled link. */
+  .xg-sell__routecta::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+
+  .xg-sell__how { margin-top: clamp(30px, 5vw, 52px); padding: clamp(28px, 4vw, 44px) 0; background: var(--xg-bg); border-top: 1px solid var(--xg-border); }
+  .xg-sell__howtitle {
+    font-family: var(--xg-font-display);
+    font-size: clamp(20px, 2.4vw, 27px); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.02em; color: var(--xg-ink); margin: 0 0 18px; text-align: center;
+  }
+  .xg-sell__steps {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 14px;
+    counter-reset: xgstep;
+  }
+  .xg-sell__step {
+    display: flex; align-items: flex-start; gap: 13px;
+    padding: 18px;
+    background: var(--xg-surface);
+    border: 1px solid var(--xg-border);
+    border-radius: var(--xg-radius);
+  }
+  .xg-sell__stepnum {
+    display: grid; place-items: center;
+    width: 30px; height: 30px; flex: 0 0 30px; border-radius: 999px;
+    background: var(--xg-red); color: #fff;
+    font-family: var(--xg-font-display); font-size: 15px; font-weight: 600;
+  }
+  .xg-sell__steptitle {
+    font-family: var(--xg-font-body); font-size: 14.5px; font-weight: 700;
+    color: var(--xg-ink); margin: 4px 0 0;
+  }
+  .xg-sell__stepbody {
+    font-family: var(--xg-font-body); font-size: 13px; line-height: 1.55;
+    color: var(--xg-muted); margin: 5px 0 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .xg-sell__route, .xg-sell__routecta svg { transition: none; }
+    .xg-sell__route:hover { transform: none; }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "Sell Routes",
+  "tag": "section",
+  "class": "xg-sell-section",
+  "max_blocks": 12,
+  "enabled_on": { "templates": ["page"] },
+  "settings": [
+    { "type": "text", "id": "kicker", "label": "Kicker", "default": "Sell to Exor Games" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Four ways to sell us your cards" },
+    { "type": "textarea", "id": "lede", "label": "Intro", "default": "Bulk, buylist, in-store or sports cards. Every route ends the same way: a fair offer, paid as cash or as store credit you can spend on anything in the shop." },
+    { "type": "text", "id": "cta1_label", "label": "Primary button", "default": "Start a buylist" },
+    { "type": "url", "id": "cta1_link", "label": "Primary button link" },
+    { "type": "text", "id": "cta2_label", "label": "Secondary button", "default": "Send in bulk" },
+    { "type": "url", "id": "cta2_link", "label": "Secondary button link" },
+    { "type": "header", "content": "Three ways to get paid", "info": "A strip above the routes. Keep the numbers honest: store credit runs about 40% above the cash offer on the buylist and at the till." },
+    { "type": "checkbox", "id": "pay_show", "label": "Show the payout strip", "default": true },
+    { "type": "text", "id": "pay_heading", "label": "Heading", "default": "Three ways to get paid" },
+    { "type": "text", "id": "pay1_title", "label": "Option 1 title", "default": "Cash" },
+    { "type": "textarea", "id": "pay1_body", "label": "Option 1 text", "default": "Cash in hand the same visit, or paid out as soon as your mailed-in cards have been checked." },
+    { "type": "text", "id": "pay2_tag", "label": "Option 2 corner tag", "default": "Worth more" },
+    { "type": "text", "id": "pay2_title", "label": "Option 2 title", "default": "Store credit" },
+    { "type": "textarea", "id": "pay2_body", "label": "Option 2 text", "default": "Our store-credit offer runs about 40% higher than cash. It goes on your account and spends on anything in the shop or online." },
+    { "type": "text", "id": "pay3_title", "label": "Option 3 title", "default": "Trade on the spot" },
+    { "type": "textarea", "id": "pay3_body", "label": "Option 3 text", "default": "Bring your cards in, pick what you want off the shelves, and the credit comes straight off your purchase at the till." },
+    { "type": "text", "id": "policy_label", "label": "Policy link text", "default": "Selling Policy" },
+    { "type": "url", "id": "policy_link", "label": "Policy link" },
+    { "type": "text", "id": "grading_label", "label": "Grading link text", "default": "Card Grading Guide" },
+    { "type": "url", "id": "grading_link", "label": "Grading link" },
+    { "type": "text", "id": "steps_heading", "label": "Steps heading", "default": "How it works" },
+    { "type": "header", "content": "Video games route (Mallow Games)", "info": "A fifth card after the selling routes: video games are sold to Mallow Games, the sister shop, and the payout can be store credit spent here." },
+    { "type": "checkbox", "id": "mallow_show", "label": "Show the video games card", "default": true },
+    { "type": "text", "id": "mallow_tag", "label": "Corner tag", "default": "Video games" },
+    { "type": "text", "id": "mallow_title", "label": "Title", "default": "Games and consoles" },
+    { "type": "textarea", "id": "mallow_body", "label": "Description", "default": "Video games, consoles and accessories go to Mallow Games, our sister shop. Build a buylist there the same way you do here, and take the payout as store credit you can spend at Exor Games on cards." },
+    { "type": "text", "id": "mallow_cta_label", "label": "Link text", "default": "Sell your games at Mallow Games" },
+    { "type": "text", "id": "mallow_cta_link", "label": "Link", "default": "https://mallowgames.com/sell-your-games/" }
+  ],
+  "blocks": [
+    {
+      "type": "route",
+      "name": "Selling route",
+      "settings": [
+        { "type": "select", "id": "icon", "label": "Icon", "default": "bulk",
+          "options": [
+            { "value": "bulk", "label": "Bulk box" },
+            { "value": "list", "label": "List" },
+            { "value": "store", "label": "Storefront" },
+            { "value": "sports", "label": "Trophy" },
+            { "value": "games", "label": "Game controller" },
+            { "value": "mail", "label": "Envelope" }
+          ] },
+        { "type": "text", "id": "tag", "label": "Corner tag", "default": "Cash or credit" },
+        { "type": "text", "id": "title", "label": "Title", "default": "Selling route" },
+        { "type": "textarea", "id": "body", "label": "Description" },
+        { "type": "text", "id": "cta_label", "label": "Link text", "default": "Learn more" },
+        { "type": "url", "id": "cta_link", "label": "Link" }
+      ]
+    },
+    {
+      "type": "step",
+      "name": "Step",
+      "settings": [
+        { "type": "text", "id": "title", "label": "Title", "default": "Step" },
+        { "type": "textarea", "id": "body", "label": "Description" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Sell Routes",
+      "blocks": [
+        { "type": "route", "settings": { "icon": "bulk", "tag": "Cash or credit", "title": "Bulk, unsorted", "body": "Send in your bulk unsorted cards and we assess the lot for you. No sorting and no listing: take the value as cash, or as credit added to your account.", "cta_label": "How bulk selling works" } },
+        { "type": "route", "settings": { "icon": "list", "tag": "Cash or credit", "title": "Build a buylist", "body": "Pick your cards in our online portal, set the right version and condition, and send the list straight to us. We check every card when it arrives and make the offer.", "cta_label": "Open the buylist" } },
+        { "type": "route", "settings": { "icon": "store", "tag": "Same visit", "title": "Bring them in", "body": "Walk into one of our shops and we value your cards while you wait. Cash on the spot, or credit on your account before you leave.", "cta_label": "In-store selling" } },
+        { "type": "route", "settings": { "icon": "sports", "tag": "By email", "title": "Sports cards", "body": "Email us a list and photos and we give you a ballpark before you ship. Final condition is confirmed by in-person inspection when the cards arrive.", "cta_label": "Email us about sports cards" } },
+        { "type": "step", "settings": { "title": "Send or bring them in", "body": "Ship your cards, drop them at a store, or send a buylist through the portal." } },
+        { "type": "step", "settings": { "title": "We check every card", "body": "Each card is inspected in person and graded against our condition guide." } },
+        { "type": "step", "settings": { "title": "Cash or store credit", "body": "Take the offer as cash, or as credit on your account to spend on anything we stock." } }
+      ]
+    }
+  ]
+}
+{% endschema %}
