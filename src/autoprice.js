@@ -1912,8 +1912,10 @@ export function renderPage(s, rep, view) {
   const games = [...new Set(all.map((r) => r.game))].sort((a, b) => a.localeCompare(b));
   const inGame = all.filter((r) => !v.game || r.game === v.game);
   // "Needs you": a price waiting to be published, a warning, a variant to
-  // choose, a product no source could price, or a write that failed.
-  const needsYou = (r) => !!(r.awaiting || r.alert || r.action === "review" || r.action === "skip" || r.writeError);
+  // choose, a product no source could price, a write that failed - and a
+  // product just added from the page (owner 2026-10-01: "I added this ...
+  // but it disappeared" - the pending row only showed under All).
+  const needsYou = (r) => !!(r.awaiting || r.alert || r.action === "review" || r.action === "skip" || r.action === "pending" || r.writeError);
   const todo = inGame.filter(needsYou);
   const viewMode = v.view === "all" || v.view === "todo" ? v.view : todo.length ? "todo" : "all";
   const rank = (r) => (r.awaiting || r.action === "pending" ? 0 : r.alert || r.action === "review" || r.writeError ? 1 : r.action === "skip" ? 2 : 3);
