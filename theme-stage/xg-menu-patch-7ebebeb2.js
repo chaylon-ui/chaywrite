@@ -129,6 +129,17 @@
         delete it.setting.disable_link;
         changed++;
       });
+      // 1c. Pokémon Singles opens the Pokémon Singles collection, like MTG Singles opens its
+      //     collection (owner, 2026-09-30: "pokemon is opening in an advanced search, I want it
+      //     to open like MTG does and have the pokemon logo"; 2026-10-01: "Can you do 4 please").
+      var PK = 'https://exorgames.com/collections/pokemon-singles';
+      walk(top, function (it) {
+        if (!it.setting || !/^pok[eé]mon singles$/.test(title(it))) return;
+        if (it.setting.url && it.setting.url.link === PK) return;
+        it.setting.url = url(PK);
+        delete it.setting.disable_link;
+        changed++;
+      });
       var ti = find(top, 'trading cards'), trading = ti > -1 ? top[ti] : null;
       if (trading && trading.menus) {
         // 2. Sports Cards becomes a tab of Trading Cards, in front of Deck Builder.

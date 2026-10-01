@@ -614,7 +614,7 @@ jobs:
           sleep 5
           echo "repo-data health: $(curl -sS --max-time 30 "$W/repo-data/health")"
           # a theme upload Shopify fetches by URL: 200 only when the bytes' md5 matches the name
-          curl -sS -D /tmp/ts-h -o /dev/null --max-time 30 -w 'theme-stage xg-menu-patch-9072e230.js: HTTP %{http_code} %{size_download}B %{content_type}\n' "$W/theme-stage/xg-menu-patch-9072e230.js"
+          curl -sS -D /tmp/ts-h -o /dev/null --max-time 30 -w 'theme-stage xg-menu-patch-7ebebeb2.js: HTTP %{http_code} %{size_download}B %{content_type}\n' "$W/theme-stage/xg-menu-patch-7ebebeb2.js"
           grep -iE '^(x-content-md5|x-repo-data):' /tmp/ts-h
           curl -sS -o /dev/null --max-time 30 -w 'theme-stage unhashed name: HTTP %{http_code} (expect 404)\n' "$W/theme-stage/theme.liquid"
           echo "eavy card (repo data through the reader): $(curl -sS --max-time 40 "$W/eavy/for.json?title=Space%20Marines%20Intercessors&v=7" | head -c 160)"
