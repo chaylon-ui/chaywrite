@@ -249,7 +249,9 @@ or template.name == 'blog'
   }
   @media (max-width: 991px) {
     .xg-sellcta--pill { display: none; }
-    .xg-sellcta--bar { display: inline-flex; }
+    /* its own full-width line after the search field (the row wraps; the
+       search line is order 10 in xg-features.css) */
+    #header .site-header-mobile .xg-sellcta--bar { display: inline-flex; flex: 0 0 100%; width: 100%; order: 11; margin: 0 0 8px; font-size: 14px; }
   }
   #header .mobile-width-right .xg-lang { height: 30px; padding: 0 2px; }
   #header .mobile-width-right .xg-lang__cur,
