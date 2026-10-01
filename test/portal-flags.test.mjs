@@ -29,3 +29,15 @@ test("low margin: lines paid above the threshold of their sell price, worst firs
   assert.deepEqual(f.lowLines.map((l) => l.title + " " + l.pct), ["steep 80", "over 120"]);
   assert.deepEqual(cartFlags({}), { creditNoCustomer: 0, lowMargin: 0, worstPct: 0, unpriced: 0, lowLines: [] });
 });
+
+// 2026-10-01: BinderPOS `price` is the line total, `actualPrice` per unit.
+// Cart 30930381: Crispin x4, price -63, actualPrice -15.75, sell 22.50 (70%).
+import { unitPrice } from "../src/portal.js";
+test("unitPrice: actualPrice wins; otherwise price / quantity; single copies unchanged", () => {
+  assert.equal(unitPrice({ price: -63, actualPrice: -15.75, quantity: 4 }), -15.75);
+  assert.equal(unitPrice({ price: -63, quantity: 4 }), -15.75);
+  assert.equal(unitPrice({ price: -4.27, quantity: 1 }), -4.27);
+  assert.equal(unitPrice({ price: -19.6, actualPrice: -2.8, quantity: 7 }), -2.8);
+  assert.equal(unitPrice({ quantity: 2 }), null);
+  assert.equal(unitPrice(null), null);
+});

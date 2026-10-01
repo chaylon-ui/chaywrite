@@ -386,7 +386,7 @@ export async function buylistDetail(env, id) {
    pure buy cart has no Shopify order at all. Read-only, like the rest. */
 const PORTAL_DO = "portal-cache";
 const DO_ORIGIN = "https://" + PORTAL_DO + ".internal"; // the DO only reads the path
-const CARTS_VER = "v2";
+const CARTS_VER = "v3";   // v3: per-unit paid from actualPrice (2026-10-01)
 const DAY_MS = 86400e3;
 export const PORTAL_CART = "https://portal.binderpos.com/#/pointOfSale/carts/";
 
@@ -425,13 +425,28 @@ export async function kvPut(env, key, text, ttlMs) {
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 const tenderBucket = (type) => (/store\s*credit/i.test(type) ? "credit" : /^cash$/i.test(str(type).trim()) ? "cash" : "other");
 
+/* BinderPOS cart items: `price` is the LINE TOTAL (quantity x unit), and
+   `actualPrice` the per-unit figure; both negative on a buy. Verified
+   2026-10-01 on carts 30930381 / 29517462 / 29518570 (price -63 =
+   4 x actualPrice -15.75, tender -71.93 = sum of price). The first version
+   read `price` as per-unit and so flagged every multi-copy line as paid
+   at quantity x 70% of its sell price - a false low-margin alert. */
+export function unitPrice(i) {
+  const a = num(i && i.actualPrice);
+  if (a != null) return a;
+  const p = num(i && i.price);
+  const q = num(i && i.quantity);
+  if (p == null) return null;
+  return q > 1 ? p / q : p;
+}
+
 // A cart as the page needs it, or null when nothing in it was bought.
 function trimCart(c) {
   const items = Array.isArray(c.cartItems) ? c.cartItems : [];
   if (!items.some((i) => i && i.buying)) return null;
   const lines = items.map((i) => {
     const qty = Math.max(0, num(i.quantity) || 0);
-    const price = num(i.price);
+    const price = unitPrice(i);
     const cond = str(i.variantTitle).trim();
     return {
       id: str(i.id),
