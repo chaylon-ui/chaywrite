@@ -61,26 +61,46 @@
     string is a section setting; the "about 40% more" figure comes from the
     buylist and till rates (credit ~70% of sell vs cash ~50%) and is editable.
   {%- endcomment -%}
-  {%- if section.settings.pay_show -%}
+  {%- liquid
+    comment
+      The page's template JSON predates these settings, and a setting absent
+      from the JSON renders nil on this page rather than its schema default
+      (checked on the preview 2026-10-01), so every string falls back here
+      to the same text the schema defaults carry.
+    endcomment
+    assign pay_show = true
+    if section.settings.pay_show == false
+      assign pay_show = false
+    endif
+    assign pay_heading = section.settings.pay_heading | default: 'Three ways to get paid'
+    assign pay1_title = section.settings.pay1_title | default: 'Cash'
+    assign pay1_body = section.settings.pay1_body | default: 'Cash in hand the same visit, or paid out as soon as your mailed-in cards have been checked.'
+    assign pay2_tag = section.settings.pay2_tag | default: 'Worth more'
+    assign pay2_title = section.settings.pay2_title | default: 'Store credit'
+    assign pay2_body = section.settings.pay2_body | default: 'Our store-credit offer runs about 40% higher than cash. It goes on your account and spends on anything in the shop or online.'
+    assign pay3_title = section.settings.pay3_title | default: 'Trade on the spot'
+    assign pay3_body = section.settings.pay3_body | default: 'Bring your cards in, pick what you want off the shelves, and the credit comes straight off your purchase at the till.'
+  -%}
+  {%- if pay_show -%}
     <div class="xg-container">
-      <div class="xg-sell__pay" aria-label="{{ section.settings.pay_heading | escape }}">
-        {%- if section.settings.pay_heading != blank -%}<h2 class="xg-sell__payhead">{{ section.settings.pay_heading | escape }}</h2>{%- endif -%}
+      <div class="xg-sell__pay" aria-label="{{ pay_heading | escape }}">
+        <h2 class="xg-sell__payhead">{{ pay_heading | escape }}</h2>
         <div class="xg-sell__paygrid">
           <div class="xg-sell__paycard">
             <span class="xg-sell__payicon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 12h.01M17 12h.01"/></svg></span>
-            <h3 class="xg-sell__paytitle">{{ section.settings.pay1_title | escape }}</h3>
-            <p class="xg-sell__paybody">{{ section.settings.pay1_body | escape }}</p>
+            <h3 class="xg-sell__paytitle">{{ pay1_title | escape }}</h3>
+            <p class="xg-sell__paybody">{{ pay1_body | escape }}</p>
           </div>
           <div class="xg-sell__paycard xg-sell__paycard--best">
-            {%- if section.settings.pay2_tag != blank -%}<span class="xg-sell__tag">{{ section.settings.pay2_tag | escape }}</span>{%- endif -%}
+            {%- if pay2_tag != blank -%}<span class="xg-sell__tag">{{ pay2_tag | escape }}</span>{%- endif -%}
             <span class="xg-sell__payicon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.5 5 3 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3"/></svg></span>
-            <h3 class="xg-sell__paytitle">{{ section.settings.pay2_title | escape }}</h3>
-            <p class="xg-sell__paybody">{{ section.settings.pay2_body | escape }}</p>
+            <h3 class="xg-sell__paytitle">{{ pay2_title | escape }}</h3>
+            <p class="xg-sell__paybody">{{ pay2_body | escape }}</p>
           </div>
           <div class="xg-sell__paycard">
             <span class="xg-sell__payicon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h12l-3-3"/><path d="M20 17H8l3 3"/></svg></span>
-            <h3 class="xg-sell__paytitle">{{ section.settings.pay3_title | escape }}</h3>
-            <p class="xg-sell__paybody">{{ section.settings.pay3_body | escape }}</p>
+            <h3 class="xg-sell__paytitle">{{ pay3_title | escape }}</h3>
+            <p class="xg-sell__paybody">{{ pay3_body | escape }}</p>
           </div>
         </div>
       </div>
