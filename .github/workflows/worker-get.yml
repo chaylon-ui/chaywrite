@@ -1,70 +1,62 @@
-name: Worker GET
-
-# Read-only diagnostic: GET one or more paths on the deployed worker and
-# print the masked, truncated answers. The sandbox this worker is developed
-# from has no egress to workers.dev, so this is how a live page is read.
-# With pin=true the staff PIN is read from src/config.js on the worker
-# branch and appended as k= (never printed); if the owner has changed the
-# PIN in /admin the gated pages simply answer 403.
-
+# Worker GET (2026-10-01): prints one staff-gated JSON answer from the worker
+# (the sandbox has no egress to workers.dev). The staff PIN comes from the
+# HOLD_REPORT_PIN secret, else the worker branch's src/config.js, and is
+# never printed. Read-only unless `method` is POST (used for the staff
+# "sync now" / "test" routes, which carry no body). Customer fields are not
+# part of the routes this is meant for; the answer is printed as-is, cut to
+# `chars` characters, after an optional `pick` expression over `d`.
+name: worker-get
 on:
   workflow_dispatch:
     inputs:
-      paths:
-        description: "Comma-separated paths, e.g. /hold/health,/hold/shadow.json?days=7"
+      path:
+        description: "Worker path with query string, e.g. /discord-events/preview.json"
         required: true
-        default: "/hold/health"
-      pin:
-        description: "Append the staff PIN from src/config.js as k= (true/false)"
+      method:
+        description: "GET or POST"
         required: false
-        default: "false"
+        default: "GET"
+      pick:
+        description: "Optional JS expression over the parsed answer d"
+        required: false
+        default: ""
       chars:
-        description: "Most characters of each answer to print"
+        description: "Most characters to print"
         required: false
-        default: "4000"
-
-permissions: {}
-
+        default: "6000"
 jobs:
   get:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/shopify-site-improvements-ztgdt8
-      - name: Fetch and print (masked)
+      - name: Fetch
         env:
-          PATHS: ${{ inputs.paths }}
-          PIN: ${{ inputs.pin }}
+          PIN: ${{ secrets.HOLD_REPORT_PIN }}
+          P: ${{ inputs.path }}
+          M: ${{ inputs.method }}
+          PICK: ${{ inputs.pick }}
           N: ${{ inputs.chars }}
-          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
         run: |
-          node <<'EOF'
-          const fs = require('fs');
+          cat > /tmp/get.mjs <<'JS'
+          import { readFileSync } from 'node:fs';
           const W = 'https://exor-binder.nevski.workers.dev';
-          const n = Math.max(200, parseInt(process.env.N, 10) || 4000);
-          const mask = (s) => String(s)
-            .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
-            .replace(/("(firstName|lastName|name|customerName|customer|phone|email)"\s*:\s*")[^"]*(")/g, '$1<masked>$3');
-          let K = '';
-          if (String(process.env.PIN) === 'true') {
-            let src = ''; try { src = fs.readFileSync('src/config.js', 'utf8'); } catch {}
-            const m = src.match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
-            K = m ? m[1] : '';
-            console.log('staff PIN from src/config.js:', K ? 'found' : 'NOT found');
-          }
-          // with pin=true the automation key (secret STAFF_AUTOMATION_KEY) rides along too; it keeps
-          // working after the owner switches the PIN off (src/staff-access.js)
-          const AK = String(process.env.PIN) === 'true' ? process.env.STAFF_AUTOMATION_KEY || '' : '';
-          (async () => {
-            for (const raw of String(process.env.PATHS || '').split(',').map(s => s.trim()).filter(Boolean)) {
-              if (!raw.startsWith('/')) { console.log('skipping (must start with /):', raw); continue; }
-              const url = W + raw + (K ? (raw.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(K) : '');
-              const r = await fetch(url, { headers: { accept: 'application/json, text/html;q=0.5', ...(AK ? { authorization: 'Bearer ' + AK } : {}) } }).catch(e => ({ status: 0, text: async () => 'fetch failed: ' + e.message, headers: new Map() }));
-              const text = await r.text();
-              console.log('=== GET ' + raw + ' -> ' + r.status + ' | bytes ' + text.length + ' | ' + (r.headers.get ? r.headers.get('content-type') : '') + ' ===');
-              console.log(mask(text).slice(0, n));
-            }
-          })().catch(e => console.log('worker-get error:', e.message));
-          EOF
+          if (!process.env.PIN) process.env.PIN = (readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["'`]([^"'`]+)/) || [])[1] || '';
+          if (!process.env.PIN) { console.log('no PIN'); process.exit(1); }
+          const p = String(process.env.P || '');
+          if (!p.startsWith('/')) { console.log('path must start with /'); process.exit(1); }
+          const u = new URL(W + p); u.searchParams.set('k', process.env.PIN);
+          const method = /^post$/i.test(process.env.M || '') ? 'POST' : 'GET';
+          const t0 = Date.now();
+          const r = await fetch(u, { method });
+          const text = await r.text();
+          console.log(method, p, '->', r.status, 'in', Date.now() - t0, 'ms,', text.length, 'chars');
+          let d = null; try { d = JSON.parse(text); } catch {}
+          let out = d;
+          if (d && process.env.PICK) { try { out = new Function('d', 'return (' + process.env.PICK + ')')(d); } catch (e) { console.log('pick failed:', e.message); } }
+          const s = d ? JSON.stringify(out, null, 1) : text;
+          console.log(s.replace(new RegExp(process.env.PIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***').slice(0, Number(process.env.N) || 6000));
+          JS
+          node /tmp/get.mjs
