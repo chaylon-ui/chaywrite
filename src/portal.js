@@ -664,7 +664,12 @@ export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
     perDay.push(rec.carts);
     if (rec.missing.length) partial.push({ day: d, windows: rec.missing });
   }
+  // A BinderPOS return (cartType "return": the store takes an item back and
+  // pays the customer) arrives with buying: true on its lines, so it read as
+  // a buy (owner 2026-10-01: a prerelease-ticket refund sat among the buys).
+  // Refunds are not purchases of stock: left off this page and its totals.
   const all = perDay.flat()
+    .filter((c) => c.type !== "return")
     .filter((c) => (Date.parse(c.submitted || "") || 0) >= since)
     .sort((a, b) => (Date.parse(b.submitted || "") || 0) - (Date.parse(a.submitted || "") || 0));
   const totals = { carts: all.length, cards: 0, paid: 0, cash: 0, credit: 0, sells: 0, pricedPaid: 0, unpricedCards: 0 };
