@@ -99,14 +99,19 @@ jobs:
               const d = await get('/api/buylist/byId/' + b.id + '/details');
               const det = d.body || {};
               const fin = Array.isArray(det.finalBuylistDetails) && det.finalBuylistDetails.length ? det.finalBuylistDetails : null;
-              const raw = fin || (Array.isArray(det.shopifyCustomerBuylistDetails) ? det.shopifyCustomerBuylistDetails : []);
+              const orig = Array.isArray(det.shopifyCustomerBuylistDetails) ? det.shopifyCustomerBuylistDetails : [];
+              const raw = fin || orig;
+              // The final lines (what was actually paid) carry no storeSellPrice; the
+              // customer's original lines do, as quoted that day - join them by card + condition.
+              const sellOf = new Map();
+              for (const o of orig) { const k = `${o.cardId}|${o.variantId || o.variantName}|${o.foil ? 1 : 0}`; if (Number(o.storeSellPrice) > 0 && !sellOf.has(k)) sellOf.set(k, Number(o.storeSellPrice)); }
               const credit = /credit/i.test(String(b.paymentType || ''));
               let paidT = 0, sellT = 0, cards = 0, flagged = 0, unpriced = 0;
               const rows = [];
               for (const l of raw) {
                 const qty = Math.max(0, Number(l.quantity) || 0);
                 const paid = credit ? Number(l.storeCreditBuyPrice) : Number(l.cashBuyPrice);
-                const sell = Number(l.storeSellPrice);
+                const sell = Number(l.storeSellPrice) > 0 ? Number(l.storeSellPrice) : (sellOf.get(`${l.cardId}|${l.variantId || l.variantName}|${l.foil ? 1 : 0}`) || 0);
                 const j = judge(`${l.cardName || l.name} [${l.setName || ''}] ${l.variantName || ''}${l.foil ? ' foil' : ''}`.replace(/\s+/g, ' ').trim(), qty, Number.isFinite(paid) ? paid : null, Number.isFinite(sell) ? sell : 0);
                 cards += qty;
                 if (j.paid != null) paidT += j.paid * qty;
