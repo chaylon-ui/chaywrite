@@ -15,6 +15,10 @@ on:
         description: "Also print the first N report rows (title, game, action, reason)"
         required: false
         default: "0"
+      resave:
+        description: "Re-save the product's CURRENT settings unchanged (markupPct=..., pcId=... as JSON) to time a quick reprice; empty = no"
+        required: false
+        default: ""
 jobs:
   peek:
     runs-on: ubuntu-latest
@@ -26,6 +30,7 @@ jobs:
           P: ${{ secrets.AUTOPRICE_PASSWORD }}
           PID: ${{ inputs.product }}
           ROWS: ${{ inputs.rows }}
+          RESAVE: ${{ inputs.resave }}
         run: |
           if [ -z "$U" ] || [ -z "$P" ]; then echo "AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets not set"; exit 1; fi
           cat > /tmp/peek.mjs <<'JS'
@@ -51,6 +56,20 @@ jobs:
           console.log('report rows', rows.length, 'at', rep.at ? new Date(rep.at).toISOString() : null, 'games', JSON.stringify([...new Set(rows.map((x) => x.game))]));
           const pid = process.env.PID && 'gid://shopify/Product/' + process.env.PID;
           if (pid) { const row = rows.find((x) => x.id === pid); console.log('ROW', row ? JSON.stringify(row).slice(0, 3000) : 'not in the report'); }
+          if (pid && process.env.RESAVE) {
+            let fields = {}; try { fields = JSON.parse(process.env.RESAVE); } catch { console.log('resave is not JSON'); }
+            const t0 = Date.now();
+            const c = await fetch(W + '/autoprice/control', { method: 'POST', headers: { ...H, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'settings', id: pid, ...fields }) });
+            console.log('resave ->', c.status, (await c.text()).slice(0, 200));
+            for (let i = 0; i < 24; i++) {
+              await new Promise((r) => setTimeout(r, 5000));
+              const rp = await (await fetch(W + '/autoprice/report.json', { headers: H })).json();
+              const row = (rp.rows || []).find((x) => x.id === pid);
+              const st = await (await fetch(W + '/autoprice/status', { headers: H })).json();
+              console.log('  +' + Math.round((Date.now() - t0) / 1000) + 's run', st.run && st.run.phase, 'ticks', st.run && st.run.ticks, '| row', row ? row.action + ' ' + (row.suggested == null ? '-' : row.suggested) + ' ' + (row.reason || '') : 'missing');
+              if (row && row.action !== 'pending') break;
+            }
+          }
           const n = parseInt(process.env.ROWS, 10) || 0;
           for (const x of rows.slice(0, n)) console.log('  row', x.game, '|', x.action, '|', String(x.title).slice(0, 60), '|', String(x.reason || '').slice(0, 80));
           JS
