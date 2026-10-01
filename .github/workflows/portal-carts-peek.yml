@@ -27,7 +27,7 @@ jobs:
           console.log('carts.json ->', r.status);
           const d = await r.json();
           console.log('totals', JSON.stringify(d.totals));
-          const carts = d.carts || [];
+          const carts = d.rows || d.carts || [];
           console.log('carts', carts.length, 'partial', JSON.stringify(d.partial || []));
           let unpricedPaid = 0, unpricedCards = 0, pricedPaid = 0, pricedSells = 0; const big = [];
           for (const c of carts) {
