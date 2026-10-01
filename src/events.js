@@ -17,6 +17,42 @@ const STORES = {
   truro: "https://exor-games-truro.myshopify.com",
 };
 const TTL_S = 600;
+// Charlottetown is the feed's own store: asked as exorgames.com it answers
+// with Charlottetown's events (src/discord-events.js asks that way).
+export const HOME_ORIGIN = "https://exorgames.com";
+export const STORE_ORIGINS = { charlottetown: HOME_ORIGIN, ...STORES };
+
+/* The feed, asked as `origin`, from startIso to endIso (YYYY-MM-DD), trimmed
+   to the fields the pages and the Discord sync use. Throws on a non-200 or a
+   non-list answer; the caller decides what a failure means. `id` is kept
+   when BinderPOS sends one so the Discord sync can follow a renamed event. */
+export function mapEvent(e, origin) {
+  return {
+    id: e.id == null ? null : String(e.id).slice(0, 40),
+    title: String(e.title).slice(0, 200),
+    date: String(e.date).slice(0, 10),
+    time: e.time == null ? null : String(e.time).slice(0, 8),
+    endTime: e.endTime == null ? null : String(e.endTime).slice(0, 8),
+    game: e.game == null ? null : String(e.game).slice(0, 60),
+    city: e.city == null ? null : String(e.city).slice(0, 60),
+    ticketPrice: typeof e.ticketPrice === "number" ? e.ticketPrice : null,
+    ticketed: !!(e.ticketed || e.isTicketed),
+    handle: e.handle ? String(e.handle).slice(0, 120) : null,
+    url: (e.ticketed || e.isTicketed) && e.handle ? origin + "/products/" + encodeURIComponent(String(e.handle).slice(0, 120)) : null,
+    calendarIcon: e.calendarIcon ? String(e.calendarIcon).slice(0, 300) : null,
+  };
+}
+export async function fetchEvents(origin, startIso, endIso, { signal, fetchFn } = {}) {
+  const f = fetchFn || fetch;
+  const r = await f(`https://portal.binderpos.com/api/events/forStore?startDate=${startIso}&endDate=${endIso}`, {
+    headers: { accept: "application/json", "content-type": "application/json", origin, referer: origin + "/", "user-agent": "ExorStorePages/1.0 (+workers.dev)" },
+    signal,
+  });
+  if (!r.ok) throw new Error("events " + r.status);
+  const arr = await r.json();
+  if (!Array.isArray(arr)) throw new Error("events: not a list");
+  return arr.filter((e) => e && e.title && e.date && !e.isDisabled && !e.disabled).map((e) => mapEvent(e, origin));
+}
 
 export async function serveEvents(request, ctx) {
   const cors = { "access-control-allow-origin": "*" };
@@ -36,25 +72,7 @@ export async function serveEvents(request, ctx) {
   const t = setTimeout(() => ctrl.abort(), 8000);
   let events = [], error = null;
   try {
-    const r = await fetch(`https://portal.binderpos.com/api/events/forStore?startDate=${iso(now)}&endDate=${iso(end)}`, {
-      headers: { accept: "application/json", "content-type": "application/json", origin, referer: origin + "/", "user-agent": "ExorStorePages/1.0 (+workers.dev)" },
-      signal: ctrl.signal,
-    });
-    if (!r.ok) throw new Error("events " + r.status);
-    const arr = await r.json();
-    if (!Array.isArray(arr)) throw new Error("events: not a list");
-    events = arr.filter((e) => e && e.title && e.date && !e.isDisabled && !e.disabled).map((e) => ({
-      title: String(e.title).slice(0, 200),
-      date: String(e.date).slice(0, 10),
-      time: e.time == null ? null : String(e.time).slice(0, 8),
-      game: e.game == null ? null : String(e.game).slice(0, 60),
-      city: e.city == null ? null : String(e.city).slice(0, 60),
-      ticketPrice: typeof e.ticketPrice === "number" ? e.ticketPrice : null,
-      ticketed: !!(e.ticketed || e.isTicketed),
-      handle: e.handle ? String(e.handle).slice(0, 120) : null,
-      url: (e.ticketed || e.isTicketed) && e.handle ? origin + "/products/" + encodeURIComponent(String(e.handle).slice(0, 120)) : null,
-      calendarIcon: e.calendarIcon ? String(e.calendarIcon).slice(0, 300) : null,
-    }));
+    events = (await fetchEvents(origin, iso(now), iso(end), { signal: ctrl.signal })).map((e) => { const { id, endTime, ...rest } = e; return rest; });
   } catch (e) {
     error = String((e && e.message) || e).slice(0, 120);
   } finally {

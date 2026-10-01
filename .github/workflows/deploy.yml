@@ -569,6 +569,11 @@ jobs:
           DISCORD_WEBHOOK_SPORTS: ${{ secrets.DISCORD_WEBHOOK_SPORTS }}
           DISCORD_WEBHOOK_SEALED: ${{ secrets.DISCORD_WEBHOOK_SEALED }}
           DISCORD_MIN_PRICE: ${{ secrets.DISCORD_MIN_PRICE }}
+          # Store events as Discord Scheduled Events (src/discord-events.js): the
+          # bot's token (Manage Events), optionally the server id and the window in days.
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          DISCORD_EVENTS_DAYS: ${{ secrets.DISCORD_EVENTS_DAYS }}
           # ntfy push for the sealed auto-pricer's daily digest (src/autoprice.js):
           # AUTOPRICE_NTFY = topic name on ntfy.sh or a full https://server/topic
           # URL; AUTOPRICE_NTFY_TOKEN = optional access token for that server.
@@ -592,10 +597,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           # Actions cannot look secrets up by name at run time, so every name the
-          # worker understands (src/discord.js, src/enrich.js, src/autoprice.js, src/repo-data.js) is listed
+          # worker understands (src/discord.js, src/discord-events.js, src/enrich.js, src/autoprice.js, src/repo-data.js) is listed
           # above; each one that is set becomes the worker secret of the same name, the rest are skipped.
           n=0
-          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM AUTOPRICE_EMAIL_TO GITHUB_DATA_TOKEN STAFF_AUTOMATION_KEY; do
+          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE DISCORD_BOT_TOKEN DISCORD_GUILD_ID DISCORD_EVENTS_DAYS AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM AUTOPRICE_EMAIL_TO GITHUB_DATA_TOKEN STAFF_AUTOMATION_KEY; do
             val="${!name}"
             if [ -n "$val" ]; then
               printf '%s' "$val" | npx wrangler@4 secret put "$name" && n=$((n+1))
@@ -685,4 +690,31 @@ jobs:
             console.log('discord preview:', r.status, '| configured', b.configured, '| channels', JSON.stringify(b.channels), '| min $' + b.minPrice, '| now', JSON.stringify(b.now), '| state', JSON.stringify(b.state), '| today arrivals', b.todayArrivals, '| pending', b.pending ? b.pending.length : '-', '| skipped now', b.skippedNow ? b.skippedNow.length : '-', '| deferred', b.deferred ? b.deferred.length : '-', b.deferredError ? '| deferred error: ' + b.deferredError : '', b.error ? '| error ' + b.error : '');
             if (b.pending && b.pending[0]) console.log('first pending:', JSON.stringify(b.pending[0]).slice(0, 300));
           })().catch(e => console.log('discord smoke error:', e.message));
+          EOF
+      # Store events as Discord Scheduled Events (src/discord-events.js): what the
+      # next sync would create / update / remove, from the live BinderPOS feed.
+      - name: Smoke-test /discord-events (log-only)
+        env:
+          STAFF_AUTOMATION_KEY: ${{ secrets.STAFF_AUTOMATION_KEY }}
+        run: |
+          set +e
+          W=https://exor-binder.nevski.workers.dev
+          curl -sS -o /dev/null -w '/discord-events/preview.json no key: HTTP %{http_code} (expect 403)\n' --max-time 20 "$W/discord-events/preview.json" || true
+          node <<'EOF'
+          const fs = require('fs');
+          const m = fs.readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["']?([\w-]+)/);
+          const K = m ? m[1] : '';
+          const W = 'https://exor-binder.nevski.workers.dev';
+          const AK = process.env.STAFF_AUTOMATION_KEY || '';
+          if (AK) { const f0 = globalThis.fetch; globalThis.fetch = (u, i) => f0(u, String(u).startsWith(W) ? { ...(i || {}), headers: { ...((i && i.headers) || {}), authorization: 'Bearer ' + AK } } : i); }
+          (async () => {
+            if (!K && !AK) { console.log('no DEFAULT_PIN found; discord-events preview skipped'); return; }
+            const r = await fetch(W + '/discord-events/preview.json?k=' + encodeURIComponent(K));
+            const b = await r.json().catch(() => null);
+            if (!b) { console.log('discord-events preview: HTTP ' + r.status + ', no JSON'); return; }
+            const n = (a) => (Array.isArray(a) ? a.length : '-');
+            console.log('discord-events preview:', r.status, '| configured', b.configured, '| guild id set', b.guildIdSet, '| guild', JSON.stringify(b.guild), '| days', b.days, '| feed', b.feed, '| would create', n(b.wouldCreate), 'update', n(b.wouldUpdate), 'remove', n(b.wouldRemove), 'unchanged', n(b.unchanged), 'skipped', n(b.skipped), '| state', JSON.stringify(b.state), b.guildError ? '| guild error: ' + b.guildError : '', b.error ? '| error ' + b.error : '');
+            for (const e of (b.wouldCreate || []).slice(0, 3)) console.log('  would create:', e.title, '|', e.start, '->', e.end, '| image', e.image, '\n    ' + String(e.description).replace(/\n/g, '\n    '));
+            for (const e of (b.skipped || []).slice(0, 5)) console.log('  skipped:', JSON.stringify(e));
+          })().catch(e => console.log('discord-events smoke error:', e.message));
           EOF

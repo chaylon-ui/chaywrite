@@ -23,6 +23,7 @@ import { servePageEdit } from "./page-edit.js";
 import { serveAutoprice } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
+import { serveDiscordEvents, discordEventsTick } from "./discord-events.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
@@ -312,6 +313,8 @@ export default {
     // (5-star only, text sentiment-screened) so the key stays private.
     // Shelf drops to Discord: staff preview / test / post-now (src/discord.js).
     if (url.pathname.startsWith("/discord/")) return serveDiscord(request, env, url, gate("admin"));
+    // Store events as Discord Scheduled Events: staff preview / sync-now / test (src/discord-events.js).
+    if (url.pathname.startsWith("/discord-events/")) return serveDiscordEvents(request, env, url, gate("admin"));
 
     if (url.pathname === "/reviews.json") {
       return serveReviews(request, env, ctx);
@@ -526,6 +529,9 @@ export default {
     // Shelf drops to Discord (quiet unless a DISCORD_WEBHOOK_* secret is set).
     try { const d = await discordTick(env); if (d && (d.posted || d.errors)) console.log("discord: " + JSON.stringify(d)); }
     catch (e) { console.log("discord: failed: " + ((e && e.message) || e)); }
+    // Store events -> Discord Scheduled Events (quiet unless DISCORD_BOT_TOKEN is set; at most every 30 min).
+    try { const d = await discordEventsTick(env); if (d && !d.skipped) console.log("discord-events: " + JSON.stringify(d)); }
+    catch (e) { console.log("discord-events: failed: " + ((e && e.message) || e)); }
     // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
     // day per game (Magic, then Pokemon), one polite BinderPOS lookup at a
     // time, off the request path.
