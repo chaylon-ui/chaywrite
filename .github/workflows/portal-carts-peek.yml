@@ -43,7 +43,7 @@ jobs:
               if (!l.buying) continue;
               const paid = (l.paid || 0) * l.qty;
               if (l.sell > 0) { pricedPaid += paid; pricedSells += l.sell * l.qty; }
-              else { unpricedPaid += paid; unpricedCards += l.qty; big.push({ cart: c.id, when: String(c.submitted || '').slice(0, 16), kind: c.kind || '', title: String(l.title).slice(0, 70), cond: l.condition, qty: l.qty, paid: l.paid }); }
+              else { unpricedPaid += paid; unpricedCards += l.qty; big.push({ cart: c.id, when: String(c.submitted || '').slice(0, 16), kind: c.type || '', title: String(l.title).slice(0, 70), cond: l.condition, qty: l.qty, paid: l.paid }); }
             }
           }
           console.log('priced lines: paid', pricedPaid.toFixed(2), 'sell', pricedSells.toFixed(2), 'pct', pricedSells ? Math.round(pricedPaid / pricedSells * 100) : null);
