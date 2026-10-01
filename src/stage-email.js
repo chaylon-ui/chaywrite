@@ -38,7 +38,9 @@ const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 const qty = (c) => Math.max(0, parseInt(c && c.quantity, 10) || 0);
 
 export function emailConfigured(env) { return !!(env && env.RESEND_API_KEY); }
-export function emailFrom(env) { return String((env && env.EMAIL_FROM) || EMAIL_FROM_DEFAULT); }
+// Trimmed: a secret pasted with a trailing line break (2026-10-01, EMAIL_FROM) must not
+// leak a newline into the From header.
+export function emailFrom(env) { const v = String((env && env.EMAIL_FROM) || "").replace(/[\r\n]+/g, " ").trim(); return v || EMAIL_FROM_DEFAULT; }
 
 // The owner's instructions, section by section, in the owner's words.
 const ADDRESS = ["Exor Games", "ATTN: Gage Office", "51 Allen Street", "Charlottetown, PE", "C1A 2V6", "CANADA"];
