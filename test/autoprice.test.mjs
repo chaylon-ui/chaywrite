@@ -1107,3 +1107,25 @@ test("product photos: three at most, stored without the CDN prefix, drawn at the
   assert.match(page, /<div class="c-prod"><div class="c-txt"><a class="ttl"[^>]*>Box B</);
   assert.match(page, /<div class="zoom" id="zoom" hidden>/);
 });
+
+// 2026-10-01: a run whose tick died after arming the nightly alarm sat on
+// "Pricing..." until that alarm; a stalled run must re-arm on any touch.
+import { armAlarm } from "../src/autoprice.js";
+test("armAlarm: a stalled run re-arms now even when a far alarm exists; a fresh run and a near alarm are left alone", async () => {
+  const mk = (alarm, run, now) => {
+    const calls = [];
+    const cx = { now: () => now, log: () => {}, storage: { getAlarm: async () => alarm, get: async (k) => (k === "ap:run" ? run : null), setAlarm: async (at) => { calls.push(at); } } };
+    return { cx, calls };
+  };
+  const now = 1e9;
+  let t = mk(now + 6 * 3600e3, { done: false, tickAt: now - 300e3, startedAt: now - 300e3 }, now);
+  await armAlarm(t.cx); assert.deepEqual(t.calls, [now + 1000]);                  // stalled, nightly alarm far away -> now
+  t = mk(now + 30e3, { done: false, tickAt: now - 300e3, startedAt: now - 300e3 }, now);
+  await armAlarm(t.cx); assert.deepEqual(t.calls, []);                            // stalled but an alarm is 30 s out -> leave it
+  t = mk(now + 6 * 3600e3, { done: false, tickAt: now - 10e3, startedAt: now - 10e3 }, now);
+  await armAlarm(t.cx); assert.deepEqual(t.calls, []);                            // ticking fine -> leave it
+  t = mk(null, { done: true, tickAt: now - 300e3 }, now);
+  await armAlarm(t.cx); assert.equal(t.calls.length, 1); assert.ok(t.calls[0] > now + 1000);   // no alarm, nothing running -> nightly
+  t = mk(null, { done: false, tickAt: now - 300e3, startedAt: now - 300e3 }, now);
+  await armAlarm(t.cx); assert.deepEqual(t.calls, [now + 1000]);                  // no alarm, stalled -> now
+});

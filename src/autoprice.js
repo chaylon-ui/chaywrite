@@ -597,13 +597,19 @@ async function arm(cx, at, why) {
 
 export async function armAlarm(cx) {
   try {
-    if ((await cx.storage.getAlarm()) != null) return;
-    // A tick that died outright (CPU limit, eviction) persists nothing and
-    // leaves an unfinished run with no alarm behind it, so the run sits at
-    // its last saved phase until the next night. Any later touch of the
+    // A tick that died outright (CPU limit, eviction, a deploy mid-tick)
+    // persists nothing and leaves an unfinished run behind, so the run sits
+    // at its last saved phase until the next night. Any later touch of the
     // room - a page load, the digest read - picks it back up (2026-09-15).
+    // 2026-10-01: the dead tick had already armed the NIGHTLY alarm at its
+    // start (the call below), so "an alarm exists" was no proof of life: a
+    // graded card added at 15:44 sat on "Pricing..." with the alarm at
+    // 22:30. A stalled run now re-arms unless the alarm is already close.
+    const at = await cx.storage.getAlarm();
     const run = await cx.storage.get("ap:run");
     const stalled = run && !run.done && cx.now() - (run.tickAt || run.startedAt || 0) > 120e3;
+    if (stalled && (at == null || at - cx.now() > 120e3)) { await cx.storage.setAlarm(cx.now() + 1000); return; }
+    if (at != null) return;
     await cx.storage.setAlarm(stalled ? cx.now() + 1000 : nextRunAt(cx.now()));
   } catch (e) { cx.log("autoprice: armAlarm failed: " + msg(e)); }
 }
@@ -1811,8 +1817,8 @@ export async function serveAutoprice(request, env, url, staffOk) {
     if (url.pathname === "/autoprice" && request.method === "GET") return html("", 303, { location: "/autoprice/login" });
     return Response.json({ error: "login required" }, { status: 401, headers: { "cache-control": "no-store" } });
   }
-  if (url.pathname === "/autoprice/status") {
-    const r = await stub.fetch(new Request(url.origin + "/_ap/status"));
+  if (url.pathname === "/autoprice/status" || url.pathname === "/autoprice/report.json") {
+    const r = await stub.fetch(new Request(url.origin + (url.pathname === "/autoprice/status" ? "/_ap/status" : "/_ap/report")));
     return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
   let body = null, form = false;
