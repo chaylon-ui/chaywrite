@@ -251,7 +251,7 @@ or template.name == 'blog'
     .xg-sellcta--pill { display: none; }
     /* its own full-width line after the search field (the row wraps; the
        search line is order 10 in xg-features.css) */
-    #header .site-header-mobile .xg-sellcta--bar { display: inline-flex; flex: 0 0 100%; width: 100%; order: 11; margin: 0 0 8px; font-size: 14px; }
+    #header .site-header-mobile .xg-sellcta--bar { display: inline-flex; flex: 0 0 100%; width: 100%; max-width: 100%; order: 11; margin: 0 0 8px; font-size: 13px; white-space: normal; text-align: center; box-sizing: border-box; }
   }
   #header .mobile-width-right .xg-lang { height: 30px; padding: 0 2px; }
   #header .mobile-width-right .xg-lang__cur,
@@ -523,7 +523,7 @@ or template.name == 'blog'
             fills this by id, so moving it does not change how it is filled.
           {%- endcomment -%}
           <div id="_mobile_search"></div>
-          <a class="xg-sellcta xg-sellcta--bar" href="/pages/sell-to-exor-games-bulk-or-create-a-list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18v10H3z"/><circle cx="12" cy="12" r="2.5"/></svg>Sell us your cards &middot; cash or store credit</a>
+          <a class="xg-sellcta xg-sellcta--bar" href="/pages/sell-to-exor-games-bulk-or-create-a-list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18v10H3z"/><circle cx="12" cy="12" r="2.5"/></svg>Sell us your cards</a>
         </div>
       </div>
     </div>
