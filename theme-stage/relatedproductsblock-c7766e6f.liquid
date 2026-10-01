@@ -1,0 +1,172 @@
+{% comment %}
+  "You May Also Like" — reworked to source products from Shopify's product
+  recommendations engine instead of the old first-alphabetical-collection
+  loop (which showed the first ~50 cards of whatever big set collection the
+  product happened to be in — irrelevant results, unbounded page weight).
+
+  How it works: the initial render outputs the shell hidden and empty.
+  The shopper's browser fetches this same section through the Section
+  Rendering API ({{ routes.product_recommendations_url }}?section_id=...)
+  — on THAT render `recommendations.performed` is true and the cards fill
+  the carousel. The loader injects them, re-creates the per-card inline
+  scripts (innerHTML-injected scripts don't execute), reveals the shell,
+  and only then starts the same Owl carousel as before. If Shopify returns
+  no recommendations, the section stays hidden — no empty box.
+
+  Same-game guard: the engine is behavioral, and store traffic skews hard
+  toward whatever's hot (verified: it recommended ten Pokémon singles under
+  an MTG Sol Ring). Each recommended card carries its product type in the
+  fetched render, the shell carries the page product's type, and the loader
+  drops mismatches before injecting; if nothing relevant survives, the
+  section stays hidden — on card singles the 'Cards With Similar Effects'
+  strip is the curated recommendation surface anyway.
+{% endcomment %}
+{% if section.settings.show_related_products == true %}
+{%- comment -%}
+  Card singles (owner 2026-09-14: "you may also like should match the cards
+  with similar effects style"): the row is drawn as the same compact tile
+  strip as the similar-effects row - card image, name without the set
+  bracket, price, side-scrolling - instead of the theme's grid cards with
+  their condition dropdowns. Every other product keeps the grid carousel.
+{%- endcomment -%}
+{%- assign xg_strip = false -%}
+{%- if product.type contains 'Single' -%}{%- assign xg_strip = true -%}{%- endif -%}
+{%- assign heading = section.settings.related_title -%}
+{%- if xg_strip -%}
+<aside class="xg-related xg-rel" id="xg-related-{{ section.id }}" data-recommendations-url="{{ routes.product_recommendations_url }}?section_id={{ section.id }}&product_id={{ product.id }}&limit=10&intent=related" data-page-type="{{ product.type | escape }}"{% unless recommendations.performed %} style="display:none"{% endunless %}>
+  {% unless heading == blank %}<div class="xg-rel__title">{{ heading }}</div>{% endunless %}
+  <div class="relatedproduct-carousel-{{ section.id }} xg-rel__row">
+    {% if recommendations.performed %}
+      {% for product in recommendations.products %}
+      <a class="xg-rel__card" href="{{ product.url }}" data-rec-type="{{ product.type | escape }}">
+        {% if product.featured_image %}<img src="{{ product.featured_image | img_url: '200x' }}" alt="{{ product.title | escape }}" loading="lazy">{% endif %}
+        <span class="xg-rel__name">{{ product.title | split: ' [' | first | escape }}</span>
+        <span class="xg-rel__price">{% if product.price >= 99999900 %}Contact us for price{% else %}{{ product.price | money }}{% endif %}</span>
+      </a>
+      {% endfor %}
+    {% endif %}
+  </div>
+</aside>
+<style>
+  .xg-rel { margin: 20px 0 8px; }
+  .xg-rel__title { font-family: var(--xg-font-display, "Oswald", "Arial Narrow", sans-serif); font-size: 19px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: var(--xg-ink, #171b1d); margin: 0 0 10px; }
+  .xg-rel__row { display: flex; gap: 12px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: #c6ccd1 #eef0f2; }
+  .xg-rel__row::-webkit-scrollbar { height: 8px; }
+  .xg-rel__row::-webkit-scrollbar-track { background: #eef0f2; border-radius: 4px; }
+  .xg-rel__row::-webkit-scrollbar-thumb { background: #c6ccd1; border-radius: 4px; }
+  .xg-rel__card { flex: 0 0 124px; width: 124px; scroll-snap-align: start; text-decoration: none; color: inherit; text-align: center; background: var(--xg-surface, #ffffff); border: 1px solid var(--xg-border, #e3e6e8); border-radius: var(--xg-radius, 10px); padding: 8px 8px 10px; transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+  .xg-rel__card:hover { border-color: #ccd2d6; box-shadow: 0 10px 28px rgba(16, 24, 40, 0.12); transform: translateY(-2px); }
+  .xg-rel__card img { width: 100%; aspect-ratio: 0.715; object-fit: cover; border-radius: 6px; display: block; }
+  .xg-rel__name { display: block; font-family: var(--xg-font-body, "Inter", sans-serif); font-size: 12.5px; color: var(--xg-text, #3d454b); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .xg-rel__price { display: block; font-family: var(--xg-font-body, "Inter", sans-serif); font-size: 14px; font-weight: 700; color: var(--xg-ink, #171b1d); margin-top: 2px; font-variant-numeric: tabular-nums; }
+</style>
+{%- else -%}
+<div class="product-template__container" id="ProductSection-{{ section.id }}" data-section-id="{{ section.id }}" data-section-type="product" data-enable-history-state="true">
+
+  <aside class="row xg-related" id="xg-related-{{ section.id }}" data-recommendations-url="{{ routes.product_recommendations_url }}?section_id={{ section.id }}&product_id={{ product.id }}&limit=10&intent=related" data-page-type="{{ product.type | escape }}"{% unless recommendations.performed %} style="display:none"{% endunless %}>
+    <div class="related page-width">
+      {% unless heading == blank %}
+      <header class="section-header main-title">
+        {% if settings.main-seperator != blank %}
+        <div class="seperator hs-id-8e6e2a6d lazyload hs-lazyload" data-bgset="{{ settings.main-seperator | img_url: 'master' }}'" style=""></div>
+        {% endif %}
+        <h2 class="section-header__title home-title">{{ heading }}</h2>
+        {% if settings.main-seperator != blank %}
+        <div class="seperator hs-id-d35c910b lazyload hs-lazyload" data-bgset="{{ settings.main-seperator | img_url: 'master' }}'" style=""></div>
+        {% endif %}
+      </header>
+      {% endunless %}
+
+      <div id="relatedproduct-carousel" class="relatedproduct-carousel-{{ section.id }} products-display grid grid--uniform grid--view-items owl-carousel owl-theme">
+        {% if recommendations.performed %}
+          {% for product in recommendations.products %}
+          <div class="grid__item " data-rec-type="{{ product.type | escape }}">
+            {% include 'product-card-grid' %}
+          </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </aside>
+
+</div>
+{%- endif -%}
+{% unless recommendations.performed %}
+<script>
+  (function () {
+    var root = document.getElementById('xg-related-{{ section.id }}');
+    if (!root) return;
+    var url = root.getAttribute('data-recommendations-url');
+    if (!url || !window.fetch || !window.DOMParser) return;
+    fetch(url)
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (!html) return;
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var src = doc.querySelector('.relatedproduct-carousel-{{ section.id }}');
+        var dst = root.querySelector('.relatedproduct-carousel-{{ section.id }}');
+        if (!src || !dst || src.children.length === 0) return;
+        var pageType = root.getAttribute('data-page-type') || '';
+        if (pageType) {
+          var kids = src.querySelectorAll('[data-rec-type]');
+          for (var k = 0; k < kids.length; k++) {
+            var rt = kids[k].getAttribute('data-rec-type') || '';
+            if (rt && rt !== pageType) kids[k].parentNode.removeChild(kids[k]);
+          }
+        }
+        if (src.children.length === 0) return;
+        dst.innerHTML = src.innerHTML;
+        var scripts = dst.querySelectorAll('script');
+        for (var i = 0; i < scripts.length; i++) {
+          var s = document.createElement('script');
+          s.textContent = scripts[i].textContent;
+          scripts[i].parentNode.replaceChild(s, scripts[i]);
+        }
+        root.style.display = '';
+        var count = dst.children.length;
+        if (dst.classList.contains('xg-rel__row')) return;   // the singles strip scrolls on its own, no carousel
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.owlCarousel) {
+          window.jQuery(dst).owlCarousel({
+            nav: true,
+            navText: ["<i class='material-icons'>chevron_left</i>", "<i class='material-icons'>chevron_right</i>"],
+            dots: false,
+            autoplay: count > 4,
+            rewind: true,
+            loop: count > 4,
+            onInitialized: function () { if (window.updateTabIndexes) updateTabIndexes(); },
+            onTranslated: function () { if (window.updateTabIndexes) updateTabIndexes(); },
+            responsive: {
+              0: { items: 1 },
+              544: { items: 2 },
+              768: { items: 3 },
+              992: { items: 3 },
+              1200: { items: 4 }
+            }
+          });
+        }
+      })
+      .catch(function () { /* quiet — the section simply stays hidden */ });
+  })();
+</script>
+{% endunless %}
+{% endif %}
+
+{% schema %}
+{
+"name": "Related Products",
+"settings": [
+{
+"type": "checkbox",
+"id": "show_related_products",
+"label": "Enable Related Products",
+"default": false
+},
+{
+"id": "related_title",
+"type": "text",
+"label": "Main Title",
+"default": "Related Products"
+}
+]
+}
+{% endschema %}

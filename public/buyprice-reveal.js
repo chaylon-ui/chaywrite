@@ -27,6 +27,9 @@
   var TYPE = root.getAttribute('data-type') || '';
   var HANDLE = root.getAttribute('data-handle') || '';
   if (!NAME || !/single/i.test(TYPE)) return;   // singles only
+  // Owner 2026-10-01: never on graded or custom items - the buylist is keyed
+  // by card name, so a PSA 6 slab would show the raw card's offer.
+  if (/graded/i.test(TYPE) || /\bgraded\b|\b(?:psa|bgs|cgc|sgc|ace|tag)\s*:?\s*(?:10|[1-9](?:\.5)?)\b/i.test(NAME)) return;
 
   var css = '' +
     '.xg-buy{margin:14px 0;font-family:var(--xg-font-body,"Inter",sans-serif)}' +

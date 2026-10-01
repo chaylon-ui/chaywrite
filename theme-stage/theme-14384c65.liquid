@@ -150,6 +150,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <script src="{{ 'xg-sharp-images.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Price filter without prices: hides the search app's price slider and blanks its min/max placeholders to 0 / 100,000 (assets/xg-price-filter.js, owner 2026-09-30). {%- endcomment -%}
   <script src="{{ 'xg-price-filter.js' | asset_url }}" defer="defer"></script>
+  {%- comment -%} Placeholder price mask: "$999,999.00" (custom / unpriced listings) reads "Contact us for price" in the search dropdown, the search grid and "You may also like" (assets/xg-price-mask.js, owner 2026-10-01). {%- endcomment -%}
+  <script src="{{ 'xg-price-mask.js' | asset_url }}" defer="defer"></script>
   {%- comment -%} Item requests: "Request this item" on sold-out products and the special-order page (assets/xg-requests.js, owner 2026-09-30). {%- endcomment -%}
   {%- if template.name == 'product' or template.suffix == 'special-order' -%}<script src="{{ 'xg-requests.js' | asset_url }}" defer="defer"></script>{%- endif -%}
   {%- comment -%} Personalised homepage: which game this page is about (assets/xg-personal.js);
