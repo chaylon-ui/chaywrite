@@ -19,7 +19,8 @@
 
    Configuration (worker secrets; deploy.yml syncs each from the GitHub
    Actions secret of the same name when it exists):
-     DISCORD_BOT_TOKEN       the bot's token (Bot needs "Manage Events" in the server)
+     DISCORD_BOT_TOKEN       the bot's token (its role needs "Create Events" in the server;
+                             "Manage Events" alone edits others' events but creates none)
      DISCORD_GUILD_ID        optional: the server id. Absent, the bot asks
                              GET /users/@me/guilds and uses the one server it
                              is in; two or more and it stops and names them.
@@ -200,11 +201,16 @@ async function api(env, method, path, body, fetchFn, retried) {
   return j;
 }
 
-/* Does the bot hold Manage Events in the server? GET /users/@me/guilds carries
-   the bot's own permission bits per server (MANAGE_EVENTS = 1 << 33). null = unknown. */
+/* Can the bot create events in the server? GET /users/@me/guilds carries the
+   bot's own permission bits per server. Since Discord split the permission
+   (2024) CREATE_EVENTS (1 << 44) is what creating takes - MANAGE_EVENTS
+   (1 << 33) alone edits and deletes other people's events but does NOT create
+   (the first live sync: Manage Events held, every POST 403 Missing
+   Permissions). null = unknown. */
 export const MANAGE_EVENTS = 1n << 33n;
+export const CREATE_EVENTS = 1n << 44n;
 export function canManageEvents(guildRow) {
-  try { return guildRow && guildRow.permissions != null ? (BigInt(guildRow.permissions) & MANAGE_EVENTS) === MANAGE_EVENTS : null; } catch { return null; }
+  try { return guildRow && guildRow.permissions != null ? (BigInt(guildRow.permissions) & CREATE_EVENTS) === CREATE_EVENTS : null; } catch { return null; }
 }
 export async function checkPermissions(env, guildId, fetchFn) {
   const guilds = await api(env, "GET", "/users/@me/guilds", null, fetchFn);
@@ -212,7 +218,7 @@ export async function checkPermissions(env, guildId, fetchFn) {
   if (!row) return { inGuild: false, manageEvents: false };
   return { inGuild: true, manageEvents: canManageEvents(row), name: row.name ? String(row.name) : null };
 }
-const PERMISSION_HELP = "the bot has no Manage Events permission in the server: Server Settings > Roles > the bot's role > enable Manage Events (or re-invite it with that permission)";
+const PERMISSION_HELP = "the bot has no Create Events permission in the server: Server Settings > Roles > the bot's role > Permissions > turn on Create Events (Manage Events alone does not create)";
 
 /* The server: DISCORD_GUILD_ID, else the one server the bot is in. */
 export async function resolveGuild(env, state, fetchFn) {

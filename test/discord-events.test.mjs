@@ -104,7 +104,7 @@ test("mapEvent keeps the feed id and end time for the sync, the pages' fields un
 /* The full sync against a fake Discord + fake feed + the module's KV (portal.js's kvGet/kvPut
    need the DO; here the env has no stub, so they answer null/false and the state starts empty
    each run - enough to see the calls that go out). */
-const MANAGE = String(1n << 33n);
+const MANAGE = String((1n << 33n) | (1n << 44n));   // Manage Events + Create Events, as a role with both reports
 function fakeWorld({ feed, guilds = [{ id: "g1", name: "Exor Games", permissions: MANAGE }], live = [], headers = {}, createStatus = 200 }) {
   const calls = [];
   const fetchFn = async (url, init = {}) => {
@@ -163,22 +163,23 @@ test("syncEvents with DISCORD_GUILD_ID uses that server (the guild list is read 
   await assert.rejects(resolveGuild({ DISCORD_BOT_TOKEN: "t" }, {}, fakeWorld({ feed: [], guilds: [] }).fetchFn), /not in any server/);
 });
 
-test("permission check: no Manage Events = one clear error and no writes; a 403 on create stops the loop with the same help", async () => {
+test("permission check: no Create Events = one clear error and no writes; a 403 on create stops the loop with the same help", async () => {
   assert.equal(canManageEvents({ permissions: MANAGE }), true);
   assert.equal(canManageEvents({ permissions: "8" }), false);
-  assert.equal(canManageEvents({ permissions: String((1n << 33n) | 8n) }), true);
+  assert.equal(canManageEvents({ permissions: String(1n << 33n) }), false);   // Manage Events alone: the live 403 case
+  assert.equal(canManageEvents({ permissions: String((1n << 44n) | 8n) }), true);
   assert.equal(canManageEvents({}), null);
   const feed = [{ id: 1, title: "FNM", date: "2026-10-09", time: "18:30:00" }, { id: 2, title: "League", date: "2026-10-10", time: "13:00:00" }];
-  const noPerm = fakeWorld({ feed, guilds: [{ id: "g1", name: "Exor Games", permissions: "8" }] });
+  const noPerm = fakeWorld({ feed, guilds: [{ id: "g1", name: "Exor Games", permissions: String(1n << 33n) }] });
   const r = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn: noPerm.fetchFn });
   assert.equal(r.created, 0);
-  assert.match(r.errors[0], /no Manage Events permission.*Server Settings > Roles/);
+  assert.match(r.errors[0], /no Create Events permission.*Server Settings > Roles.*turn on Create Events/);
   assert.equal(noPerm.calls.filter((c) => c.method === "POST").length, 0);
   const forbidden = fakeWorld({ feed, guilds: [{ id: "g1", name: "Exor Games" }], createStatus: 403 });   // permissions unknown, Discord says no
   const r2 = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn: forbidden.fetchFn });
   assert.equal(forbidden.calls.filter((c) => c.method === "POST").length, 1);   // stopped after the first 403
   assert.match(r2.errors[0], /discord 403: Missing Permissions/);
-  assert.match(r2.errors[1], /no Manage Events permission/);
+  assert.match(r2.errors[1], /no Create Events permission/);
 });
 
 test("rate limits: an empty bucket pauses for its reset before the next call; a 429 is slept off and retried once", async () => {
