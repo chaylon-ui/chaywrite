@@ -1,7 +1,7 @@
 // Store events -> Discord Scheduled Events (owner 2026-10-01, "Let's build it").
 import test from "node:test";
 import assert from "node:assert/strict";
-import { eventTimes, feeLine, eventKey, toDiscord, plan, hashBody, syncEvents, resolveGuild, windowDays } from "../src/discord-events.js";
+import { eventTimes, feeLine, eventKey, toDiscord, plan, hashBody, syncEvents, resolveGuild, windowDays, canManageEvents } from "../src/discord-events.js";
 import { mapEvent } from "../src/events.js";
 
 const ev = (o) => ({ id: null, title: "Friday Night Magic", date: "2026-10-09", time: "18:30:00", endTime: null, game: "Magic: The Gathering", city: "Charlottetown", ticketPrice: 10, ticketed: true, handle: "fnm-oct-9", url: "https://exorgames.com/products/fnm-oct-9", calendarIcon: null, ...o });
@@ -104,17 +104,18 @@ test("mapEvent keeps the feed id and end time for the sync, the pages' fields un
 /* The full sync against a fake Discord + fake feed + the module's KV (portal.js's kvGet/kvPut
    need the DO; here the env has no stub, so they answer null/false and the state starts empty
    each run - enough to see the calls that go out). */
-function fakeWorld({ feed, guilds = [{ id: "g1", name: "Exor Games" }], live = [] }) {
+const MANAGE = String(1n << 33n);
+function fakeWorld({ feed, guilds = [{ id: "g1", name: "Exor Games", permissions: MANAGE }], live = [], headers = {}, createStatus = 200 }) {
   const calls = [];
   const fetchFn = async (url, init = {}) => {
     const u = String(url);
     const method = init.method || "GET";
     calls.push({ method, url: u, body: init.body ? JSON.parse(init.body) : null });
-    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", ...headers } });
     if (u.includes("binderpos.com")) return json(feed);
     if (u.endsWith("/users/@me/guilds")) return json(guilds);
     if (/scheduled-events$/.test(u) && method === "GET") return json(live);
-    if (/scheduled-events$/.test(u) && method === "POST") return json({ id: "new" + calls.length });
+    if (/scheduled-events$/.test(u) && method === "POST") return createStatus === 200 ? json({ id: "new" + calls.length }) : json({ message: createStatus === 403 ? "Missing Permissions" : "nope" }, createStatus);
     if (method === "PATCH") return json({ id: u.split("/").pop() });
     if (method === "DELETE") return new Response(null, { status: 204 });
     return json({ message: "unknown" }, 404);
@@ -134,6 +135,7 @@ test("syncEvents does nothing without a token; with one it finds the guild, read
   const r = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn: w.fetchFn });
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.guild, { id: "g1", name: "Exor Games" });
+  assert.equal(w.calls.filter((c) => c.url.endsWith("/users/@me/guilds")).length, 2);   // discovery, then the permission check
   assert.equal(r.created, 2);
   assert.equal(r.skipped, 1);
   const feedCall = w.calls.find((c) => c.url.includes("binderpos"));
@@ -146,13 +148,60 @@ test("syncEvents does nothing without a token; with one it finds the guild, read
   assert.ok(!w.calls.some((c) => /channels|webhooks|messages/.test(c.url)));
 });
 
-test("syncEvents with DISCORD_GUILD_ID never asks for the guild list; two servers and no id is a named error", async () => {
-  const w = fakeWorld({ feed: [] });
-  await syncEvents({ DISCORD_BOT_TOKEN: "t", DISCORD_GUILD_ID: "g9" }, { now: NOW, fetchFn: w.fetchFn });
-  assert.ok(!w.calls.some((c) => c.url.endsWith("/users/@me/guilds")));
+test("syncEvents with DISCORD_GUILD_ID uses that server (the guild list is read once, for the permission bits only); two servers and no id is a named error", async () => {
+  const w = fakeWorld({ feed: [], guilds: [{ id: "g9", name: "Nine", permissions: MANAGE }, { id: "g1", name: "One", permissions: MANAGE }] });
+  const r0 = await syncEvents({ DISCORD_BOT_TOKEN: "t", DISCORD_GUILD_ID: "g9" }, { now: NOW, fetchFn: w.fetchFn });
+  assert.deepEqual(r0.errors, []);
+  assert.equal(w.calls.filter((c) => c.url.endsWith("/users/@me/guilds")).length, 1);
   assert.ok(w.calls.some((c) => c.url.endsWith("/guilds/g9/scheduled-events")));
-  const two = fakeWorld({ feed: [], guilds: [{ id: "a", name: "A" }, { id: "b", name: "B" }] });
+  const gone = fakeWorld({ feed: [], guilds: [{ id: "g1", name: "One", permissions: MANAGE }] });
+  const r1 = await syncEvents({ DISCORD_BOT_TOKEN: "t", DISCORD_GUILD_ID: "g9" }, { now: NOW, fetchFn: gone.fetchFn });
+  assert.match(r1.errors[0], /no longer in server g9 \(DISCORD_GUILD_ID\): invite it again/);
+  const two = fakeWorld({ feed: [], guilds: [{ id: "a", name: "A", permissions: MANAGE }, { id: "b", name: "B", permissions: MANAGE }] });
   const r = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn: two.fetchFn });
   assert.match(r.errors[0], /2 servers \(A a, B b\): set DISCORD_GUILD_ID/);
   await assert.rejects(resolveGuild({ DISCORD_BOT_TOKEN: "t" }, {}, fakeWorld({ feed: [], guilds: [] }).fetchFn), /not in any server/);
+});
+
+test("permission check: no Manage Events = one clear error and no writes; a 403 on create stops the loop with the same help", async () => {
+  assert.equal(canManageEvents({ permissions: MANAGE }), true);
+  assert.equal(canManageEvents({ permissions: "8" }), false);
+  assert.equal(canManageEvents({ permissions: String((1n << 33n) | 8n) }), true);
+  assert.equal(canManageEvents({}), null);
+  const feed = [{ id: 1, title: "FNM", date: "2026-10-09", time: "18:30:00" }, { id: 2, title: "League", date: "2026-10-10", time: "13:00:00" }];
+  const noPerm = fakeWorld({ feed, guilds: [{ id: "g1", name: "Exor Games", permissions: "8" }] });
+  const r = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn: noPerm.fetchFn });
+  assert.equal(r.created, 0);
+  assert.match(r.errors[0], /no Manage Events permission.*Server Settings > Roles/);
+  assert.equal(noPerm.calls.filter((c) => c.method === "POST").length, 0);
+  const forbidden = fakeWorld({ feed, guilds: [{ id: "g1", name: "Exor Games" }], createStatus: 403 });   // permissions unknown, Discord says no
+  const r2 = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn: forbidden.fetchFn });
+  assert.equal(forbidden.calls.filter((c) => c.method === "POST").length, 1);   // stopped after the first 403
+  assert.match(r2.errors[0], /discord 403: Missing Permissions/);
+  assert.match(r2.errors[1], /no Manage Events permission/);
+});
+
+test("rate limits: an empty bucket pauses for its reset before the next call; a 429 is slept off and retried once", async () => {
+  const feed = [{ id: 1, title: "FNM", date: "2026-10-09", time: "18:30:00" }, { id: 2, title: "League", date: "2026-10-10", time: "13:00:00" }];
+  const w = fakeWorld({ feed, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset-after": "0.05" } });
+  const t0 = Date.now();
+  const r = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn: w.fetchFn });
+  assert.equal(r.created, 2);
+  assert.ok(Date.now() - t0 >= 4 * 250, "paused after each metered answer");
+  let first = true;
+  const calls = [];
+  const fetchFn = async (url, init = {}) => {
+    const method = init.method || "GET";
+    calls.push(method + " " + url);
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
+    if (String(url).includes("binderpos")) return json(feed.slice(0, 1));
+    if (String(url).endsWith("/users/@me/guilds")) return json([{ id: "g1", name: "G", permissions: MANAGE }]);
+    if (method === "GET") return json([]);
+    if (method === "POST" && first) { first = false; return json({ retry_after: 0.05, message: "You are being rate limited." }, 429); }
+    return json({ id: "ok1" });
+  };
+  const r2 = await syncEvents({ DISCORD_BOT_TOKEN: "t" }, { now: NOW, fetchFn });
+  assert.equal(r2.created, 1);
+  assert.deepEqual(r2.errors, []);
+  assert.equal(calls.filter((c) => c.startsWith("POST")).length, 2);
 });

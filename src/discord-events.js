@@ -159,7 +159,15 @@ export async function plan(feedEvents, map, now = Date.now()) {
 
 /* ---- Discord calls ------------------------------------------------------ */
 
-async function api(env, method, path, body, fetchFn) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const MAX_PAUSE_MS = 15e3;
+
+/* One Discord call. Discord meters the scheduled-events routes tightly (the
+   first live sync hit 429 after five creates in ~3 s): when the answer says the
+   bucket is empty the call pauses for its reset (CPU-free, up to 15 s) before
+   returning, and a 429 is slept off once and retried. A 403 is marked
+   `forbidden` so the caller stops instead of failing every event the same way. */
+async function api(env, method, path, body, fetchFn, retried) {
   const f = fetchFn || fetch;
   const r = await f(API + path, {
     method,
@@ -168,20 +176,43 @@ async function api(env, method, path, body, fetchFn) {
   });
   if (r.status === 429) {
     const j = await r.json().catch(() => ({}));
-    const err = new Error("rate limited" + (j.retry_after ? " (" + j.retry_after + "s)" : ""));
+    const wait = Number(j.retry_after) || Number(r.headers.get("retry-after")) || 2;
+    if (!retried && wait * 1000 <= MAX_PAUSE_MS) { await sleep(wait * 1000 + 250); return api(env, method, path, body, fetchFn, true); }
+    const err = new Error("rate limited (" + wait + "s)");
     err.rateLimited = true;
     throw err;
   }
-  if (r.status === 204) return null;
+  const remaining = Number(r.headers.get("x-ratelimit-remaining"));
+  const resetAfter = Number(r.headers.get("x-ratelimit-reset-after"));
+  const pause = remaining === 0 && resetAfter > 0 ? Math.min(resetAfter * 1000 + 250, MAX_PAUSE_MS) : 0;
+  if (r.status === 204) { if (pause) await sleep(pause); return null; }
   const text = await r.text();
   let j = null;
   try { j = text ? JSON.parse(text) : null; } catch {}
   if (!r.ok) {
     const msg = (j && (j.message || (j.errors && JSON.stringify(j.errors).slice(0, 160)))) || text.slice(0, 160) || ("http " + r.status);
-    throw new Error("discord " + r.status + ": " + msg);
+    const err = new Error("discord " + r.status + ": " + msg);
+    if (r.status === 403) err.forbidden = true;
+    if (r.status === 404) err.notFound = true;
+    throw err;
   }
+  if (pause) await sleep(pause);
   return j;
 }
+
+/* Does the bot hold Manage Events in the server? GET /users/@me/guilds carries
+   the bot's own permission bits per server (MANAGE_EVENTS = 1 << 33). null = unknown. */
+export const MANAGE_EVENTS = 1n << 33n;
+export function canManageEvents(guildRow) {
+  try { return guildRow && guildRow.permissions != null ? (BigInt(guildRow.permissions) & MANAGE_EVENTS) === MANAGE_EVENTS : null; } catch { return null; }
+}
+export async function checkPermissions(env, guildId, fetchFn) {
+  const guilds = await api(env, "GET", "/users/@me/guilds", null, fetchFn);
+  const row = Array.isArray(guilds) ? guilds.find((g) => String(g.id) === String(guildId)) : null;
+  if (!row) return { inGuild: false, manageEvents: false };
+  return { inGuild: true, manageEvents: canManageEvents(row), name: row.name ? String(row.name) : null };
+}
+const PERMISSION_HELP = "the bot has no Manage Events permission in the server: Server Settings > Roles > the bot's role > enable Manage Events (or re-invite it with that permission)";
 
 /* The server: DISCORD_GUILD_ID, else the one server the bot is in. */
 export async function resolveGuild(env, state, fetchFn) {
@@ -250,6 +281,10 @@ export async function syncEvents(env, { force = false, now = Date.now(), fetchFn
     const guild = await resolveGuild(env, state, fetchFn);
     state.guildId = guild.id; state.guildName = guild.name || state.guildName;
     result.guild = guild;
+    const perm = await checkPermissions(env, guild.id, fetchFn);
+    if (perm.name && !guild.name) { guild.name = perm.name; state.guildName = perm.name; }
+    if (!perm.inGuild) throw new Error("the bot is no longer in server " + guild.id + (env.DISCORD_GUILD_ID ? " (DISCORD_GUILD_ID)" : "") + ": invite it again");
+    if (perm.manageEvents === false) throw new Error(PERMISSION_HELP);
     const feed = await feedWindow(env, now, fetchFn);
     pruneMap(state.map, now);
     // Discord's own list: an event a human deleted stays deleted; one we think exists but does not is forgotten.
@@ -265,7 +300,7 @@ export async function syncEvents(env, { force = false, now = Date.now(), fetchFn
     const path = "/guilds/" + guild.id + "/scheduled-events";
     for (const r of p.remove) {
       try { await api(env, "DELETE", path + "/" + r.id, null, fetchFn); result.removed++; }
-      catch (e) { if (!/discord 404/.test(e.message)) result.errors.push("remove " + r.name + ": " + e.message); if (e.rateLimited) break; }
+      catch (e) { if (!e.notFound) result.errors.push("remove " + r.name + ": " + e.message); if (e.rateLimited || e.forbidden) break; }
       delete state.map[r.key];
     }
     for (const u of p.update) {
@@ -276,9 +311,9 @@ export async function syncEvents(env, { force = false, now = Date.now(), fetchFn
         state.map[u.key] = { id: u.id, hash: u.hash, startMs: u.startMs, name: u.body.name };
         result.updated++;
       } catch (e) {
-        if (/discord 404/.test(e.message)) { state.map[u.key] = { id: null, hash: "", startMs: u.startMs, removed: true, removedAt: now, name: u.body.name }; }
+        if (e.notFound) { state.map[u.key] = { id: null, hash: "", startMs: u.startMs, removed: true, removedAt: now, name: u.body.name }; }
         else result.errors.push("update " + u.body.name + ": " + e.message);
-        if (e.rateLimited) break;
+        if (e.rateLimited || e.forbidden) break;
       }
     }
     for (const c of p.create) {
@@ -290,7 +325,7 @@ export async function syncEvents(env, { force = false, now = Date.now(), fetchFn
         if (!made || !made.id) throw new Error("no id in the answer");
         state.map[c.key] = { id: String(made.id), hash: c.hash, startMs: c.startMs, name: c.body.name };
         result.created++;
-      } catch (e) { result.errors.push("create " + c.body.name + ": " + e.message); if (e.rateLimited) break; }
+      } catch (e) { result.errors.push("create " + c.body.name + ": " + e.message); if (e.rateLimited || e.forbidden) { if (e.forbidden) result.errors.push(PERMISSION_HELP); break; } }
     }
     if (p.create.length + p.update.length > MAX_WRITES) result.deferred = p.create.length + p.update.length - MAX_WRITES;
     state.lastError = result.errors.length ? result.errors[0].slice(0, 200) : null;
@@ -331,8 +366,15 @@ export async function serveDiscordEvents(request, env, url, staffOk) {
       const brief = (d) => ({ title: d.body.name, start: d.body.scheduled_start_time, end: d.body.scheduled_end_time, description: d.body.description, image: !!d.image, id: d.id || null });
       out.feed = feed.length;
       out.wouldCreate = p.create.map(brief); out.wouldUpdate = p.update.map(brief); out.wouldRemove = p.remove; out.unchanged = p.keep.map(brief); out.skipped = p.skipped;
-      if (configured && !state.guildId) {
-        try { out.guild = await resolveGuild(env, state); } catch (e) { out.guildError = String(e.message).slice(0, 300); }
+      if (configured) {
+        try {
+          const g = state.guildId ? { id: state.guildId, name: state.guildName } : await resolveGuild(env, state);
+          const perm = await checkPermissions(env, g.id);
+          out.guild = { id: g.id, name: g.name || perm.name || null };
+          out.manageEvents = perm.manageEvents;
+          if (!perm.inGuild) out.guildError = "the bot is not in server " + g.id;
+          else if (perm.manageEvents === false) out.guildError = PERMISSION_HELP;
+        } catch (e) { out.guildError = String(e.message).slice(0, 300); }
       }
       return Response.json(out, { headers: cors });
     } catch (e) {
@@ -348,9 +390,11 @@ export async function serveDiscordEvents(request, env, url, staffOk) {
     try {
       const guild = await resolveGuild(env, state);
       state.guildId = guild.id; state.guildName = guild.name || state.guildName;
+      const perm = await checkPermissions(env, guild.id);
+      if (perm.manageEvents === false) throw new Error(PERMISSION_HELP);
       const path = "/guilds/" + guild.id + "/scheduled-events";
       if (state.testId) {
-        try { await api(env, "DELETE", path + "/" + state.testId); } catch (e) { if (!/discord 404/.test(e.message)) throw e; }
+        try { await api(env, "DELETE", path + "/" + state.testId); } catch (e) { if (!e.notFound) throw e; }
         state.testId = null;
       }
       if (url.searchParams.get("delete")) { await writeState(env, state); return Response.json({ ok: true, deleted: true }, { headers: cors }); }
