@@ -80,6 +80,11 @@ jobs:
           const since = Date.now() - DAYS * 86400e3;
           const worst = [];   // every flagged line, for the final table
           const note = (where, ref, when, l) => worst.push({ where, ref, when, ...l });
+          // Owner 2026-10-01: the customer may be an employee. Say whether the staff
+          // account that rang up / signed off is the customer's own address, plus the
+          // staff login's first letter - never the address itself.
+          const same = (staff, cust) => !!(staff && cust && String(staff).trim().toLowerCase() === String(cust).trim().toLowerCase());
+          const initial = (staff) => staff ? String(staff).trim().charAt(0).toUpperCase() + '.' : '?';
           const judge = (card, qty, paid, sell) => {
             const pct = sell > 0 && paid != null ? Math.round(paid / sell * 100) : null;
             return { card, qty, paid, sell, pct, low: pct != null && pct > PCT };
@@ -106,6 +111,9 @@ jobs:
               const sellOf = new Map();
               for (const o of orig) { const k = `${o.cardId}|${o.variantId || o.variantName}|${o.foil ? 1 : 0}`; if (Number(o.storeSellPrice) > 0 && !sellOf.has(k)) sellOf.set(k, Number(o.storeSellPrice)); }
               const credit = /credit/i.test(String(b.paymentType || ''));
+              const custEmail = det.shopifyCustomer && det.shopifyCustomer.email;
+              const signer = det.completedBy || det.approvedBy || det.updatedBy || det.processedBy || null;
+              const selfB = same(signer, custEmail);
               let paidT = 0, sellT = 0, cards = 0, flagged = 0, unpriced = 0;
               const rows = [];
               for (const l of raw) {
@@ -121,7 +129,7 @@ jobs:
               bt.lists++; bt.lines += raw.length; bt.cards += cards; bt.paid += paidT; bt.sell += sellT; bt.flagged += flagged; bt.unpriced += unpriced;
               if (credit) bt.credit += paidT; else bt.cash += paidT;
               const overall = sellT > 0 ? Math.round(paidT / sellT * 100) + '%' : 'n/a';
-              console.log(`buylist ${b.id} · ${day(b.dateSubmitted)} · ${b.paymentType} · ${b.completed ? 'completed' : b.approved ? 'approved' : 'pending'}${fin ? ' (final lines)' : ''} · ${raw.length} lines / ${cards} cards · paid ${money(paidT)} vs sell-that-day ${money(sellT)} = ${overall}${flagged ? ` · ${flagged} FLAGGED` : ''}${unpriced ? ` · ${unpriced} unpriced` : ''}`);
+              console.log(`buylist ${b.id} · ${day(b.dateSubmitted)} · ${b.paymentType} · ${b.completed ? 'completed' : b.approved ? 'approved' : 'pending'}${fin ? ' (final lines)' : ''} · ${raw.length} lines / ${cards} cards · paid ${money(paidT)} vs sell-that-day ${money(sellT)} = ${overall}${flagged ? ` · ${flagged} FLAGGED` : ''}${unpriced ? ` · ${unpriced} unpriced` : ''}${signer ? ` · signed off by ${initial(signer)}${selfB ? ' = THE CUSTOMER THEMSELVES' : ''}` : ' · signer field not in the record'}`);
               for (const r of rows.sort((a, b2) => b2.pct - a.pct).slice(0, 12)) console.log(`    ${r.pct}%  ${r.card}  x${r.qty}  paid ${money(r.paid)} / sell ${money(r.sell)}`);
               await sleep(150);
             }
@@ -155,13 +163,16 @@ jobs:
                     if (j.low) { flagged++; rows.push(j); note('cart', String(c.id), day(c.dateSubmitted), j); }
                   }
                   const tenders = (Array.isArray(c.tenders) ? c.tenders : []).map((x) => `${x.type} ${money(Math.abs(Number(x.amount) || 0))}`).join(', ');
+                  const rang = c.submittedBy || c.createdBy || null;
+                  const selfC = same(rang, c.customer && c.customer.email);
+                  if (selfC) ct.self = (ct.self || 0) + 1;
                   ct.carts++; ct.lines += buys.length; ct.cards += cards; ct.paid += paidT; ct.sell += sellT; ct.flagged += flagged; ct.unpriced += unpriced;
-                  console.log(`cart ${c.id} · ${day(c.dateSubmitted)} · ${c.cartType || (items.some((i) => !i.buying) ? 'trade' : 'buy')} · ${tenders || 'no tender'} · ${buys.length} lines / ${cards} cards · paid ${money(paidT)} vs sell-that-day ${money(sellT)} = ${sellT > 0 ? Math.round(paidT / sellT * 100) + '%' : 'n/a'}${flagged ? ` · ${flagged} FLAGGED` : ''}${unpriced ? ` · ${unpriced} unpriced` : ''} · ${PORTAL}/#/pointOfSale/carts/${c.id}`);
+                  console.log(`cart ${c.id} · ${day(c.dateSubmitted)} · ${c.cartType || (items.some((i) => !i.buying) ? 'trade' : 'buy')} · ${tenders || 'no tender'} · ${buys.length} lines / ${cards} cards · paid ${money(paidT)} vs sell-that-day ${money(sellT)} = ${sellT > 0 ? Math.round(paidT / sellT * 100) + '%' : 'n/a'}${flagged ? ` · ${flagged} FLAGGED` : ''}${unpriced ? ` · ${unpriced} unpriced` : ''} · rang up by ${initial(rang)}${selfC ? ' = THE CUSTOMER THEMSELVES' : ''} · ${PORTAL}/#/pointOfSale/carts/${c.id}`);
                   for (const r2 of rows.sort((a2, b2) => b2.pct - a2.pct).slice(0, 12)) console.log(`    ${r2.pct}%  ${r2.card}  x${r2.qty}  paid ${money(r2.paid)} / sell ${money(r2.sell)}`);
                 }
                 if (ct.windows % 120 === 0) console.log(`  ... ${ct.windows} windows scanned, ${ct.carts} carts of this customer so far`);
               }
-              console.log(`carts total: ${ct.carts} buy carts (${ct.windows} windows, ${ct.failed} failed), ${ct.lines} lines, ${ct.cards} cards, paid ${money(ct.paid)} vs sell-that-day ${money(ct.sell)} = ${ct.sell > 0 ? Math.round(ct.paid / ct.sell * 100) + '%' : 'n/a'}, ${ct.flagged} flagged line(s), ${ct.unpriced} unpriced\n`);
+              console.log(`carts total: ${ct.carts} buy carts (${ct.windows} windows, ${ct.failed} failed), ${ct.lines} lines, ${ct.cards} cards, paid ${money(ct.paid)} vs sell-that-day ${money(ct.sell)} = ${ct.sell > 0 ? Math.round(ct.paid / ct.sell * 100) + '%' : 'n/a'}, ${ct.flagged} flagged line(s), ${ct.unpriced} unpriced, ${ct.self || 0} rung up by the customer themselves\n`);
             }
 
             console.log(`== WORST LINES (paid > ${PCT}% of that day's sell price), top 40 of ${worst.length}`);
