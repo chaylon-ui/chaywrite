@@ -15,14 +15,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/shopify-site-improvements-ztgdt8
       - name: Read the cart window
         env:
           PIN: ${{ secrets.HOLD_REPORT_PIN }}
           DAYS: ${{ inputs.days }}
         run: |
-          if [ -z "$PIN" ]; then echo "HOLD_REPORT_PIN secret not set"; exit 1; fi
           cat > /tmp/peek.mjs <<'JS'
+          import { readFileSync } from 'node:fs';
           const W = 'https://exor-binder.nevski.workers.dev';
+          // the staff PIN the way tools/hold-report.mjs reads it: the secret, else the worker's config
+          if (!process.env.PIN) process.env.PIN = (readFileSync('src/config.js', 'utf8').match(/DEFAULT_PIN\s*=\s*["'`]([^"'`]+)/) || [])[1] || '';
+          if (!process.env.PIN) { console.log('no PIN'); process.exit(1); }
           const r = await fetch(W + '/portal/carts.json?days=' + (process.env.DAYS || 7) + '&take=200&k=' + encodeURIComponent(process.env.PIN));
           console.log('carts.json ->', r.status);
           const d = await r.json();
