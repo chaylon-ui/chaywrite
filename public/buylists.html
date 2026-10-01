@@ -48,6 +48,10 @@
   .badge.completed { background: rgba(76,175,125,.2); color: #8fe0b4; }
   .badge.return { background: rgba(214,44,40,.18); color: #ff9b8f; }
   .badge.foil { background: rgba(214,44,40,.18); color: #ff9b8f; font-size: 11px; }
+  .badge.flag { background: rgba(214,44,40,.22); color: #ffb3aa; border: 1px solid rgba(214,44,40,.5); }
+  tr.low td { background: rgba(214,44,40,.08); }
+  .flagnote { margin: 10px 0 0; padding: 10px 14px; border-radius: 10px; background: rgba(214,44,40,.14); border: 1px solid rgba(214,44,40,.45); color: #ffd6d1; font-size: 14px; }
+  .flagnote b { color: #fff; }
   .who { font-weight: 600; }
   .who small { display: block; color: var(--dim); font-weight: 400; font-size: 12.5px; }
   .thumb { width: 38px; height: 53px; object-fit: cover; border-radius: 4px; background: #222; display: block; }
@@ -268,7 +272,8 @@
       var t = S.totals;
       html += '<div class="grid"><div class="card"><div class="k">Buy carts in this window</div><div class="v">' + esc(t.carts) + '</div><div class="d">' + esc(t.cards) + ' cards bought</div></div>' +
         '<div class="card"><div class="k">Paid for cards</div><div class="v">' + money(t.paid) + '</div><div class="d">' + money(t.cash) + ' cash out · ' + money(t.credit) + ' credit issued</div></div>' +
-        '<div class="card"><div class="k">They sell for</div><div class="v">' + money(t.sells) + '</div><div class="d">' + (t.sells && t.paid ? 'bought at ' + Math.round(t.paid / t.sells * 100) + '% of sell price' : 'catalogue cards only') + '</div></div></div>';
+        '<div class="card"><div class="k">They sell for</div><div class="v">' + money(t.sells) + '</div><div class="d">' + (t.sells && t.paid ? 'bought at ' + Math.round(t.paid / t.sells * 100) + '% of sell price' : 'catalogue cards only') + '</div></div></div>' +
+        (t.flagged ? '<div class="flagnote"><b>' + esc(t.flagged) + ' cart' + (t.flagged === 1 ? '' : 's') + ' need' + (t.flagged === 1 ? 's' : '') + ' a look</b> · store credit paid to no customer, or cards bought above 75% of their sell price. Marked in red below.</div>' : '');
     }
     if (S.busy && !S.rows.length) html += '<div class="empty">Loading ' + (isCarts() ? 'in-store buys (a fresh day takes a few seconds)' : esc(S.status) + ' buylists') + '…</div>';
     else if (!rows.length) html += '<div class="empty">' + (S.q ? 'Nothing matches that filter.' : isCarts() ? 'No in-store buys in this window.' : 'No ' + esc(S.status) + ' buylists in this range.') + '</div>';
@@ -278,9 +283,9 @@
         var c = r.customer || {};
         html += '<tr class="row-link" data-href="#/c/' + esc(r.day) + '/' + esc(r.id) + '">' +
           '<td class="nw"><div>' + esc(when(r.submitted)) + '</div><small class="muted">' + esc(ago(r.submitted)) + (r.type !== 'buy' ? ' · <span class="badge ' + esc(r.type) + '">' + esc(r.type) + '</span>' : '') + '</small></td>' +
-          '<td><span class="who">' + esc(c.name || (r.customer ? '(no name)' : 'walk-in')) + '<small>' + esc(c.email || '') + '</small></span></td>' +
+          '<td><span class="who">' + esc(c.name || (r.customer ? '(no name)' : 'walk-in')) + '<small>' + esc(c.email || '') + '</small></span>' + (r.flags && r.flags.creditNoCustomer ? ' <span class="badge flag" title="Store credit was paid out but no customer is on the cart: the credit went to nobody">credit, no customer</span>' : '') + '</td>' +
           '<td class="nw">' + esc(staffName(r.staff)) + '</td>' +
-          '<td class="nw">' + payoutBadges(r.payout) + '</td>' +
+          '<td class="nw">' + payoutBadges(r.payout) + (r.flags && r.flags.lowMargin ? ' <span class="badge flag" title="Bought above ' + esc(r.lowMarginPct || 75) + '% of the sell price">' + esc(r.flags.lowMargin) + ' low margin · ' + esc(r.flags.worstPct) + '%</span>' : '') + '</td>' +
           '<td class="num">' + esc(r.bought.cards) + (r.sold && r.sold.cards ? '<br><small class="muted">+' + esc(r.sold.cards) + ' sold</small>' : '') + '</td>' +
           '<td class="num muted">' + esc(r.id) + '</td>' +
           '<td class="nw noprint"><a href="#/c/' + esc(r.day) + '/' + esc(r.id) + '" class="btn btn-dim">View</a> ' +
@@ -443,7 +448,7 @@
     if (l.sell == null || l.paid == null) return '<td class="num muted">—</td>';
     var s = l.sell - l.paid;
     var pct = l.sell > 0 ? Math.round(l.paid / l.sell * 100) : null;
-    return '<td class="num ' + (s < 0 ? 'down' : '') + '">' + money(s) + (pct != null ? '<br><small class="muted">paid ' + pct + '%</small>' : '') + '</td>';
+    return '<td class="num ' + (s < 0 ? 'down' : '') + '">' + money(s) + (pct != null ? '<br><small class="' + (l.low ? 'err' : 'muted') + '">paid ' + pct + '%' + (l.low ? ' ⚠' : '') + '</small>' : '') + '</td>';
   }
   function renderCart() {
     var d = S.detail;
@@ -464,21 +469,22 @@
       '<div class="card"><div class="k">Customer</div><div class="v">' + esc(c ? (c.name || '(no name)') : 'Walk-in, not on file') + '</div>' +
       (c && c.email ? '<div class="d"><a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a></div>' : '') +
       (c && c.phone ? '<div class="d">' + esc(c.phone) + '</div>' : '') +
-      (c && c.storeCredit != null ? '<div class="d">store credit balance now: ' + money(c.storeCredit) + '</div>' : '') + '</div>' +
+      (c && c.storeCredit != null ? '<div class="d">store credit balance now: ' + money(c.storeCredit) + '</div>' : '') +
+      (d.flags && d.flags.creditNoCustomer ? '<div class="d"><span class="badge flag">' + money(d.flags.creditNoCustomer) + ' store credit went to nobody</span><br><small class="muted">No customer on the cart, so BinderPOS could not credit an account. Attach the customer in BinderPOS and add the credit by hand.</small></div>' : '') + '</div>' +
       '<div class="card"><div class="k">Paid out</div><div class="v">' + money(d.payout.total) + '</div><div class="d">' + payoutBadges(d.payout) + '</div></div>' +
       '<div class="card"><div class="k">Bought</div><div class="v">' + esc(d.bought.cards) + ' cards</div><div class="d">' + money(d.bought.total) + ' for cards' +
       (d.bought.sells ? ' · sell for ' + money(d.bought.sells) : '') + '</div></div>' +
       (sells.length ? '<div class="card"><div class="k">Sold in the same cart</div><div class="v">' + money(d.sold.total) + '</div><div class="d">' + esc(d.sold.cards) + ' items · ' + money(d.taken.total) + ' taken</div></div>' : '') +
       '</div>';
     if (d.notes) html += '<div class="notes"><strong>Cart notes:</strong> ' + esc(d.notes) + '</div>';
-    html += '<h2>Cards we bought</h2>';
+    html += '<h2>Cards we bought' + (d.flags && d.flags.lowMargin ? ' <span class="badge flag">' + esc(d.flags.lowMargin) + ' bought above ' + esc(d.lowMarginPct || 75) + '% of sell price</span>' : '') + '</h2>';
     if (!buys.length) html += '<div class="empty">No buy lines on this cart.</div>';
     else {
       html += '<div class="scroll"><table><thead><tr><th></th><th>Card</th><th>Condition</th><th class="num">Qty</th><th class="num">Paid each</th><th class="num">Paid</th><th class="num">Sells for</th><th class="num">Spread</th></tr></thead><tbody>';
       var t = { qty: 0, paid: 0, sells: 0 };
       buys.forEach(function (l) {
         t.qty += l.qty; t.paid += (l.paid || 0) * l.qty; if (l.sell != null) t.sells += l.sell * l.qty;
-        html += '<tr><td>' + (l.image ? '<img class="thumb" loading="lazy" src="' + esc(l.image) + '" alt="">' : '') + '</td>' +
+        html += '<tr' + (l.low ? ' class="low" title="Paid ' + esc(l.paidPct) + '% of the sell price"' : '') + '><td>' + (l.image ? '<img class="thumb" loading="lazy" src="' + esc(l.image) + '" alt="">' : '') + '</td>' +
           '<td><strong>' + esc(l.title) + '</strong></td>' +
           '<td class="nw">' + esc(l.condition || '—') + '</td>' +
           '<td class="num"><strong>' + esc(l.qty) + '</strong></td>' +

@@ -598,7 +598,38 @@ export async function buylistLines(env, id) {
   };
 }
 
-const cartSummary = (c) => Object.assign({}, c, { lines: undefined, tenders: undefined });
+/* Two things worth a second look on a buy cart (owner 2026-10-01, after cart
+   33003202 paid $0.99 of store credit to nobody: "Yes and also alert any low
+   margin buys"). Computed when a cart is served, so cached days get them too.
+   - creditNoCustomer: store credit paid out, no customer on the cart - the
+     credit was recorded against nobody.
+   - low margin: a bought line where what we paid is more than LOW_MARGIN_PCT
+     of its sell price (store credit normally runs ~70%, cash ~50%); lines
+     with no sell price cannot be judged and are counted as unpriced. */
+export const LOW_MARGIN_PCT = 75;
+export function cartFlags(c) {
+  const lines = Array.isArray(c && c.lines) ? c.lines : [];
+  const low = [];
+  let unpriced = 0, worst = 0;
+  for (const l of lines) {
+    if (!l || !l.buying) continue;
+    if (!(l.sell > 0) || l.paid == null) { unpriced++; continue; }
+    const pct = Math.round(l.paid / l.sell * 100);
+    if (pct > LOW_MARGIN_PCT) { low.push({ title: l.title, condition: l.condition, qty: l.qty, paid: l.paid, sell: l.sell, pct }); if (pct > worst) worst = pct; }
+  }
+  const credit = c && c.payout ? Number(c.payout.credit) || 0 : 0;
+  return {
+    creditNoCustomer: !(c && c.customer) && credit > 0 ? round2(credit) : 0,
+    lowMargin: low.length, worstPct: worst, unpriced,
+    lowLines: low.slice(0, 40),
+  };
+}
+const withFlags = (c) => {
+  const f = cartFlags(c);
+  const lines = (c.lines || []).map((l) => (l.buying && l.sell > 0 && l.paid != null ? { ...l, paidPct: Math.round(l.paid / l.sell * 100), low: Math.round(l.paid / l.sell * 100) > LOW_MARGIN_PCT } : l));
+  return { ...c, lines, flags: { creditNoCustomer: f.creditNoCustomer, lowMargin: f.lowMargin, worstPct: f.worstPct, unpriced: f.unpriced }, lowMarginPct: LOW_MARGIN_PCT };
+};
+const cartSummary = (c) => Object.assign({}, withFlags(c), { lines: undefined, tenders: undefined });
 
 export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
   days = Math.max(1, Math.min(31, days | 0));
@@ -620,6 +651,7 @@ export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
   const totals = { carts: all.length, cards: 0, paid: 0, cash: 0, credit: 0, sells: 0 };
   for (const c of all) { totals.cards += c.bought.cards; totals.paid += c.bought.total; totals.cash += c.payout.cash; totals.credit += c.payout.credit; totals.sells += c.bought.sells; }
   for (const k of ["paid", "cash", "credit", "sells"]) totals[k] = round2(totals[k]);
+  totals.flagged = all.reduce((n, c) => { const f = cartFlags(c); return n + (f.creditNoCustomer || f.lowMargin ? 1 : 0); }, 0);
   return { ok: true, days, take, skip, total: all.length, totals, partial, rows: all.slice(skip, skip + take).map(cartSummary), more: skip + take < all.length };
 }
 
@@ -628,7 +660,7 @@ export async function cartDetail(env, id, day) {
   const candidates = Number.isFinite(base) ? [day, dayKey(base - DAY_MS), dayKey(base + DAY_MS)] : [dayKey(Date.now())];
   for (const d of candidates) {
     const c = (await dayCarts(env, d)).carts.find((x) => x.id === id);
-    if (c) return Object.assign({ ok: true }, c);
+    if (c) return Object.assign({ ok: true }, withFlags(c));
   }
   throw new Error("cart " + id + " is not among the buy carts of " + candidates.join(", "));
 }

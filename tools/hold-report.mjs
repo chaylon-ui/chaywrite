@@ -72,5 +72,21 @@ console.log(`\nonline buylists: ${(d.buylists || []).length} submitted in the pe
 for (const x of bl.slice(0, 30)) console.log(`  ${when(x.ts)}  ${x.title} · ${x.variantTitle}  +${x.delta}  buylist ${x.buylist}`);
 const notSingle = decisions.filter((x) => !x.single).length;
 console.log(`\n${notSingle} rise(s) on products that are not singles were ignored; ${decisions.filter((x) => x.firstSight).length} first-sight probable(s) recorded`);
+// Owner 2026-10-01: a cart that paid store credit to no customer, and cards
+// bought above LOW_MARGIN_PCT of their sell price, are problems too. The
+// flags come from /portal/carts.json (src/portal.js cartFlags).
+try {
+  const cr = await fetch(BASE + "/portal/carts.json?days=" + DAYS + "&take=200&k=" + encodeURIComponent(PIN));
+  const cj = cr.ok ? await cr.json() : null;
+  const rows = (cj && cj.rows) || [];
+  const flagged = rows.filter((c) => c.flags && (c.flags.creditNoCustomer || c.flags.lowMargin));
+  console.log(`\nin-store buy carts checked: ${rows.length}${cj && cj.more ? " (first page only)" : ""}, ${flagged.length} need a look`);
+  for (const c of flagged) {
+    const who = c.customer && c.customer.id ? "customer " + c.customer.id : "no customer";
+    if (c.flags.creditNoCustomer) problem(`cart ${c.id} (${when(c.submitted)}, ${who}): $${c.flags.creditNoCustomer.toFixed(2)} store credit paid out with no customer attached - it went to nobody`);
+    if (c.flags.lowMargin) problem(`cart ${c.id} (${when(c.submitted)}, ${who}): ${c.flags.lowMargin} card(s) bought above ${c.lowMarginPct || 75}% of sell price, worst ${c.flags.worstPct}% - ${c.portalUrl}`);
+  }
+  if (!cr.ok) problem("carts.json answered HTTP " + cr.status + " - cart flags not checked");
+} catch (e) { problem("carts.json could not be read: " + (e && e.message)); }
 console.log(problems ? `HOLD-REPORT PROBLEMS ${problems}` : "HOLD-REPORT OK");
 process.exit(problems && (d.mode !== "shadow" || !d.hooks || !d.hooks.orders) ? 1 : 0);
