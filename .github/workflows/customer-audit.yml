@@ -156,7 +156,9 @@ jobs:
                   const rows = [];
                   for (const i of buys) {
                     const qty = Math.max(0, Number(i.quantity) || 0);
-                    const j = judge(`${i.productTitle} ${i.variantTitle || ''}`.replace(/\s+/g, ' ').trim(), qty, Number.isFinite(Number(i.price)) ? Math.abs(Number(i.price)) : null, Number(i.shopifyPrice) || 0);
+                    // BinderPOS: `price` is the LINE TOTAL, `actualPrice` the per-unit figure (verified 2026-10-01)
+                    const unit = Number.isFinite(Number(i.actualPrice)) ? Math.abs(Number(i.actualPrice)) : Number.isFinite(Number(i.price)) ? Math.abs(Number(i.price)) / Math.max(1, qty) : null;
+                    const j = judge(`${i.productTitle} ${i.variantTitle || ''}`.replace(/\s+/g, ' ').trim(), qty, unit, Number(i.shopifyPrice) || 0);
                     cards += qty;
                     if (j.paid != null) paidT += j.paid * qty;
                     if (j.sell > 0) sellT += j.sell * qty; else unpriced++;
