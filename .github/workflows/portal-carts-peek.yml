@@ -1,0 +1,48 @@
+# Cart window peek (2026-10-01): reads the worker's /portal/carts.json for N
+# days with the HOLD_REPORT_PIN secret and prints the window totals plus the
+# bought lines that carry NO sell price (title, qty, paid) - the lines that
+# make "bought at X% of sell price" misleading. No customer names or ids.
+name: portal-carts-peek
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Window in days"
+        required: false
+        default: "7"
+jobs:
+  peek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read the cart window
+        env:
+          PIN: ${{ secrets.HOLD_REPORT_PIN }}
+          DAYS: ${{ inputs.days }}
+        run: |
+          if [ -z "$PIN" ]; then echo "HOLD_REPORT_PIN secret not set"; exit 1; fi
+          cat > /tmp/peek.mjs <<'JS'
+          const W = 'https://exor-binder.nevski.workers.dev';
+          const r = await fetch(W + '/portal/carts.json?days=' + (process.env.DAYS || 7) + '&take=200&k=' + encodeURIComponent(process.env.PIN));
+          console.log('carts.json ->', r.status);
+          const d = await r.json();
+          console.log('totals', JSON.stringify(d.totals));
+          const carts = d.carts || [];
+          console.log('carts', carts.length, 'partial', JSON.stringify(d.partial || []));
+          let unpricedPaid = 0, unpricedCards = 0, pricedPaid = 0, pricedSells = 0; const big = [];
+          for (const c of carts) {
+            const det = await (await fetch(W + '/portal/cart.json?id=' + encodeURIComponent(c.id) + '&day=' + encodeURIComponent((c.submitted || '').slice(0, 10)) + '&k=' + encodeURIComponent(process.env.PIN))).json().catch(() => null);
+            const lines = (det && det.lines) || [];
+            for (const l of lines) {
+              if (!l.buying) continue;
+              const paid = (l.paid || 0) * l.qty;
+              if (l.sell > 0) { pricedPaid += paid; pricedSells += l.sell * l.qty; }
+              else { unpricedPaid += paid; unpricedCards += l.qty; big.push({ cart: c.id, title: String(l.title).slice(0, 70), cond: l.condition, qty: l.qty, paid: l.paid }); }
+            }
+          }
+          console.log('priced lines: paid', pricedPaid.toFixed(2), 'sell', pricedSells.toFixed(2), 'pct', pricedSells ? Math.round(pricedPaid / pricedSells * 100) : null);
+          console.log('UNPRICED lines: paid', unpricedPaid.toFixed(2), 'cards', unpricedCards);
+          big.sort((a, b) => b.paid * b.qty - a.paid * a.qty);
+          for (const x of big.slice(0, 25)) console.log('  cart', x.cart, '|', x.title, '|', x.cond, '| x' + x.qty, '| paid each', x.paid);
+          JS
+          node /tmp/peek.mjs
