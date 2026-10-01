@@ -51,8 +51,8 @@ export const HOLD_MODE = "shadow";
 // cards 175 to 205 seconds later, one every ten seconds. A card that rose
 // two minutes BEFORE the order was not in the cart. So: a long window after
 // the order, and only webhook-ordering slack before it.
-export const ORDER_LEAD_MS = 1200e3;  // a cart's order may come before its stock rises by this much (was 600s; 2026-09-20 a buy cart's last card was entered 562s after the order)
-export const ORDER_LAG_MS = 60e3;     // or after them by this much
+export const ORDER_LEAD_MS = 1800e3;  // a cart's order may come before its stock rises by this much (600s, then 1200s on 2026-09-20 after a 562s entry; 1800s on 2026-10-01 after cart 33015219, a 100+ card trade whose last card was entered 1056s after the order)
+export const ORDER_LAG_MS = 180e3;    // or after them by this much (60s until 2026-10-01: cart 33003202's Port Razer rose 57s BEFORE its order and only matched late)
 const KEEP_MS = 30 * 86400e3;
 const INFO_TTL_MS = 7 * 86400e3;
 const HOOKS_EVERY_MS = 6 * 3600e3;
