@@ -1,0 +1,53 @@
+# Rename the store's Discord bot (owner 2026-10-02: "Can we make the bot changed
+# from exor games to exor events?"). PATCH /users/@me sets the bot user's
+# username (Discord allows two changes per hour); PATCH /guilds/{id}/members/@me
+# sets its nickname in the server when the bot may change its own nickname.
+# The token is the repo secret DISCORD_BOT_TOKEN and is never printed.
+name: discord-bot-rename
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "New bot name"
+        required: true
+        default: "Exor Events"
+      guild:
+        description: "Server id for the nickname (optional)"
+        required: false
+        default: ""
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Rename
+        env:
+          TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          NAME: ${{ inputs.name }}
+          GUILD: ${{ inputs.guild }}
+        run: |
+          node <<'JS'
+          const H = { authorization: 'Bot ' + process.env.TOKEN, 'content-type': 'application/json', 'user-agent': 'ExorEvents/1.0 (+https://exorgames.com)' };
+          if (!process.env.TOKEN) { console.log('no DISCORD_BOT_TOKEN secret'); process.exit(1); }
+          const show = (label, r, j) => console.log(label, r.status, JSON.stringify(j).replace(/"(email|token)":"[^"]*"/g, '"$1":"***"').slice(0, 400));
+          (async () => {
+            let r = await fetch('https://discord.com/api/v10/users/@me', { headers: H });
+            let j = await r.json().catch(() => ({}));
+            show('before:', r, { id: j.id, username: j.username, global_name: j.global_name, bot: j.bot });
+            r = await fetch('https://discord.com/api/v10/users/@me', { method: 'PATCH', headers: H, body: JSON.stringify({ username: process.env.NAME }) });
+            j = await r.json().catch(() => ({}));
+            show('rename user:', r, { id: j.id, username: j.username, global_name: j.global_name, message: j.message, errors: j.errors, retry_after: j.retry_after });
+            let guild = process.env.GUILD;
+            if (!guild) {
+              const g = await fetch('https://discord.com/api/v10/users/@me/guilds', { headers: H });
+              const gj = await g.json().catch(() => []);
+              if (Array.isArray(gj) && gj.length === 1) guild = gj[0].id;
+              console.log('guilds:', Array.isArray(gj) ? gj.map((x) => x.name + ' ' + x.id).join(', ') : JSON.stringify(gj).slice(0, 200));
+            }
+            if (guild) {
+              r = await fetch('https://discord.com/api/v10/guilds/' + guild + '/members/@me', { method: 'PATCH', headers: H, body: JSON.stringify({ nick: process.env.NAME }) });
+              j = await r.json().catch(() => ({}));
+              show('nickname:', r, { nick: j.nick, message: j.message, code: j.code });
+            }
+          })().catch((e) => { console.log('error:', e.message); process.exit(1); });
+          JS
