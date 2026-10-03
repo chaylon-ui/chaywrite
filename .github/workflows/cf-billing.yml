@@ -1,0 +1,54 @@
+# Cloudflare subscriptions peek (owner 2026-10-03, budget email): which paid
+# products the account and its zones carry, read-only, nothing secret printed.
+name: cf-billing
+on:
+  workflow_dispatch:
+jobs:
+  peek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Query
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node <<'JS'
+          const T = process.env.CF_TOKEN, A = process.env.CF_ACCT;
+          const get = async (p) => { const r = await fetch('https://api.cloudflare.com/client/v4' + p, { headers: { authorization: 'Bearer ' + T } }); const j = await r.json().catch(() => ({})); return { status: r.status, ok: j.success, result: j.result, errors: (j.errors || []).map((e) => e.code + ' ' + e.message) }; };
+          (async () => {
+            let r = await get('/accounts/' + A + '/subscriptions');
+            console.log('account subscriptions:', r.status, r.errors.join('; '));
+            for (const s of (r.result || [])) console.log('  ', s.rate_plan && s.rate_plan.public_name || s.rate_plan && s.rate_plan.id, '|', s.frequency, '| price', s.price, s.currency, '| state', s.state, '| components', JSON.stringify((s.component_values || []).map((c) => c.name + '=' + c.value + (c.price ? ' $' + c.price : ''))).slice(0, 400));
+            r = await get('/zones?per_page=50');
+            console.log('zones:', r.status, r.errors.join('; '));
+            for (const z of (r.result || [])) {
+              console.log('  ', z.name, '| plan', z.plan && z.plan.name, '| status', z.status);
+              const sub = await get('/zones/' + z.id + '/subscription');
+              if (sub.result) console.log('     subscription:', sub.result.rate_plan && sub.result.rate_plan.public_name, '| price', sub.result.price, '| components', JSON.stringify((sub.result.component_values || []).map((c) => c.name + '=' + c.value)).slice(0, 300));
+              else console.log('     subscription:', sub.status, sub.errors.join('; '));
+              const argo = await get('/zones/' + z.id + '/argo/smart_routing');
+              console.log('     argo smart routing:', argo.result ? argo.result.value : argo.status + ' ' + argo.errors.join('; '));
+              const tiered = await get('/zones/' + z.id + '/argo/tiered_caching');
+              console.log('     argo tiered cache:', tiered.result ? tiered.result.value : tiered.status + ' ' + tiered.errors.join('; '));
+            }
+            r = await get('/accounts/' + A + '/workers/scripts');
+            console.log('workers scripts:', r.status, (r.result || []).map((s) => s.id + (s.logpush ? ' logpush' : '') + (s.observability && s.observability.enabled ? ' observability' : '')).join(', '), r.errors.join('; '));
+            for (const name of ['exor-binder', 'exor-pullsheet']) {
+              const s = await get('/accounts/' + A + '/workers/scripts/' + name + '/settings');
+              console.log('  ', name, 'settings:', s.status, s.result ? JSON.stringify({ observability: s.result.observability, logpush: s.result.logpush, limits: s.result.limits, placement: s.result.placement, usage_model: s.result.usage_model }) : s.errors.join('; '));
+            }
+            r = await get('/accounts/' + A + '/workers/durable_objects/namespaces');
+            console.log('DO namespaces:', r.status, (r.result || []).map((n) => n.name + ' (' + n.class + ' in ' + n.script + ')').join(', '), r.errors.join('; '));
+            r = await get('/accounts/' + A + '/storage/kv/namespaces');
+            console.log('KV namespaces:', r.status, (r.result || []).map((n) => n.title).join(', '), r.errors.join('; '));
+            r = await get('/accounts/' + A + '/r2/buckets');
+            console.log('R2 buckets:', r.status, JSON.stringify(r.result && r.result.buckets ? r.result.buckets.map((b) => b.name) : r.errors));
+            r = await get('/accounts/' + A + '/d1/database');
+            console.log('D1 databases:', r.status, (r.result || []).map((d) => d.name).join(', '), r.errors.join('; '));
+            r = await get('/accounts/' + A + '/queues');
+            console.log('Queues:', r.status, (r.result || []).map((q) => q.queue_name).join(', '), r.errors.join('; '));
+            r = await get('/accounts/' + A + '/images/v1/stats');
+            console.log('Images:', r.status, JSON.stringify(r.result || r.errors).slice(0, 200));
+          })().catch((e) => { console.log('error:', e.message); process.exit(1); });
+          JS
