@@ -1,0 +1,83 @@
+# Cloudflare usage peek (owner 2026-10-03: "Metered usage has reached your
+# configured budget" email). Reads the account's Workers / Durable Objects
+# analytics through Cloudflare's GraphQL API with the deploy token and prints
+# per-day and per-script totals next to the Workers Paid allowances, so the
+# metered line on the bill can be traced to a script or a DO. Read-only;
+# the token and account id are never printed.
+name: cf-usage
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "First day (YYYY-MM-DD)"
+        required: false
+        default: "2026-09-24"
+      until:
+        description: "Last day (YYYY-MM-DD)"
+        required: false
+        default: "2026-10-03"
+jobs:
+  usage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+        run: |
+          node <<'JS'
+          const T = process.env.CF_TOKEN, A = process.env.CF_ACCT, since = process.env.SINCE, until = process.env.UNTIL;
+          if (!T || !A) { console.log('no CLOUDFLARE_API_TOKEN / ACCOUNT_ID'); process.exit(1); }
+          const gql = async (q, v) => {
+            const r = await fetch('https://api.cloudflare.com/client/v4/graphql', { method: 'POST', headers: { authorization: 'Bearer ' + T, 'content-type': 'application/json' }, body: JSON.stringify({ query: q, variables: v }) });
+            const j = await r.json().catch(() => ({}));
+            if (j.errors) console.log('  gql errors:', JSON.stringify(j.errors).slice(0, 600));
+            return j.data && j.data.viewer && j.data.viewer.accounts && j.data.viewer.accounts[0] || {};
+          };
+          const fmt = (n) => Number(n).toLocaleString('en-US');
+          (async () => {
+            console.log('window', since, '->', until);
+            // 1. Workers requests + CPU per script
+            let d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){workersInvocationsAdaptive(limit:2000,filter:{date_geq:$s,date_leq:$u}){sum{requests errors subrequests} quantiles{cpuTimeP50 cpuTimeP99} dimensions{scriptName date}}}}}`, { a: A, s: since, u: until });
+            const w = d.workersInvocationsAdaptive || [];
+            const byScript = {}, byDay = {};
+            for (const r of w) {
+              const s = r.dimensions.scriptName, day = r.dimensions.date;
+              byScript[s] = byScript[s] || { requests: 0, subrequests: 0, errors: 0, cpuMs: 0 };
+              byScript[s].requests += r.sum.requests; byScript[s].subrequests += r.sum.subrequests; byScript[s].errors += r.sum.errors;
+              byScript[s].cpuMs += r.sum.requests * (r.quantiles.cpuTimeP50 || 0) / 1000;   // µs p50 x requests ~ CPU ms (rough)
+              byDay[day] = (byDay[day] || 0) + r.sum.requests;
+            }
+            console.log('\nWORKERS requests by script (paid plan includes 10,000,000 requests + 30,000,000 CPU-ms per month):');
+            for (const [s, v] of Object.entries(byScript).sort((a, b) => b[1].requests - a[1].requests)) console.log('  ', s, '| requests', fmt(v.requests), '| subrequests', fmt(v.subrequests), '| errors', fmt(v.errors), '| ~CPU ms', fmt(Math.round(v.cpuMs)));
+            console.log('  by day:', Object.entries(byDay).sort().map(([k, v]) => k.slice(5) + ' ' + fmt(v)).join(', '));
+            // 2. Durable Objects requests
+            d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){durableObjectsInvocationsAdaptiveGroups(limit:2000,filter:{date_geq:$s,date_leq:$u}){sum{requests errors responseBodySize wallTime} dimensions{scriptName date}}}}}`, { a: A, s: since, u: until });
+            const di = d.durableObjectsInvocationsAdaptiveGroups || [];
+            const doScript = {}, doDay = {};
+            for (const r of di) { const s = r.dimensions.scriptName; doScript[s] = doScript[s] || { requests: 0, wallMs: 0, errors: 0 }; doScript[s].requests += r.sum.requests; doScript[s].wallMs += r.sum.wallTime / 1000; doScript[s].errors += r.sum.errors; doDay[r.dimensions.date] = (doDay[r.dimensions.date] || 0) + r.sum.requests; }
+            console.log('\nDURABLE OBJECT requests by script (plan includes 1,000,000 per month, then $0.15 per million):');
+            for (const [s, v] of Object.entries(doScript).sort((a, b) => b[1].requests - a[1].requests)) console.log('  ', s, '| requests', fmt(v.requests), '| wall ms', fmt(Math.round(v.wallMs)), '| errors', fmt(v.errors));
+            console.log('  by day:', Object.entries(doDay).sort().map(([k, v]) => k.slice(5) + ' ' + fmt(v)).join(', '));
+            // 3. Durable Objects duration (active time) + storage
+            d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){durableObjectsPeriodicGroups(limit:2000,filter:{date_geq:$s,date_leq:$u}){sum{activeTime cpuTime subrequests inboundWebsocketMsgCount outboundWebsocketMsgCount storageReadUnits storageWriteUnits storageDeletes} dimensions{date}}}}}`, { a: A, s: since, u: until });
+            const dp = d.durableObjectsPeriodicGroups || [];
+            let active = 0, cpu = 0, ws = 0, reads = 0, writes = 0;
+            console.log('\nDURABLE OBJECT duration by day (plan includes 400,000 GB-s per month, then $12.50 per million GB-s; an object kept awake all day costs 128MB x 86,400s = 11,059 GB-s):');
+            for (const r of dp.sort((x, y) => x.dimensions.date < y.dimensions.date ? -1 : 1)) {
+              const gbs = r.sum.activeTime / 1e6 * 0.128;
+              active += gbs; cpu += r.sum.cpuTime; ws += r.sum.inboundWebsocketMsgCount + r.sum.outboundWebsocketMsgCount; reads += r.sum.storageReadUnits; writes += r.sum.storageWriteUnits;
+              console.log('  ', r.dimensions.date, '| active', fmt(Math.round(r.sum.activeTime / 1e6)), 's =', fmt(Math.round(gbs)), 'GB-s | cpu', fmt(Math.round(r.sum.cpuTime / 1000)), 'ms | ws msgs', fmt(r.sum.inboundWebsocketMsgCount + r.sum.outboundWebsocketMsgCount), '| storage reads', fmt(r.sum.storageReadUnits), 'writes', fmt(r.sum.storageWriteUnits));
+            }
+            console.log('  TOTAL active', fmt(Math.round(active)), 'GB-s ->', active > 400000 ? '$' + ((active - 400000) / 1e6 * 12.5).toFixed(2) + ' over the allowance so far' : 'within the allowance', '| storage reads', fmt(reads), '(1M included, then $0.20/M) writes', fmt(writes), '(1M included, then $1.00/M)');
+            d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){durableObjectsStorageGroups(limit:200,filter:{date_geq:$s,date_leq:$u}){max{storedBytes} dimensions{date}}}}}`, { a: A, s: since, u: until });
+            const ds = d.durableObjectsStorageGroups || [];
+            console.log('  stored bytes by day (1 GB-month included, then $0.20/GB-month):', ds.sort((x, y) => x.dimensions.date < y.dimensions.date ? -1 : 1).map((r) => r.dimensions.date.slice(5) + ' ' + (r.max.storedBytes / 1e6).toFixed(1) + 'MB').join(', '));
+            // 4. KV + R2 + Queues quick look (if any)
+            d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){kvOperationsAdaptiveGroups(limit:200,filter:{date_geq:$s,date_leq:$u}){sum{requests} dimensions{actionType}}}}}`, { a: A, s: since, u: until });
+            console.log('\nKV ops:', JSON.stringify((d.kvOperationsAdaptiveGroups || []).map((r) => r.dimensions.actionType + ' ' + fmt(r.sum.requests))));
+          })().catch((e) => { console.log('error:', e.message); process.exit(1); });
+          JS
