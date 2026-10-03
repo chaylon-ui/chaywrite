@@ -316,3 +316,42 @@ html[data-xg-theme="dark"] .template-cart .cart .cart__footer .cart-bottm .cart_
 html[data-xg-theme="dark"] .template-404 .empty-page .empty-page-content .home-title,
 html[data-xg-theme="dark"] .template-404 .empty-page .empty-page-content .sub-title { color: #e6ebee; }
 html[data-xg-theme="dark"] .template-404 .empty-page .empty-page-content .description { color: #b8c0c6; }
+/* ---- Wishlist pop-out drawer, dark mode (customer via the owner, 2026-10-02:
+   "that pop-out wishlist doesn't follow the dark mode setting, FYI. Stays white
+   background"). The drawer is the Notify Me app's (.nm-wishlist-drawer, opened
+   by the floating bottom-left Wishlist button). Measured with the probe on the
+   dark site: drawer #f5f5f5, header #fff, title #333, count #616161, empty-state
+   text #303030 on a light panel, while parts of it inherit the dark page's light
+   ink - near-invisible either way. The same dark surfaces as the login modal
+   (section 5) and the Cloud Search sheet above; the close cross's stroke is a
+   hard-coded SVG attribute, so it is overridden in CSS. Rows are matched by
+   class prefix because the list was empty when measured. */
+html[data-xg-theme="dark"] .nm-wishlist-drawer {
+  background: #161b1e !important; color: #e6ebee !important; border-color: #2a3236 !important;
+  box-shadow: 0 0 0 1px #2a3236, 0 16px 48px rgba(0, 0, 0, 0.6) !important;
+}
+html[data-xg-theme="dark"] .nm-wishlist-drawer-header { background: #181d20 !important; border-color: #2a3236 !important; }
+html[data-xg-theme="dark"] .nm-wishlist-drawer-title,
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="nm-wishlist-product"],
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="nm-wishlist-item"],
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="title"],
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="price"],
+html[data-xg-theme="dark"] .nm-wishlist-drawer-body span,
+html[data-xg-theme="dark"] .nm-wishlist-drawer-body p { color: #e6ebee !important; }
+html[data-xg-theme="dark"] .nm-wishlist-drawer-count,
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="variant"],
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="compare"],
+html[data-xg-theme="dark"] .nm-wishlist-empty-state-description { color: #b8c0c6 !important; }
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="nm-wishlist-product"],
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="nm-wishlist-item"] { background: transparent !important; border-color: #2a3236 !important; }
+html[data-xg-theme="dark"] .nm-wishlist-drawer .nm-modal-close-button path { stroke: #e6ebee !important; }
+html[data-xg-theme="dark"] .nm-wishlist-drawer a:not([class*="button"]):not([class*="btn"]) { color: #e6ebee !important; }
+html[data-xg-theme="dark"] .nm-wishlist-empty-state-link,
+html[data-xg-theme="dark"] .nm-wishlist-drawer [class*="button"]:not(.nm-modal-close-button):not([class*="add-to-cart"]):not([class*="primary"]) {
+  background: #1d2327 !important; color: #e6ebee !important; border: 1px solid #39434a !important;
+}
+html[data-xg-theme="dark"] .nm-wishlist-drawer input,
+html[data-xg-theme="dark"] .nm-wishlist-drawer select {
+  background: #1d2327 !important; color: #e6ebee !important; border-color: #39434a !important;
+}
+html[data-xg-theme="dark"] .nm-wishlist-drawer img { background: #fff; border-radius: 6px; }
