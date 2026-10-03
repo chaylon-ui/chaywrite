@@ -354,4 +354,4 @@ html[data-xg-theme="dark"] .nm-wishlist-drawer input,
 html[data-xg-theme="dark"] .nm-wishlist-drawer select {
   background: #1d2327 !important; color: #e6ebee !important; border-color: #39434a !important;
 }
-html[data-xg-theme="dark"] .nm-wishlist-drawer img { background: #fff; border-radius: 6px; }
+html[data-xg-theme="dark"] .nm-wishlist-drawer-body:not(.nm-wishlist-empty-state) img { background: #fff; border-radius: 6px; }
