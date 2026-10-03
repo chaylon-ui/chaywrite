@@ -5,7 +5,7 @@ import { serveStores } from "./stores.js";
 import { serveEvents } from "./events.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 import { serveIcs } from "./ics.js";
-import { servePriceHistory, adminGql } from "./price-history.js";
+import { servePriceHistory, adminGql, PRICE_DO } from "./price-history.js";
 import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
@@ -14,13 +14,13 @@ import { serveEavy } from "./eavy.js";
 import { serveKit } from "./kit.js";
 import { serveArmyPreview } from "./army.js";
 import { GS_PAGE, GS_QUERY, parseGsPage } from "./gamesys.js";
-import { serveEnrich } from "./enrich.js";
+import { serveEnrich, ENRICH_DO } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
-import { serveStage, servePair } from "./stage.js";
+import { serveStage, servePair, STAGE_DO } from "./stage.js";
 import { serveRequests, REQUESTS_DO } from "./requests.js";
 import { servePageEdit } from "./page-edit.js";
-import { serveAutoprice } from "./autoprice.js";
+import { serveAutoprice, AUTOPRICE_DO } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
 import { serveDiscordEvents, discordEventsTick } from "./discord-events.js";
@@ -272,6 +272,18 @@ export default {
     }
     // One-span edit of a Shopify page body (src/page-edit.js): staff key,
     // dry unless told otherwise, verified by a re-read. Owner-asked edits only.
+    // Which Durable Object is which (Cloudflare's usage analytics show only ids): name -> id for every named object and known screen room (2026-10-03, budget email).
+    if (url.pathname === "/admin/do-ids.json") {
+      if (!(await gate("admin")(env, url.origin, url.searchParams.get("k")))) return Response.json({ error: "staff PIN required" }, { status: 403, headers: { "cache-control": "no-store" } });
+      const names = { default: "default", cache: CACHE_DO, portal: "portal-cache", price: PRICE_DO, enrich: ENRICH_DO, hold: HOLD_DO, stage: STAGE_DO, requests: REQUESTS_DO, autoprice: AUTOPRICE_DO };
+      const out = {};
+      for (const [k, n] of Object.entries(names)) out[k] = { name: n, id: env.ROOM.idFromName(n).toString() };
+      let rooms = null;
+      try { rooms = await (await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/rooms-list"))).json(); } catch {}
+      const list = Array.isArray(rooms) ? rooms : (rooms && (rooms.rooms || rooms.list)) || [];
+      for (const r of list) { const n = typeof r === "string" ? r : r && (r.room || r.name || r.id); if (n && !out["room:" + n]) out["room:" + n] = { name: String(n), id: env.ROOM.idFromName(String(n)).toString(), seen: r && r.seen || r && r.last || null }; }
+      return Response.json(out, { headers: { "cache-control": "no-store" } });
+    }
     if (url.pathname === "/admin/page-edit.json") return servePageEdit(request, env, url, gate("admin"), null);
     if (url.pathname === "/hold/health") return serveHoldPage(request, env, url);
     if (url.pathname === "/hold/control" && request.method === "POST") return serveHoldControl(request, env, url, gate("admin"));
