@@ -76,6 +76,14 @@ jobs:
             d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){durableObjectsStorageGroups(limit:200,filter:{date_geq:$s,date_leq:$u}){max{storedBytes} dimensions{date}}}}}`, { a: A, s: since, u: until });
             const ds = d.durableObjectsStorageGroups || [];
             console.log('  stored bytes by day (1 GB-month included, then $0.20/GB-month):', ds.sort((x, y) => x.dimensions.date < y.dimensions.date ? -1 : 1).map((r) => r.dimensions.date.slice(5) + ' ' + (r.max.storedBytes / 1e6).toFixed(1) + 'MB').join(', '));
+            // 3b. Which objects burn the time: per objectId (ids are opaque; the worker's /admin/do-ids.json names them)
+            d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){durableObjectsPeriodicGroups(limit:5000,filter:{date_geq:$s,date_leq:$u}){sum{activeTime inboundWebsocketMsgCount outboundWebsocketMsgCount subrequests} dimensions{objectId date}}}}}`, { a: A, s: since, u: until });
+            const po = d.durableObjectsPeriodicGroups || [];
+            const byObj = {};
+            for (const r of po) { const k = r.dimensions.objectId; byObj[k] = byObj[k] || { s: 0, ws: 0, sub: 0, days: new Set() }; byObj[k].s += r.sum.activeTime / 1e6; byObj[k].ws += r.sum.inboundWebsocketMsgCount + r.sum.outboundWebsocketMsgCount; byObj[k].sub += r.sum.subrequests; byObj[k].days.add(r.dimensions.date); }
+            console.log('\nDURABLE OBJECT active time by object (top 15):');
+            for (const [k, v] of Object.entries(byObj).sort((a, b) => b[1].s - a[1].s).slice(0, 15)) console.log('  ', k, '| active', fmt(Math.round(v.s)), 's =', fmt(Math.round(v.s * 0.128)), 'GB-s over', v.days.size, 'days (' + fmt(Math.round(v.s / v.days.size)) + ' s/day) | ws msgs', fmt(v.ws), '| subrequests', fmt(v.sub));
+            console.log('  objects seen:', Object.keys(byObj).length);
             // 4. KV + R2 + Queues quick look (if any)
             d = await gql(`query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){kvOperationsAdaptiveGroups(limit:200,filter:{date_geq:$s,date_leq:$u}){sum{requests} dimensions{actionType}}}}}`, { a: A, s: since, u: until });
             console.log('\nKV ops:', JSON.stringify((d.kvOperationsAdaptiveGroups || []).map((r) => r.dimensions.actionType + ' ' + fmt(r.sum.requests))));
