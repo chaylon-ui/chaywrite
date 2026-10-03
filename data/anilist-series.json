@@ -1,7 +1,7 @@
 {
  "asked": 816,
  "count": 388,
- "generated": "2026-10-02T13:58:44Z",
+ "generated": "2026-10-03T12:40:15Z",
  "series": {
   "2.5 Dimensional Seduction": {
    "author": "Yuu Hashimoto",
@@ -790,10 +790,10 @@
    "volumes": 10
   },
   "Heroic Legend of Arslan": {
-   "author": "Hiromu Arakawa",
-   "demographic": "Shonen",
-   "status": "Ongoing",
-   "volumes": null
+   "author": "Chisato Nakamura",
+   "demographic": "Shojo",
+   "status": "Completed",
+   "volumes": 13
   },
   "Hikari-man": {
    "author": "Hideo Yamamoto",
@@ -1654,8 +1654,8 @@
    "volumes": 8
   },
   "Reincarnated As a Sword": {
-   "author": "Tomoo Maruyama",
-   "demographic": "Shonen",
+   "author": "Yuu Tanaka",
+   "demographic": "",
    "status": "Ongoing",
    "volumes": null
   },
