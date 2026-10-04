@@ -1021,13 +1021,29 @@ function baseName(title) {
    whole requested name, so distinct cards can never collide. Without this
    the $5.00 SLD Command Tower lost the cheapest-printing race to an $18.10
    plain copy because its title never exact-matched (owner screenshot). */
-function nameMatches(title, want, game) {
-  const b = baseName(title).toLowerCase();
-  if (b === want) return true;
+/* Punctuation-blind spelling of a name: lower case, accents dropped, every
+   run of non-letters/digits folded to one space. "Adewale breaker of chains"
+   == "Adewale, Breaker of Chains"; "Peter Pans Ally" == "Peter Pan's Ally";
+   "Witch king of Angmar" == "Witch-king of Angmar" (owner 2026-10-04: a
+   name typed without its comma found nothing). Letters and digits all still
+   have to match in order, so distinct cards cannot collide. */
+export function foldName(s) {
+  return String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/['\u2018\u2019]/g, "")   // apostrophes vanish: "Pan's" and "Pans" are the same card
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+export function nameMatches(title, want, game) {
+  const base = baseName(title);
+  const w = foldName(want);
+  if (!w) return false;
+  if (foldName(base) === w) return true;
+  // A double-faced / split card is listed as "Front // Back": the list
+  // usually names one face, and a face name belongs to one card only.
+  if (base.indexOf("//") !== -1 && base.split("//").some((f) => foldName(f) === w)) return true;
   // Lorcana names ARE "Character - Version" ("Stitch - Rock Star"): a bare
   // "Stitch" must not pick up every Stitch, so no segment matching there.
-  if (game === "lorcana" || b.indexOf(" - ") === -1) return false;
-  return b.split(" - ").some((seg) => seg.trim() === want);
+  if (game === "lorcana" || base.indexOf(" - ") === -1) return false;
+  return base.split(" - ").some((seg) => foldName(seg) === w);
 }
 
 /* ---------------- "What we pay" — BinderPOS buylist prices ----------------
