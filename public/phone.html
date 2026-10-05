@@ -183,6 +183,11 @@ window.BINDER_READY=fetch('/cards.json?v=1'+RQ,{cache:'no-store'}).then(r=>r.ok?
 function IMGURL(u,w){return u+(u.indexOf('?')>-1?'&':'?')+'width='+w}
 </script>
 <script>
+/* idle countdown: the room sends 'idle' when the session starts and after each
+   command (its object sleeps between events, 2026-10-05); the phone counts down. */
+var PHIDLE=null;
+function phIdleDraw(){if(!PHIDLE)return;var left=Math.max(0,PHIDLE.left-Math.floor((Date.now()-PHIDLE.at)/1000));var el=document.getElementById('phIdle');if(el)el.textContent=Math.floor(left/60)+':'+String(left%60).padStart(2,'0');}
+
 let CARDS, CN;
 /* Fallback art swatches per lane (MTG letters, Pokémon energies, YGO lanes). */
 const ART={W:'radial-gradient(circle at 50% 40%,#fff8e0,#cdbf90)',U:'radial-gradient(circle at 50% 40%,#7db4e8,#254a72)',B:'radial-gradient(circle at 50% 40%,#4a4a56,#0c0c10)',R:'radial-gradient(circle at 50% 40%,#e08a5a,#7a1f16)',G:'radial-gradient(circle at 50% 40%,#7fc88f,#1c5030)',M:'radial-gradient(circle at 50% 40%,#f0d878,#8a6f18)',C:'radial-gradient(circle at 50% 40%,#c8ced6,#5c626b)',
@@ -309,10 +314,11 @@ let ws;
 function connect(){
  const proto=location.protocol==='https:'?'wss':'ws';
  ws=new WebSocket(`${proto}://${location.host}/ws?role=phone&token=${encodeURIComponent(token)}${RQ}`);
+ if(!window.PHTICK){window.PHTICK=setInterval(phIdleDraw,1000);}
  ws.onmessage=(ev)=>{const m=JSON.parse(ev.data);
    if(m.type==='claimed'){SHOW('v-ctrl');drawSpread();}
    else if(m.type==='rejected'){SHOW('v-reject');if(m.reason==='expired'){document.getElementById('rjT').textContent='This code expired';document.getElementById('rjP').textContent='Codes refresh every 2 minutes. Scan the current code on the TV.';}}
-   else if(m.type==='idle'){document.getElementById('phIdle').textContent=Math.floor(m.idleLeft/60)+':'+String(m.idleLeft%60).padStart(2,'0');}
+   else if(m.type==='idle'){PHIDLE={left:+m.idleLeft||0,at:Date.now()};phIdleDraw();}
    else if(m.type==='dropped'){if(!checkedOut){SHOW('v-done');document.getElementById('doneT').textContent='Session ended';document.getElementById('doneP').textContent=m.reason==='idle'?'No activity for 2 minutes, so the showcase freed up for the next customer.':'Disconnected.';}}
    else if(m.type==='counter_order'){if(m.data&&m.data.name){document.getElementById('doneP').textContent='Order '+m.data.name+' is on the counter list ('+m.data.count+' cards · $'+m.data.total+'). Head up and give that number to a staff member — we don’t bring orders out; they’ll pull your cards and ring you up.';setTimeout(showRevPop,1500);}}
    else if(m.type==='settings'){applyPhoneSettings(m.data);}

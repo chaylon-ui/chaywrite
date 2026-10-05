@@ -1,5 +1,5 @@
 import { TOKEN_LIFE_S, IDLE_TIMEOUT_S, DEFAULT_SETTINGS, DEFAULT_PIN, SLEEVES_TAB_ICON, BOARD_TAB_ICON, WH_TAB_ICON } from "./config.js";
-import { CACHE_DO, WARM_EVERY_MS, gzipText, warmWithStore } from "./binder-search.js";
+import { CACHE_DO, gzipText } from "./binder-search.js";
 import { PRICE_DO, priceDoFetch, priceDoAlarm } from "./price-history.js";
 import { ENRICH_DO, enrichDoFetch, enrichDoAlarm } from "./enrich.js";
 import { HOLD_DO, holdDoFetch, holdDoAlarm } from "./hold.js";
@@ -26,10 +26,12 @@ export class BinderRoom {
     this.tokenExpiresAt = 0;
     this.controllerId = null;
     this.lastActivity = 0;
-    this.tv = null;
-    this.phone = null;
-    this.staff = new Set(); // /staff alert pages watching this room (any number)
-    this.remotes = new Set(); // admin remote-control mirrors of this room's kiosk
+    // Sockets are never held in memory: with the WebSocket Hibernation API the
+    // runtime keeps them, and the tv / phone / remotes / staff getters below
+    // look them up by tag, so this object can be evicted between messages
+    // (Cloudflare bills a Durable Object for every second it is in memory).
+    this.sess = null;   // pairing session {token, tokenExpiresAt, controllerId, lastActivity}, loaded from storage on first use
+    this.sessSavedAt = 0;
     this.settings = { ...DEFAULT_SETTINGS };
     this.pin = DEFAULT_PIN;
     // Shared tab icons: the DEFAULT room's DO keeps the one icon set every
@@ -106,17 +108,100 @@ export class BinderRoom {
         }
       } catch {}
     });
-    this.rotateToken();
-    this.state.setInterval?.(() => this.tick(), 1e3) ?? (this._iv = setInterval(() => this.tick(), 1e3));
+  }
+
+  /* ---- Pairing session, persisted (2026-10-05) ----------------------------
+     Until now every BinderRoom instance - screens AND the cache / price /
+     staff objects, which share this class - ran a 1-second setInterval from
+     its constructor, and a pending timer keeps a Durable Object in memory
+     (and billed) around the clock: 3 objects awake 24/7 and 51,000 GB-s a
+     day against a 400,000 GB-s monthly allowance (cf-usage, 2026-10-03). The
+     per-second tick is gone: the token rotation and the idle timeout are DO
+     alarms set for the moment they are due, the screens count the seconds
+     down themselves, and the session state lives in storage so a room that
+     hibernated between messages carries on where it was. */
+  async ensureSess() {
+    if (this.sess) return this.sess;
+    let st = null;
+    try { st = await this.state.storage.get("sess"); } catch {}
+    this.sess = st && typeof st === "object" ? st : { token: null, tokenExpiresAt: 0, controllerId: null, lastActivity: 0 };
+    return this.sess;
+  }
+  async saveSess() {
+    this.sessSavedAt = this.now();
+    try { await this.state.storage.put("sess", this.sess); } catch {}
+  }
+  get token() { return this.sess ? this.sess.token : null; }
+  set token(v) { if (this.sess) this.sess.token = v; }
+  get tokenExpiresAt() { return this.sess ? this.sess.tokenExpiresAt : 0; }
+  set tokenExpiresAt(v) { if (this.sess) this.sess.tokenExpiresAt = v; }
+  get controllerId() { return this.sess ? this.sess.controllerId : null; }
+  set controllerId(v) { if (this.sess) this.sess.controllerId = v; }
+  get lastActivity() { return this.sess ? this.sess.lastActivity : 0; }
+  set lastActivity(v) { if (this.sess) this.sess.lastActivity = v; }
+
+  // Live socket lookups (hibernation tags). A setter swallows the old
+  // `this.tv = null` style assignments: closing a socket is what removes it.
+  sockets(tag) { try { return this.state.getWebSockets(tag); } catch { return []; } }
+  get tv() { return this.sockets("tv")[0] || null; }
+  set tv(v) {}
+  get phone() {
+    const cid = this.controllerId;
+    if (!cid) return null;
+    for (const w of this.sockets("phone")) { let a = null; try { a = w.deserializeAttachment(); } catch {} if (a && a.cid === cid) return w; }
+    return null;
+  }
+  set phone(v) {}
+  get remotes() { return new Set(this.sockets("remote")); }
+  set remotes(v) {}
+  get staff() { return new Set(this.sockets("staff")); }
+  set staff(v) {}
+
+  // When the next session event is due: the token's expiry while a TV waits
+  // unpaired, the idle cut-off while a phone drives. Nothing pending -> no
+  // alarm, so an idle screen room sleeps. Screen rooms only: the cache,
+  // price, hold, stage, enrich, autoprice and requests objects own their
+  // alarms (see alarm()).
+  async scheduleTick() {
+    if (!this.isScreen()) return;
+    await this.ensureSess();
+    let at = null;
+    if (this.controllerId) at = this.lastActivity + IDLE_TIMEOUT_S * 1e3;
+    else if (this.tv) at = this.tokenExpiresAt;
+    try {
+      if (at == null) await this.state.storage.deleteAlarm();
+      else await this.state.storage.setAlarm(Math.max(at, this.now() + 1000));
+    } catch {}
+  }
+  isScreen() { return !(this.isCacheDo || this.isPriceDo || this.isEnrichDo || this.isHoldDo || this.isStageDo || this.isAutoDo || this.isReqDo); }
+  async screenAlarm() {
+    await this.ensureSess();
+    if (this.controllerId) {
+      if (this.now() >= this.lastActivity + IDLE_TIMEOUT_S * 1e3) { await this.dropSession("idle"); return; }
+    } else if (this.now() >= this.tokenExpiresAt) {
+      if (!this.tv) return;   // nobody is looking: the next TV to connect gets a fresh code
+      await this.rotateToken();
+      return;
+    }
+    this.pushTvState();
+    await this.scheduleTick();
   }
 
   now() { return Date.now(); }
 
-  rotateToken() {
+  async rotateToken() {
+    await this.ensureSess();
     const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
     this.token = "EX-" + rand;
     this.tokenExpiresAt = this.now() + TOKEN_LIFE_S * 1e3;
+    await this.saveSess();
     this.pushTvState();
+    await this.scheduleTick();
+  }
+  // A current token for the QR: rotated on demand when the last one lapsed.
+  async freshToken() {
+    await this.ensureSess();
+    if (!this.controllerId && (!this.token || this.now() >= this.tokenExpiresAt)) await this.rotateToken();
   }
 
   secondsLeft(untilMs) { return Math.max(0, Math.ceil((untilMs - this.now()) / 1e3)); }
@@ -134,29 +219,15 @@ export class BinderRoom {
     });
   }
 
-  tick() {
-    if (!this.controllerId) {
-      if (this.now() >= this.tokenExpiresAt) this.rotateToken();
-      else this.pushTvState();
-    } else {
-      const idleLeft = this.secondsLeft(this.lastActivity + IDLE_TIMEOUT_S * 1e3);
-      if (idleLeft <= 0) {
-        this.dropSession("idle");
-      } else {
-        this.pushTvState();
-        if (this.phone) this.send(this.phone, { type: "idle", idleLeft });
-      }
+  async dropSession(reason) {
+    await this.ensureSess();
+    const ph = this.phone;
+    if (ph) {
+      this.send(ph, { type: "dropped", reason });
+      try { ph.close(1e3, reason); } catch {}
     }
-  }
-
-  dropSession(reason) {
-    if (this.phone) {
-      this.send(this.phone, { type: "dropped", reason });
-      try { this.phone.close(1e3, reason); } catch {}
-    }
-    this.phone = null;
     this.controllerId = null;
-    this.rotateToken();
+    await this.rotateToken();
     if (this.tv) this.send(this.tv, { type: "unpaired", reason });
   }
 
@@ -723,13 +794,7 @@ export class BinderRoom {
   // runtime itself - the worker cron registered by wrangler on 2026-09-02
   // was never seen to invoke scheduled(). Only the cache DO ever sets an
   // alarm, so alarm() is a no-op for every screen's room.
-  async armWarmAlarm() {
-    if (!this.isCacheDo || this.warmAlarmArmed) return;
-    this.warmAlarmArmed = true;
-    try {
-      if ((await this.state.storage.getAlarm()) == null) await this.state.storage.setAlarm(Date.now() + 30e3);
-    } catch (e) { console.log("binder-warm(alarm): arm failed: " + ((e && e.message) || e)); }
-  }
+  async armWarmAlarm() { /* retired 2026-10-05: the worker cron warms the cache (see alarm()) */ }
 
   async alarm() {
     // The price DO's alarm is the nightly snapshot clock (price-history.js).
@@ -739,18 +804,60 @@ export class BinderRoom {
     if (this.isStageDo) { await stageDoAlarm(this.stageCx()); return; }
     if (this.isAutoDo) { await autopriceDoAlarm(this.autoCx()); return; }
     if (this.isReqDo) { await requestsDoAlarm(this.reqCx()); return; }
-    if (!this.isCacheDo) return;
-    try { await this.state.storage.setAlarm(Date.now() + WARM_EVERY_MS); } catch {}
-    let r = null;
-    try { r = await warmWithStore(this.cacheStore(), "alarm"); }
-    catch (e) { console.log("binder-warm(alarm): " + ((e && e.message) || e)); }
-    // A run was still going (a slow BinderPOS can stretch one past the
-    // period): look again in a minute instead of a full period later.
-    if (r && r.skipped) { try { await this.state.storage.setAlarm(Date.now() + 60e3); } catch {} }
+    if (this.isCacheDo) {
+      // Retired 2026-10-05: the worker's cron (index.js scheduled(), proven
+      // live since September) runs the same warm-up, and in the worker the
+      // 25-60 s BinderPOS waits cost nothing, whereas here they kept this
+      // object awake for 48,000 s a day. An alarm set before the change
+      // lands here once and is not re-armed.
+      try { await this.state.storage.deleteAlarm(); } catch {}
+      return;
+    }
+    await this.screenAlarm();
+  }
+
+  /* ---- Hibernation API callbacks: a message or a close wakes the object,
+     the role rides in the socket's attachment. ---- */
+  async webSocketMessage(ws, message) {
+    if (typeof message !== "string") return;
+    let a = null; try { a = ws.deserializeAttachment(); } catch {}
+    const role = a && a.role;
+    if (role === "tv") {
+      let m; try { m = JSON.parse(message); } catch { return; }
+      if (!m || m.type !== "mirror") return;
+      const rs = this.remotes;
+      // The kiosk streams mirror snapshots once a second only while it
+      // believes a remote is attached; with none, tell it so it stops.
+      if (!rs.size) { this.send(ws, { type: "remotes", data: { n: 0 } }); return; }
+      for (const r of rs) this.send(r, m);
+    } else if (role === "remote") {
+      let m; try { m = JSON.parse(message); } catch { return; }
+      const tv = this.tv;
+      if (m && m.type === "rc" && tv) this.send(tv, m);
+    } else if (role === "phone") {
+      await this.ensureSess();
+      if (!a.cid || a.cid !== this.controllerId) return;
+      await this.onPhoneMessage({ data: message });
+    }
+  }
+  async webSocketClose(ws, code, reason, wasClean) { await this.socketGone(ws); }
+  async webSocketError(ws, err) { await this.socketGone(ws); }
+  async socketGone(ws) {
+    let a = null; try { a = ws.deserializeAttachment(); } catch {}
+    const role = a && a.role;
+    try { ws.close(1000, "bye"); } catch {}
+    if (role === "remote") {
+      const tv = this.tv;
+      if (tv) this.send(tv, { type: "remotes", data: { n: [...this.remotes].filter((w) => w !== ws).length } });
+    } else if (role === "phone") {
+      await this.ensureSess();
+      if (a.cid && a.cid === this.controllerId) await this.dropSession("closed");
+    }
   }
 
   async fetch(request) {
     const url = new URL(request.url);
+    if (this.isScreen()) await this.ensureSess();
     if (url.pathname.startsWith("/_cache/")) return this.cacheOp(request, url);
     if (url.pathname.startsWith("/_kv/")) return this.kvOp(request, url);
     // The price DO answers only its own paths, and nothing else answers
@@ -788,65 +895,57 @@ export class BinderRoom {
       const token = url.searchParams.get("token");
       const pair = new WebSocketPair();
       const [client, server] = [pair[0], pair[1]];
-      server.accept();
+      await this.ensureSess();
+      // Hibernation API: the runtime owns the socket, messages arrive in
+      // webSocketMessage() below, and this object may sleep in between.
+      const accept = (tag, attachment) => {
+        this.state.acceptWebSocket(server, [tag]);
+        try { server.serializeAttachment(attachment); } catch {}
+      };
       if (role === "tv") {
-        this.tv = server;
+        for (const old of this.sockets("tv")) { try { old.close(1000, "replaced"); } catch {} }
+        accept("tv", { role: "tv" });
+        await this.freshToken();
         this.send(server, { type: "settings", data: this.publicSettings() });
         { const p = this.syncGicons(); this.state.waitUntil?.(p); } // rebroadcasts if the shared icons moved
         this.pushTvState();
         this.send(server, { type: "remotes", data: { n: this.remotes.size } });
-        // The kiosk streams mirror snapshots; fan them out to the remotes.
-        server.addEventListener("message", (ev) => {
-          let m; try { m = JSON.parse(ev.data); } catch { return; }
-          if (m && m.type === "mirror") for (const r of this.remotes) this.send(r, m);
-        });
-        server.addEventListener("close", () => {
-          if (this.tv === server) this.tv = null;
-        });
+        await this.scheduleTick();
       } else if (role === "remote") {
         // Admin remote-control mirror (worker already checked the PIN):
         // receives the kiosk's mirror stream, sends rc commands back to it.
-        this.remotes.add(server);
+        accept("remote", { role: "remote" });
         this.send(server, { type: "settings", data: this.publicSettings() });
-        if (this.tv) this.send(this.tv, { type: "remotes", data: { n: this.remotes.size } });
-        if (this.tv) this.send(this.tv, { type: "rc", data: { a: "hello" } });
-        server.addEventListener("message", (ev) => {
-          let m; try { m = JSON.parse(ev.data); } catch { return; }
-          if (m && m.type === "rc" && this.tv) this.send(this.tv, m);
-        });
-        server.addEventListener("close", () => {
-          this.remotes.delete(server);
-          if (this.tv) this.send(this.tv, { type: "remotes", data: { n: this.remotes.size } });
-        });
+        const tv = this.tv;
+        if (tv) this.send(tv, { type: "remotes", data: { n: this.remotes.size } });
+        if (tv) this.send(tv, { type: "rc", data: { a: "hello" } });
       } else if (role === "phone") {
         const ok = token && token === this.token && this.now() < this.tokenExpiresAt;
-        if (this.controllerId) {
-          this.send(server, { type: "rejected", reason: "busy" });
-          server.close(4001, "busy");
-        } else if (!ok) {
-          this.send(server, { type: "rejected", reason: "expired" });
-          server.close(4002, "expired");
+        if (this.controllerId || !ok) {
+          // Rejected before it is ever registered: a plain accept so the
+          // reason reaches the phone, then closed on the spot.
+          server.accept();
+          this.send(server, { type: "rejected", reason: this.controllerId ? "busy" : "expired" });
+          server.close(this.controllerId ? 4001 : 4002, this.controllerId ? "busy" : "expired");
         } else {
-          this.controllerId = crypto.randomUUID();
-          this.phone = server;
+          const cid = crypto.randomUUID();
+          accept("phone", { role: "phone", cid });
+          this.controllerId = cid;
           this.lastActivity = this.now();
-          this.rotateToken();
-          this.send(server, { type: "claimed", controllerId: this.controllerId });
+          await this.rotateToken();   // saves the session and arms the idle alarm
+          this.send(server, { type: "claimed", controllerId: cid });
           this.send(server, { type: "settings", data: this.publicSettings() });
+          this.send(server, { type: "idle", idleLeft: IDLE_TIMEOUT_S });
           if (this.tv) this.send(this.tv, { type: "paired" });
           this.pushTvState();
-          server.addEventListener("message", (ev) => this.onPhoneMessage(ev));
-          server.addEventListener("close", () => {
-            if (this.phone === server) this.dropSession("closed");
-          });
         }
       } else if (role === "staff") {
         // Counter-alert listeners (the /staff Chrome page). Any number may
         // watch a room; they only receive broadcasts and can never drive it.
-        this.staff.add(server);
+        accept("staff", { role: "staff" });
         this.send(server, { type: "staff_hello" });
-        server.addEventListener("close", () => this.staff.delete(server));
       } else {
+        server.accept();
         server.close(4e3, "unknown role");
       }
       return new Response(null, { status: 101, webSocket: client });
@@ -1466,6 +1565,7 @@ export class BinderRoom {
     }
 
     if (url.pathname.endsWith("/status")) {
+      await this.freshToken();
       return Response.json({
         paired: !!this.controllerId,
         token: this.controllerId ? null : this.token,
@@ -1527,9 +1627,12 @@ export class BinderRoom {
     for (const s of this.staff) this.send(s, m);
   }
 
-  onPhoneMessage(ev) {
-    if (!this.phone) return;
+  async onPhoneMessage(ev) {
+    const phone = this.phone;
+    if (!phone) return;
     this.lastActivity = this.now();
+    if (this.now() - this.sessSavedAt > 5e3) await this.saveSess();
+    this.send(phone, { type: "idle", idleLeft: IDLE_TIMEOUT_S });
     let msg;
     try {
       msg = JSON.parse(ev.data);

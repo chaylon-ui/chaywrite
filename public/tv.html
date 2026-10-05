@@ -1575,6 +1575,12 @@ let qrLast=null;
 function renderQR(token,left){document.getElementById('rc').textContent=token?token.replace('EX-',''):'— — —';document.getElementById('timer').textContent='new code in '+fmt(left);
  if(token!==qrLast){qrLast=token;const el=document.getElementById('qr');el.innerHTML='';const url=(location.origin)+'/c/'+token+(ROOM==='default'?'':'?room='+ROOM);try{new QRCode(el,{text:url,width:190,height:190,colorDark:'#0a0a0a',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}catch(e){el.textContent='QR';}}}
 
+/* The room no longer pushes tv_state every second (its object sleeps
+   between events, 2026-10-05): the last state is counted down here. */
+let TVS=null;
+setInterval(function(){if(!TVS)return;var gone=Math.floor((Date.now()-TVS.at)/1000);
+ if(TVS.paired){document.getElementById('tvIdle').textContent=fmt(Math.max(0,TVS.idleLeft-gone));}
+ else{document.getElementById('timer').textContent='new code in '+fmt(Math.max(0,TVS.tokenLeft-gone));}},1000);
 /* ---- WebSocket to the room ---- */
 let ws;
 function connect(){
@@ -1584,7 +1590,7 @@ function connect(){
  ws.onopen=()=>{document.getElementById('conn').classList.add('on');document.getElementById('connT').textContent='live';};
  ws.onclose=()=>{document.getElementById('conn').classList.remove('on');document.getElementById('connT').textContent='reconnecting…';setTimeout(connect,1500);};
  ws.onmessage=(ev)=>{const m=JSON.parse(ev.data);
-   if(m.type==='tv_state'){ if(m.paired){setPaired(true);document.getElementById('tvIdle').textContent=fmt(m.idleLeft);} else {setPaired(false);renderQR(m.token,m.tokenLeft);} }
+   if(m.type==='tv_state'){ TVS={paired:!!m.paired,token:m.token,tokenLeft:+m.tokenLeft||0,idleLeft:+m.idleLeft||0,at:Date.now()}; if(m.paired){setPaired(true);document.getElementById('tvIdle').textContent=fmt(m.idleLeft);} else {setPaired(false);renderQR(m.token,m.tokenLeft);} }
    else if(m.type==='paired'){setPaired(true);refreshCards();/* sync to the same cached deck the phone just fetched */}
    else if(m.type==='unpaired'){setPaired(false);refreshCards();}
    else if(m.type==='flip'){flipTo(m.data&&m.data.spread);selected=null;markSel();setTimeout(unzoom,10);}
