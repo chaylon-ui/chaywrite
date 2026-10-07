@@ -79,6 +79,25 @@
      every set (22 s, 36629383484). */
   var MTG_COLOURS = [['W', 'White', '#f3ecd2'], ['U', 'Blue', '#2f7bd2'], ['B', 'Black', '#2b2530'], ['R', 'Red', '#d3312d'], ['G', 'Green', '#2f8f4e'],
     ['Multicolor', 'Multicolour', 'linear-gradient(135deg,#d9a520,#2f7bd2 50%,#d3312d)'], ['Colorless', 'Colourless', '#b9bec2']];
+  /* Condition + finish (owner, 2026-10-07, screenshot of the panel: "Can you add condition here
+     too?"). forStore's `variants` is a list of EXACT variant names ("Near Mint", "Near Mint Foil",
+     "Lightly Played"...), OR within the list, and the answer carries only the matching variants
+     (probe 37551690067: Sol Ring - no filter 17 products, Near Mint 13, Lightly Played 1, Near
+     Mint Foil 3, an unknown name 0). So a Condition chip sends every finish spelling of that
+     condition, a Finish chip every condition in that finish, and both together the cross
+     product; names a game never uses simply match nothing. */
+  var CONDS = [['Near Mint'], ['Lightly Played'], ['Moderately Played'], ['Heavily Played'], ['Damaged']];
+  var FINISH = {
+    mtg: [['', 'Non-foil'], [' Foil', 'Foil']],
+    pokemon: [['', 'Normal'], [' Holofoil', 'Holofoil'], [' Reverse Holofoil', 'Reverse Holofoil'], [' 1st Edition', '1st Edition'], [' 1st Edition Holofoil', '1st Edition Holofoil']],
+    yugioh: [[' 1st Edition', '1st Edition'], [' Unlimited', 'Unlimited'], [' Limited', 'Limited'], ['', 'Plain']]
+  };
+  var CONDGROUPS = function (g) {
+    return [
+      { k: 'conds', label: 'Condition', fixed: CONDS },
+      { k: 'finish', label: 'Finish', fixed: (FINISH[g] || FINISH.mtg).map(function (f) { return [f[0] || 'plain', f[1]]; }) }
+    ];
+  };
   var FILTERS = {
     mtg: [
       { k: 'colors', label: 'Colour', fixed: MTG_COLOURS },
@@ -96,8 +115,20 @@
       { k: 'monsterTypes', label: 'Monster type', api: 'monsterTypes', prefer: [] }
     ]
   };
-  var FKEYS = ['colors', 'rarities', 'types', 'monsterTypes'];
-  var FHASH = { colors: 'c', rarities: 'r', types: 't', monsterTypes: 'm' };
+  Object.keys(FILTERS).forEach(function (g) { FILTERS[g] = CONDGROUPS(g).concat(FILTERS[g]); });
+  var FKEYS = ['conds', 'finish', 'colors', 'rarities', 'types', 'monsterTypes'];
+  var FHASH = { conds: 'd', finish: 'n', colors: 'c', rarities: 'r', types: 't', monsterTypes: 'm' };
+  // The variant names one state asks BinderPOS for: null when neither chip row is used.
+  function variantNames(st) {
+    var conds = (st.f && st.f.conds) || [], fin = (st.f && st.f.finish) || [];
+    if (!conds.length && !fin.length) return null;
+    var table = FINISH[st.g] || FINISH.mtg;
+    var sufs = fin.length ? fin.map(function (id) { return id === 'plain' ? '' : id; }) : table.map(function (f) { return f[0]; });
+    var cs = conds.length ? conds : CONDS.map(function (c) { return c[0]; });
+    var out = [];
+    cs.forEach(function (c) { sufs.forEach(function (x) { out.push(c + x); }); });
+    return out;
+  }
   var ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M10.5 17a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zm4.8-1.7L20 20"/></svg>';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -286,10 +317,11 @@
   }
   function bodyOf(st, typeList) {
     var s = sortOf(st);
-    var b = { storeUrl: STORE, game: st.g, strict: null, sortTypes: [{ type: s[0], asc: s[1], order: 1 }], variants: null,
+    var b = { storeUrl: STORE, game: st.g, strict: null, sortTypes: [{ type: s[0], asc: s[1], order: 1 }], variants: variantNames(st),
       title: st.q || '', priceGreaterThan: st.lo !== '' ? st.lo : 0, priceLessThan: st.hi !== '' ? st.hi : null, instockOnly: !st.all, limit: PER, offset: (st.p - 1) * PER };
     if (st.set) b.setNames = [st.set];
     FKEYS.forEach(function (k) {
+      if (k === 'conds' || k === 'finish') return;   // sent as `variants` above
       var v = st.f && st.f[k];
       if (!v || !v.length) return;
       if (k === 'types' && st.g === 'mtg' && typeList) v = expandTypes(v, typeList);
