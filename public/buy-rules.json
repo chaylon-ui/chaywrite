@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-10-08",
+  "updated": "2026-10-09",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -862,279 +862,6 @@
             "MP": {
               "cash": 0.15,
               "credit": 0.25,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "reality fracture special guests": {
-          "name": "reality fracture SG squash delete oct 9th",
-          "conds": {
-            "NM": {
-              "cash": 0.25,
-              "credit": 0.35,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "LP": {
-              "cash": 0.25,
-              "credit": 0.35,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "MP": {
-              "cash": 0.25,
-              "credit": 0.35,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "reality fracture": {
-          "name": "Reality fracture squash delete October 9th",
-          "conds": {
-            "NM": {
-              "cash": 0.25,
-              "credit": 0.35,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "LP": {
-              "cash": 0.25,
-              "credit": 0.35,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "MP": {
-              "cash": 0.25,
-              "credit": 0.35,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "reality fracture commander": {
-          "name": "reality fracture squash commander delete oct 9th",
-          "conds": {
-            "NM": {
-              "cash": 0.2,
-              "credit": 0.3,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "LP": {
-              "cash": 0.2,
-              "credit": 0.3,
-              "rarities": {
-                "common": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "mythic": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "rare": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "special": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                },
-                "uncommon": {
-                  "cash": 0.0,
-                  "credit": 0.0
-                }
-              }
-            },
-            "MP": {
-              "cash": 0.2,
-              "credit": 0.3,
               "rarities": {
                 "common": {
                   "cash": 0.0,
@@ -3980,6 +3707,31 @@
         },
         "winner's pack 2026-2027": {
           "name": "YUgiOH winners pack 26/27. Do not delete.",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "beyond the brave": {
+          "name": "beyond the brave delete october 23rd",
           "conds": {
             "NM": {
               "cash": 0.0,
