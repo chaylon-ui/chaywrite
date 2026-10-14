@@ -366,7 +366,10 @@ async function saveCfg(cx, cfg) { await cx.storage.put("sc:cfg", cfg); }
 
 function newRun(cfg, now) {
   const since = cfg.ordersSince || new Date(now - BACKFILL_DAYS * DAY_MS).toISOString();
-  return { id: now, day: dayOf(now), phase: cfg.ordersDenied ? "types" : "orders", since, newest: cfg.ordersSince || "", cursor: null, types: null, typeIdx: 0, pages: 0, orders: 0, lines: 0, seen: 0, scanned: 0, lookup: [], lookupDone: 0, open: [], openDone: 0, errors: [], phaseErrors: 0, startedAt: now, candidates: null };
+  // The run record stays small (a Durable Object value holds 128 KiB): the
+  // candidate lists, the lookup ids and the open-order items live in their
+  // own keys (sc:cand, sc:lookup, sc:open), written by compute() and plan().
+  return { id: now, day: dayOf(now), phase: cfg.ordersDenied ? "types" : "orders", since, newest: cfg.ordersSince || "", cursor: null, types: null, typeIdx: 0, pages: 0, orders: 0, lines: 0, seen: 0, scanned: 0, lookupDone: 0, lookupTotal: 0, openDone: 0, openTotal: 0, errors: [], phaseErrors: 0, startedAt: now };
 }
 
 // Should a run start now? The first ever run starts at once; later runs once
@@ -391,7 +394,7 @@ async function ledgersFor(cx, today, days) {
 }
 
 // After the scan: the candidates for both lists, from the ledger and the
-// in-stock records. Sets run.lookup (variant ids the lookup phase fetches).
+// in-stock records. Writes sc:cand, sc:lookup (the variant ids the lookup phase fetches) and sc:types.
 async function compute(cx, run) {
   const today = run.day;
   const ledgers = await ledgersFor(cx, today, WINDOW_DAYS);
@@ -426,12 +429,18 @@ async function compute(cx, run) {
     reorderIds.push(vid);
   }
   look.sort((a, b) => b.f.score - a.f.score);
-  run.candidates = { look: look.slice(0, MAX_ROWS * 2), reorderIds: reorderIds.slice(0, 2000), typeSeries };
-  const ids = new Set(run.candidates.look.map((x) => x.vid));
-  for (const v of reorderIds) ids.add(v);
-  run.lookup = [...ids];
-  run.lookupDone = 0;
-  run.phase = run.lookup.length ? "lookup" : "finalize";
+  const cand = { look: look.slice(0, MAX_ROWS * 2), reorderIds: reorderIds.slice(0, 2000) };
+  const ids = new Set(cand.look.map((x) => x.vid));
+  for (const v of cand.reorderIds) ids.add(v);
+  const lookup = [...ids];
+  // the type series only for the types the candidates are in (a few KiB)
+  const need = new Set(cand.look.map((x) => inStock.get("sc:v:" + x.vid)).filter(Boolean).map((it) => it.type));
+  for (const v of cand.reorderIds) { const m = metas.get(v); if (m && m.type != null) need.add(m.type); }
+  const ts = {};
+  for (const t of need) if (typeSeries[t]) ts[t] = typeSeries[t];
+  await cx.storage.put({ "sc:cand": cand, "sc:lookup": lookup, "sc:types": ts });
+  run.lookupDone = 0; run.lookupTotal = lookup.length;
+  run.phase = lookup.length ? "lookup" : "finalize";
 }
 
 // After lookup + open: the two result lists, auto-closes, prunes.
@@ -439,13 +448,15 @@ async function finalize(cx, run, cfg, now) {
   const today = run.day;
   const ledgers = await ledgersFor(cx, today, WINDOW_DAYS);
   const lk = new Map();
-  const ids = run.lookup || [];
+  const ids = (await cx.storage.get("sc:lookup")) || [];
+  const cand = (await cx.storage.get("sc:cand")) || { look: [], reorderIds: [] };
+  const typeSeries = (await cx.storage.get("sc:types")) || {};
   for (let i = 0; i < ids.length; i += 128) {
     const m = await cx.storage.get(ids.slice(i, i + 128).map((v) => "sc:lk:" + v));
     for (const [k, v] of m) lk.set(k.slice(6), v);
   }
   const look = [];
-  for (const c of (run.candidates && run.candidates.look) || []) {
+  for (const c of cand.look || []) {
     const item = await cx.storage.get("sc:v:" + c.vid);
     if (!item) continue;
     const l = lk.get(c.vid);
@@ -456,7 +467,7 @@ async function finalize(cx, run, cfg, now) {
   }
   look.sort((a, b) => b.score - a.score);
   const reorderRows = [];
-  for (const vid of (run.candidates && run.candidates.reorderIds) || []) {
+  for (const vid of cand.reorderIds || []) {
     const l = lk.get(vid);
     if (!l) continue;
     if (l.status && l.status !== "ACTIVE") continue;
@@ -464,8 +475,7 @@ async function finalize(cx, run, cfg, now) {
     const s = seriesOf(ledgers, vid, today, WINDOW_DAYS);
     const f = reorder(l, s, today, l.qty);
     if (!f) continue;
-    const ts = run.candidates.typeSeries && run.candidates.typeSeries[l.type];
-    f.catDrop = categoryDrop(ts, f.lastDay, today, 60, s);
+    f.catDrop = categoryDrop(typeSeries[l.type], f.lastDay, today, 60, s);
     reorderRows.push({ vid, pid: l.pid, title: l.title, vtitle: l.vtitle, sku: l.sku, barcode: l.barcode, cents: l.cents, type: l.type, vendor: l.vendor, handle: l.handle, image: l.image, qty: l.qty, q: l.q || {}, ...f });
   }
   reorderRows.sort((a, b) => b.score - a.score);
@@ -504,7 +514,7 @@ async function finalize(cx, run, cfg, now) {
   cfg.lastRunDay = today; cfg.lastRunAt = now; cfg.kick = false; cfg.runs = (cfg.runs || 0) + 1; cfg.lastError = (run.errors || []).length ? run.errors[run.errors.length - 1] : "";
   if (run.newest) cfg.ordersSince = run.newest;
   await saveCfg(cx, cfg);
-  await cx.storage.delete("sc:run");
+  await cx.storage.delete(["sc:run", "sc:cand", "sc:lookup", "sc:types", "sc:open"]);
 }
 
 // What the worker should do next. Runs the in-DO phases itself first.
@@ -517,14 +527,15 @@ async function plan(cx, now) {
     await cx.storage.put("sc:run", run);
   }
   if (run.phase === "compute") { await compute(cx, run); await cx.storage.put("sc:run", run); }
-  if (run.phase === "lookup" && run.lookupDone >= (run.lookup || []).length) {
+  if (run.phase === "lookup" && run.lookupDone >= run.lookupTotal) {
     // which candidates have committed units and a SKU -> the open-orders phase
     const items = [];
-    for (const vid of run.lookup || []) { const l = await cx.storage.get("sc:lk:" + vid); if (l && l.q && l.q.committed > 0 && l.sku) items.push({ vid, sku: l.sku }); }
-    run.open = items; run.openDone = 0; run.phase = items.length ? "open" : "finalize";
+    for (const vid of (await cx.storage.get("sc:lookup")) || []) { const l = await cx.storage.get("sc:lk:" + vid); if (l && l.q && l.q.committed > 0 && l.sku) items.push({ vid, sku: l.sku }); }
+    await cx.storage.put("sc:open", items);
+    run.openDone = 0; run.openTotal = items.length; run.phase = items.length ? "open" : "finalize";
     await cx.storage.put("sc:run", run);
   }
-  if (run.phase === "open" && run.openDone >= (run.open || []).length) { run.phase = "finalize"; await cx.storage.put("sc:run", run); }
+  if (run.phase === "open" && run.openDone >= run.openTotal) { run.phase = "finalize"; await cx.storage.put("sc:run", run); }
   if (run.phase === "finalize") { await finalize(cx, run, cfg, now); return { ok: true, kind: "idle", phase: "done", finished: true }; }
   if (run.phase === "scan" && (!run.types || run.typeIdx >= run.types.length)) { run.phase = "compute"; await cx.storage.put("sc:run", run); return plan(cx, now); }
   // One worker at a time: a unit handed out is leased for LEASE_MS; a second
@@ -537,8 +548,8 @@ async function plan(cx, now) {
   if (run.phase === "orders") return { ...unit, kind: "orders", since: run.since, cursor: run.cursor, pages: run.pages };
   if (run.phase === "types") return { ...unit, kind: "types" };
   if (run.phase === "scan") return { ...unit, kind: "scan", type: run.types[run.typeIdx], cursor: run.cursor, typeIdx: run.typeIdx, types: run.types.length };
-  if (run.phase === "lookup") return { ...unit, kind: "lookup", ids: run.lookup.slice(run.lookupDone, run.lookupDone + LOOKUP_PAGE), done: run.lookupDone, total: run.lookup.length };
-  if (run.phase === "open") return { ...unit, kind: "open", items: run.open.slice(run.openDone, run.openDone + OPEN_PER_PAGE), done: run.openDone, total: run.open.length };
+  if (run.phase === "lookup") { const ids = (await cx.storage.get("sc:lookup")) || []; return { ...unit, kind: "lookup", ids: ids.slice(run.lookupDone, run.lookupDone + LOOKUP_PAGE), done: run.lookupDone, total: run.lookupTotal }; }
+  if (run.phase === "open") { const items = (await cx.storage.get("sc:open")) || []; return { ...unit, kind: "open", items: items.slice(run.openDone, run.openDone + OPEN_PER_PAGE), done: run.openDone, total: run.openTotal }; }
   run.lease = null; await cx.storage.put("sc:run", run);
   return { ok: false, error: "bad phase " + run.phase };
 }
@@ -686,7 +697,7 @@ async function view(cx, now) {
   const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
-  return { ok: true, look: outLook, reorder: outReorder, missing, dismissed, meta: meta || null, status: { lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: (run.lookup || []).length, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
+  return { ok: true, look: outLook, reorder: outReorder, missing, dismissed, meta: meta || null, status: { lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
 }
 
 export async function stockDoFetch(cx, request, url) {
@@ -701,7 +712,7 @@ export async function stockDoFetch(cx, request, url) {
     if (p === "/_sc/view") return doJson(await view(cx, now));
     if (p === "/_sc/health") {
       const cfg = await loadCfg(cx); const run = await cx.storage.get("sc:run"); const meta = await cx.storage.get("sc:res:meta");
-      return doJson({ ok: true, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, runs: cfg.runs || 0, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, orders: run.orders, lines: run.lines, scanned: run.scanned, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: (run.lookup || []).length, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, counts: meta ? meta.counts : null, resultsAt: meta ? meta.at : 0 });
+      return doJson({ ok: true, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, runs: cfg.runs || 0, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, orders: run.orders, lines: run.lines, scanned: run.scanned, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, counts: meta ? meta.counts : null, resultsAt: meta ? meta.at : 0 });
     }
   } catch (e) { cx.log("stock-check: " + p + ": " + ((e && e.message) || e)); return doJson({ ok: false, error: String((e && e.message) || e).slice(0, 200) }, 500); }
   return doJson({ ok: false, error: "not found" }, 404);
