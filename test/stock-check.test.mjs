@@ -173,7 +173,7 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   const sl = v.reorder[0];
   assert.equal(sl.vid, "22"); assert.equal(sl.daysOut, 20); assert.equal(sl.sold60, 8, "70, 50, 35 and 20 days ago all fall in the 60 days before the last sale"); assert.equal(sl.vendor, "Arcane Tinmen"); assert.equal(sl.missed, 2.7); assert.equal(sl.missedRevenue, 34.64);
   const ledger = await c.storage.get("sc:l:" + (TODAY - 50));
-  assert.deepEqual(ledger, { 11: 1 }, "the single on the same order is not in the ledger");
+  assert.deepEqual(ledger, { 11: 1, 22: 3 }, "the box and the sleeves sold that day; the single on the box order is not in the ledger");
   assert.equal(await c.storage.get("sc:m:99"), undefined, "no meta for singles either");
   assert.equal(v.meta.counts.scanned, 1); assert.equal(v.meta.counts.orders, 11);
   assert.equal(v.status.lastRunDay, TODAY);
