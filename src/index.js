@@ -19,6 +19,7 @@ import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
 import { serveStage, servePair, STAGE_DO } from "./stage.js";
 import { serveRequests, REQUESTS_DO } from "./requests.js";
+import { stockCheckTick, STOCK_DO } from "./stock-check.js";
 import { servePageEdit } from "./page-edit.js";
 import { serveAutoprice, AUTOPRICE_DO } from "./autoprice.js";
 import { servePortal } from "./portal.js";
@@ -275,7 +276,7 @@ export default {
     // Which Durable Object is which (Cloudflare's usage analytics show only ids): name -> id for every named object and known screen room (2026-10-03, budget email).
     if (url.pathname === "/admin/do-ids.json") {
       if (!(await gate("admin")(env, url.origin, url.searchParams.get("k")))) return Response.json({ error: "staff PIN required" }, { status: 403, headers: { "cache-control": "no-store" } });
-      const names = { default: "default", cache: CACHE_DO, portal: "portal-cache", price: PRICE_DO, enrich: ENRICH_DO, hold: HOLD_DO, stage: STAGE_DO, requests: REQUESTS_DO, autoprice: AUTOPRICE_DO };
+      const names = { default: "default", cache: CACHE_DO, portal: "portal-cache", price: PRICE_DO, enrich: ENRICH_DO, hold: HOLD_DO, stage: STAGE_DO, requests: REQUESTS_DO, autoprice: AUTOPRICE_DO, stock: STOCK_DO };
       const out = {};
       for (const [k, n] of Object.entries(names)) out[k] = { name: n, id: env.ROOM.idFromName(n).toString() };
       let rooms = null;
@@ -549,6 +550,11 @@ export default {
     // time, off the request path.
     try { const w = await refreshWantedCards(env); if (w && !w.skipped) console.log("wanted: " + JSON.stringify({ game: w.game || "mtg", count: w.count, tried: w.tried, error: w.error || null })); }
     catch (e) { console.log("wanted: failed: " + ((e && e.message) || e)); }
+    // Stock check (src/stock-check.js): units of the daily run - orders,
+    // stock scan, lookups - done here where waiting on Shopify costs nothing;
+    // the stock-check DO only plans and stores. Quiet when idle.
+    try { const s = await stockCheckTick(env); if (s && !s.skipped && !s.idle) console.log("stock-check: " + JSON.stringify(s)); }
+    catch (e) { console.log("stock-check: failed: " + ((e && e.message) || e)); }
   },
 };
 

@@ -54,7 +54,13 @@ export const STAFF_PERMS = [
   { key: "portal", label: "BinderPOS buylists screen (customer contact details)" },
   { key: "decks", label: "Deck Builder stats and bans" },
 ];
-export const ALL_PERMS = [...PERMS, ...AP_PERMS, ...STAFF_PERMS];
+// The stock check (src/stock-check.js): the screen itself, and marking items.
+// Owner, 2026-10-14: a standalone 9Pocket screen, not behind the PIN.
+export const SC_PERMS = [
+  { key: "sc_view", label: "Stock check: open the screen (read only)" },
+  { key: "sc_act", label: "Stock check: mark items found / not found / ordered / can't reorder" },
+];
+export const ALL_PERMS = [...PERMS, ...AP_PERMS, ...STAFF_PERMS, ...SC_PERMS];
 
 // Per-account brakes on what a publish may do to a price, in percent of
 // today's price. Blank means no limit. Admins are never limited.

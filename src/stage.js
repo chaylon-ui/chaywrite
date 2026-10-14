@@ -66,6 +66,7 @@ import { buildEmail, buildDecisionEmail, buildCodeEmail, sendEmail, emailConfigu
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
 import { serveRequestsStaff } from "./requests.js";
+import { serveStockStaff } from "./stock-check.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
@@ -972,6 +973,10 @@ export async function serveStage(request, env, url, staffOk, sopts) {
   // Item requests (src/requests.js): the list, one request, its control.
   if (p === BASE + "/requests" || p === BASE + "/requests.json" || p.startsWith(BASE + "/requests/")) {
     return serveRequestsStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts });
+  }
+  // Stock check (src/stock-check.js): go look / reorder / missing / dismissed.
+  if (p === BASE + "/stock" || p === BASE + "/stock.json" || p.startsWith(BASE + "/stock/")) {
+    return serveStockStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, pinOk });
   }
 
   if (p === BASE + ".json") {

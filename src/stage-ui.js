@@ -17,7 +17,7 @@
    Markup only here; every decision is made in stage.js. What a page shows
    follows the signed-in account's permissions (src/stage-auth.js can()). */
 
-import { PERMS, AP_PERMS, STAFF_PERMS, LIMITS, can, apPerms } from "./stage-auth.js";
+import { PERMS, AP_PERMS, STAFF_PERMS, SC_PERMS, LIMITS, can, apPerms } from "./stage-auth.js";
 
 export const BASE = "/9pocket";
 export const BRAND = "9Pocket by Exor";
@@ -68,7 +68,7 @@ form.login{max-width:400px;margin:60px auto;background:#fff;border:1px solid #dd
 @media (max-width:720px){.wrap{padding:12px}td,th{padding:6px}input.p{width:72px}}`;
 
 export const shell = (title, body, o, back) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>
-<div class="bar">${back ? `<a class="back" href="${BASE}">← Back to 9Pocket</a>` : ""}<a class="brand" href="${BASE}" aria-label="${BRAND}">${brandMark()}<small>buylists</small></a><span class="sp"></span><span class="links">${o && o.user ? `<span class="who">${esc(o.user.name || o.user.email)}${o.user.role === "admin" ? " · admin" : ""}</span>${o.user.role === "admin" ? `<a href="${BASE}/admin">Admin</a>` : ""}${apPerms(o.user) ? `<a href="/autoprice">Auto-pricing</a>` : ""}${can(o.user, "release") ? `<a href="${BASE}/held">Held stock</a>` : ""}${can(o.user, "requests") ? `<a href="${BASE}/requests">Requests</a>` : ""}` : ""}<a href="/portal/buylists">BinderPOS's list</a>${o && o.user ? `<form method="post" action="${BASE}/logout"><button type="submit">Sign out</button></form>` : ""}</span></div>
+<div class="bar">${back ? `<a class="back" href="${BASE}">← Back to 9Pocket</a>` : ""}<a class="brand" href="${BASE}" aria-label="${BRAND}">${brandMark()}<small>buylists</small></a><span class="sp"></span><span class="links">${o && o.user ? `<span class="who">${esc(o.user.name || o.user.email)}${o.user.role === "admin" ? " · admin" : ""}</span>${o.user.role === "admin" ? `<a href="${BASE}/admin">Admin</a>` : ""}${apPerms(o.user) ? `<a href="/autoprice">Auto-pricing</a>` : ""}${can(o.user, "release") ? `<a href="${BASE}/held">Held stock</a>` : ""}${can(o.user, "requests") ? `<a href="${BASE}/requests">Requests</a>` : ""}${can(o.user, "sc_view") || can(o.user, "sc_act") ? `<a href="${BASE}/stock">Stock check</a>` : ""}` : ""}<a href="/portal/buylists">BinderPOS's list</a>${o && o.user ? `<form method="post" action="${BASE}/logout"><button type="submit">Sign out</button></form>` : ""}</span></div>
 <div class="wrap">${body}</div></body></html>`;
 
 const plain = (title, inner) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>${inner}</body></html>`;
@@ -334,7 +334,7 @@ export function renderAdmin(o) {
   const checks = (list, u) => list.map((p) => `<label class="chk"><input type="checkbox" name="perm_${p.key}" ${u && u.perms && u.perms[p.key] ? "checked" : ""}> ${esc(p.label)}</label>`).join("");
   const limitFields = (u) => LIMITS.map((l) => { const val = u && u.limits && u.limits[l.key] != null ? u.limits[l.key] : ""; return `<label class="chk">${esc(l.label)} <input type="number" class="p" name="${l.key}" min="0" max="${l.max}" step="0.5" value="${esc(val)}" placeholder="no limit"> %</label>`; }).join("");
   // Two groups: the buylist worksheet, then the auto-pricer with its brakes.
-  const permChecks = (u) => `<div class="pg"><b>Store screens</b> <span class="muted">(they used to open with the staff PIN)</span><br>${checks(STAFF_PERMS, u)}</div><div class="pg"><b>9Pocket buylists</b><br>${checks(PERMS, u)}</div><div class="pg"><b>Auto-pricing</b> <span class="muted">(any of these opens /autoprice)</span><br>${checks(AP_PERMS, u)}<br>${limitFields(u)}<span class="muted">Limits are in percent of today's price; blank = no limit. Admins are never limited.</span></div>`;
+  const permChecks = (u) => `<div class="pg"><b>Store screens</b> <span class="muted">(they used to open with the staff PIN)</span><br>${checks(STAFF_PERMS, u)}</div><div class="pg"><b>9Pocket buylists</b><br>${checks(PERMS, u)}</div><div class="pg"><b>Auto-pricing</b> <span class="muted">(any of these opens /autoprice)</span><br>${checks(AP_PERMS, u)}<br>${limitFields(u)}<span class="muted">Limits are in percent of today's price; blank = no limit. Admins are never limited.</span></div><div class="pg"><b>Stock check</b> <span class="muted">(items to go look for, items to reorder)</span><br>${checks(SC_PERMS, u)}</div>`;
   const limitChips = (u) => LIMITS.filter((l) => u.limits && u.limits[l.key] != null).map((l) => `<span class="perm lim">${l.key === "apMaxDropPct" ? "drop" : "raise"} ≤ ${esc(u.limits[l.key])}%</span>`).join("");
   const userRow = (u) => {
     const self = me && u.email === me.email;
