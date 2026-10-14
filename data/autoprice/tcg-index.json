@@ -1,23 +1,23 @@
 {
- "builtAt": "2026-10-14T00:16:31Z",
+ "builtAt": "2026-10-14T23:53:59Z",
  "categories": {
   "3": {
    "groups": 220,
    "rows": 5091,
-   "priced": 3416,
+   "priced": 3434,
    "withUpc": 943
   },
   "1": {
    "groups": 456,
    "rows": 3975,
-   "priced": 2885,
+   "priced": 2888,
    "withUpc": 1052
   },
   "2": {
    "groups": 658,
-   "rows": 1509,
-   "priced": 1003,
-   "withUpc": 428
+   "rows": 1512,
+   "priced": 1001,
+   "withUpc": 430
   },
   "71": {
    "groups": 21,
@@ -28,25 +28,25 @@
   "68": {
    "groups": 87,
    "rows": 1522,
-   "priced": 1281,
+   "priced": 1282,
    "withUpc": 0
   },
   "79": {
    "groups": 34,
    "rows": 231,
-   "priced": 222,
+   "priced": 221,
    "withUpc": 0
   },
   "62": {
-   "groups": 105,
-   "rows": 313,
-   "priced": 263,
+   "groups": 106,
+   "rows": 315,
+   "priced": 264,
    "withUpc": 0
   },
   "63": {
    "groups": 103,
    "rows": 1758,
-   "priced": 1615,
+   "priced": 1616,
    "withUpc": 0
   },
   "80": {
@@ -58,12 +58,12 @@
   "27": {
    "groups": 107,
    "rows": 2054,
-   "priced": 1597,
+   "priced": 1596,
    "withUpc": 0
   },
   "24": {
    "groups": 39,
-   "rows": 209,
+   "rows": 210,
    "priced": 164,
    "withUpc": 0
   },
@@ -76,31 +76,31 @@
   "86": {
    "groups": 28,
    "rows": 389,
-   "priced": 348,
+   "priced": 349,
    "withUpc": 0
   },
   "81": {
    "groups": 82,
    "rows": 515,
-   "priced": 475,
+   "priced": 474,
    "withUpc": 0
   },
   "89": {
    "groups": 14,
-   "rows": 105,
+   "rows": 106,
    "priced": 80,
    "withUpc": 0
   },
   "72": {
    "groups": 20,
    "rows": 540,
-   "priced": 191,
+   "priced": 192,
    "withUpc": 0
   },
   "66": {
    "groups": 42,
    "rows": 295,
-   "priced": 148,
+   "priced": 149,
    "withUpc": 0
   },
   "84": {
@@ -130,25 +130,25 @@
   "20": {
    "groups": 177,
    "rows": 1220,
-   "priced": 738,
+   "priced": 735,
    "withUpc": 577
   },
   "16": {
    "groups": 272,
    "rows": 1162,
-   "priced": 726,
+   "priced": 729,
    "withUpc": 254
   },
   "77": {
    "groups": 9,
    "rows": 211,
-   "priced": 104,
+   "priced": 105,
    "withUpc": 0
   },
   "73": {
    "groups": 54,
    "rows": 160,
-   "priced": 97,
+   "priced": 96,
    "withUpc": 0
   },
   "87": {
