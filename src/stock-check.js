@@ -175,16 +175,22 @@ export function reorder(meta, series, today, qtyNow) {
 }
 
 // Did the whole product type cool off over the same gap? Compares the type's
-// units/day in the item's rate window with its units/day since the item's
-// last sale. Returns the drop as a fraction (0.7 = fell 70%), or null.
-export function categoryDrop(typeSeries, lastDay, today, windowDays) {
+// OTHER items' units/day in the item's rate window with their units/day since
+// the item's last sale (the item's own series is taken out, so a type with
+// one seller never "slows" because of that seller). Needs CAT_MIN units from
+// the others to say anything. Returns the drop as a fraction (0.7 = fell
+// 70%), or null.
+export const CAT_MIN = 10;
+export function categoryDrop(typeSeries, lastDay, today, windowDays, ownSeries) {
   if (!typeSeries || !typeSeries.length) return null;
   const lastIdx = typeSeries.length - 1 - (today - lastDay);
   if (lastIdx < 0) return null;
-  const before = sum(typeSeries, lastIdx - windowDays + 1, lastIdx) / windowDays;
+  const others = typeSeries.map((n, i) => n - ((ownSeries && ownSeries[i]) || 0));
+  const beforeUnits = sum(others, lastIdx - windowDays + 1, lastIdx);
   const since = today - lastDay;
-  if (!since || before <= 0) return null;
-  const after = sum(typeSeries, lastIdx + 1, typeSeries.length - 1) / since;
+  if (!since || beforeUnits < CAT_MIN) return null;
+  const before = beforeUnits / windowDays;
+  const after = sum(others, lastIdx + 1, others.length - 1) / since;
   return +Math.max(0, 1 - after / before).toFixed(2);
 }
 
@@ -408,7 +414,7 @@ async function compute(cx, run) {
     const s = series[item.vid] || seriesOf(ledgers, item.vid, today, WINDOW_DAYS);
     const f = stalled(item, s, today);
     if (!f) continue;
-    f.catDrop = categoryDrop(typeSeries[item.type], f.lastDay, today, f.window);
+    f.catDrop = categoryDrop(typeSeries[item.type], f.lastDay, today, f.window, s);
     if (f.catDrop != null && f.catDrop >= 0.6) f.score = +(f.score * 0.5).toFixed(1);
     look.push({ vid: item.vid, f });
   }
@@ -459,7 +465,7 @@ async function finalize(cx, run, cfg, now) {
     const f = reorder(l, s, today, l.qty);
     if (!f) continue;
     const ts = run.candidates.typeSeries && run.candidates.typeSeries[l.type];
-    f.catDrop = categoryDrop(ts, f.lastDay, today, 60);
+    f.catDrop = categoryDrop(ts, f.lastDay, today, 60, s);
     reorderRows.push({ vid, pid: l.pid, title: l.title, vtitle: l.vtitle, sku: l.sku, barcode: l.barcode, cents: l.cents, type: l.type, vendor: l.vendor, handle: l.handle, image: l.image, qty: l.qty, q: l.q || {}, ...f });
   }
   reorderRows.sort((a, b) => b.score - a.score);
@@ -677,7 +683,7 @@ async function view(cx, now) {
   }
   missing.sort((a, b) => (b.at || 0) - (a.at || 0)); dismissed.sort((a, b) => (b.at || 0) - (a.at || 0));
   // name missing/dismissed items from whatever we know
-  const name = async (s) => { if (s.title) return s; const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image; s.cents = v.cents; } return s; };
+  const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
   return { ok: true, look: outLook, reorder: outReorder, missing, dismissed, meta: meta || null, status: { lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: (run.lookup || []).length, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };

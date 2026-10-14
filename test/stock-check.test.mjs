@@ -79,6 +79,12 @@ test("categoryDrop: the whole type cooling off", () => {
   assert.equal(categoryDrop(typeS, TODAY - 24, TODAY, 30), 0.8);
   assert.equal(categoryDrop(null, TODAY - 24, TODAY, 30), null);
   assert.equal(categoryDrop(new Array(90).fill(0), TODAY - 24, TODAY, 30), null);
+  // the item's own sales are taken out: a type whose only seller is this item says nothing
+  assert.equal(categoryDrop(typeS, TODAY - 24, TODAY, 30, typeS), null);
+  const own = new Array(90).fill(0); for (let i = 30; i <= 65; i++) own[i] = 1;
+  assert.equal(categoryDrop(typeS, TODAY - 24, TODAY, 30, own), 0.78, "9/day before from the others, 2/day after");
+  const thin = new Array(90).fill(0); thin[60] = 3; thin[65] = 3;
+  assert.equal(categoryDrop(thin, TODAY - 24, TODAY, 30), null, "6 units from the others is too little to call a trend");
 });
 
 test("visibility: snoozes expire, missing hides, permanent dismissals stay, arrivals clear", () => {
