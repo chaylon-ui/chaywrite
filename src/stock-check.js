@@ -100,13 +100,25 @@ export const STORE_PRODUCT = "https://exorgames.com/products/";
 // per vendor ({q} = the product title), admins add the rest on the page.
 // PLAMOD's retailer search is known (src/plamod.js); a vendor without a
 // template gets a web search for the vendor and the title.
-export const DEFAULT_DISTRIBUTORS = { plamod: { name: "PLAMOD", url: "https://www.plamod.com/retailer/search?q={q}" } };
-export function distributorUrl(vendor, title, map) {
+// {q} = the product title, {upc} = its barcode (owner, 2026-10-15: "for
+// universal put barcode in search for results" - Universal's search page
+// finds an item by UPC: probe 38668096856, search-list?keyword=<upc>).
+export const DEFAULT_DISTRIBUTORS = {
+  plamod: { name: "PLAMOD", url: "https://www.plamod.com/retailer/search?q={q}" },
+  "universal distribution": { name: "Universal Distribution", url: "https://ca.universaldist.com/search-list?keyword={upc}" },
+};
+export function distributorUrl(vendor, title, map, upc) {
   const v = String(vendor || "").trim(), t = String(title || "").trim();
+  const code = String(upc || "").replace(/[^0-9A-Za-z-]/g, "");
   const d = (map && map[v.toLowerCase()]) || DEFAULT_DISTRIBUTORS[v.toLowerCase()];
-  if (d && d.url) return d.url.includes("{q}") ? d.url.replace("{q}", encodeURIComponent(t)) : d.url;
+  if (d && d.url) {
+    let u = d.url;
+    if (u.includes("{upc}")) u = u.replace("{upc}", encodeURIComponent(code || t));   // no barcode: the title stands in
+    return u.includes("{q}") ? u.replace("{q}", encodeURIComponent(t)) : u;
+  }
   return "https://www.google.com/search?q=" + encodeURIComponent((v ? v + " " : "") + t);
 }
+export const upcOf = (r) => { const b = normUpc(r && r.barcode), s = normUpc(r && r.sku); return b.length >= 8 ? b : s.length >= 8 ? s : ""; };
 // "Universal Distribution = https://.../search?q={q}" per line -> the map
 export function parseDistributors(text) {
   const out = {};
@@ -183,23 +195,46 @@ export function udPickLeaves(cands, cats, maxLists) {
   return [...score.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map((e) => e[0]).slice(0, maxLists || 40);
 }
 // Resolve candidates [{pid, sku, barcode, type, title}] -> { pid: url }.
-// fetchFn fetches JSON (the worker's fetch, edge-cached half a day so a run
-// reads each list once and the next run mostly hits the cache).
+// First by Universal's own search (GET /api/v1/en/items/search?keyword=<upc>,
+// what their search page calls - probe 38668096856 - one small answer per
+// item, edge-cached half a day); whatever that leaves, or everything when
+// the search answers an error, through the category lists above.
+export const UD_SEARCH_AT_ONCE = 4;
 export async function resolveUniversal(cands, fetchFn, opts) {
   const o = opts || {};
   // every candidate's SKU and barcode (8+ digits: a UPC/EAN, not a short house code) -> its product
   const want = new Map();
   const pids = new Set();
   for (const c of cands || []) { if (!c || !c.pid) continue; for (const k of [normUpc(c.sku), normUpc(c.barcode)]) if (k.length >= 8 && !want.has(k)) { want.set(k, String(c.pid)); pids.add(String(c.pid)); } }
-  const out = {}, stats = { wanted: pids.size, lists: 0, matched: 0, errors: [] };
+  const out = {}, stats = { wanted: pids.size, searched: 0, lists: 0, matched: 0, errors: [] };
   if (!want.size) return { links: out, stats };
   const getJson = async (path) => {
     const r = await fetchFn(UD_ORIGIN + path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000), cf: { cacheTtl: 43200, cacheEverything: true } });
     if (!r.ok) throw new Error("UD HTTP " + r.status + " " + path);
     return r.json();
   };
+  // 1. the search, a few at a time
+  let searchDead = false;
+  const keys = [...want.keys()];
+  for (let i = 0; i < keys.length && !searchDead; i += UD_SEARCH_AT_ONCE) {
+    await Promise.all(keys.slice(i, i + UD_SEARCH_AT_ONCE).map(async (k) => {
+      const pid = want.get(k);
+      if (!pid || out[pid]) { want.delete(k); return; }
+      let j;
+      try { j = await getJson("/api/v1/en/items/search?keyword=" + encodeURIComponent(k)); }
+      catch (e) { stats.errors.push(String((e && e.message) || e).slice(0, 120)); if (/HTTP (401|403|5\d\d)/.test(String(e && e.message))) searchDead = true; return; }
+      stats.searched++;
+      const hit = udIndex(j && (j.items || j))[k];
+      if (hit) { out[pid] = UD_ITEM + hit.guid; stats.matched++; }
+      want.delete(k);
+    }));
+  }
+  for (const [k, pid] of [...want]) if (out[pid]) want.delete(k);
+  if (!want.size || o.noLists) return { links: out, stats };
+  // 2. the category lists for what is left
   let codes;
-  try { codes = udPickLeaves(cands, await getJson("/api/v1/en/itemcategories"), o.maxLists); } catch (e) { stats.errors.push(String((e && e.message) || e).slice(0, 120)); return { links: out, stats }; }
+  const left = new Set([...want.values()]);
+  try { codes = udPickLeaves((cands || []).filter((c) => c && left.has(String(c.pid))), await getJson("/api/v1/en/itemcategories"), o.maxLists); } catch (e) { stats.errors.push(String((e && e.message) || e).slice(0, 120)); return { links: out, stats }; }
   if (o.codes) codes = o.codes;
   stats.picked = codes.length;
   for (const code of codes) {
@@ -215,7 +250,7 @@ export async function resolveUniversal(cands, fetchFn, opts) {
 export function reorderLink(r, o) {
   const saved = o && o.links && r && r.pid && o.links[r.pid];
   if (saved && saved.url) return { url: saved.url, label: (r.vendor ? r.vendor : "distributor") + " item page", saved: true };
-  return { url: distributorUrl(r && r.vendor, r && r.title, o && o.distributors), label: (r && r.vendor ? r.vendor + " reorder page" : "search the web"), saved: false };
+  return { url: distributorUrl(r && r.vendor, r && r.title, o && o.distributors, upcOf(r)), label: (r && r.vendor ? r.vendor + " reorder page" : "search the web"), saved: false };
 }
 export const mergedDistributors = (cfg) => ({ ...DEFAULT_DISTRIBUTORS, ...((cfg && cfg.distributors) || {}) });
 
@@ -596,7 +631,7 @@ async function finalize(cx, run, cfg, now) {
     const l = lk.get(c.vid);
     const q = (l && l.q) || {};
     if (l && Number.isFinite(l.qty) && l.qty <= 0) continue;   // sold out between scan and lookup
-    look.push({ vid: c.vid, pid: item.pid, title: item.title, vtitle: item.vtitle, sku: item.sku, barcode: item.barcode, cents: item.cents, type: item.type, vendor: item.vendor, handle: item.handle, image: item.image || (l && l.image) || "",
+    look.push({ vid: c.vid, pid: item.pid, title: item.title, vtitle: item.vtitle, sku: (l && l.sku) || item.sku, barcode: (l && l.barcode) || item.barcode, cents: item.cents, type: item.type, vendor: item.vendor, handle: item.handle, image: item.image || (l && l.image) || "",
       qty: l && Number.isFinite(l.qty) ? l.qty : item.qty, q, open: (l && l.open) || [], restockDay: item.restockDay || null, ...c.f });
   }
   look.sort((a, b) => b.score - a.score);
