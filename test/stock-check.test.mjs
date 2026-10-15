@@ -424,6 +424,11 @@ test("permissions and pages", async () => {
   assert.match(adminPage, /Distributor websites \(admins\)/); assert.match(adminPage, /Universal Distribution = https:\/\/ud\.example\.test\/search\?text=\{q\}<\/textarea>/);
   assert.match(adminPage, /Built in: PLAMOD = https:\/\/www\.plamod\.com/);
   assert.equal((await serve("/9pocket/stock/control", actor, { action: "cfg", distributors: "x = https://x.test/{q}", json: "1" })).status, 400);
+  // live keyword filter, chips and the floating Top button, on every tab
+  assert.match(page, /<input type="search" id="scq" name="q"/); assert.match(page, /class="kw" data-kw="booster"/); assert.match(page, /class="kw" data-kw="blind"/);
+  assert.match(page, /<div class="sc-card" data-hay="mtg bloomburrow play booster box default title 195166 195166 universal distribution magic sealed product">/);
+  assert.match(page, /<button type="button" id="sctop"/);
+  assert.match(missingAdmin, /id="scq"/); assert.match(missingAdmin, /<tr data-hay="mtg bloomburrow play booster box/);
   assert.match(renderStockDenied({ user: other }), /cannot open the stock check/);
   assert.match(renderStock(null, { user: admin, tab: "look", err: "x" }), /No scan has finished yet/);
   // email: needs the key; then the boxes and the bar appear
