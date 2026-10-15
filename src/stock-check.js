@@ -76,6 +76,8 @@ export const SNOOZE_DAYS = 14;
 export const RUN_HOUR_UTC = 9;           // 05:00 Atlantic
 export const ORDERS_PAGE = 20, LINES_PER_ORDER = 15, SCAN_PAGE = 120, LOOKUP_PAGE = 100, OPEN_PER_PAGE = 20;
 export const MAX_ROWS = 200;             // per result list
+export const HOT_MIN = 6;                // Order now: at least this many sold in the 30 days before it ran out (admins change it)
+export const HOT_FLOOR = 3;              // the stored Order now list keeps everything down to this, so a lower threshold applies at once
 export const MAX_PHASE_ERRORS = 3;
 export const LEASE_MS = 150e3;            // a unit of work handed to a worker tick is held this long
 export const LOOK_STATES = ["found_floor", "found_overstock", "reserved", "fewer", "damaged", "not_found"];
@@ -171,7 +173,8 @@ export function reorder(meta, series, today, qtyNow) {
   const daysOut = today - lastDay;
   const missed = rate * daysOut;
   const price = ((meta && meta.cents) || 0) / 100;
-  return { lastDay, daysOut, sold60: soldBefore, sold30: sum(series, lastIdx - 29, lastIdx), rate: +rate.toFixed(3), missed: +missed.toFixed(1), missedRevenue: +(missed * price).toFixed(2), score: +(missed * Math.max(1, price)).toFixed(1) };
+  const sold30 = sum(series, lastIdx - 29, lastIdx);
+  return { lastDay, daysOut, sold60: soldBefore, sold30, perWeek: +(sold30 / 30 * 7).toFixed(1), rate: +rate.toFixed(3), missed: +missed.toFixed(1), missedRevenue: +(missed * price).toFixed(2), score: +(missed * Math.max(1, price)).toFixed(1) };
 }
 
 // Did the whole product type cool off over the same gap? Compares the type's
@@ -360,7 +363,7 @@ export async function stockCheckTick(env, o) {
 
 /* ---- the Durable Object side ---- */
 
-const CFG0 = () => ({ ordersSince: null, lastRunDay: null, lastRunAt: 0, lastError: "", ordersDenied: false, kick: false, runs: 0 });
+const CFG0 = () => ({ ordersSince: null, lastRunDay: null, lastRunAt: 0, lastError: "", ordersDenied: false, kick: false, runs: 0, hotMin: HOT_MIN });
 async function loadCfg(cx) { return { ...CFG0(), ...((await cx.storage.get("sc:cfg")) || {}) }; }
 async function saveCfg(cx, cfg) { await cx.storage.put("sc:cfg", cfg); }
 
@@ -479,6 +482,8 @@ async function finalize(cx, run, cfg, now) {
     reorderRows.push({ vid, pid: l.pid, title: l.title, vtitle: l.vtitle, sku: l.sku, barcode: l.barcode, cents: l.cents, type: l.type, vendor: l.vendor, handle: l.handle, image: l.image, qty: l.qty, q: l.q || {}, ...f });
   }
   reorderRows.sort((a, b) => b.score - a.score);
+  // Order now: the fastest sellers among them, by the 30-day rate before the stockout
+  const hot = reorderRows.filter((r) => r.sold30 >= HOT_FLOOR).sort((a, b) => b.sold30 - a.sold30 || b.score - a.score).slice(0, MAX_ROWS);
   // auto-close: a missing item that sold again turned up; one BinderPOS took to 0 was adjusted;
   // an ordered item back in stock arrived.
   const states = await cx.storage.list({ prefix: "sc:s:" });
@@ -498,8 +503,9 @@ async function finalize(cx, run, cfg, now) {
     } else if ((st.state === "ordered" || st.state === "snooze") && qtyNow > 0) { st.closed = { at: now, by: "stock check", state: "arrived", note: "back in stock (" + qtyNow + ")" }; puts[k] = st; }
   }
   if (Object.keys(puts).length) await cx.storage.put(puts);
-  const meta = { at: now, day: today, runId: run.id, counts: { look: look.length, reorder: reorderRows.length, scanned: run.scanned, orders: run.orders, lines: run.lines, lookedUp: run.lookupDone }, errors: (run.errors || []).slice(-10), ordersSince: run.newest || run.since, ordersDenied: !!cfg.ordersDenied, ledgerDays: Object.keys(ledgers).length };
-  await cx.storage.put({ "sc:res:look": look.slice(0, MAX_ROWS), "sc:res:reorder": reorderRows.slice(0, MAX_ROWS), "sc:res:meta": meta });
+  const hotMin = Number(cfg.hotMin) >= 1 ? Number(cfg.hotMin) : HOT_MIN;
+  const meta = { at: now, day: today, runId: run.id, counts: { look: look.length, reorder: reorderRows.length, hot: hot.filter((r) => r.sold30 >= hotMin).length, scanned: run.scanned, orders: run.orders, lines: run.lines, lookedUp: run.lookupDone }, errors: (run.errors || []).slice(-10), ordersSince: run.newest || run.since, ordersDenied: !!cfg.ordersDenied, ledgerDays: Object.keys(ledgers).length };
+  await cx.storage.put({ "sc:res:look": look.slice(0, MAX_ROWS), "sc:res:reorder": reorderRows.slice(0, MAX_ROWS), "sc:res:hot": hot, "sc:res:meta": meta });
   // prune: ledgers older than KEEP_DAYS, in-stock records not seen for 30 days, lookups outside this run
   try {
     const old = await cx.storage.list({ prefix: "sc:l:" });
@@ -671,12 +677,19 @@ async function mark(cx, b, now) {
 // Everything the page needs: the two result lists with each item's state,
 // the missing and dismissed lists, the run status.
 async function view(cx, now) {
-  const [look, reorderRows, meta, cfg, run] = await Promise.all([cx.storage.get("sc:res:look"), cx.storage.get("sc:res:reorder"), cx.storage.get("sc:res:meta"), loadCfg(cx), cx.storage.get("sc:run")]);
+  const [look, reorderRows, hotRows, meta, cfg, run] = await Promise.all([cx.storage.get("sc:res:look"), cx.storage.get("sc:res:reorder"), cx.storage.get("sc:res:hot"), cx.storage.get("sc:res:meta"), loadCfg(cx), cx.storage.get("sc:run")]);
   const states = await cx.storage.list({ prefix: "sc:s:" });
   const st = {};
   for (const [k, v] of states) st[k.slice(5)] = v;
   const today = dayOf(now);
-  const outLook = [], outReorder = [], missing = [], dismissed = [];
+  const outLook = [], outReorder = [], outHot = [], missing = [], dismissed = [];
+  const hotMin = Number(cfg.hotMin) >= 1 ? Number(cfg.hotMin) : HOT_MIN;
+  for (const r of hotRows || []) {
+    if (!(r.sold30 >= hotMin)) continue;
+    const s = st[r.vid];
+    const v = visibleReorder(s, now, r.qty);
+    if (v.show) outHot.push({ ...r, state: s || null, due: !!v.due });
+  }
   for (const r of look || []) {
     const s = st[r.vid];
     const v = visibleLook(s, now, s && s.at ? r.lastDay > dayOf(s.at) : false);
@@ -697,7 +710,7 @@ async function view(cx, now) {
   const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
-  return { ok: true, look: outLook, reorder: outReorder, missing, dismissed, meta: meta || null, status: { lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
+  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, meta: meta || null, status: { hotMin, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
 }
 
 export async function stockDoFetch(cx, request, url) {
@@ -709,10 +722,16 @@ export async function stockDoFetch(cx, request, url) {
     if (p === "/_sc/ingest" && post) return doJson(await ingest(cx, b, now));
     if (p === "/_sc/mark" && post) return doJson(await mark(cx, b, now));
     if (p === "/_sc/kick" && post) { const cfg = await loadCfg(cx); cfg.kick = true; await saveCfg(cx, cfg); return doJson({ ok: true }); }
+    if (p === "/_sc/cfg" && post) {
+      const cfg = await loadCfg(cx);
+      if (b.hotMin != null) { const n = parseInt(b.hotMin, 10); if (!(n >= 1 && n <= 1000)) return doJson({ ok: false, error: "Order now needs a whole number of sales, 1 or more." }, 400); cfg.hotMin = n; }
+      await saveCfg(cx, cfg);
+      return doJson({ ok: true, hotMin: cfg.hotMin });
+    }
     if (p === "/_sc/view") return doJson(await view(cx, now));
     if (p === "/_sc/health") {
       const cfg = await loadCfg(cx); const run = await cx.storage.get("sc:run"); const meta = await cx.storage.get("sc:res:meta");
-      return doJson({ ok: true, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, runs: cfg.runs || 0, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, orders: run.orders, lines: run.lines, scanned: run.scanned, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, counts: meta ? meta.counts : null, resultsAt: meta ? meta.at : 0 });
+      return doJson({ ok: true, hotMin: cfg.hotMin, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, runs: cfg.runs || 0, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, orders: run.orders, lines: run.lines, scanned: run.scanned, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, counts: meta ? meta.counts : null, resultsAt: meta ? meta.at : 0 });
     }
   } catch (e) { cx.log("stock-check: " + p + ": " + ((e && e.message) || e)); return doJson({ ok: false, error: String((e && e.message) || e).slice(0, 200) }, 500); }
   return doJson({ ok: false, error: "not found" }, 404);
@@ -754,6 +773,9 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
         const r = await doCall(env, "/_sc/mark", { vid: f.vid, state, note: f.note, count: f.count, until: f.until, title: f.title, by, byName });
         result = r.ok ? { ok: true, message: (STATE_LABEL[state] || state) + (f.title ? ": " + String(f.title).slice(0, 80) : "") + "." } : r;
       }
+    } else if (action === "cfg") {
+      if (user.role !== "admin") result = { ok: false, error: "Only an admin can change the Order now threshold." };
+      else { const r = await doCall(env, "/_sc/cfg", { hotMin: f.hotMin }); result = r.ok ? { ok: true, message: "Order now lists items that sold " + r.hotMin + " or more in the 30 days before running out." } : r; }
     } else if (action === "scan") {
       if (user.role !== "admin") result = { ok: false, error: "Only an admin can start a scan." };
       else { const r = await doCall(env, "/_sc/kick", {}); result = r.ok ? { ok: true, message: "A scan starts within 5 minutes; this page shows its progress." } : r; }

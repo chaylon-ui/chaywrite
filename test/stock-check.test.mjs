@@ -138,19 +138,23 @@ function fakeShopify(clock) {
     { quantity: 4, variant: { id: "gid://shopify/ProductVariant/99" }, product: { id: "gid://shopify/Product/9", title: "Lightning Bolt", productType: "MTG Single", vendor: "" } } ] } });
   const sleeves = (d, n) => ({ id: "gid://shopify/Order/" + (100 + d), name: "#" + (3000 + d), createdAt: day(d, 14), lineItems: { nodes: [
     { quantity: n, variant: { id: "gid://shopify/ProductVariant/22" }, product: { id: "gid://shopify/Product/2", title: "Dragon Shield Matte Black", productType: "Sleeves & Toploaders", vendor: "Arcane Tinmen" } } ] } });
+  const bundle = (d, n) => ({ id: "gid://shopify/Order/" + (200 + d), name: "#" + (4000 + d), createdAt: day(d, 16), lineItems: { nodes: [
+    { quantity: n, variant: { id: "gid://shopify/ProductVariant/33" }, product: { id: "gid://shopify/Product/3", title: "POKEMON 151 BOOSTER BUNDLE", productType: "Pokemon Sealed Product", vendor: "Universal Distribution" } } ] } });
   const calls = [];
   const gql = async (q, v) => {
     calls.push({ q: q.slice(0, 40), v });
     if (q === ORDERS_Q) {
       if (!v.after) return { data: { orders: { pageInfo: { hasNextPage: true, endCursor: "p2" }, nodes: [box(50, 1), box(45, 2), box(40, 1), box(35, 2), box(30, 1)] } }, cost: { actualQueryCost: 500, throttleStatus: { currentlyAvailable: 600, restoreRate: 100 } } };
-      return { data: { orders: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [box(27, 1), box(24, 1), sleeves(70, 2), sleeves(50, 3), sleeves(35, 2), sleeves(20, 1)] } }, cost: { actualQueryCost: 500, throttleStatus: { currentlyAvailable: 1900, restoreRate: 100 } } };
+      return { data: { orders: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [box(27, 1), box(24, 1), sleeves(70, 2), sleeves(50, 3), sleeves(35, 2), sleeves(20, 1), bundle(38, 2), bundle(30, 3), bundle(18, 2), bundle(10, 2)] } }, cost: { actualQueryCost: 500, throttleStatus: { currentlyAvailable: 1900, restoreRate: 100 } } };
     }
-    if (q === TYPES_Q) return { data: { productTypes: { pageInfo: { hasNextPage: false, endCursor: null }, edges: [{ node: "Magic Sealed Product" }, { node: "MTG Single" }, { node: "Sleeves & Toploaders" }] } }, cost: null };
+    if (q === TYPES_Q) return { data: { productTypes: { pageInfo: { hasNextPage: false, endCursor: null }, edges: [{ node: "Magic Sealed Product" }, { node: "MTG Single" }, { node: "Sleeves & Toploaders" }, { node: "Pokemon Sealed Product" }] } }, cost: null };
     if (q === SCAN_Q) {
       if (/Magic Sealed/.test(v.q)) return { data: { productVariants: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: "gid://shopify/ProductVariant/11", title: "Default Title", sku: "195166", barcode: "195166", price: "159.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } } }] } }, cost: null };
       return { data: { productVariants: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } }, cost: null };
     }
-    if (q === LOOKUP_Q) return { data: { nodes: v.ids.map((id) => id.endsWith("/11")
+    if (q === LOOKUP_Q) return { data: { nodes: v.ids.map((id) => id.endsWith("/33")
+      ? { id, title: "Default Title", sku: "PK151B", barcode: "", price: "54.95", inventoryQuantity: -1, product: { id: "gid://shopify/Product/3", title: "POKEMON 151 BOOSTER BUNDLE", productType: "Pokemon Sealed Product", vendor: "Universal Distribution", handle: "pk-151-bundle", status: "ACTIVE", featuredMedia: null }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: -1 }, { name: "committed", quantity: 0 }] }] } } }
+      : id.endsWith("/11")
       ? { id, title: "Default Title", sku: "195166", barcode: "195166", price: "159.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", status: "ACTIVE", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 3 }, { name: "committed", quantity: 1 }, { name: "on_hand", quantity: 4 }, { name: "quality_control", quantity: 0 }] }] } } }
       : { id, title: "Default Title", sku: "DS-BLK", barcode: "", price: "12.99", inventoryQuantity: 0, product: { id: "gid://shopify/Product/2", title: "Dragon Shield Matte Black", productType: "Sleeves & Toploaders", vendor: "Arcane Tinmen", handle: "ds-black", status: "ACTIVE", featuredMedia: null }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 0 }, { name: "committed", quantity: 0 }] }] } } }) }, cost: null };
     if (/^query\{o0:orders/.test(q)) return { data: { o0: { nodes: [{ name: "#2101", createdAt: day(2), displayFulfillmentStatus: "UNFULFILLED", shippingLine: null }] } }, cost: null };
@@ -167,7 +171,7 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   const slept = [];
   const r = await stockCheckTick(env, { gql: fake.gql, now: () => clock.t, sleep: async (ms) => { slept.push(ms); }, budgetMs: 1e9 });
   assert.equal(r.idle, true); assert.equal(r.phase, "done");
-  assert.deepEqual(r.kinds, { orders: 2, types: 1, scan: 2, lookup: 1, open: 1 }, "two in-scope types scanned, the singles type skipped");
+  assert.deepEqual(r.kinds, { orders: 2, types: 1, scan: 3, lookup: 1, open: 1 }, "three in-scope types scanned, the singles type skipped");
   assert.ok(slept.some((ms) => ms > 0), "paced on the throttle status after the first orders page");
   const v = await call(c, "/_sc/view");
   assert.equal(v.look.length, 1, "the box is in stock and went quiet");
@@ -175,15 +179,24 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   assert.equal(b.vid, "11"); assert.equal(b.qty, 3); assert.equal(b.daysSince, 24); assert.equal(b.soldWindow, 9); assert.equal(b.window, 30);
   assert.deepEqual(b.q, { available: 3, committed: 1, on_hand: 4, quality_control: 0 });
   assert.deepEqual(b.open, [{ name: "#2101", at: b.open[0].at, ship: "pickup" }], "the committed unit's order number rides along");
-  assert.equal(v.reorder.length, 1, "the sleeves sold steadily and are at 0");
-  const sl = v.reorder[0];
+  assert.equal(v.reorder.length, 2, "the sleeves and the bundle sold steadily and are at 0 or less");
+  const sl = v.reorder.find((x) => x.vid === "22");
+  // Order now: the bundle sold 9 in its last 30 days (fast); the sleeves only 3
+  assert.deepEqual(v.hot.map((x) => x.vid), ["33"]);
+  assert.equal(v.hot[0].sold30, 9); assert.equal(v.hot[0].perWeek, 2.1); assert.equal(v.hot[0].qty, -1, "below zero counts as out");
+  assert.equal(v.status.hotMin, 6);
+  assert.equal((await call(c, "/_sc/cfg", { hotMin: "0" })).ok, false);
+  assert.equal((await call(c, "/_sc/cfg", { hotMin: "3" })).hotMin, 3);
+  const v3 = await call(c, "/_sc/view");
+  assert.deepEqual(v3.hot.map((x) => x.vid), ["33", "22"], "a lower threshold applies at once, fastest first");
+  await call(c, "/_sc/cfg", { hotMin: 6 });
   assert.equal(sl.vid, "22"); assert.equal(sl.daysOut, 20); assert.equal(sl.sold60, 8, "70, 50, 35 and 20 days ago all fall in the 60 days before the last sale"); assert.equal(sl.vendor, "Arcane Tinmen"); assert.equal(sl.missed, 2.7); assert.equal(sl.missedRevenue, 34.64);
   const ledger = await c.storage.get("sc:l:" + (TODAY - 50));
   assert.deepEqual(ledger, { 11: 1, 22: 3 }, "the box and the sleeves sold that day; the single on the box order is not in the ledger");
   assert.equal(await c.storage.get("sc:m:99"), undefined, "no meta for singles either");
-  assert.equal(v.meta.counts.scanned, 1); assert.equal(v.meta.counts.orders, 11);
+  assert.equal(v.meta.counts.scanned, 1); assert.equal(v.meta.counts.orders, 15); assert.equal(v.meta.counts.hot, 1);
   assert.equal(v.status.lastRunDay, TODAY);
-  assert.equal(v.status.ordersSince.slice(0, 10), new Date((TODAY - 20) * DAY_MS).toISOString().slice(0, 10), "next run starts from the newest order seen");
+  assert.equal(v.status.ordersSince.slice(0, 10), new Date((TODAY - 10) * DAY_MS).toISOString().slice(0, 10), "next run starts from the newest order seen");
   // nothing more today
   const again = await stockCheckTick(env, { gql: async () => { throw new Error("must not be called"); }, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9 });
   assert.equal(again.idle, true); assert.equal(again.phase, "idle");
@@ -260,23 +273,25 @@ test("staff states: found hides for 14 days then is due; not found goes to Missi
   v = await call(c, "/_sc/view", { now: clock.t });
   assert.equal(v.missing[0].closed.state, "turned_up");
   assert.equal(v.look.length, 0, "it just sold: no longer stalled");
-  // reorder: ordered hides; cant_reorder is permanent; restore brings it back
-  assert.equal(v.reorder.length, 1);
+  // reorder: ordered hides (from Order now too); cant_reorder is permanent; restore brings it back
+  const re = (vv) => vv.reorder.filter((x) => x.vid === "22").length, hotN = (vv) => vv.hot.length;
+  assert.equal(re(v), 1); assert.equal(hotN(v), 1);
   await call(c, "/_sc/mark", { vid: "22", state: "ordered", by: "sam@x.test", now: clock.t });
-  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(v.reorder.length, 0);
+  await call(c, "/_sc/mark", { vid: "33", state: "ordered", by: "sam@x.test", now: clock.t });
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 0); assert.equal(hotN(v), 0, "ordered hides it from Order now as well");
   clock.t += (SNOOZE_DAYS + 1) * DAY_MS;
-  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(v.reorder.length, 1); assert.equal(v.reorder[0].due, true);
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 1); assert.equal(v.reorder.find((x) => x.vid === "22").due, true); assert.equal(hotN(v), 1);
   await call(c, "/_sc/mark", { vid: "22", state: "cant_reorder", by: "boss@x.test", byName: "Boss", note: "LOTR collector boxes are gone", now: clock.t });
-  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(v.reorder.length, 0); assert.equal(v.dismissed.length, 1); assert.equal(v.dismissed[0].note, "LOTR collector boxes are gone");
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 0); assert.equal(v.dismissed.length, 1); assert.equal(v.dismissed[0].note, "LOTR collector boxes are gone");
   clock.t += 400 * DAY_MS;
-  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(v.reorder.length, 0, "still dismissed a year later");
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 0, "still dismissed a year later");
   assert.equal((await call(c, "/_sc/mark", { vid: "11", state: "restore", by: "boss@x.test" })).ok, false, "only a dismissed item can be restored");
   await call(c, "/_sc/mark", { vid: "22", state: "restore", by: "boss@x.test", now: clock.t });
-  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(v.reorder.length, 1); assert.equal(v.dismissed.length, 0);
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 1); assert.equal(v.dismissed.length, 0);
   // snooze until a date
   assert.equal((await call(c, "/_sc/mark", { vid: "22", state: "snooze", until: "2020-01-01", by: "s" })).ok, false);
   assert.equal((await call(c, "/_sc/mark", { vid: "22", state: "snooze", until: new Date(clock.t + 5 * DAY_MS).toISOString().slice(0, 10), by: "s", now: clock.t })).ok, true);
-  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(v.reorder.length, 0);
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 0);
   // note on anything
   assert.equal((await call(c, "/_sc/mark", { vid: "22", state: "note", note: "rep says November", by: "s" })).ok, true);
   assert.equal((await call(c, "/_sc/mark", { vid: "22", state: "bogus", by: "s" })).ok, false);
@@ -325,6 +340,16 @@ test("permissions and pages", async () => {
   const reorderPage = await (await serve("/9pocket/stock?tab=reorder", admin)).text();
   assert.match(reorderPage, /Dragon Shield Matte Black/); assert.match(reorderPage, /Arcane Tinmen/); assert.match(reorderPage, /data-confirm="Dragon Shield Matte Black will never be listed for reorder again/); assert.match(reorderPage, /Scan now/);
   assert.match(reorderPage, /sales missed/);
+  const hotPage = await (await serve("/9pocket/stock?tab=hot", admin)).text();
+  assert.match(hotPage, /Order now<b>1<\/b>/); assert.match(hotPage, /POKEMON 151 BOOSTER BUNDLE/); assert.doesNotMatch(hotPage, /Dragon Shield/); assert.match(hotPage, /sells ~2\.1 a week/); assert.match(hotPage, /name="hotMin"/);
+  const hotStaff = await (await serve("/9pocket/stock?tab=hot", actor)).text();
+  assert.doesNotMatch(hotStaff, /name="hotMin"/); assert.match(hotStaff, /sold at least 6/);
+  let rc = await serve("/9pocket/stock/control", actor, { action: "cfg", hotMin: "3", json: "1" });
+  assert.equal(rc.status, 400);
+  rc = await serve("/9pocket/stock/control", admin, { action: "cfg", hotMin: "3", json: "1" });
+  assert.equal(rc.status, 200); assert.match((await rc.json()).message, /3 or more/);
+  assert.match(await (await serve("/9pocket/stock?tab=hot", admin)).text(), /Order now<b>2<\/b>/);
+  await serve("/9pocket/stock/control", admin, { action: "cfg", hotMin: "6", json: "1" });
   // actions: a viewer cannot mark; an actor can; closing is admin-only
   let r = await serve("/9pocket/stock/control", viewer, { action: "mark", state: "found_floor", vid: "11", json: "1" });
   assert.equal(r.status, 400); assert.match((await r.json()).error, /can look but not mark/);
