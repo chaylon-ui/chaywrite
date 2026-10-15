@@ -63,6 +63,8 @@
 import { adminGql, throttleWait } from "./price-history.js";
 import { can } from "./stage-auth.js";
 import { BASE } from "./stage-ui.js";
+import { STAGE_DO } from "./stage.js";
+import { sendEmail, emailConfigured } from "./stage-email.js";
 import { renderStock, renderStockDenied } from "./stock-check-ui.js";
 
 export const STOCK_DO = "stock-check";
@@ -91,6 +93,34 @@ export const STATE_LABEL = {
   adjusted: "Adjusted in BinderPOS", turned_up: "Turned up", restored: "Restored", note: "Note",
 };
 export const PLACES = ["Overstock shelf / back room", "Pickup shelf (online orders)", "Customer holds behind the counter", "Display case", "Event prize support", "Returns / damaged bin"];
+export const ADMIN_PRODUCT = "https://admin.shopify.com/store/most-wanted-ca/products/";
+export const STORE_PRODUCT = "https://exorgames.com/products/";
+// Owner, 2026-10-15: "distributor reorder page where it opens on the
+// distributor's website with that search term" - one search-address template
+// per vendor ({q} = the product title), admins add the rest on the page.
+// PLAMOD's retailer search is known (src/plamod.js); a vendor without a
+// template gets a web search for the vendor and the title.
+export const DEFAULT_DISTRIBUTORS = { plamod: { name: "PLAMOD", url: "https://www.plamod.com/retailer/search?q={q}" } };
+export function distributorUrl(vendor, title, map) {
+  const v = String(vendor || "").trim(), t = String(title || "").trim();
+  const d = (map && map[v.toLowerCase()]) || DEFAULT_DISTRIBUTORS[v.toLowerCase()];
+  if (d && d.url) return d.url.includes("{q}") ? d.url.replace("{q}", encodeURIComponent(t)) : d.url;
+  return "https://www.google.com/search?q=" + encodeURIComponent((v ? v + " " : "") + t);
+}
+// "Universal Distribution = https://.../search?q={q}" per line -> the map
+export function parseDistributors(text) {
+  const out = {};
+  let n = 0;
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const m = /^\s*([^=]{1,80}?)\s*=\s*(https:\/\/[^\s"'<>]{1,300})\s*$/.exec(line);
+    if (!m) continue;
+    out[m[1].toLowerCase()] = { name: m[1], url: m[2] };
+    if (++n >= 100) break;
+  }
+  return out;
+}
+export const distributorsText = (map) => Object.values(map || {}).map((d) => d.name + " = " + d.url).join("\n");
+export const mergedDistributors = (cfg) => ({ ...DEFAULT_DISTRIBUTORS, ...((cfg && cfg.distributors) || {}) });
 
 export const dayOf = (ms) => Math.floor(ms / DAY_MS);
 export const dayIso = (day) => new Date(day * DAY_MS).toISOString().slice(0, 10);
@@ -363,7 +393,7 @@ export async function stockCheckTick(env, o) {
 
 /* ---- the Durable Object side ---- */
 
-const CFG0 = () => ({ ordersSince: null, lastRunDay: null, lastRunAt: 0, lastError: "", ordersDenied: false, kick: false, runs: 0, hotMin: HOT_MIN });
+const CFG0 = () => ({ ordersSince: null, lastRunDay: null, lastRunAt: 0, lastError: "", ordersDenied: false, kick: false, runs: 0, hotMin: HOT_MIN, distributors: {} });
 async function loadCfg(cx) { return { ...CFG0(), ...((await cx.storage.get("sc:cfg")) || {}) }; }
 async function saveCfg(cx, cfg) { await cx.storage.put("sc:cfg", cfg); }
 
@@ -663,6 +693,8 @@ async function mark(cx, b, now) {
     Object.assign(cur, { state, at: now, by, byName, until, closed: null, title: text(b.title, 200) || cur.title });
     if (note) cur.note = note;
     push(ev);
+  } else if (state === "emailed") {
+    cur.emailedAt = now; push({ at: now, by, byName, state: "emailed", note });
   } else if (state === "adjusted" || state === "turned_up") {
     if (!cur.state) return { ok: false, error: "Nothing to close." };
     cur.closed = { at: now, by, byName, state, note }; push({ at: now, by, byName, state, note });
@@ -710,7 +742,7 @@ async function view(cx, now) {
   const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
-  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, meta: meta || null, status: { hotMin, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
+  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, meta: meta || null, status: { hotMin, distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
 }
 
 export async function stockDoFetch(cx, request, url) {
@@ -725,8 +757,9 @@ export async function stockDoFetch(cx, request, url) {
     if (p === "/_sc/cfg" && post) {
       const cfg = await loadCfg(cx);
       if (b.hotMin != null) { const n = parseInt(b.hotMin, 10); if (!(n >= 1 && n <= 1000)) return doJson({ ok: false, error: "Order now needs a whole number of sales, 1 or more." }, 400); cfg.hotMin = n; }
+      if (b.distributors != null) cfg.distributors = parseDistributors(b.distributors);
       await saveCfg(cx, cfg);
-      return doJson({ ok: true, hotMin: cfg.hotMin });
+      return doJson({ ok: true, hotMin: cfg.hotMin, distributors: cfg.distributors });
     }
     if (p === "/_sc/view") return doJson(await view(cx, now));
     if (p === "/_sc/health") {
@@ -735,6 +768,63 @@ export async function stockDoFetch(cx, request, url) {
     }
   } catch (e) { cx.log("stock-check: " + p + ": " + ((e && e.message) || e)); return doJson({ ok: false, error: String((e && e.message) || e).slice(0, 200) }, 500); }
   return doJson({ ok: false, error: "not found" }, 404);
+}
+
+/* ---- the email to the admins ---- */
+
+const escH = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+const whenH = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", hour12: false, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+const LIST_LABEL = { look: "Go look", hot: "Order now", reorder: "Reorder", missing: "Missing" };
+
+// Facts worth a line in the email, per list.
+export function itemFacts(list, r) {
+  const f = [];
+  if (list === "look") { f.push(r.qty + " on the system"); if (r.daysSince != null) f.push("last sold " + r.daysSince + " days ago"); if (r.expected != null) f.push("should have sold ~" + Math.round(r.expected) + " since"); if (r.atRisk != null) f.push("$" + Number(r.atRisk).toFixed(2) + " at risk"); }
+  else if (list === "hot" || list === "reorder") { if (r.daysOut != null) f.push("out " + r.daysOut + " days"); if (r.perWeek != null) f.push("sells ~" + r.perWeek + " a week"); if (r.sold60 != null) f.push(r.sold60 + " sold in the 60 days before"); if (r.missedRevenue != null) f.push("~$" + Number(r.missedRevenue).toFixed(2) + " missed so far"); }
+  else if (list === "missing" && r.cents) f.push("$" + (r.cents / 100).toFixed(2) + " each");
+  return f;
+}
+
+// items: [{ list, row }], row carries the item and its state. o: { byName, by, message, distributors }.
+export function buildStockEmail(items, o) {
+  const n = items.length;
+  const who = (o && (o.byName || o.by)) || "9Pocket";
+  const subject = "Stock check: " + n + " item" + (n === 1 ? "" : "s") + " from " + who;
+  const INK = "#1d2327", MUTED = "#6b7780", RULE = "#e5e9ec", PAPER = "#f4f6f7", RED = "#d52c28";
+  const block = (it) => {
+    const r = it.row, s = r.state || {};
+    const links = [[ADMIN_PRODUCT + (r.pid || ""), "Shopify admin"], r.handle ? [STORE_PRODUCT + r.handle, "product page"] : null, [distributorUrl(r.vendor, r.title, o && o.distributors), (r.vendor ? r.vendor : "web") + " search"]].filter(Boolean);
+    const marked = s.state ? "Marked: " + (STATE_LABEL[s.state] || s.state) + (s.state === "fewer" && s.count != null ? " (found " + s.count + ")" : "") + (s.byName || s.by ? " by " + (s.byName || s.by) : "") + (s.at ? ", " + whenH(s.at) : "") + (s.closed ? " · closed: " + (STATE_LABEL[s.closed.state] || s.closed.state) + (s.closed.note ? " (" + s.closed.note + ")" : "") : "") : "";
+    return `<tr><td style="padding:12px 14px;border-bottom:1px solid ${RULE}">
+<div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:${MUTED}">${escH(LIST_LABEL[it.list] || it.list)}${r.type ? " · " + escH(r.type) : ""}</div>
+<div style="font-size:16px;font-weight:700;margin:2px 0"><a href="${escH(links[0][0])}" style="color:${INK};text-decoration:none">${escH(r.title)}</a>${r.vtitle && r.vtitle !== "Default Title" ? ` <span style="font-weight:400;color:${MUTED}">${escH(r.vtitle)}</span>` : ""}</div>
+${r.vendor || r.sku ? `<div style="font-size:13px;color:${MUTED}">${escH(r.vendor || "")}${r.sku ? (r.vendor ? " · " : "") + "SKU " + escH(r.sku) : ""}</div>` : ""}
+${itemFacts(it.list, r).length ? `<div style="font-size:13px;margin-top:4px">${escH(itemFacts(it.list, r).join(" · "))}</div>` : ""}
+${marked ? `<div style="font-size:13px;margin-top:4px;color:#7f1d1d;font-weight:600">${escH(marked)}</div>` : ""}
+${s.note ? `<div style="font-size:13px;margin-top:4px;background:#fff8dc;border-radius:6px;padding:6px 8px">Note: ${escH(s.note)}</div>` : ""}
+<div style="font-size:13px;margin-top:6px">${links.map((l) => `<a href="${escH(l[0])}" style="color:${RED};font-weight:600;text-decoration:none">${escH(l[1])}</a>`).join(" &nbsp;·&nbsp; ")}</div></td></tr>`;
+  };
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escH(subject)}</title></head>
+<body style="margin:0;padding:0;background:${PAPER};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${INK};font-size:15px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:${RED};padding:14px 24px;color:#fff;font-weight:800;font-size:18px">9Pocket · Stock check</td></tr>
+<tr><td style="padding:18px 24px 6px"><h1 style="margin:0;font-size:19px;line-height:1.3">${escH(n + " item" + (n === 1 ? "" : "s"))} from ${escH(who)}</h1>${o && o.message ? `<p style="margin:8px 0 0;white-space:pre-line">${escH(o.message)}</p>` : ""}</td></tr>
+<tr><td style="padding:8px 10px 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${RULE};border-radius:10px;overflow:hidden">${items.map(block).join("")}</table></td></tr>
+<tr><td style="padding:14px 24px 22px;font-size:13px"><a href="https://exor-binder.nevski.workers.dev${BASE}/stock" style="display:inline-block;background:${INK};color:#fff;text-decoration:none;font-weight:700;padding:10px 16px;border-radius:8px">Open the Stock check</a></td></tr>
+<tr><td style="background:${PAPER};padding:12px 24px;font-size:12px;color:${MUTED}">Sent from 9Pocket by ${escH(who)}. Staff notice - customers never see this.</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [subject, o && o.message ? "\n" + o.message : "", ""].concat(items.map((it) => { const r = it.row, s = r.state || {}; return [(LIST_LABEL[it.list] || it.list) + ": " + r.title + (r.vtitle && r.vtitle !== "Default Title" ? " - " + r.vtitle : ""), r.vendor ? "  " + r.vendor : "", itemFacts(it.list, r).length ? "  " + itemFacts(it.list, r).join(" · ") : "", s.state ? "  Marked: " + (STATE_LABEL[s.state] || s.state) + (s.note ? " - " + s.note : "") : s.note ? "  Note: " + s.note : "", "  " + ADMIN_PRODUCT + (r.pid || ""), r.handle ? "  " + STORE_PRODUCT + r.handle : "", "  " + distributorUrl(r.vendor, r.title, o && o.distributors), ""].filter((x) => x !== "").join("\n"); })).join("\n");
+  return { subject, html, text };
+}
+
+// The admin accounts' addresses (9Pocket accounts, src/stage.js).
+export async function adminEmails(env, origin) {
+  try {
+    const r = await env.ROOM.get(env.ROOM.idFromName(STAGE_DO)).fetch(new Request(origin + "/_stage/users"));
+    const j = await r.json();
+    return (j && j.users || []).filter((u) => u && u.email && u.role === "admin" && !u.disabled).map((u) => u.email);
+  } catch { return []; }
 }
 
 /* ---- the 9Pocket routes ---- */
@@ -748,7 +838,7 @@ export const canView = (u) => !!u && (u.role === "admin" || can(u, "sc_view") ||
 export const canAct = (u) => !!u && (u.role === "admin" || can(u, "sc_act"));
 
 export async function serveStockStaff(request, env, url, user, form, helpers) {
-  const { html, redirect, q, toLogin, opts, pinOk } = helpers;
+  const { html, redirect, q, toLogin, opts, pinOk, fetchFn } = helpers;
   const p = url.pathname;
   const noStore = { "cache-control": "no-store" };
   const R = BASE + "/stock";
@@ -774,8 +864,37 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
         result = r.ok ? { ok: true, message: (STATE_LABEL[state] || state) + (f.title ? ": " + String(f.title).slice(0, 80) : "") + "." } : r;
       }
     } else if (action === "cfg") {
-      if (user.role !== "admin") result = { ok: false, error: "Only an admin can change the Order now threshold." };
+      if (user.role !== "admin") result = { ok: false, error: "Only an admin can change these settings." };
+      else if (f.distributors != null) { const r = await doCall(env, "/_sc/cfg", { distributors: f.distributors }); result = r.ok ? { ok: true, message: "Distributor websites saved: " + Object.keys(r.distributors || {}).length + " vendor" + (Object.keys(r.distributors || {}).length === 1 ? "" : "s") + " with their own search address." } : r; }
       else { const r = await doCall(env, "/_sc/cfg", { hotMin: f.hotMin }); result = r.ok ? { ok: true, message: "Order now lists items that sold " + r.hotMin + " or more in the 30 days before running out." } : r; }
+    } else if (action === "email") {
+      if (!canAct(user)) result = { ok: false, error: "Your account can look but not send items to the admins." };
+      else if (!emailConfigured(env)) result = { ok: false, error: "Email is not set up on the worker (RESEND_API_KEY)." };
+      else {
+        const vids = [...new Set(String(Array.isArray(f.vids) ? f.vids.join(",") : f.vids || "").split(",").map(digits).filter(Boolean))].slice(0, 100);
+        const d = await doCall(env, "/_sc/view");
+        const items = [];
+        for (const vid of vids) {
+          let hit = null;
+          for (const list of ["look", "hot", "reorder"]) { const r = (d[list] || []).find((x) => x.vid === vid); if (r) { hit = { list, row: r }; break; } }
+          if (!hit) { const s = (d.missing || []).find((x) => x.vid === vid && !x.closed); if (s) hit = { list: "missing", row: { ...s, state: s } }; }
+          if (hit) items.push(hit);
+        }
+        if (!items.length) result = { ok: false, error: "Tick at least one item first." };
+        else {
+          const to = await adminEmails(env, url.origin);
+          if (!to.length) result = { ok: false, error: "No admin account to email." };
+          else {
+            const msg = buildStockEmail(items, { by: user.email, byName: user.name, message: String(f.message || "").slice(0, 1000), distributors: d.status && d.status.distributors });
+            const sent = await sendEmail(env, to, msg, { replyTo: user.email, fetchFn });
+            if (!sent.ok) result = { ok: false, error: "The email failed: " + (sent.error || sent.status) };
+            else {
+              for (const it of items) await doCall(env, "/_sc/mark", { vid: it.row.vid, state: "emailed", note: "to " + to.join(", "), by, byName, title: it.row.title });
+              result = { ok: true, message: "Emailed " + items.length + " item" + (items.length === 1 ? "" : "s") + " to " + to.join(", ") + "." };
+            }
+          }
+        }
+      }
     } else if (action === "scan") {
       if (user.role !== "admin") result = { ok: false, error: "Only an admin can start a scan." };
       else { const r = await doCall(env, "/_sc/kick", {}); result = r.ok ? { ok: true, message: "A scan starts within 5 minutes; this page shows its progress." } : r; }
@@ -785,7 +904,7 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
   }
   if (p === R) {
     const d = await doCall(env, "/_sc/view");
-    return html(renderStock(d, { ...opts, tab, type: url.searchParams.get("type") || "", q: url.searchParams.get("q") || "", act: canAct(user), admin: user.role === "admin" }));
+    return html(renderStock(d, { ...opts, tab, type: url.searchParams.get("type") || "", q: url.searchParams.get("q") || "", act: canAct(user), admin: user.role === "admin", emailOn: emailConfigured(env) }));
   }
   return html(renderStock(null, { ...opts, tab, err: "No such page." }), 404);
 }

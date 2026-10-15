@@ -976,7 +976,7 @@ export async function serveStage(request, env, url, staffOk, sopts) {
   }
   // Stock check (src/stock-check.js): go look / reorder / missing / dismissed.
   if (p === BASE + "/stock" || p === BASE + "/stock.json" || p.startsWith(BASE + "/stock/")) {
-    return serveStockStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, pinOk });
+    return serveStockStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, pinOk, fetchFn: sopts && sopts.fetchFn });
   }
 
   if (p === BASE + ".json") {

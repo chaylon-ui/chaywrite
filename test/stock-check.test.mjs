@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q } from "../src/stock-check.js";
+import { inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails } from "../src/stock-check.js";
 import { renderStock, renderStockDenied } from "../src/stock-check-ui.js";
 import { SC_PERMS, ALL_PERMS, permsFrom, can } from "../src/stage-auth.js";
 
@@ -20,8 +20,11 @@ async function call(c, path, body) {
   const r = await stockDoFetch(c, req, url);
   return r.json();
 }
+const STAGE_USERS = { ok: true, users: [{ email: "boss@x.test", name: "Boss", role: "admin" }, { email: "v@x.test", role: "staff" }, { email: "old@x.test", role: "admin", disabled: true }, { email: "two@x.test", role: "admin" }] };
 function envWith(c, extra) {
-  return { SHOPIFY_ADMIN_TOKEN: "t", ...(extra || {}), ROOM: { idFromName: (n) => n, get: (n) => ({ fetch: async (req) => { assert.equal(n, STOCK_DO); return stockDoFetch(c, req, new URL(req.url)); } }) } };
+  return { SHOPIFY_ADMIN_TOKEN: "t", ...(extra || {}), ROOM: { idFromName: (n) => n, get: (n) => ({ fetch: async (req) => {
+    if (n === "buylist-stage") { assert.match(new URL(req.url).pathname, /^\/_stage\/users$/); return Response.json(STAGE_USERS); }
+    assert.equal(n, STOCK_DO); return stockDoFetch(c, req, new URL(req.url)); } }) } };
 }
 const series = (spec) => { const a = new Array(90).fill(0); for (const [i, n] of Object.entries(spec)) a[Number(i)] = n; return a; };
 
@@ -126,6 +129,44 @@ test("Shopify page shapes", () => {
   assert.match(openQuery(items), /o0:orders\(first:5,query:"sku:824968 fulfillment_status:unfulfilled status:open"\)/);
   assert.deepEqual(parseOpen(items, { o0: { nodes: [{ name: "#1002", createdAt: "2026-10-10T00:00:00Z", displayFulfillmentStatus: "UNFULFILLED", shippingLine: null }] }, o1: { nodes: [] } }), { 11: [{ name: "#1002", at: "2026-10-10T00:00:00Z", ship: "pickup" }] });
   assert.throws(() => parseOrdersPage({}), /orders shape/);
+});
+
+test("distributor links: a template per vendor, {q} = the title, a web search otherwise", () => {
+  assert.equal(distributorUrl("PLAMOD", "HG Gundam Aerial", null), "https://www.plamod.com/retailer/search?q=HG%20Gundam%20Aerial");
+  assert.equal(distributorUrl("plamod", "x", {}), "https://www.plamod.com/retailer/search?q=x");
+  assert.equal(distributorUrl("Arcane Tinmen", "Dragon Shield Matte Black", null), "https://www.google.com/search?q=Arcane%20Tinmen%20Dragon%20Shield%20Matte%20Black");
+  assert.equal(distributorUrl("", "Mystery Box", null), "https://www.google.com/search?q=Mystery%20Box");
+  const map = parseDistributors("Universal Distribution = https://example.test/search?q={q}\n  Games Workshop=https://trade.example.test/find/{q}&x=1 \nbad line\nNo Scheme = http://insecure.test/{q}\n");
+  assert.deepEqual(Object.keys(map), ["universal distribution", "games workshop"]);
+  assert.equal(map["universal distribution"].name, "Universal Distribution");
+  assert.equal(distributorUrl("Universal Distribution", "MTG Box & Co", map), "https://example.test/search?q=MTG%20Box%20%26%20Co");
+  assert.equal(distributorUrl("GAMES WORKSHOP", "Paint", map), "https://trade.example.test/find/Paint&x=1");
+  assert.equal(distributorsText(map), "Universal Distribution = https://example.test/search?q={q}\nGames Workshop = https://trade.example.test/find/{q}&x=1");
+});
+
+test("the email to the admins: every item with its facts, state, note and links", () => {
+  const items = [
+    { list: "look", row: { vid: "11", pid: "1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", vtitle: "Default Title", vendor: "Universal Distribution", type: "Magic Sealed Product", sku: "195166", handle: "bloomburrow-box", qty: 3, daysSince: 24, expected: 7.2, atRisk: 479.85, state: { state: "not_found", byName: "Sam", at: T0, note: "checked the back twice" } } },
+    { list: "hot", row: { vid: "33", pid: "3", title: "POKEMON 151 BOOSTER BUNDLE", vendor: "PLAMOD", type: "Pokemon Sealed Product", handle: "pk-151", qty: -1, daysOut: 10, perWeek: 2.1, sold60: 9, missedRevenue: 164.85, state: null } },
+  ];
+  const m77 = { vid: "77", pid: "7", title: "Mystery <Thing>", vendor: "", cents: 1299, state: "fewer", count: 2, byName: "Ann", at: T0, note: "one left" };
+  items.push({ list: "missing", row: { ...m77, state: m77 } });   // as the control builds it from a Missing line
+  const m = buildStockEmail(items, { by: "sam@x.test", byName: "Sam", message: "Please order the Pokémon today.", distributors: parseDistributors("Universal Distribution = https://example.test/s?q={q}") });
+  assert.equal(m.subject, "Stock check: 3 items from Sam");
+  assert.match(m.html, /Please order the Pokémon today\./);
+  assert.match(m.html, /Go look · Magic Sealed Product/); assert.match(m.html, /Order now · Pokemon Sealed Product/); assert.match(m.html, /Missing/);
+  assert.match(m.html, /href="https:\/\/admin\.shopify\.com\/store\/most-wanted-ca\/products\/1"/);
+  assert.match(m.html, /href="https:\/\/exorgames\.com\/products\/bloomburrow-box"/);
+  assert.match(m.html, /href="https:\/\/example\.test\/s\?q=MTG%20BLOOMBURROW%20PLAY%20BOOSTER%20BOX"/, "the vendor's own search address");
+  assert.match(m.html, /href="https:\/\/www\.plamod\.com\/retailer\/search\?q=POKEMON%20151%20BOOSTER%20BUNDLE"/, "the built-in PLAMOD address");
+  assert.match(m.html, /Marked: Not found by Sam/); assert.match(m.html, /Note: checked the back twice/);
+  assert.match(m.html, /Marked: Found fewer than listed \(found 2\) by Ann/);
+  assert.match(m.html, /3 on the system · last sold 24 days ago · should have sold ~7 since · \$479\.85 at risk/);
+  assert.match(m.html, /out 10 days · sells ~2\.1 a week · 9 sold in the 60 days before · ~\$164\.85 missed so far/);
+  assert.match(m.html, /Mystery &lt;Thing&gt;/, "escaped"); assert.doesNotMatch(m.html, /Mystery <Thing>/);
+  assert.match(m.text, /Go look: MTG BLOOMBURROW PLAY BOOSTER BOX\n  Universal Distribution/);
+  assert.match(m.text, /Marked: Not found - checked the back twice/);
+  assert.deepEqual(itemFacts("missing", { cents: 1299 }), ["$12.99 each"]);
 });
 
 // A fake Shopify: two orders pages (a sealed box selling steadily, a single
@@ -370,6 +411,49 @@ test("permissions and pages", async () => {
   // a form post redirects back to the same tab with the message
   r = await serve("/9pocket/stock/control", actor, { action: "mark", state: "note", vid: "22", note: "rep says Nov", tab: "reorder" });
   assert.equal(r.status, 303); assert.match(r.headers.get("location"), /^\/9pocket\/stock\?tab=reorder&msg=/);
+  // the title opens Shopify admin; the vendor link opens its reorder page
+  assert.match(page, /<b><a href="https:\/\/admin\.shopify\.com\/store\/most-wanted-ca\/products\/1" target="_blank" rel="noopener" title="Open in Shopify">MTG BLOOMBURROW PLAY BOOSTER BOX<\/a><\/b>/);
+  assert.match(page, /href="https:\/\/www\.google\.com\/search\?q=Universal%20Distribution%20MTG%20BLOOMBURROW[^"]*" target="_blank" rel="noopener">Universal Distribution reorder page ↗/);
+  assert.doesNotMatch(page, /class="pick"/, "no email boxes while the worker has no email key");
+  assert.doesNotMatch(await (await serve("/9pocket/stock", actor)).text(), /Distributor websites/, "settings are the admins'");
+  // admin sets the vendor's search address: the links change at once
+  rc = await serve("/9pocket/stock/control", admin, { action: "cfg", distributors: "Universal Distribution = https://ud.example.test/search?text={q}", json: "1" });
+  assert.equal(rc.status, 200); assert.match((await rc.json()).message, /1 vendor/);
+  const adminPage = await (await serve("/9pocket/stock", admin)).text();
+  assert.match(adminPage, /href="https:\/\/ud\.example\.test\/search\?text=MTG%20BLOOMBURROW%20PLAY%20BOOSTER%20BOX"/);
+  assert.match(adminPage, /Distributor websites \(admins\)/); assert.match(adminPage, /Universal Distribution = https:\/\/ud\.example\.test\/search\?text=\{q\}<\/textarea>/);
+  assert.match(adminPage, /Built in: PLAMOD = https:\/\/www\.plamod\.com/);
+  assert.equal((await serve("/9pocket/stock/control", actor, { action: "cfg", distributors: "x = https://x.test/{q}", json: "1" })).status, 400);
   assert.match(renderStockDenied({ user: other }), /cannot open the stock check/);
   assert.match(renderStock(null, { user: admin, tab: "look", err: "x" }), /No scan has finished yet/);
+  // email: needs the key; then the boxes and the bar appear
+  assert.equal((await serve("/9pocket/stock/control", actor, { action: "email", vids: "11,22", json: "1" })).status, 400);
+  const sent = [];
+  const fetchFn = async (u, init) => { sent.push({ u, body: JSON.parse(init.body) }); return new Response(JSON.stringify({ id: "re_1" }), { status: 200 }); };
+  const env2 = { ...env, RESEND_API_KEY: "re_test", EMAIL_FROM: "9Pocket <9pocket@exorgames.com>" };
+  const serve2 = (path, user, form) => { const url = new URL("https://w.example" + path); const req = new Request(url, form ? { method: "POST" } : {}); return serveStockStaff(req, env2, url, user, form, { html, redirect, q, toLogin, opts: { user }, pinOk: false, fetchFn }); };
+  const page2 = await (await serve2("/9pocket/stock", actor)).text();
+  assert.match(page2, /<input type="checkbox" class="pick" value="11">/); assert.match(page2, /id="scbar"/); assert.match(page2, /Email to admins/);
+  assert.doesNotMatch(await (await serve2("/9pocket/stock", viewer)).text(), /class="pick"/, "a viewer cannot email");
+  assert.equal((await serve2("/9pocket/stock/control", viewer, { action: "email", vids: "11", json: "1" })).status, 400);
+  assert.equal((await serve2("/9pocket/stock/control", actor, { action: "email", vids: "", json: "1" })).status, 400);
+  await serve2("/9pocket/stock/control", actor, { action: "mark", state: "note", vid: "22", note: "rep says November", json: "1" });
+  rc = await serve2("/9pocket/stock/control", actor, { action: "email", vids: "22,11,999,11", message: "Two for today", json: "1" });
+  const rcText = await rc.text();
+  assert.equal(rc.status, 200, rcText);
+  assert.match(JSON.parse(rcText).message, /^Emailed 2 items to boss@x\.test, two@x\.test\.$/, "the enabled admin accounts only, each item once");
+  assert.equal(sent.length, 1); assert.equal(sent[0].u, "https://api.resend.com/emails");
+  assert.deepEqual(sent[0].body.to, ["boss@x.test", "two@x.test"]); assert.equal(sent[0].body.reply_to, "a@x.test");
+  assert.equal(sent[0].body.subject, "Stock check: 2 items from Ann");
+  assert.match(sent[0].body.html, /Two for today/); assert.match(sent[0].body.html, /Dragon Shield Matte Black/); assert.match(sent[0].body.html, /Note: rep says November/); assert.match(sent[0].body.html, /MTG BLOOMBURROW PLAY BOOSTER BOX/);
+  assert.match(sent[0].body.html, /Marked: Not found by Ann, [^·<]+ · closed: Adjusted in BinderPOS/, "the box's last state and how it was closed ride along");
+  const v2 = await call(c, "/_sc/view");
+  const st22 = v2.reorder.find((x) => x.vid === "22").state;
+  assert.equal(st22.hist[st22.hist.length - 1].state, "emailed"); assert.match(st22.hist[st22.hist.length - 1].note, /boss@x\.test/);
+  // a failing send is reported, nothing recorded
+  const env3 = { ...env2 };
+  const serve3 = (path, user, form) => { const url = new URL("https://w.example" + path); return serveStockStaff(new Request(url, { method: "POST" }), env3, url, user, form, { html, redirect, q, toLogin, opts: { user }, pinOk: false, fetchFn: async () => new Response(JSON.stringify({ message: "nope" }), { status: 500 }) }); };
+  rc = await serve3("/9pocket/stock/control", actor, { action: "email", vids: "11", json: "1" });
+  assert.equal(rc.status, 400); assert.match((await rc.json()).error, /email failed: HTTP 500 nope/);
+  assert.deepEqual(await adminEmails(env, "https://w.example"), ["boss@x.test", "two@x.test"]);
 });
