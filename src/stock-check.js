@@ -869,6 +869,12 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
   if (p === R + "/health") return Response.json(await doCall(env, "/_sc/health"), { headers: noStore });
   if (p === R + ".json") {
     if (!(user && canView(user)) && !pinOk) return Response.json({ error: "sign in (stock check permission) or staff key required" }, { status: 403, headers: noStore });
+    // ?kick=1 (an admin, or the staff key from the runners): start a scan on the next cron tick
+    if (url.searchParams.get("kick") === "1") {
+      if (!(pinOk || (user && user.role === "admin"))) return Response.json({ error: "admin or staff key required to start a scan" }, { status: 403, headers: noStore });
+      const k = await doCall(env, "/_sc/kick", {});
+      return Response.json({ ok: !!k.ok, kicked: !!k.ok, health: await doCall(env, "/_sc/health") }, { headers: noStore });
+    }
     return Response.json(await doCall(env, "/_sc/view"), { headers: noStore });
   }
   if (!user) return toLogin();

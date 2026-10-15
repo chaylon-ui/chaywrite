@@ -370,6 +370,11 @@ test("permissions and pages", async () => {
   assert.equal((await serve("/9pocket/stock.json", other)).status, 403);
   assert.equal((await serve("/9pocket/stock.json", viewer)).status, 200);
   assert.equal((await serve("/9pocket/stock.json", null, null, true)).status, 200);
+  // the staff key (the runners) or an admin may queue a scan through the json
+  assert.equal((await serve("/9pocket/stock.json?kick=1", viewer)).status, 403);
+  const kicked = await (await serve("/9pocket/stock.json?kick=1", null, null, true)).json();
+  assert.equal(kicked.kicked, true); assert.equal(kicked.health.kick, true);
+  assert.equal((await (await serve("/9pocket/stock.json?kick=1", admin)).json()).kicked, true);
   // the page
   assert.equal((await serve("/9pocket/stock", null)).status, 303);
   assert.equal((await serve("/9pocket/stock", other)).status, 403);
