@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails } from "../src/stock-check.js";
+import { inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink } from "../src/stock-check.js";
 import { renderStock, renderStockDenied } from "../src/stock-check-ui.js";
 import { SC_PERMS, ALL_PERMS, permsFrom, can } from "../src/stage-auth.js";
 
@@ -142,6 +142,11 @@ test("distributor links: a template per vendor, {q} = the title, a web search ot
   assert.equal(distributorUrl("Universal Distribution", "MTG Box & Co", map), "https://example.test/search?q=MTG%20Box%20%26%20Co");
   assert.equal(distributorUrl("GAMES WORKSHOP", "Paint", map), "https://trade.example.test/find/Paint&x=1");
   assert.equal(distributorsText(map), "Universal Distribution = https://example.test/search?q={q}\nGames Workshop = https://trade.example.test/find/{q}&x=1");
+  // a saved per-product link beats the vendor's search
+  const r = { pid: "1", vendor: "Universal Distribution", title: "MTG Box" };
+  assert.deepEqual(reorderLink(r, { distributors: map }), { url: "https://example.test/search?q=MTG%20Box", label: "Universal Distribution reorder page", saved: false });
+  assert.deepEqual(reorderLink(r, { distributors: map, links: { 1: { url: "https://ca.universaldist.com/item/detail/b6e53b18" } } }), { url: "https://ca.universaldist.com/item/detail/b6e53b18", label: "Universal Distribution item page", saved: true });
+  assert.equal(validLink("https://ca.universaldist.com/item/detail/x"), true); assert.equal(validLink("http://x.test"), false); assert.equal(validLink("javascript:alert(1)"), false);
 });
 
 test("the email to the admins: every item with its facts, state, note and links", () => {
@@ -151,14 +156,14 @@ test("the email to the admins: every item with its facts, state, note and links"
   ];
   const m77 = { vid: "77", pid: "7", title: "Mystery <Thing>", vendor: "", cents: 1299, state: "fewer", count: 2, byName: "Ann", at: T0, note: "one left" };
   items.push({ list: "missing", row: { ...m77, state: m77 } });   // as the control builds it from a Missing line
-  const m = buildStockEmail(items, { by: "sam@x.test", byName: "Sam", message: "Please order the Pokémon today.", distributors: parseDistributors("Universal Distribution = https://example.test/s?q={q}") });
+  const m = buildStockEmail(items, { by: "sam@x.test", byName: "Sam", message: "Please order the Pokémon today.", distributors: parseDistributors("Universal Distribution = https://example.test/s?q={q}"), links: { 3: { url: "https://ca.universaldist.com/item/detail/abc" } } });
   assert.equal(m.subject, "Stock check: 3 items from Sam");
   assert.match(m.html, /Please order the Pokémon today\./);
   assert.match(m.html, /Go look · Magic Sealed Product/); assert.match(m.html, /Order now · Pokemon Sealed Product/); assert.match(m.html, /Missing/);
   assert.match(m.html, /href="https:\/\/admin\.shopify\.com\/store\/most-wanted-ca\/products\/1"/);
   assert.match(m.html, /href="https:\/\/exorgames\.com\/products\/bloomburrow-box"/);
   assert.match(m.html, /href="https:\/\/example\.test\/s\?q=MTG%20BLOOMBURROW%20PLAY%20BOOSTER%20BOX"/, "the vendor's own search address");
-  assert.match(m.html, /href="https:\/\/www\.plamod\.com\/retailer\/search\?q=POKEMON%20151%20BOOSTER%20BUNDLE"/, "the built-in PLAMOD address");
+  assert.match(m.html, /href="https:\/\/ca\.universaldist\.com\/item\/detail\/abc"[^>]*>PLAMOD item page</, "a saved item link wins over the vendor's search");
   assert.match(m.html, /Marked: Not found by Sam/); assert.match(m.html, /Note: checked the back twice/);
   assert.match(m.html, /Marked: Found fewer than listed \(found 2\) by Ann/);
   assert.match(m.html, /3 on the system · last sold 24 days ago · should have sold ~7 since · \$479\.85 at risk/);
@@ -424,6 +429,18 @@ test("permissions and pages", async () => {
   assert.match(adminPage, /Distributor websites \(admins\)/); assert.match(adminPage, /Universal Distribution = https:\/\/ud\.example\.test\/search\?text=\{q\}<\/textarea>/);
   assert.match(adminPage, /Built in: PLAMOD = https:\/\/www\.plamod\.com/);
   assert.equal((await serve("/9pocket/stock/control", actor, { action: "cfg", distributors: "x = https://x.test/{q}", json: "1" })).status, 400);
+  // a saved link per product: pasted once on the card, remembered
+  assert.match(page, /class="setlink" data-pid="1">set link</); assert.match(page, /name="action" value="link"/);
+  assert.doesNotMatch(await (await serve("/9pocket/stock", viewer)).text(), /class="setlink"/, "a viewer gets no set-link control");
+  assert.equal((await serve("/9pocket/stock/control", viewer, { action: "link", pid: "1", url: "https://ca.universaldist.com/item/detail/b6e", json: "1" })).status, 400);
+  assert.equal((await serve("/9pocket/stock/control", actor, { action: "link", pid: "1", url: "ftp://nope", json: "1" })).status, 400);
+  rc = await serve("/9pocket/stock/control", actor, { action: "link", pid: "1", url: "https://ca.universaldist.com/item/detail/b6e53b18", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", json: "1" });
+  assert.equal(rc.status, 200); assert.match((await rc.json()).message, /Reorder link saved for MTG BLOOMBURROW/);
+  const linked = await (await serve("/9pocket/stock", actor)).text();
+  assert.match(linked, /href="https:\/\/ca\.universaldist\.com\/item\/detail\/b6e53b18" target="_blank" rel="noopener" class="saved" title="saved link">Universal Distribution item page ↗/);
+  assert.match(linked, /class="setlink" data-pid="1">change link</);
+  assert.equal((await serve("/9pocket/stock/control", actor, { action: "link", pid: "1", url: "", json: "1" })).status, 200, "an empty address clears it");
+  assert.match(await (await serve("/9pocket/stock", actor)).text(), /Universal Distribution reorder page ↗/);
   // live keyword filter, chips and the floating Top button, on every tab
   assert.match(page, /<input type="search" id="scq" name="q"/); assert.match(page, /class="kw" data-kw="booster"/); assert.match(page, /class="kw" data-kw="blind"/);
   assert.match(page, /<div class="sc-card" data-hay="mtg bloomburrow play booster box default title 195166 195166 universal distribution magic sealed product">/);

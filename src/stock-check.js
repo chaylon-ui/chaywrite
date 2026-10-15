@@ -120,6 +120,16 @@ export function parseDistributors(text) {
   return out;
 }
 export const distributorsText = (map) => Object.values(map || {}).map((d) => d.name + " = " + d.url).join("\n");
+// Owner, 2026-10-15: "it needs to open in say universals actual page", e.g.
+// https://ca.universaldist.com/item/detail/<uuid>. A saved link per product
+// (sc:dl:<productId>) wins over the vendor's search template; staff paste it
+// once on the card and it is remembered for good.
+export const validLink = (u) => /^https:\/\/[^\s"'<>]{1,400}$/i.test(String(u || "").trim());
+export function reorderLink(r, o) {
+  const saved = o && o.links && r && r.pid && o.links[r.pid];
+  if (saved && saved.url) return { url: saved.url, label: (r.vendor ? r.vendor : "distributor") + " item page", saved: true };
+  return { url: distributorUrl(r && r.vendor, r && r.title, o && o.distributors), label: (r && r.vendor ? r.vendor + " reorder page" : "search the web"), saved: false };
+}
 export const mergedDistributors = (cfg) => ({ ...DEFAULT_DISTRIBUTORS, ...((cfg && cfg.distributors) || {}) });
 
 export const dayOf = (ms) => Math.floor(ms / DAY_MS);
@@ -713,6 +723,9 @@ async function view(cx, now) {
   const states = await cx.storage.list({ prefix: "sc:s:" });
   const st = {};
   for (const [k, v] of states) st[k.slice(5)] = v;
+  const linkRows = await cx.storage.list({ prefix: "sc:dl:" });
+  const links = {};
+  for (const [k, v] of linkRows) if (v && v.url) links[k.slice(6)] = v;
   const today = dayOf(now);
   const outLook = [], outReorder = [], outHot = [], missing = [], dismissed = [];
   const hotMin = Number(cfg.hotMin) >= 1 ? Number(cfg.hotMin) : HOT_MIN;
@@ -742,7 +755,7 @@ async function view(cx, now) {
   const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
-  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, meta: meta || null, status: { hotMin, distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
+  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, links, meta: meta || null, status: { hotMin, distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
 }
 
 export async function stockDoFetch(cx, request, url) {
@@ -754,6 +767,16 @@ export async function stockDoFetch(cx, request, url) {
     if (p === "/_sc/ingest" && post) return doJson(await ingest(cx, b, now));
     if (p === "/_sc/mark" && post) return doJson(await mark(cx, b, now));
     if (p === "/_sc/kick" && post) { const cfg = await loadCfg(cx); cfg.kick = true; await saveCfg(cx, cfg); return doJson({ ok: true }); }
+    if (p === "/_sc/link" && post) {
+      const pid = digits(b.pid);
+      if (!pid) return doJson({ ok: false, error: "which product?" }, 400);
+      const u = String(b.url || "").trim();
+      if (!u) { await cx.storage.delete("sc:dl:" + pid); return doJson({ ok: true, cleared: true }); }
+      if (!validLink(u)) return doJson({ ok: false, error: "Paste a full https:// address." }, 400);
+      const rec = { pid, url: u.slice(0, 400), by: text(b.by, 160), byName: text(b.byName, 80), at: now, title: text(b.title, 200) };
+      await cx.storage.put("sc:dl:" + pid, rec);
+      return doJson({ ok: true, link: rec });
+    }
     if (p === "/_sc/cfg" && post) {
       const cfg = await loadCfg(cx);
       if (b.hotMin != null) { const n = parseInt(b.hotMin, 10); if (!(n >= 1 && n <= 1000)) return doJson({ ok: false, error: "Order now needs a whole number of sales, 1 or more." }, 400); cfg.hotMin = n; }
@@ -793,7 +816,8 @@ export function buildStockEmail(items, o) {
   const INK = "#1d2327", MUTED = "#6b7780", RULE = "#e5e9ec", PAPER = "#f4f6f7", RED = "#d52c28";
   const block = (it) => {
     const r = it.row, s = r.state || {};
-    const links = [[ADMIN_PRODUCT + (r.pid || ""), "Shopify admin"], r.handle ? [STORE_PRODUCT + r.handle, "product page"] : null, [distributorUrl(r.vendor, r.title, o && o.distributors), (r.vendor ? r.vendor : "web") + " search"]].filter(Boolean);
+    const rl = reorderLink(r, o);
+    const links = [[ADMIN_PRODUCT + (r.pid || ""), "Shopify admin"], r.handle ? [STORE_PRODUCT + r.handle, "product page"] : null, [rl.url, rl.label]].filter(Boolean);
     const marked = s.state ? "Marked: " + (STATE_LABEL[s.state] || s.state) + (s.state === "fewer" && s.count != null ? " (found " + s.count + ")" : "") + (s.byName || s.by ? " by " + (s.byName || s.by) : "") + (s.at ? ", " + whenH(s.at) : "") + (s.closed ? " · closed: " + (STATE_LABEL[s.closed.state] || s.closed.state) + (s.closed.note ? " (" + s.closed.note + ")" : "") : "") : "";
     return `<tr><td style="padding:12px 14px;border-bottom:1px solid ${RULE}">
 <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:${MUTED}">${escH(LIST_LABEL[it.list] || it.list)}${r.type ? " · " + escH(r.type) : ""}</div>
@@ -814,7 +838,7 @@ ${s.note ? `<div style="font-size:13px;margin-top:4px;background:#fff8dc;border-
 <tr><td style="padding:14px 24px 22px;font-size:13px"><a href="https://exor-binder.nevski.workers.dev${BASE}/stock" style="display:inline-block;background:${INK};color:#fff;text-decoration:none;font-weight:700;padding:10px 16px;border-radius:8px">Open the Stock check</a></td></tr>
 <tr><td style="background:${PAPER};padding:12px 24px;font-size:12px;color:${MUTED}">Sent from 9Pocket by ${escH(who)}. Staff notice - customers never see this.</td></tr>
 </table></td></tr></table></body></html>`;
-  const text = [subject, o && o.message ? "\n" + o.message : "", ""].concat(items.map((it) => { const r = it.row, s = r.state || {}; return [(LIST_LABEL[it.list] || it.list) + ": " + r.title + (r.vtitle && r.vtitle !== "Default Title" ? " - " + r.vtitle : ""), r.vendor ? "  " + r.vendor : "", itemFacts(it.list, r).length ? "  " + itemFacts(it.list, r).join(" · ") : "", s.state ? "  Marked: " + (STATE_LABEL[s.state] || s.state) + (s.note ? " - " + s.note : "") : s.note ? "  Note: " + s.note : "", "  " + ADMIN_PRODUCT + (r.pid || ""), r.handle ? "  " + STORE_PRODUCT + r.handle : "", "  " + distributorUrl(r.vendor, r.title, o && o.distributors), ""].filter((x) => x !== "").join("\n"); })).join("\n");
+  const text = [subject, o && o.message ? "\n" + o.message : "", ""].concat(items.map((it) => { const r = it.row, s = r.state || {}; return [(LIST_LABEL[it.list] || it.list) + ": " + r.title + (r.vtitle && r.vtitle !== "Default Title" ? " - " + r.vtitle : ""), r.vendor ? "  " + r.vendor : "", itemFacts(it.list, r).length ? "  " + itemFacts(it.list, r).join(" · ") : "", s.state ? "  Marked: " + (STATE_LABEL[s.state] || s.state) + (s.note ? " - " + s.note : "") : s.note ? "  Note: " + s.note : "", "  " + ADMIN_PRODUCT + (r.pid || ""), r.handle ? "  " + STORE_PRODUCT + r.handle : "", "  " + reorderLink(r, o).url, ""].filter((x) => x !== "").join("\n"); })).join("\n");
   return { subject, html, text };
 }
 
@@ -867,6 +891,9 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
       if (user.role !== "admin") result = { ok: false, error: "Only an admin can change these settings." };
       else if (f.distributors != null) { const r = await doCall(env, "/_sc/cfg", { distributors: f.distributors }); result = r.ok ? { ok: true, message: "Distributor websites saved: " + Object.keys(r.distributors || {}).length + " vendor" + (Object.keys(r.distributors || {}).length === 1 ? "" : "s") + " with their own search address." } : r; }
       else { const r = await doCall(env, "/_sc/cfg", { hotMin: f.hotMin }); result = r.ok ? { ok: true, message: "Order now lists items that sold " + r.hotMin + " or more in the 30 days before running out." } : r; }
+    } else if (action === "link") {
+      if (!canAct(user)) result = { ok: false, error: "Your account can look but not save links." };
+      else { const r = await doCall(env, "/_sc/link", { pid: f.pid, url: f.url, title: f.title, by, byName }); result = r.ok ? { ok: true, message: r.cleared ? "Reorder link removed." : "Reorder link saved for " + String(f.title || "").slice(0, 80) + "." } : r; }
     } else if (action === "email") {
       if (!canAct(user)) result = { ok: false, error: "Your account can look but not send items to the admins." };
       else if (!emailConfigured(env)) result = { ok: false, error: "Email is not set up on the worker (RESEND_API_KEY)." };
@@ -885,7 +912,7 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
           const to = await adminEmails(env, url.origin);
           if (!to.length) result = { ok: false, error: "No admin account to email." };
           else {
-            const msg = buildStockEmail(items, { by: user.email, byName: user.name, message: String(f.message || "").slice(0, 1000), distributors: d.status && d.status.distributors });
+            const msg = buildStockEmail(items, { by: user.email, byName: user.name, message: String(f.message || "").slice(0, 1000), distributors: d.status && d.status.distributors, links: d.links || {} });
             const sent = await sendEmail(env, to, msg, { replyTo: user.email, fetchFn });
             if (!sent.ok) result = { ok: false, error: "The email failed: " + (sent.error || sent.status) };
             else {
