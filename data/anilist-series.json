@@ -1,7 +1,7 @@
 {
  "asked": 816,
  "count": 388,
- "generated": "2026-10-14T12:58:19Z",
+ "generated": "2026-10-15T12:45:32Z",
  "series": {
   "2.5 Dimensional Seduction": {
    "author": "Yuu Hashimoto",
@@ -1312,10 +1312,10 @@
    "volumes": null
   },
   "My Hero Academia": {
-   "author": "Kouhei Horikoshi",
-   "demographic": "Shonen",
+   "author": "Anri Takahashi",
+   "demographic": "",
    "status": "Completed",
-   "volumes": 42
+   "volumes": 6
   },
   "My Isekai Life": {
    "author": "Cyorisuke Natsumi",
@@ -2026,9 +2026,9 @@
    "volumes": null
   },
   "The Villainess's Guide to": {
-   "author": "Ren Sakuma",
-   "demographic": "Shojo",
-   "status": "Ongoing",
+   "author": "Garamdal",
+   "demographic": "",
+   "status": "Cancelled",
    "volumes": null
   },
   "The Weakest Tamer Began a Journey to Pick Up Trash": {
