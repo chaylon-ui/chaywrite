@@ -125,6 +125,93 @@ export const distributorsText = (map) => Object.values(map || {}).map((d) => d.n
 // (sc:dl:<productId>) wins over the vendor's search template; staff paste it
 // once on the card and it is remembered for good.
 export const validLink = (u) => /^https:\/\/[^\s"'<>]{1,400}$/i.test(String(u || "").trim());
+
+/* ---- Universal Distribution: the item page for a UPC ----
+   Probes 2026-10-15 (bp-popup-probe 38663055383 / 38663274019 / 38663412433 /
+   38663573140): ca.universaldist.com is public. GET /api/v1/en/itemcategories
+   lists the categories (code, parentCode, description); GET
+   /api/v1/en/items?category=<code> answers { items: [...] } with each item's
+   guid (the /item/detail/<guid> page), sku (the UPC, sometimes zero-padded),
+   productName, itemCode, categoryCode, releaseDate and warehouse quantities.
+   There is no public search by UPC (those calls answer 401/500), so the
+   worker reads the category lists it needs and matches on the UPC. Nothing
+   is signed in, nothing is written, no prices are read or kept. */
+export const UD_ORIGIN = "https://ca.universaldist.com";
+export const UD_ITEM = UD_ORIGIN + "/item/detail/";
+export const isUniversal = (vendor) => /universal/i.test(String(vendor || ""));
+// UPCs compare on their digits with leading zeros dropped (Universal pads some to 14).
+export const normUpc = (s) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "");
+export function udIndex(items) {
+  const out = {};
+  for (const it of items || []) { const k = normUpc(it && it.sku); if (k && it.guid && !out[k]) out[k] = { guid: String(it.guid), name: String(it.productName || "").slice(0, 200), code: String(it.categoryCode || "") }; }
+  return out;
+}
+// Universal's lists are per LEAF category (a parent code answers nothing;
+// 483 categories, 16 top-level, 467 leaves - probe 38663711747), so a run
+// reads only the leaves a candidate could sit in: leaves whose description
+// shares a word with the product's type or title (Magic Sealed Product ->
+// MAGIC THE GATHERING, Pokemon Sealed Product -> POKEMON), else the leaves
+// of the top-level group the product's type points at, a few at a time.
+const UD_STOP = new Set(["THE", "AND", "OF", "FOR", "MISC", "OTHER", "ALL", "NEW", "SET", "CARD", "CARDS", "TRADING", "GAME", "GAMES", "PRODUCT", "PRODUCTS", "SEALED", "SINGLE", "SINGLES", "ACCESSORIES", "ACCESSORY", "SUPPLIES", "BOX", "BOXES", "PACK", "PACKS", "BOOSTER", "BUNDLE", "DECK", "DECKS", "KIT", "KITS", "MODEL", "MODELS", "EDITION", "COLLECTION", "SERIES", "VOL", "VOLUME", "ONE", "TWO", "WITH", "FROM", "ETC"]);
+export const udWords = (s) => [...new Set(String(s || "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").split(" ").filter((w) => w.length >= 3 && !UD_STOP.has(w)))];
+// Shopify product type -> Universal top-level group code (the fallback)
+export function udGroupFor(type) {
+  const t = String(type || "").toLowerCase();
+  if (/sealed|tcg|card game|lorcana|riftbound|one piece|battle spirits|digimon|dbs|gundam|cyberpunk|metazoo|neopets|kayou|union arena|grand archive|final fantasy|flesh|star wars/.test(t)) return "2000";
+  if (/board game|asmodee/.test(t)) return "4000";
+  if (/paint|airbrush/.test(t)) return "6300";
+  if (/model|gunpla|scale|heroclix|tabletop|games workshop|wargame/.test(t)) return /heroclix|tabletop|games workshop|wargame/.test(t) ? "3000" : "6500";
+  if (/dice/.test(t)) return "6000";
+  if (/sleeve|toploader|deck box|storage|binder|page|playmat|other trading card game accessories/.test(t)) return "9000";
+  if (/funko|plush|toy|figure|blind box|lego|collectible/.test(t)) return "7500";
+  if (/rpg/.test(t)) return "5000";
+  if (/book/.test(t)) return "5500";
+  if (/hockey|baseball|basketball|football|sport/.test(t)) return "1000";
+  return "";
+}
+// The leaf codes to read for these candidates, most wanted first.
+export function udPickLeaves(cands, cats, maxLists) {
+  const leaves = (Array.isArray(cats) ? cats : []).filter((c) => c && c.code && c.parentCode).map((c) => ({ code: String(c.code), parent: String(c.parentCode), words: udWords(c.description) }));
+  const score = new Map();
+  const bump = (code, n) => score.set(code, (score.get(code) || 0) + n);
+  for (const c of cands || []) {
+    const words = new Set(udWords((c.type || "") + " " + (c.title || "")));
+    let hit = false;
+    for (const l of leaves) { const n = l.words.filter((w) => words.has(w)).length; if (n) { bump(l.code, 10 * n); hit = true; } }
+    if (!hit) { const g = udGroupFor(c.type); if (g) for (const l of leaves) if (l.parent === g) bump(l.code, 1); }
+  }
+  return [...score.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map((e) => e[0]).slice(0, maxLists || 40);
+}
+// Resolve candidates [{pid, sku, barcode, type, title}] -> { pid: url }.
+// fetchFn fetches JSON (the worker's fetch, edge-cached half a day so a run
+// reads each list once and the next run mostly hits the cache).
+export async function resolveUniversal(cands, fetchFn, opts) {
+  const o = opts || {};
+  // every candidate's SKU and barcode (8+ digits: a UPC/EAN, not a short house code) -> its product
+  const want = new Map();
+  const pids = new Set();
+  for (const c of cands || []) { if (!c || !c.pid) continue; for (const k of [normUpc(c.sku), normUpc(c.barcode)]) if (k.length >= 8 && !want.has(k)) { want.set(k, String(c.pid)); pids.add(String(c.pid)); } }
+  const out = {}, stats = { wanted: pids.size, lists: 0, matched: 0, errors: [] };
+  if (!want.size) return { links: out, stats };
+  const getJson = async (path) => {
+    const r = await fetchFn(UD_ORIGIN + path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000), cf: { cacheTtl: 43200, cacheEverything: true } });
+    if (!r.ok) throw new Error("UD HTTP " + r.status + " " + path);
+    return r.json();
+  };
+  let codes;
+  try { codes = udPickLeaves(cands, await getJson("/api/v1/en/itemcategories"), o.maxLists); } catch (e) { stats.errors.push(String((e && e.message) || e).slice(0, 120)); return { links: out, stats }; }
+  if (o.codes) codes = o.codes;
+  stats.picked = codes.length;
+  for (const code of codes) {
+    if (!want.size) break;
+    let j;
+    try { j = await getJson("/api/v1/en/items?category=" + encodeURIComponent(code)); } catch (e) { stats.errors.push(String((e && e.message) || e).slice(0, 120)); continue; }
+    stats.lists++;
+    const idx = udIndex(j && j.items);
+    for (const [k, pid] of [...want]) { const hit = idx[k]; if (hit && !out[pid]) { out[pid] = UD_ITEM + hit.guid; stats.matched++; } if (out[pid]) want.delete(k); }
+  }
+  return { links: out, stats };
+}
 export function reorderLink(r, o) {
   const saved = o && o.links && r && r.pid && o.links[r.pid];
   if (saved && saved.url) return { url: saved.url, label: (r.vendor ? r.vendor : "distributor") + " item page", saved: true };
@@ -331,7 +418,7 @@ export function parseOpen(items, data) {
 // The worker side of one plan: fetch what the plan asks for and shape the
 // ingest body. gql(query, variables) -> { data, cost } (price-history.js
 // adminGql); pacing is the caller's.
-export async function doWork(plan, gql) {
+export async function doWork(plan, gql, udFetch) {
   if (plan.kind === "orders") {
     const q = `created_at:>${plan.since} -status:cancelled`;
     const r = await gql(ORDERS_Q, { q, after: plan.cursor || null });
@@ -360,6 +447,10 @@ export async function doWork(plan, gql) {
     const r = await gql(openQuery(plan.items));
     return { kind: "open", vids: plan.items.map((it) => it.vid), orders: parseOpen(plan.items, r.data), cost: r.cost };
   }
+  if (plan.kind === "links") {
+    const r = await resolveUniversal(plan.items, udFetch || ((a, b) => fetch(a, b)));
+    return { kind: "links", links: r.links, stats: r.stats, cost: null };
+  }
   throw new Error("unknown plan " + plan.kind);
 }
 
@@ -382,7 +473,7 @@ export async function stockCheckTick(env, o) {
     if (plan.kind === "idle") { out.idle = true; out.phase = plan.phase; break; }
     if (plan.kind === "busy") { out.busy = true; out.phase = plan.phase; break; }
     let payload;
-    try { payload = await doWork(plan, gql); }
+    try { payload = await doWork(plan, gql, o.udFetch); }
     catch (e) {
       out.errors++;
       await call("/_sc/ingest", { token: plan.token, kind: plan.kind, error: String((e && e.message) || e).slice(0, 200), type: plan.type, ids: plan.ids, vids: plan.items && plan.items.map((it) => it.vid) });
@@ -544,7 +635,7 @@ async function finalize(cx, run, cfg, now) {
   }
   if (Object.keys(puts).length) await cx.storage.put(puts);
   const hotMin = Number(cfg.hotMin) >= 1 ? Number(cfg.hotMin) : HOT_MIN;
-  const meta = { at: now, day: today, runId: run.id, counts: { look: look.length, reorder: reorderRows.length, hot: hot.filter((r) => r.sold30 >= hotMin).length, scanned: run.scanned, orders: run.orders, lines: run.lines, lookedUp: run.lookupDone }, errors: (run.errors || []).slice(-10), ordersSince: run.newest || run.since, ordersDenied: !!cfg.ordersDenied, ledgerDays: Object.keys(ledgers).length };
+  const meta = { at: now, day: today, runId: run.id, links: run.links || null, counts: { look: look.length, reorder: reorderRows.length, hot: hot.filter((r) => r.sold30 >= hotMin).length, scanned: run.scanned, orders: run.orders, lines: run.lines, lookedUp: run.lookupDone }, errors: (run.errors || []).slice(-10), ordersSince: run.newest || run.since, ordersDenied: !!cfg.ordersDenied, ledgerDays: Object.keys(ledgers).length };
   await cx.storage.put({ "sc:res:look": look.slice(0, MAX_ROWS), "sc:res:reorder": reorderRows.slice(0, MAX_ROWS), "sc:res:hot": hot, "sc:res:meta": meta });
   // prune: ledgers older than KEEP_DAYS, in-stock records not seen for 30 days, lookups outside this run
   try {
@@ -560,7 +651,7 @@ async function finalize(cx, run, cfg, now) {
   cfg.lastRunDay = today; cfg.lastRunAt = now; cfg.kick = false; cfg.runs = (cfg.runs || 0) + 1; cfg.lastError = (run.errors || []).length ? run.errors[run.errors.length - 1] : "";
   if (run.newest) cfg.ordersSince = run.newest;
   await saveCfg(cx, cfg);
-  await cx.storage.delete(["sc:run", "sc:cand", "sc:lookup", "sc:types", "sc:open"]);
+  await cx.storage.delete(["sc:run", "sc:cand", "sc:lookup", "sc:types", "sc:open", "sc:links"]);
 }
 
 // What the worker should do next. Runs the in-DO phases itself first.
@@ -581,7 +672,23 @@ async function plan(cx, now) {
     run.openDone = 0; run.openTotal = items.length; run.phase = items.length ? "open" : "finalize";
     await cx.storage.put("sc:run", run);
   }
-  if (run.phase === "open" && run.openDone >= run.openTotal) { run.phase = "finalize"; await cx.storage.put("sc:run", run); }
+  if (run.phase === "open" && run.openDone >= run.openTotal) {
+    // Universal items without a link staff pasted -> the links phase resolves their item pages by UPC
+    const cands = [];
+    for (const vid of (await cx.storage.get("sc:lookup")) || []) {
+      const l = await cx.storage.get("sc:lk:" + vid);
+      if (!l || !l.pid || !isUniversal(l.vendor) || !(l.sku || l.barcode)) continue;
+      const have = await cx.storage.get("sc:dl:" + l.pid);
+      if (have && have.url && !have.auto) continue;
+      cands.push({ pid: l.pid, sku: l.sku, barcode: l.barcode, type: l.type, title: l.title });
+    }
+    const seen = new Set();
+    const uniq = cands.filter((c) => !seen.has(c.pid) && seen.add(c.pid));
+    await cx.storage.put("sc:links", uniq);
+    run.linksTotal = uniq.length; run.linksDone = 0; run.phase = uniq.length ? "links" : "finalize";
+    await cx.storage.put("sc:run", run);
+  }
+  if (run.phase === "links" && (run.linksDone || 0) >= (run.linksTotal || 0)) { run.phase = "finalize"; await cx.storage.put("sc:run", run); }
   if (run.phase === "finalize") { await finalize(cx, run, cfg, now); return { ok: true, kind: "idle", phase: "done", finished: true }; }
   if (run.phase === "scan" && (!run.types || run.typeIdx >= run.types.length)) { run.phase = "compute"; await cx.storage.put("sc:run", run); return plan(cx, now); }
   // One worker at a time: a unit handed out is leased for LEASE_MS; a second
@@ -596,6 +703,7 @@ async function plan(cx, now) {
   if (run.phase === "scan") return { ...unit, kind: "scan", type: run.types[run.typeIdx], cursor: run.cursor, typeIdx: run.typeIdx, types: run.types.length };
   if (run.phase === "lookup") { const ids = (await cx.storage.get("sc:lookup")) || []; return { ...unit, kind: "lookup", ids: ids.slice(run.lookupDone, run.lookupDone + LOOKUP_PAGE), done: run.lookupDone, total: run.lookupTotal }; }
   if (run.phase === "open") { const items = (await cx.storage.get("sc:open")) || []; return { ...unit, kind: "open", items: items.slice(run.openDone, run.openDone + OPEN_PER_PAGE), done: run.openDone, total: run.openTotal }; }
+  if (run.phase === "links") { const items = (await cx.storage.get("sc:links")) || []; return { ...unit, kind: "links", items, total: run.linksTotal }; }
   run.lease = null; await cx.storage.put("sc:run", run);
   return { ok: false, error: "bad phase " + run.phase };
 }
@@ -616,6 +724,7 @@ async function ingest(cx, b, now) {
       else if (b.kind === "scan") { run.typeIdx++; run.cursor = null; }
       else if (b.kind === "lookup") { run.lookupDone += (b.ids || []).length || LOOKUP_PAGE; }
       else if (b.kind === "open") { run.openDone += (b.vids || []).length || OPEN_PER_PAGE; }
+      else if (b.kind === "links") { run.linksDone = run.linksTotal || 0; }
     }
     await cx.storage.put("sc:run", run);
     return { ok: true, errors: run.errors.length };
@@ -677,6 +786,17 @@ async function ingest(cx, b, now) {
     for (const vid of b.vids || []) { const l = await cx.storage.get("sc:lk:" + vid); if (l) { l.open = (b.orders && b.orders[vid]) || []; puts["sc:lk:" + vid] = l; } }
     if (Object.keys(puts).length) await cx.storage.put(puts);
     run.openDone += (b.vids || []).length;
+  } else if (b.kind === "links") {
+    const puts = {};
+    for (const [pid, url] of Object.entries(b.links || {})) {
+      if (!digits(pid) || !validLink(url)) continue;
+      const have = await cx.storage.get("sc:dl:" + digits(pid));
+      if (have && have.url && !have.auto) continue;   // a pasted link stays
+      puts["sc:dl:" + digits(pid)] = { pid: digits(pid), url, auto: true, by: "universal lookup", at: now };
+    }
+    if (Object.keys(puts).length) await cx.storage.put(puts);
+    run.links = { ...(b.stats || {}), saved: Object.keys(puts).length };
+    run.linksDone = run.linksTotal || 0;
   }
   await cx.storage.put("sc:run", run);
   return { ok: true, phase: run.phase };

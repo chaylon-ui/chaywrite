@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink } from "../src/stock-check.js";
+import { inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
 import { renderStock, renderStockDenied } from "../src/stock-check-ui.js";
 import { SC_PERMS, ALL_PERMS, permsFrom, can } from "../src/stage-auth.js";
 
@@ -174,6 +174,48 @@ test("the email to the admins: every item with its facts, state, note and links"
   assert.deepEqual(itemFacts("missing", { cents: 1299 }), ["$12.99 each"]);
 });
 
+// A fake Universal Distribution site: two top-level categories, the MTG list
+// holds the box's UPC (zero-padded, as their lists sometimes are).
+function fakeUniversal() {
+  const calls = [];
+  const fetchFn = async (u) => {
+    calls.push(u);
+    const path = new URL(u).pathname + new URL(u).search;
+    const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
+    if (path === "/api/v1/en/itemcategories") return json([{ code: "2000", parentCode: null, description: "TRADING CARD GAMES" }, { code: "2010", parentCode: "2000", description: "MAGIC THE GATHERING" }, { code: "2020", parentCode: "2000", description: "POKEMON" }, { code: "2030", parentCode: "2000", description: "YU-GI-OH!" }, { code: "4000", parentCode: null, description: "BOARDGAMES" }, { code: "4010", parentCode: "4000", description: "ASMODEE" }, { code: "4020", parentCode: "4000", description: "HASBRO" }]);
+    if (path === "/api/v1/en/items?category=2000") return json({ items: [] });   // a parent answers nothing
+    if (path === "/api/v1/en/items?category=2010") return json({ items: [{ guid: "b6e53b18-92d9-4bc2-b55d-fb5d56cd782a", sku: "00195166150611", productName: "MTG BLOOMBURROW PLAY BOOSTER BOX", categoryCode: "2010" }, { guid: "other", sku: "111", productName: "x" }] });
+    if (path === "/api/v1/en/items?category=2020") return json({ items: [{ guid: "pk-151", sku: "820650859991", productName: "POKEMON 151 BOOSTER BUNDLE", categoryCode: "2020" }] });
+    if (/\/api\/v1\/en\/items\?category=(2030|4010|4020)$/.test(path)) return json({ items: [] });
+    return new Response("nope", { status: 404 });
+  };
+  return { fetchFn, calls };
+}
+
+test("Universal: UPCs match on their digits; the leaves to read come from the product's type and title", async () => {
+  assert.equal(normUpc("00195166150611"), "195166150611"); assert.equal(normUpc("195166-150611"), "195166150611"); assert.equal(normUpc(""), "");
+  const idx = udIndex([{ guid: "g1", sku: "0012345", productName: "A" }, { guid: "g2", sku: "", productName: "no sku" }, { guid: "g3", sku: "12345", productName: "dup" }]);
+  assert.deepEqual(Object.keys(idx), ["12345"]); assert.equal(idx["12345"].guid, "g1", "first wins");
+  assert.deepEqual(udWords("Magic: The Gathering Singles & Sealed Product"), ["MAGIC", "GATHERING"]);
+  assert.equal(udGroupFor("Pokemon Sealed Product"), "2000"); assert.equal(udGroupFor("Board Games"), "4000"); assert.equal(udGroupFor("Paint"), "6300"); assert.equal(udGroupFor("Sleeves & Toploaders"), "9000"); assert.equal(udGroupFor("Games Workshop"), "3000"); assert.equal(udGroupFor("Gunpla"), "6500"); assert.equal(udGroupFor("Beverages"), "");
+  const cats = [{ code: "2000", parentCode: null, description: "TRADING CARD GAMES" }, { code: "2010", parentCode: "2000", description: "MAGIC THE GATHERING" }, { code: "2020", parentCode: "2000", description: "POKEMON" }, { code: "4000", parentCode: null, description: "BOARDGAMES" }, { code: "4010", parentCode: "4000", description: "ASMODEE" }, { code: "4020", parentCode: "4000", description: "HASBRO" }];
+  assert.deepEqual(udPickLeaves([{ type: "Magic Sealed Product", title: "MTG BLOOMBURROW PLAY BOOSTER BOX" }], cats), ["2010"], "a word of the type names the leaf");
+  assert.deepEqual(udPickLeaves([{ type: "Board Games", title: "CATAN" }], cats), ["4010", "4020"], "no word matches: every leaf of the group");
+  assert.deepEqual(udPickLeaves([{ type: "Pokemon Sealed Product", title: "x" }, { type: "Pokemon Sealed Product", title: "y" }, { type: "Magic Sealed Product", title: "z" }], cats), ["2020", "2010"], "most wanted first");
+  assert.deepEqual(udPickLeaves([{ type: "Beverages", title: "Cola" }], cats), []);
+  const ud = fakeUniversal();
+  const r = await resolveUniversal([{ pid: "1", sku: "195166", barcode: "195166150611", type: "Magic Sealed Product", title: "MTG BLOOMBURROW PLAY BOOSTER BOX" }, { pid: "9", sku: "99999999", type: "Board Games", title: "Catan" }], ud.fetchFn);
+  assert.deepEqual(r.links, { 1: UD_ITEM + "b6e53b18-92d9-4bc2-b55d-fb5d56cd782a" });
+  assert.equal(r.stats.wanted, 2); assert.equal(r.stats.matched, 1); assert.equal(r.stats.picked, 3); assert.equal(r.stats.lists, 3, "the MTG leaf and both board-game leaves read; the board game is never found");
+  assert.ok(!ud.calls.some((u) => /category=2000/.test(u)), "parents are never read");
+  const r2 = await resolveUniversal([{ pid: "1", sku: "195166150611", type: "Magic Sealed Product", title: "x" }], ud.fetchFn);
+  assert.equal(r2.stats.lists, 1, "stops as soon as every candidate is matched");
+  assert.deepEqual((await resolveUniversal([], ud.fetchFn)).stats.wanted, 0);
+  assert.deepEqual((await resolveUniversal([{ pid: "1", sku: "195166", type: "Magic Sealed Product" }], ud.fetchFn)).stats.wanted, 0, "a 6-digit house code is not a UPC");
+  const dead = await resolveUniversal([{ pid: "1", sku: "12345678", type: "Magic Sealed Product" }], async () => new Response("", { status: 503 }));
+  assert.deepEqual(dead.links, {}); assert.match(dead.stats.errors[0], /UD HTTP 503/);
+});
+
 // A fake Shopify: two orders pages (a sealed box selling steadily, a single
 // that must be ignored, a sold-out sleeve pack), two product types, one scan
 // page, a lookup, an open-orders page.
@@ -201,7 +243,7 @@ function fakeShopify(clock) {
     if (q === LOOKUP_Q) return { data: { nodes: v.ids.map((id) => id.endsWith("/33")
       ? { id, title: "Default Title", sku: "PK151B", barcode: "", price: "54.95", inventoryQuantity: -1, product: { id: "gid://shopify/Product/3", title: "POKEMON 151 BOOSTER BUNDLE", productType: "Pokemon Sealed Product", vendor: "Universal Distribution", handle: "pk-151-bundle", status: "ACTIVE", featuredMedia: null }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: -1 }, { name: "committed", quantity: 0 }] }] } } }
       : id.endsWith("/11")
-      ? { id, title: "Default Title", sku: "195166", barcode: "195166", price: "159.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", status: "ACTIVE", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 3 }, { name: "committed", quantity: 1 }, { name: "on_hand", quantity: 4 }, { name: "quality_control", quantity: 0 }] }] } } }
+      ? { id, title: "Default Title", sku: "195166", barcode: "195166150611", price: "159.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", status: "ACTIVE", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 3 }, { name: "committed", quantity: 1 }, { name: "on_hand", quantity: 4 }, { name: "quality_control", quantity: 0 }] }] } } }
       : { id, title: "Default Title", sku: "DS-BLK", barcode: "", price: "12.99", inventoryQuantity: 0, product: { id: "gid://shopify/Product/2", title: "Dragon Shield Matte Black", productType: "Sleeves & Toploaders", vendor: "Arcane Tinmen", handle: "ds-black", status: "ACTIVE", featuredMedia: null }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 0 }, { name: "committed", quantity: 0 }] }] } } }) }, cost: null };
     if (/^query\{o0:orders/.test(q)) return { data: { o0: { nodes: [{ name: "#2101", createdAt: day(2), displayFulfillmentStatus: "UNFULFILLED", shippingLine: null }] } }, cost: null };
     throw new Error("unexpected query " + q.slice(0, 60));
@@ -215,11 +257,17 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   const env = envWith(c);
   const fake = fakeShopify(clock);
   const slept = [];
-  const r = await stockCheckTick(env, { gql: fake.gql, now: () => clock.t, sleep: async (ms) => { slept.push(ms); }, budgetMs: 1e9 });
+  const ud = fakeUniversal();
+  const r = await stockCheckTick(env, { gql: fake.gql, now: () => clock.t, sleep: async (ms) => { slept.push(ms); }, budgetMs: 1e9, udFetch: ud.fetchFn });
   assert.equal(r.idle, true); assert.equal(r.phase, "done");
-  assert.deepEqual(r.kinds, { orders: 2, types: 1, scan: 3, lookup: 1, open: 1 }, "three in-scope types scanned, the singles type skipped");
+  assert.deepEqual(r.kinds, { orders: 2, types: 1, scan: 3, lookup: 1, open: 1, links: 1 }, "three in-scope types scanned, the singles type skipped, one Universal lookup");
+  assert.equal((await c.storage.get("sc:dl:1")).url, UD_ITEM + "b6e53b18-92d9-4bc2-b55d-fb5d56cd782a", "the box's Universal page was found by UPC");
+  assert.equal((await c.storage.get("sc:dl:1")).auto, true);
+  assert.equal(await c.storage.get("sc:dl:3"), undefined, "the bundle is Universal too but has no UPC in the lists");
   assert.ok(slept.some((ms) => ms > 0), "paced on the throttle status after the first orders page");
   const v = await call(c, "/_sc/view");
+  assert.equal(v.links["1"].url, UD_ITEM + "b6e53b18-92d9-4bc2-b55d-fb5d56cd782a");
+  assert.equal(v.meta.links.matched, 1);
   assert.equal(v.look.length, 1, "the box is in stock and went quiet");
   const b = v.look[0];
   assert.equal(b.vid, "11"); assert.equal(b.qty, 3); assert.equal(b.daysSince, 24); assert.equal(b.soldWindow, 9); assert.equal(b.window, 30);
