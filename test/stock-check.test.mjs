@@ -516,6 +516,8 @@ test("permissions and pages", async () => {
   assert.match(page, /<input type="search" id="scq" name="q"/); assert.match(page, /class="kw" data-kw="booster"/); assert.match(page, /class="kw" data-kw="blind"/);
   assert.match(page, /<div class="sc-card" data-hay="mtg bloomburrow play booster box default title 195166 195166150611 universal distribution magic sealed product">/);
   assert.match(page, /<button type="button" id="sctop"/);
+  // card actions post in place (no reload): the script sends json=1 and retires the card; a full reload keeps the scroll position
+  assert.match(page, /fd\.set\('json','1'\)/); assert.match(page, /function retire\(card,msg\)/); assert.match(page, /sessionStorage\.setItem\('scY'/); assert.match(page, /<div id="sctoast" role="status"><\/div>/);
   assert.match(missingAdmin, /id="scq"/); assert.match(missingAdmin, /<tr data-hay="mtg bloomburrow play booster box/);
   assert.match(renderStockDenied({ user: other }), /cannot open the stock check/);
   assert.match(renderStock(null, { user: admin, tab: "look", err: "x" }), /No scan has finished yet/);

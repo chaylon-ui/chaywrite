@@ -42,15 +42,38 @@ details.sc-note{font-size:13px}details.sc-note summary{cursor:pointer;color:#0d7
 .sc-find{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.sc-find select,.sc-find input{padding:10px;border:1px solid #cbd3d9;border-radius:10px;font:inherit;font-size:15px;background:#fff}.sc-find input{flex:1 1 200px}.sc-find button{padding:10px 16px}
 table.sc-tab td,table.sc-tab th{font-size:14px}table.sc-tab td form{display:inline}table.sc-tab img{width:40px;height:40px;object-fit:contain;border-radius:6px;background:#eef2f4;vertical-align:middle;margin-right:8px}
 dialog#scd{border:0;border-radius:16px;padding:0;max-width:440px;width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.35)}dialog#scd::backdrop{background:rgba(0,0,0,.45)}#scd .in{padding:20px}#scd h3{margin:0 0 6px;font-size:18px}#scd p{margin:6px 0;font-size:14px}#scd ul{margin:8px 0;padding:0;list-style:none}#scd li{padding:6px 0;font-size:14px}#scd li label{display:flex;gap:10px;align-items:center}#scd li input{width:22px;height:22px}#scd .btns{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}#scd .btns button{min-height:44px;padding:10px 18px;font-size:15px}
+.sc-card.busy{opacity:.6;pointer-events:none}.sc-card.done{transition:opacity .35s ease,max-height .4s ease,margin .4s ease,padding .4s ease;overflow:hidden}.sc-card.done.gone{opacity:0;max-height:0;margin:0;padding:0;border-width:0}.sc-done{background:#d1fae5;color:#065f46;border-radius:10px;padding:12px 14px;font-weight:700;font-size:15px}.sc-fail{background:#fee2e2;color:#7f1d1d;border-radius:10px;padding:10px 12px;font-size:13px}
+#sctoast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%) translateY(20px);background:#1d2327;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;opacity:0;transition:opacity .25s,transform .25s;z-index:7;pointer-events:none;max-width:92vw}#sctoast.on{opacity:1;transform:translateX(-50%) translateY(0)}body.sc-picking #sctoast{bottom:150px}
 @media (max-width:720px){.sc-cards{grid-template-columns:1fr}.sc-acts{grid-template-columns:1fr 1fr}}`;
 
 const js = () => `(function(){var dlg=document.getElementById('scd');if(!dlg)return;var pending=null;
 function openFor(f){var t=f.getAttribute('data-confirm')||'Are you sure?';var title=f.getAttribute('data-title')||'';var places=f.getAttribute('data-places')==='1';
 dlg.querySelector('h3').textContent='Are you sure?';dlg.querySelector('.msg').textContent=t;dlg.querySelector('.item').textContent=title;
 var ul=dlg.querySelector('ul');ul.innerHTML='';if(places){ul.innerHTML='<li class="muted" style="font-size:13px">Did you check:</li>'+${JSON.stringify(PLACES)}.map(function(p){return '<li><label><input type="checkbox"> <span>'+p+'</span></label></li>';}).join('');}
-pending=f;if(typeof dlg.showModal==='function'){dlg.showModal();}else if(confirm(t)){f.setAttribute('data-ok','1');f.submit();}}
-document.addEventListener('submit',function(e){var f=e.target;if(f&&f.getAttribute&&f.getAttribute('data-confirm')&&f.getAttribute('data-ok')!=='1'){e.preventDefault();openFor(f);}},true);
-dlg.querySelector('.yes').addEventListener('click',function(){if(pending){pending.setAttribute('data-ok','1');dlg.close();pending.submit();}});
+pending=f;if(typeof dlg.showModal==='function'){dlg.showModal();}else if(confirm(t)){f.setAttribute('data-ok','1');go(f);}}
+var toastT=null;function toast(msg){var t=document.getElementById('sctoast');if(!t)return;t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('on');},2600);}
+function bump(n){var b=document.querySelector('.sc-tabs a.on b');if(b){b.textContent=Math.max(0,(parseInt(b.textContent,10)||0)+n);}}
+function retire(card,msg){card.classList.remove('busy');card.classList.add('done');card.innerHTML='<div class="sc-done">✓ '+msg.replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];})+'</div>';bump(-1);setTimeout(function(){card.classList.add('gone');setTimeout(function(){var g=card.parentElement;card.remove();if(g&&g.classList.contains('sc-cards')&&!g.querySelector('.sc-card')){var h=g.previousElementSibling;if(h&&h.classList.contains('sc-group'))h.remove();g.remove();}},450);},1400);}
+// Actions on a card are sent in place (owner, 2026-10-15: a reload lost the
+// place in the list); the page itself only reloads for a scan, the
+// settings and the email.
+function go(f){var card=f.closest('.sc-card'),row=f.closest('tr');var state=(f.querySelector('input[name=state]')||{}).value||'';var act=(f.querySelector('input[name=action]')||{}).value||'';
+if(act!=='mark'&&act!=='link'){try{sessionStorage.setItem('scY',String(window.scrollY||0));}catch(e){}f.submit();return;}
+var fd=new FormData(f);fd.set('json','1');if(card)card.classList.add('busy');
+fetch(f.action,{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+if(!j||!j.ok){if(card)card.classList.remove('busy');var m=(j&&j.error)||'That did not save.';var box=f.closest('.sc-card')||f.closest('td')||f.parentElement;var old=box&&box.querySelector('.sc-fail');if(old)old.remove();var d=document.createElement('div');d.className='sc-fail';d.textContent=m;if(box)box.appendChild(d);toast(m);return;}
+toast(j.message||'Saved.');
+if(act==='link'){if(card)card.classList.remove('busy');var u=(fd.get('url')||'').toString();var a=f.closest('.t')&&f.closest('.t').querySelector('small a[target=_blank]:not([href*="exorgames.com"])');var al=f.closest('.t')&&f.closest('.t').querySelector('a.setlink');if(a&&u){a.href=u;a.className='saved';a.textContent=(a.textContent||'').replace(/ reorder page/,' item page');}if(al)al.textContent=u?'change link':'set link';f.hidden=true;return;}
+if(state==='note'){if(card)card.classList.remove('busy');var det=f.closest('details');var n=(fd.get('note')||'').toString();if(det){var su=det.querySelector('summary');if(su)su.textContent=n?'Note: '+(n.length>60?n.slice(0,60)+'…':n):'Add a note';det.open=false;}return;}
+if(card){retire(card,j.message||'Done.');return;}
+if(row){row.style.transition='opacity .3s';row.style.opacity='0';setTimeout(function(){row.remove();},320);bump(-1);return;}
+}).catch(function(){if(card)card.classList.remove('busy');try{sessionStorage.setItem('scY',String(window.scrollY||0));}catch(e){}f.submit();});}
+document.addEventListener('submit',function(e){var f=e.target;if(!f||!f.getAttribute)return;
+if(f.getAttribute('data-confirm')&&f.getAttribute('data-ok')!=='1'){e.preventDefault();openFor(f);return;}
+if(f.closest('.sc-card')||f.closest('table.sc-tab')){e.preventDefault();go(f);return;}
+try{sessionStorage.setItem('scY',String(window.scrollY||0));}catch(x){}},true);
+try{var y=parseInt(sessionStorage.getItem('scY')||'',10);sessionStorage.removeItem('scY');if(y>0)window.scrollTo(0,y);}catch(e){}
+dlg.querySelector('.yes').addEventListener('click',function(){if(pending){pending.setAttribute('data-ok','1');dlg.close();var p=pending;pending=null;go(p);}});
 dlg.querySelector('.cancel').addEventListener('click',function(){pending=null;dlg.close();});
 var bar=document.getElementById('scbar');if(bar){var picks=function(){return [].slice.call(document.querySelectorAll('input.pick:checked')).map(function(i){return i.value;});};
 var upd=function(){var n=picks().length;bar.classList.toggle('on',n>0);document.body.classList.toggle('sc-picking',n>0);bar.querySelector('.n').textContent=n+' selected';};
@@ -165,7 +188,7 @@ ${closed.length ? `<h2>Closed recently</h2><div class="list"><table class="sc-ta
   const bar = o.act && o.emailOn ? `<div id="scbar"><span class="n">0 selected</span><button type="button" class="all">Select all</button><button type="button" class="none">Clear</button><form method="post" action="${R}/control"><input type="hidden" name="action" value="email"><input type="hidden" name="tab" value="${tab}"><input type="hidden" name="type" value="${esc(o.type || "")}"><input type="hidden" name="q" value="${esc(o.q || "")}"><input type="hidden" name="vids" value=""><input class="text" type="text" name="message" maxlength="1000" placeholder="Message to the admins (optional)"><button type="submit" class="go">Email to admins</button></form></div>` : "";
   const page = `<style>${CSS}</style><div class="hz"><h1>Stock check</h1></div>
 ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
-${statusBar(d, { ...o, tab })}${settings}${tabs}${find}${body}${DIALOG}${bar}<button type="button" id="sctop" title="Back to the top"><span>↑</span>Top</button><script>${js()}</script>`;
+${statusBar(d, { ...o, tab })}${settings}${tabs}${find}${body}${DIALOG}${bar}<button type="button" id="sctop" title="Back to the top"><span>↑</span>Top</button><div id="sctoast" role="status"></div><script>${js()}</script>`;
   return shell("Stock check", page, o, true);
 }
 
