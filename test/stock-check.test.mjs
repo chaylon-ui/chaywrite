@@ -518,6 +518,10 @@ test("permissions and pages", async () => {
   assert.match(page, /<button type="button" id="sctop"/);
   // card actions post in place (no reload): the script sends json=1 and retires the card; a full reload keeps the scroll position
   assert.match(page, /fd\.set\('json','1'\)/); assert.match(page, /function retire\(card,msg\)/); assert.match(page, /sessionStorage\.setItem\('scY'/); assert.match(page, /<div id="sctoast" role="status"><\/div>/);
+  // owner, 2026-10-15: snooze showed "not found" - the form's `action` property is shadowed by the hidden
+  // <input name="action">, so the URL must come from the attribute; the set-link form stays hidden until tapped
+  assert.match(page, /fetch\(f\.getAttribute\('action'\)\|\|location\.pathname,/); assert.doesNotMatch(page, /fetch\(f\.action,/);
+  assert.match(page, /\.sc-link\[hidden\]\{display:none\}/); assert.match(page, /class="sc-link" hidden><input type="hidden" name="action" value="link"><input type="hidden" name="tab"/); assert.match(page, /var acts=f\.querySelectorAll\('input\[name=action\]'\)/);
   assert.match(missingAdmin, /id="scq"/); assert.match(missingAdmin, /<tr data-hay="mtg bloomburrow play booster box/);
   assert.match(renderStockDenied({ user: other }), /cannot open the stock check/);
   assert.match(renderStock(null, { user: admin, tab: "look", err: "x" }), /No scan has finished yet/);
