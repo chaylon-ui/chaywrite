@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { winDoFetch, serveWin, serveWinStaff, omnisendUpsert, omnisendBody, validateEntry, atlanticToUtc, utcToAtlanticInput, skillQuestion, csvOf, isOpen, hashIp, cleanName, DEFAULT_CFG, WIN_DO, INTERESTS, PENDING_MS, RATE_PER_HOUR, PENDING_PER_EMAIL } from "../src/win.js";
+import { winDoFetch, serveWin, serveWinStaff, shopifySubscribe, shopifyScopes, shopifyUrl, validateEntry, atlanticToUtc, utcToAtlanticInput, skillQuestion, csvOf, isOpen, hashIp, cleanName, DEFAULT_CFG, WIN_DO, INTERESTS, PENDING_MS, RATE_PER_HOUR, PENDING_PER_EMAIL } from "../src/win.js";
 import { renderLanding, renderHolding, renderVerified, renderRules, renderWinAdmin, buildVerifyEmail, buildWinnerEmail, closesText, prizeShort } from "../src/win-ui.js";
 
 class MemStorage {
@@ -18,23 +18,26 @@ async function call(c, path, body) {
   return (await winDoFetch(c, req, url)).json();
 }
 function envWith(c, extra) {
-  return { RESEND_API_KEY: "re_k", ...(extra || {}), ROOM: { idFromName: (n) => n, get: (n) => ({ fetch: async (req) => { assert.equal(n, WIN_DO); return winDoFetch(c, req, new URL(req.url)); } }) } };
+  return { RESEND_API_KEY: "re_k", SHOPIFY_ADMIN_TOKEN: "t", ...(extra || {}), ROOM: { idFromName: (n) => n, get: (n) => ({ fetch: async (req) => { assert.equal(n, WIN_DO); return winDoFetch(c, req, new URL(req.url)); } }) } };
 }
 function fakeNet(opts) {
   const o = opts || {}, calls = [];
   const f = async (url, init) => {
     const u = String(url); calls.push({ url: u, init: init || {}, body: init && init.body ? JSON.parse(init.body) : null });
     if (u.startsWith("https://api.resend.com/")) return o.resendFail ? new Response(JSON.stringify({ message: "nope" }), { status: 500 }) : Response.json({ id: "re_1" });
-    if (u.startsWith("https://api.omnisend.com/v3/contacts?email=")) return Response.json({ contacts: [{ contactID: "c_9" }] });
-    if (u.startsWith("https://api.omnisend.com/v3/contacts/c_9")) return Response.json({ contactID: "c_9" });
-    if (u.startsWith("https://api.omnisend.com/v3/contacts")) {
-      if (o.omniExists) return new Response(JSON.stringify({ error: "contact already exists" }), { status: 400 });
-      if (o.omniDown) return new Response("x", { status: 503 });
-      return Response.json({ contactID: "c_1" });
+    if (u === "https://most-wanted-ca.myshopify.com/admin/api/2025-01/graphql.json") {
+      const q = String((init && init.body && JSON.parse(init.body).query) || "");
+      if (o.shopDown) return new Response("x", { status: 503 });
+      if (q.includes("currentAppInstallation")) return Response.json({ data: { currentAppInstallation: { accessScopes: (o.noWrite ? ["read_customers"] : ["read_customers", "write_customers"]).map((h) => ({ handle: h })) } } });
+      if (q.includes("customers(first")) return Response.json({ data: { customers: { nodes: o.exists ? [{ id: "gid://shopify/Customer/777", email: o.exists, firstName: "", lastName: "Old" }] : [] } } });
+      if (q.includes("customerCreate")) return Response.json({ data: { customerCreate: o.createErr ? { customer: null, userErrors: [{ field: ["email"], message: o.createErr }] } : { customer: { id: "gid://shopify/Customer/123" }, userErrors: [] } } });
+      if (q.includes("tagsAdd")) return Response.json({ data: { tagsAdd: { userErrors: [] } } });
+      if (q.includes("customerUpdate")) return Response.json({ data: { customerUpdate: { customer: { id: "gid://shopify/Customer/777" }, userErrors: [] } } });
+      if (q.includes("customerEmailMarketingConsentUpdate")) return Response.json({ data: { customerEmailMarketingConsentUpdate: { customer: { id: "gid://shopify/Customer/777" }, userErrors: [] } } });
     }
     throw new Error("unexpected fetch " + u);
   };
-  return { f, calls, resend: () => calls.filter((c) => c.url.startsWith("https://api.resend.com/")), omni: () => calls.filter((c) => c.url.startsWith("https://api.omnisend.com/")) };
+  return { f, calls, resend: () => calls.filter((c) => c.url.startsWith("https://api.resend.com/")), shop: () => calls.filter((c) => c.url.includes("myshopify.com")) };
 }
 const formReq = (path, fields, ip) => {
   const url = new URL("https://w.example" + path);
@@ -89,12 +92,12 @@ test("DO: closed by default, preview entries are tests, pending -> verify -> ent
   assert.equal(e1.status, "pending"); assert.ok(e1.token.length >= 24);
   assert.equal((await call(c, "/_win/verify", { token: "nope" })).error, "invalid");
   const v2 = await call(c, "/_win/verify", { token: e1.token });
-  assert.equal(v2.status, "verified"); assert.deepEqual([v2.entry.email, v2.entry.first, v2.entry.last, v2.entry.consent, v2.entry.interests, v2.entry.test, v2.entry.omnisend.status], ["bo@x.test", "Bo", "Li", true, ["Lorcana"], false, "pending"]);
+  assert.equal(v2.status, "verified"); assert.deepEqual([v2.entry.email, v2.entry.first, v2.entry.last, v2.entry.consent, v2.entry.interests, v2.entry.test, v2.entry.shopify.status], ["bo@x.test", "Bo", "Li", true, ["Lorcana"], false, "pending"]);
   assert.equal((await call(c, "/_win/verify", { token: e1.token })).error, "invalid", "one use");
   assert.equal((await call(c, "/_win/enter", { email: "bo@x.test", first: "Bo" })).status, "already");
-  // no consent -> never sent to Omnisend
+  // no consent -> never subscribed
   const e2 = await call(c, "/_win/enter", { email: "cy@x.test", first: "Cy", consent: false });
-  assert.equal((await call(c, "/_win/verify", { token: e2.token })).entry.omnisend.status, "no-consent");
+  assert.equal((await call(c, "/_win/verify", { token: e2.token })).entry.shopify.status, "no-consent");
   // pending cap per address, rate cap per connection
   for (let i = 0; i < PENDING_PER_EMAIL; i++) assert.equal((await call(c, "/_win/enter", { email: "dee@x.test", first: "Dee" })).status, "pending");
   assert.equal((await call(c, "/_win/enter", { email: "dee@x.test", first: "Dee" })).error, "pending");
@@ -107,9 +110,9 @@ test("DO: closed by default, preview entries are tests, pending -> verify -> ent
   const e3 = await call(c, "/_win/enter", { email: "ed@x.test", first: "Ed" });
   clock.t += PENDING_MS + 1;
   assert.equal((await call(c, "/_win/verify", { token: e3.token })).error, "expired");
-  // omnisend result recorded
-  const om = await call(c, "/_win/omnisend", { email: "bo@x.test", result: { ok: true, status: "subscribed", id: "c_1" } });
-  assert.equal(om.entry.omnisend.status, "subscribed");
+  // the Shopify result recorded
+  const om = await call(c, "/_win/synced", { email: "bo@x.test", result: { ok: true, status: "subscribed", id: "123" } });
+  assert.equal(om.entry.shopify.status, "subscribed"); assert.equal(om.entry.shopify.id, "123");
   const list = await call(c, "/_win/list");
   assert.deepEqual(list.entries.map((e) => e.email).sort(), ["a@x.test", "bo@x.test", "cy@x.test"]);
   assert.equal(list.pending, 0, "the expired ones are pruned");
@@ -129,9 +132,10 @@ test("DO: closed by default, preview entries are tests, pending -> verify -> ent
   assert.equal((await call(c, "/_win/delete", { email: "bo@x.test" })).ok, false);
 });
 
-test("public pages: holding while closed, preview, the form, the confirmation email, the link, Omnisend", async () => {
+test("public pages: holding while closed, preview, the form, the confirmation email, the link, the Shopify customer", async () => {
   const clock = { t: T0 }; const c = cx(clock);
-  const net = fakeNet(); const env = envWith(c, { OMNISEND_API_KEY: "om_k" });
+  const net = fakeNet(); const env = envWith(c);
+  const shopCalls = () => net.shop().filter((c) => !/currentAppInstallation/.test(c.body.query));   // the health probe's scope check aside
   const serve = (req, url) => serveWin(req, env, url, null, { fetchFn: net.f });
   const key = (await call(c, "/_win/cfg")).previewKey;
   let r = await serve(...getReq("/win"));
@@ -143,6 +147,7 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   assert.equal((await serve(...getReq("/win?preview=wrong"))).status, 200); assert.doesNotMatch(await (await serve(...getReq("/win?preview=wrong"))).text(), /<form/);
   assert.equal((await serve(...formReq("/win", [["first", "A"], ["email", "a@x.test"], ["rules", "1"], ["consent", "1"]]))).status, 403, "closed: no entries");
   assert.equal((await serve(...getReq("/win/health"))).status, 200);
+  const hp = await (await serve(...getReq("/win/health?probe=1"))).json(); assert.equal(hp.shopify, true); assert.equal(hp.customersWrite, true); assert.equal(hp.email, true);
   await call(c, "/_win/cfg", { open: true });
   r = await serve(...getReq("/win")); page = await r.text();
   assert.match(page, /Win <b>\$100<\/b> in store credit/); assert.match(page, /Atlantic Entertainment Expo · Moncton, NB · October 17–18, 2026/);
@@ -165,7 +170,7 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   assert.deepEqual(mail.body.to, ["ann@x.test"]); assert.equal(mail.body.reply_to, "customerservice@exorgames.com"); assert.match(mail.body.subject, /^Confirm your entry - win \$100 at Exor Games$/);
   const link = linkIn(mail); assert.ok(link, "the email carries the link"); assert.match(mail.body.text, /\/win\/verify\?t=/);
   assert.match(mail.body.html, /51 Allen Street/); assert.match(mail.body.html, /Confirm my entry/);
-  assert.equal((await call(c, "/_win/list")).pending, 1); assert.equal(net.omni().length, 0, "nothing reaches Omnisend before the click");
+  assert.equal((await call(c, "/_win/list")).pending, 1); assert.equal(shopCalls().length, 0, "nothing reaches Shopify before the click");
   // the same address again: an "already" mail only after it is confirmed; before that, a second confirmation goes out
   r = await serve(...formReq("/win", [["first", "Ann"], ["email", "ann@x.test"], ["rules", "1"], ["consent", "1"]], "203.0.113.9"));
   assert.equal(net.resend().length, 2); assert.match(net.resend()[1].body.subject, /^Confirm your entry/);
@@ -173,13 +178,14 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   r = await serve(...getReq(link.replace("https://w.example", "")));
   assert.equal(r.status, 200); page = await r.text();
   assert.match(page, /You're in, Ann! /); assert.match(page, /Sell your video games/);
-  assert.equal(net.omni().length, 1);
-  const om = net.omni()[0];
-  assert.equal(om.url, "https://api.omnisend.com/v3/contacts"); assert.equal(om.init.method, "POST"); assert.equal(om.init.headers["x-api-key"], "om_k");
-  assert.equal(om.body.identifiers[0].id, "ann@x.test"); assert.equal(om.body.identifiers[0].channels.email.status, "subscribed"); assert.ok(om.body.identifiers[0].channels.email.statusDate);
-  assert.equal(om.body.firstName, "Ann"); assert.equal(om.body.lastName, "Lee"); assert.deepEqual(om.body.tags, ["AEE 2026", "Moncton", "Contest"]); assert.equal(om.body.customProperties.interests, "Pokémon, Video games"); assert.equal(om.body.customProperties.source, "expo_contest");
+  assert.equal(shopCalls().length, 2, "a lookup by address, then the create");
+  const cr = shopCalls()[1];
+  assert.equal(cr.init.method, "POST"); assert.equal(cr.init.headers["X-Shopify-Access-Token"], "t"); assert.match(cr.body.query, /customerCreate/);
+  const inp = cr.body.variables.in;
+  assert.equal(inp.email, "ann@x.test"); assert.equal(inp.firstName, "Ann"); assert.equal(inp.lastName, "Lee"); assert.deepEqual(inp.tags, ["AEE 2026", "Moncton", "Contest"]);
+  assert.equal(inp.emailMarketingConsent.marketingState, "SUBSCRIBED"); assert.equal(inp.emailMarketingConsent.marketingOptInLevel, "CONFIRMED_OPT_IN"); assert.ok(inp.emailMarketingConsent.consentUpdatedAt); assert.match(inp.note, /Atlantic Entertainment Expo/);
   let list = await call(c, "/_win/list");
-  assert.equal(list.entries.length, 1); assert.equal(list.entries[0].omnisend.status, "subscribed"); assert.equal(list.entries[0].omnisend.id, "c_1"); assert.equal(list.pending, 0, "the other pending for the same address went too");
+  assert.equal(list.entries.length, 1); assert.equal(list.entries[0].shopify.status, "subscribed"); assert.equal(list.entries[0].shopify.id, "123"); assert.equal(list.pending, 0, "the other pending for the same address went too");
   // the link a second time
   r = await serve(...getReq(link.replace("https://w.example", "")));
   assert.equal(r.status, 404); assert.match(await r.text(), /That link isn't valid/);
@@ -198,12 +204,12 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   // rules page, unknown path, expired wording
   assert.match(await (await serve(...getReq("/win/rules"))).text(), /skill-testing question/);
   assert.equal((await serve(...getReq("/win/nothing"))).status, 404);
-  // no Omnisend key: the entry is kept and marked
-  const env2 = envWith(c); const net2 = fakeNet();
+  // no Shopify token: the entry is kept and marked
+  const env2 = envWith(c, { SHOPIFY_ADMIN_TOKEN: "" }); const net2 = fakeNet();
   r = await serveWith(env2, net2, formReq("/win", [["first", "Kay"], ["email", "kay@x.test"], ["rules", "1"], ["consent", "1"]], "203.0.113.11"));
   r = await serveWith(env2, net2, getReq(linkIn(net2.resend()[0]).replace("https://w.example", "")));
   assert.equal(r.status, 200); list = await call(c, "/_win/list");
-  assert.equal(list.entries.find((e) => e.email === "kay@x.test").omnisend.status, "unconfigured"); assert.equal(net2.omni().length, 0);
+  assert.equal(list.entries.find((e) => e.email === "kay@x.test").shopify.status, "unconfigured"); assert.equal(net2.shop().length, 0);
   // after the closing time the public sees "entries have closed" and the form is gone
   clock.t = DEFAULT_CFG.closesAt + 1;
   const realNow = Date.now; Date.now = () => clock.t;
@@ -211,21 +217,28 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   finally { Date.now = realNow; }
 });
 
-test("omnisend: new contact, existing contact is found and updated, outage is a failure, no key is unconfigured", async () => {
+test("shopify: new customer, existing customer is tagged and re-consented, outage, user errors, no token", async () => {
   const cfg = { ...DEFAULT_CFG }, entry = { email: "a@x.test", first: "A", last: "", consent: true, interests: [], verifiedAt: T0 };
-  const b = omnisendBody(entry, cfg);
-  assert.equal(b.lastName, undefined); assert.equal(b.customProperties.interests, undefined); assert.equal(b.countryCode, "CA");
-  const n1 = fakeNet(); assert.deepEqual((({ ok, status, id }) => ({ ok, status, id }))(await omnisendUpsert({ OMNISEND_API_KEY: "k" }, entry, cfg, n1.f)), { ok: true, status: "subscribed", id: "c_1" });
-  const n2 = fakeNet({ omniExists: true }); const r2 = await omnisendUpsert({ OMNISEND_API_KEY: "k" }, entry, cfg, n2.f);
-  assert.deepEqual([r2.ok, r2.status, r2.id], [true, "updated", "c_9"]); assert.deepEqual(n2.calls.map((c) => (c.init.method || "GET") + " " + c.url.replace("https://api.omnisend.com/v3", "")), ["POST /contacts", "GET /contacts?email=a%40x.test", "PATCH /contacts/c_9"]);
-  const n3 = fakeNet({ omniDown: true }); const r3 = await omnisendUpsert({ OMNISEND_API_KEY: "k" }, entry, cfg, n3.f);
-  assert.equal(r3.ok, false); assert.match(r3.error, /HTTP 503/);
-  assert.equal((await omnisendUpsert({}, entry, cfg, n3.f)).status, "unconfigured");
+  const env = { SHOPIFY_ADMIN_TOKEN: "t" };
+  const n1 = fakeNet(); const r1 = await shopifySubscribe(env, entry, cfg, n1.f);
+  assert.deepEqual([r1.ok, r1.status, r1.id], [true, "subscribed", "123"]);
+  const inp = n1.shop()[1].body.variables.in; assert.equal(inp.lastName, undefined); assert.equal(inp.firstName, "A"); assert.equal(n1.shop()[0].body.variables.q, "email:a@x.test");
+  const n2 = fakeNet({ exists: "a@x.test" }); const r2 = await shopifySubscribe(env, { ...entry, last: "Lee" }, cfg, n2.f);
+  assert.deepEqual([r2.ok, r2.status, r2.id], [true, "updated", "777"]);
+  assert.deepEqual(n2.shop().map((c) => /(customers\(|customerCreate|tagsAdd|customerUpdate|customerEmailMarketingConsentUpdate)/.exec(c.body.query)[1]), ["customers(", "tagsAdd", "customerUpdate", "customerEmailMarketingConsentUpdate"]);
+  assert.deepEqual(n2.shop()[1].body.variables, { id: "gid://shopify/Customer/777", t: ["AEE 2026", "Moncton", "Contest"] });
+  assert.deepEqual(n2.shop()[2].body.variables.in, { id: "gid://shopify/Customer/777", firstName: "A" }, "only the blank name is filled; their last name stays");
+  assert.equal(n2.shop()[3].body.variables.in.emailMarketingConsent.marketingOptInLevel, "CONFIRMED_OPT_IN"); assert.equal(n2.shop()[3].body.variables.in.customerId, "gid://shopify/Customer/777");
+  const n3 = fakeNet({ shopDown: true }); const r3 = await shopifySubscribe(env, entry, cfg, n3.f); assert.equal(r3.ok, false); assert.match(r3.error, /HTTP 503/);
+  const n4 = fakeNet({ createErr: "Email has already been taken" }); const r4 = await shopifySubscribe(env, entry, cfg, n4.f); assert.equal(r4.ok, false); assert.match(r4.error, /already been taken/);
+  assert.equal((await shopifySubscribe({}, entry, cfg, n3.f)).status, "unconfigured");
+  assert.equal((await shopifyScopes(env, fakeNet().f)).customersWrite, true); assert.equal((await shopifyScopes(env, fakeNet({ noWrite: true }).f)).customersWrite, false); assert.equal((await shopifyScopes({}, fakeNet().f)).customersWrite, false);
+  assert.equal(shopifyUrl({}), "https://most-wanted-ca.myshopify.com/admin/api/2025-01/graphql.json"); assert.equal(shopifyUrl({ SHOPIFY_SHOP: "x.myshopify.com" }), "https://x.myshopify.com/admin/api/2025-01/graphql.json");
 });
 
 test("admin screen: admins only; open/close, settings, the draw, winner email, retry, remove, CSV", async () => {
   const clock = { t: T0 }; const c = cx(clock);
-  const net = fakeNet(); const env = envWith(c);   // no Omnisend key at first
+  const net = fakeNet(); const env = envWith(c, { SHOPIFY_ADMIN_TOKEN: "" });   // no Shopify token at first
   const admin = { email: "boss@x.test", name: "Boss Person", role: "admin", perms: [] }, staff = { email: "s@x.test", name: "Sam", role: "staff", perms: [] };
   const html = (s, status) => new Response(s, { status: status || 200, headers: { "content-type": "text/html" } });
   const redirect = (to) => new Response(null, { status: 303, headers: { location: to } });
@@ -239,7 +252,7 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   assert.equal((await serve("/9pocket/win/export.csv", staff)).status, 403);
   assert.equal((await serve("/9pocket/win/control", staff, { action: "open" })).status, 403);
   let r = await serve("/9pocket/win", admin); assert.equal(r.status, 200); let page = await r.text();
-  assert.match(page, /<h1>Expo contest<\/h1>/); assert.match(page, /CLOSED/); assert.match(page, /Open the contest/); assert.match(page, /Omnisend: not connected/); assert.match(page, /OMNISEND_API_KEY/);
+  assert.match(page, /<h1>Expo contest<\/h1>/); assert.match(page, /CLOSED/); assert.match(page, /Open the contest/); assert.match(page, /Shopify customers: no token on the worker/); assert.match(page, /Omnisend takes its list from Shopify/);
   assert.match(page, /\/win-qr\.png/); assert.match(page, /\/win-qr\.svg/); assert.match(page, /\/win-sign\.html/); assert.match(page, /href="\/9pocket\/win\/export\.csv"/); assert.match(page, /\?preview=/); assert.match(page, /No confirmed entries yet/);
   assert.match(page, /value="2026-10-18T23:59"/); assert.match(page, /name="consentRequired" value="1" checked/);
   // open
@@ -262,11 +275,12 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   await mk("a@x.test", "Ann", true); await mk("b@x.test", "Bo", false);
   r = await serve("/9pocket/win", admin); page = await r.text();
   assert.match(page, /<b>2<\/b><br><span class="muted">confirmed entries/); assert.match(page, /<b>1<\/b><br><span class="muted">test entries/);
-  assert.match(page, /waiting/, "made straight in the DO: Omnisend never ran"); assert.match(page, /Retry<\/button>/); assert.match(page, /no consent/);
-  // retry once the key exists
-  const env2 = envWith(c, { OMNISEND_API_KEY: "k" });
-  r = await serve("/9pocket/win/control", admin, { action: "retry", email: "a@x.test" }, env2); assert.match(loc(r), /msg=Added to Omnisend/);
-  assert.equal(net.omni().length, 1); assert.equal((await call(c, "/_win/list")).entries.find((e) => e.email === "a@x.test").omnisend.status, "subscribed");
+  assert.match(page, /waiting/, "made straight in the DO: Shopify never ran"); assert.match(page, /Retry<\/button>/); assert.match(page, /no consent/);
+  // retry once the token is there
+  const env2 = envWith(c);
+  r = await serve("/9pocket/win/control", admin, { action: "retry", email: "a@x.test" }, env2); assert.match(loc(r), /msg=Subscribed as a Shopify customer/);
+  assert.equal(net.shop().length, 2); assert.equal((await call(c, "/_win/list")).entries.find((e) => e.email === "a@x.test").shopify.status, "subscribed");
+  r = await serve("/9pocket/win", admin, null, env2); page = await r.text(); assert.match(page, /the token can create and subscribe customers/); assert.match(page, /customers\/123" target="_blank"/);
   r = await serve("/9pocket/win/control", admin, { action: "retry", email: "b@x.test" }, env2); assert.match(loc(r), /did not tick the email box/);
   // the draw never picks the test entry; the winner email carries the question
   r = await serve("/9pocket/win/control", admin, { action: "draw" }); assert.match(loc(r), /msg=Drawn: (Ann|Bo) /);
@@ -277,7 +291,7 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   assert.match(page, /winner emailed/); assert.match(page, /Skill-testing question: <b>/); assert.match(page, new RegExp("answer <b>" + draws[0].a + "</b>"));
   // CSV: text/csv, formulas defused
   r = await serve("/9pocket/win/export.csv", admin); assert.match(r.headers.get("content-type"), /text\/csv/);
-  const csv = await r.text(); assert.match(csv, /^email,first_name,last_name,email_consent,interests,entered_at,confirmed_at,omnisend,test\r\n/); assert.match(csv, /a@x\.test,Ann,'=SUM\(1\),yes,,2026-10-17T15:00:00\.000Z,2026-10-17T15:00:00\.000Z,subscribed,\r\n/); assert.match(csv, /t@x\.test,.*,test\r\n/);
+  const csv = await r.text(); assert.match(csv, /^email,first_name,last_name,email_consent,interests,entered_at,confirmed_at,shopify_customer,test\r\n/); assert.match(csv, /a@x\.test,Ann,'=SUM\(1\),yes,,2026-10-17T15:00:00\.000Z,2026-10-17T15:00:00\.000Z,subscribed,\r\n/); assert.match(csv, /t@x\.test,.*,test\r\n/);
   assert.equal(csvOf([{ email: "x@y", first: 'He said "hi"', last: "", interests: [], enteredAt: T0, verifiedAt: T0 }]).split("\r\n")[1], 'x@y,"He said ""hi""",,no,,2026-10-17T15:00:00.000Z,2026-10-17T15:00:00.000Z,,');
   // remove
   r = await serve("/9pocket/win/control", admin, { action: "delete", email: "b@x.test" }); assert.match(loc(r), /msg=Entry removed/);
@@ -296,10 +310,10 @@ test("markup: landing, holding, verified, rules and the emails say what they mus
   const hold = renderHolding(cfg, {}); assert.match(hold, /opens at the show/); assert.doesNotMatch(hold, /<form/);
   assert.match(renderHolding(cfg, { ended: true }), /Entries have closed/);
   assert.match(renderVerified(cfg, { first: "Ann", already: true }), /already confirmed/);
-  const rules = renderRules(cfg, {}); assert.match(rules, /excluding Quebec/); assert.match(rules, /51 Allen Street/); assert.match(rules, /Omnisend/); assert.match(rules, /seven \(7\) days/);
+  const rules = renderRules(cfg, {}); assert.match(rules, /excluding Quebec/); assert.match(rules, /51 Allen Street/); assert.match(rules, /subscribed customer/); assert.match(rules, /seven \(7\) days/);
   const ve = buildVerifyEmail({ first: "Ann", link: "https://w/win/verify?t=abc", cfg, origin: "https://w" });
   assert.match(ve.html, /href="https:\/\/w\/win\/verify\?t=abc"/); assert.match(ve.text, /https:\/\/w\/win\/verify\?t=abc/); assert.match(ve.html, /Didn't enter\? Ignore this email/);
   const we = buildWinnerEmail({ first: "Ann", question: "(2 × 3) + 10 − 1", cfg }); assert.match(we.html, /\(2 × 3\) \+ 10 − 1 = \?/); assert.match(we.text, /Reply within 7 days/);
-  const adm = renderWinAdmin({ cfg: { ...cfg, previewKey: "pk" }, entries: [], draws: [], pending: 0, now: T0 }, { user: { email: "b@x", role: "admin" }, origin: "https://w", emailOn: true, omnisendOn: true, closesInput: "2026-10-18T23:59" });
-  assert.match(adm, /OPEN/); assert.match(adm, /https:\/\/w\/win\?preview=pk/); assert.match(adm, /Omnisend: connected/); assert.match(adm, /Close the contest/);
+  const adm = renderWinAdmin({ cfg: { ...cfg, previewKey: "pk" }, entries: [], draws: [], pending: 0, now: T0 }, { user: { email: "b@x", role: "admin" }, origin: "https://w", emailOn: true, shopifyOn: true, customersWrite: true, closesInput: "2026-10-18T23:59" });
+  assert.match(adm, /OPEN/); assert.match(adm, /https:\/\/w\/win\?preview=pk/); assert.match(adm, /the token can create and subscribe customers/); assert.match(adm, /Close the contest/);
 });

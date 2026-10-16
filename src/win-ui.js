@@ -134,20 +134,20 @@ export function renderRules(cfg, o) {
 <li><b>How to enter.</b> No purchase necessary. Visit this page (scan the code at our booth), enter your name and email address and tap the confirmation link we email you. One entry per person and per email address; extra entries are removed.</li>
 <li><b>Prize.</b> One (1) prize: ${esc(cfg.prize)}, issued as an Exor Games gift card (approximate retail value $100 CAD), redeemable at ExorGames.com and in store on anything we sell, including video games from Mallow Games. No cash value, not transferable, no substitution except by the sponsor if the prize becomes unavailable.</li>
 <li><b>Draw.</b> One winner is chosen at random from all confirmed entries ${esc(cfg.drawText)}. The odds of winning depend on the number of eligible entries received. The winner is notified by email and must correctly answer a mathematical skill-testing question and reply within seven (7) days, or an alternate winner is drawn.</li>
-<li><b>Your information.</b> We use your name and email address to run the draw and contact the winner. If you ticked the email box, we also add you to the Exor Games / Mallow Games email list (sent through Omnisend); every email carries an unsubscribe link. We never sell your information.</li>
+<li><b>Your information.</b> We use your name and email address to run the draw and contact the winner. If you ticked the email box, we also add you to the Exor Games / Mallow Games email list as a subscribed customer; every email carries an unsubscribe link. We never sell your information.</li>
 <li><b>General.</b> By entering you accept these rules and the sponsor's decisions, which are final. The sponsor may disqualify entries made by automated means or in breach of these rules. Void where prohibited by law. This contest is subject to all applicable federal, provincial and municipal laws.</li>
 </ol><p><a href="${esc(back(o))}">← Back to the entry page</a></p></div>`, cfg, o);
 }
 
 /* ---------- /9pocket/win (admins) ---------- */
-const OM_LABEL = { subscribed: "on the list", updated: "on the list (updated)", pending: "waiting", "no-consent": "no consent", unconfigured: "no Omnisend key", failed: "failed" };
+const OM_LABEL = { subscribed: "subscribed (new customer)", updated: "subscribed (existing customer)", pending: "waiting", "no-consent": "no consent", unconfigured: "no Shopify token", failed: "failed" };
 export function renderWinAdmin(d, o) {
   o = o || {};
   const cfg = d.cfg || {}, list = d.entries || [], draws = d.draws || [], now = d.now || 0;
   const real = list.filter((e) => !e.test), tests = list.filter((e) => e.test);
-  const okOm = (e) => e.omnisend && /^(subscribed|updated)$/.test(e.omnisend.status);
+  const okOm = (e) => e.shopify && /^(subscribed|updated)$/.test(e.shopify.status);
   const onList = real.filter(okOm).length;
-  const failed = real.filter((e) => e.consent && e.omnisend && !okOm(e) && e.omnisend.status !== "pending").length;
+  const failed = real.filter((e) => e.consent && e.shopify && !okOm(e) && e.shopify.status !== "pending").length;
   const live = !!cfg.open && (!cfg.closesAt || now <= cfg.closesAt);
   const pubUrl = (o.origin || "") + B, prev = pubUrl + "?preview=" + encodeURIComponent(cfg.previewKey || "");
   const ctl = A + "/control";
@@ -161,13 +161,13 @@ ${o.msg ? `<div class="wmsg">${esc(o.msg)}</div>` : ""}${o.err ? `<div class="we
 <p class="muted" style="margin:4px 0 10px">${esc(cfg.event)} · ${esc(cfg.place)} · ${esc(cfg.dates)} · prize: ${esc(cfg.prize)} · entries close ${esc(closesText(cfg))} · draw ${esc(cfg.drawText)}</p>
 <div class="pg"><b>Setup</b><br>
 <span class="badge ${o.emailOn ? "on" : "off"}">Confirmation email (Resend): ${o.emailOn ? "ready" : "RESEND_API_KEY missing"}</span>
-<span class="badge ${o.omnisendOn ? "on" : "off"}">Omnisend: ${o.omnisendOn ? "connected" : "not connected"}</span>
-${o.omnisendOn ? "" : `<div class="muted" style="margin-top:6px">Add an <code>OMNISEND_API_KEY</code> repo secret (Omnisend › Store settings › Integrations &amp; API › API keys) and the next deploy connects it; confirmed entries are kept here meanwhile - use <b>Retry</b> per row or the CSV export to import them.</div>`}</div>
+<span class="badge ${o.shopifyOn && o.customersWrite ? "on" : "off"}">Shopify customers: ${!o.shopifyOn ? "no token on the worker" : o.customersWrite ? "the token can create and subscribe customers" : o.scopeError ? "scope check failed - " + esc(o.scopeError) : "the token lacks write_customers"}</span>
+<div class="muted" style="margin-top:6px">Omnisend takes its list from Shopify's customers: a confirmed entrant who ticked the box becomes a Shopify customer marked <b>subscribed</b> (confirmed opt-in) and tagged <b>${esc(cfg.tags)}</b>; one who already is a customer gets the tags and the subscription.${o.shopifyOn && !o.customersWrite ? " <b>Until the token has the write_customers scope</b> (Shopify admin › Settings › Apps and sales channels › Develop apps › the worker's app › Configuration), entries are kept here - use <b>Retry</b> per row or the CSV export afterwards." : ""}</div></div>
 <div class="tiles">
 <div class="tile2"><b>${real.length}</b><br><span class="muted">confirmed entries</span></div>
 <div class="tile2"><b>${d.pending || 0}</b><br><span class="muted">awaiting confirmation</span></div>
-<div class="tile2"><b>${onList}</b><br><span class="muted">on the Omnisend list</span></div>
-<div class="tile2"><b>${failed}</b><br><span class="muted">Omnisend failed</span></div>
+<div class="tile2"><b>${onList}</b><br><span class="muted">subscribed in Shopify</span></div>
+<div class="tile2"><b>${failed}</b><br><span class="muted">Shopify failed</span></div>
 <div class="tile2"><b>${tests.length}</b><br><span class="muted">test entries (preview)</span></div>
 </div>
 <div class="pg winl"><b>Links</b><br>
@@ -184,13 +184,13 @@ ${w.emailed && w.emailed.ok ? `<span class="badge on">winner emailed ${esc(when(
 <div class="two"><div><label>Event</label><input type="text" name="event" value="${esc(cfg.event)}" maxlength="120"></div><div><label>Place</label><input type="text" name="place" value="${esc(cfg.place)}" maxlength="120"></div>
 <div><label>Dates (as shown on the page)</label><input type="text" name="dates" value="${esc(cfg.dates)}" maxlength="120"></div><div><label>Prize</label><input type="text" name="prize" value="${esc(cfg.prize)}" maxlength="160"></div>
 <div><label>Entries close (Atlantic time)</label><input type="datetime-local" name="closes" value="${esc(o.closesInput || "")}"></div><div><label>Draw (as shown on the page)</label><input type="text" name="drawText" value="${esc(cfg.drawText)}" maxlength="120"></div></div>
-<label>Omnisend tags (comma-separated)</label><input type="text" name="tags" value="${esc(cfg.tags)}" maxlength="200">
+<label>Customer tags in Shopify (comma-separated)</label><input type="text" name="tags" value="${esc(cfg.tags)}" maxlength="200">
 <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" name="consentRequired" value="1"${cfg.consentRequired ? " checked" : ""}> The email box must be ticked to enter (untick to let people enter the draw without joining the list)</label>
 <button type="submit" class="primary" style="margin-top:10px">Save settings</button></form></details>
 <h2>Entries <span class="muted" style="font-size:14px">(${list.length})</span></h2>
-${list.length ? `<table class="wtab"><tr><th>#</th><th>Name</th><th>Email</th><th>Confirmed</th><th>Emails</th><th>Plays</th><th>Omnisend</th><th></th></tr>
+${list.length ? `<table class="wtab"><tr><th>#</th><th>Name</th><th>Email</th><th>Confirmed</th><th>Emails</th><th>Plays</th><th>Shopify</th><th></th></tr>
 ${list.map((e, i) => `<tr${e.test ? ' style="opacity:.6"' : ""}><td>${i + 1}</td><td>${esc(e.first)} ${esc(e.last)}${e.test ? ' <span class="badge">test</span>' : ""}${drawnSet.has(e.email) ? ' <span class="badge on">drawn</span>' : ""}</td><td>${esc(e.email)}</td><td>${esc(when(e.verifiedAt))}</td><td>${e.consent ? "yes" : "no"}</td><td>${esc((e.interests || []).join(", "))}</td>
-<td><span class="om ${okOm(e) ? "ok" : e.omnisend && e.omnisend.status !== "pending" && e.consent ? "bad" : ""}">${esc(OM_LABEL[(e.omnisend || {}).status] || (e.omnisend || {}).status || "")}</span>${e.omnisend && e.omnisend.error ? `<br><small class="muted">${esc(e.omnisend.error)}</small>` : ""}${e.consent && !okOm(e) ? ` <form method="post" action="${ctl}">${hid("retry")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Retry</button></form>` : ""}</td>
+<td><span class="om ${okOm(e) ? "ok" : e.shopify && e.shopify.status !== "pending" && e.consent ? "bad" : ""}">${esc(OM_LABEL[(e.shopify || {}).status] || (e.shopify || {}).status || "")}</span>${e.shopify && e.shopify.id ? ` <a href="https://admin.shopify.com/store/most-wanted-ca/customers/${esc(e.shopify.id)}" target="_blank" rel="noopener">open</a>` : ""}${e.shopify && e.shopify.error ? `<br><small class="muted">${esc(e.shopify.error)}</small>` : ""}${e.consent && !okOm(e) ? ` <form method="post" action="${ctl}">${hid("retry")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Retry</button></form>` : ""}</td>
 <td><form method="post" action="${ctl}" onsubmit="return confirm('Remove ${esc(e.first)}\\'s entry? This cannot be undone.')">${hid("delete")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Remove</button></form></td></tr>`).join("")}</table>` : `<p class="muted">No confirmed entries yet.</p>`}`;
   return shell("Expo contest", page, o, true);
 }

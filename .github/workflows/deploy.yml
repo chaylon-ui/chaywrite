@@ -112,21 +112,6 @@ jobs:
             echo "No PRICECHARTING_TOKEN repo secret set - skipping (the sealed auto-pricer runs on TCGplayer alone)"
           fi
 
-      # Omnisend API key (optional): the Expo contest (src/win.js) adds confirmed,
-      # consenting entrants to the email list with it. Same pattern. Without it
-      # the entries are kept on the worker and the admin screen offers a CSV.
-      - name: Sync OMNISEND_API_KEY worker secret (when configured)
-        env:
-          OMNISEND_API_KEY: ${{ secrets.OMNISEND_API_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ -n "$OMNISEND_API_KEY" ]; then
-            printf '%s' "$OMNISEND_API_KEY" | npx wrangler@4 secret put OMNISEND_API_KEY
-          else
-            echo "No OMNISEND_API_KEY repo secret set - skipping (contest entries stay on the worker; export the CSV from /9pocket/win to import them)"
-          fi
-
       # Log-only probe of the freshly deployed similar-cards endpoints. The
       # sandbox this worker is developed from has no outbound internet, so
       # this step is where the real upstream shapes and live responses become
@@ -221,7 +206,7 @@ jobs:
           echo "=== Expo contest (src/win.js) ==="
           curl -sS -o /dev/null -w '/win: HTTP %{http_code} (expect 200: the holding page while closed, the form once an admin opens it)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/win" || true
           echo "contest page served: $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/win' | grep -c 'Mallow Games' || true) (expect >0)"
-          echo -n "contest health: "; curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/win/health" | head -c 400; echo
+          echo -n "contest health (+ can the token write customers): "; curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/win/health?probe=1" | head -c 400; echo
           curl -sS -o /dev/null -w '/win/verify bad token: HTTP %{http_code} (expect 404)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/win/verify?t=smoke" || true
           curl -sS -o /dev/null -w '/win-qr.png: HTTP %{http_code} %{content_type}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/win-qr.png" || true
           curl -sS -o /dev/null -w '/win-sign.html: HTTP %{http_code}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/win-sign.html" || true

@@ -9,19 +9,20 @@
 
    Public, no sign-in: /win (landing page + entry form), /win/verify (the
    emailed confirmation link), /win/rules, /win/health. Admins only (9Pocket
-   sign-in): /9pocket/win - open / close, settings, entries, Omnisend status,
+   sign-in): /9pocket/win - open / close, settings, entries, Shopify status,
    the draw, CSV export.
 
    Flow: form -> pending record (48 h, random token) -> confirmation email
    (Resend) -> the link verifies the address -> the entry counts and, when
-   the box was ticked, the contact goes to Omnisend as subscribed. Double
-   opt-in: nothing reaches the list before the click. CLOSED by default: an
+   the box was ticked, the person becomes a Shopify customer marked
+   subscribed (confirmed opt-in) and tagged - Omnisend takes its list from
+   Shopify's customers. Double opt-in: nothing is subscribed before the click. CLOSED by default: an
    admin opens it; while closed the public sees a holding page and an admin
    a preview (?preview=<key>; entries made that way are marked test and
    never drawn).
 
    Kept small on purpose: names and addresses live only in the win-contest
-   DO and reach the admin screen, Omnisend and the emails - never a log.
+   DO and reach the admin screen, Shopify and the emails - never a log.
    Sign-ups are rate-limited per connection (a salted hash of the address,
    kept two hours) and a honeypot field drops bots. */
 
@@ -36,7 +37,6 @@ export const PENDING_MS = 48 * 3600e3;    // a confirmation link works this long
 export const RATE_PER_HOUR = 8;           // sign-ups per connection per hour
 export const PENDING_PER_EMAIL = 3;       // unconfirmed entries per address (re-sends)
 export { INTERESTS, REPLY_TO };
-export const OMNISEND_API = "https://api.omnisend.com/v3";
 
 export const DEFAULT_CFG = {
   open: false,
@@ -174,19 +174,19 @@ export async function winDoFetch(cx, request, url) {
     const others = (await pendings(cx, now)).filter(([, v]) => v.email === pend.email).map(([k]) => k);
     if (others.length) await cx.storage.delete(others);
     if (existing) return json({ ok: true, status: "already", entry: existing });
-    const entry = { email: pend.email, first: pend.first, last: pend.last, consent: pend.consent, interests: pend.interests || [], enteredAt: pend.at, verifiedAt: now, test: !!pend.preview, omnisend: { status: pend.consent ? "pending" : "no-consent" } };
+    const entry = { email: pend.email, first: pend.first, last: pend.last, consent: pend.consent, interests: pend.interests || [], enteredAt: pend.at, verifiedAt: now, test: !!pend.preview, shopify: { status: pend.consent ? "pending" : "no-consent" } };
     await cx.storage.put("win:e:" + entry.email, entry);
     return json({ ok: true, status: "verified", entry });
   }
 
-  if (p === "/_win/omnisend" && request.method === "POST") {
+  if (p === "/_win/synced" && request.method === "POST") {
     const email = normEmail(body.email);
     const e = await cx.storage.get("win:e:" + email);
     if (!e) return json({ ok: false, error: "no such entry" });
     const r = body.result || {};
-    e.omnisend = { status: r.ok ? r.status || "subscribed" : r.status || "failed", id: r.id || "", error: r.ok ? "" : String(r.error || "").slice(0, 160), at: now };
+    e.shopify = { status: r.ok ? r.status || "subscribed" : r.status || "failed", id: r.id || "", error: r.ok ? "" : String(r.error || "").slice(0, 160), at: now };
     await cx.storage.put("win:e:" + email, e);
-    return json({ ok: true, entry: e, message: r.ok ? "Added to Omnisend." : "Omnisend: " + e.omnisend.error });
+    return json({ ok: true, entry: e, message: r.ok ? "Subscribed as a Shopify customer." : "Shopify: " + e.shopify.error });
   }
 
   if (p === "/_win/entry" && request.method === "POST") {
@@ -238,47 +238,79 @@ export async function winDoFetch(cx, request, url) {
     const cfg = await cfgOf(cx);
     const list = await entries(cx);
     const real = list.filter((e) => !e.test);
-    return json({ ok: true, open: isOpen(cfg, now), closesAt: cfg.closesAt, confirmed: real.length, onList: real.filter((e) => e.omnisend && /^(subscribed|updated)$/.test(e.omnisend.status)).length, pending: (await pendings(cx, now)).length, drawn: ((await cx.storage.get("win:draws")) || []).length });
+    return json({ ok: true, open: isOpen(cfg, now), closesAt: cfg.closesAt, confirmed: real.length, onList: real.filter((e) => e.shopify && /^(subscribed|updated)$/.test(e.shopify.status)).length, pending: (await pendings(cx, now)).length, drawn: ((await cx.storage.get("win:draws")) || []).length });
   }
 
   return json({ ok: false, error: "no such path" }, 404);
 }
 
-/* ---------- Omnisend (API v3, X-API-KEY) ---------- */
-export function omnisendConfigured(env) { return !!(env && env.OMNISEND_API_KEY); }
-export function omnisendBody(entry, cfg) {
-  const iso = new Date(entry.verifiedAt || Date.now()).toISOString();
-  const custom = { source: "expo_contest", event: String((cfg && cfg.event) || "").slice(0, 100) };
-  if (entry.interests && entry.interests.length) custom.interests = entry.interests.join(", ");
-  const b = { identifiers: [{ type: "email", id: entry.email, channels: { email: { status: "subscribed", statusDate: iso } } }], tags: tagsOf(cfg), customProperties: custom, country: "Canada", countryCode: "CA" };
-  if (entry.first) b.firstName = entry.first;
-  if (entry.last) b.lastName = entry.last;
-  return b;
-}
-const omniErr = (status, j) => ({ ok: false, status: "failed", error: ("HTTP " + status + " " + String((j && (j.error || j.message)) || "")).trim().slice(0, 160), at: Date.now() });
-export async function omnisendUpsert(env, entry, cfg, fetchFn) {
-  if (!omnisendConfigured(env)) return { ok: false, status: "unconfigured", error: "OMNISEND_API_KEY is not set on the worker", at: Date.now() };
+/* ---------- Shopify customers (Omnisend takes its list from them) ----------
+   Owner, 2026-10-16: "I don't need omnisend as I think it gets its email
+   from the shopify orders and customers" - so a confirmed, consenting
+   entrant becomes a Shopify customer (or updates the one with that address)
+   marked SUBSCRIBED with CONFIRMED_OPT_IN - the click is the confirmation -
+   and tagged for the event; Omnisend's Shopify sync carries that into the
+   list. Same token and endpoint as the rest of the worker. */
+export const API_VERSION = "2025-01";
+export const DEFAULT_SHOP = "most-wanted-ca.myshopify.com";
+export function shopifyConfigured(env) { return !!(env && env.SHOPIFY_ADMIN_TOKEN); }
+export const shopifyUrl = (env) => `https://${(env && env.SHOPIFY_SHOP) || DEFAULT_SHOP}/admin/api/${API_VERSION}/graphql.json`;
+async function gql(env, fetchFn, query, variables) {
   const f = fetchFn || fetch;
-  const headers = { "content-type": "application/json", "x-api-key": String(env.OMNISEND_API_KEY).trim() };
-  const body = JSON.stringify(omnisendBody(entry, cfg));
+  const r = await f(shopifyUrl(env), { method: "POST", headers: { "content-type": "application/json", "X-Shopify-Access-Token": String(env.SHOPIFY_ADMIN_TOKEN || "").trim() }, body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(15000) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error("Shopify HTTP " + r.status);
+  if (!j || !j.data) throw new Error("Shopify: " + String((j && j.errors && j.errors[0] && j.errors[0].message) || "no data").slice(0, 140));
+  return j.data;
+}
+const FIND = `query($q:String!){customers(first:5,query:$q){nodes{id email firstName lastName}}}`;
+const CREATE = `mutation($in:CustomerInput!){customerCreate(input:$in){customer{id}userErrors{field message}}}`;
+const UPDATE = `mutation($in:CustomerInput!){customerUpdate(input:$in){customer{id}userErrors{field message}}}`;
+const TAG = `mutation($id:ID!,$t:[String!]!){tagsAdd(id:$id,tags:$t){userErrors{message}}}`;
+const CONSENT = `mutation($in:CustomerEmailMarketingConsentUpdateInput!){customerEmailMarketingConsentUpdate(input:$in){customer{id}userErrors{field message}}}`;
+const SCOPES = `{currentAppInstallation{accessScopes{handle}}}`;
+const uerr = (node) => { const u = node && node.userErrors; return u && u.length ? u.map((e) => e.message).join("; ").slice(0, 160) : ""; };
+const digitsOf = (gid) => String(gid || "").replace(/\D/g, "");
+const fail = (error) => ({ ok: false, status: "failed", error: String(error).slice(0, 160), at: Date.now() });
+
+export async function shopifySubscribe(env, entry, cfg, fetchFn) {
+  if (!shopifyConfigured(env)) return { ok: false, status: "unconfigured", error: "SHOPIFY_ADMIN_TOKEN is not set on the worker", at: Date.now() };
+  const consent = { marketingState: "SUBSCRIBED", marketingOptInLevel: "CONFIRMED_OPT_IN", consentUpdatedAt: new Date(entry.verifiedAt || Date.now()).toISOString() };
+  const tags = tagsOf(cfg);
   try {
-    const r = await f(OMNISEND_API + "/contacts", { method: "POST", headers, body, signal: AbortSignal.timeout(12000) });
-    const j = await r.json().catch(() => null);
-    if (r.ok) return { ok: true, status: "subscribed", id: String((j && (j.contactID || j.id)) || "").slice(0, 64), at: Date.now() };
-    if (r.status === 400 || r.status === 409 || r.status === 422) {
-      // already a contact: find it by address and update that record instead
-      const g = await f(OMNISEND_API + "/contacts?email=" + encodeURIComponent(entry.email), { headers, signal: AbortSignal.timeout(12000) });
-      const gj = await g.json().catch(() => null);
-      const found = gj && Array.isArray(gj.contacts) ? gj.contacts[0] : null;
-      const id = found && (found.contactID || found.id);
-      if (id) {
-        const u = await f(OMNISEND_API + "/contacts/" + encodeURIComponent(id), { method: "PATCH", headers, body, signal: AbortSignal.timeout(12000) });
-        const uj = await u.json().catch(() => null);
-        return u.ok ? { ok: true, status: "updated", id: String(id).slice(0, 64), at: Date.now() } : omniErr(u.status, uj);
-      }
+    const found = await gql(env, fetchFn, FIND, { q: "email:" + entry.email });
+    const c = (((found.customers || {}).nodes) || []).find((n) => normEmail(n.email) === entry.email);
+    if (!c) {
+      const input = { email: entry.email, tags, emailMarketingConsent: consent, note: `Entered the ${cfg && cfg.event ? cfg.event : "Expo"} draw` };
+      if (entry.first) input.firstName = entry.first;
+      if (entry.last) input.lastName = entry.last;
+      const d = await gql(env, fetchFn, CREATE, { in: input });
+      const e = uerr(d.customerCreate); if (e) return fail(e);
+      return { ok: true, status: "subscribed", id: digitsOf(d.customerCreate.customer && d.customerCreate.customer.id), at: Date.now() };
     }
-    return omniErr(r.status, j);
-  } catch (e) { return { ok: false, status: "failed", error: String((e && e.message) || e).slice(0, 160), at: Date.now() }; }
+    // already a customer: add the tags, fill a blank name, record the consent they just confirmed
+    const t = await gql(env, fetchFn, TAG, { id: c.id, t: tags });
+    const e1 = uerr(t.tagsAdd); if (e1) return fail(e1);
+    if ((!c.firstName && entry.first) || (!c.lastName && entry.last)) {
+      const input = { id: c.id };
+      if (!c.firstName && entry.first) input.firstName = entry.first;
+      if (!c.lastName && entry.last) input.lastName = entry.last;
+      const u = await gql(env, fetchFn, UPDATE, { in: input });
+      const e2 = uerr(u.customerUpdate); if (e2) return fail(e2);
+    }
+    const sc = await gql(env, fetchFn, CONSENT, { in: { customerId: c.id, emailMarketingConsent: consent } });
+    const e3 = uerr(sc.customerEmailMarketingConsentUpdate); if (e3) return fail(e3);
+    return { ok: true, status: "updated", id: digitsOf(c.id), at: Date.now() };
+  } catch (e) { return fail((e && e.message) || e); }
+}
+/* Can the token write customers? (the admin screen, and health?probe=1) */
+export async function shopifyScopes(env, fetchFn) {
+  if (!shopifyConfigured(env)) return { ok: false, customersWrite: false, error: "no token" };
+  try {
+    const d = await gql(env, fetchFn, SCOPES, {});
+    const h = (((d.currentAppInstallation || {}).accessScopes) || []).map((x) => x.handle);
+    return { ok: true, customersWrite: h.includes("write_customers"), customersRead: h.includes("read_customers") || h.includes("write_customers") };
+  } catch (e) { return { ok: false, customersWrite: false, error: String((e && e.message) || e).slice(0, 120) }; }
 }
 
 /* ---------- worker side ---------- */
@@ -311,7 +343,8 @@ export async function serveWin(request, env, url, ctx, sopts) {
   const html = (s, status) => new Response(s, { status: status || 200, headers: { "content-type": "text/html; charset=utf-8", "referrer-policy": "no-referrer", "x-robots-tag": "noindex", ...noStore } });
   if (p === WIN_BASE + "/health") {
     const h = await doCall(env, "/_win/health");
-    return json({ ...h, email: emailConfigured(env), omnisend: omnisendConfigured(env) });
+    const probe = url.searchParams.get("probe") === "1" ? await shopifyScopes(env, fetchFn) : null;
+    return json({ ...h, email: emailConfigured(env), shopify: shopifyConfigured(env), ...(probe ? { customersWrite: probe.customersWrite, scopeError: probe.error || null } : {}) });
   }
   const cfg = await doCall(env, "/_win/cfg");
   const preview = !!cfg.previewKey && url.searchParams.get("preview") === cfg.previewKey;
@@ -322,8 +355,8 @@ export async function serveWin(request, env, url, ctx, sopts) {
     const r = await doCall(env, "/_win/verify", { token: url.searchParams.get("t") || "" });
     if (!r.ok) return html(renderExpired(cfg, { ...o, reason: r.error }), r.error === "expired" ? 410 : 404);
     if (r.status === "verified" && r.entry.consent) {
-      const om = await omnisendUpsert(env, r.entry, cfg, fetchFn);
-      await doCall(env, "/_win/omnisend", { email: r.entry.email, result: om });
+      const sub = await shopifySubscribe(env, r.entry, cfg, fetchFn);
+      await doCall(env, "/_win/synced", { email: r.entry.email, result: sub });
     }
     return html(renderVerified(cfg, { ...o, first: r.entry.first, already: r.status === "already" }));
   }
@@ -361,8 +394,8 @@ function cfgFrom(f) {
 }
 const csvCell = (v) => { let s = String(v == null ? "" : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 export function csvOf(list) {
-  const rows = [["email", "first_name", "last_name", "email_consent", "interests", "entered_at", "confirmed_at", "omnisend", "test"]];
-  for (const e of list) rows.push([e.email, e.first, e.last, e.consent ? "yes" : "no", (e.interests || []).join("; "), new Date(e.enteredAt).toISOString(), new Date(e.verifiedAt).toISOString(), (e.omnisend && e.omnisend.status) || "", e.test ? "test" : ""]);
+  const rows = [["email", "first_name", "last_name", "email_consent", "interests", "entered_at", "confirmed_at", "shopify_customer", "test"]];
+  for (const e of list) rows.push([e.email, e.first, e.last, e.consent ? "yes" : "no", (e.interests || []).join("; "), new Date(e.enteredAt).toISOString(), new Date(e.verifiedAt).toISOString(), (e.shopify && e.shopify.status) || "", e.test ? "test" : ""]);
   return rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
@@ -387,8 +420,8 @@ export async function serveWinStaff(request, env, url, user, form, h) {
     else if (action === "retry") {
       const d = await doCall(env, "/_win/entry", { email: f.email });
       if (!d.ok) result = d;
-      else if (!d.entry.consent) result = { ok: false, error: "That person did not tick the email box, so they are not sent to Omnisend." };
-      else result = await doCall(env, "/_win/omnisend", { email: d.entry.email, result: await omnisendUpsert(env, d.entry, d.cfg, fetchFn) });
+      else if (!d.entry.consent) result = { ok: false, error: "That person did not tick the email box, so they are not subscribed." };
+      else result = await doCall(env, "/_win/synced", { email: d.entry.email, result: await shopifySubscribe(env, d.entry, d.cfg, fetchFn) });
     } else if (action === "email_winner") {
       const d = await doCall(env, "/_win/list");
       const w = (d.draws || []).find((x) => x.email === normEmail(f.email));
@@ -403,7 +436,8 @@ export async function serveWinStaff(request, env, url, user, form, h) {
   }
   if (p === WIN_ADMIN || p === WIN_ADMIN + "/") {
     const d = await doCall(env, "/_win/list");
-    return html(renderWinAdmin(d, { ...opts, origin, emailOn: emailConfigured(env), omnisendOn: omnisendConfigured(env), closesInput: utcToAtlanticInput(d.cfg && d.cfg.closesAt) }));
+    const scopes = await shopifyScopes(env, fetchFn);
+    return html(renderWinAdmin(d, { ...opts, origin, emailOn: emailConfigured(env), shopifyOn: shopifyConfigured(env), customersWrite: scopes.customersWrite, scopeError: scopes.error || "", closesInput: utcToAtlanticInput(d.cfg && d.cfg.closesAt) }));
   }
   return html(renderWinDenied(opts), 404);
 }
