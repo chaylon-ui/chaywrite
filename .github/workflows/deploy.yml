@@ -212,6 +212,8 @@ jobs:
           curl -sS -o /dev/null -w '/win-sign.html: HTTP %{http_code}\n' --max-time 20 "https://exor-binder.nevski.workers.dev/win-sign.html" || true
           curl -sS -o /dev/null -w '/9pocket/win signed out: HTTP %{http_code} (expect 303 to login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/win" || true
           curl -sS -o /dev/null -w 'exorgames.com/win (the QR address, a Shopify redirect): HTTP %{http_code} -> %{redirect_url} (expect 301 to the worker /win)\n' --max-time 20 "https://exorgames.com/win" || true
+          curl -sS -o /dev/null -w 'exorgames.com/win/verify?t=smoke (the emailed link): HTTP %{http_code} -> %{redirect_url} (expect 301 to the worker /win/verify?t=smoke - the token must survive the redirect)\n' --max-time 20 "https://exorgames.com/win/verify?t=smoke" || true
+          curl -sS -o /dev/null -w 'exorgames.com/win/rules: HTTP %{http_code} -> %{redirect_url} (expect 301 to the worker /win/rules)\n' --max-time 20 "https://exorgames.com/win/rules" || true
           curl -sS -o /dev/null -w '/9pocket/b/x no session: HTTP %{http_code} (expect 303 to /login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/b/01700000000000-abcd" || true
           curl -sS -o /dev/null -w '/9pocket/admin no session: HTTP %{http_code} (expect 303 to /login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/admin" || true
           curl -sS -o /dev/null -w '/9pocket/control no session: HTTP %{http_code} (expect 403)\n' --max-time 20 -X POST -H 'content-type: application/json' -d '{"id":"x","action":"approve"}' "https://exor-binder.nevski.workers.dev/9pocket/control" || true

@@ -313,7 +313,10 @@ test("markup: landing, holding, verified, rules and the emails say what they mus
   const rules = renderRules(cfg, {}); assert.match(rules, /excluding Quebec/); assert.match(rules, /51 Allen Street/); assert.match(rules, /subscribed customer/); assert.match(rules, /seven \(7\) days/);
   const ve = buildVerifyEmail({ first: "Ann", link: "https://w/win/verify?t=abc", cfg, origin: "https://w" });
   assert.match(ve.html, /href="https:\/\/w\/win\/verify\?t=abc"/); assert.match(ve.text, /https:\/\/w\/win\/verify\?t=abc/); assert.match(ve.html, /Didn't enter\? Ignore this email/);
-  const we = buildWinnerEmail({ first: "Ann", question: "(2 × 3) + 10 − 1", cfg }); assert.match(we.html, /\(2 × 3\) \+ 10 − 1 = \?/); assert.match(we.text, /Reply within 7 days/);
+  // the owner's Mallow Games graphic (2026-10-16) rides in both emails, on the confirmed page and on the landing card
+  assert.match(ve.html, /src="https:\/\/exor-binder\.nevski\.workers\.dev\/win-mallow\.jpg"/); assert.match(ve.text, /mallowgames\.com\/sell-your-games\//);
+  assert.match(renderVerified(cfg, { first: "Ann" }), /<img class="entered" src="\/win-entered\.jpg"/); assert.match(landing, /src="\/win-mallow\.jpg"/);
+  const we = buildWinnerEmail({ first: "Ann", question: "(2 × 3) + 10 − 1", cfg }); assert.match(we.html, /\(2 × 3\) \+ 10 − 1 = \?/); assert.match(we.text, /Reply within 7 days/); assert.match(we.html, /win-mallow\.jpg/);
   const adm = renderWinAdmin({ cfg: { ...cfg, previewKey: "pk" }, entries: [], draws: [], pending: 0, now: T0 }, { user: { email: "b@x", role: "admin" }, origin: "https://w", emailOn: true, shopifyOn: true, customersWrite: true, closesInput: "2026-10-18T23:59" });
   assert.match(adm, /OPEN/); assert.match(adm, /https:\/\/w\/win\?preview=pk/); assert.match(adm, /the token can create and subscribe customers/); assert.match(adm, /Close the contest/);
 });

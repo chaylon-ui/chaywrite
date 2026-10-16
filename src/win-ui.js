@@ -5,13 +5,19 @@
    the 9Pocket shell (src/stage-ui.js). */
 
 import { shell, esc, when, LOGO } from "./stage-ui.js";
-import { MALLOW_URL, MALLOW_BANNER } from "./stage-email.js";
+import { MALLOW_URL } from "./stage-email.js";
 
 const B = "/win", A = "/9pocket/win";
 export const REPLY_TO = "customerservice@exorgames.com";
 export const INTERESTS = ["Magic: The Gathering", "Pokémon", "Yu-Gi-Oh!", "One Piece", "Lorcana", "Video games", "Board games", "Warhammer & minis"];
 const EXOR = "https://exorgames.com", MALLOW = "https://mallowgames.com";
 export const SHORT_URL = "https://exorgames.com/win";   // the address on the QR code: a Shopify URL redirect to the worker page (owner, 2026-10-16)
+export const ASSET_ORIGIN = "https://exor-binder.nevski.workers.dev";   // the emails need absolute image addresses; public/ files are served from the worker
+// The owner's graphic (2026-10-16): the whole thing says "Thank you - you're entered!"
+// over the Mallow Games band (buys / sells / trades video games, credit at Exor);
+// the band alone rides in the emails and on the landing page's Mallow card.
+export const ENTERED_ART = "/win-entered.jpg";
+export const MALLOW_BAND = "/win-mallow.jpg";
 const RED = "#d62c28", INK = "#27302f", PINK = "#e2529a", PAPER = "#f6f7f8", MUTED = "#6b7780";
 
 export const prizeShort = (cfg) => { const m = /\$\s?\d[\d,]*/.exec(String((cfg && cfg.prize) || "")); return m ? m[0].replace(/\s/g, "") : String((cfg && cfg.prize) || "the prize"); };
@@ -40,6 +46,7 @@ label.f,p.f{display:block;font-weight:700;font-size:14px;margin:12px 0 4px}.opt{
 .err{background:#fde8e8;color:#7f1d1d;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-weight:600}.fine{font-size:13px;color:var(--mute);margin:10px 0 0}
 .hp{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
 .split{display:grid;gap:16px;margin:16px 0}.split .card{margin:0}@media(min-width:640px){.split{grid-template-columns:1fr 1fr}}
+.entered{display:block;width:100%;max-width:640px;height:auto;margin:0 auto 16px;border-radius:14px;box-shadow:0 1px 3px rgba(39,48,47,.12)}
 .exor{border-top:6px solid var(--red)}.exor h3{color:var(--red)}.mallow{border-top:6px solid var(--pink)}.mallow h3{color:var(--pink)}.mallow img{width:100%;height:auto;border-radius:10px;margin:0 0 12px;display:block}
 .credit{background:var(--cream);border-radius:10px;padding:10px 12px;font-size:15px}.lnk{font-weight:800;text-decoration:none}.lnk.pink{color:var(--pink)}
 .steps{counter-reset:s;list-style:none;padding:0;margin:0}.steps li{position:relative;padding:4px 0 4px 46px;margin:8px 0}.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:2px;width:34px;height:34px;border-radius:50%;background:var(--yel);color:var(--ink);font-weight:800;display:grid;place-items:center}
@@ -53,7 +60,7 @@ ${body}
 
 const ABOUT = (cfg) => `<section class="split">
 <div class="card exor"><h3>Exor Games</h3><p>Trading cards, board games, Warhammer, accessories and more - in store and at <a href="${EXOR}" target="_blank" rel="noopener">ExorGames.com</a>. Magic, Pokémon, Yu-Gi-Oh!, One Piece, Lorcana... if it comes in a booster, we probably have it.</p><a class="lnk" href="${EXOR}" target="_blank" rel="noopener">Shop ExorGames.com →</a></div>
-<div class="card mallow"><a href="${MALLOW_URL}" target="_blank" rel="noopener"><img src="${MALLOW_BANNER}" alt="Mallow Games - we buy video games" width="600" height="86" loading="lazy"></a><h3>Mallow Games</h3><p>Our sister shop for video games. We <b>buy and sell used video games</b>. Got games gathering dust? Check what we pay on the Mallow Games buylist at <a href="${MALLOW}" target="_blank" rel="noopener">mallowgames.com</a> and take cash or Exor Games store credit.</p><p class="credit">Win the draw and your <b>${esc(prizeShort(cfg))} credit</b> works on cards <i>or</i> video games.</p><a class="lnk pink" href="${MALLOW_URL}" target="_blank" rel="noopener">See the video game buylist →</a></div></section>`;
+<div class="card mallow"><a href="${MALLOW_URL}" target="_blank" rel="noopener"><img src="${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="1200" height="373" loading="lazy"></a><h3>Mallow Games</h3><p>Our sister shop for video games. We <b>buy and sell used video games</b>. Got games gathering dust? Check what we pay on the Mallow Games buylist at <a href="${MALLOW}" target="_blank" rel="noopener">mallowgames.com</a> and take cash or Exor Games store credit.</p><p class="credit">Win the draw and your <b>${esc(prizeShort(cfg))} credit</b> works on cards <i>or</i> video games.</p><a class="lnk pink" href="${MALLOW_URL}" target="_blank" rel="noopener">See the video game buylist →</a></div></section>`;
 
 const HOW = (cfg, o) => `<section class="card"><h3>How it works</h3><ol class="steps"><li><b>Enter</b> your name and email above.</li><li><b>Tap the link</b> we email you - that confirms your entry (and your spot on our list).</li><li><b>One winner</b> is drawn at random ${esc(cfg.drawText)} and emailed. Entries close ${esc(closesText(cfg))}.</li></ol><p class="fine">No purchase necessary. Open to residents of Canada (excluding Quebec) who are the age of majority in their province. Full <a href="${B}/rules${o && o.preview ? "?preview=" + encodeURIComponent(o.preview) : ""}">contest rules</a>.</p></section>`;
 
@@ -106,7 +113,7 @@ export function renderCheckInbox(cfg, o) {
 
 export function renderVerified(cfg, o) {
   o = o || {};
-  return pub("You're in!", `<section class="hero"><p class="kicker">Entry confirmed</p><h1>You're in${o.first ? ", " + esc(o.first) : ""}! 🎉</h1>
+  return pub("You're in!", `<section class="hero"><img class="entered" src="${ENTERED_ART}" alt="Thank you - you're entered! You're now in the draw to win a $100 Exor Games gift card. Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit." width="1200" height="800"><p class="kicker">Entry confirmed</p><h1>You're in${o.first ? ", " + esc(o.first) : ""}! 🎉</h1>
 <p class="big">${o.already ? "This address was already confirmed - you're in the draw once, and once is all it takes." : `You're in the draw for ${esc(prizeShort(cfg))} in store credit.`} We draw the winner ${esc(cfg.drawText)} and email them.</p>
 <p>While you're here: see what's new at Exor Games, or find out what Mallow Games pays for the video games you're done with.</p>
 <div class="btns"><a class="btn" href="${EXOR}">Shop ExorGames.com</a><a class="btn pink" href="${MALLOW_URL}">Sell your video games</a></div></section>
@@ -214,9 +221,11 @@ export function buildVerifyEmail(a) {
 ${button(a.link, "Confirm my entry")}
 <p style="font-size:14px;color:${MUTED}">The link works for 48 hours. If the button does not work, copy this address into your browser:<br><a href="${esc(a.link)}" style="color:${RED};word-break:break-all">${esc(a.link)}</a></p>
 <p style="font-size:14px;color:${MUTED}">Ticked the email box? Confirming also signs you up for Exor Games and Mallow Games emails - new releases, deals, events and what we're buying. Every email has an unsubscribe link.</p>
-<p style="font-size:14px;color:${MUTED}">Didn't enter? Ignore this email and nothing happens.</p>${a.test ? `<p><b>This is a sample sent from the 9Pocket admin screen; the button opens the preview page.</b></p>` : ""}`,
+<p style="font-size:14px;color:${MUTED}">Didn't enter? Ignore this email and nothing happens.</p>
+<a href="${MALLOW_URL}" style="display:block;margin:18px 0 6px;text-decoration:none"><img src="${ASSET_ORIGIN}${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="544" height="169" style="display:block;width:100%;max-width:544px;height:auto;border-radius:10px"></a>
+<p style="font-size:14px;color:${MUTED};margin:0 0 8px">Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit - <a href="${MALLOW_URL}" style="color:${RED}">see what we pay</a>.</p>${a.test ? `<p><b>This is a sample sent from the 9Pocket admin screen; the button opens the preview page.</b></p>` : ""}`,
     `${ADDR}<br>You received this one-time message because this address was entered in our contest at the ${esc(cfg.event)}.`);
-  const text = [`One tap and you're in${first}`, "", `Thanks for entering our draw at the ${cfg.event}. Confirm your email address to enter the draw for ${cfg.prize}:`, "", a.link, "", "The link works for 48 hours.", "Ticked the email box? Confirming also signs you up for Exor Games and Mallow Games emails (unsubscribe any time).", "Didn't enter? Ignore this email and nothing happens.", "", ADDR_TEXT].join("\n");
+  const text = [`One tap and you're in${first}`, "", `Thanks for entering our draw at the ${cfg.event}. Confirm your email address to enter the draw for ${cfg.prize}:`, "", a.link, "", "The link works for 48 hours.", "Ticked the email box? Confirming also signs you up for Exor Games and Mallow Games emails (unsubscribe any time).", "Didn't enter? Ignore this email and nothing happens.", "", "Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit: " + MALLOW_URL, "", ADDR_TEXT].join("\n");
   return { subject, html, text };
 }
 
@@ -235,7 +244,9 @@ export function buildWinnerEmail(a) {
 <p>Your entry was drawn in our ${esc(cfg.event)} contest: <b>${esc(cfg.prize)}</b> is yours.</p>
 <p>One formality first. Canadian contest rules ask the winner a skill-testing question, so please reply to this email with the answer to:</p>
 <p style="font-size:22px;font-weight:700;margin:10px 0">${esc(a.question)} = ?</p>
-<p>Reply within 7 days and we'll send your gift card to this address. Spend it at ExorGames.com or in store - on cards, games or video games from Mallow Games.</p>`, ADDR);
-  const text = [`Congratulations${first} - you won!`, "", `Your entry was drawn in our ${cfg.event} contest: ${cfg.prize} is yours.`, "", `Canadian contest rules ask the winner a skill-testing question. Reply to this email with the answer to: ${a.question} = ?`, "", "Reply within 7 days and we'll send your gift card to this address.", "", ADDR_TEXT].join("\n");
+<p>Reply within 7 days and we'll send your gift card to this address. Spend it at ExorGames.com or in store - on cards, games or video games from Mallow Games.</p>
+<a href="${MALLOW_URL}" style="display:block;margin:18px 0 6px;text-decoration:none"><img src="${ASSET_ORIGIN}${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="544" height="169" style="display:block;width:100%;max-width:544px;height:auto;border-radius:10px"></a>
+<p style="font-size:14px;color:${MUTED};margin:0 0 8px">Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit - <a href="${MALLOW_URL}" style="color:${RED}">see what we pay</a>.</p>`, ADDR);
+  const text = [`Congratulations${first} - you won!`, "", `Your entry was drawn in our ${cfg.event} contest: ${cfg.prize} is yours.`, "", `Canadian contest rules ask the winner a skill-testing question. Reply to this email with the answer to: ${a.question} = ?`, "", "Reply within 7 days and we'll send your gift card to this address.", "", "Got video games you're done with? Mallow Games buys them for cash or Exor Games store credit: " + MALLOW_URL, "", ADDR_TEXT].join("\n");
   return { subject, html, text };
 }
