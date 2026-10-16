@@ -20,6 +20,7 @@ import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
 import { serveStage, servePair, STAGE_DO } from "./stage.js";
 import { serveRequests, REQUESTS_DO } from "./requests.js";
 import { stockCheckTick, STOCK_DO } from "./stock-check.js";
+import { serveWin, WIN_DO } from "./win.js";
 import { servePageEdit } from "./page-edit.js";
 import { serveAutoprice, AUTOPRICE_DO } from "./autoprice.js";
 import { servePortal } from "./portal.js";
@@ -276,7 +277,7 @@ export default {
     // Which Durable Object is which (Cloudflare's usage analytics show only ids): name -> id for every named object and known screen room (2026-10-03, budget email).
     if (url.pathname === "/admin/do-ids.json") {
       if (!(await gate("admin")(env, url.origin, url.searchParams.get("k")))) return Response.json({ error: "staff PIN required" }, { status: 403, headers: { "cache-control": "no-store" } });
-      const names = { default: "default", cache: CACHE_DO, portal: "portal-cache", price: PRICE_DO, enrich: ENRICH_DO, hold: HOLD_DO, stage: STAGE_DO, requests: REQUESTS_DO, autoprice: AUTOPRICE_DO, stock: STOCK_DO };
+      const names = { default: "default", cache: CACHE_DO, portal: "portal-cache", price: PRICE_DO, enrich: ENRICH_DO, hold: HOLD_DO, stage: STAGE_DO, requests: REQUESTS_DO, autoprice: AUTOPRICE_DO, stock: STOCK_DO, win: WIN_DO };
       const out = {};
       for (const [k, n] of Object.entries(names)) out[k] = { name: n, id: env.ROOM.idFromName(n).toString() };
       let rooms = null;
@@ -303,6 +304,10 @@ export default {
     // Item requests (src/requests.js): the store's pages post sold-out and
     // special-order requests here; /requests/health for the deploy smoke.
     if (url.pathname.startsWith("/requests/api/") || url.pathname === "/requests/health") return serveRequests(request, env, url, ctx);
+    // Enter to win (src/win.js): the Expo contest page reached by the booth's QR
+    // code, its emailed confirmation link, rules and health. Public; its admin
+    // screen is /9pocket/win inside 9Pocket.
+    if (url.pathname === "/win" || url.pathname.startsWith("/win/")) return serveWin(request, env, url, ctx);
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"));
     }

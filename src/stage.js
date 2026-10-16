@@ -67,6 +67,7 @@ import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
 import { serveRequestsStaff } from "./requests.js";
 import { serveStockStaff } from "./stock-check.js";
+import { serveWinStaff } from "./win.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
@@ -977,6 +978,10 @@ export async function serveStage(request, env, url, staffOk, sopts) {
   // Stock check (src/stock-check.js): go look / reorder / missing / dismissed.
   if (p === BASE + "/stock" || p === BASE + "/stock.json" || p.startsWith(BASE + "/stock/")) {
     return serveStockStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, pinOk, fetchFn: sopts && sopts.fetchFn });
+  }
+  // Expo contest (src/win.js): admins only - open / close, entries, the draw.
+  if (p === BASE + "/win" || p.startsWith(BASE + "/win/")) {
+    return serveWinStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, fetchFn: sopts && sopts.fetchFn });
   }
 
   if (p === BASE + ".json") {
