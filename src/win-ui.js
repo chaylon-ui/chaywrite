@@ -11,6 +11,7 @@ const B = "/win", A = "/9pocket/win";
 export const REPLY_TO = "customerservice@exorgames.com";
 export const INTERESTS = ["Magic: The Gathering", "Pokémon", "Yu-Gi-Oh!", "One Piece", "Lorcana", "Video games", "Board games", "Warhammer & minis"];
 const EXOR = "https://exorgames.com", MALLOW = "https://mallowgames.com";
+export const SHORT_URL = "https://exorgames.com/win";   // the address on the QR code: a Shopify URL redirect to the worker page (owner, 2026-10-16)
 const RED = "#d62c28", INK = "#27302f", PINK = "#e2529a", PAPER = "#f6f7f8", MUTED = "#6b7780";
 
 export const prizeShort = (cfg) => { const m = /\$\s?\d[\d,]*/.exec(String((cfg && cfg.prize) || "")); return m ? m[0].replace(/\s/g, "") : String((cfg && cfg.prize) || "the prize"); };
@@ -121,7 +122,7 @@ ${again ? `<a class="btn" href="${esc(back(o))}">Enter again</a>` : ""}</section
 }
 
 export function renderNotFound(cfg, o) {
-  return pub("Not found", `<section class="hero"><h1>There's nothing here</h1><p class="big">The contest page is at <a href="${esc(back(o))}">${esc((o && o.origin) || "")}${B}</a>.</p></section>`, cfg, o || {});
+  return pub("Not found", `<section class="hero"><h1>There's nothing here</h1><p class="big">The contest page is at <a href="${esc(back(o))}">${SHORT_URL}</a>.</p></section>`, cfg, o || {});
 }
 
 export function renderRules(cfg, o) {
@@ -171,7 +172,7 @@ ${o.msg ? `<div class="wmsg">${esc(o.msg)}</div>` : ""}${o.err ? `<div class="we
 <div class="tile2"><b>${tests.length}</b><br><span class="muted">test entries (preview)</span></div>
 </div>
 <div class="pg winl"><b>Links</b><br>
-Public page: <a href="${esc(pubUrl)}" target="_blank" rel="noopener"><code>${esc(pubUrl)}</code></a>${live ? "" : ` <span class="muted">(shows the holding page while closed)</span>`}<br>
+Short address on the QR code and the sign: <a href="${SHORT_URL}" target="_blank" rel="noopener"><code>${SHORT_URL}</code></a> <span class="muted">(a Shopify redirect to <code>${esc(pubUrl)}</code>${live ? "" : "; shows the holding page while closed"})</span><br>
 Preview while closed (admins only - do not print this one): <a href="${esc(prev)}" target="_blank" rel="noopener"><code>${esc(prev)}</code></a><br>
 QR code for the booth: <a href="/win-qr.png" target="_blank">PNG</a> · <a href="/win-qr.svg" target="_blank">SVG (print)</a> · <a href="/win-sign.html" target="_blank">printable sign</a> · <a href="${B}/rules" target="_blank">rules page</a> · <a href="${A}/export.csv">export entries (CSV)</a><br>
 <form method="post" action="${ctl}" style="display:inline">${hid("test_email")}<button type="submit" class="dim">Send me a sample confirmation email</button></form></div>

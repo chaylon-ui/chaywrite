@@ -253,7 +253,7 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   assert.equal((await serve("/9pocket/win/control", staff, { action: "open" })).status, 403);
   let r = await serve("/9pocket/win", admin); assert.equal(r.status, 200); let page = await r.text();
   assert.match(page, /<h1>Expo contest<\/h1>/); assert.match(page, /CLOSED/); assert.match(page, /Open the contest/); assert.match(page, /Shopify customers: no token on the worker/); assert.match(page, /Omnisend takes its list from Shopify/);
-  assert.match(page, /\/win-qr\.png/); assert.match(page, /\/win-qr\.svg/); assert.match(page, /\/win-sign\.html/); assert.match(page, /href="\/9pocket\/win\/export\.csv"/); assert.match(page, /\?preview=/); assert.match(page, /No confirmed entries yet/);
+  assert.match(page, /https:\/\/exorgames\.com\/win<\/code>/, "the short address the QR carries"); assert.match(page, /\/win-qr\.png/); assert.match(page, /\/win-qr\.svg/); assert.match(page, /\/win-sign\.html/); assert.match(page, /href="\/9pocket\/win\/export\.csv"/); assert.match(page, /\?preview=/); assert.match(page, /No confirmed entries yet/);
   assert.match(page, /value="2026-10-18T23:59"/); assert.match(page, /name="consentRequired" value="1" checked/);
   // open
   r = await serve("/9pocket/win/control", admin, { action: "open" }); assert.equal(r.status, 303); assert.match(loc(r), /msg=The contest is OPEN/);
