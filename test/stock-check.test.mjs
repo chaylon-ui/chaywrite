@@ -424,7 +424,9 @@ test("permissions and pages", async () => {
   const clock = { t: T0 };
   const c = cx(clock);
   const env = envWith(c);
-  await stockCheckTick(env, { gql: fakeShopify(clock).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9 });
+  // no Universal lookups here: the links phase must not reach the real site (the CI runner has
+  // internet, and the real UPC resolved to the real page, which changed what the card showed)
+  await stockCheckTick(env, { gql: fakeShopify(clock).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9, udFetch: async () => new Response("{}", { status: 404 }) });
   const html = (s, status) => new Response(s, { status: status || 200, headers: { "content-type": "text/html" } });
   const redirect = (to) => new Response(null, { status: 303, headers: { location: to } });
   const q = (o) => { const s = new URLSearchParams(); for (const [a, b] of Object.entries(o)) if (b) s.set(a, b); const t = s.toString(); return t ? "?" + t : ""; };
