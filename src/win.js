@@ -33,6 +33,11 @@ import { INTERESTS, REPLY_TO, renderLanding, renderHolding, renderCheckInbox, re
 export const WIN_DO = "win-contest";
 export const WIN_BASE = "/win";
 export const WIN_ADMIN = "/9pocket/win";
+// The links people see (the confirmation email's button and address, the sample's
+// preview link) use the store's own domain: Shopify URL redirects /win, /win/verify
+// and /win/rules point at the worker and pass the query string through (owner,
+// 2026-10-16: "short url this in the email"; checked by the deploy smoke).
+export const LINK_ORIGIN = "https://exorgames.com";
 export const PENDING_MS = 48 * 3600e3;    // a confirmation link works this long
 export const RATE_PER_HOUR = 8;           // sign-ups per connection per hour
 export const PENDING_PER_EMAIL = 3;       // unconfirmed entries per address (re-sends)
@@ -373,7 +378,7 @@ export async function serveWin(request, env, url, ctx, sopts) {
         if (r.error === "closed") return html(renderHolding(cfg, o), 403);
         return html(renderLanding(cfg, { ...o, err: ENTER_ERRORS[r.error] || "That did not save. Please try again.", f }), r.error === "rate" ? 429 : 400);
       }
-      const msg = r.status === "already" ? buildAlreadyEmail({ first: r.first || v.entry.first, cfg, origin }) : buildVerifyEmail({ first: v.entry.first, link: origin + WIN_BASE + "/verify?t=" + r.token, cfg, origin });
+      const msg = r.status === "already" ? buildAlreadyEmail({ first: r.first || v.entry.first, cfg, origin }) : buildVerifyEmail({ first: v.entry.first, link: LINK_ORIGIN + WIN_BASE + "/verify?t=" + r.token, cfg, origin });
       const sent = await sendEmail(env, v.entry.email, msg, { replyTo: REPLY_TO, fetchFn });
       if (r.status === "pending" && !sent.ok) return html(renderLanding(cfg, { ...o, err: "We could not send the confirmation email just now. Please try again in a moment.", f }), 502);
       return html(renderCheckInbox(cfg, { ...o, first: v.entry.first, email: v.entry.email }));
@@ -429,7 +434,7 @@ export async function serveWinStaff(request, env, url, user, form, h) {
       else result = await doCall(env, "/_win/winner-emailed", { email: w.email, result: await sendEmail(env, w.email, buildWinnerEmail({ first: w.first, question: w.q, cfg: d.cfg, origin }), { replyTo: REPLY_TO, fetchFn }) });
     } else if (action === "test_email") {
       const d = await doCall(env, "/_win/cfg");
-      const sent = await sendEmail(env, user.email, buildVerifyEmail({ first: (user.name || "").split(/\s+/)[0] || "there", link: origin + WIN_BASE + "?preview=" + d.previewKey, cfg: d, origin, test: true }), { replyTo: REPLY_TO, fetchFn });
+      const sent = await sendEmail(env, user.email, buildVerifyEmail({ first: (user.name || "").split(/\s+/)[0] || "there", link: LINK_ORIGIN + WIN_BASE + "?preview=" + d.previewKey, cfg: d, origin, test: true }), { replyTo: REPLY_TO, fetchFn });
       result = sent.ok ? { ok: true, message: "A sample confirmation email is on its way to you." } : { ok: false, error: "Email: " + sent.error };
     } else result = { ok: false, error: "Unknown action." };
     return redirect(WIN_ADMIN + q(result.ok ? { msg: result.message || "Saved." } : { err: result.error || "failed" }));

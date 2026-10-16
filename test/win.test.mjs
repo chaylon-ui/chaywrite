@@ -45,7 +45,7 @@ const formReq = (path, fields, ip) => {
   return [new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(ip ? { "cf-connecting-ip": ip } : {}) }, body: body.toString() }), url];
 };
 const getReq = (path) => { const url = new URL("https://w.example" + path); return [new Request(url), url]; };
-const linkIn = (resendCall) => { const m = /https:\/\/w\.example\/win\/verify\?t=([A-Za-z0-9_-]+)/.exec(resendCall.body.html); return m ? m[0] : ""; };
+const linkIn = (resendCall) => { const m = /https:\/\/exorgames\.com\/win\/verify\?t=([A-Za-z0-9_-]+)/.exec(resendCall.body.html); return m ? m[0] : ""; };   // the store domain redirects to the worker
 
 test("entry validation, names, interests, times, the skill question", () => {
   const cfg = { ...DEFAULT_CFG };
@@ -175,7 +175,7 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   r = await serve(...formReq("/win", [["first", "Ann"], ["email", "ann@x.test"], ["rules", "1"], ["consent", "1"]], "203.0.113.9"));
   assert.equal(net.resend().length, 2); assert.match(net.resend()[1].body.subject, /^Confirm your entry/);
   // the click
-  r = await serve(...getReq(link.replace("https://w.example", "")));
+  r = await serve(...getReq(link.replace("https://exorgames.com", "")));
   assert.equal(r.status, 200); page = await r.text();
   assert.match(page, /You're in, Ann! /); assert.match(page, /Sell your video games/);
   assert.equal(shopCalls().length, 2, "a lookup by address, then the create");
@@ -187,7 +187,7 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   let list = await call(c, "/_win/list");
   assert.equal(list.entries.length, 1); assert.equal(list.entries[0].shopify.status, "subscribed"); assert.equal(list.entries[0].shopify.id, "123"); assert.equal(list.pending, 0, "the other pending for the same address went too");
   // the link a second time
-  r = await serve(...getReq(link.replace("https://w.example", "")));
+  r = await serve(...getReq(link.replace("https://exorgames.com", "")));
   assert.equal(r.status, 404); assert.match(await r.text(), /That link isn't valid/);
   // entering again once confirmed: the "already" email, no new pending
   r = await serve(...formReq("/win", [["first", "Ann"], ["email", "ann@x.test"], ["rules", "1"], ["consent", "1"]], "203.0.113.9"));
@@ -207,7 +207,7 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   // no Shopify token: the entry is kept and marked
   const env2 = envWith(c, { SHOPIFY_ADMIN_TOKEN: "" }); const net2 = fakeNet();
   r = await serveWith(env2, net2, formReq("/win", [["first", "Kay"], ["email", "kay@x.test"], ["rules", "1"], ["consent", "1"]], "203.0.113.11"));
-  r = await serveWith(env2, net2, getReq(linkIn(net2.resend()[0]).replace("https://w.example", "")));
+  r = await serveWith(env2, net2, getReq(linkIn(net2.resend()[0]).replace("https://exorgames.com", "")));
   assert.equal(r.status, 200); list = await call(c, "/_win/list");
   assert.equal(list.entries.find((e) => e.email === "kay@x.test").shopify.status, "unconfigured"); assert.equal(net2.shop().length, 0);
   // after the closing time the public sees "entries have closed" and the form is gone
@@ -266,7 +266,7 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   assert.equal((await call(c, "/_win/cfg")).consentRequired, true);
   // sample email to the admin
   r = await serve("/9pocket/win/control", admin, { action: "test_email" }); assert.match(loc(r), /sample confirmation email/);
-  assert.deepEqual(net.resend()[0].body.to, ["boss@x.test"]); assert.match(net.resend()[0].body.html, /sample sent from the 9Pocket admin screen/); assert.match(net.resend()[0].body.html, /Boss/);
+  assert.deepEqual(net.resend()[0].body.to, ["boss@x.test"]); assert.match(net.resend()[0].body.html, /sample sent from the 9Pocket admin screen/); assert.match(net.resend()[0].body.html, /Boss/); assert.match(net.resend()[0].body.html, /href="https:\/\/exorgames\.com\/win\?preview=/);
   // nothing to draw yet
   r = await serve("/9pocket/win/control", admin, { action: "draw" }); assert.match(loc(r), /err=No confirmed entries/);
   // two confirmed entries (one without consent), one test entry
