@@ -96,6 +96,25 @@ export function atlanticToUtc(s) {
   const local = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"));
   return guess + (guess - local);
 }
+/* The owner's day for the visit tally (Atlantic time). */
+export function atlanticDay(ms) {
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Halifax", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms));
+  const g = (t) => (p.find((x) => x.type === t) || {}).value;
+  return `${g("year")}-${g("month")}-${g("day")}`;
+}
+/* Visits / sign-ups / confirmations per Atlantic day (owner, 2026-10-17: "how many
+   visits the contest had today"): win:v:<day> holds three numbers, nothing else. */
+async function bump(cx, day, field) {
+  const k = "win:v:" + day;
+  const v = (await cx.storage.get(k)) || { visits: 0, signups: 0, confirmed: 0 };
+  v[field] = (v[field] || 0) + 1;
+  await cx.storage.put(k, v);
+  return v;
+}
+async function daysOf(cx) {
+  const all = await cx.storage.list({ prefix: "win:v:" });
+  return [...all].map(([k, v]) => ({ day: k.slice(6), visits: v.visits || 0, signups: v.signups || 0, confirmed: v.confirmed || 0 })).sort((a, b) => (a.day < b.day ? 1 : -1));
+}
 export function utcToAtlanticInput(ms) {
   if (!ms) return "";
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Halifax", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(ms));
@@ -166,6 +185,7 @@ export async function winDoFetch(cx, request, url) {
     const token = rnd(24);
     const rec = { email, first: cleanName(body.first), last: cleanName(body.last), consent: !!body.consent, interests: cleanInterests(body.interests), at: now, exp: now + PENDING_MS, preview: !!body.preview && !isOpen(cfg, now) };
     await cx.storage.put("win:p:" + token, rec);
+    if (!rec.preview) await bump(cx, atlanticDay(now), "signups");
     return json({ ok: true, status: "pending", token, first: rec.first });
   }
 
@@ -181,6 +201,7 @@ export async function winDoFetch(cx, request, url) {
     if (existing) return json({ ok: true, status: "already", entry: existing });
     const entry = { email: pend.email, first: pend.first, last: pend.last, consent: pend.consent, interests: pend.interests || [], enteredAt: pend.at, verifiedAt: now, test: !!pend.preview, shopify: { status: pend.consent ? "pending" : "no-consent" } };
     await cx.storage.put("win:e:" + entry.email, entry);
+    if (!entry.test) await bump(cx, atlanticDay(now), "confirmed");
     return json({ ok: true, status: "verified", entry });
   }
 
@@ -232,18 +253,24 @@ export async function winDoFetch(cx, request, url) {
     return json({ ok: true, message: d.emailed.ok ? "The winner has been emailed." : "Email failed: " + d.emailed.error });
   }
 
+  if (p === "/_win/hit" && request.method === "POST") {
+    if (body.kind !== "visit") return json({ ok: false, error: "kind" });
+    return json({ ok: true, day: await bump(cx, atlanticDay(now), "visits") });
+  }
+
   if (p === "/_win/list") {
     const cfg = await cfgOf(cx);
     const list = await entries(cx);
     const pend = await pendings(cx, now);
-    return json({ ok: true, cfg: publicCfg(cfg), entries: list, pending: pend.length, draws: (await cx.storage.get("win:draws")) || [], now });
+    return json({ ok: true, cfg: publicCfg(cfg), entries: list, pending: pend.length, draws: (await cx.storage.get("win:draws")) || [], days: await daysOf(cx), today: atlanticDay(now), now });
   }
 
   if (p === "/_win/health") {
     const cfg = await cfgOf(cx);
     const list = await entries(cx);
     const real = list.filter((e) => !e.test);
-    return json({ ok: true, open: isOpen(cfg, now), closesAt: cfg.closesAt, confirmed: real.length, onList: real.filter((e) => e.shopify && /^(subscribed|updated)$/.test(e.shopify.status)).length, pending: (await pendings(cx, now)).length, drawn: ((await cx.storage.get("win:draws")) || []).length });
+    const today = (await cx.storage.get("win:v:" + atlanticDay(now))) || {};
+    return json({ ok: true, open: isOpen(cfg, now), closesAt: cfg.closesAt, visitsToday: today.visits || 0, signupsToday: today.signups || 0, confirmed: real.length, onList: real.filter((e) => e.shopify && /^(subscribed|updated)$/.test(e.shopify.status)).length, pending: (await pendings(cx, now)).length, drawn: ((await cx.storage.get("win:draws")) || []).length });
   }
 
   return json({ ok: false, error: "no such path" }, 404);
@@ -384,6 +411,10 @@ export async function serveWin(request, env, url, ctx, sopts) {
       return html(renderCheckInbox(cfg, { ...o, first: v.entry.first, email: v.entry.email }));
     }
     if (!live && !preview) return html(renderHolding(cfg, o));
+    if (request.method === "GET" && live && !preview) {   // one tick on the day's visit tally; never slows the page
+      const hit = doCall(env, "/_win/hit", { kind: "visit" }).catch(() => {});
+      if (ctx && ctx.waitUntil) ctx.waitUntil(hit); else await hit;
+    }
     return html(renderLanding(cfg, o));
   }
   return html(renderNotFound(cfg, o), 404);

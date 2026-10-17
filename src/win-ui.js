@@ -148,6 +148,17 @@ export function renderRules(cfg, o) {
 }
 
 /* ---------- /9pocket/win (admins) ---------- */
+/* Visits, sign-ups and confirmations per Atlantic day; the page itself ticks the
+   visit on every live load (not the preview, not the holding page). */
+function traffic(d) {
+  const days = (d.days || []).slice(0, 21), today = d.today || "";
+  const now = days.find((x) => x.day === today) || { visits: 0, signups: 0, confirmed: 0 };
+  const tot = days.reduce((a, x) => ({ visits: a.visits + x.visits, signups: a.signups + x.signups, confirmed: a.confirmed + x.confirmed }), { visits: 0, signups: 0, confirmed: 0 });
+  const pct = (n, v) => (v ? Math.round((100 * n) / v) + "%" : "–");
+  const row = (x, b) => `<tr${b ? ' style="font-weight:700"' : ""}><td>${esc(x.day)}</td><td class="n">${x.visits}</td><td class="n">${x.signups}</td><td class="n">${x.confirmed}</td><td class="n">${pct(x.signups, x.visits)}</td><td class="n">${pct(x.confirmed, x.visits)}</td></tr>`;
+  return `<h2>Traffic</h2><div class="tiles"><div class="tile2"><b>${now.visits}</b><br><span class="muted">visits today (${esc(today)})</span></div><div class="tile2"><b>${now.signups}</b><br><span class="muted">sign-ups today</span></div><div class="tile2"><b>${now.confirmed}</b><br><span class="muted">confirmed today</span></div><div class="tile2"><b>${pct(now.signups, now.visits)}</b><br><span class="muted">of today's visits signed up</span></div></div>
+${days.length ? `<table class="wtab" style="max-width:720px"><tr><th>Day (Atlantic)</th><th class="n">Visits</th><th class="n">Sign-ups</th><th class="n">Confirmed</th><th class="n">Signed up</th><th class="n">Confirmed</th></tr>${days.map((x) => row(x, false)).join("")}${days.length > 1 ? row({ ...tot, day: "Total" }, true) : ""}</table><p class="muted" style="font-size:12px">A visit is one load of the entry page while the contest is open. Phones that scan the code twice count twice; previews and the holding page do not count.</p>` : `<p class="muted">No visits counted yet.</p>`}`;
+}
 const OM_LABEL = { subscribed: "subscribed (new customer)", updated: "subscribed (existing customer)", pending: "waiting", "no-consent": "no consent", unconfigured: "no Shopify token", failed: "failed" };
 export function renderWinAdmin(d, o) {
   o = o || {};
@@ -178,6 +189,7 @@ ${o.msg ? `<div class="wmsg">${esc(o.msg)}</div>` : ""}${o.err ? `<div class="we
 <div class="tile2"><b>${failed}</b><br><span class="muted">Shopify failed</span></div>
 <div class="tile2"><b>${tests.length}</b><br><span class="muted">test entries (preview)</span></div>
 </div>
+${traffic(d)}
 <div class="pg winl"><b>Links</b><br>
 Short address on the QR code and the sign: <a href="${SHORT_URL}" target="_blank" rel="noopener"><code>${SHORT_URL}</code></a> <span class="muted">(a Shopify redirect to <code>${esc(pubUrl)}</code>${live ? "" : "; shows the holding page while closed"})</span><br>
 Preview while closed (admins only - do not print this one): <a href="${esc(prev)}" target="_blank" rel="noopener"><code>${esc(prev)}</code></a><br>

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { winDoFetch, serveWin, serveWinStaff, shopifySubscribe, shopifyScopes, shopifyUrl, validateEntry, atlanticToUtc, utcToAtlanticInput, skillQuestion, csvOf, isOpen, hashIp, cleanName, DEFAULT_CFG, WIN_DO, INTERESTS, PENDING_MS, RATE_PER_HOUR, PENDING_PER_EMAIL } from "../src/win.js";
+import { winDoFetch, serveWin, serveWinStaff, shopifySubscribe, shopifyScopes, shopifyUrl, validateEntry, atlanticToUtc, atlanticDay, utcToAtlanticInput, skillQuestion, csvOf, isOpen, hashIp, cleanName, DEFAULT_CFG, WIN_DO, INTERESTS, PENDING_MS, RATE_PER_HOUR, PENDING_PER_EMAIL } from "../src/win.js";
 import { renderLanding, renderHolding, renderVerified, renderRules, renderWinAdmin, buildVerifyEmail, buildWinnerEmail, closesText, prizeShort } from "../src/win-ui.js";
 
 class MemStorage {
@@ -64,6 +64,7 @@ test("entry validation, names, interests, times, the skill question", () => {
   assert.equal(atlanticToUtc("2026-12-01T12:00"), Date.UTC(2026, 11, 1, 16, 0));
   assert.equal(atlanticToUtc("garbage"), null);
   assert.equal(utcToAtlanticInput(DEFAULT_CFG.closesAt), "2026-10-18T23:59");
+  assert.equal(atlanticDay(T0), "2026-10-17"); assert.equal(atlanticDay(Date.UTC(2026, 9, 18, 2, 30)), "2026-10-17", "11:30 pm Atlantic is still the 17th"); assert.equal(atlanticDay(Date.UTC(2026, 9, 18, 3, 1)), "2026-10-18");
   assert.equal(closesText(DEFAULT_CFG), "Sunday, October 18 at 11:59 pm (Atlantic)");
   assert.equal(prizeShort(DEFAULT_CFG), "$100");
   assert.equal(isOpen({ open: true, closesAt: T0 + 1 }, T0), true); assert.equal(isOpen({ open: true, closesAt: T0 - 1 }, T0), false); assert.equal(isOpen({ open: false }, T0), false);
@@ -84,6 +85,7 @@ test("DO: closed by default, preview entries are tests, pending -> verify -> ent
   assert.equal(pv.status, "pending");
   const v1 = await call(c, "/_win/verify", { token: pv.token });
   assert.equal(v1.status, "verified"); assert.equal(v1.entry.test, true, "made from the preview while closed");
+  assert.deepEqual((await call(c, "/_win/list")).days, [], "test entries are not in the tally");
   // open it
   const op = await call(c, "/_win/cfg", { open: true });
   assert.equal(op.cfg.open, true); assert.match(op.message, /OPEN/);
@@ -94,6 +96,9 @@ test("DO: closed by default, preview entries are tests, pending -> verify -> ent
   const v2 = await call(c, "/_win/verify", { token: e1.token });
   assert.equal(v2.status, "verified"); assert.deepEqual([v2.entry.email, v2.entry.first, v2.entry.last, v2.entry.consent, v2.entry.interests, v2.entry.test, v2.entry.shopify.status], ["bo@x.test", "Bo", "Li", true, ["Lorcana"], false, "pending"]);
   assert.equal((await call(c, "/_win/verify", { token: e1.token })).error, "invalid", "one use");
+  assert.deepEqual((await call(c, "/_win/list")).days, [{ day: "2026-10-17", visits: 0, signups: 1, confirmed: 1 }]);
+  assert.equal((await call(c, "/_win/hit", { kind: "visit" })).ok, true); assert.equal((await call(c, "/_win/hit", { kind: "nope" })).ok, false);
+  assert.equal((await call(c, "/_win/list")).days[0].visits, 1); assert.equal((await call(c, "/_win/health")).visitsToday, 1);
   assert.equal((await call(c, "/_win/enter", { email: "bo@x.test", first: "Bo" })).status, "already");
   // no consent -> never subscribed
   const e2 = await call(c, "/_win/enter", { email: "cy@x.test", first: "Cy", consent: false });
@@ -149,7 +154,9 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   assert.equal((await serve(...getReq("/win/health"))).status, 200);
   const hp = await (await serve(...getReq("/win/health?probe=1"))).json(); assert.equal(hp.shopify, true); assert.equal(hp.customersWrite, true); assert.equal(hp.email, true);
   await call(c, "/_win/cfg", { open: true });
+  assert.deepEqual((await call(c, "/_win/list")).days, [], "the holding page and the preview never count");
   r = await serve(...getReq("/win")); page = await r.text();
+  assert.deepEqual((await call(c, "/_win/list")).days, [{ day: "2026-10-17", visits: 1, signups: 0, confirmed: 0 }], "a live load counts");
   assert.match(page, /Win <b>\$100<\/b> in store credit/); assert.match(page, /Atlantic Entertainment Expo · Moncton, NB · October 17–18, 2026/);
   assert.match(page, /name="first" value="" required/); assert.match(page, /type="email" name="email"/); assert.match(page, /name="consent" value="1" required/); assert.match(page, /name="rules" value="1" required/);
   assert.match(page, /name="website" tabindex="-1"/); assert.match(page, /buy and sell used video games/); assert.match(page, /mallowgames\.com\/sell-your-games\//); assert.match(page, /href="\/win\/rules"/);
@@ -252,7 +259,7 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   assert.equal((await serve("/9pocket/win/export.csv", staff)).status, 403);
   assert.equal((await serve("/9pocket/win/control", staff, { action: "open" })).status, 403);
   let r = await serve("/9pocket/win", admin); assert.equal(r.status, 200); let page = await r.text();
-  assert.match(page, /<h1>Expo contest<\/h1>/); assert.match(page, /CLOSED/); assert.match(page, /Open the contest/); assert.match(page, /Shopify customers: no token on the worker/); assert.match(page, /Omnisend takes its list from Shopify/);
+  assert.match(page, /<h1>Expo contest<\/h1>/); assert.match(page, /No visits counted yet/); assert.match(page, /CLOSED/); assert.match(page, /Open the contest/); assert.match(page, /Shopify customers: no token on the worker/); assert.match(page, /Omnisend takes its list from Shopify/);
   assert.match(page, /https:\/\/exorgames\.com\/win<\/code>/, "the short address the QR carries"); assert.match(page, /\/win-qr\.png/); assert.match(page, /\/win-qr\.svg/); assert.match(page, /\/win-sign\.html/); assert.match(page, /href="\/9pocket\/win\/export\.csv"/); assert.match(page, /\?preview=/); assert.match(page, /No confirmed entries yet/);
   assert.match(page, /value="2026-10-18T23:59"/); assert.match(page, /name="consentRequired" value="1" checked/);
   // open
@@ -273,7 +280,9 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   const mk = async (email, first, consent, preview) => { const e = await call(c, "/_win/enter", { email, first, last: "=SUM(1)", consent, preview }); await call(c, "/_win/verify", { token: e.token }); };
   await call(c, "/_win/cfg", { open: false }); await mk("t@x.test", "Tess", true, true); await call(c, "/_win/cfg", { open: true });
   await mk("a@x.test", "Ann", true); await mk("b@x.test", "Bo", false);
+  await call(c, "/_win/hit", { kind: "visit" }); await call(c, "/_win/hit", { kind: "visit" });
   r = await serve("/9pocket/win", admin); page = await r.text();
+  assert.match(page, /<b>2<\/b><br><span class="muted">visits today \(2026-10-17\)/); assert.match(page, /<tr><td>2026-10-17<\/td><td class="n">2<\/td><td class="n">2<\/td><td class="n">2<\/td><td class="n">100%<\/td><td class="n">100%<\/td><\/tr>/, "two real sign-ups confirmed, the test one not counted");
   assert.match(page, /<b>2<\/b><br><span class="muted">confirmed entries/); assert.match(page, /<b>1<\/b><br><span class="muted">test entries/);
   assert.match(page, /waiting/, "made straight in the DO: Shopify never ran"); assert.match(page, /Retry<\/button>/); assert.match(page, /no consent/);
   // retry once the token is there
