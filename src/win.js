@@ -234,14 +234,40 @@ export async function winDoFetch(cx, request, url) {
   if (p === "/_win/draw" && request.method === "POST") {
     const draws = (await cx.storage.get("win:draws")) || [];
     const drawn = new Set(draws.map((d) => d.email));
-    const pool = (await entries(cx)).filter((e) => !e.test && !drawn.has(e.email));
-    if (!pool.length) return json({ ok: false, error: draws.length ? "Every confirmed entry has been drawn already." : "No confirmed entries to draw from yet." });
+    const all = (await entries(cx)).filter((e) => !e.test);
+    const excluded = all.filter((e) => e.excluded).length;
+    const pool = all.filter((e) => !e.excluded && !drawn.has(e.email));
+    if (!pool.length) return json({ ok: false, error: draws.length || excluded ? "Every eligible confirmed entry has been drawn or excluded already." : "No confirmed entries to draw from yet." });
     const w = pool[randInt(0, pool.length - 1)];
     const sq = skillQuestion();
     const d = { email: w.email, first: w.first, last: w.last, at: now, by: String(body.by || ""), q: sq.q, a: sq.a, emailed: null };
     draws.push(d);
     await cx.storage.put("win:draws", draws);
-    return json({ ok: true, draw: d, message: `Drawn: ${w.first} ${w.last} (${w.email}). ${pool.length} entries were in the hat.` });
+    return json({ ok: true, draw: d, message: `Drawn: ${w.first} ${w.last} (${w.email}) - nothing has been emailed. ${pool.length} entries were in the hat${excluded ? `, ${excluded} excluded` : ""}.` });
+  }
+
+  // Owner, 2026-10-18: staff may have signed up - an entry can be excluded from the
+  // draw (and included again), and a draw that landed on staff can be voided, which
+  // excludes that entry too. Nothing here sends an email.
+  if (p === "/_win/exclude" && request.method === "POST") {
+    const email = normEmail(body.email);
+    const e = await cx.storage.get("win:e:" + email);
+    if (!e) return json({ ok: false, error: "no such entry" });
+    if (body.on) e.excluded = { at: now, by: String(body.by || "") }; else delete e.excluded;
+    await cx.storage.put("win:e:" + email, e);
+    return json({ ok: true, entry: e, message: body.on ? `${e.first} ${e.last} is excluded from the draw.` : `${e.first} ${e.last} is back in the draw.` });
+  }
+
+  if (p === "/_win/void" && request.method === "POST") {
+    const email = normEmail(body.email);
+    const draws = (await cx.storage.get("win:draws")) || [];
+    const d = draws.find((x) => x.email === email && !x.voided);
+    if (!d) return json({ ok: false, error: "no such draw" });
+    d.voided = { at: now, by: String(body.by || "") };
+    await cx.storage.put("win:draws", draws);
+    const e = await cx.storage.get("win:e:" + email);
+    if (e) { e.excluded = { at: now, by: String(body.by || ""), reason: "voided draw" }; await cx.storage.put("win:e:" + email, e); }
+    return json({ ok: true, message: `${d.first} ${d.last}'s draw is voided and the entry excluded - draw again when ready.` });
   }
 
   if (p === "/_win/winner-emailed" && request.method === "POST") {
@@ -453,6 +479,8 @@ export async function serveWinStaff(request, env, url, user, form, h) {
     else if (action === "open" || action === "close") result = await doCall(env, "/_win/cfg", { open: action === "open" });
     else if (action === "draw") result = await doCall(env, "/_win/draw", { by: user.email });
     else if (action === "delete") result = await doCall(env, "/_win/delete", { email: f.email });
+    else if (action === "exclude" || action === "include") result = await doCall(env, "/_win/exclude", { email: f.email, on: action === "exclude", by: user.email });
+    else if (action === "void") result = await doCall(env, "/_win/void", { email: f.email, by: user.email });
     else if (action === "retry") {
       const d = await doCall(env, "/_win/entry", { email: f.email });
       if (!d.ok) result = d;
@@ -460,8 +488,8 @@ export async function serveWinStaff(request, env, url, user, form, h) {
       else result = await doCall(env, "/_win/synced", { email: d.entry.email, result: await shopifySubscribe(env, d.entry, d.cfg, fetchFn) });
     } else if (action === "email_winner") {
       const d = await doCall(env, "/_win/list");
-      const w = (d.draws || []).find((x) => x.email === normEmail(f.email));
-      if (!w) result = { ok: false, error: "No such draw." };
+      const w = (d.draws || []).find((x) => x.email === normEmail(f.email) && !x.voided);
+      if (!w) result = { ok: false, error: "No such draw (or it was voided)." };
       else result = await doCall(env, "/_win/winner-emailed", { email: w.email, result: await sendEmail(env, w.email, buildWinnerEmail({ first: w.first, question: w.q, cfg: d.cfg, origin }), { replyTo: REPLY_TO, fetchFn }) });
     } else if (action === "test_email") {
       const d = await doCall(env, "/_win/cfg");

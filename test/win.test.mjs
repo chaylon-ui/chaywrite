@@ -126,9 +126,19 @@ test("DO: closed by default, preview entries are tests, pending -> verify -> ent
   // the draw: never a test entry, never twice
   const d1 = await call(c, "/_win/draw", { by: "boss@x.test" });
   assert.ok(d1.ok && ["bo@x.test", "cy@x.test"].includes(d1.draw.email) && d1.draw.q && Number.isInteger(d1.draw.a), JSON.stringify(d1));
+  assert.match(d1.message, /nothing has been emailed/);
+  // staff: a draw can be voided (entry excluded), entries excluded / included by hand; the draw skips them
+  const vd = await call(c, "/_win/void", { email: d1.draw.email, by: "boss@x.test" });
+  assert.equal(vd.ok, true); assert.equal((await call(c, "/_win/list")).draws[0].voided.by, "boss@x.test");
+  assert.equal((await call(c, "/_win/list")).entries.find((e) => e.email === d1.draw.email).excluded.reason, "voided draw");
+  assert.equal((await call(c, "/_win/void", { email: d1.draw.email })).ok, false, "voided once");
+  const other = d1.draw.email === "bo@x.test" ? "cy@x.test" : "bo@x.test";
+  assert.equal((await call(c, "/_win/exclude", { email: other, on: true, by: "boss@x.test" })).ok, true);
+  assert.match((await call(c, "/_win/draw", { by: "boss@x.test" })).error, /drawn or excluded already/);
+  assert.match((await call(c, "/_win/exclude", { email: other, on: false })).message, /back in the draw/);
   const d2 = await call(c, "/_win/draw", { by: "boss@x.test" });
-  assert.ok(d2.ok && d2.draw.email !== d1.draw.email);
-  assert.match((await call(c, "/_win/draw", { by: "boss@x.test" })).error, /drawn already/);
+  assert.ok(d2.ok && d2.draw.email === other, JSON.stringify(d2)); assert.match(d2.message, /1 entries were in the hat, 1 excluded/);
+  assert.match((await call(c, "/_win/draw", { by: "boss@x.test" })).error, /drawn or excluded already/);
   const we = await call(c, "/_win/winner-emailed", { email: d1.draw.email, result: { ok: true } });
   assert.equal(we.ok, true);
   assert.equal((await call(c, "/_win/list")).draws[0].emailed.ok, true);
@@ -292,12 +302,24 @@ test("admin screen: admins only; open/close, settings, the draw, winner email, r
   r = await serve("/9pocket/win", admin, null, env2); page = await r.text(); assert.match(page, /the token can create and subscribe customers/); assert.match(page, /customers\/123" target="_blank"/);
   r = await serve("/9pocket/win/control", admin, { action: "retry", email: "b@x.test" }, env2); assert.match(loc(r), /did not tick the email box/);
   // the draw never picks the test entry; the winner email carries the question
-  r = await serve("/9pocket/win/control", admin, { action: "draw" }); assert.match(loc(r), /msg=Drawn: (Ann|Bo) /);
-  const draws = (await call(c, "/_win/list")).draws; assert.equal(draws.length, 1); assert.notEqual(draws[0].email, "t@x.test");
-  r = await serve("/9pocket/win/control", admin, { action: "email_winner", email: draws[0].email }); assert.match(loc(r), /winner has been emailed/);
-  const wm = net.resend().at(-1); assert.deepEqual(wm.body.to, [draws[0].email]); assert.match(wm.body.subject, /You won our AEE draw!/); assert.ok(wm.body.html.includes(draws[0].q + " = ?"));
+  // staff first: Bo is excluded, so the draw can only land on Ann; nothing is emailed by a draw
+  r = await serve("/9pocket/win/control", admin, { action: "exclude", email: "b@x.test" }); assert.match(loc(r), /msg=Bo .* is excluded from the draw/);
+  r = await serve("/9pocket/win", admin); page = await r.text(); assert.match(page, /<span class="badge off">excluded<\/span>/); assert.match(page, /Include<\/button>/); assert.match(page, /Drawing never emails anyone/); assert.match(page, /<b>1<\/b><br><span class="muted">excluded from the draw/);
+  const sentBefore = net.resend().length;
+  r = await serve("/9pocket/win/control", admin, { action: "draw" }); assert.match(loc(r), /msg=Drawn: Ann .*nothing has been emailed/);
+  assert.equal(net.resend().length, sentBefore, "a draw sends no email");
+  let draws = (await call(c, "/_win/list")).draws; assert.equal(draws.length, 1); assert.equal(draws[0].email, "a@x.test");
+  // void it as staff: the card says so, the email button goes, the entry is excluded; include Bo again and draw him
+  r = await serve("/9pocket/win/control", admin, { action: "void", email: "a@x.test" }); assert.match(loc(r), /msg=Ann .*draw is voided/);
+  r = await serve("/9pocket/win", admin); page = await r.text(); assert.match(page, /voided .* by boss@x\.test - staff/); assert.doesNotMatch(page, /<button type="submit" class="primary">Email the winner<\/button>/, "no email button on a voided draw");
+  r = await serve("/9pocket/win/control", admin, { action: "email_winner", email: "a@x.test" }); assert.match(loc(r), /err=No such draw/);
+  r = await serve("/9pocket/win/control", admin, { action: "include", email: "b@x.test" }); assert.match(loc(r), /back in the draw/);
+  r = await serve("/9pocket/win/control", admin, { action: "draw" }); assert.match(loc(r), /msg=Drawn: Bo /);
+  draws = (await call(c, "/_win/list")).draws; assert.equal(draws.length, 2); assert.equal(draws[1].email, "b@x.test"); assert.notEqual(draws[1].email, "t@x.test");
+  r = await serve("/9pocket/win/control", admin, { action: "email_winner", email: draws[1].email }); assert.match(loc(r), /winner has been emailed/);
+  const wm = net.resend().at(-1); assert.deepEqual(wm.body.to, [draws[1].email]); assert.match(wm.body.subject, /You won our AEE draw!/); assert.ok(wm.body.html.includes(draws[1].q + " = ?"));
   r = await serve("/9pocket/win", admin); page = await r.text();
-  assert.match(page, /winner emailed/); assert.match(page, /Skill-testing question: <b>/); assert.match(page, new RegExp("answer <b>" + draws[0].a + "</b>"));
+  assert.match(page, /winner emailed/); assert.match(page, /Skill-testing question: <b>/); assert.match(page, new RegExp("answer <b>" + draws[1].a + "</b>"));
   // CSV: text/csv, formulas defused
   r = await serve("/9pocket/win/export.csv", admin); assert.match(r.headers.get("content-type"), /text\/csv/);
   const csv = await r.text(); assert.match(csv, /^email,first_name,last_name,email_consent,interests,entered_at,confirmed_at,shopify_customer,test\r\n/); assert.match(csv, /a@x\.test,Ann,'=SUM\(1\),yes,,2026-10-17T15:00:00\.000Z,2026-10-17T15:00:00\.000Z,subscribed,\r\n/); assert.match(csv, /t@x\.test,.*,test\r\n/);
