@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-10-17T23:05:58Z",
+ "builtAt": "2026-10-18T23:07:30Z",
  "categories": {
   "3": {
    "groups": 220,
@@ -10,13 +10,13 @@
   "1": {
    "groups": 456,
    "rows": 3975,
-   "priced": 2904,
+   "priced": 2906,
    "withUpc": 1052
   },
   "2": {
    "groups": 658,
    "rows": 1512,
-   "priced": 998,
+   "priced": 997,
    "withUpc": 430
   },
   "71": {
@@ -34,7 +34,7 @@
   "79": {
    "groups": 34,
    "rows": 231,
-   "priced": 222,
+   "priced": 223,
    "withUpc": 0
   },
   "62": {
@@ -46,13 +46,13 @@
   "63": {
    "groups": 103,
    "rows": 1758,
-   "priced": 1615,
+   "priced": 1614,
    "withUpc": 0
   },
   "80": {
    "groups": 54,
    "rows": 750,
-   "priced": 663,
+   "priced": 664,
    "withUpc": 0
   },
   "27": {
@@ -64,7 +64,7 @@
   "24": {
    "groups": 39,
    "rows": 210,
-   "priced": 165,
+   "priced": 164,
    "withUpc": 0
   },
   "74": {
@@ -88,19 +88,19 @@
   "89": {
    "groups": 14,
    "rows": 108,
-   "priced": 84,
+   "priced": 85,
    "withUpc": 0
   },
   "72": {
    "groups": 20,
    "rows": 540,
-   "priced": 191,
+   "priced": 190,
    "withUpc": 0
   },
   "66": {
    "groups": 42,
    "rows": 295,
-   "priced": 148,
+   "priced": 147,
    "withUpc": 0
   },
   "84": {
@@ -130,13 +130,13 @@
   "20": {
    "groups": 177,
    "rows": 1220,
-   "priced": 734,
+   "priced": 733,
    "withUpc": 577
   },
   "16": {
    "groups": 272,
    "rows": 1162,
-   "priced": 726,
+   "priced": 725,
    "withUpc": 254
   },
   "77": {
@@ -148,7 +148,7 @@
   "73": {
    "groups": 54,
    "rows": 160,
-   "priced": 97,
+   "priced": 99,
    "withUpc": 0
   },
   "87": {
