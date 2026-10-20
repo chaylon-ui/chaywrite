@@ -328,6 +328,33 @@ ${use.length ? `<table class="users"><thead><tr><th>Still opened with the PIN</t
 <form method="post" action="${BASE}/admin/control" onsubmit="return ${c.pinOff ? "true" : "confirm('Switch the staff PIN off? Every screen, device and workflow still using it stops working until it signs in or is paired.')"}"><input type="hidden" name="action" value="${c.pinOff ? "pin-on" : "pin-off"}"><div class="act"><button class="${c.pinOff ? "" : "ok"}" type="submit">${c.pinOff ? "Switch the PIN back on" : "Switch the PIN off"}</button></div></form></div>`;
 }
 
+// Who looked at customer data + data retention (owner, 2026-10-20, privacy
+// review; src/access-log.js). Counts and periods only, never a customer.
+const tally = (c) => Object.entries(c || {}).filter(([, v]) => typeof v !== "boolean").map(([k, v]) => v && typeof v === "object" ? k + " (" + tally(v) + ")" : String(v) + " " + k).join(", ");
+function accessSection(o) {
+  const rows = (o.access || []).map((r) => `<tr><td>${esc(when(r.t))}</td><td>${esc(r.who)}<small>${esc(r.via)}</small></td><td>${esc(r.what)}${r.id ? `<small>${esc(r.id)}</small>` : ""}</td></tr>`).join("");
+  const ret = (o.retention && o.retention.retention) || {};
+  const last = o.retention && o.retention.last;
+  const days = (n) => (n === 1 ? "1 day" : n + " days");
+  const periods = [
+    ["Approved or rejected buylists", ret.buylistDays, "BinderPOS keeps the payout record"],
+    ["Buylists never decided", ret.stagedDays],
+    ["Item requests, once decided", ret.requestDays],
+    ["Item requests still open", ret.openRequestDays],
+    ["Contest entries and draws", ret.contestDaysAfterClose, "after the contest closes"],
+    ["Hold-on-arrival rows", ret.heldDays],
+    ["Deck Builder daily stats", ret.deckStatDays],
+    ["This access log", ret.accessLogDays],
+  ].filter((x) => x[1] != null);
+  return `<div class="card"><div class="hz"><h3 style="margin:0">Who looked at customer data</h3><a class="btn" href="${BASE}/admin/access.csv">Download CSV</a></div>
+<p class="muted">Each time an account, a paired device, the automation key or the old PIN opens a screen that shows a customer's details (the buylists, a worksheet, held stock, item requests, contest entries, the BinderPOS list, pickups, the hold report, Deck Builder stats), one line is written here: who, how, which screen, which record. Nothing about the customer is copied. The newest ${(o.access || []).length} are shown; the CSV holds up to 5,000.</p>
+${rows ? `<table class="users"><thead><tr><th>When</th><th>Who</th><th>Screen</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="muted">Nothing has been recorded yet.</p>`}
+</div>
+<div class="card"><h3>Data retention</h3>
+<p class="muted">Personal data is deleted on its own once it is older than the period below. The sweep runs once a day${last ? `; it last ran ${esc(when(last.at))}${last.counts ? ` and removed: ${esc(tally(last.counts))}${last.others ? "; " + esc(tally(last.others)) : ""}` : ""}` : "; it has not run yet"}.</p>
+<table class="users"><thead><tr><th>Data</th><th>Kept</th></tr></thead><tbody>${periods.map((x) => `<tr><td>${esc(x[0])}${x[2] ? `<small>${esc(x[2])}</small>` : ""}</td><td>${esc(days(x[1]))}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
 export function renderAdmin(o) {
   const users = o.users || [];
   const me = o.user;
@@ -359,6 +386,7 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 <div style="margin:8px 0"><span class="muted">Permissions (staff only; admins have all):</span>${permChecks(null)}</div>
 <div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>
 ${deviceCard(o)}
-${pinCard(o.cfg)}`;
+${pinCard(o.cfg)}
+${accessSection(o)}`;
   return shell("Accounts", body, o, true);
 }

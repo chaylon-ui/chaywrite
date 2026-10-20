@@ -130,7 +130,9 @@ export async function staffAccess(request, env, url, perm, k, opts) {
 
 // The shape every module already takes: staffOk(env, origin, k) -> bool, for one request and screen.
 export function staffGate(request, env, url, perm, opts) {
-  return async (_env, _origin, k) => (await staffAccess(request, env, url, perm, k, opts)).ok;
+  // g.last keeps the last answer (who / via) so a screen can log who looked (src/access-log.js)
+  const g = async (_env, _origin, k) => { const r = await staffAccess(request, env, url, perm, k, opts); g.last = r; return r.ok; };
+  return g;
 }
 
 // GET /staff/me.json?perm=pickups - what a staff page shows before it asks for anything.

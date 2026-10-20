@@ -46,13 +46,14 @@ import { sendEmail, buildNoticeEmail, emailConfigured } from "./stage-email.js";
 import { can } from "./stage-auth.js";
 import { BASE } from "./stage-ui.js";
 import { renderRequests, renderRequest } from "./requests-ui.js";
+import { RETENTION } from "./access-log.js";
 
 export const REQUESTS_DO = "requests";
 export const STATUSES = ["open", "ordered", "arrived", "closed", "declined"];
 export const KINDS = ["restock", "special"];
 export const DEFAULT_TO = "charlottetown@exorgames.com";
 export const CHECK_MS = 30 * 60e3;          // stock check for open restock requests
-const KEEP_MS = 180 * 86400e3;              // decided requests are pruned after this
+const KEEP_MS = RETENTION.requestDays * 86400e3;   // decided requests are pruned after this (src/access-log.js)
 const RL_MAX = 8, RL_MS = 3600e3;           // new requests per address per hour
 const MAX_LIST = 500;
 const MAX_QTY = 999;
@@ -248,6 +249,17 @@ export async function requestsDoFetch(cx, request, url) {
     // an inventory webhook: look soon rather than at the next half hour
     try { const at = await cx.storage.getAlarm(); if (at == null || at > cx.now() + 90e3) await cx.storage.setAlarm(cx.now() + 60e3); } catch {}
     return doJson({ ok: true });
+  }
+  // Retention (src/retention.js, once a day): decided requests past
+  // requestDays, open ones past openRequestDays, stale rate rows.
+  if (p === "/_req/sweep" && post) {
+    const now = cx.now(), gone = [];
+    const m = await cx.storage.list({ prefix: "rq:" });
+    for (const [k, v] of m) if (!v || (v.ts || 0) < now - (v.status === "open" ? RETENTION.openRequestDays : RETENTION.requestDays) * 86400e3) gone.push(k);
+    const rl = await cx.storage.list({ prefix: "rqrl:" });
+    for (const [k, v] of rl) if (!v || now - (v.at || 0) > RL_MS) gone.push(k);
+    for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
+    return doJson({ ok: true, counts: { requests: gone.filter((k) => k.startsWith("rq:")).length, rateRows: gone.filter((k) => k.startsWith("rqrl:")).length } });
   }
   if (p === "/_req/health") {
     const all = await listAll(cx);

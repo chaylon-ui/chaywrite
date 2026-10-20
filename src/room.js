@@ -10,6 +10,7 @@ import { AUTOPRICE_DO, autopriceDoFetch, autopriceDoAlarm } from "./autoprice.js
 import { REQUESTS_DO, requestsDoFetch, requestsDoAlarm } from "./requests.js";
 import { STOCK_DO, stockDoFetch } from "./stock-check.js";
 import { winDoFetch, WIN_DO } from "./win.js";
+import { RETENTION } from "./access-log.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -1074,7 +1075,7 @@ export class BinderRoom {
         await this.state.storage.put(mk, m);
       }
       if (Math.random() < 0.02) { // day keys start "…:2…", totals are never swept
-        for (const [prefix, days] of [["dstat:2", 400], ["dlog:2", 14], ["dmiss:2", 60]]) {
+        for (const [prefix, days] of [["dstat:2", RETENTION.deckStatDays], ["dlog:2", 14], ["dmiss:2", 60]]) {
           const cut = prefix.slice(0, -1) + new Date(nowMs - days * 864e5).toISOString().slice(0, 10);
           const all = await this.state.storage.list({ prefix });
           for (const k of all.keys()) if (k < cut) await this.state.storage.delete(k);

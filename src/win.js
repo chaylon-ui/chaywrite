@@ -28,6 +28,7 @@
 
 import { sendEmail, emailConfigured } from "./stage-email.js";
 import { validEmail, normEmail } from "./stage-auth.js";
+import { RETENTION } from "./access-log.js";
 import { INTERESTS, REPLY_TO, renderLanding, renderHolding, renderCheckInbox, renderVerified, renderExpired, renderRules, renderNotFound, renderWinAdmin, renderWinDenied, buildVerifyEmail, buildAlreadyEmail, buildWinnerEmail } from "./win-ui.js";
 
 export const WIN_DO = "win-contest";
@@ -291,6 +292,27 @@ export async function winDoFetch(cx, request, url) {
     return json({ ok: true, cfg: publicCfg(cfg), entries: list, pending: pend.length, draws: (await cx.storage.get("win:draws")) || [], days: await daysOf(cx), today: atlanticDay(now), now });
   }
 
+  // Retention (src/retention.js, once a day): once the contest has been
+  // closed for contestDaysAfterClose, every entry, pending token, rate row
+  // and draw goes; the per-day counts (no names) and the settings stay.
+  if (p === "/_win/sweep" && request.method === "POST") {
+    const cfg = await cfgOf(cx);
+    await pendings(cx, now);   // drops expired pending tokens as it goes
+    const due = !!(cfg.closesAt && now > cfg.closesAt + RETENTION.contestDaysAfterClose * 86400e3);
+    const counts = { due, entries: 0, pending: 0, draws: 0 };
+    if (due) {
+      const gone = [];
+      for (const prefix of ["win:e:", "win:p:", "win:r:"]) for (const k of (await cx.storage.list({ prefix })).keys()) gone.push(k);
+      counts.entries = gone.filter((k) => k.startsWith("win:e:")).length;
+      counts.pending = gone.filter((k) => k.startsWith("win:p:")).length;
+      const draws = (await cx.storage.get("win:draws")) || [];
+      counts.draws = draws.length;
+      if (draws.length) gone.push("win:draws");
+      for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
+    }
+    return json({ ok: true, counts });
+  }
+
   if (p === "/_win/health") {
     const cfg = await cfgOf(cx);
     const list = await entries(cx);
@@ -397,7 +419,7 @@ export function validateEntry(f, cfg) {
 const ENTER_ERRORS = { rate: "Too many entries from this connection. Please try again in an hour.", pending: "We already sent you a confirmation email - check your inbox and spam folder, and tap the link there.", email: "That email address doesn't look right.", closed: "" };
 
 export async function serveWin(request, env, url, ctx, sopts) {
-  const p = url.pathname, origin = url.origin, fetchFn = sopts && sopts.fetchFn, now = Date.now();
+  const p = url.pathname, origin = url.origin, fetchFn = sopts && sopts.fetchFn, now = sopts && sopts.now ? sopts.now() : Date.now();   // sopts.now: a clock for tests
   const html = (s, status) => new Response(s, { status: status || 200, headers: { "content-type": "text/html; charset=utf-8", "referrer-policy": "no-referrer", "x-robots-tag": "noindex", ...noStore } });
   if (p === WIN_BASE + "/health") {
     const h = await doCall(env, "/_win/health");

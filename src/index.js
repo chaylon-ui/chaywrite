@@ -30,6 +30,9 @@ import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
 import { stripInternal, staffGate, staffAccess, serveStaffMe, pinAllowed, INTERNAL_HEADER } from "./staff-access.js";
+import { harden } from "./harden.js";
+import { logAccess } from "./access-log.js";
+import { retentionTick } from "./retention.js";
 
 export { BinderRoom };
 
@@ -54,7 +57,46 @@ async function deckBanned(env, origin, ip) {
 }
 
 export default {
+  // Every answer leaves through harden() (src/harden.js): the usual browser
+  // protections on all of them; staff screens also refuse framing, send no
+  // referrer and are never cached. The routing itself is route() below.
   async fetch(request, env, ctx) {
+    return harden(await route(request, env, ctx), new URL(request.url));
+  },
+
+  // Cron (wrangler.toml [triggers], every 5 min): re-warm the advanced-search
+  // landing bodies so the storefront's default query never reaches BinderPOS
+  // cold (25s+ Pokémon, 60s MTG). Per-game timings go to console.log, so
+  // `wrangler tail` shows them.
+  async scheduled(event, env, ctx) {
+    try { await warmBinderSearch(env); }
+    catch (e) { console.log("binder-warm: failed: " + ((e && e.message) || e)); }
+    // Shelf drops to Discord (quiet unless a DISCORD_WEBHOOK_* secret is set).
+    try { const d = await discordTick(env); if (d && (d.posted || d.errors)) console.log("discord: " + JSON.stringify(d)); }
+    catch (e) { console.log("discord: failed: " + ((e && e.message) || e)); }
+    // Store events -> Discord Scheduled Events (quiet unless DISCORD_BOT_TOKEN is set; at most every 30 min).
+    try { const d = await discordEventsTick(env); if (d && !d.skipped) console.log("discord-events: " + JSON.stringify(d)); }
+    catch (e) { console.log("discord-events: failed: " + ((e && e.message) || e)); }
+    // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
+    // day per game (Magic, then Pokemon), one polite BinderPOS lookup at a
+    // time, off the request path.
+    try { const w = await refreshWantedCards(env); if (w && !w.skipped) console.log("wanted: " + JSON.stringify({ game: w.game || "mtg", count: w.count, tried: w.tried, error: w.error || null })); }
+    catch (e) { console.log("wanted: failed: " + ((e && e.message) || e)); }
+    // Stock check (src/stock-check.js): units of the daily run - orders,
+    // stock scan, lookups - done here where waiting on Shopify costs nothing;
+    // the stock-check DO only plans and stores. Quiet when idle.
+    try { const s = await stockCheckTick(env); if (s && !s.skipped && !s.idle) console.log("stock-check: " + JSON.stringify(s)); }
+    catch (e) { console.log("stock-check: failed: " + ((e && e.message) || e)); }
+    // Data retention (src/retention.js): once a day, personal data past its
+    // period is deleted from every store that holds some; counts only.
+    try { const r = await retentionTick(env); if (r && r.ran) console.log("retention: " + JSON.stringify(r)); }
+    catch (e) { console.log("retention: failed: " + ((e && e.message) || e)); }
+  },
+};
+
+// The worker's routing, one request at a time (the body of fetch() until the
+// 2026-10-20 privacy review; its indentation is kept so the history reads).
+async function route(request, env, ctx) {
     // x-exor-staff is ours alone: set only below, after an account passed (src/staff-access.js)
     request = stripInternal(request);
     const url = new URL(request.url);
@@ -192,11 +234,13 @@ export default {
       return serveAsset(env, "/deckstats.html", request);
     }
     if (url.pathname === "/deckstats.json") {
-      if (!(await gate("decks")(env, url.origin, url.searchParams.get("k")))) {
+      const dg = gate("decks");
+      if (!(await dg(env, url.origin, url.searchParams.get("k")))) {
         return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
       }
       const opIn = url.searchParams.get("op") || "overview";
       const op = ["orders", "misslog", "overview"].indexOf(opIn) > -1 ? opIn : "overview";
+      logAccess(env, ctx, url.origin, { who: dg.last && dg.last.who, via: dg.last && dg.last.via, what: "deck builder stats", id: op });
       const me = encodeURIComponent(request.headers.get("cf-connecting-ip") || "");
       const res = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(url.origin + "/deck-admin?op=" + op + "&me=" + me));
       return new Response(res.body, { status: res.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -290,9 +334,11 @@ export default {
     if (url.pathname === "/hold/health") return serveHoldPage(request, env, url);
     if (url.pathname === "/hold/control" && request.method === "POST") return serveHoldControl(request, env, url, gate("admin"));
     if (url.pathname === "/hold/shadow" || url.pathname === "/hold/shadow.json") {
-      if (!(await gate("admin")(env, url.origin, url.searchParams.get("k")))) {
+      const hg = gate("admin");
+      if (!(await hg(env, url.origin, url.searchParams.get("k")))) {
         return Response.json({ error: "staff key required" }, { status: 403, headers: { "cache-control": "no-store" } });
       }
+      logAccess(env, ctx, url.origin, { who: hg.last && hg.last.who, via: hg.last && hg.last.via, what: "hold report" });
       return serveHoldPage(request, env, url);
     }
     if (url.pathname.startsWith("/buylist/poc/") || url.pathname.startsWith("/buylist/api/")) {
@@ -309,7 +355,7 @@ export default {
     // screen is /9pocket/win inside 9Pocket.
     if (url.pathname === "/win" || url.pathname.startsWith("/win/")) return serveWin(request, env, url, ctx);
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
-      return serveStage(request, env, url, gate("admin"));
+      return serveStage(request, env, url, gate("admin"), { ctx });
     }
 
     // Round 32: our own read-only view of BinderPOS's online buylists
@@ -320,7 +366,10 @@ export default {
       return serveAsset(env, "/buylists.html", request);
     }
     if (url.pathname.startsWith("/portal/") && url.pathname.endsWith(".json")) {
-      return servePortal(request, env, url, gate("portal"));
+      const pg = gate("portal");
+      const res = await servePortal(request, env, url, pg);
+      if (pg.last && pg.last.ok && res && res.status === 200) logAccess(env, ctx, url.origin, { who: pg.last.who, via: pg.last.via, what: "BinderPOS " + url.pathname.slice(8, -5) });
+      return res;
     }
 
     if (url.pathname === "/buyprice.json") {
@@ -512,8 +561,10 @@ export default {
       // "wrong PIN" apart from "network down".
       const cors = { "access-control-allow-origin": "*" };
       if (request.method === "OPTIONS") return new Response(null, { headers: cors });
-      const ok = await gate("pickups")(env, url.origin, url.searchParams.get("k") || "");
+      const pk = gate("pickups");
+      const ok = await pk(env, url.origin, url.searchParams.get("k") || "");
       if (!ok) return Response.json({ error: "staff key required" }, { status: 403, headers: cors });
+      logAccess(env, ctx, url.origin, { who: pk.last && pk.last.who, via: pk.last && pk.last.via, what: "pickups (open draft orders)" });
       return servePickups(env);
     }
     // Mark a pickup done (deletes the open draft order after it's rung
@@ -535,33 +586,7 @@ export default {
       return serveAsset(env, "/tv.html", request);
     }
     return env.ASSETS.fetch(request);
-  },
-
-  // Cron (wrangler.toml [triggers], every 5 min): re-warm the advanced-search
-  // landing bodies so the storefront's default query never reaches BinderPOS
-  // cold (25s+ Pokémon, 60s MTG). Per-game timings go to console.log, so
-  // `wrangler tail` shows them.
-  async scheduled(event, env, ctx) {
-    try { await warmBinderSearch(env); }
-    catch (e) { console.log("binder-warm: failed: " + ((e && e.message) || e)); }
-    // Shelf drops to Discord (quiet unless a DISCORD_WEBHOOK_* secret is set).
-    try { const d = await discordTick(env); if (d && (d.posted || d.errors)) console.log("discord: " + JSON.stringify(d)); }
-    catch (e) { console.log("discord: failed: " + ((e && e.message) || e)); }
-    // Store events -> Discord Scheduled Events (quiet unless DISCORD_BOT_TOKEN is set; at most every 30 min).
-    try { const d = await discordEventsTick(env); if (d && !d.skipped) console.log("discord-events: " + JSON.stringify(d)); }
-    catch (e) { console.log("discord-events: failed: " + ((e && e.message) || e)); }
-    // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
-    // day per game (Magic, then Pokemon), one polite BinderPOS lookup at a
-    // time, off the request path.
-    try { const w = await refreshWantedCards(env); if (w && !w.skipped) console.log("wanted: " + JSON.stringify({ game: w.game || "mtg", count: w.count, tried: w.tried, error: w.error || null })); }
-    catch (e) { console.log("wanted: failed: " + ((e && e.message) || e)); }
-    // Stock check (src/stock-check.js): units of the daily run - orders,
-    // stock scan, lookups - done here where waiting on Shopify costs nothing;
-    // the stock-check DO only plans and stores. Quiet when idle.
-    try { const s = await stockCheckTick(env); if (s && !s.skipped && !s.idle) console.log("stock-check: " + JSON.stringify(s)); }
-    catch (e) { console.log("stock-check: failed: " + ((e && e.message) || e)); }
-  },
-};
+}
 
 async function serveAsset(env, path, request) {
   const u = new URL(request.url);

@@ -68,15 +68,18 @@ import { HOLD_DO } from "./hold.js";
 import { serveRequestsStaff } from "./requests.js";
 import { serveStockStaff } from "./stock-check.js";
 import { serveWinStaff } from "./win.js";
-import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage } from "./stage-ui.js";
+import { RETENTION, accessWhat, logAccess } from "./access-log.js";
+import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage, when } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
   CODE_TTL_MS, CODE_TRIES, CODE_SENDS, CODE_RESEND_MS, CODE_STARTS, DEVICE_DAYS, DEVICE_KEEP, CHALLENGE_COOKIE } from "./stage-auth.js";
 export { safeImage };
 
 export const STAGE_DO = "buylist-stage";
-const KEEP_MS = 90 * 86400e3;
+const KEEP_MS = RETENTION.buylistDays * 86400e3;   // approved / rejected (src/access-log.js RETENTION)
 const PRUNE_EVERY_MS = 24 * 3600e3;
+const SWEEP_EVERY_MS = 20 * 3600e3;                 // the retention sweep is due once a day
+const accKey = (t) => String(1e13 - t).padStart(13, "0");   // newest first in key order
 const MAX_LIST = 300;
 const MINE_MAX = 20;
 const STATUSES = ["staged", "approved", "rejected"];
@@ -686,12 +689,51 @@ export async function stageDoFetch(cx, request, url) {
     for (const [k, v] of m) if (v && v.id === id) { await cx.storage.delete(k); return doJson({ ok: true, name: v.name }); }
     return doJson({ ok: false, error: "no such device" });
   }
+  // Who looked at customer data (src/access-log.js): one row per view, newest first.
+  if (p === "/_stage/access" && post) {
+    const b = await bodyOf(request);
+    const t = cx.now();
+    await cx.storage.put("acc:" + accKey(t) + "-" + newToken().slice(0, 6), { t, who: String(b.who || "").slice(0, 160), via: String(b.via || "").slice(0, 24), what: String(b.what || "").slice(0, 60), id: String(b.id || "").slice(0, 80) });
+    return doJson({ ok: true });
+  }
+  if (p === "/_stage/access") {
+    const limit = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit")) || 200));
+    const m = await cx.storage.list({ prefix: "acc:", limit });
+    return doJson({ ok: true, rows: [...m.values()] });
+  }
+  if (p === "/_stage/retention") return doJson({ ok: true, retention: RETENTION, last: (await cx.storage.get("ret:last")) || null });
+  // The retention sweep (src/retention.js): due once a day unless forced.
+  // Access rows past accessLogDays, decided buylists past buylistDays,
+  // staged ones nobody decided past stagedDays. Records what it removed.
+  if (p === "/_stage/sweep" && post) {
+    const b = await bodyOf(request);
+    const now = cx.now();
+    const last = (await cx.storage.get("ret:last")) || null;
+    if (!b.force && last && now - (last.at || 0) < SWEEP_EVERY_MS) return doJson({ ok: true, skipped: "not due", last });
+    const gone = [];
+    const old = await cx.storage.list({ prefix: "acc:", start: "acc:" + accKey(now - RETENTION.accessLogDays * 86400e3) });
+    for (const k of old.keys()) gone.push(k);
+    const access = gone.length;
+    const m = await cx.storage.list({ prefix: "st:" });
+    for (const [k, v] of m) if (!v || (v.ts || 0) < now - (v.status === "staged" ? RETENTION.stagedDays : RETENTION.buylistDays) * 86400e3) gone.push(k);
+    for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
+    const next = { at: now, counts: { access, buylists: gone.length - access }, others: null };
+    await cx.storage.put("ret:last", next);
+    return doJson({ ok: true, last: next });
+  }
+  if (p === "/_stage/sweep-note" && post) {
+    const b = await bodyOf(request);
+    const last = (await cx.storage.get("ret:last")) || { at: cx.now(), counts: {} };
+    last.others = b.others || null;
+    await cx.storage.put("ret:last", last);
+    return doJson({ ok: true, last });
+  }
   if (p === "/_stage/health") {
     const all = await listAll(cx);
     const counts = {};
     for (const r of all) counts[r.status] = (counts[r.status] || 0) + 1;
     const users = await cx.storage.list({ prefix: "u:" });
-    return doJson({ ok: true, counts, oldestStaged: all.filter((r) => r.status === "staged").map((r) => r.ts).sort()[0] || null, lastNumber: numberOf((await cx.storage.get("seq")) || SEQ_START), accounts: users.size });
+    return doJson({ ok: true, counts, oldestStaged: all.filter((r) => r.status === "staged").map((r) => r.ts).sort()[0] || null, lastNumber: numberOf((await cx.storage.get("seq")) || SEQ_START), accounts: users.size, retention: RETENTION, lastSweep: (await cx.storage.get("ret:last")) || null });
   }
   return doJson({ ok: false, error: "not found" }, 404);
 }
@@ -878,6 +920,19 @@ async function createAccount(env, origin, { email, name, password, role, perms, 
 // /9pocket/login|logout|setup, /9pocket/admin(+/control); the old
 // /buylist/staged addresses redirect here.
 export async function serveStage(request, env, url, staffOk, sopts) {
+  // Every successful GET of a screen that shows a customer's or an order's
+  // details goes to the access log (src/access-log.js): who opened it, how.
+  const seen = {};
+  const res = await serveStageInner(request, env, url, staffOk, sopts, seen);
+  const what = request.method === "GET" && res && res.status === 200 ? accessWhat(url.pathname) : null;
+  if (what && (seen.user || seen.pinOk)) {
+    const acc = staffOk && staffOk.last;
+    logAccess(env, sopts && sopts.ctx, url.origin, { who: seen.user ? seen.user.email : (acc && acc.who) || "staff key", via: seen.user ? "account" : (acc && acc.via) || "key", what: what.what, id: what.id });
+  }
+  return res;
+}
+
+async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   const noStore = { "cache-control": "no-store" };
   const html = (s, status, extra) => new Response(s, { status: status || 200, headers: { "content-type": "text/html; charset=utf-8", ...noStore, ...(extra || {}) } });
   const redirect = (to, extra) => new Response(null, { status: 303, headers: { location: to, ...noStore, ...(extra || {}) } });
@@ -969,6 +1024,7 @@ export async function serveStage(request, env, url, staffOk, sopts) {
   }
 
   const user = await currentUser(request, env, origin);
+  if (seen) { seen.user = user; seen.pinOk = pinOk; }
   const opts = { user, on: stagingOn(env), emailOn: emailConfigured(env), err: url.searchParams.get("err") || "", msg: url.searchParams.get("msg") || "" };
   const toLogin = () => redirect(BASE + "/login" + q({ next: p + (url.search && request.method === "GET" ? url.search : "") }));
   // Item requests (src/requests.js): the list, one request, its control.
@@ -998,6 +1054,17 @@ export async function serveStage(request, env, url, staffOk, sopts) {
     }
     return Response.json(result, { status: result.ok ? 200 : (result.status || 400), headers: noStore });
   }
+  // Who looked at customer data, as a CSV for the privacy file (admins only).
+  if (p === BASE + "/admin/access.csv") {
+    if (!user) return toLogin();
+    if (user.role !== "admin") return html(renderDenied(opts), 403);
+    const j = await doCall(env, origin, "/_stage/access?limit=5000");
+    // a cell starting with = + - @ would run as a formula in a spreadsheet
+    const cell = (v) => { let t = String(v == null ? "" : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
+    const lines = ["time (UTC),time (Atlantic),who,via,screen,record"];
+    for (const r of j.rows || []) lines.push([new Date(r.t).toISOString(), when(r.t), r.who, r.via, r.what, r.id].map(cell).join(","));
+    return new Response(lines.join("\r\n") + "\r\n", { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": "attachment; filename=\"9pocket-access-log.csv\"", ...noStore } });
+  }
   if (p === BASE + "/admin" || p === BASE + "/admin/control") {
     if (!user) return toLogin();
     if (user.role !== "admin") return html(renderDenied(opts), 403);
@@ -1010,7 +1077,9 @@ export async function serveStage(request, env, url, staffOk, sopts) {
     }
     const j = await doCall(env, origin, "/_stage/users");
     const dv = await doCall(env, origin, "/_stage/device-keys");
-    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin), devices: dv.ok ? dv.devices : [], newKey, origin }));
+    const acc = await doCall(env, origin, "/_stage/access?limit=200");
+    const ret = await doCall(env, origin, "/_stage/retention");
+    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin), devices: dv.ok ? dv.devices : [], newKey, origin, access: acc.ok ? acc.rows : [], retention: ret.ok ? ret : null }));
   }
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.

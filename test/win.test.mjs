@@ -151,7 +151,7 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   const clock = { t: T0 }; const c = cx(clock);
   const net = fakeNet(); const env = envWith(c);
   const shopCalls = () => net.shop().filter((c) => !/currentAppInstallation/.test(c.body.query));   // the health probe's scope check aside
-  const serve = (req, url) => serveWin(req, env, url, null, { fetchFn: net.f });
+  const serve = (req, url) => serveWin(req, env, url, null, { fetchFn: net.f, now: () => clock.t });   // the test's clock, not the real one (the contest closed 2026-10-19)
   const key = (await call(c, "/_win/cfg")).previewKey;
   let r = await serve(...getReq("/win"));
   assert.equal(r.status, 200); let page = await r.text();
@@ -215,7 +215,7 @@ test("public pages: holding while closed, preview, the form, the confirmation em
   assert.equal(r.status, 429); assert.match(await r.text(), /Too many entries from this connection/);
   // resend down: told to retry, nothing half-done
   const down = fakeNet({ resendFail: true });
-  const serveWith = (e, n, [req, url]) => serveWin(req, e, url, null, { fetchFn: n.f });
+  const serveWith = (e, n, [req, url]) => serveWin(req, e, url, null, { fetchFn: n.f, now: () => clock.t });
   r = await serveWith(env, down, formReq("/win", [["first", "Zed"], ["email", "zed@x.test"], ["rules", "1"], ["consent", "1"]], "203.0.113.10"));
   assert.equal(r.status, 502); assert.match(await r.text(), /could not send the confirmation email/);
   // rules page, unknown path, expired wording
