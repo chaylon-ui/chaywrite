@@ -12,6 +12,7 @@ import { STOCK_DO, stockDoFetch } from "./stock-check.js";
 import { winDoFetch, WIN_DO } from "./win.js";
 import { RETENTION } from "./access-log.js";
 import { seenDoFetch, SEEN_DO } from "./discord-seen.js";
+import { gwDoFetch, gwDoAlarm, GW_DO } from "./discord-gateway.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -80,6 +81,8 @@ export class BinderRoom {
     try { this.isWinDo = !!env.ROOM?.idFromName(WIN_DO)?.equals?.(state.id); } catch {}
     this.isSeenDo = false;
     try { this.isSeenDo = !!env.ROOM?.idFromName(SEEN_DO)?.equals?.(state.id); } catch {}
+    this.isGwDo = false;
+    try { this.isGwDo = !!env.ROOM?.idFromName(GW_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -185,7 +188,7 @@ export class BinderRoom {
       else await this.state.storage.setAlarm(Math.max(at, this.now() + 1000));
     } catch {}
   }
-  isScreen() { return !(this.isCacheDo || this.isPriceDo || this.isEnrichDo || this.isHoldDo || this.isStageDo || this.isAutoDo || this.isReqDo || this.isStockDo || this.isWinDo || this.isSeenDo); }
+  isScreen() { return !(this.isCacheDo || this.isPriceDo || this.isEnrichDo || this.isHoldDo || this.isStageDo || this.isAutoDo || this.isReqDo || this.isStockDo || this.isWinDo || this.isSeenDo || this.isGwDo); }
   async screenAlarm() {
     await this.ensureSess();
     if (this.controllerId) {
@@ -778,6 +781,18 @@ export class BinderRoom {
     return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s) };
   }
 
+  // The Discord gateway object (src/discord-gateway.js) keeps its socket and
+  // client in gwMem for as long as it stays in memory; `seen` posts what the
+  // socket reports to the discord-seen object.
+  gwCx() {
+    if (!this.gwMem) this.gwMem = {};
+    const seen = async (path, body) => {
+      const r = await this.env.ROOM.get(this.env.ROOM.idFromName(SEEN_DO)).fetch(new Request("https://exor-binder.internal" + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) }));
+      return r.json();
+    };
+    return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s), mem: this.gwMem, seen };
+  }
+
   stageCx() {
     if (!this.stageMem) this.stageMem = {};
     return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s), mem: this.stageMem };
@@ -830,6 +845,7 @@ export class BinderRoom {
     if (this.isStageDo) { await stageDoAlarm(this.stageCx()); return; }
     if (this.isAutoDo) { await autopriceDoAlarm(this.autoCx()); return; }
     if (this.isReqDo) { await requestsDoAlarm(this.reqCx()); return; }
+    if (this.isGwDo) { await gwDoAlarm(this.gwCx()); return; }
     if (this.isCacheDo) {
       // Retired 2026-10-05: the worker's cron (index.js scheduled(), proven
       // live since September) runs the same warm-up, and in the worker the
@@ -924,7 +940,11 @@ export class BinderRoom {
       if (url.pathname.startsWith("/_seen/")) return seenDoFetch(this.seenCx(), request, url);
       return new Response(null, { status: 404 });
     }
-    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/") || url.pathname.startsWith("/_req/") || url.pathname.startsWith("/_sc/") || url.pathname.startsWith("/_win/") || url.pathname.startsWith("/_seen/")) return new Response(null, { status: 404 });
+    if (this.isGwDo) {
+      if (url.pathname.startsWith("/_gw/")) return gwDoFetch(this.gwCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/") || url.pathname.startsWith("/_req/") || url.pathname.startsWith("/_sc/") || url.pathname.startsWith("/_win/") || url.pathname.startsWith("/_seen/") || url.pathname.startsWith("/_gw/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });

@@ -27,6 +27,7 @@ import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
 import { serveDiscordEvents, discordEventsTick } from "./discord-events.js";
 import { serveDiscordSeen, serveInteraction, discordSeenTick } from "./discord-seen.js";
+import { gatewayTick } from "./discord-gateway.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
@@ -81,6 +82,9 @@ export default {
     // Discord "last seen" (src/discord-seen.js): new posts since the last tick -> who was seen when. Counts only in the log.
     try { const d = await discordSeenTick(env); if (d && !d.skipped) console.log("discord-seen: " + JSON.stringify(d)); }
     catch (e) { console.log("discord-seen: failed: " + ((e && e.message) || e)); }
+    // The gateway connection for online status (src/discord-gateway.js): make sure it is up; quiet while it is.
+    try { const g = await gatewayTick(env); if (g && !g.running) console.log("discord-gateway: " + JSON.stringify({ running: false, state: g.state || null, reason: g.reason || g.halted || null })); }
+    catch (e) { console.log("discord-gateway: failed: " + ((e && e.message) || e)); }
     // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
     // day per game (Magic, then Pokemon), one polite BinderPOS lookup at a
     // time, off the request path.

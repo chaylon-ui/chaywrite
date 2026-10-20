@@ -6,10 +6,11 @@
    admins by default, every answer private to the person who asked:
      /lastseen member:@X     "@X last posted 2 days ago (Oct 18, 2026 15:14 Atlantic) in #trades"
      /inactive days:30       members seen posting, but not in the last N days
-   Online / offline presence is NOT tracked: that needs a bot process holding
-   a gateway connection around the clock plus Discord's privileged Presence
-   intent; on Cloudflare that is exactly the Durable Object duration the owner
-   was billed for in October. Posts are what this measures.
+   Online status (owner, later the same day: "I want online status") comes
+   from src/discord-gateway.js: one Durable Object keeps the bot's gateway
+   socket open with the Presence and Server Members intents and posts every
+   presence change and the member list here (/_seen/presence, /_seen/members).
+   So a row knows the last post AND the last time the member was online.
 
    How it watches: the worker's five-minute cron (src/index.js scheduled())
    asks Discord, with the same bot token the events sync uses, for the server's
@@ -41,6 +42,7 @@
 
 import { api, resolveGuild } from "./discord-events.js";
 import { RETENTION } from "./access-log.js";
+import { gatewayStatus, gatewayControl } from "./discord-gateway.js";
 
 export const SEEN_DO = "discord-seen";
 export const COMMANDS_VERSION = 1;
@@ -134,32 +136,84 @@ export async function seenDoFetch(cx, request, url) {
     for (const [ch, c] of Object.entries(b.cursors || {})) if (idOf(ch)) await cx.storage.put("cur:" + idOf(ch), c);
     return json({ ok: true, updated });
   }
+  // Presence from the gateway (src/discord-gateway.js): online / idle / dnd /
+  // offline per member. onlineAt = the last moment the member was known to be
+  // online (kept when they go offline); offlineAt = when they went offline.
+  if (p === "/_seen/presence" && post) {
+    const b = await bodyOf(request);
+    const meta = await metaOf(cx);
+    if (!meta.presenceSince) { meta.presenceSince = cx.now(); if (!meta.startedAt) meta.startedAt = cx.now(); await cx.storage.put("meta", meta); }
+    let updated = 0;
+    for (const r of Array.isArray(b.rows) ? b.rows : []) {
+      const id = idOf(r && r.id); if (!id || !(r.at > 0)) continue;
+      const key = "seen:" + id;
+      const cur = (await cx.storage.get(key)) || { id, n: 0 };
+      const online = r.status === "online" || r.status === "idle" || r.status === "dnd";
+      const next = { ...cur, id, status: online ? r.status : "offline", statusAt: r.at, online };
+      if (r.name) next.name = clean(r.name, 80);
+      if (online) { next.onlineAt = Math.max(cur.onlineAt || 0, r.at); if (r.client) next.client = clean(r.client, 24); }
+      else { next.offlineAt = r.at; if (cur.online) next.onlineAt = Math.max(cur.onlineAt || 0, r.at); }
+      await cx.storage.put(key, next); updated++;
+    }
+    return json({ ok: true, updated });
+  }
+  // The member list from the gateway: mem:<id>. `left` marks departures;
+  // `complete` (every id in a full roster) marks anyone missing as left.
+  if (p === "/_seen/members" && post) {
+    const b = await bodyOf(request); const now = cx.now(); let upserted = 0, left = 0;
+    for (const m of Array.isArray(b.members) ? b.members : []) {
+      const id = idOf(m && m.id); if (!id) continue;
+      const cur = (await cx.storage.get("mem:" + id)) || {};
+      await cx.storage.put("mem:" + id, { id, name: clean(m.name, 80), nick: clean(m.nick, 80), joinedAt: Number(m.joinedAt) || cur.joinedAt || 0, bot: !!m.bot, seenAt: now, left: 0 }); upserted++;
+    }
+    for (const x of Array.isArray(b.left) ? b.left : []) { const id = idOf(x); const cur = id ? await cx.storage.get("mem:" + id) : null; if (cur && !cur.left) { cur.left = now; await cx.storage.put("mem:" + id, cur); left++; } }
+    if (Array.isArray(b.complete)) {
+      const keep = new Set(b.complete.map(idOf));
+      const all = await cx.storage.list({ prefix: "mem:" });
+      for (const [k, v] of all) if (v && !v.left && !keep.has(v.id)) { v.left = now; await cx.storage.put(k, v); left++; }
+    }
+    return json({ ok: true, upserted, left });
+  }
   if (p === "/_seen/user") {
     const id = idOf(url.searchParams.get("id"));
     const row = id ? await cx.storage.get("seen:" + id) : null;
-    return json({ ok: true, row: row || null, meta: await metaOf(cx) });
+    const member = id ? await cx.storage.get("mem:" + id) : null;
+    return json({ ok: true, row: row || null, member: member || null, meta: await metaOf(cx) });
   }
-  // Everyone seen, oldest post first; ?days=N keeps those quiet for at least N days.
+  // Everyone with any activity (a post or being online), quietest first;
+  // ?days=N keeps those quiet for at least N days. `never`: members on the
+  // roster with no activity at all, oldest join first.
   if (p === "/_seen/list") {
     const now = cx.now();
     const days = Math.max(0, Number(url.searchParams.get("days")) || 0);
     const limit = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit")) || 500));
     const m = await cx.storage.list({ prefix: "seen:" });
-    const rows = [...m.values()].filter((r) => r && r.at && (!days || now - r.at >= days * 864e5)).sort((a, b) => a.at - b.at);
-    return json({ ok: true, total: m.size, rows: rows.slice(0, limit), now });
+    const act = (r) => Math.max(r.at || 0, r.onlineAt || 0);
+    const seen = [...m.values()].filter((r) => r && act(r) > 0);
+    const rows = seen.filter((r) => !days || now - act(r) >= days * 864e5).map((r) => ({ ...r, last: act(r) })).sort((a, b) => a.last - b.last);
+    const roster = [...(await cx.storage.list({ prefix: "mem:" })).values()].filter((x) => x && !x.bot && !x.left);
+    const seenIds = new Set(seen.map((r) => r.id));
+    const never = roster.filter((x) => !seenIds.has(x.id) && (!days || now - (x.joinedAt || 0) >= days * 864e5)).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    return json({ ok: true, total: seen.length, members: roster.length, rows: rows.slice(0, limit), never: never.slice(0, limit), now });
   }
-  // Retention (src/retention.js): rows whose last post is past discordSeenDays.
+  // Retention (src/retention.js): rows whose last activity is past
+  // discordSeenDays; roster rows of members gone for discordLeftDays.
   if (p === "/_seen/sweep" && post) {
-    const cut = cx.now() - RETENTION.discordSeenDays * 864e5;
+    const now = cx.now(), cut = now - RETENTION.discordSeenDays * 864e5, cutLeft = now - RETENTION.discordLeftDays * 864e5;
     const m = await cx.storage.list({ prefix: "seen:" });
-    const gone = []; for (const [k, v] of m) if (!v || (v.at || 0) < cut) gone.push(k);
+    const gone = []; for (const [k, v] of m) if (!v || Math.max(v.at || 0, v.onlineAt || 0, v.statusAt || 0) < cut) gone.push(k);
+    const members = gone.length;
+    const r = await cx.storage.list({ prefix: "mem:" });
+    for (const [k, v] of r) if (!v || (v.left && v.left < cutLeft)) gone.push(k);
     for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
-    return json({ ok: true, counts: { members: gone.length } });
+    return json({ ok: true, counts: { members, departed: gone.length - members } });
   }
   if (p === "/_seen/health") {
     const meta = await metaOf(cx);
     const m = await cx.storage.list({ prefix: "seen:" });
-    return json({ ok: true, tracked: m.size, startedAt: meta.startedAt, lastPollAt: meta.lastPollAt, polls: meta.polls, messages: meta.messages, channels: meta.channels, lastError: meta.lastError, commandsVersion: meta.commandsVersion, guild: meta.guildName || meta.guildId || null });
+    const rows = [...m.values()].filter(Boolean);
+    const roster = [...(await cx.storage.list({ prefix: "mem:" })).values()].filter((x) => x && !x.bot && !x.left);
+    return json({ ok: true, tracked: m.size, posters: rows.filter((r) => r.at).length, withPresence: rows.filter((r) => r.onlineAt || r.statusAt).length, onlineNow: rows.filter((r) => r.online).length, roster: roster.length, presenceSince: meta.presenceSince || null, startedAt: meta.startedAt, lastPollAt: meta.lastPollAt, polls: meta.polls, messages: meta.messages, channels: meta.channels, lastError: meta.lastError, commandsVersion: meta.commandsVersion, guild: meta.guildName || meta.guildId || null });
   }
   return json({ ok: false, error: "no such path" }, 404);
 }
@@ -280,21 +334,34 @@ export async function answerCommand(env, body, now) {
   const opt = (n) => { const x = (data.options || []).find((q) => q && q.name === n); return x ? x.value : undefined; };
   const meta = (await doCall(env, "/_seen/meta")).meta;
   const since = meta.startedAt ? " (watching since " + whenAtlantic(meta.startedAt) + " Atlantic; posts from the last pages of each channel before that count too)" : "";
+  const day = (ms) => whenAtlantic(ms).replace(/,? \d\d:\d\d$/, "");
+  const presenceNote = meta.presenceSince ? "Online status counted since " + whenAtlantic(meta.presenceSince) + " Atlantic" : "Online status is not being tracked yet (the gateway connection is not up)";
   if (data.name === "lastseen") {
     const id = idOf(opt("member"));
     if (!id) return reply("Pick a member.");
     const u = data.resolved && data.resolved.users && data.resolved.users[id];
     if (u && u.bot) return reply("<@" + id + "> is a bot; I only track people.");
-    const r = (await doCall(env, "/_seen/user?id=" + id)).row;
-    if (!r) return reply("I have not seen <@" + id + "> post" + since + ".");
-    return reply("<@" + id + "> last posted **" + ago(r.at, now) + "** (" + whenAtlantic(r.at) + " Atlantic) in <#" + r.ch + ">" + (r.n > 1 ? " - " + r.n + " posts seen" : "") + ".");
+    const got = await doCall(env, "/_seen/user?id=" + id);
+    const r = got.row, mb = got.member;
+    if (!r && !mb) return reply("I have not seen <@" + id + "> post or come online" + since + ".");
+    const parts = [];
+    if (r && r.online) parts.push("**Online now**" + (r.client ? " on " + r.client : "") + (r.status && r.status !== "online" ? " (" + r.status + ")" : ""));
+    else if (r && r.onlineAt) parts.push("Last online **" + ago(r.onlineAt, now) + "** (" + whenAtlantic(r.onlineAt) + " Atlantic)");
+    else parts.push(meta.presenceSince ? "Not seen online since " + whenAtlantic(meta.presenceSince) + " Atlantic" : presenceNote);
+    if (r && r.at) parts.push("Last posted **" + ago(r.at, now) + "** (" + whenAtlantic(r.at) + " Atlantic) in <#" + r.ch + ">" + (r.n > 1 ? ", " + r.n + " posts seen" : ""));
+    else parts.push("No posts seen" + since);
+    if (mb && mb.left) parts.push("Left the server " + ago(mb.left, now));
+    else if (mb && mb.joinedAt) parts.push("Joined " + day(mb.joinedAt));
+    return reply("<@" + id + ">: " + parts.join(". ") + ".");
   }
   if (data.name === "inactive") {
     const days = Math.min(3650, Math.max(1, Math.floor(Number(opt("days")) || 30)));
     const l = await doCall(env, "/_seen/list?days=" + days + "&limit=" + MAX_LIST);
-    const lines = (l.rows || []).map((r) => "<@" + r.id + "> - " + ago(r.at, now) + " in <#" + r.ch + ">");
-    const head = lines.length ? "**" + (l.rows.length >= MAX_LIST ? MAX_LIST + "+" : l.rows.length) + " of " + l.total + " tracked members** have not posted for " + days + " days (quietest first):" : "Everyone I have seen (" + l.total + " members) has posted within " + days + " days.";
-    return reply(head + (lines.length ? "\n" + lines.join("\n") : "") + "\nMembers who never posted while I was watching are not listed" + since + ".");
+    const lines = (l.rows || []).map((r) => "<@" + r.id + "> - " + ((r.onlineAt || 0) > (r.at || 0) ? "online " : "posted ") + ago(r.last, now) + ((r.at || 0) >= (r.onlineAt || 0) && r.ch ? " in <#" + r.ch + ">" : ""));
+    const never = (l.never || []).slice(0, Math.max(0, MAX_LIST - lines.length)).map((x) => "<@" + x.id + "> - never seen" + (x.joinedAt ? ", joined " + day(x.joinedAt) : ""));
+    const n = lines.length + never.length;
+    const head = n ? "**" + n + ((l.rows || []).length >= MAX_LIST || (l.never || []).length > never.length ? "+" : "") + " quiet for " + days + " days** (of " + (l.members || l.total) + " members; quietest first):" : "Everyone I know of (" + l.total + " members) has posted or been online within " + days + " days.";
+    return reply(head + (lines.length ? "\n" + lines.join("\n") : "") + (never.length ? "\n" + never.join("\n") : "") + "\n" + presenceNote + "; posts" + since + ".");
   }
   return reply("I do not know that command.");
 }
@@ -317,9 +384,10 @@ export async function serveInteraction(request, env, url) {
 
 export async function serveDiscordSeen(request, env, url, staffOk, sopts) {
   const cors = { "access-control-allow-origin": "*", ...noStore };
+  const gw = async () => { try { const g = await gatewayStatus(env); return { state: g.state, connected: !!g.connected, halted: g.halted || null, lastEventAt: g.lastEventAt || 0, presences: g.presences || 0, reconnects: g.reconnects || 0, guildName: g.guildName || null, memberCount: g.memberCount || null }; } catch (e) { return { state: "unknown", error: String((e && e.message) || e).slice(0, 80) }; } };
   if (url.pathname === "/discord-seen/health") {
     const h = env.ROOM ? await doCall(env, "/_seen/health") : {};
-    return Response.json({ ...h, configured: seenConfigured(env), publicKey: publicKeySet(env), commands: COMMANDS.map((c) => c.name) }, { headers: cors });
+    return Response.json({ ...h, configured: seenConfigured(env), publicKey: publicKeySet(env), commands: COMMANDS.map((c) => c.name), gateway: await gw() }, { headers: cors });
   }
   if (!(await staffOk(env, url.origin, url.searchParams.get("k")))) return Response.json({ error: "staff PIN required" }, { status: 403, headers: cors });
   if (url.pathname === "/discord-seen/preview.json") {
@@ -331,7 +399,17 @@ export async function serveDiscordSeen(request, env, url, staffOk, sopts) {
     setup.push("Developer Portal > the app > General Information > Interactions Endpoint URL = " + url.origin + "/discord-seen/interactions (save; Discord checks it with a signed ping)");
     if ((meta.commandsVersion || 0) !== COMMANDS_VERSION) setup.push("the slash commands register on the next poll; if that fails with Missing Access, re-invite the bot with the applications.commands scope: https://discord.com/oauth2/authorize?client_id=" + (meta.appId || "APP_ID") + "&scope=bot%20applications.commands&permissions=66560");
     setup.push("in every channel that should count, the bot's role needs View Channel + Read Message History");
-    return Response.json({ ...h, configured: seenConfigured(env), publicKey: publicKeySet(env), appId: meta.appId, guild: { id: meta.guildId, name: meta.guildName }, pollEvery: "5 min", backfill: BACKFILL_PAGES * 100 + " messages per channel", commands: COMMANDS, commandsVersion: { registered: meta.commandsVersion || 0, current: COMMANDS_VERSION }, interactionsUrl: url.origin + "/discord-seen/interactions", setup, retentionDays: RETENTION.discordSeenDays }, { headers: cors });
+    const gateway = await gw();
+    if (gateway.halted || !gateway.connected) setup.push("online status: Developer Portal > the app > Bot > Privileged Gateway Intents: turn on Presence Intent and Server Members Intent and save (the gateway connection closes with 4014 without them; it retries within the hour, or POST /discord-seen/gateway/start)");
+    return Response.json({ ...h, configured: seenConfigured(env), publicKey: publicKeySet(env), appId: meta.appId, guild: { id: meta.guildId, name: meta.guildName }, pollEvery: "5 min", backfill: BACKFILL_PAGES * 100 + " messages per channel", commands: COMMANDS, commandsVersion: { registered: meta.commandsVersion || 0, current: COMMANDS_VERSION }, interactionsUrl: url.origin + "/discord-seen/interactions", gateway, setup, retentionDays: RETENTION.discordSeenDays }, { headers: cors });
+  }
+  // The gateway connection (src/discord-gateway.js): state, start / stop / reset (reset drops the saved session).
+  if (url.pathname === "/discord-seen/gateway.json") return Response.json(await gatewayStatus(env), { headers: cors });
+  if (url.pathname.startsWith("/discord-seen/gateway/") && request.method === "POST") {
+    const action = url.pathname.slice("/discord-seen/gateway/".length);
+    if (action === "start") return Response.json(await gatewayControl(env, "start"), { headers: cors });
+    if (action === "reset") return Response.json(await gatewayControl(env, "start", { fresh: true }), { headers: cors });
+    if (action === "stop") return Response.json(await gatewayControl(env, "stop"), { headers: cors });
   }
   if (url.pathname === "/discord-seen/poll" && request.method === "POST") {
     if (!seenConfigured(env)) return Response.json({ ok: false, error: "DISCORD_BOT_TOKEN is not set" }, { status: 503, headers: cors });

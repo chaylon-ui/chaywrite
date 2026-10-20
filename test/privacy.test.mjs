@@ -198,7 +198,7 @@ test("retentionTick: the 9Pocket DO decides whether a sweep is due; the other st
   const r1 = await retentionTick(env);
   assert.equal(r1.ran, true);
   assert.deepEqual(r1.stage, { access: 0, buylists: 0 });
-  assert.deepEqual(r1.others, { requests: { requests: 1, rateRows: 0 }, contest: { due: false, entries: 0, pending: 0, draws: 0 }, discord: { members: 1 } });
+  assert.deepEqual(r1.others, { requests: { requests: 1, rateRows: 0 }, contest: { due: false, entries: 0, pending: 0, draws: 0 }, discord: { members: 1, departed: 0 } });
   assert.deepEqual((await call(stageDoFetch, stores["buylist-stage"], "/_stage/retention")).last.others, r1.others);
   assert.deepEqual(await retentionTick(env), { skipped: "not due" });
   clock.t += DAY;
