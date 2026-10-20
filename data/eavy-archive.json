@@ -1,7 +1,7 @@
 {
 "source": "https://eavy-archive.com/",
 "credit": "'Eavy Archive - box-art recipes collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)",
-"generated": "2026-10-13T12:48:45Z",
+"generated": "2026-10-20T10:11:46Z",
 "count": 52,
 "pages": {
 "https://eavy-archive.com/40k/adepta-sororitas/": {
@@ -12257,6 +12257,57 @@
 "faction": "seraphon",
 "sub": "",
 "schemes": [
+{
+"slug": "aggradon-lancers",
+"name": "Aggradon Lancers",
+"areas": [
+{
+"slug": "aggradon-scales",
+"name": "Aggradon Scales",
+"paints": [
+"Khorne Red",
+"Wild Rider Red",
+"Rhinox Hide",
+"Previous Mix",
+"Abaddon Black",
+"Bestigor Flesh",
+"Ushabti Bone",
+"Wraithbone"
+]
+},
+{
+"slug": "aggradon-spines",
+"name": "Aggradon Spines",
+"paints": [
+"Abaddon Black",
+"Khorne Red",
+"Ushabti Bone",
+"Wraithbone"
+]
+},
+{
+"slug": "aggradon-belly",
+"name": "Aggradon Belly",
+"paints": [
+"Bestigor Flesh",
+"Wraithbone",
+"Khorne Red",
+"Wild Rider Red",
+"Screaming Skull"
+]
+},
+{
+"slug": "aggradon-eyes",
+"name": "Aggradon Eyes",
+"paints": [
+"Averland Sunset",
+"White Scar",
+"Wraithbone",
+"Casandora Yellow"
+]
+}
+]
+},
 {
 "slug": "kroxigors",
 "name": "Kroxigors",
