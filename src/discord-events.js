@@ -168,7 +168,7 @@ const MAX_PAUSE_MS = 15e3;
    bucket is empty the call pauses for its reset (CPU-free, up to 15 s) before
    returning, and a 429 is slept off once and retried. A 403 is marked
    `forbidden` so the caller stops instead of failing every event the same way. */
-async function api(env, method, path, body, fetchFn, retried) {
+export async function api(env, method, path, body, fetchFn, retried) {
   const f = fetchFn || fetch;
   const r = await f(API + path, {
     method,

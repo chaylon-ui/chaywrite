@@ -344,6 +344,7 @@ function accessSection(o) {
     ["Contest entries and draws", ret.contestDaysAfterClose, "after the contest closes"],
     ["Hold-on-arrival rows", ret.heldDays],
     ["Deck Builder daily stats", ret.deckStatDays],
+    ["Discord last-seen rows", ret.discordSeenDays, "since the member's last post"],
     ["This access log", ret.accessLogDays],
   ].filter((x) => x[1] != null);
   return `<div class="card"><div class="hz"><h3 style="margin:0">Who looked at customer data</h3><a class="btn" href="${BASE}/admin/access.csv">Download CSV</a></div>

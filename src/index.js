@@ -26,6 +26,7 @@ import { serveAutoprice, AUTOPRICE_DO } from "./autoprice.js";
 import { servePortal } from "./portal.js";
 import { serveDiscord, discordTick } from "./discord.js";
 import { serveDiscordEvents, discordEventsTick } from "./discord-events.js";
+import { serveDiscordSeen, serveInteraction, discordSeenTick } from "./discord-seen.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
@@ -77,6 +78,9 @@ export default {
     // Store events -> Discord Scheduled Events (quiet unless DISCORD_BOT_TOKEN is set; at most every 30 min).
     try { const d = await discordEventsTick(env); if (d && !d.skipped) console.log("discord-events: " + JSON.stringify(d)); }
     catch (e) { console.log("discord-events: failed: " + ((e && e.message) || e)); }
+    // Discord "last seen" (src/discord-seen.js): new posts since the last tick -> who was seen when. Counts only in the log.
+    try { const d = await discordSeenTick(env); if (d && !d.skipped) console.log("discord-seen: " + JSON.stringify(d)); }
+    catch (e) { console.log("discord-seen: failed: " + ((e && e.message) || e)); }
     // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
     // day per game (Magic, then Pokemon), one polite BinderPOS lookup at a
     // time, off the request path.
@@ -382,6 +386,16 @@ async function route(request, env, ctx) {
     if (url.pathname.startsWith("/discord/")) return serveDiscord(request, env, url, gate("admin"));
     // Store events as Discord Scheduled Events: staff preview / sync-now / test (src/discord-events.js).
     if (url.pathname.startsWith("/discord-events/")) return serveDiscordEvents(request, env, url, gate("admin"));
+    // Discord "last seen" (src/discord-seen.js): slash commands arrive signed from
+    // Discord at /interactions (public, Ed25519-checked); health is counts only;
+    // the rest is staff. The member list is customer-ish data: logged.
+    if (url.pathname === "/discord-seen/interactions") return serveInteraction(request, env, url);
+    if (url.pathname.startsWith("/discord-seen/")) {
+      const sg = gate("admin");
+      const res = await serveDiscordSeen(request, env, url, sg, { ctx });
+      if (url.pathname === "/discord-seen/list.json" && sg.last && sg.last.ok && res.status === 200) logAccess(env, ctx, url.origin, { who: sg.last.who, via: sg.last.via, what: "Discord last-seen list" });
+      return res;
+    }
 
     if (url.pathname === "/reviews.json") {
       return serveReviews(request, env, ctx);

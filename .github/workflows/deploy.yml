@@ -219,6 +219,10 @@ jobs:
           echo "/win response headers (expect nosniff, referrer-policy strict-origin-when-cross-origin, HSTS; no x-frame-options):"; curl -sS -D - -o /dev/null --max-time 20 "https://exor-binder.nevski.workers.dev/win" | grep -i -E '^(x-frame-options|referrer-policy|x-content-type-options|strict-transport-security):' || true
           curl -sS -o /dev/null -w '/9pocket/admin/access.csv no session: HTTP %{http_code} -> %{redirect_url} (expect 303 to /login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/admin/access.csv" || true
           echo "retention periods + last sweep (from /9pocket/health): $(curl -sS --max-time 20 'https://exor-binder.nevski.workers.dev/9pocket/health' | grep -o '"retention":{[^}]*}\|"lastSweep":[^}]*}' || echo 'none yet')"
+          echo "=== Discord last seen (src/discord-seen.js) ==="
+          echo -n "last-seen health (counts only): "; curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/discord-seen/health" | head -c 600; echo
+          curl -sS -o /dev/null -w '/discord-seen/interactions unsigned POST: HTTP %{http_code} (expect 401 once DISCORD_PUBLIC_KEY is set, 501 before)\n' --max-time 20 -X POST -H 'content-type: application/json' -d '{"type":1}' "https://exor-binder.nevski.workers.dev/discord-seen/interactions" || true
+          curl -sS -o /dev/null -w '/discord-seen/preview.json no key: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/discord-seen/preview.json" || true
           curl -sS -o /dev/null -w '/9pocket/b/x no session: HTTP %{http_code} (expect 303 to /login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/b/01700000000000-abcd" || true
           curl -sS -o /dev/null -w '/9pocket/admin no session: HTTP %{http_code} (expect 303 to /login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/admin" || true
           curl -sS -o /dev/null -w '/9pocket/control no session: HTTP %{http_code} (expect 403)\n' --max-time 20 -X POST -H 'content-type: application/json' -d '{"id":"x","action":"approve"}' "https://exor-binder.nevski.workers.dev/9pocket/control" || true
@@ -594,6 +598,10 @@ jobs:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           DISCORD_EVENTS_DAYS: ${{ secrets.DISCORD_EVENTS_DAYS }}
+          # Discord "last seen" slash commands (src/discord-seen.js): the app's
+          # PUBLIC KEY (Developer Portal > General Information) verifies Discord's
+          # signed interaction posts. Without it the endpoint answers 501.
+          DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
           # ntfy push for the sealed auto-pricer's daily digest (src/autoprice.js):
           # AUTOPRICE_NTFY = topic name on ntfy.sh or a full https://server/topic
           # URL; AUTOPRICE_NTFY_TOKEN = optional access token for that server.
@@ -620,7 +628,7 @@ jobs:
           # worker understands (src/discord.js, src/discord-events.js, src/enrich.js, src/autoprice.js, src/repo-data.js) is listed
           # above; each one that is set becomes the worker secret of the same name, the rest are skipped.
           n=0
-          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE DISCORD_BOT_TOKEN DISCORD_GUILD_ID DISCORD_EVENTS_DAYS AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM AUTOPRICE_EMAIL_TO GITHUB_DATA_TOKEN STAFF_AUTOMATION_KEY; do
+          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE DISCORD_BOT_TOKEN DISCORD_GUILD_ID DISCORD_EVENTS_DAYS DISCORD_PUBLIC_KEY AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM AUTOPRICE_EMAIL_TO GITHUB_DATA_TOKEN STAFF_AUTOMATION_KEY; do
             val="${!name}"
             if [ -n "$val" ]; then
               printf '%s' "$val" | npx wrangler@4 secret put "$name" && n=$((n+1))

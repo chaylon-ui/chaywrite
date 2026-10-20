@@ -3,7 +3,7 @@
    also refuse to be framed, send no referrer and are never cached.
    WebSocket upgrades pass through untouched. Existing headers win. */
 
-export const STAFF_PREFIXES = ["/9pocket", "/staff", "/pickups", "/admin", "/autoprice", "/portal", "/deckstats", "/hold", "/buylist/staged", "/buylist/poc", "/discord", "/discord-events", "/enrich"];
+export const STAFF_PREFIXES = ["/9pocket", "/staff", "/pickups", "/admin", "/autoprice", "/portal", "/deckstats", "/hold", "/buylist/staged", "/buylist/poc", "/discord", "/discord-events", "/discord-seen", "/enrich"];
 
 export function isStaffPath(p) {
   return STAFF_PREFIXES.some((x) => p === x || p.startsWith(x + "/") || p.startsWith(x + "."));

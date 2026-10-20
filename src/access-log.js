@@ -20,6 +20,7 @@ export const RETENTION = {
   contestDaysAfterClose: 90,   // contest entries, pending tokens and draws, counted from the contest's closing time
   heldDays: 30,                // hold-on-arrival rows (src/hold.js prunes these itself)
   deckStatDays: 90,            // deck-builder usage stats by day (src/room.js)
+  discordSeenDays: 730,        // Discord "last seen" rows: a member whose last post is older than this (src/discord-seen.js)
 };
 
 const STAGE = "buylist-stage";   // the 9Pocket DO (src/stage.js STAGE_DO; not imported to keep this module cycle-free)

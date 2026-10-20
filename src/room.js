@@ -11,6 +11,7 @@ import { REQUESTS_DO, requestsDoFetch, requestsDoAlarm } from "./requests.js";
 import { STOCK_DO, stockDoFetch } from "./stock-check.js";
 import { winDoFetch, WIN_DO } from "./win.js";
 import { RETENTION } from "./access-log.js";
+import { seenDoFetch, SEEN_DO } from "./discord-seen.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -77,6 +78,8 @@ export class BinderRoom {
     // And for the Expo contest (src/win.js): /_win/* only.
     this.isWinDo = false;
     try { this.isWinDo = !!env.ROOM?.idFromName(WIN_DO)?.equals?.(state.id); } catch {}
+    this.isSeenDo = false;
+    try { this.isSeenDo = !!env.ROOM?.idFromName(SEEN_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -182,7 +185,7 @@ export class BinderRoom {
       else await this.state.storage.setAlarm(Math.max(at, this.now() + 1000));
     } catch {}
   }
-  isScreen() { return !(this.isCacheDo || this.isPriceDo || this.isEnrichDo || this.isHoldDo || this.isStageDo || this.isAutoDo || this.isReqDo || this.isStockDo || this.isWinDo); }
+  isScreen() { return !(this.isCacheDo || this.isPriceDo || this.isEnrichDo || this.isHoldDo || this.isStageDo || this.isAutoDo || this.isReqDo || this.isStockDo || this.isWinDo || this.isSeenDo); }
   async screenAlarm() {
     await this.ensureSess();
     if (this.controllerId) {
@@ -771,6 +774,10 @@ export class BinderRoom {
     return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s), mem: this.winMem };
   }
 
+  seenCx() {
+    return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s) };
+  }
+
   stageCx() {
     if (!this.stageMem) this.stageMem = {};
     return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s), mem: this.stageMem };
@@ -913,7 +920,11 @@ export class BinderRoom {
       if (url.pathname.startsWith("/_win/")) return winDoFetch(this.winCx(), request, url);
       return new Response(null, { status: 404 });
     }
-    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/") || url.pathname.startsWith("/_req/") || url.pathname.startsWith("/_sc/") || url.pathname.startsWith("/_win/")) return new Response(null, { status: 404 });
+    if (this.isSeenDo) {
+      if (url.pathname.startsWith("/_seen/")) return seenDoFetch(this.seenCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/") || url.pathname.startsWith("/_req/") || url.pathname.startsWith("/_sc/") || url.pathname.startsWith("/_win/") || url.pathname.startsWith("/_seen/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
