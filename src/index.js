@@ -83,7 +83,7 @@ export default {
     try { const d = await discordSeenTick(env); if (d && !d.skipped) console.log("discord-seen: " + JSON.stringify(d)); }
     catch (e) { console.log("discord-seen: failed: " + ((e && e.message) || e)); }
     // The gateway connection for online status (src/discord-gateway.js): make sure it is up; quiet while it is.
-    try { const g = await gatewayTick(env); if (g && !g.running) console.log("discord-gateway: " + JSON.stringify({ running: false, state: g.state || null, reason: g.reason || g.halted || null })); }
+    try { const g = await gatewayTick(env); if (g && !g.running && g.reason !== "stopped by staff") console.log("discord-gateway: " + JSON.stringify({ running: false, state: g.state || null, reason: g.reason || g.halted || null })); }
     catch (e) { console.log("discord-gateway: failed: " + ((e && e.message) || e)); }
     // The sell page's "cards we need most" (src/wanted.js): rebuilt once a
     // day per game (Magic, then Pokemon), one polite BinderPOS lookup at a

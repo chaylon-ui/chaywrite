@@ -98,7 +98,7 @@ export function rowOf(m, channel) {
 /* ---- the DO side ---------------------------------------------------------- */
 
 async function bodyOf(request) { try { return (await request.json()) || {}; } catch { return {}; } }
-const metaOf = async (cx) => (await cx.storage.get("meta")) || { startedAt: null, lastPollAt: 0, polls: 0, messages: 0, channels: 0, lastError: null, guildId: null, guildName: null, appId: null, commandsVersion: 0 };
+const metaOf = async (cx) => (await cx.storage.get("meta")) || { startedAt: null, lastPollAt: 0, polls: 0, messages: 0, channels: 0, lastError: null, guildId: null, guildName: null, appId: null, commandsVersion: 0, paused: false, pausedAt: 0 };
 
 export async function seenDoFetch(cx, request, url) {
   const p = url.pathname, post = request.method === "POST";
@@ -213,7 +213,7 @@ export async function seenDoFetch(cx, request, url) {
     const m = await cx.storage.list({ prefix: "seen:" });
     const rows = [...m.values()].filter(Boolean);
     const roster = [...(await cx.storage.list({ prefix: "mem:" })).values()].filter((x) => x && !x.bot && !x.left);
-    return json({ ok: true, tracked: m.size, posters: rows.filter((r) => r.at).length, withPresence: rows.filter((r) => r.onlineAt || r.statusAt).length, onlineNow: rows.filter((r) => r.online).length, roster: roster.length, presenceSince: meta.presenceSince || null, startedAt: meta.startedAt, lastPollAt: meta.lastPollAt, polls: meta.polls, messages: meta.messages, channels: meta.channels, lastError: meta.lastError, commandsVersion: meta.commandsVersion, guild: meta.guildName || meta.guildId || null });
+    return json({ ok: true, paused: !!meta.paused, pausedAt: meta.pausedAt || 0, tracked: m.size, posters: rows.filter((r) => r.at).length, withPresence: rows.filter((r) => r.onlineAt || r.statusAt).length, onlineNow: rows.filter((r) => r.online).length, roster: roster.length, presenceSince: meta.presenceSince || null, startedAt: meta.startedAt, lastPollAt: meta.lastPollAt, polls: meta.polls, messages: meta.messages, channels: meta.channels, lastError: meta.lastError, commandsVersion: meta.commandsVersion, guild: meta.guildName || meta.guildId || null });
   }
   return json({ ok: false, error: "no such path" }, 404);
 }
@@ -275,6 +275,7 @@ export async function discordSeenTick(env, opts) {
   if (!seenConfigured(env) || !env.ROOM) return null;
   const now = o.now || Date.now();
   const meta = (await doCall(env, "/_seen/meta")).meta;
+  if (meta.paused) return { skipped: "paused" };   // owner, 2026-10-20: "just cancel the bot for now" - nothing is read until /discord-seen/resume
   if (!o.force && now - (meta.lastPollAt || 0) < POLL_GAP_MS) return { skipped: "not due" };
   const out = { polled: 0, rows: 0, denied: 0, registered: false };
   try {
@@ -312,6 +313,29 @@ export async function discordSeenTick(env, opts) {
     await doCall(env, "/_seen/meta", { lastPollAt: now, lastError: out.error });
   }
   return out;
+}
+
+/* Pause (owner, 2026-10-20: "just cancel the bot for now"): the slash
+   commands are removed from the server, the gateway connection is stopped
+   and the poll stands down; what was collected stays until the retention
+   sweep or a wipe. Resume puts it all back on the next poll. */
+export async function pauseSeen(env, fetchFn) {
+  const meta = (await doCall(env, "/_seen/meta")).meta;
+  const out = { ok: true, paused: true, commandsRemoved: false, gateway: null };
+  if (meta.appId && meta.guildId && seenConfigured(env)) {
+    try { await api(env, "PUT", "/applications/" + meta.appId + "/guilds/" + meta.guildId + "/commands", [], fetchFn); out.commandsRemoved = true; }
+    catch (e) { out.commandsError = String((e && e.message) || e).slice(0, 160); }
+  }
+  try { out.gateway = await gatewayControl(env, "stop"); } catch (e) { out.gateway = { error: String((e && e.message) || e).slice(0, 80) }; }
+  await doCall(env, "/_seen/meta", { paused: true, pausedAt: Date.now(), commandsVersion: 0 });
+  return out;
+}
+export async function resumeSeen(env, fetchFn) {
+  await doCall(env, "/_seen/meta", { paused: false, pausedAt: 0 });
+  let gateway = null;
+  try { gateway = await gatewayControl(env, "start"); } catch (e) { gateway = { error: String((e && e.message) || e).slice(0, 80) }; }
+  const tick = await discordSeenTick(env, { force: true, fetchFn });   // polls now and registers the commands again
+  return { ok: true, paused: false, gateway, tick };
 }
 
 /* ---- Discord -> us: slash commands -------------------------------------- */
@@ -394,6 +418,7 @@ export async function serveDiscordSeen(request, env, url, staffOk, sopts) {
     const h = await doCall(env, "/_seen/health");
     const meta = (await doCall(env, "/_seen/meta")).meta;
     const setup = [];
+    if (meta.paused) setup.push("PAUSED since " + new Date(meta.pausedAt || 0).toISOString() + " (owner): no polling, no slash commands, gateway stopped; POST /discord-seen/resume brings it back");
     if (!seenConfigured(env)) setup.push("set DISCORD_BOT_TOKEN (the events bot's token)");
     if (!publicKeySet(env)) setup.push("add the GitHub Actions secret DISCORD_PUBLIC_KEY = the PUBLIC KEY on the app's General Information page (Developer Portal), then redeploy");
     setup.push("Developer Portal > the app > General Information > Interactions Endpoint URL = " + url.origin + "/discord-seen/interactions (save; Discord checks it with a signed ping)");
@@ -401,7 +426,7 @@ export async function serveDiscordSeen(request, env, url, staffOk, sopts) {
     setup.push("in every channel that should count, the bot's role needs View Channel + Read Message History");
     const gateway = await gw();
     if (gateway.halted || !gateway.connected) setup.push("online status: Developer Portal > the app > Bot > Privileged Gateway Intents: turn on Presence Intent and Server Members Intent and save (the gateway connection closes with 4014 without them; it retries within the hour, or POST /discord-seen/gateway/start)");
-    return Response.json({ ...h, configured: seenConfigured(env), publicKey: publicKeySet(env), appId: meta.appId, guild: { id: meta.guildId, name: meta.guildName }, pollEvery: "5 min", backfill: BACKFILL_PAGES * 100 + " messages per channel", commands: COMMANDS, commandsVersion: { registered: meta.commandsVersion || 0, current: COMMANDS_VERSION }, interactionsUrl: url.origin + "/discord-seen/interactions", gateway, setup, retentionDays: RETENTION.discordSeenDays }, { headers: cors });
+    return Response.json({ ...h, paused: !!meta.paused, configured: seenConfigured(env), publicKey: publicKeySet(env), appId: meta.appId, guild: { id: meta.guildId, name: meta.guildName }, pollEvery: "5 min", backfill: BACKFILL_PAGES * 100 + " messages per channel", commands: COMMANDS, commandsVersion: { registered: meta.commandsVersion || 0, current: COMMANDS_VERSION }, interactionsUrl: url.origin + "/discord-seen/interactions", gateway, setup, retentionDays: RETENTION.discordSeenDays }, { headers: cors });
   }
   // The gateway connection (src/discord-gateway.js): state, start / stop / reset (reset drops the saved session).
   if (url.pathname === "/discord-seen/gateway.json") return Response.json(await gatewayStatus(env), { headers: cors });
@@ -411,6 +436,8 @@ export async function serveDiscordSeen(request, env, url, staffOk, sopts) {
     if (action === "reset") return Response.json(await gatewayControl(env, "start", { fresh: true }), { headers: cors });
     if (action === "stop") return Response.json(await gatewayControl(env, "stop"), { headers: cors });
   }
+  if (url.pathname === "/discord-seen/pause" && request.method === "POST") return Response.json(await pauseSeen(env, sopts && sopts.fetchFn), { headers: cors });
+  if (url.pathname === "/discord-seen/resume" && request.method === "POST") return Response.json(await resumeSeen(env, sopts && sopts.fetchFn), { headers: cors });
   if (url.pathname === "/discord-seen/poll" && request.method === "POST") {
     if (!seenConfigured(env)) return Response.json({ ok: false, error: "DISCORD_BOT_TOKEN is not set" }, { status: 503, headers: cors });
     return Response.json(await discordSeenTick(env, { force: true, fetchFn: sopts && sopts.fetchFn }), { headers: cors });

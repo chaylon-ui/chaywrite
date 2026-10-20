@@ -1,7 +1,7 @@
 // Discord "last seen" (owner 2026-10-20, "can you make a last-seen bot on our discord server?").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { seenDoFetch, discordSeenTick, serveInteraction, serveDiscordSeen, rowOf, ago, newerId, olderId, COMMANDS, COMMANDS_VERSION, SEEN_DO } from "../src/discord-seen.js";
+import { seenDoFetch, discordSeenTick, serveInteraction, serveDiscordSeen, pauseSeen, resumeSeen, rowOf, ago, newerId, olderId, COMMANDS, COMMANDS_VERSION, SEEN_DO } from "../src/discord-seen.js";
 
 const DAY = 864e5;
 const T0 = Date.UTC(2026, 9, 20, 15, 0, 0);
@@ -146,6 +146,18 @@ test("poll: first look + backfill, bots skipped, a channel the bot cannot read i
   meta = (await call(c, "/_seen/meta")).meta;
   assert.match(meta.lastError, /discord 500/); assert.equal(meta.lastPollAt, T0 + 2 * DAY);
   assert.equal(await discordSeenTick({ ROOM: env.ROOM }), null, "no bot token: nothing runs");
+  // pause (owner: "just cancel the bot for now"): commands removed, polls skipped; resume polls at once and registers again
+  world.registered = null;
+  const n2 = d.calls.length;
+  const paused = await pauseSeen(env, d.f);
+  assert.equal(paused.paused, true); assert.equal(paused.commandsRemoved, true); assert.deepEqual(world.registered, [], "the guild's command list is emptied");
+  assert.ok(paused.gateway && paused.gateway.error, "no gateway store in this test: reported, not fatal");
+  assert.deepEqual(await discordSeenTick(env, { now: T0 + 3 * DAY, fetchFn: d.f }), { skipped: "paused" });
+  assert.equal(d.calls.length, n2 + 1, "only the PUT; nothing was read while paused");
+  let h = await call(c, "/_seen/health"); assert.equal(h.paused, true); assert.ok(h.pausedAt > 0);
+  const resumed = await resumeSeen(env, d.f);
+  assert.equal(resumed.paused, false); assert.equal(resumed.tick.registered, true); assert.deepEqual(world.registered.map((x) => x.name), ["lastseen", "inactive"]);
+  h = await call(c, "/_seen/health"); assert.equal(h.paused, false);
 });
 
 test("interactions: signed by Discord's key or refused; ping, /lastseen, /inactive, unknown member, a bot", async () => {
