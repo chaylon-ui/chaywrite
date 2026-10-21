@@ -68,6 +68,7 @@ import { HOLD_DO } from "./hold.js";
 import { serveRequestsStaff } from "./requests.js";
 import { serveStockStaff } from "./stock-check.js";
 import { serveWinStaff } from "./win.js";
+import { serveImpactStaff } from "./impact.js";
 import { RETENTION, accessWhat, logAccess } from "./access-log.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage, when } from "./stage-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
@@ -1034,6 +1035,10 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   // Stock check (src/stock-check.js): go look / reorder / missing / dismissed.
   if (p === BASE + "/stock" || p === BASE + "/stock.json" || p.startsWith(BASE + "/stock/")) {
     return serveStockStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, pinOk, fetchFn: sopts && sopts.fetchFn });
+  }
+  // Sales impact of the site tools (src/impact.js): admins only.
+  if (p === BASE + "/impact" || p === BASE + "/impact.json" || p.startsWith(BASE + "/impact/")) {
+    return serveImpactStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, fetchFn: sopts && sopts.fetchFn });
   }
   // Expo contest (src/win.js): admins only - open / close, entries, the draw.
   if (p === BASE + "/win" || p.startsWith(BASE + "/win/")) {

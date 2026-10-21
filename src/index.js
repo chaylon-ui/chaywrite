@@ -28,6 +28,7 @@ import { serveDiscord, discordTick } from "./discord.js";
 import { serveDiscordEvents, discordEventsTick } from "./discord-events.js";
 import { serveDiscordSeen, serveInteraction, discordSeenTick } from "./discord-seen.js";
 import { gatewayTick } from "./discord-gateway.js";
+import { serveImpact, impactTick } from "./impact.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
@@ -99,6 +100,9 @@ export default {
     // period is deleted from every store that holds some; counts only.
     try { const r = await retentionTick(env); if (r && r.ran) console.log("retention: " + JSON.stringify(r)); }
     catch (e) { console.log("retention: failed: " + ((e && e.message) || e)); }
+    // Sales impact (src/impact.js): new orders attributed to the tools that filled the cart, a few pages every 10 min.
+    try { const i = await impactTick(env); if (i && !i.skipped) console.log("impact: " + JSON.stringify(i)); }
+    catch (e) { console.log("impact: failed: " + ((e && e.message) || e)); }
   },
 };
 
@@ -362,6 +366,8 @@ async function route(request, env, ctx) {
     // code, its emailed confirmation link, rules and health. Public; its admin
     // screen is /9pocket/win inside 9Pocket.
     if (url.pathname === "/win" || url.pathname.startsWith("/win/")) return serveWin(request, env, url, ctx);
+    // Sales impact of the site tools (src/impact.js): the tools' counts-only beacon.
+    if (url.pathname === "/impact") return serveImpact(request, env, url, ctx);
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"), { ctx });
     }

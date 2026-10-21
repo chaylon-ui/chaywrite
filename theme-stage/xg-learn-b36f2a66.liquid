@@ -1,0 +1,360 @@
+{%- comment -%}
+  Learn-to-play hub (templates/page.learn.json): one template for the hub
+  page and the per-game pages. Each "Game" block names the page handle it
+  belongs to; the page whose handle matches renders that game - the starter
+  products with live price and stock from this store's catalogue, the
+  owner's "how it plays" from the page body, the next beginner-friendly
+  events for that game from BinderPOS's public feed (fetched from the
+  shopper's browser like the homepage strip), and links on to the game's
+  singles and sealed collections and the publisher's own rules. Any other
+  page on the template (the hub) renders the grid of games and the
+  beginner nights across every game. A game page also tells
+  assets/xg-personal.js which game it is, so the homepage leads with it on
+  the next visit. Built on the --xg- tokens; dark mode needs no rules.
+{%- endcomment -%}
+{%- liquid
+  assign games = section.blocks | where: 'type', 'game'
+  assign mine = nil
+  for b in games
+    if b.settings.handle == page.handle
+      assign mine = b
+      break
+    endif
+  endfor
+  assign hub = section.settings.hub_link | default: '/pages/learn-to-play'
+  assign events_link = section.settings.events_link | default: '/pages/events'
+  assign events_heading = section.settings.events_heading | default: 'Learn it in store'
+-%}
+
+<style>
+  .xg-learn{--xl-accent:var(--xg-red,#d62c28);color:var(--xg-text,#3d454b);font-family:var(--xg-font-body,inherit)}
+  .xg-learn__hero{position:relative;overflow:hidden;background:var(--xg-charcoal,#1f2428);color:#fff;padding:clamp(28px,5vw,56px) 0}
+  .xg-learn__hero::before{content:'';position:absolute;inset:0;background:radial-gradient(60% 120% at 90% 10%,var(--xl-accent) 0,transparent 60%);opacity:.45;pointer-events:none}
+  .xg-learn__hero-inner{position:relative;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(200px,.7fr);gap:clamp(20px,4vw,44px);align-items:center}
+  .xg-learn__kicker{margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--xg-inverse-muted,#b7bec4)}
+  .xg-learn__kicker a{color:inherit;text-decoration:none}
+  .xg-learn__kicker a:hover{text-decoration:underline}
+  .xg-learn__title{margin:0;font-family:var(--xg-font-display,inherit);font-size:clamp(30px,5vw,52px);line-height:1.05;letter-spacing:-.02em;color:#fff}
+  .xg-learn__lede{margin:14px 0 0;font-size:clamp(16px,1.6vw,19px);line-height:1.55;max-width:56ch;color:var(--xg-inverse-muted,#d5dade)}
+  .xg-learn__facts{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0;padding:0;list-style:none}
+  .xg-learn__facts li{margin:0;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.12);font-size:13px;font-weight:600;color:#fff}
+  .xg-learn__art{display:block;width:100%;max-width:340px;justify-self:end;border-radius:var(--xg-radius-lg,18px);box-shadow:var(--xg-shadow-2,0 12px 30px rgba(0,0,0,.25));background:#fff}
+  .xg-learn__sec{padding:clamp(22px,3.5vw,40px) 0}
+  .xg-learn__head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+  .xg-learn__head h2{margin:0;font-family:var(--xg-font-display,inherit);font-size:clamp(21px,2.6vw,28px);letter-spacing:-.01em;color:var(--xg-ink,#111)}
+  .xg-learn__head a{color:var(--xg-red,#d62c28);font-weight:700;text-decoration:none}
+  .xg-learn__note{margin:0 0 14px;font-size:14.5px;color:var(--xg-muted,#707a83)}
+  .xg-learn__note a{color:var(--xg-red,#d62c28);font-weight:700}
+  .xg-learn__starters{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:0;padding:0;list-style:none}
+  .xg-learn__starter{margin:0;display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;padding:14px;border:1px solid var(--xg-border,#e6e9ec);border-radius:var(--xg-radius-lg,18px);background:var(--xg-surface,#fff)}
+  .xg-learn__starter-img img{width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:10px;background:var(--xg-bg,#f6f7f8)}
+  .xg-learn__starter h3{margin:0 0 4px;font-size:16px;line-height:1.3}
+  .xg-learn__starter h3 a{color:var(--xg-ink,#111);text-decoration:none}
+  .xg-learn__price{margin:0;font-size:18px;font-weight:800;color:var(--xg-ink,#111)}
+  .xg-learn__price s{margin-left:6px;font-size:14px;font-weight:500;color:var(--xg-muted,#707a83)}
+  .xg-learn__stock{margin:6px 0 10px;font-size:13px;font-weight:600}
+  .xg-learn__stock.is-in{color:var(--xg-success,#1c9a4e)}
+  .xg-learn__stock.is-out{color:var(--xg-muted,#707a83)}
+  .xg-learn__buy{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin:0}
+  .xg-learn__more{color:var(--xg-red,#d62c28);font-weight:700;text-decoration:none}
+  .xg-learn__btn-outline{background:transparent;border:2px solid var(--xg-border,#d8dde2);color:var(--xg-ink,#111)}
+  .xg-learn__prose{max-width:70ch;font-size:16.5px;line-height:1.65}
+  .xg-learn__prose--hub{padding-top:clamp(20px,3vw,32px)}
+  .xg-learn__prose h2,.xg-learn__prose h3{font-family:var(--xg-font-display,inherit);color:var(--xg-ink,#111)}
+  .xg-learn__events{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin:0;padding:0;list-style:none}
+  .xg-learn__ev{margin:0;padding:14px 16px;border:1px solid var(--xg-border,#e6e9ec);border-radius:var(--xg-radius,12px);background:var(--xg-surface,#fff);display:flex;flex-direction:column;gap:4px}
+  .xg-learn__ev.is-beginner{border-color:var(--xl-accent)}
+  .xg-learn__ev-when{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--xg-red,#d62c28)}
+  .xg-learn__ev a{font-weight:700;color:var(--xg-ink,#111);text-decoration:none;font-size:15.5px;line-height:1.3}
+  .xg-learn__ev a:hover{text-decoration:underline}
+  .xg-learn__ev-meta{font-size:13px;color:var(--xg-muted,#707a83)}
+  .xg-learn__links{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin:0;padding:0;list-style:none}
+  .xg-learn__links li{margin:0}
+  .xg-learn__links a{display:flex;flex-direction:column;gap:3px;height:100%;padding:14px 16px;border:1px solid var(--xg-border,#e6e9ec);border-radius:var(--xg-radius,12px);background:var(--xg-surface,#fff);color:var(--xg-text,#3d454b);text-decoration:none}
+  .xg-learn__links a:hover{border-color:var(--xg-red,#d62c28)}
+  .xg-learn__links b{color:var(--xg-ink,#111);font-size:15.5px}
+  .xg-learn__links span{font-size:13px;color:var(--xg-muted,#707a83)}
+  .xg-learn__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin:0;padding:0;list-style:none}
+  .xg-learn__tile{margin:0}
+  .xg-learn__tile a{display:flex;flex-direction:column;height:100%;border:1px solid var(--xg-border,#e6e9ec);border-top:4px solid var(--xl-accent);border-radius:var(--xg-radius-lg,18px);background:var(--xg-surface,#fff);color:var(--xg-text,#3d454b);text-decoration:none;overflow:hidden;transition:transform var(--xg-fast,.18s) var(--xg-ease,ease),box-shadow var(--xg-fast,.18s) var(--xg-ease,ease)}
+  .xg-learn__tile a:hover{transform:translateY(-2px);box-shadow:var(--xg-shadow-2,0 12px 30px rgba(0,0,0,.14))}
+  .xg-learn__tile img{width:100%;aspect-ratio:4/3;object-fit:contain;background:var(--xg-bg,#f6f7f8);padding:12px;box-sizing:border-box}
+  .xg-learn__tile-body{display:flex;flex-direction:column;gap:4px;padding:12px 14px 14px}
+  .xg-learn__tile-body b{font-size:17px;color:var(--xg-ink,#111)}
+  .xg-learn__tile-body span{font-size:13.5px;line-height:1.4}
+  .xg-learn__tile-body em{margin-top:auto;padding-top:8px;font-style:normal;font-size:13px;font-weight:700;color:var(--xg-red,#d62c28)}
+  .xg-learn__foot{padding:8px 0 clamp(30px,5vw,56px)}
+  .xg-learn__ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  @media (max-width:760px){.xg-learn__hero-inner{grid-template-columns:1fr}.xg-learn__art{max-width:220px;justify-self:start}.xg-learn__starter{grid-template-columns:96px minmax(0,1fr)}}
+</style>
+
+{%- if mine -%}
+  {%- assign g = mine.settings -%}
+  {%- assign p1 = g.starter -%}
+  {%- assign p2 = g.starter2 -%}
+  {%- assign hero_img = g.image -%}
+  {%- if hero_img == blank and p1.featured_image -%}{%- assign hero_img = p1.featured_image -%}{%- endif -%}
+  <section class="xg-learn xg-learn--game" id="xg-learn-{{ section.id }}" data-key="{{ g.key }}" data-game="{{ g.name | escape }}" data-events-url="{{ events_link | escape }}"{% if g.color != blank %} style="--xl-accent:{{ g.color }}"{% endif %}>
+    <script>try { var m = document.querySelector('meta[name="xg-game"]'); if (m && !m.getAttribute('content')) m.setAttribute('content', {{ g.name | json }}); } catch (e) {}</script>
+    <header class="xg-learn__hero">
+      <div class="xg-container xg-learn__hero-inner">
+        <div>
+          <p class="xg-learn__kicker"><a href="{{ hub }}">{{ section.settings.kicker | default: 'Learn to play' | escape }}</a></p>
+          <h1 class="xg-learn__title">{{ g.name | escape }}</h1>
+          {%- if g.tagline != blank -%}<p class="xg-learn__lede">{{ g.tagline | escape }}</p>{%- endif -%}
+          {%- if g.facts != blank -%}
+            {%- assign facts = g.facts | split: '|' -%}
+            <ul class="xg-learn__facts">{% for f in facts %}<li>{{ f | strip | escape }}</li>{% endfor %}</ul>
+          {%- endif -%}
+        </div>
+        {%- if hero_img -%}<img class="xg-learn__art" src="{{ hero_img | img_url: '800x' }}" alt="">{%- endif -%}
+      </div>
+    </header>
+
+    {%- if p1 != blank or p2 != blank -%}
+      <section class="xg-learn__sec">
+        <div class="xg-container">
+          <div class="xg-learn__head">
+            <h2>{{ section.settings.start_heading | default: 'Start with' | escape }}</h2>
+            {%- if g.sealed != blank -%}<a href="{{ g.sealed.url }}">All {{ g.name | escape }} sealed</a>{%- endif -%}
+          </div>
+          {%- if g.starter_note != blank -%}<p class="xg-learn__note">{{ g.starter_note | escape }}</p>{%- endif -%}
+          <ul class="xg-learn__starters">
+            {%- for i in (1..2) -%}
+              {%- if i == 1 -%}{%- assign p = p1 -%}{%- else -%}{%- assign p = p2 -%}{%- endif -%}
+              {%- if p != blank -%}
+                <li class="xg-learn__starter{% unless p.available %} is-out{% endunless %}">
+                  <a class="xg-learn__starter-img" href="{{ p.url }}">{% if p.featured_image %}<img src="{{ p.featured_image | img_url: '480x' }}" alt="{{ p.title | escape }}" loading="lazy">{% endif %}</a>
+                  <div class="xg-learn__starter-body">
+                    <h3><a href="{{ p.url }}">{{ p.title | escape }}</a></h3>
+                    <p class="xg-learn__price">{{ p.price | money }}{% if p.compare_at_price > p.price %}<s>{{ p.compare_at_price | money }}</s>{% endif %}</p>
+                    {%- if p.available -%}
+                      <p class="xg-learn__stock is-in">In stock &middot; order online or pick up in Charlottetown</p>
+                      <form method="post" action="/cart/add" class="xg-learn__buy">
+                        <input type="hidden" name="id" value="{{ p.selected_or_first_available_variant.id }}">
+                        <input type="hidden" name="quantity" value="1">
+                        <input type="hidden" name="properties[_xg]" value="learn">
+                        <button type="submit" class="xg-btn xg-btn--primary">Add to cart</button>
+                        <a class="xg-learn__more" href="{{ p.url }}">Details</a>
+                      </form>
+                    {%- else -%}
+                      <p class="xg-learn__stock is-out">Sold out online right now &middot; ask at any store, we can order it in</p>
+                      <a class="xg-btn xg-learn__btn-outline" href="{{ p.url }}">View product</a>
+                    {%- endif -%}
+                  </div>
+                </li>
+              {%- endif -%}
+            {%- endfor -%}
+          </ul>
+        </div>
+      </section>
+    {%- endif -%}
+
+    {%- if page.content != blank -%}
+      <section class="xg-learn__sec">
+        <div class="xg-container">
+          <div class="xg-learn__head"><h2>{{ section.settings.how_heading | default: 'How it plays' | escape }}</h2></div>
+          <div class="xg-learn__prose xg-rte">{{ page.content }}</div>
+        </div>
+      </section>
+    {%- endif -%}
+
+    <section class="xg-learn__sec" data-events hidden>
+      <div class="xg-container">
+        <div class="xg-learn__head"><h2>{{ events_heading | escape }}</h2><a href="{{ events_link }}">All events</a></div>
+        <p class="xg-learn__note" data-events-note></p>
+        <ul class="xg-learn__events" data-events-list></ul>
+      </div>
+    </section>
+    <section class="xg-learn__sec" data-events-none hidden>
+      <div class="xg-container">
+        <div class="xg-learn__head"><h2>{{ events_heading | escape }}</h2></div>
+        <p class="xg-learn__note">{{ section.settings.events_fallback | default: 'Nothing on the calendar for this game just now. Ask at the counter in any store and someone will walk you through a first game.' | escape }} <a href="{{ events_link }}">See all events</a></p>
+      </div>
+    </section>
+
+    <section class="xg-learn__sec">
+      <div class="xg-container">
+        <div class="xg-learn__head"><h2>{{ section.settings.next_heading | default: 'Keep going' | escape }}</h2></div>
+        <ul class="xg-learn__links">
+          {%- if g.singles != blank -%}<li><a href="{{ g.singles.url }}"><b>{{ g.name | escape }} singles</b><span>Every card we stock, by set</span></a></li>{%- endif -%}
+          {%- if g.sealed != blank -%}<li><a href="{{ g.sealed.url }}"><b>{{ g.name | escape }} sealed</b><span>Boosters, decks and boxes</span></a></li>{%- endif -%}
+          {%- if g.rules_url != blank -%}<li><a href="{{ g.rules_url }}" rel="noopener"><b>{{ g.rules_label | default: 'Official rules' | escape }}</b><span>The publisher's own learn-to-play</span></a></li>{%- endif -%}
+          {%- if section.settings.deck_link != blank -%}<li><a href="{{ section.settings.deck_link }}"><b>Deck builder</b><span>Paste a list, we price it from our stock</span></a></li>{%- endif -%}
+          {%- if section.settings.sell_link != blank -%}<li><a href="{{ section.settings.sell_link }}"><b>Sell or trade</b><span>Cash or store credit for cards you are done with</span></a></li>{%- endif -%}
+        </ul>
+      </div>
+    </section>
+  </section>
+{%- else -%}
+  <section class="xg-learn xg-learn--hub" id="xg-learn-{{ section.id }}" data-key="" data-game="" data-events-url="{{ events_link | escape }}">
+    <header class="xg-learn__hero">
+      <div class="xg-container xg-learn__hero-inner">
+        <div>
+          <p class="xg-learn__kicker">{{ section.settings.kicker | default: 'Learn to play' | escape }}</p>
+          <h1 class="xg-learn__title">{{ page.title | escape }}</h1>
+          {%- if section.settings.lede != blank -%}<p class="xg-learn__lede">{{ section.settings.lede | escape }}</p>{%- endif -%}
+        </div>
+      </div>
+    </header>
+    {%- if page.content != blank -%}
+      <div class="xg-container"><div class="xg-learn__prose xg-learn__prose--hub xg-rte">{{ page.content }}</div></div>
+    {%- endif -%}
+    <section class="xg-learn__sec">
+      <div class="xg-container">
+        <ul class="xg-learn__grid">
+          {%- for b in games -%}
+            {%- assign g = b.settings -%}
+            {%- assign p = g.starter -%}
+            {%- assign img = g.image -%}
+            {%- if img == blank and p.featured_image -%}{%- assign img = p.featured_image -%}{%- endif -%}
+            <li class="xg-learn__tile" {{ b.shopify_attributes }}{% if g.color != blank %} style="--xl-accent:{{ g.color }}"{% endif %}>
+              <a href="/pages/{{ g.handle }}">
+                {%- if img -%}<img src="{{ img | img_url: '480x' }}" alt="" loading="lazy">{%- endif -%}
+                <span class="xg-learn__tile-body">
+                  <b>{{ g.name | escape }}</b>
+                  {%- if g.tagline != blank -%}<span>{{ g.tagline | escape }}</span>{%- endif -%}
+                  <em>{% if p != blank and p.available %}Starter in stock &middot; {{ p.price | money }}{% else %}Start here{% endif %}</em>
+                </span>
+              </a>
+            </li>
+          {%- endfor -%}
+        </ul>
+      </div>
+    </section>
+    <section class="xg-learn__sec" data-events hidden>
+      <div class="xg-container">
+        <div class="xg-learn__head"><h2>{{ section.settings.hub_events_heading | default: 'Beginner nights coming up' | escape }}</h2><a href="{{ events_link }}">All events</a></div>
+        <p class="xg-learn__note" data-events-note></p>
+        <ul class="xg-learn__events" data-events-list></ul>
+      </div>
+    </section>
+    <div class="xg-learn__foot">
+      <div class="xg-container xg-learn__ctas">
+        <a class="xg-btn xg-btn--primary" href="{{ events_link }}">Events at every store</a>
+        <a class="xg-btn xg-learn__btn-outline" href="{{ section.settings.stores_link | default: '/#shopify-section-locations' }}">Find a store</a>
+      </div>
+    </div>
+  </section>
+{%- endif -%}
+
+<script>
+  (function () {
+    var root = document.getElementById('xg-learn-{{ section.id }}');
+    if (!root || !window.fetch) return;
+    var KEY = root.getAttribute('data-key') || '';
+    var EVURL = root.getAttribute('data-events-url') || '/pages/events';
+    var GAMES = { pokemon: /pok[eé]mon/i, mtg: /magic|\bmtg\b/i, yugioh: /yu-?gi-?oh/i, lorcana: /lorcana/i, onepiece: /one[- ]?piece/i, fab: /flesh/i, swu: /star[- ]?wars/i, riftbound: /riftbound/i };
+    var BEGINNER = /learn|beginner|intro|new player|teach|first game|101|how to play|casual|open play|kitchen table/i;
+    var gm = GAMES[KEY] || null;
+    var sec = root.querySelector('[data-events]'), list = root.querySelector('[data-events-list]'), note = root.querySelector('[data-events-note]'), none = root.querySelector('[data-events-none]');
+    if (!sec || !list) return;
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    var DAYN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var today = new Date(), todayIso = iso(today);
+    var tmr = new Date(today); tmr.setDate(tmr.getDate() + 1); var tomorrowIso = iso(tmr);
+    var end = new Date(today); end.setDate(end.getDate() + 60);
+    function dayOf(e) { return String(e.date).slice(0, 10); }
+    function fmtTime(t) {
+      var m = /^([0-9]{1,2}):([0-9]{2})/.exec(String(t || ''));
+      if (!m) return '';
+      var h = parseInt(m[1], 10);
+      return (h % 12 || 12) + ':' + m[2] + ' ' + (h >= 12 ? 'PM' : 'AM');
+    }
+    function shortGame(g) { return String(g).replace(/:? *the gathering/i, '').replace(/ *card game/i, '').replace(/ *tcg/i, '').trim().slice(0, 24); }
+    function when(day) {
+      if (day === todayIso) return 'Today';
+      if (day === tomorrowIso) return 'Tomorrow';
+      var p = day.split('-'), dt = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+      return DAYN[dt.getDay()] + ' ' + MONTHS[dt.getMonth()] + ' ' + dt.getDate();
+    }
+    // 2 = a beginner-tagged event for this game (or any game on the hub), 1 = any event for this game, 0 = not ours.
+    function score(e) {
+      var hay = String(e.game || '') + ' ' + String(e.title || '');
+      if (gm && !gm.test(hay)) return 0;
+      return BEGINNER.test(String(e.title || '')) ? 2 : (gm ? 1 : 0);
+    }
+    function card(x) {
+      var e = x.e, day = dayOf(e);
+      var href = (e.ticketed || e.isTicketed) && e.handle ? '/products/' + encodeURIComponent(e.handle) : EVURL;
+      var meta = [], tm = fmtTime(e.time);
+      if (tm) meta.push(tm);
+      if (e.game) meta.push(shortGame(e.game));
+      if (e.city) meta.push(e.city);
+      if (typeof e.ticketPrice === 'number' && e.ticketPrice > 0.009) meta.push('$' + (Math.round(e.ticketPrice * 100) / 100).toFixed(2).replace(/[.]00$/, ''));
+      return '<li class="xg-learn__ev' + (x.s === 2 ? ' is-beginner' : '') + '"><span class="xg-learn__ev-when">' + esc(when(day)) + '</span>' +
+        '<a href="' + esc(href) + '">' + esc(e.title) + '</a><span class="xg-learn__ev-meta">' + esc(meta.join(' · ')) + '</span></li>';
+    }
+    fetch('https://portal.binderpos.com/api/events/forStore?startDate=' + todayIso + '&endDate=' + iso(end), { headers: { 'content-type': 'application/json' } })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function (arr) {
+        if (!Array.isArray(arr)) return;
+        var evs = arr.filter(function (e) { return e && e.title && e.date && !e.isDisabled && !e.disabled && dayOf(e) >= todayIso; })
+          .map(function (e) { return { e: e, s: score(e) }; })
+          .filter(function (x) { return x.s > 0; });
+        evs.sort(function (a, b) {
+          if (a.s !== b.s) return b.s - a.s;
+          var ka = dayOf(a.e) + ' ' + String(a.e.time || '99'), kb = dayOf(b.e) + ' ' + String(b.e.time || '99');
+          return ka < kb ? -1 : ka > kb ? 1 : 0;
+        });
+        var beginner = evs.filter(function (x) { return x.s === 2; });
+        evs = evs.slice(0, gm ? 4 : 6);
+        if (!evs.length) { if (none) none.hidden = false; return; }
+        if (note) note.textContent = beginner.length ? 'Beginner-friendly nights first. New players are welcome at every one of these.' : 'No beginner night is listed right now; these are the next events for this game, and new players are welcome at casual nights.';
+        list.innerHTML = evs.map(card).join('');
+        sec.hidden = false;
+      }).catch(function () {});
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Learn to Play",
+  "tag": "section",
+  "class": "xg-learn-section",
+  "max_blocks": 12,
+  "enabled_on": { "templates": ["page"] },
+  "settings": [
+    { "type": "paragraph", "content": "One template for the hub and the per-game pages. Each Game block names the page handle it renders on; every other page on this template shows the hub grid." },
+    { "type": "text", "id": "kicker", "label": "Kicker", "default": "Learn to play" },
+    { "type": "textarea", "id": "lede", "label": "Hub intro line", "default": "Eight games, one page each: what to buy on day one, how a first game goes, and the next night you can learn it in a store." },
+    { "type": "url", "id": "hub_link", "label": "Hub page link" },
+    { "type": "url", "id": "events_link", "label": "All-events link" },
+    { "type": "url", "id": "stores_link", "label": "Find-a-store link" },
+    { "type": "url", "id": "deck_link", "label": "Deck builder link" },
+    { "type": "url", "id": "sell_link", "label": "Sell page link" },
+    { "type": "text", "id": "start_heading", "label": "Starters heading", "default": "Start with" },
+    { "type": "text", "id": "how_heading", "label": "Page-body heading", "default": "How it plays" },
+    { "type": "text", "id": "events_heading", "label": "Events heading (game page)", "default": "Learn it in store" },
+    { "type": "text", "id": "hub_events_heading", "label": "Events heading (hub)", "default": "Beginner nights coming up" },
+    { "type": "textarea", "id": "events_fallback", "label": "No-events line", "default": "Nothing on the calendar for this game just now. Ask at the counter in any store and someone will walk you through a first game." },
+    { "type": "text", "id": "next_heading", "label": "Links heading", "default": "Keep going" }
+  ],
+  "blocks": [
+    {
+      "type": "game",
+      "name": "Game",
+      "settings": [
+        { "type": "text", "id": "name", "label": "Game name", "default": "Pokémon TCG" },
+        { "type": "text", "id": "handle", "label": "Page handle this game renders on", "default": "learn-to-play-pokemon", "info": "The page's handle from Shopify admin > Pages, e.g. learn-to-play-pokemon." },
+        { "type": "select", "id": "key", "label": "Game (for events and personalisation)", "default": "pokemon", "options": [
+          { "value": "pokemon", "label": "Pokémon" }, { "value": "mtg", "label": "Magic: The Gathering" }, { "value": "lorcana", "label": "Disney Lorcana" }, { "value": "onepiece", "label": "One Piece" },
+          { "value": "yugioh", "label": "Yu-Gi-Oh!" }, { "value": "swu", "label": "Star Wars: Unlimited" }, { "value": "riftbound", "label": "Riftbound" }, { "value": "fab", "label": "Flesh and Blood" } ] },
+        { "type": "text", "id": "tagline", "label": "One-line pitch" },
+        { "type": "text", "id": "facts", "label": "Quick facts (separate with |)", "default": "2 players|60-card decks|20–30 minutes" },
+        { "type": "product", "id": "starter", "label": "Starter product" },
+        { "type": "product", "id": "starter2", "label": "Second starter product" },
+        { "type": "text", "id": "starter_note", "label": "Note above the starters" },
+        { "type": "collection", "id": "singles", "label": "Singles collection" },
+        { "type": "collection", "id": "sealed", "label": "Sealed collection" },
+        { "type": "url", "id": "rules_url", "label": "Publisher's how-to-play link" },
+        { "type": "text", "id": "rules_label", "label": "Rules link label", "default": "Official rules" },
+        { "type": "image_picker", "id": "image", "label": "Hero image (blank: the starter's photo)" },
+        { "type": "color", "id": "color", "label": "Accent colour", "default": "#d62c28" }
+      ]
+    }
+  ]
+}
+{% endschema %}

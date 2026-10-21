@@ -916,6 +916,7 @@
   })();
 
   function postCart(body) {
+    if (window.xgImpact) { try { window.xgImpact('deck', 'add'); } catch (e) {} }
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -966,7 +967,7 @@
              removed line - order #205473 (2026-09-22) carried "Deck Builder:
              1 card, $4.95" while the only thing bought was a sealed preorder
              - so the sales tally trusts this line property, not the cart. */
-          if (q > 0) send.push({ id: it.id, quantity: q, properties: { _deck: '1' } });
+          if (q > 0) send.push({ id: it.id, quantity: q, properties: { _deck: '1', _xg: 'deck' } });
         });
         if (!send.length) { window.location.href = '/cart'; return; }   // all copies already in the cart
         addToCartSend(send, buttons);

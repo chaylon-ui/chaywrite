@@ -36,10 +36,11 @@
     var vid = +btn.getAttribute('data-vid');
     if (!vid) return;
     btn.setAttribute('data-busy', '1');
+    if (window.xgImpact) { try { window.xgImpact('new-today', 'add'); } catch (e) {} }
     fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ items: [{ id: vid, quantity: 1 }] })
+      body: JSON.stringify({ items: [{ id: vid, quantity: 1, properties: { _xg: 'new-today' } }] })
     }).then(function (r) {
       if (!r.ok) throw new Error('add ' + r.status);
       return r.json().catch(function () { return null; });

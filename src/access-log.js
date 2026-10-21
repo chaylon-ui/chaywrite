@@ -22,6 +22,7 @@ export const RETENTION = {
   deckStatDays: 90,            // deck-builder usage stats by day (src/room.js)
   discordSeenDays: 730,        // Discord "last seen" rows: a member whose last post / last time online is older than this (src/discord-seen.js)
   discordLeftDays: 90,         // the roster row of a Discord member who left the server
+  impactDays: 400,             // sales-impact day and week rows (counts only; src/impact.js); order markers go after 150 days
 };
 
 const STAGE = "buylist-stage";   // the 9Pocket DO (src/stage.js STAGE_DO; not imported to keep this module cycle-free)

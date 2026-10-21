@@ -1,0 +1,394 @@
+{%- comment -%}
+  "Paint it like the box" (owner 2026-09-25: "Can you use this website to help
+  suggest paints on Warhammer products with direct links to the paints on our
+  site for sale https://eavy-archive.com/40k/adeptus-mechanicus/").
+
+  The worker (chaywrite src/eavy.js, /eavy/for.json) picks the 'Eavy Archive
+  army page and box-art scheme for this product - a character or chapter the
+  title names first, else the army from the 40K unit facts or the title - and
+  resolves every paint each area uses to our own Citadel listing. Only the
+  paint NAMES come from 'Eavy Archive; the method (steps, ratios, photos)
+  stays on their site, linked per scheme and per area, with a credit.
+
+  Layout (owner, same day: "a lot more structured ... smaller and tighter"):
+  one compact shopping list - each pot once, in the order the recipe first
+  uses it. Paints we do not list sit on one muted line. (The step-by-step
+  link and the "Which paint goes where" breakdown were removed at the
+  owner's request; the thanks to the sources sits at the foot of the page, above the footer; the card itself says these are suggestions.) No scheme found -> the card stays hidden.
+
+  Teaser (owner, same day: "add a fun little graphic up near the top to say
+  don't forget the paint and maybe an arrow or something to do with Warhammer
+  to signify a scroll to where the paints are listed"): once the card has
+  paints, a button goes in under Add to cart - a red wax purity seal with a
+  paint drop and parchment tails, a parchment strip "Don't forget the paint!"
+  and a bouncing arrow; it opens the Description tab and scrolls to the card.
+  Drawn here (no Games Workshop marks); nothing shows when no scheme matched.
+
+  Params: product, faction (exor.wh_unit faction, may be blank), kind ('vehicle' when the unit
+  facts carry the Vehicle keyword: a tank opens on the army's vehicle scheme, owner 2026-09-26).
+{%- endcomment -%}
+{%- liquid
+  assign ptype = product.type | downcase
+  assign skip = false
+  if ptype contains 'paint' or ptype contains 'hobby' or ptype contains 'book' or ptype contains 'dice' or ptype contains 'accessor' or ptype contains 'tool'
+    assign skip = true
+  endif
+  comment
+    paint pots sold as "Tabletop Wargames" (WARHAMMER COLOUR ..., CITADEL ... SPRAY) are not boxes to paint;
+    they get the "Similar colours in stock" strip instead (snippets/xg-paint-similar.liquid)
+  endcomment
+  assign ptitle = product.title | upcase
+  if ptitle contains 'WARHAMMER COLOUR' or ptitle contains 'CITADEL' or ptitle contains ' SPRAY' or ptitle contains 'PAINT'
+    assign skip = true
+  endif
+-%}
+{%- unless skip -%}
+<section class="xg-eavy" hidden aria-label="Paint it like the box" data-title="{{ product.title | escape }}" data-faction="{{ faction | escape }}" data-kind="{{ kind }}">
+  <div class="xg-eavy__top">
+    <div class="xg-eavy__ttl">Paint it like the box</div>
+    <label class="xg-eavy__pick"><span class="visually-hidden">Colour scheme</span><select></select></label>
+  </div>
+  <div class="xg-eavy__meta"></div>
+  <div class="xg-eavy__tier" role="group" aria-label="How many paints" hidden>
+    <button type="button" class="xg-eavy__tb" data-tier="min" aria-pressed="true"><strong>Minimum</strong><span></span></button>
+    <button type="button" class="xg-eavy__tb" data-tier="full" aria-pressed="false"><strong>Full scheme</strong><span></span></button>
+  </div>
+  <p class="xg-eavy__tierx" hidden></p>
+  <div class="xg-eavy__list" role="list"></div>
+  <button type="button" class="xg-eavy__all" hidden></button>
+  <div class="xg-eavy__more"></div>
+  <div class="xg-eavy__kit" hidden>
+    <div class="xg-eavy__kh">Complete the kit <small>Untick anything you already have</small></div>
+    <div class="xg-eavy__tools" role="list"></div>
+  </div>
+  <div class="xg-eavy__act">
+    <button type="button" class="xg-eavy__add"></button>
+    <button type="button" class="xg-eavy__rack"></button>
+  </div>
+  <div class="xg-eavy__msg" role="status"></div>
+  <p class="xg-eavy__credit">These are paint suggestions to get you started. Every model is yours to paint, so please choose the paints that are right for you.</p>
+</section>
+<style>
+  .xg-eavy { --e-ink: #171b1d; --e-text: #3d454b; --e-mute: #6b757c; --e-line: #e3e7ea; --e-bg: #fff; --e-row: #f6f8f9;
+    margin: 22px 0 0; padding: 14px 16px 12px; border: 1px solid var(--e-line); border-radius: 12px; background: var(--e-bg); max-width: 720px; font-size: 14px; line-height: 1.35; }
+  html[data-xg-theme="dark"] .xg-eavy { --e-ink: #eef1f3; --e-text: #d5dbdf; --e-mute: #93a0a8; --e-line: #2f373c; --e-bg: #171c1f; --e-row: #1e2428; }
+  .xg-eavy__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .xg-eavy .xg-eavy__ttl { margin: 0; white-space: nowrap; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--e-ink) !important; }
+  .xg-eavy__pick select { max-width: 240px; height: 30px; padding: 0 26px 0 9px; border: 1px solid var(--e-line); border-radius: 7px; background-color: var(--e-row); color: var(--e-ink); font: inherit; font-size: 13px; }
+  .xg-eavy__meta { margin: 3px 0 10px; font-size: 12.5px; color: var(--e-mute); }
+  /* Minimum / Full scheme (owner 2026-09-29: the full recipe is "overkill and cost prohibitive" for some) */
+  .xg-eavy__tier { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 0 0 8px; padding: 4px; border: 1px solid var(--e-line); border-radius: 10px; background: var(--e-row); }
+  .xg-eavy__tier[hidden], .xg-eavy__tierx[hidden] { display: none; }
+  .xg-eavy .xg-eavy__tb { display: flex; flex-direction: column; align-items: center; gap: 1px; min-height: 0; margin: 0; padding: 7px 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--e-text) !important; font: inherit; font-size: 12px; line-height: 1.25; text-transform: none; letter-spacing: normal; cursor: pointer; }
+  .xg-eavy .xg-eavy__tb strong { font-size: 13.5px; font-weight: 800; color: var(--e-ink); }
+  .xg-eavy .xg-eavy__tb span { font-variant-numeric: tabular-nums; color: var(--e-mute); }
+  .xg-eavy .xg-eavy__tb[aria-pressed="true"] { background: var(--e-bg); border-color: var(--xg-red, #d62c28); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .xg-eavy .xg-eavy__tb[aria-pressed="true"] strong { color: var(--xg-red, #d62c28); }
+  html[data-xg-theme="dark"] .xg-eavy .xg-eavy__tb[aria-pressed="true"] strong { color: #ff6a5e; }
+  .xg-eavy__tierx { margin: 0 0 8px; font-size: 12px; line-height: 1.4; color: var(--e-mute); }
+  .xg-eavy__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; border-top: 1px solid var(--e-line); }
+  .xg-eavy .xg-eavy__row { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 7px; min-height: 29px; padding: 0 2px; border-bottom: 1px solid var(--e-line); }
+  .xg-eavy .xg-eavy__lnk { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 29px; padding: 3px 2px; color: var(--e-text) !important; text-decoration: none !important; }
+  .xg-eavy .xg-eavy__lnk:hover { background: var(--e-row); }
+  /* "I have this" tick (owner 2026-09-29, My paint rack): kept in this browser by assets/xg-rack.js */
+  .xg-eavy .xg-eavy__have { position: relative; width: 18px; height: 18px; padding: 0; border: 1.5px solid var(--e-mute); border-radius: 50%; background: transparent; cursor: pointer; opacity: .75; transition: background .15s, border-color .15s, opacity .15s; }
+  .xg-eavy .xg-eavy__have:hover { opacity: 1; border-color: #1a9e6f; }
+  .xg-eavy .xg-eavy__have[aria-pressed="true"] { opacity: 1; border-color: #1a9e6f; background: #1a9e6f; }
+  .xg-eavy .xg-eavy__have[aria-pressed="true"]::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .xg-eavy__row.is-have .xg-eavy__nm { color: var(--e-mute); font-weight: 500; }
+  .xg-eavy__row.is-have .xg-eavy__pr { color: #1a9e6f; font-weight: 700; }
+  html[data-xg-theme="dark"] .xg-eavy__row.is-have .xg-eavy__pr { color: #4fd1a5; }
+  .xg-eavy .xg-eavy__row--tool .xg-eavy__lnk { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .xg-eavy__ti { width: 24px; height: 24px; border-radius: 5px; object-fit: contain; background: #fff; box-shadow: inset 0 0 0 1px var(--e-line); }
+  .xg-eavy__kit { margin: 12px 0 0; }
+  .xg-eavy__kit[hidden] { display: none; }
+  .xg-eavy__kh { margin: 0 0 4px; font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--e-ink); }
+  .xg-eavy__kh small { margin-left: 6px; font-size: 11.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--e-mute); }
+  .xg-eavy__tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; border-top: 1px solid var(--e-line); }
+  .xg-eavy .xg-eavy__rack { height: 30px; padding: 0 12px; border: 1px solid var(--e-line); border-radius: 999px; background: var(--e-row); color: var(--e-ink) !important; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .xg-eavy .xg-eavy__rack:hover { border-color: #1a9e6f; }
+  .xg-eavy__dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); background: #999; }
+  .xg-eavy__nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--e-ink); }
+  .xg-eavy__nm small { margin-left: 5px; font-weight: 500; font-size: 11px; color: var(--e-mute); }
+  .xg-eavy__pr { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--e-text); white-space: nowrap; }
+  .xg-eavy__row.is-out .xg-eavy__nm, .xg-eavy__row.is-out .xg-eavy__pr { color: var(--e-mute); font-weight: 500; }
+  .xg-eavy__list:not(.is-all) .xg-eavy__row:nth-child(n+9) { display: none; }
+  @media (min-width: 561px) { .xg-eavy__list:not(.is-all) .xg-eavy__row:nth-child(n+9) { display: grid; } .xg-eavy__list:not(.is-all) .xg-eavy__row:nth-child(n+13) { display: none; } }
+  .xg-eavy .xg-eavy__all { display: block; margin: 6px 0 0; padding: 0; border: 0; background: none; color: var(--e-ink) !important; font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+  .xg-eavy .xg-eavy__all[hidden] { display: none; }
+  .xg-eavy__more { margin: 7px 0 0; font-size: 12px; color: var(--e-mute); }
+  .xg-eavy__act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 12px 0 0; }
+  .xg-eavy .xg-eavy__add { height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--xg-red, #d62c28); color: #fff !important; font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; }
+  .xg-eavy__add[disabled] { opacity: .65; cursor: default; }
+  .xg-eavy__msg { margin: 6px 0 0; font-size: 12.5px; color: var(--e-mute); }
+  .xg-eavy__msg:empty { display: none; }
+  .xg-eavy__msg a { color: inherit; text-decoration: underline; }
+  .xg-eavy { scroll-margin-top: 120px; }
+  .xg-eavy.is-flash { animation: xgEavyFlash 1.4s ease-out 1; }
+  @keyframes xgEavyFlash { 0%, 30% { box-shadow: 0 0 0 3px var(--xg-red, #d62c28); } 100% { box-shadow: 0 0 0 3px transparent; } }
+  .xg-eavy-tease { display: flex; align-items: center; gap: 4px; width: 100%; max-width: 420px; margin: 14px 0 10px; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; -webkit-tap-highlight-color: transparent; }
+  .xg-eavy-tease__seal { flex: 0 0 auto; width: 46px; height: 58px; margin-right: -14px; position: relative; z-index: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.28)); transform-origin: 50% 35%; transition: transform .2s; }
+  .xg-eavy-tease:hover .xg-eavy-tease__seal { transform: rotate(-8deg); }
+  .xg-eavy-tease__strip { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 22px; background: linear-gradient(180deg, #f4ead0, #e6d6ad); color: #3b2a14 !important;
+    clip-path: polygon(0 0, 100% 0, 98% 18%, 100% 36%, 97.5% 54%, 100% 72%, 98% 88%, 100% 100%, 0 100%); box-shadow: inset 0 0 0 1px rgba(120,90,40,.25); }
+  .xg-eavy-tease__txt { min-width: 0; line-height: 1.2; }
+  .xg-eavy-tease__t { display: block; font-family: Georgia, "Times New Roman", serif; font-size: 15px; font-weight: 700; letter-spacing: .02em; color: #3b2a14; }
+  .xg-eavy-tease__s { display: block; margin-top: 2px; font-size: 12px; color: #6b5530; }
+  .xg-eavy-tease__arrow { flex: 0 0 auto; margin-left: auto; width: 22px; height: 26px; color: #b3201c; animation: xgEavyBob 1.6s ease-in-out infinite; }
+  @keyframes xgEavyBob { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(4px); } }
+  @media (prefers-reduced-motion: reduce) { .xg-eavy-tease__arrow, .xg-eavy.is-flash { animation: none; } }
+  .xg-eavy__credit { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--e-mute); }
+  .xg-eavy__credit a { color: inherit !important; text-decoration: underline; }
+  /* the sources, thanked once at the foot of the page (owner, 2026-09-28) */
+  .xg-eavy-thanks { max-width: 1200px; margin: 28px auto 18px; padding: 0 16px; text-align: center; font-size: 11.5px; line-height: 1.5; color: var(--xg-muted, #707a83); }
+  .xg-eavy-thanks a { color: inherit !important; text-decoration: underline; }
+  @media (max-width: 560px) {
+    .xg-eavy { padding: 12px 12px 10px; }
+    .xg-eavy__list, .xg-eavy__tools { grid-template-columns: 1fr; }
+    .xg-eavy__top { flex-wrap: nowrap; }
+    .xg-eavy__pick select { max-width: 150px; }
+    .xg-eavy .xg-eavy__ttl { font-size: 12px; letter-spacing: .06em; }
+  }
+</style>
+<script src="{{ 'xg-rack.js' | asset_url }}"></script>
+<script src="{{ 'xg-paint-sheet.js' | asset_url }}" defer></script>
+<script>
+  (function () {
+    var box = document.querySelector('section.xg-eavy');   // one card per product page
+    if (!box || !box.classList || !box.classList.contains('xg-eavy') || !window.fetch) return;
+    var W = 'https://exor-binder.nevski.workers.dev';
+    var data = null, cur = 0;
+    // Minimum (the basecoat and wash of each part, flagged m by the worker) or the full scheme;
+    // the choice is remembered on this device. curTier is what the card shows right now.
+    var tier = 'min', curTier = 'min';
+    try { if (localStorage.getItem('xg-eavy-tier') === 'full') tier = 'full'; } catch (e) {}
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function money(p) { return '$' + (Number(p) || 0).toFixed(2); }
+    function $(s) { return box.querySelector(s); }
+    function kOf(p) { return p.handle || ('?' + String(p.name).toLowerCase()); }
+    // My paint rack (assets/xg-rack.js): what this shopper already owns is ticked, and the
+    // add button leaves it out. Without the script every row simply counts as not owned.
+    var RK = window.xgRack || { has: function () { return false; }, set: function () {}, key: function (b, n) { return n; }, count: function () { return 0; }, on: function () {}, open: function () {} };
+    var tools = [];   // "Complete the kit": /kit.json?for=wh, first pick per kind
+    function pk(p) { return RK.key('Citadel', p.name); }
+    function tick(k, label, have, meta) {
+      return '<button type="button" class="xg-eavy__have" data-k="' + esc(k) + '" data-n="' + esc(meta.n || '') + '" data-b="' + esc(meta.b || '') + '" data-h="' + esc(meta.h || '') + '" data-u="' + esc(meta.u || '') + '"' +
+        ' aria-pressed="' + have + '" aria-label="I already have ' + esc(label) + '" title="' + (have ? 'In your paint rack - click to remove' : 'Tick if you already have it') + '"></button>';
+    }
+    function trow(c) {
+      var it = c.items[0], k = 'tool:' + c.key, have = RK.has(k);
+      var short = it.title.replace(/^(THE )?ARMY PAINTER:?\s*|^CITADEL:?\s*/i, '').toLowerCase().replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
+      return '<div role="listitem" class="xg-eavy__row xg-eavy__row--tool' + (have ? ' is-have' : '') + '">' + tick(k, c.label, have, { n: c.label }) +
+        '<a class="xg-eavy__lnk" data-tool="1" href="/products/' + encodeURIComponent(it.handle) + '" title="' + esc(it.title + ' - ' + c.why) + '">' +
+        (it.img ? '<img class="xg-eavy__ti" src="' + esc(it.img.replace(/(\.[a-z]+)(\?|$)/i, '_48x$1$2')) + '" alt="" loading="lazy" width="24" height="24">' : '<span class="xg-eavy__ti"></span>') +
+        '<span class="xg-eavy__nm">' + esc(c.label) + '<small>' + esc(short) + '</small></span>' +
+        '<span class="xg-eavy__pr">' + (have ? 'have it' : money(it.price)) + '</span></a></div>';
+    }
+    function kitTools() { return tools.filter(function (c) { return !RK.has('tool:' + c.key); }).map(function (c) { return c.items[0]; }); }
+
+    // each pot once, in the order the recipe first uses it; t 'min' keeps only the basecoat and
+    // wash of each part (the worker flags those m), 'full' everything
+    function pots(s, t) {
+      var seen = {}, ours = [], other = [], min = (t || curTier) === 'min';
+      s.areas.forEach(function (ar) { ar.paints.forEach(function (p) {
+        if (min && !p.m) return;
+        var k = kOf(p); if (seen[k]) return; seen[k] = 1;
+        (p.handle ? ours : other).push(p);
+      }); });
+      return { ours: ours, other: other };
+    }
+    // what the in-stock pots the shopper does not own come to
+    function cost(list) { return list.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); }).reduce(function (t, p) { return t + (Number(p.price) || 0); }, 0); }
+    // "5 paints · $31.20 for 4": the price covers the in-stock pots the shopper does not own
+    function tierLabel(list) {
+      var buy = list.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); }), c = cost(list);
+      return list.length + ' paint' + (list.length === 1 ? '' : 's') + (c ? ' · ' + money(c) + (buy.length < list.length ? ' for ' + buy.length : '') : '');
+    }
+    function row(p) {
+      var rng = p.r ? '<small>' + esc(p.r) + '</small>' : '';
+      var was = p.was ? ' (recipe: ' + esc(p.was) + ')' : '';
+      var have = RK.has(pk(p));
+      return '<div role="listitem" class="xg-eavy__row' + (p.a ? '' : ' is-out') + (have ? ' is-have' : '') + '">' + tick(pk(p), p.name, have, { n: p.name, b: 'Citadel', h: p.h, u: p.handle }) +
+        '<a class="xg-eavy__lnk" href="/products/' + encodeURIComponent(p.handle) + '" title="' + esc(p.title) + was + '">' +
+        '<span class="xg-eavy__dot"' + (p.h ? ' style="background:' + esc(p.h) + '"' : '') + '></span>' +
+        '<span class="xg-eavy__nm">' + esc(p.name) + rng + '</span>' +
+        '<span class="xg-eavy__pr">' + (have ? 'have it' : p.a ? money(p.price) : 'sold out') + '</span></a></div>';
+    }
+    function show(i) {
+      var keepOpen = i === cur && $('.xg-eavy__list').classList.contains('is-all');
+      cur = i;
+      var s = data.schemes[i], pmin = pots(s, 'min'), pfull = pots(s, 'full');
+      // two tiers only when the minimum is a real saving
+      var twoTiers = pmin.ours.length > 0 && pmin.ours.length < pfull.ours.length;
+      curTier = twoTiers ? tier : 'full';
+      var tb = box.querySelectorAll('.xg-eavy__tb');
+      $('.xg-eavy__tier').hidden = !twoTiers;
+      $('.xg-eavy__tierx').hidden = !twoTiers;
+      if (twoTiers) {
+        tb[0].setAttribute('aria-pressed', curTier === 'min' ? 'true' : 'false');
+        tb[1].setAttribute('aria-pressed', curTier === 'full' ? 'true' : 'false');
+        tb[0].querySelector('span').textContent = tierLabel(pmin.ours);
+        tb[1].querySelector('span').textContent = tierLabel(pfull.ours);
+        var hasWash = pmin.ours.concat(pmin.other).some(function (p) { return (p.r0 || p.r) === 'Shade'; });
+        $('.xg-eavy__tierx').textContent = curTier === 'min'
+          ? (hasWash ? 'The main colour of each part, plus its wash where the recipe uses one: the cheapest way to a painted army. Add the layers and highlights later.'
+            : 'The main colour of each part: the cheapest way to a painted army. Add a wash, the layers and highlights later.')
+          : 'Every paint in the recipe: basecoats, washes, layers and highlights, as painted on the box.';
+      }
+      var pp = curTier === 'min' ? pmin : pfull;
+      var owned = pp.ours.filter(function (p) { return RK.has(pk(p)); }).length;
+      var inst = pp.ours.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); });
+      var extra = kitTools();
+      var sum = inst.concat(extra).reduce(function (t, p) { return t + (Number(p.price) || 0); }, 0);
+      $('.xg-eavy__pick select').value = String(i);
+      $('.xg-eavy__meta').textContent = data.page.title + ' · ' + pp.ours.length + ' paint' + (pp.ours.length === 1 ? '' : 's') + ' · ' +
+        pp.ours.filter(function (p) { return p.a; }).length + ' in stock' + (owned ? ' · you have ' + owned + ' of ' + pp.ours.length : ' · tick the ones you already own');
+      var list = $('.xg-eavy__list'), all = $('.xg-eavy__all');
+      list.innerHTML = pp.ours.map(row).join('');
+      list.classList.toggle('is-all', keepOpen);
+      // 8 rows on a phone, 12 (two columns) wider; the rest behind one toggle
+      var fold = window.matchMedia && window.matchMedia('(max-width: 560px)').matches ? 8 : 12;
+      all.hidden = pp.ours.length <= fold;
+      all.textContent = keepOpen ? 'Show fewer' : 'Show all ' + pp.ours.length + ' paints';
+      $('.xg-eavy__more').textContent = pp.other.length ? 'Also used, not sold here: ' + pp.other.map(function (p) { return p.name; }).join(', ') : '';
+      var kit = $('.xg-eavy__kit');
+      kit.hidden = !tools.length;
+      $('.xg-eavy__tools').innerHTML = tools.map(trow).join('');
+      var add = $('.xg-eavy__add'), n = inst.length + extra.length;
+      add.hidden = !n; add.disabled = false;
+      add.textContent = extra.length ? 'Add the kit to cart · ' + n + ' item' + (n === 1 ? '' : 's') + ' · ' + money(sum)
+        : 'Add ' + inst.length + ' in-stock paint' + (inst.length === 1 ? '' : 's') + ' · ' + money(sum);
+      var rc = RK.count();
+      $('.xg-eavy__rack').textContent = 'My paint rack' + (rc ? ' · ' + rc : '');
+      $('.xg-eavy__msg').textContent = !n && owned === pp.ours.length ? 'You already have every paint on this list.' : '';
+    }
+    /* The thanks to the sources, at the foot of the page above the footer (owner, 2026-09-28:
+       "can the thanks be somewhere at bottom of page"): whichever sources this card's schemes use. */
+    function thanks(d) {
+      if (document.querySelector('.xg-eavy-thanks')) return;
+      var main = document.querySelector('main') || document.getElementById('MainContent');
+      if (!main || !main.parentNode) return;
+      var src = [];
+      if (d.schemes.some(function (s) { return s.src !== 'pp'; }))
+        src.push('<a href="https://eavy-archive.com/" target="_blank" rel="noopener">&lsquo;Eavy Archive</a> (box-art recipes collected by The Infernal Brush community)');
+      var g = d.schemes.filter(function (s) { return s.src === 'pp'; })[0];
+      if (g) src.push('the <a href="' + esc(g.url) + '" target="_blank" rel="noopener">Paint Picker ' + esc(d.page.title) + ' guide</a>');
+      var p = document.createElement('p');
+      p.className = 'xg-eavy-thanks';
+      p.innerHTML = 'Thank you to ' + src.join(' and ') + ' for the paint suggestions on this page. Unofficial, not endorsed by Games Workshop.';
+      main.parentNode.insertBefore(p, main.nextSibling);
+    }
+    // "Don't forget the paint!" under the buy buttons; it scrolls to this card
+    function tease(n, full) {
+      if (document.querySelector('.xg-eavy-tease')) return;
+      var meta = document.querySelector('.product-single-right .product-single__meta') || document.querySelector('.product-single__meta');
+      if (!meta) return;
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'xg-eavy-tease';
+      b.setAttribute('aria-label', "Don't forget the paint: see the paints for this box");
+      b.innerHTML =
+        '<svg class="xg-eavy-tease__seal" viewBox="0 0 64 80" aria-hidden="true">' +
+          '<path d="M21 40 15 78l6-5 6 6 4-37z" fill="#efe3c2" stroke="#b9a578"/><path d="M33 42l4 37 6-6 6 5-6-38z" fill="#e4d4a8" stroke="#b9a578"/>' +
+          '<path d="M19.5 53h7M19 59h7M18.5 65h7M37.5 53h7M38 59h7M38.5 65h7" stroke="#8a7650" stroke-width="1.3" stroke-linecap="round" opacity=".75"/>' +
+          '<circle cx="32" cy="28" r="21" fill="#b3201c"/><circle cx="32" cy="28" r="21" fill="none" stroke="#b3201c" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 8.25"/>' +
+          '<circle cx="32" cy="28" r="15.5" fill="none" stroke="#7d1512" stroke-width="2" opacity=".7"/>' +
+          '<path d="M32 16.5c0 0-8.5 10.2-8.5 15.2a8.5 8.5 0 0 0 17 0c0-5-8.5-15.2-8.5-15.2z" fill="#f4e6c4"/>' +
+          '<path d="M28.3 31.5a3.8 3.8 0 0 0 3 3.9" fill="none" stroke="#b3201c" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>' +
+        '</svg>' +
+        '<span class="xg-eavy-tease__strip"><span class="xg-eavy-tease__txt"><span class="xg-eavy-tease__t">Don\u2019t forget the paint!</span>' +
+          '<span class="xg-eavy-tease__s">' + (full > n ? n + ' paints minimum · ' + full + ' for the full box art' : n + ' paint' + (n === 1 ? '' : 's') + ' to paint it like the box') + '</span></span>' +
+          '<svg class="xg-eavy-tease__arrow" viewBox="0 0 22 26" aria-hidden="true"><path d="M3 4l8 7 8-7M3 13l8 7 8-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+      var form = meta.querySelector('.product-selection') || meta.querySelector('form[action*="/cart/add"]');
+      if (form && form.parentNode === meta) meta.insertBefore(b, form.nextSibling); else meta.appendChild(b);
+      b.addEventListener('click', function () {
+        // the card lives in the Description tab: open it first when another tab is showing
+        var pane = box.closest('.tab-pane');
+        if (pane && !pane.classList.contains('active')) { var t = document.querySelector('a[href="#' + pane.id + '"]'); if (t) t.click(); }
+        setTimeout(function () {
+          box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          box.classList.remove('is-flash'); void box.offsetWidth; box.classList.add('is-flash');
+        }, 60);
+      });
+    }
+    function added(ok) {
+      $('.xg-eavy__add').disabled = false;
+      $('.xg-eavy__msg').innerHTML = ok ? 'Added to your cart. <a href="/cart">View cart</a>' : 'Could not add them - please try again.';
+      if (ok) {
+        document.dispatchEvent(new CustomEvent('cart:refresh'));
+        try { var sync = (window.Shopify && window.Shopify.adjustCartDropDown) || window.adjustCartDropDown; if (typeof sync === 'function') sync(); } catch (e) {}
+      }
+    }
+    function post(items) {
+      if (window.xgImpact) { try { window.xgImpact('eavy', 'add'); } catch (e) {} } 
+      items = items.map(function (it) { it.properties = { _xg: 'eavy' }; return it; });
+      return fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: items }) })
+        .then(function (r) { return r.ok; }, function () { return false; });
+    }
+    box.addEventListener('change', function (e) { if (e.target.tagName === 'SELECT') show(+e.target.value); });
+    // a paint row opens the colour picker's bottle sheet (owner 2026-09-27): photo, bottles, price,
+    // add to cart and the closest colours from the other brands; the link is the fallback
+    box.addEventListener('click', function (e) {
+      var hv = e.target.closest && e.target.closest('.xg-eavy__have');
+      if (hv) {
+        var hk = hv.getAttribute('data-k');
+        RK.set(hk, !RK.has(hk), { n: hv.getAttribute('data-n'), b: hv.getAttribute('data-b'), h: hv.getAttribute('data-h'), u: hv.getAttribute('data-u') });
+        return;   // xgRack.on() redraws the card
+      }
+      if (e.target.closest && e.target.closest('.xg-eavy__rack')) { RK.open(); return; }
+      var r = e.target.closest && e.target.closest('a.xg-eavy__lnk:not([data-tool])');
+      if (r && window.xgPaintSheet && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();
+        var h = decodeURIComponent(r.getAttribute('href').replace('/products/', ''));
+        window.xgPaintSheet.open({ handle: h }).then(function (ok) { if (!ok) location.href = r.href; });
+        return;
+      }
+      var tbtn = e.target.closest && e.target.closest('.xg-eavy__tb');
+      if (tbtn) {
+        tier = tbtn.getAttribute('data-tier') === 'full' ? 'full' : 'min';
+        try { localStorage.setItem('xg-eavy-tier', tier); } catch (err) {}
+        show(cur);
+        return;
+      }
+      if (e.target.closest && e.target.closest('.xg-eavy__all')) {
+        var on = $('.xg-eavy__list').classList.toggle('is-all');
+        e.target.textContent = on ? 'Show fewer' : 'Show all ' + pots(data.schemes[cur]).ours.length + ' paints';
+        return;
+      }
+      if (!(e.target.closest && e.target.closest('.xg-eavy__add'))) return;
+      var list = pots(data.schemes[cur]).ours.filter(function (p) { return p.a && p.v && !RK.has(pk(p)); }).concat(kitTools());
+      if (!list.length) return;
+      $('.xg-eavy__add').disabled = true; $('.xg-eavy__msg').textContent = 'Adding…';
+      post(list.map(function (p) { return { id: p.v, quantity: 1 }; })).then(function (ok) {
+        if (ok) return added(true);
+        // one pot just sold out: add the rest one by one
+        var any = false;
+        list.reduce(function (q, p) { return q.then(function () { return post([{ id: p.v, quantity: 1 }]).then(function (k) { any = any || k; }); }); }, Promise.resolve())
+          .then(function () { added(any); });
+      });
+    });
+
+    // v= changes with the worker's cache version so a browser never keeps an answer from before a fix
+    var u = W + '/eavy/for.json?v=8&title=' + encodeURIComponent(box.getAttribute('data-title')) + '&faction=' + encodeURIComponent(box.getAttribute('data-faction') || '') + '&kind=' + encodeURIComponent(box.getAttribute('data-kind') || '');
+    fetch(u).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !d.ok || !d.schemes || !d.schemes.length) return;
+      // a scheme is only worth showing when we sell at least one of its paints
+      d.schemes = d.schemes.filter(function (s) { return s.areas.some(function (ar) { return ar.paints.some(function (p) { return p.handle; }); }); });
+      if (!d.schemes.length) return;
+      data = d;
+      var sel = $('.xg-eavy__pick select');
+      sel.innerHTML = d.schemes.map(function (s, i) { return '<option value="' + i + '">' + esc(s.name) + '</option>'; }).join('');
+      if (d.schemes.length < 2) $('.xg-eavy__pick').hidden = true;
+      show(0);
+      box.hidden = false;
+      RK.on(function () { show(cur); });
+      fetch(W + '/kit.json?for=wh').then(function (r) { return r.ok ? r.json() : null; }).then(function (k) {
+        tools = (k && k.cats || []).filter(function (c) { return c.items && c.items.length && c.items[0].v; });
+        if (tools.length) show(cur);
+      }).catch(function () {});
+      thanks(d);
+      var t0 = pots(d.schemes[0], 'min').ours.length, f0 = pots(d.schemes[0], 'full').ours.length;
+      tease(t0 && t0 < f0 ? t0 : f0, f0);
+    }).catch(function () {});
+  })();
+</script>
+{%- endunless -%}
