@@ -331,7 +331,7 @@ async function route(request, env, ctx) {
     }
     // Sealed auto-pricing (src/autoprice.js): staff page, report, controls.
     // Opt-in by the auto-price tag; shadow mode until switched on the page.
-    if (url.pathname === "/autoprice" || url.pathname === "/autoprice/login" || url.pathname === "/autoprice/logout" || url.pathname === "/autoprice/report.json" || url.pathname === "/autoprice/status" || url.pathname === "/autoprice/control" || url.pathname === "/autoprice/digest.json" || url.pathname === "/autoprice/comp-feed.json") {
+    if (url.pathname === "/autoprice" || url.pathname === "/autoprice/all" || url.pathname === "/autoprice/login" || url.pathname === "/autoprice/logout" || url.pathname === "/autoprice/report.json" || url.pathname === "/autoprice/status" || url.pathname === "/autoprice/control" || url.pathname === "/autoprice/digest.json" || url.pathname === "/autoprice/comp-feed.json") {
       return serveAutoprice(request, env, url, gate("admin"));
     }
     // One-span edit of a Shopify page body (src/page-edit.js): staff key,

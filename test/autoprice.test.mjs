@@ -1150,3 +1150,33 @@ test("kickRun only: quick runs pool while a run is going; a fresh kick carries o
   assert.deepEqual(store.get("ap:run").only, ["gid://shopify/Product/9"]);
   assert.equal(store.get("ap:run").phase, "fx");
 });
+
+test("the Everything screen (/autoprice/all): every row, quiet ones labelled, links and controls stay on it; the main page points at it", () => {
+  const rows = [
+    { id: "gid://shopify/Product/1", title: "Umbreon PSA 10", type: "Pokemon Single Graded", current: 14599.95, suggested: 14599.95, action: "hold", anchor: { price: 13999.99, market: 10340.21, ratio: 1.3539 } },
+    { id: "gid://shopify/Product/2", title: "Quiet box", type: "Pokemon Sealed Product", current: 100, suggested: 100, action: "hold" },
+    { id: "gid://shopify/Product/3", title: "Waiting box", type: "Magic Sealed Product", current: 50, suggested: 60, action: "raise", awaiting: true },
+  ];
+  const st = { mode: "stage", config: { ...DEFAULT_CONFIG, mode: "stage" } };
+  const every = renderPage(st, { rows, stage: true }, { configured: true, everything: true });
+  assert.match(every, /<title>Auto-pricing · everything<\/title>/); assert.match(every, /<h1>Auto-pricing · everything /);
+  assert.match(every, /Every product on the pricer: <b>3<\/b> across 3 games, the quiet ones included/);
+  for (const r of rows) assert.ok(every.includes(r.title), r.title + " is on the screen");   // plain titles, nothing to escape
+  assert.match(every, /<div class="c-st" data-l="Status"><span class="sub quiet">tracking from your \$13999\.99<\/span><\/div>/); assert.equal((every.match(/sub quiet/g) || []).length, 1, "only the anchored row gets the note; a plain quiet row already says up to date in its Suggested column");
+  assert.match(every, /data-l="Suggested"><span class="sub" title="">up to date<\/span>/);
+  assert.match(every, /<a class="seg" href="\/autoprice\?view=todo">Needs you <span class="n">1<\/span><\/a><a class="seg on" href="\/autoprice\/all">Everything <span class="n">3<\/span><\/a>/);
+  assert.match(every, /<a href="\/autoprice\/all\?game=Magic" class="tab"/, "the game tabs stay on the screen");
+  assert.match(every, /<a class="btn" href="\/autoprice"[^>]*>← What needs you <span class="n">1<\/span><\/a>/);
+  assert.match(every, /<input type="hidden" name="back" value="all">/, "controls used here come back here");
+  assert.doesNotMatch(every, /Nothing needs you right now/);
+  const byGame = renderPage(st, { rows, stage: true }, { configured: true, everything: true, game: "Pokemon" });
+  assert.match(byGame, /Every product on the pricer in Pokemon: <b>1<\/b>, the quiet ones included/); assert.match(byGame, /href="\/autoprice\?game=Pokemon"[^>]*>← What needs you/);
+  // the usual page: opens on "Needs you", with the way to the Everything screen beside the tools
+  const main = renderPage(st, { rows, stage: true }, { configured: true });
+  assert.match(main, /<title>Auto-pricing<\/title>/); assert.match(main, /<a class="btn ghost" href="\/autoprice\/all"[^>]*>Everything <span class="n">3<\/span><\/a>/);
+  assert.ok(!main.includes("Umbreon PSA 10"), "a quiet row is not in Needs you"); assert.ok(main.includes("Waiting box"));
+  assert.doesNotMatch(main, /name="back"/);
+  assert.match(renderPage(st, { rows, stage: true }, { configured: true, game: "Magic" }), /href="\/autoprice\/all\?game=Magic"[^>]*>Everything <span class="n">3<\/span>/, "the button keeps the game");
+  assert.match(renderPage(st, { rows, stage: true }, { configured: true, view: "all" }), /<span class="sub quiet">tracking from your \$13999\.99<\/span>/, "the All chip view carries the note too");
+  assert.doesNotMatch(main, /sub quiet/, "Needs you never shows quiet rows, so no note");
+});

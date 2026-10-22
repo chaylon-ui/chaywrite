@@ -1852,7 +1852,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
   const access = acctAccess || (session ? { name: session.u === "pin" ? "" : session.u, admin: true, view: true, publish: true, settings: true, config: true, maxDrop: null, maxRaise: null, legacy: true } : null);
   if (!access) {
     if (account) return html(renderLogin({ configured, account, error: "Your 9Pocket account (" + account.email + ") has no auto-pricing permission yet. Ask an admin to tick one on 9Pocket › Admin." }), 403);
-    if (url.pathname === "/autoprice" && request.method === "GET") return html("", 303, { location: "/autoprice/login" });
+    if ((url.pathname === "/autoprice" || url.pathname === "/autoprice/all") && request.method === "GET") return html("", 303, { location: "/autoprice/login" });
     return Response.json({ error: "login required" }, { status: 401, headers: { "cache-control": "no-store" } });
   }
   if (url.pathname === "/autoprice/status" || url.pathname === "/autoprice/report.json") {
@@ -1871,10 +1871,11 @@ export async function serveAutoprice(request, env, url, staffOk) {
     // publish and record who did what.
     const need = CONTROL_NEEDS[String(body.action || "")];
     const keepQ = body.q && body.action !== "add" && body.action !== "remove";
+    const backPath = body.back === "all" ? "/autoprice/all" : "/autoprice";   // a control used on the Everything screen returns there
     const qsBase = [keepQ ? "q=" + encodeURIComponent(body.q) : "", body.game ? "game=" + encodeURIComponent(body.game) : "", body.view === "all" || body.view === "todo" ? "view=" + body.view : ""].filter(Boolean);
     if (need && !access[need]) {
       const why = "Your account may not do that (" + NEED_LABEL[need] + "). An admin can grant it on 9Pocket › Admin.";
-      if (form) return html("", 303, { location: "/autoprice?" + [...qsBase, "flash=" + encodeURIComponent(why)].join("&") });
+      if (form) return html("", 303, { location: backPath + "?" + [...qsBase, "flash=" + encodeURIComponent(why)].join("&") });
       return Response.json({ ok: false, error: why }, { status: 403, headers: { "cache-control": "no-store" } });
     }
     body = { ...body, who: access.name || (access.legacy ? "shared login" : ""), limits: { maxDrop: access.maxDrop, maxRaise: access.maxRaise } };
@@ -1886,15 +1887,17 @@ export async function serveAutoprice(request, env, url, staffOk) {
     if (body.action === "keep") { try { const j = JSON.parse(text); flash = j.ok ? "Kept today's price; that suggestion will not be offered again." : "Keep failed: " + (j.error || "unknown"); } catch { flash = "Keep: no answer"; } }
     if (body.action === "publish-all") { try { const j = JSON.parse(text); flash = j.ok ? j.published + " price" + (j.published === 1 ? "" : "s") + " published" + (j.failed ? ", " + j.failed + " failed (" + j.errors.join("; ").slice(0, 120) + ")" : "") + (j.overLimit ? ", " + j.overLimit + " left waiting: over your limit" : "") + (j.left ? ", " + j.left + " still waiting - press again" : "") : "Publish all failed: " + (j.error || "unknown"); } catch { flash = "Publish all: no answer"; } }
     const qs = [...qsBase, flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
-    if (form) return html("", 303, { location: "/autoprice" + (qs ? "?" + qs : "") });
+    if (form) return html("", 303, { location: backPath + (qs ? "?" + qs : "") });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
   const q = (url.searchParams.get("q") || "").slice(0, 120), game = (url.searchParams.get("game") || "").slice(0, 60), flash = (url.searchParams.get("flash") || "").slice(0, 200);
-  const pageView = /^(all|todo)$/.test(url.searchParams.get("view") || "") ? url.searchParams.get("view") : "";
+  // /autoprice/all (owner, 2026-10-22: "a screen that does show all"): the same page, every row, no "Needs you" filter.
+  const everything = url.pathname === "/autoprice/all";
+  const pageView = everything ? "all" : /^(all|todo)$/.test(url.searchParams.get("view") || "") ? url.searchParams.get("view") : "";
   const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
-  return html(renderPage(status, report, { q, game, view: pageView, found, user: access.name, perms: access, configured, flash }));
+  return html(renderPage(status, report, { q, game, view: pageView, everything, found, user: access.name, perms: access, configured, flash }));
 }
 
 // Which permission each control action needs (src/stage-auth.js AP_PERMS).
@@ -1947,6 +1950,7 @@ function photoStrip(r) {
 export function renderPage(s, rep, view) {
   const cfg = s.config || DEFAULT_CONFIG;
   const v = view || {};
+  const everything = !!v.everything;   // the /autoprice/all screen: every row, links stay on it
   // What the viewer may do (serveAutoprice: a 9Pocket account's auto-pricing
   // permissions, or the shared login with everything). Buttons the viewer
   // cannot press are not drawn; the room refuses them anyway.
@@ -1961,7 +1965,7 @@ export function renderPage(s, rep, view) {
   // but it disappeared" - the pending row only showed under All).
   const needsYou = (r) => !!(r.awaiting || r.alert || r.action === "review" || r.action === "skip" || r.action === "pending" || r.writeError);
   const todo = inGame.filter(needsYou);
-  const viewMode = v.view === "all" || v.view === "todo" ? v.view : todo.length ? "todo" : "all";
+  const viewMode = everything ? "all" : v.view === "all" || v.view === "todo" ? v.view : todo.length ? "todo" : "all";
   const rank = (r) => (r.awaiting || r.action === "pending" ? 0 : r.alert || r.action === "review" || r.writeError ? 1 : r.action === "skip" ? 2 : 3);
   const rows = inGame.filter((r) => viewMode === "all" || needsYou(r))
     .sort((a, b) => a.game.localeCompare(b.game) || rank(a) - rank(b) || String(a.title).localeCompare(String(b.title)));
@@ -1974,9 +1978,10 @@ export function renderPage(s, rep, view) {
   const thin = inGame.filter((r) => r.thin);
   const alerted = inGame.filter((r) => r.alert && !r.thin && r.held == null);
   const q = (s2) => encodeURIComponent(String(s2 || "").slice(0, 120));
-  const qs = (o) => { const p = Object.entries(o).filter(([, x]) => x).map(([k, x]) => k + "=" + encodeURIComponent(x)); return "/autoprice" + (p.length ? "?" + p.join("&") : ""); };
+  const qsAt = (base, o) => { const p = Object.entries(o).filter(([, x]) => x).map(([k, x]) => k + "=" + encodeURIComponent(x)); return base + (p.length ? "?" + p.join("&") : ""); };
+  const qs = (o) => qsAt(everything ? "/autoprice/all" : "/autoprice", o);
   const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
-  const keepView = () => (v.game ? hidden("game", v.game) : "") + (v.q ? hidden("q", v.q) : "") + (v.view ? hidden("view", v.view) : "");
+  const keepView = () => (v.game ? hidden("game", v.game) : "") + (v.q ? hidden("q", v.q) : "") + (v.view ? hidden("view", v.view) : "") + (everything ? hidden("back", "all") : "");
   const ctlForm = (action, extra, label, cls, attrs) => `<form method="post" action="/autoprice/control" class="inl"${attrs || ""}>${hidden("action", action)}${keepView()}${extra}<button class="${cls || ""}">${label}</button></form>`;
   const admin = (id) => "https://admin.shopify.com/store/most-wanted-ca/products/" + String(id || "").replace(/\D/g, "");
   const whenShort = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
@@ -2153,7 +2158,7 @@ ${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct
 <div class="line"><div class="c-prod${(r.images || []).length ? " has-pic" : ""}">${photoThumb(r)}<div class="c-txt"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div></div>
 <div class="c-now num" data-l="Today"><b>${money(r.current)}</b>${marginLine(r.marginNow, r.current, r.cost)}</div>
 <div class="c-sug num" data-l="Suggested">${sugCell(r)}</div>
-<div class="c-st" data-l="Status">${upToDate(r) && !r.applied && !r.alert ? "" : `<span class="badge b-${sk}">${esc(sl)}</span><div class="sub two" title="${esc(r.reason || "")}">${esc(why(r))}</div>`}</div>
+<div class="c-st" data-l="Status">${upToDate(r) && !r.applied && !r.alert ? (viewMode === "all" && r.anchor && r.anchor.price > 0 ? `<span class="sub quiet">tracking from your ${money(r.anchor.price)}</span>` : "") : `<span class="badge b-${sk}">${esc(sl)}</span><div class="sub two" title="${esc(r.reason || "")}">${esc(why(r))}</div>`}</div>
 <div class="c-act">${quickAct(r)}</div></div>${panel}</article>`;
   };
   let list = "", lastGame = null;
@@ -2192,13 +2197,13 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
   const pubAll = waiting.length && P.publish ? ctlForm("publish-all", "", "Publish all " + waiting.length, "btn go", ` onsubmit="return confirm('Publish ${waiting.length} price${waiting.length === 1 ? "" : "s"} at the suggested price? They go live in the shop at once.')" title="Every waiting price${v.game ? " in the " + esc(v.game) + " tab" : ""} at its suggested number, up to 25 a press${limitNote ? "; moves over your limit (" + esc(limitNote) + ") are left waiting" : ""}"`) : "";
   const chip = (key, label, n) => `<a class="seg${viewMode === key ? " on" : ""}" href="${esc(qs({ game: v.game || "", view: key }))}">${label} <span class="n">${n}</span></a>`;
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark"><title>Auto-pricing</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark"><title>${everything ? "Auto-pricing · everything" : "Auto-pricing"}</title>
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--ink:#16191d;--mut:#667085;--line:#e4e7ec;--soft:#f2f4f7;--acc:#0d7a5f;--acc2:#0a6650;--on-acc:#fff;--wait:#1d4ed8;--wait-bg:#e8efff;--up:#067647;--up-bg:#dcfae6;--down:#b42318;--down-bg:#fee4e2;--warn:#b54708;--warn-bg:#fffaeb;--warn-line:#fedf89;--shadow:0 1px 2px rgba(16,24,40,.05)}
 @media (prefers-color-scheme:dark){:root{--bg:#0e1113;--card:#161a1e;--ink:#e6e9ec;--mut:#98a2b3;--line:#262c32;--soft:#1d2328;--acc:#2fbf8f;--acc2:#27a67c;--on-acc:#06140f;--wait:#93b4ff;--wait-bg:#18233d;--up:#6ce9a6;--up-bg:#10301f;--down:#fda29b;--down-bg:#3a1a17;--warn:#fec84b;--warn-bg:#2a2210;--warn-line:#5c4712;--shadow:none}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}a{color:var(--acc)}.wrap{max-width:1280px;margin:0 auto;padding:18px 20px 40px}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.sub,.muted{color:var(--mut);font-size:12px}.neg{color:var(--down)!important;font-weight:600}.one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.num{font-variant-numeric:tabular-nums}
-.btn{display:inline-flex;align-items:center;gap:6px;font:600 13px/1 inherit;font-family:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap;list-style:none}.btn:hover{border-color:var(--mut)}.btn.go{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}.btn.go:hover{background:var(--acc2)}.btn.ghost{background:transparent}.btn.sm{padding:5px 9px;font-size:12px}.btn.danger{color:var(--down)}summary.btn::-webkit-details-marker{display:none}
+.btn{display:inline-flex;align-items:center;gap:6px;font:600 13px/1 inherit;font-family:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap;list-style:none}.btn:hover{border-color:var(--mut)}.btn.go{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}.btn.go:hover{background:var(--acc2)}.btn.ghost{background:transparent}.btn .n{font-weight:800}.every{margin:6px 0 10px;font-size:13px;color:#5f6b76}.every b{color:inherit}.sub.quiet{color:#6b7780}.btn.sm{padding:5px 9px;font-size:12px}.btn.danger{color:var(--down)}summary.btn::-webkit-details-marker{display:none}
 .inl{display:inline}input,select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 8px}input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.top h1{font-size:20px;margin:0;display:flex;align-items:center;gap:10px}.mode{font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--soft);color:var(--mut)}.mode.m-stage{background:var(--wait-bg);color:var(--wait)}.mode.m-apply{background:var(--down-bg);color:var(--down)}.who{font-size:12.5px;color:var(--mut);text-align:right}.who form{display:inline}.who button{border:0;background:none;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-decoration:underline}
 .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 4px}.tools .runl{margin-left:auto;font-size:12.5px;color:var(--mut)}.tools .runl details{display:inline}.tools .runl summary{cursor:pointer;color:var(--down)}
@@ -2226,13 +2231,14 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 @media (max-width:1000px){.lhead{display:none}.line{grid-template-columns:minmax(0,1fr) 110px 140px;row-gap:8px}.c-prod{grid-column:1/-1}.c-now{text-align:left}.c-sug{text-align:left}.c-act{grid-column:1/-1;justify-content:flex-start}.c-now::before,.c-sug::before,.c-st::before{content:attr(data-l);display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.c-act:empty,.c-st:empty{display:none}.panel{grid-template-columns:1fr 1fr}.panel .setsec{grid-column:1/-1}}
 @media (max-width:640px){.wrap{padding:12px 12px 32px}.top h1{font-size:18px}.who{text-align:left}.tools .runl{margin-left:0;width:100%}.drop{position:static}.drop>.dd{left:12px!important;right:12px!important;width:auto}.bar .filt{margin-left:0;width:100%}.tabs{flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:2px;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tab{flex:none}.line{grid-template-columns:1fr 1fr;padding:12px 42px 12px 12px}.c-st{grid-column:1/-1}.panel{grid-template-columns:1fr}.pubf{flex:1}.pubf .px{flex:1}.px input{width:100%;font-size:16px}.c-act .inl{flex:0}.pubbar{flex-wrap:wrap}.pubbar form{margin-left:0;width:100%}.pubbar .btn{width:100%;justify-content:center}}
 </style></head><body><div class="wrap">
-<header class="top"><h1>Auto-pricing <span class="mode m-${esc(s.mode)}" title="${esc(modeTip)}">${esc(modeName)}</span>${v.configured ? "" : '<span class="mode m-apply">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
+<header class="top"><h1>Auto-pricing${everything ? " · everything" : ""} <span class="mode m-${esc(s.mode)}" title="${esc(modeTip)}">${esc(modeName)}</span>${v.configured ? "" : '<span class="mode m-apply">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
 <div class="who">${v.perms && !P.legacy ? `Signed in as <b>${esc(P.name || P.email || "")}</b>${P.admin ? ' · admin: everything · <a href="/9pocket/admin">accounts and permissions</a>' : " · may " + [P.publish ? "publish" : "", P.settings ? "change product settings" : "", P.config ? "change page rules" : ""].filter(Boolean).join(", ").replace(/^$/, "view only") + (limitNote ? " · " + limitNote : "")} · <a href="/9pocket">9Pocket</a> · <form method="post" action="/9pocket/logout"><button>sign out</button></form>` : `<a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>`}</div></header>
-<div class="tools">${P.config ? ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "↻ Run now", "btn", ` title="${s.mode === "apply" ? "Prices are written by this run" : s.mode === "stage" ? "Changes are queued here for you to publish" : "Shadow: report only"}"`) : ""}${addPanel}${pageSettings}<details class="drop right"><summary class="btn ghost">How it works</summary><div class="dd">${help}</div></details>
+<div class="tools">${P.config ? ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "↻ Run now", "btn", ` title="${s.mode === "apply" ? "Prices are written by this run" : s.mode === "stage" ? "Changes are queued here for you to publish" : "Shadow: report only"}"`) : ""}${addPanel}${pageSettings}${everything ? `<a class="btn" href="${esc(qsAt("/autoprice", { game: v.game || "" }))}" title="Back to the page that opens on what needs you">← What needs you <span class="n">${todo.length}</span></a>` : `<a class="btn ghost" href="${esc(qsAt("/autoprice/all", { game: v.game || "" }))}" title="Every product on the pricer, the quiet ones included">Everything <span class="n">${all.length}</span></a>`}<details class="drop right"><summary class="btn ghost">How it works</summary><div class="dd">${help}</div></details>
 <div class="runl">${runLine}${runErrors.length ? ` · <details><summary>${runErrors.length} error${runErrors.length === 1 ? "" : "s"}</summary><div class="sub">${runErrors.map(esc).join("<br>")}</div></details>` : ""}${run.error ? ' · <span class="neg">failed: ' + esc(run.error) + "</span>" : ""}${nextLine}${fxLine}</div></div>
+${everything ? `<p class="every">Every product on the pricer${v.game ? " in " + esc(v.game) : ""}: <b>${inGame.length}</b>${v.game ? "" : " across " + games.length + " game" + (games.length === 1 ? "" : "s")}, the quiet ones included. A row that says <i>up to date</i> is priced and needs nothing; <i>tracking from your price</i> means it follows the market from a price you set.</p>` : ""}
 ${v.flash ? `<p class="flash${/may not|Not published|over your limit|failed/i.test(v.flash) ? " bad" : ""}">${esc(v.flash)}</p>` : ""}
 ${downBanner}${thinBanner}${followBanner}
-<div class="bar"><div class="segs">${chip("todo", "Needs you", todo.length)}${chip("all", "All", inGame.length)}</div><nav class="tabs">${tab(null, "All games", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</nav><input type="search" class="filt" id="filt" placeholder="Filter this list  ( / )" aria-label="Filter the list by name"></div>
+<div class="bar"><div class="segs">${everything ? `<a class="seg" href="${esc(qsAt("/autoprice", { game: v.game || "", view: "todo" }))}">Needs you <span class="n">${todo.length}</span></a><a class="seg on" href="${esc(qs({ game: v.game || "" }))}">Everything <span class="n">${inGame.length}</span></a>` : chip("todo", "Needs you", todo.length) + chip("all", "All", inGame.length)}</div><nav class="tabs">${tab(null, "All games", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</nav><input type="search" class="filt" id="filt" placeholder="Filter this list  ( / )" aria-label="Filter the list by name"></div>
 ${waiting.length ? `<div class="pubbar"><span><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting${P.publish ? " for you" : ""}</b> — none of them is live${P.publish ? ". Correct a box if the sources got it wrong, then Publish." : ". Your account cannot publish; someone with that permission will."}</span>${pubAll}</div>` : ""}
 <main class="list" id="list">${rows.length ? '<div class="lhead" aria-hidden="true"><span>Product</span><span>Today</span><span>Suggested</span><span>Status</span><span></span></div>' : ""}${list}</main>
 <section class="hist">${(s.audit || []).length ? `<details><summary>Activity <span class="sub">· ${(s.audit || []).length} recent</span></summary><div class="scroll"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Product</th></tr></thead><tbody>${s.audit.map((e) => `<tr><td>${esc(whenShort(e.at))}</td><td>${esc(e.who || "—")}</td><td>${e.action === "publish" ? "published " + (e.from != null ? money(e.from) + " → " : "") + money(e.to) + (e.anchored ? " (tracking from there)" : "") : esc(e.detail || e.action)}</td><td>${esc(e.title || "")}</td></tr>`).join("")}</tbody></table></div></details>` : ""}
