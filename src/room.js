@@ -79,7 +79,7 @@ export class BinderRoom {
     // And for the stock check (src/stock-check.js): /_sc/* only, no alarm (the worker cron drives it).
     this.isStockDo = false;
     try { this.isStockDo = !!env.ROOM?.idFromName(STOCK_DO)?.equals?.(state.id); } catch {}
-    // And for the Expo contest (src/win.js): /_win/* only.
+    // And for the contests (src/win.js): /_win/* only.
     this.isWinDo = false;
     try { this.isWinDo = !!env.ROOM?.idFromName(WIN_DO)?.equals?.(state.id); } catch {}
     this.isSeenDo = false;

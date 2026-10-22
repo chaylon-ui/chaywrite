@@ -23,7 +23,7 @@ const T0 = Date.UTC(2026, 9, 20, 15, 0, 0);
 class MemStorage {
   constructor() { this.m = new Map(); this.alarm = null; }
   async get(k) { if (Array.isArray(k)) { const out = new Map(); for (const x of k) if (this.m.has(x)) out.set(x, this.m.get(x)); return out; } return this.m.get(k); }
-  async put(k, v) { this.m.set(k, JSON.parse(JSON.stringify(v))); }
+  async put(k, v) { if (typeof k === "object") { for (const [a, b] of Object.entries(k)) this.m.set(a, JSON.parse(JSON.stringify(b))); return; } this.m.set(k, JSON.parse(JSON.stringify(v))); }   // single key or a batch of up to 128
   async delete(k) { for (const x of Array.isArray(k) ? k : [k]) this.m.delete(x); }
   async list(o) {
     const out = new Map(); const keys = [...this.m.keys()].sort();
@@ -94,8 +94,10 @@ test("accessWhat: the 9Pocket screens that show customer data, with the record t
   assert.deepEqual(accessWhat("/9pocket/b/01700000000000-abcd"), { what: "buylist", id: "01700000000000-abcd" });
   assert.deepEqual(accessWhat("/9pocket/held"), { what: "held stock" });
   assert.deepEqual(accessWhat("/9pocket/requests/RQ-1001"), { what: "request", id: "RQ-1001" });
-  assert.deepEqual(accessWhat("/9pocket/win"), { what: "contest entries" });
+  assert.equal(accessWhat("/9pocket/win"), null, "the contests list shows counts, no names");
   assert.deepEqual(accessWhat("/9pocket/win/export.csv"), { what: "contest export" });
+  assert.deepEqual(accessWhat("/9pocket/win/c/expo-2026"), { what: "contest entries", id: "expo-2026" });
+  assert.deepEqual(accessWhat("/9pocket/win/c/expo-2026/export.csv"), { what: "contest export", id: "expo-2026" });
   assert.deepEqual(accessWhat("/9pocket/admin/access.csv"), { what: "access log export" });
   assert.equal(accessWhat("/9pocket/login"), null, "signing in shows nobody's data");
   assert.equal(accessWhat("/9pocket/stock"), null);
@@ -170,13 +172,13 @@ test("contest sweep: nothing until the contest has been closed for contestDaysAf
   const closes = Date.UTC(2026, 9, 19, 2, 59, 0);
   const clock = { t: closes + 10 * DAY }; const c = cx(clock);
   const W = (p, b) => call(winDoFetch, c, p, b);
-  await W("/_win/cfg", { closesAt: closes });
-  await c.storage.put("win:e:a@x.test", { email: "a@x.test", first: "A", verifiedAt: closes - DAY });
-  await c.storage.put("win:e:b@x.test", { email: "b@x.test", first: "B", verifiedAt: closes - DAY });
-  await c.storage.put("win:p:tok1", { email: "c@x.test", at: closes - 3600e3, exp: closes + 48 * 3600e3 });   // long expired
+  const id = (await W("/_win/cfg", { closesAt: closes })).cfg.id;   // the first (seeded) contest
+  await c.storage.put(`win:e:${id}:a@x.test`, { email: "a@x.test", first: "A", verifiedAt: closes - DAY });
+  await c.storage.put(`win:e:${id}:b@x.test`, { email: "b@x.test", first: "B", verifiedAt: closes - DAY });
+  await c.storage.put("win:p:tok1", { c: id, email: "c@x.test", at: closes - 3600e3, exp: closes + 48 * 3600e3 });   // long expired
   await c.storage.put("win:r:1234:abcd", { n: 1 });
-  await c.storage.put("win:draws", [{ email: "a@x.test", first: "A", at: closes + DAY }]);
-  await c.storage.put("win:v:2026-10-17", { visits: 40, signups: 9, confirmed: 7 });
+  await c.storage.put(`win:d:${id}`, [{ email: "a@x.test", first: "A", at: closes + DAY }]);
+  await c.storage.put(`win:v:${id}:2026-10-17`, { visits: 40, signups: 9, confirmed: 7 });
   const early = await W("/_win/sweep", {});
   assert.deepEqual(early.counts, { due: false, entries: 0, pending: 0, draws: 0 });
   assert.equal((await c.storage.list({ prefix: "win:e:" })).size, 2, "entries stay while the owner may still need them");
@@ -186,11 +188,14 @@ test("contest sweep: nothing until the contest has been closed for contestDaysAf
   assert.deepEqual(late.counts, { due: true, entries: 2, pending: 0, draws: 1 });
   assert.equal((await c.storage.list({ prefix: "win:e:" })).size, 0);
   assert.equal((await c.storage.list({ prefix: "win:r:" })).size, 0);
-  assert.equal(await c.storage.get("win:draws"), undefined);
-  assert.deepEqual(await c.storage.get("win:v:2026-10-17"), { visits: 40, signups: 9, confirmed: 7 }, "counts carry no names and stay");
-  assert.equal((await c.storage.get("win:cfg")).closesAt, closes, "the settings stay");
-  const open = cx({ t: T0 }); await call(winDoFetch, open, "/_win/cfg", { closesAt: null });
-  await open.storage.put("win:e:z@x.test", { email: "z@x.test" });
+  assert.equal(await c.storage.get(`win:d:${id}`), undefined);
+  assert.deepEqual(await c.storage.get(`win:v:${id}:2026-10-17`), { visits: 40, signups: 9, confirmed: 7 }, "counts carry no names and stay");
+  const rec = await c.storage.get("win:c:" + id);
+  assert.equal(rec.closesAt, closes, "the settings stay");
+  assert.deepEqual(rec.summary, { confirmed: 2, test: 0, onList: 0, excluded: 0, draws: 1, winners: 1, visits: 40, signups: 9, sweptAt: clock.t }, "the counts the list shows afterwards");
+  assert.deepEqual((await W("/_win/sweep", {})).counts, { due: false, entries: 0, pending: 0, draws: 0 }, "swept once");
+  const open = cx({ t: T0 }); const oid = (await call(winDoFetch, open, "/_win/cfg", { closesAt: null })).cfg.id;
+  await open.storage.put(`win:e:${oid}:z@x.test`, { email: "z@x.test" });
   assert.equal((await call(winDoFetch, open, "/_win/sweep", {})).counts.due, false, "a contest with no closing time is never swept");
 });
 

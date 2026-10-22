@@ -1,8 +1,9 @@
 /* ---------------- Enter to win: the pages and the emails ----------------
    Markup only; every decision is made in src/win.js. Public pages are
    self-contained (one stylesheet inline, no script - it has to work on
-   any phone that scanned the code at the booth); the admin page shares
-   the 9Pocket shell (src/stage-ui.js). */
+   any phone that scanned the code at the booth); the admin pages share
+   the 9Pocket shell (src/stage-ui.js). Every renderer takes the contest
+   (cfg): its words, its Mallow Games switch, its prize. */
 
 import { shell, esc, when, LOGO } from "./stage-ui.js";
 import { MALLOW_URL } from "./stage-email.js";
@@ -20,15 +21,27 @@ export const ENTERED_ART = "/win-entered.jpg";
 export const MALLOW_BAND = "/win-mallow.jpg";
 const RED = "#d62c28", INK = "#27302f", PINK = "#e2529a", PAPER = "#f6f7f8", MUTED = "#6b7780";
 
+/* Per contest: is Mallow Games (the sister shop) on the page? Off = Exor Games alone. */
+export const mallowOn = (cfg) => !cfg || cfg.mallow !== false;
+const brand = (cfg) => (mallowOn(cfg) ? "Exor Games × Mallow Games" : "Exor Games");
+const both = (cfg) => (mallowOn(cfg) ? "Exor Games and Mallow Games" : "Exor Games");
+/* The prize: "$100 in store credit at ExorGames.com" reads as "$100 in store credit";
+   a prize that is not credit (a booster box) is said as typed. */
+export const isCredit = (cfg) => /credit|gift card/i.test(String((cfg && cfg.prize) || ""));
 export const prizeShort = (cfg) => { const m = /\$\s?\d[\d,]*/.exec(String((cfg && cfg.prize) || "")); return m ? m[0].replace(/\s/g, "") : String((cfg && cfg.prize) || "the prize"); };
+const prizeHtml = (cfg) => (isCredit(cfg) ? `<b>${esc(prizeShort(cfg))}</b> in store credit` : `<b>${esc(cfg && cfg.prize)}</b>`);
+const prizeText = (cfg) => (isCredit(cfg) ? `${prizeShort(cfg)} in store credit` : String((cfg && cfg.prize) || "the prize"));
 export function closesText(cfg) {
-  if (!cfg || !cfg.closesAt) return "when the show ends";
+  if (!cfg || !cfg.closesAt) return "just before the draw";
   const d = new Date(cfg.closesAt);
   const day = d.toLocaleDateString("en-CA", { timeZone: "America/Halifax", weekday: "long", month: "long", day: "numeric" });
   const time = d.toLocaleTimeString("en-CA", { timeZone: "America/Halifax", hour: "numeric", minute: "2-digit", hour12: true }).replace(/\./g, "").toLowerCase();
   return `${day} at ${time} (Atlantic)`;
 }
-const back = (o) => B + (o && o.preview ? "?preview=" + encodeURIComponent(o.preview) : "");
+/* The preview key (and, for a contest that is not the current one, its id) ride on every link. */
+const qs = (o) => { if (!o || !o.preview) return ""; const s = new URLSearchParams({ preview: o.preview }); if (o.c) s.set("c", o.c); return "?" + s.toString(); };
+const back = (o) => B + qs(o);
+const rulesHref = (o) => B + "/rules" + qs(o);
 
 const PUB_CSS = `:root{--red:${RED};--ink:${INK};--yel:#ffd800;--pink:${PINK};--cream:#fff7ee;--mute:#5f6b76}
 *{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--cream)}a{color:var(--red)}
@@ -45,7 +58,7 @@ label.f,p.f{display:block;font-weight:700;font-size:14px;margin:12px 0 4px}.opt{
 .chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0;font-size:14px;line-height:1.45}.chk input{width:24px;height:24px;flex:none;margin:0}
 .err{background:#fde8e8;color:#7f1d1d;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-weight:600}.fine{font-size:13px;color:var(--mute);margin:10px 0 0}
 .hp{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
-.split{display:grid;gap:16px;margin:16px 0}.split .card{margin:0}@media(min-width:640px){.split{grid-template-columns:1fr 1fr}}
+.split{display:grid;gap:16px;margin:16px 0}.split .card{margin:0}@media(min-width:640px){.split{grid-template-columns:1fr 1fr}.split.one{grid-template-columns:1fr}}
 .entered{display:block;width:100%;max-width:640px;height:auto;margin:0 auto 16px;border-radius:14px;box-shadow:0 1px 3px rgba(39,48,47,.12)}
 .exor{border-top:6px solid var(--red)}.exor h3{color:var(--red)}.mallow{border-top:6px solid var(--pink)}.mallow h3{color:var(--pink)}.mallow img{width:100%;height:auto;border-radius:10px;margin:0 0 12px;display:block}
 .credit{background:var(--cream);border-radius:10px;padding:10px 12px;font-size:15px}.lnk{font-weight:800;text-decoration:none}.lnk.pink{color:var(--pink)}
@@ -53,25 +66,25 @@ label.f,p.f{display:block;font-weight:700;font-size:14px;margin:12px 0 4px}.opt{
 footer{font-size:13px;color:var(--mute);text-align:center;padding:16px 16px 28px;line-height:1.6}footer a{color:var(--mute)}`;
 
 const pub = (title, body, cfg, o) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)}</title><style>${PUB_CSS}</style></head><body>
-<header class="top"><a href="${EXOR}" target="_blank" rel="noopener"><img src="${LOGO}" alt="Exor Games" width="61" height="44"></a><span class="x">×</span><span class="m">Mallow Games</span><span class="sp"></span><span class="ev">${esc(cfg.event)}<br>${esc(cfg.place)}</span></header>
+<header class="top"><a href="${EXOR}" target="_blank" rel="noopener"><img src="${LOGO}" alt="Exor Games" width="61" height="44"></a>${mallowOn(cfg) ? `<span class="x">×</span><span class="m">Mallow Games</span>` : ""}<span class="sp"></span><span class="ev">${esc(cfg.event)}<br>${esc(cfg.place)}</span></header>
 ${o && o.preview ? `<div class="prev">Preview - not open to the public yet. Entries made from this preview are marked test and never drawn.</div>` : ""}
 ${body}
-<footer>Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · <a href="mailto:${REPLY_TO}">${REPLY_TO}</a><br><a href="${B}/rules${o && o.preview ? "?preview=" + encodeURIComponent(o.preview) : ""}">Contest rules</a> · <a href="${EXOR}" target="_blank" rel="noopener">ExorGames.com</a> · <a href="${MALLOW}" target="_blank" rel="noopener">MallowGames.com</a></footer></body></html>`;
+<footer>Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · <a href="mailto:${REPLY_TO}">${REPLY_TO}</a><br><a href="${rulesHref(o)}">Contest rules</a> · <a href="${EXOR}" target="_blank" rel="noopener">ExorGames.com</a>${mallowOn(cfg) ? ` · <a href="${MALLOW}" target="_blank" rel="noopener">MallowGames.com</a>` : ""}</footer></body></html>`;
 
-const ABOUT = (cfg) => `<section class="split">
+const ABOUT = (cfg) => `<section class="split${mallowOn(cfg) ? "" : " one"}">
 <div class="card exor"><h3>Exor Games</h3><p>Trading cards, board games, Warhammer, accessories and more - in store and at <a href="${EXOR}" target="_blank" rel="noopener">ExorGames.com</a>. Magic, Pokémon, Yu-Gi-Oh!, One Piece, Lorcana... if it comes in a booster, we probably have it.</p><a class="lnk" href="${EXOR}" target="_blank" rel="noopener">Shop ExorGames.com →</a></div>
-<div class="card mallow"><a href="${MALLOW_URL}" target="_blank" rel="noopener"><img src="${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="1200" height="373" loading="lazy"></a><h3>Mallow Games</h3><p>Our sister shop for video games. We <b>buy and sell used video games</b>. Got games gathering dust? Check what we pay on the Mallow Games buylist at <a href="${MALLOW}" target="_blank" rel="noopener">mallowgames.com</a> and take cash or Exor Games store credit.</p><p class="credit">Win the draw and your <b>${esc(prizeShort(cfg))} credit</b> works on cards <i>or</i> video games.</p><a class="lnk pink" href="${MALLOW_URL}" target="_blank" rel="noopener">See the video game buylist →</a></div></section>`;
+${mallowOn(cfg) ? `<div class="card mallow"><a href="${MALLOW_URL}" target="_blank" rel="noopener"><img src="${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="1200" height="373" loading="lazy"></a><h3>Mallow Games</h3><p>Our sister shop for video games. We <b>buy and sell used video games</b>. Got games gathering dust? Check what we pay on the Mallow Games buylist at <a href="${MALLOW}" target="_blank" rel="noopener">mallowgames.com</a> and take cash or Exor Games store credit.</p>${isCredit(cfg) ? `<p class="credit">Win the draw and your <b>${esc(prizeShort(cfg))} credit</b> works on cards <i>or</i> video games.</p>` : ""}<a class="lnk pink" href="${MALLOW_URL}" target="_blank" rel="noopener">See the video game buylist →</a></div>` : ""}</section>`;
 
-const HOW = (cfg, o) => `<section class="card"><h3>How it works</h3><ol class="steps"><li><b>Enter</b> your name and email above.</li><li><b>Tap the link</b> we email you - that confirms your entry (and your spot on our list).</li><li><b>One winner</b> is drawn at random ${esc(cfg.drawText)} and emailed. Entries close ${esc(closesText(cfg))}.</li></ol><p class="fine">No purchase necessary. Open to residents of Canada (excluding Quebec) who are the age of majority in their province. Full <a href="${B}/rules${o && o.preview ? "?preview=" + encodeURIComponent(o.preview) : ""}">contest rules</a>.</p></section>`;
+const HOW = (cfg, o) => `<section class="card"><h3>How it works</h3><ol class="steps"><li><b>Enter</b> your name and email above.</li><li><b>Tap the link</b> we email you - that confirms your entry (and your spot on our list).</li><li><b>One winner</b> is drawn at random ${esc(cfg.drawText)} and emailed. Entries close ${esc(closesText(cfg))}.</li></ol><p class="fine">No purchase necessary. Open to residents of Canada (excluding Quebec) who are the age of majority in their province. Full <a href="${rulesHref(o)}">contest rules</a>.</p></section>`;
 
 export function renderLanding(cfg, o) {
   o = o || {};
   const f = o.f || {};
   const ints = Array.isArray(f.interests) ? f.interests : f.interests ? [f.interests] : [];
-  return pub(`Win ${prizeShort(cfg)} in store credit - Exor Games × Mallow Games`, `
+  return pub(`Win ${prizeText(cfg)} - ${brand(cfg)}`, `
 <section class="hero"><p class="kicker">${esc(cfg.event)} · ${esc(cfg.place)} · ${esc(cfg.dates)}</p>
-<h1>Win <b>${esc(prizeShort(cfg))}</b> in store credit</h1>
-<p class="big">Spend it at ExorGames.com on trading cards, board games and more - or on video games from Mallow Games.</p>
+<h1>Win ${prizeHtml(cfg)}</h1>
+${isCredit(cfg) ? `<p class="big">Spend it at ExorGames.com on trading cards, board games and more${mallowOn(cfg) ? " - or on video games from Mallow Games" : ""}.</p>` : ""}
 <p>One winner, drawn ${esc(cfg.drawText)}. Takes 30 seconds.</p>
 <a class="btn" href="#enter">Enter the draw</a></section>
 <div class="wrap">
@@ -83,8 +96,8 @@ ${o.err ? `<div class="err" role="alert">${esc(o.err)}</div>` : ""}
 <label class="f" for="email">Email</label><input class="t" id="email" type="email" name="email" value="${esc(f.email)}" required maxlength="160" autocomplete="email" inputmode="email">
 <p class="f">What do you play or collect? <span class="opt">(optional)</span></p>
 <div class="chips">${INTERESTS.map((i) => `<label><input type="checkbox" name="interests" value="${esc(i)}"${ints.includes(i) ? " checked" : ""}> ${esc(i)}</label>`).join("")}</div>
-<label class="chk"><input type="checkbox" name="consent" value="1"${f.consent ? " checked" : ""}${cfg.consentRequired ? " required" : ""}><span>Yes - email me Exor Games and Mallow Games news: new releases, deals, events and what we're buying.${cfg.consentRequired ? "" : " (optional)"} Unsubscribe any time.</span></label>
-<label class="chk"><input type="checkbox" name="rules" value="1"${f.rules ? " checked" : ""} required><span>I am the age of majority in my province and I accept the <a href="${B}/rules${o.preview ? "?preview=" + encodeURIComponent(o.preview) : ""}" target="_blank">contest rules</a>.</span></label>
+<label class="chk"><input type="checkbox" name="consent" value="1"${f.consent ? " checked" : ""}${cfg.consentRequired ? " required" : ""}><span>Yes - email me ${both(cfg)} news: new releases, deals, events and what we're buying.${cfg.consentRequired ? "" : " (optional)"} Unsubscribe any time.</span></label>
+<label class="chk"><input type="checkbox" name="rules" value="1"${f.rules ? " checked" : ""} required><span>I am the age of majority in my province and I accept the <a href="${rulesHref(o)}" target="_blank">contest rules</a>.</span></label>
 <div class="hp" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
 <button class="btn wide" type="submit">Enter the draw</button>
 <p class="fine">We'll email you a confirmation link - your entry counts once you tap it. One entry per person.</p>
@@ -97,26 +110,26 @@ ${HOW(cfg, o)}
 export function renderHolding(cfg, o) {
   o = o || {};
   const ended = !!o.ended;
-  return pub(`${cfg.event} - Exor Games × Mallow Games`, `<section class="hero"><p class="kicker">${esc(cfg.event)} · ${esc(cfg.place)} · ${esc(cfg.dates)}</p>
-<h1>${ended ? "Entries have closed" : "Our Expo draw opens at the show"}</h1>
-<p class="big">${ended ? `Thanks to everyone who entered! The winner is drawn ${esc(cfg.drawText)} and emailed.` : `Come see Exor Games and Mallow Games at the ${esc(cfg.event)} - scan the code at our booth to enter to win <b>${esc(prizeShort(cfg))}</b> in store credit.`}</p></section>
+  return pub(`${cfg.event} - ${brand(cfg)}`, `<section class="hero"><p class="kicker">${esc(cfg.event)} · ${esc(cfg.place)} · ${esc(cfg.dates)}</p>
+<h1>${ended ? "Entries have closed" : "Entries open soon"}</h1>
+<p class="big">${ended ? `Thanks to everyone who entered! The winner is drawn ${esc(cfg.drawText)} and emailed.` : `Check back soon - the draw for ${prizeHtml(cfg)} opens here.${isCredit(cfg) ? ` Spend it at Exor Games${mallowOn(cfg) ? " or on video games from Mallow Games" : ""}.` : ""}`}</p></section>
 <div class="wrap">${ABOUT(cfg)}</div>`, cfg, o);
 }
 
 export function renderCheckInbox(cfg, o) {
   o = o || {};
   return pub("Check your email", `<section class="hero"><p class="kicker">One more step</p><h1>Check your email${o.first ? ", " + esc(o.first) : ""}!</h1>
-<p class="big">We sent a confirmation link to <b>${esc(o.email)}</b>. Tap it and you're in the draw for ${esc(prizeShort(cfg))}.</p>
+<p class="big">We sent a confirmation link to <b>${esc(o.email)}</b>. Tap it and you're in the draw for ${esc(prizeText(cfg))}.</p>
 <p>Nothing there? Give it a minute and check your spam folder. The link works for 48 hours.</p><a class="btn" href="${esc(back(o))}">Back</a></section>
 <div class="wrap">${ABOUT(cfg)}</div>`, cfg, o);
 }
 
 export function renderVerified(cfg, o) {
   o = o || {};
-  return pub("You're in!", `<section class="hero"><img class="entered" src="${ENTERED_ART}" alt="Thank you - you're entered! You're now in the draw to win a $100 Exor Games gift card. Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit." width="1200" height="800"><p class="kicker">Entry confirmed</p><h1>You're in${o.first ? ", " + esc(o.first) : ""}! 🎉</h1>
-<p class="big">${o.already ? "This address was already confirmed - you're in the draw once, and once is all it takes." : `You're in the draw for ${esc(prizeShort(cfg))} in store credit.`} We draw the winner ${esc(cfg.drawText)} and email them.</p>
-<p>While you're here: see what's new at Exor Games, or find out what Mallow Games pays for the video games you're done with.</p>
-<div class="btns"><a class="btn" href="${EXOR}">Shop ExorGames.com</a><a class="btn pink" href="${MALLOW_URL}">Sell your video games</a></div></section>
+  return pub("You're in!", `<section class="hero">${cfg.art ? `<img class="entered" src="${esc(cfg.art)}" alt="Thank you - you're entered! You're now in the draw to win ${esc(prizeText(cfg))} at Exor Games." width="1200" height="800">` : ""}<p class="kicker">Entry confirmed</p><h1>You're in${o.first ? ", " + esc(o.first) : ""}! 🎉</h1>
+<p class="big">${o.already ? "This address was already confirmed - you're in the draw once, and once is all it takes." : `You're in the draw for ${esc(prizeText(cfg))}.`} We draw the winner ${esc(cfg.drawText)} and email them.</p>
+<p>While you're here: see what's new at Exor Games${mallowOn(cfg) ? ", or find out what Mallow Games pays for the video games you're done with" : ""}.</p>
+<div class="btns"><a class="btn" href="${EXOR}">Shop ExorGames.com</a>${mallowOn(cfg) ? `<a class="btn pink" href="${MALLOW_URL}">Sell your video games</a>` : ""}</div></section>
 <div class="wrap">${ABOUT(cfg)}</div>`, cfg, o);
 }
 
@@ -134,20 +147,57 @@ export function renderNotFound(cfg, o) {
 
 export function renderRules(cfg, o) {
   o = o || {};
-  return pub("Contest rules", `<div class="wrap rules"><h1>Contest rules</h1><p class="fine">${esc(cfg.event)} draw · Exor Games × Mallow Games</p>
+  return pub("Contest rules", `<div class="wrap rules"><h1>Contest rules</h1><p class="fine">${esc(cfg.event)} draw · ${brand(cfg)}</p>
 <ol>
 <li><b>Sponsor.</b> Exor Games, 51 Allen Street, Charlottetown, PE C1A 2V6, Canada (<a href="mailto:${REPLY_TO}">${REPLY_TO}</a>).</li>
-<li><b>Who can enter.</b> Legal residents of Canada, excluding Quebec, who have reached the age of majority in their province or territory at the time of entry. Employees of Exor Games and Mallow Games, and the members of their households, cannot enter.</li>
+<li><b>Who can enter.</b> Legal residents of Canada, excluding Quebec, who have reached the age of majority in their province or territory at the time of entry. Employees of ${both(cfg)}, and the members of their households, cannot enter.</li>
 <li><b>Contest period.</b> Entries are accepted from the opening of the ${esc(cfg.event)} (${esc(cfg.dates)}) until ${esc(closesText(cfg))}. Entries not confirmed by then do not count.</li>
 <li><b>How to enter.</b> No purchase necessary. Visit this page (scan the code at our booth), enter your name and email address and tap the confirmation link we email you. One entry per person and per email address; extra entries are removed.</li>
-<li><b>Prize.</b> One (1) prize: ${esc(cfg.prize)}, issued as an Exor Games gift card (approximate retail value $100 CAD), redeemable at ExorGames.com and in store on anything we sell, including video games from Mallow Games. No cash value, not transferable, no substitution except by the sponsor if the prize becomes unavailable.</li>
+<li><b>Prize.</b> One (1) prize: ${esc(cfg.prize)}${isCredit(cfg) ? `, issued as an Exor Games gift card (approximate retail value ${esc(prizeShort(cfg))} CAD), redeemable at ExorGames.com and in store on anything we sell${mallowOn(cfg) ? ", including video games from Mallow Games" : ""}` : ""}. No cash value, not transferable, no substitution except by the sponsor if the prize becomes unavailable.</li>
 <li><b>Draw.</b> One winner is chosen at random from all confirmed entries ${esc(cfg.drawText)}. The odds of winning depend on the number of eligible entries received. The winner is notified by email and must correctly answer a mathematical skill-testing question and reply within seven (7) days, or an alternate winner is drawn.</li>
-<li><b>Your information.</b> We use your name and email address to run the draw and contact the winner. If you ticked the email box, we also add you to the Exor Games / Mallow Games email list as a subscribed customer; every email carries an unsubscribe link. We never sell your information.</li>
+<li><b>Your information.</b> We use your name and email address to run the draw and contact the winner. If you ticked the email box, we also add you to the ${both(cfg)} email list as a subscribed customer; every email carries an unsubscribe link. We never sell your information.</li>
 <li><b>General.</b> By entering you accept these rules and the sponsor's decisions, which are final. The sponsor may disqualify entries made by automated means or in breach of these rules. Void where prohibited by law. This contest is subject to all applicable federal, provincial and municipal laws.</li>
 </ol><p><a href="${esc(back(o))}">← Back to the entry page</a></p></div>`, cfg, o);
 }
 
 /* ---------- /9pocket/win (admins) ---------- */
+const ADMIN_CSS = `<style>.wmsg{background:#d1fae5;color:#065f46;padding:10px 12px;border-radius:10px;margin:0 0 12px;font-weight:600}.werr{background:#fee2e2;color:#7f1d1d;padding:10px 12px;border-radius:10px;margin:0 0 12px;font-weight:600}.wset label{display:block;font-size:13px;font-weight:600;margin:8px 0 2px}.wset input[type=text],.wset input[type=datetime-local]{width:100%;max-width:520px;padding:8px;border:1px solid #cbd3d9;border-radius:8px;font:inherit}.wset .two{display:grid;gap:0 16px;grid-template-columns:1fr 1fr;max-width:760px}.wset .chk{display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:500}.winl{font-size:14px;line-height:1.8}.winl code{background:#eef2f4;padding:2px 6px;border-radius:6px;word-break:break-all}.wtab{width:100%;border-collapse:collapse;font-size:13px}.wtab td,.wtab th{text-align:left;vertical-align:top;border-top:1px solid #eef2f4;padding:6px}.wtab td.n,.wtab th.n{text-align:right}.wtab form{display:inline}.wtab .om.bad{color:#b42318;font-weight:600}.wtab .om.ok{color:#065f46;font-weight:600}.draw{background:#fff;border:2px solid #d62c28;border-radius:12px;padding:12px 14px;margin:8px 0}.draw b.w{font-size:17px}.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;background:#eef2f4}.badge.on{background:#d1fae5;color:#065f46}.badge.off{background:#fee2e2;color:#7f1d1d}.badge.cur{background:#dbeafe;color:#1e3a8a}button.primary{background:#d62c28;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}button.dim{background:#eef2f4;border:0;border-radius:8px;padding:6px 10px;cursor:pointer}.crumb{margin:0 0 8px;font-size:14px}</style>`;
+const isLive = (c, now) => !!c.open && (!c.closesAt || now <= c.closesAt);
+const stateOf = (c, now) => (c.summary ? ["", "ENDED · entries removed"] : isLive(c, now) ? ["on", "OPEN"] : c.open ? ["", "ENDED"] : ["", "CLOSED"]);
+/* A checkbox that always arrives: the hidden "0" of the same name rides first, the box's "1" when ticked. */
+/* Text inside a confirm('...') on a form: the quote and the backslash escaped for JS, then the whole for HTML. */
+const jq = (v) => esc(String(v == null ? "" : v).replace(/[\\']/g, "\\$&"));
+const tick = (name, on, label) => `<label class="chk"><input type="hidden" name="${name}" value="0"><input type="checkbox" name="${name}" value="1"${on ? " checked" : ""}> ${label}</label>`;
+
+/* The list: every contest with its counts (live, or the summary kept after the
+   sweep), which one the public page shows, and the form for a new one. */
+export function renderContests(d, o) {
+  o = o || {};
+  const list = d.contests || [], cur = d.current || "", now = d.now || 0, ctl = A + "/control";
+  const curRec = list.find((c) => c.id === cur);
+  const row = (c) => {
+    const s = c.stats || {}, [cls, label] = stateOf(c, now), here = A + "/c/" + encodeURIComponent(c.id);
+    return `<tr><td><a href="${here}"><b>${esc(c.event)}</b></a>${c.id === cur ? ' <span class="badge cur">current</span>' : ""}<br><span class="muted">${esc(c.place)}${c.dates ? " · " + esc(c.dates) : ""} · ${esc(c.prize)}</span></td><td>${esc(closesText(c))}</td><td><span class="sw ${cls}">${label}</span></td><td class="n">${s.visits || 0}</td><td class="n">${s.signups || 0}</td><td class="n">${s.confirmed || 0}</td><td class="n">${s.pending || 0}</td><td class="n">${s.onList || 0}</td><td class="n">${s.winners != null ? s.winners : s.draws || 0}</td><td style="white-space:nowrap"><a href="${here}">Open</a>${c.id === cur ? "" : ` · <form method="post" action="${ctl}" onsubmit="return confirm('Put ${jq(c.event)} at exorgames.com/win? The QR address and the holding page switch to it; ${jq(curRec ? curRec.event : "the current contest")} stays here with its entries.')"><input type="hidden" name="action" value="current"><input type="hidden" name="c" value="${esc(c.id)}"><button type="submit" class="dim">Make current</button></form> <form method="post" action="${ctl}" onsubmit="return confirm('Remove ${jq(c.event)}${s.confirmed ? ` and its ${s.confirmed} confirmed entries` : ""}? This cannot be undone.')"><input type="hidden" name="action" value="remove_contest"><input type="hidden" name="c" value="${esc(c.id)}"><button type="submit" class="dim">Remove</button></form>`}</td></tr>`;
+  };
+  const page = `${ADMIN_CSS}
+<div class="hz"><h1>Contests</h1>${curRec ? `<span class="sw ${isLive(curRec, now) ? "on" : ""}">${esc(SHORT_URL.replace("https://", ""))} → ${esc(curRec.event)}: ${stateOf(curRec, now)[1]}</span>` : ""}</div>
+${o.msg ? `<div class="wmsg">${esc(o.msg)}</div>` : ""}${o.err ? `<div class="werr">${esc(o.err)}</div>` : ""}
+<p class="muted" style="margin:4px 0 10px"><a href="${SHORT_URL}" target="_blank" rel="noopener">${esc(SHORT_URL.replace("https://", ""))}</a> (the QR address) always shows the <b>current</b> contest: its entry form while it is open, a holding page before and after. Every contest keeps its own entries, draws, settings and daily counts. Entries and draws are removed ${o.keepDays || 90} days after a contest closes; the counts stay for good.</p>
+${list.length ? `<table class="wtab"><tr><th>Contest</th><th>Entries close</th><th>State</th><th class="n">Visits</th><th class="n">Sign-ups</th><th class="n">Confirmed</th><th class="n">Awaiting</th><th class="n">On the list</th><th class="n">Winners</th><th></th></tr>${list.map(row).join("")}</table>
+<p class="muted" style="font-size:12px">Visits: loads of the entry page while open. Sign-ups: forms sent. Confirmed: links tapped (test entries from the preview are not counted). Awaiting: sent the link, not tapped yet. On the list: subscribed in Shopify. Winners: draws not voided.</p>` : `<p class="muted">No contests yet.</p>`}
+<details class="sc-note" style="margin:16px 0"${list.length ? "" : " open"}><summary><b>New contest</b></summary>
+<form method="post" action="${ctl}" class="wset"><input type="hidden" name="action" value="new">
+<div class="two"><div><label>Event (the contest's name)</label><input type="text" name="event" value="" maxlength="120" required placeholder="Pokémon prerelease weekend"></div><div><label>Place</label><input type="text" name="place" value="" maxlength="120" placeholder="Exor Games, Charlottetown"></div>
+<div><label>Dates (as shown on the page)</label><input type="text" name="dates" value="" maxlength="120" placeholder="November 7–8, 2026"></div><div><label>Prize</label><input type="text" name="prize" value="" maxlength="160" required placeholder="$50 in store credit at ExorGames.com"></div>
+<div><label>Entries close (Atlantic time)</label><input type="datetime-local" name="closes" value=""></div><div><label>Draw (as shown on the page)</label><input type="text" name="drawText" value="" maxlength="120" placeholder="Monday, November 9, 2026"></div></div>
+<label>Customer tags in Shopify (comma-separated)</label><input type="text" name="tags" value="" maxlength="200" placeholder="Prerelease 2026, Contest">
+${tick("consentRequired", true, "The email box must be ticked to enter (untick to let people enter the draw without joining the list)")}
+${tick("mallow", true, "Show Mallow Games too (the partner card, the video-game band in the emails, \"Exor Games × Mallow Games\")")}
+${tick("current", !(curRec && isLive(curRec, now)), `Put it at ${esc(SHORT_URL.replace("https://", ""))} right away${curRec && isLive(curRec, now) ? ` (<b>${esc(curRec.event)} is open there now</b> - leave this off until it closes)` : ""}`)}
+<button type="submit" class="primary" style="margin-top:10px">Create the contest</button> <span class="muted">It starts <b>closed</b>: check its page, send yourself the sample email, then open it.</span></form></details>`;
+  return shell("Contests", page, o, true);
+}
+
 /* Visits, sign-ups and confirmations per Atlantic day; the page itself ticks the
    visit on every live load (not the preview, not the holding page). */
 function traffic(d) {
@@ -160,65 +210,70 @@ function traffic(d) {
 ${days.length ? `<table class="wtab" style="max-width:720px"><tr><th>Day (Atlantic)</th><th class="n">Visits</th><th class="n">Sign-ups</th><th class="n">Confirmed</th><th class="n">Signed up</th><th class="n">Confirmed</th></tr>${days.map((x) => row(x, false)).join("")}${days.length > 1 ? row({ ...tot, day: "Total" }, true) : ""}</table><p class="muted" style="font-size:12px">A visit is one load of the entry page while the contest is open. Phones that scan the code twice count twice; previews and the holding page do not count.</p>` : `<p class="muted">No visits counted yet.</p>`}`;
 }
 const OM_LABEL = { subscribed: "subscribed (new customer)", updated: "subscribed (existing customer)", pending: "waiting", "no-consent": "no consent", unconfigured: "no Shopify token", failed: "failed" };
+/* One contest: state, setup, counts, links, the draw, settings, entries. */
 export function renderWinAdmin(d, o) {
   o = o || {};
-  const cfg = d.cfg || {}, list = d.entries || [], draws = d.draws || [], now = d.now || 0;
+  const cfg = d.cfg || {}, list = d.entries || [], draws = d.draws || [], now = d.now || 0, id = cfg.id || "";
   const real = list.filter((e) => !e.test), tests = list.filter((e) => e.test);
   const okOm = (e) => e.shopify && /^(subscribed|updated)$/.test(e.shopify.status);
   const onList = real.filter(okOm).length;
   const failed = real.filter((e) => e.consent && e.shopify && !okOm(e) && e.shopify.status !== "pending").length;
-  const live = !!cfg.open && (!cfg.closesAt || now <= cfg.closesAt);
-  const pubUrl = (o.origin || "") + B, prev = pubUrl + "?preview=" + encodeURIComponent(cfg.previewKey || "");
+  const live = isLive(cfg, now), current = cfg.current !== false;
+  const pubUrl = (o.origin || "") + B, prev = pubUrl + "?preview=" + encodeURIComponent(cfg.previewKey || "") + (current ? "" : "&c=" + encodeURIComponent(id));
   const ctl = A + "/control";
-  const hid = (a) => `<input type="hidden" name="action" value="${a}">`;
+  const hid = (a) => `<input type="hidden" name="action" value="${a}"><input type="hidden" name="c" value="${esc(id)}">`;
   const drawnSet = new Set(draws.map((x) => x.email));
-  const state = cfg.open ? (live ? "OPEN" : "CLOSED - past the closing time") : "CLOSED";
-  const page = `<style>.wmsg{background:#d1fae5;color:#065f46;padding:10px 12px;border-radius:10px;margin:0 0 12px;font-weight:600}.werr{background:#fee2e2;color:#7f1d1d;padding:10px 12px;border-radius:10px;margin:0 0 12px;font-weight:600}.wset label{display:block;font-size:13px;font-weight:600;margin:8px 0 2px}.wset input[type=text],.wset input[type=datetime-local]{width:100%;max-width:520px;padding:8px;border:1px solid #cbd3d9;border-radius:8px;font:inherit}.wset .two{display:grid;gap:0 16px;grid-template-columns:1fr 1fr;max-width:760px}.winl{font-size:14px;line-height:1.8}.winl code{background:#eef2f4;padding:2px 6px;border-radius:6px;word-break:break-all}.wtab{width:100%;border-collapse:collapse;font-size:13px}.wtab td,.wtab th{text-align:left;vertical-align:top;border-top:1px solid #eef2f4;padding:6px}.wtab form{display:inline}.wtab .om.bad{color:#b42318;font-weight:600}.wtab .om.ok{color:#065f46;font-weight:600}.draw{background:#fff;border:2px solid #d62c28;border-radius:12px;padding:12px 14px;margin:8px 0}.draw b.w{font-size:17px}.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;background:#eef2f4}.badge.on{background:#d1fae5;color:#065f46}.badge.off{background:#fee2e2;color:#7f1d1d}button.primary{background:#d62c28;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}button.dim{background:#eef2f4;border:0;border-radius:8px;padding:6px 10px;cursor:pointer}</style>
-<div class="hz"><h1>Expo contest</h1><span class="sw ${live ? "on" : ""}">${state}</span>
-<form method="post" action="${ctl}">${hid(cfg.open ? "close" : "open")}<button type="submit" class="${cfg.open ? "dim" : "primary"}"${cfg.open ? "" : ` onclick="return confirm('Open the contest to the public now? The QR code page starts taking entries.')"`}>${cfg.open ? "Close the contest" : "Open the contest"}</button></form></div>
+  const state = cfg.summary ? "ENDED - entries removed after " + (o.keepDays || 90) + " days" : cfg.open ? (live ? "OPEN" : "CLOSED - past the closing time") : "CLOSED";
+  const page = `${ADMIN_CSS}
+<p class="crumb"><a href="${A}">← All contests</a></p>
+<div class="hz"><h1>${esc(cfg.event)}</h1><span class="sw ${live ? "on" : ""}">${state}</span>${current ? `<span class="badge cur">current - at ${esc(SHORT_URL.replace("https://", ""))}</span>` : `<form method="post" action="${ctl}" onsubmit="return confirm('Put ${jq(cfg.event)} at exorgames.com/win? The QR address and the holding page switch to it.')">${hid("current")}<button type="submit" class="dim">Make current</button></form>`}
+<form method="post" action="${ctl}">${hid(cfg.open ? "close" : "open")}<button type="submit" class="${cfg.open ? "dim" : "primary"}"${cfg.open ? "" : ` onclick="return confirm('Open the contest now?${current ? " The QR code page starts taking entries." : " It is not the contest at exorgames.com/win, so only the preview link reaches it until you make it current."}')"`}>${cfg.open ? "Close the contest" : "Open the contest"}</button></form></div>
 ${o.msg ? `<div class="wmsg">${esc(o.msg)}</div>` : ""}${o.err ? `<div class="werr">${esc(o.err)}</div>` : ""}
-<p class="muted" style="margin:4px 0 10px">${esc(cfg.event)} · ${esc(cfg.place)} · ${esc(cfg.dates)} · prize: ${esc(cfg.prize)} · entries close ${esc(closesText(cfg))} · draw ${esc(cfg.drawText)}</p>
+<p class="muted" style="margin:4px 0 10px">${esc(cfg.event)} · ${esc(cfg.place)} · ${esc(cfg.dates)} · prize: ${esc(cfg.prize)} · entries close ${esc(closesText(cfg))} · draw ${esc(cfg.drawText)}${mallowOn(cfg) ? " · with Mallow Games" : " · Exor Games alone"}</p>
 <div class="pg"><b>Setup</b><br>
 <span class="badge ${o.emailOn ? "on" : "off"}">Confirmation email (Resend): ${o.emailOn ? "ready" : "RESEND_API_KEY missing"}</span>
 <span class="badge ${o.shopifyOn && o.customersWrite ? "on" : "off"}">Shopify customers: ${!o.shopifyOn ? "no token on the worker" : o.customersWrite ? "the token can create and subscribe customers" : o.scopeError ? "scope check failed - " + esc(o.scopeError) : "the token lacks write_customers"}</span>
 <div class="muted" style="margin-top:6px">Omnisend takes its list from Shopify's customers: a confirmed entrant who ticked the box becomes a Shopify customer marked <b>subscribed</b> (confirmed opt-in) and tagged <b>${esc(cfg.tags)}</b>; one who already is a customer gets the tags and the subscription.${o.shopifyOn && !o.customersWrite ? " <b>Until the token has the write_customers scope</b> (Shopify admin › Settings › Apps and sales channels › Develop apps › the worker's app › Configuration), entries are kept here - use <b>Retry</b> per row or the CSV export afterwards." : ""}</div></div>
 <div class="tiles">
-<div class="tile2"><b>${real.length}</b><br><span class="muted">confirmed entries</span></div>
+<div class="tile2"><b>${cfg.summary ? cfg.summary.confirmed : real.length}</b><br><span class="muted">confirmed entries</span></div>
 <div class="tile2"><b>${d.pending || 0}</b><br><span class="muted">awaiting confirmation</span></div>
-<div class="tile2"><b>${onList}</b><br><span class="muted">subscribed in Shopify</span></div>
+<div class="tile2"><b>${cfg.summary ? cfg.summary.onList : onList}</b><br><span class="muted">subscribed in Shopify</span></div>
 <div class="tile2"><b>${failed}</b><br><span class="muted">Shopify failed</span></div>
-<div class="tile2"><b>${real.filter((e) => e.excluded).length}</b><br><span class="muted">excluded from the draw</span></div>
-<div class="tile2"><b>${tests.length}</b><br><span class="muted">test entries (preview)</span></div>
+<div class="tile2"><b>${cfg.summary ? cfg.summary.excluded : real.filter((e) => e.excluded).length}</b><br><span class="muted">excluded from the draw</span></div>
+<div class="tile2"><b>${cfg.summary ? cfg.summary.test : tests.length}</b><br><span class="muted">test entries (preview)</span></div>
 </div>
+${cfg.summary ? `<p class="muted">The entries, pending tokens and draws of this contest were removed ${esc(when(cfg.summary.sweptAt))} (${o.keepDays || 90} days after it closed); ${cfg.summary.winners || 0} winner${cfg.summary.winners === 1 ? "" : "s"} had been drawn. The counts above and the traffic below stay.</p>` : ""}
 ${traffic(d)}
 <div class="pg winl"><b>Links</b><br>
-Short address on the QR code and the sign: <a href="${SHORT_URL}" target="_blank" rel="noopener"><code>${SHORT_URL}</code></a> <span class="muted">(a Shopify redirect to <code>${esc(pubUrl)}</code>${live ? "" : "; shows the holding page while closed"})</span><br>
-Preview while closed (admins only - do not print this one): <a href="${esc(prev)}" target="_blank" rel="noopener"><code>${esc(prev)}</code></a><br>
-QR code for the booth: <a href="/win-qr.png" target="_blank">PNG</a> · <a href="/win-qr.svg" target="_blank">SVG (print)</a> · <a href="/win-sign.html" target="_blank">printable sign</a> · <a href="${B}/rules" target="_blank">rules page</a> · <a href="${A}/export.csv">export entries (CSV)</a><br>
+${current ? `Short address on the QR code and the sign: <a href="${SHORT_URL}" target="_blank" rel="noopener"><code>${SHORT_URL}</code></a> <span class="muted">(a Shopify redirect to <code>${esc(pubUrl)}</code>${live ? "" : "; shows the holding page while closed"})</span><br>
+Preview while closed (admins only - do not print this one): <a href="${esc(prev)}" target="_blank" rel="noopener"><code>${esc(prev)}</code></a><br>` : `<span class="muted">This is not the contest at <code>${esc(SHORT_URL)}</code> yet - the QR address shows the current one. Check this one with the preview link, then <b>Make current</b> when it should take over.</span><br>
+Preview (admins only - do not print this one): <a href="${esc(prev)}" target="_blank" rel="noopener"><code>${esc(prev)}</code></a><br>`}
+QR code for the booth: <a href="/win-qr.png" target="_blank">PNG</a> · <a href="/win-qr.svg" target="_blank">SVG (print)</a> · <a href="/win-sign.html" target="_blank">printable sign</a> · <a href="${current ? B + "/rules" : esc(B + "/rules?preview=" + encodeURIComponent(cfg.previewKey || "") + "&c=" + encodeURIComponent(id))}" target="_blank">rules page</a> · <a href="${A}/c/${esc(id)}/export.csv">export entries (CSV)</a><br>
 <form method="post" action="${ctl}" style="display:inline">${hid("test_email")}<button type="submit" class="dim">Send me a sample confirmation email</button></form></div>
 <h2>The draw</h2>
 <p class="muted" style="margin:0 0 8px"><b>Drawing never emails anyone.</b> It only picks a name and shows it here. Check the name against your staff first; if it is one of them, press <b>Void, staff</b> on the card and draw again. Email the winner yourself with the button on their card. Before the draw, you can also mark entries <b>Exclude</b> in the table below.</p>
 <form method="post" action="${ctl}" onsubmit="return confirm('Draw a winner now from the ${real.filter((e) => !drawnSet.has(e.email) && !e.excluded).length} eligible confirmed entries? Nothing is emailed.')">${hid("draw")}<button type="submit" class="primary">Draw a winner</button> <span class="muted">Random pick among confirmed, non-test, non-excluded entries not drawn before. Draw again only after voiding a draw or if a winner does not answer within 7 days.</span></form>
-${draws.map((w, i) => `<div class="draw"><b class="w">${i + 1}. ${esc(w.first)} ${esc(w.last)}</b> · <a href="mailto:${esc(w.email)}">${esc(w.email)}</a><br><span class="muted">drawn ${esc(when(w.at))} by ${esc(w.by)}</span><br>Skill-testing question: <b>${esc(w.q)} = ?</b> &nbsp;answer <b>${esc(w.a)}</b> (they must reply with it before the gift card goes out)<br>
-${w.voided ? `<span class="badge off">voided ${esc(when(w.voided.at))} by ${esc(w.voided.by)} - staff / not eligible, entry excluded</span>` : w.emailed && w.emailed.ok ? `<span class="badge on">winner emailed ${esc(when(w.emailed.at))}</span>` : `${w.emailed ? `<span class="badge off">email failed: ${esc(w.emailed.error)}</span> ` : ""}<form method="post" action="${ctl}" style="display:inline" onsubmit="return confirm('Email ${esc(w.first)} that they won, with the skill-testing question? This is the only step that emails them.')">${hid("email_winner")}<input type="hidden" name="email" value="${esc(w.email)}"><button type="submit" class="primary">Email the winner</button></form> <form method="post" action="${ctl}" style="display:inline" onsubmit="return confirm('Void this draw because ${esc(w.first)} is staff or not eligible? The entry is excluded and you can draw again. Nothing is emailed.')">${hid("void")}<input type="hidden" name="email" value="${esc(w.email)}"><button type="submit" class="dim">Void, staff / not eligible</button></form>`}</div>`).join("")}
+${draws.map((w, i) => `<div class="draw"><b class="w">${i + 1}. ${esc(w.first)} ${esc(w.last)}</b> · <a href="mailto:${esc(w.email)}">${esc(w.email)}</a><br><span class="muted">drawn ${esc(when(w.at))} by ${esc(w.by)}</span><br>Skill-testing question: <b>${esc(w.q)} = ?</b> &nbsp;answer <b>${esc(w.a)}</b> (they must reply with it before the prize goes out)<br>
+${w.voided ? `<span class="badge off">voided ${esc(when(w.voided.at))} by ${esc(w.voided.by)} - staff / not eligible, entry excluded</span>` : w.emailed && w.emailed.ok ? `<span class="badge on">winner emailed ${esc(when(w.emailed.at))}</span>` : `${w.emailed ? `<span class="badge off">email failed: ${esc(w.emailed.error)}</span> ` : ""}<form method="post" action="${ctl}" style="display:inline" onsubmit="return confirm('Email ${jq(w.first)} that they won, with the skill-testing question? This is the only step that emails them.')">${hid("email_winner")}<input type="hidden" name="email" value="${esc(w.email)}"><button type="submit" class="primary">Email the winner</button></form> <form method="post" action="${ctl}" style="display:inline" onsubmit="return confirm('Void this draw because ${jq(w.first)} is staff or not eligible? The entry is excluded and you can draw again. Nothing is emailed.')">${hid("void")}<input type="hidden" name="email" value="${esc(w.email)}"><button type="submit" class="dim">Void, staff / not eligible</button></form>`}</div>`).join("")}
 <details class="sc-note" style="margin:16px 0"><summary><b>Settings</b></summary>
 <form method="post" action="${ctl}" class="wset">${hid("cfg")}
 <div class="two"><div><label>Event</label><input type="text" name="event" value="${esc(cfg.event)}" maxlength="120"></div><div><label>Place</label><input type="text" name="place" value="${esc(cfg.place)}" maxlength="120"></div>
 <div><label>Dates (as shown on the page)</label><input type="text" name="dates" value="${esc(cfg.dates)}" maxlength="120"></div><div><label>Prize</label><input type="text" name="prize" value="${esc(cfg.prize)}" maxlength="160"></div>
 <div><label>Entries close (Atlantic time)</label><input type="datetime-local" name="closes" value="${esc(o.closesInput || "")}"></div><div><label>Draw (as shown on the page)</label><input type="text" name="drawText" value="${esc(cfg.drawText)}" maxlength="120"></div></div>
 <label>Customer tags in Shopify (comma-separated)</label><input type="text" name="tags" value="${esc(cfg.tags)}" maxlength="200">
-<label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" name="consentRequired" value="1"${cfg.consentRequired ? " checked" : ""}> The email box must be ticked to enter (untick to let people enter the draw without joining the list)</label>
-<button type="submit" class="primary" style="margin-top:10px">Save settings</button></form></details>
+${tick("consentRequired", cfg.consentRequired, "The email box must be ticked to enter (untick to let people enter the draw without joining the list)")}
+${tick("mallow", mallowOn(cfg), "Show Mallow Games too (the partner card, the video-game band in the emails, \"Exor Games × Mallow Games\")")}
+<button type="submit" class="primary" style="margin-top:10px">Save settings</button> <span class="muted">Admin address of this contest: <code>${esc(A + "/c/" + id)}</code></span></form></details>
 <h2>Entries <span class="muted" style="font-size:14px">(${list.length})</span></h2>
 ${list.length ? `<table class="wtab"><tr><th>#</th><th>Name</th><th>Email</th><th>Confirmed</th><th>Emails</th><th>Plays</th><th>Shopify</th><th></th></tr>
 ${list.map((e, i) => `<tr${e.test || e.excluded ? ' style="opacity:.6"' : ""}><td>${i + 1}</td><td>${esc(e.first)} ${esc(e.last)}${e.test ? ' <span class="badge">test</span>' : ""}${e.excluded ? ' <span class="badge off">excluded</span>' : ""}${drawnSet.has(e.email) ? ' <span class="badge on">drawn</span>' : ""}</td><td>${esc(e.email)}</td><td>${esc(when(e.verifiedAt))}</td><td>${e.consent ? "yes" : "no"}</td><td>${esc((e.interests || []).join(", "))}</td>
 <td><span class="om ${okOm(e) ? "ok" : e.shopify && e.shopify.status !== "pending" && e.consent ? "bad" : ""}">${esc(OM_LABEL[(e.shopify || {}).status] || (e.shopify || {}).status || "")}</span>${e.shopify && e.shopify.id ? ` <a href="https://admin.shopify.com/store/most-wanted-ca/customers/${esc(e.shopify.id)}" target="_blank" rel="noopener">open</a>` : ""}${e.shopify && e.shopify.error ? `<br><small class="muted">${esc(e.shopify.error)}</small>` : ""}${e.consent && !okOm(e) ? ` <form method="post" action="${ctl}">${hid("retry")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Retry</button></form>` : ""}</td>
-<td style="white-space:nowrap">${e.test ? "" : e.excluded ? `<form method="post" action="${ctl}">${hid("include")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Include</button></form> ` : `<form method="post" action="${ctl}" onsubmit="return confirm('Exclude ${esc(e.first)} from the draw (staff / not eligible)? They stay on the list; only the draw skips them.')">${hid("exclude")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Exclude</button></form> `}<form method="post" action="${ctl}" onsubmit="return confirm('Remove ${esc(e.first)}\\'s entry? This cannot be undone.')">${hid("delete")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Remove</button></form></td></tr>`).join("")}</table>` : `<p class="muted">No confirmed entries yet.</p>`}`;
-  return shell("Expo contest", page, o, true);
+<td style="white-space:nowrap">${e.test ? "" : e.excluded ? `<form method="post" action="${ctl}">${hid("include")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Include</button></form> ` : `<form method="post" action="${ctl}" onsubmit="return confirm('Exclude ${jq(e.first)} from the draw (staff / not eligible)? They stay on the list; only the draw skips them.')">${hid("exclude")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Exclude</button></form> `}<form method="post" action="${ctl}" onsubmit="return confirm('Remove ${jq(e.first)}\\'s entry? This cannot be undone.')">${hid("delete")}<input type="hidden" name="email" value="${esc(e.email)}"><button type="submit" class="dim">Remove</button></form></td></tr>`).join("")}</table>` : `<p class="muted">${cfg.summary ? "The entries were removed after the retention period." : "No confirmed entries yet."}</p>`}`;
+  return shell(cfg.event ? cfg.event + " - contest" : "Contest", page, o, true);
 }
 
-export function renderWinDenied(o) {
-  return shell("Expo contest", `<h1>Expo contest</h1><div class="err">Only an admin can open the contest screen.</div>`, o, true);
+export function renderWinDenied(o, msg) {
+  return shell("Contests", `<h1>Contests</h1><div class="err">${esc(msg || "Only an admin can open the contest screens.")}</div>`, o, true);
 }
 
 /* ---------- emails ---------- */
@@ -226,6 +281,10 @@ const frame = (inner, foot) => `<!doctype html><html><body style="margin:0;backg
 const button = (href, text) => `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:18px 0"><tr><td style="background:${RED};border-radius:10px"><a href="${esc(href)}" style="display:inline-block;padding:14px 26px;color:#fff;font-weight:700;text-decoration:none;font-size:16px">${esc(text)}</a></td></tr></table>`;
 const ADDR = `Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6, Canada · <a href="mailto:${REPLY_TO}" style="color:${MUTED}">${REPLY_TO}</a>`;
 const ADDR_TEXT = `Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6, Canada · ${REPLY_TO}`;
+/* The Mallow Games band and line at the foot of an email (only on a contest with Mallow on). */
+const mallowHtml = (cfg) => (mallowOn(cfg) ? `<a href="${MALLOW_URL}" style="display:block;margin:18px 0 6px;text-decoration:none"><img src="${ASSET_ORIGIN}${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="544" height="169" style="display:block;width:100%;max-width:544px;height:auto;border-radius:10px"></a>
+<p style="font-size:14px;color:${MUTED};margin:0 0 8px">Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit - <a href="${MALLOW_URL}" style="color:${RED}">see what we pay</a>.</p>` : "");
+const mallowText = (cfg) => (mallowOn(cfg) ? ["", "Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit: " + MALLOW_URL] : []);
 
 export function buildVerifyEmail(a) {
   const cfg = a.cfg || {}, first = a.first ? ", " + a.first : "";
@@ -234,12 +293,11 @@ export function buildVerifyEmail(a) {
 <p>Thanks for entering our draw at the ${esc(cfg.event)}. Confirm your email address to enter the draw for <b>${esc(cfg.prize)}</b>.</p>
 ${button(a.link, "Confirm my entry")}
 <p style="font-size:14px;color:${MUTED}">The link works for 48 hours. If the button does not work, copy this address into your browser:<br><a href="${esc(a.link)}" style="color:${RED};word-break:break-all">${esc(a.link)}</a></p>
-<p style="font-size:14px;color:${MUTED}">Ticked the email box? Confirming also signs you up for Exor Games and Mallow Games emails - new releases, deals, events and what we're buying. Every email has an unsubscribe link.</p>
+<p style="font-size:14px;color:${MUTED}">Ticked the email box? Confirming also signs you up for ${both(cfg)} emails - new releases, deals, events and what we're buying. Every email has an unsubscribe link.</p>
 <p style="font-size:14px;color:${MUTED}">Didn't enter? Ignore this email and nothing happens.</p>
-<a href="${MALLOW_URL}" style="display:block;margin:18px 0 6px;text-decoration:none"><img src="${ASSET_ORIGIN}${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="544" height="169" style="display:block;width:100%;max-width:544px;height:auto;border-radius:10px"></a>
-<p style="font-size:14px;color:${MUTED};margin:0 0 8px">Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit - <a href="${MALLOW_URL}" style="color:${RED}">see what we pay</a>.</p>${a.test ? `<p><b>This is a sample sent from the 9Pocket admin screen; the button opens the preview page.</b></p>` : ""}`,
+${mallowHtml(cfg)}${a.test ? `<p><b>This is a sample sent from the 9Pocket admin screen; the button opens the preview page.</b></p>` : ""}`,
     `${ADDR}<br>You received this one-time message because this address was entered in our contest at the ${esc(cfg.event)}.`);
-  const text = [`One tap and you're in${first}`, "", `Thanks for entering our draw at the ${cfg.event}. Confirm your email address to enter the draw for ${cfg.prize}:`, "", a.link, "", "The link works for 48 hours.", "Ticked the email box? Confirming also signs you up for Exor Games and Mallow Games emails (unsubscribe any time).", "Didn't enter? Ignore this email and nothing happens.", "", "Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit: " + MALLOW_URL, "", ADDR_TEXT].join("\n");
+  const text = [`One tap and you're in${first}`, "", `Thanks for entering our draw at the ${cfg.event}. Confirm your email address to enter the draw for ${cfg.prize}:`, "", a.link, "", "The link works for 48 hours.", `Ticked the email box? Confirming also signs you up for ${both(cfg)} emails (unsubscribe any time).`, "Didn't enter? Ignore this email and nothing happens.", ...mallowText(cfg), "", ADDR_TEXT].join("\n");
   return { subject, html, text };
 }
 
@@ -254,13 +312,13 @@ export function buildAlreadyEmail(a) {
 export function buildWinnerEmail(a) {
   const cfg = a.cfg || {}, first = a.first ? ", " + a.first : "";
   const subject = `You won our ${cfg.event} draw!`;
+  const next = isCredit(cfg) ? `Reply within 7 days and we'll send your gift card to this address. Spend it at ExorGames.com or in store - on cards, games${mallowOn(cfg) ? " or video games from Mallow Games" : " and more"}.` : "Reply within 7 days and we'll arrange your prize with you by email.";
   const html = frame(`<h1 style="margin:0 0 10px;font-size:24px">Congratulations${esc(first)} - you won!</h1>
 <p>Your entry was drawn in our ${esc(cfg.event)} contest: <b>${esc(cfg.prize)}</b> is yours.</p>
 <p>One formality first. Canadian contest rules ask the winner a skill-testing question, so please reply to this email with the answer to:</p>
 <p style="font-size:22px;font-weight:700;margin:10px 0">${esc(a.question)} = ?</p>
-<p>Reply within 7 days and we'll send your gift card to this address. Spend it at ExorGames.com or in store - on cards, games or video games from Mallow Games.</p>
-<a href="${MALLOW_URL}" style="display:block;margin:18px 0 6px;text-decoration:none"><img src="${ASSET_ORIGIN}${MALLOW_BAND}" alt="Mallow Games buys, sells and trades video games - use your video games for Exor Games store credit" width="544" height="169" style="display:block;width:100%;max-width:544px;height:auto;border-radius:10px"></a>
-<p style="font-size:14px;color:${MUTED};margin:0 0 8px">Got video games you're done with? Mallow Games, our sister shop, buys them for cash or Exor Games store credit - <a href="${MALLOW_URL}" style="color:${RED}">see what we pay</a>.</p>`, ADDR);
-  const text = [`Congratulations${first} - you won!`, "", `Your entry was drawn in our ${cfg.event} contest: ${cfg.prize} is yours.`, "", `Canadian contest rules ask the winner a skill-testing question. Reply to this email with the answer to: ${a.question} = ?`, "", "Reply within 7 days and we'll send your gift card to this address.", "", "Got video games you're done with? Mallow Games buys them for cash or Exor Games store credit: " + MALLOW_URL, "", ADDR_TEXT].join("\n");
+<p>${esc(next)}</p>
+${mallowHtml(cfg)}`, ADDR);
+  const text = [`Congratulations${first} - you won!`, "", `Your entry was drawn in our ${cfg.event} contest: ${cfg.prize} is yours.`, "", `Canadian contest rules ask the winner a skill-testing question. Reply to this email with the answer to: ${a.question} = ?`, "", next, ...mallowText(cfg), "", ADDR_TEXT].join("\n");
   return { subject, html, text };
 }

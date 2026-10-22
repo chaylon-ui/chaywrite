@@ -1040,7 +1040,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   if (p === BASE + "/impact" || p === BASE + "/impact.json" || p.startsWith(BASE + "/impact/")) {
     return serveImpactStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, fetchFn: sopts && sopts.fetchFn });
   }
-  // Expo contest (src/win.js): admins only - open / close, entries, the draw.
+  // Contests (src/win.js): admins only - the list, a new contest, each one's entries and draw.
   if (p === BASE + "/win" || p.startsWith(BASE + "/win/")) {
     return serveWinStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, fetchFn: sopts && sopts.fetchFn });
   }

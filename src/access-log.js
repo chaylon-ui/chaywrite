@@ -44,8 +44,9 @@ export function accessWhat(p) {
   if (p === B + "/held" || p === B + "/held.json") return { what: "held stock" };
   if (p === B + "/requests" || p === B + "/requests.json") return { what: "requests" };
   m = /^\/9pocket\/requests\/([A-Za-z0-9-]{1,40})$/.exec(p); if (m) return { what: "request", id: m[1] };
-  if (p === B + "/win") return { what: "contest entries" };
+  // /9pocket/win itself is the contests list (counts, no names): not logged.
   if (p === B + "/win/export.csv") return { what: "contest export" };
+  m = /^\/9pocket\/win\/c\/([a-z0-9-]{1,64})(\/export\.csv)?$/.exec(p); if (m) return { what: m[2] ? "contest export" : "contest entries", id: m[1] };
   if (p === B + "/admin") return { what: "accounts" };
   if (p === B + "/admin/access.csv") return { what: "access log export" };
   return null;
