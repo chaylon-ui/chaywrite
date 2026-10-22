@@ -40,7 +40,7 @@
 
 import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
-import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf } from "./stage.js";
+import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf, emailStaffBuylist } from "./stage.js";
 import { instructionsPayload, buildEmail, sendEmail } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
 import { wantedCards, refreshWanted, internalCandidates } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
 
@@ -534,6 +534,8 @@ async function route(mode, action, request, env, url, cors) {
         const rec = { id: "bp-" + (number || Date.now()), number, ts: Date.now(), customer, customerName: who.name, customerEmail: who.email, paymentType, cards, totals: totalsOf(cards), repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } };
         const out = await sendEmail(env, who.email, buildEmail(rec));
         email = { status: out.status, error: out.error, to: who.email ? who.email.replace(/^(.).*(@.*)$/, "$1***$2") : "" };
+        // The staff copy (owner, 2026-10-22): the same list with the customer's details, one email per address.
+        try { await emailStaffBuylist(env, url, { ...rec, customerPhone: who.phone || "" }, { customerMail: { ok: out.ok, to: who.email, error: out.error }, link: url.origin + "/portal/buylists" }); } catch {}
       } catch (e) { email = { status: "failed", error: String((e && e.message) || e).slice(0, 160) }; }
     }
     return json({ upstream: r.upstream, paymentType, submitted: cards.length, accepted: r.accepted, cleared: r.cleared, confirmation: r.confirmation, reply: r.reply,

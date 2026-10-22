@@ -62,7 +62,7 @@
 
 import { repriceCards, submitToBinderPos, cleanCards, conditionsFor } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
-import { buildEmail, buildDecisionEmail, buildCodeEmail, sendEmail, emailConfigured } from "./stage-email.js";
+import { buildEmail, buildDecisionEmail, buildCodeEmail, buildStaffBuylistEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
 import { serveRequestsStaff } from "./requests.js";
@@ -282,7 +282,7 @@ export function mergeApproval(recCards, repriced) {
 // token, a slow answer or a missing customer leaves both blank and the staff
 // page still shows the id link. Never called for the shopper's own view.
 export async function lookupCustomer(env, id) {
-  const blank = { name: "", email: "" };
+  const blank = { name: "", email: "", phone: "" };
   const token = env && env.SHOPIFY_ADMIN_TOKEN;
   const cid = digits(id);
   if (!token || !cid) return blank;
@@ -290,14 +290,14 @@ export async function lookupCustomer(env, id) {
     const r = await fetch(`https://${SHOP(env)}/admin/api/2025-01/graphql.json`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Shopify-Access-Token": token },
-      body: JSON.stringify({ query: "query($id:ID!){customer(id:$id){displayName email}}", variables: { id: "gid://shopify/Customer/" + cid } }),
+      body: JSON.stringify({ query: "query($id:ID!){customer(id:$id){displayName email phone}}", variables: { id: "gid://shopify/Customer/" + cid } }),
       signal: AbortSignal.timeout(5000),
     });
     if (!r.ok) return blank;
     const j = await r.json().catch(() => null);
     const c = j && j.data && j.data.customer;
     if (!c) return blank;
-    return { name: String(c.displayName || "").trim().slice(0, 120), email: String(c.email || "").trim().slice(0, 160) };
+    return { name: String(c.displayName || "").trim().slice(0, 120), email: String(c.email || "").trim().slice(0, 160), phone: String(c.phone || "").trim().slice(0, 40) };
   } catch { return blank; }
 }
 
@@ -600,7 +600,15 @@ export async function stageDoFetch(cx, request, url) {
   // ---- staff access (src/staff-access.js): the old staff PIN's switch, and where it was last used ----
   if (p === "/_stage/cfg") {
     const c = (await cx.storage.get("cfg")) || {};
-    return doJson({ ok: true, pinOff: c.pinOff === true, pinOffBy: c.pinOffBy || "", pinOffAt: c.pinOffAt || null, pinUse: (await cx.storage.get("pinuse")) || {} });
+    return doJson({ ok: true, pinOff: c.pinOff === true, pinOffBy: c.pinOffBy || "", pinOffAt: c.pinOffAt || null, pinUse: (await cx.storage.get("pinuse")) || {}, buylistTo: Array.isArray(c.buylistTo) ? c.buylistTo : null, buylistToBy: c.buylistToBy || "", buylistToAt: c.buylistToAt || null });
+  }
+  // Who gets the staff copy of a submitted buylist (owner, 2026-10-22); null = never set (the default address), [] = off.
+  if (p === "/_stage/cfg/notify" && post) {
+    const b = await bodyOf(request);
+    const c = (await cx.storage.get("cfg")) || {};
+    Object.assign(c, { buylistTo: parseNotifyList(Array.isArray(b.buylistTo) ? b.buylistTo.join("\n") : b.buylistTo), buylistToBy: String(b.by || "").slice(0, 160), buylistToAt: cx.now() });
+    await cx.storage.put("cfg", c);
+    return doJson({ ok: true, buylistTo: c.buylistTo });
   }
   if (p === "/_stage/cfg/pin" && post) {
     const b = await bodyOf(request);
@@ -796,8 +804,11 @@ export async function stageSubmit(env, url, { customer, paymentType, cards, repr
   const who = await lookupCustomer(env, customer);
   const j = await doCall(env, url.origin, "/_stage/put", { customer, customerName: who.name, customerEmail: who.email, paymentType, cards, repriced });
   if (!j.ok) throw new Error(j.error || "could not stage the list");
-  try { await emailCustomer(env, url, (await doCall(env, url.origin, "/_stage/get?id=" + encodeURIComponent(j.id))).record, ""); } catch {}
+  let rec = null, customerMail = null;
+  try { rec = (await doCall(env, url.origin, "/_stage/get?id=" + encodeURIComponent(j.id))).record; customerMail = await emailCustomer(env, url, rec, ""); } catch {}
   try { await notifyStaff(env, url, { id: j.id, number: j.number, customer, customerName: who.name, paymentType, totals: j.totals }); } catch {}
+  // The staff copy (owner, 2026-10-22), one email per address.
+  try { if (rec) await emailStaffBuylist(env, url, { ...rec, customerPhone: who.phone || "" }, { staged: true, customerMail: customerMail ? { ...customerMail, to: rec.customerEmail } : null, link: url.origin + BASE + "/b/" + encodeURIComponent(j.id) }); } catch {}
   return { id: j.id, number: j.number, totals: j.totals };
 }
 
@@ -859,6 +870,30 @@ export async function currentUser(request, env, origin) {
 
 // Staff access settings for src/staff-access.js (the PIN switch, where the PIN was last used).
 export async function stageCfg(env, origin) { return doCall(env, origin, "/_stage/cfg"); }
+/* The staff copy of a buylist: who gets it (9Pocket > Admin > Buylist emails; the
+   store's service address until an admin saves a list) and the sending - one
+   email per address, each on its own, never a CC; Reply-To is the customer. */
+export const BUYLIST_NOTIFY_DEFAULT = ["customerservice@exorgames.com"];
+export function parseNotifyList(text) {
+  const out = [];
+  for (const raw of String(text == null ? "" : text).split(/[\n\r,;]+/)) { const e = normEmail(raw); if (validEmail(e) && !out.includes(e)) out.push(e); }
+  return out.slice(0, 10);
+}
+export async function buylistNotifyList(env, origin) {
+  let c = null;
+  try { c = await stageCfg(env, origin); } catch {}
+  return c && Array.isArray(c.buylistTo) ? c.buylistTo : BUYLIST_NOTIFY_DEFAULT.slice();
+}
+export async function emailStaffBuylist(env, url, rec, o) {
+  const op = o || {};
+  const to = await buylistNotifyList(env, url.origin);
+  if (!to.length) return { n: 0, sent: 0, failed: [] };
+  const msg = buildStaffBuylistEmail(rec, op);
+  const results = await Promise.all(to.map((a) => sendEmail(env, a, msg, { replyTo: rec.customerEmail || undefined, fetchFn: op.fetchFn }).catch((e) => ({ ok: false, error: String((e && e.message) || e).slice(0, 160) }))));
+  const failed = results.filter((r) => !r.ok).map((r) => r.error || r.status || "failed").slice(0, 3);
+  console.log(`buylist: staff copy ${results.length - failed.length}/${to.length} sent${failed.length ? " (" + failed.join("; ") + ")" : ""}`);   // counts only
+  return { n: to.length, sent: results.length - failed.length, failed };
+}
 export async function notePinUse(env, origin, route) { return doCall(env, origin, "/_stage/pinuse", { route }); }
 // Device and service keys (src/staff-access.js): looked up by hash, never stored in the clear.
 export async function deviceByHash(env, origin, hash) { const j = await doCall(env, origin, "/_stage/device-key?hash=" + hash); return j.ok ? j.device : null; }
@@ -1349,6 +1384,18 @@ async function adminControl(env, origin, f, admin) {
   if (action === "device-revoke") {
     const r = await doCall(env, origin, "/_stage/device-key/revoke", { id: f.id });
     return r.ok ? { ok: true, message: "Revoked " + r.name + ". It stops working within a minute." } : { ok: false, error: r.error };
+  }
+  if (action === "notify") {
+    const list = parseNotifyList(f.to);
+    const r = await doCall(env, origin, "/_stage/cfg/notify", { buylistTo: list, by: admin.email });
+    return r.ok ? { ok: true, message: list.length ? "The staff copy of each buylist goes to " + list.length + " address" + (list.length === 1 ? "" : "es") + " now, each sent on its own." : "The staff copy is off: nobody gets it until you save an address." } : { ok: false, error: r.error || "failed" };
+  }
+  if (action === "notify-test") {
+    const sample = { id: "sample", number: "9P-0000", customer: "", customerName: "Sample Customer", customerEmail: "sample@example.test", customerPhone: "(902) 555-0100", paymentType: "Store Credit",
+      cards: [{ cardName: "Lightning Bolt", setName: "Magic 2011", conditionName: "Near Mint", type: "Normal", quantity: "3", cashBuyPrice: 1.5, storeCreditBuyPrice: 1.95 }, { cardName: "Sol Ring", setName: "Commander Legends", conditionName: "Lightly Played", type: "Foil", quantity: "1", cashBuyPrice: 2, storeCreditBuyPrice: 2.6 }],
+      totals: { cash: 6.5, credit: 8.45, units: 4, lines: 2 }, repriced: { changed: ["Sol Ring · Lightly Played · Foil ($2.50 credit is now $2.60)"], capped: [], dropped: [] } };
+    const sent = await sendEmail(env, admin.email, buildStaffBuylistEmail(sample, { customerMail: { ok: true, to: "sample@example.test" }, link: origin + "/portal/buylists" }), { replyTo: null });
+    return sent.ok ? { ok: true, message: "A sample staff copy is on its way to " + admin.email + "." } : { ok: false, error: "Email: " + (sent.error || sent.status) };
   }
   if (action === "pin-off" || action === "pin-on") {
     const r = await doCall(env, origin, "/_stage/cfg/pin", { off: action === "pin-off", by: admin.email });

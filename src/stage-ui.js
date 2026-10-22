@@ -312,6 +312,19 @@ ${list.length ? `<table class="users"><thead><tr><th>Device</th><th>May use</th>
 <div class="pg">${checks(["alerts"])}</div><div class="act"><button class="ok" type="submit">Create key</button><span class="muted">The key is shown once, on the next page.</span></div></form></details></div>`;
 }
 
+// Who gets the staff copy of each submitted buylist (owner, 2026-10-22): one
+// address per line, each sent on its own (src/stage.js emailStaffBuylist).
+function notifyCard(cfg) {
+  const c = cfg || {};
+  const list = Array.isArray(c.buylistTo) ? c.buylistTo : null;
+  return `<div class="card"><h3>Buylist emails</h3>
+<p class="muted">When a customer submits a buylist on the sell page, the customer gets the confirmation with every card, and each address below gets the <b>staff copy</b>: who it is, how to reach them, every card at today's cash and credit prices, the total, the reference and a button to open it. Each address gets its own email - nobody sees the others - and replying goes to the customer.</p>
+<form method="post" action="${BASE}/admin/control"><input type="hidden" name="action" value="notify">
+<textarea class="text" name="to" rows="5" style="width:100%;max-width:440px;font:inherit" placeholder="one address per line">${esc(list === null ? "customerservice@exorgames.com" : list.join("\n"))}</textarea>
+<div class="act"><button class="ok" type="submit">Save addresses</button><span class="muted">${list === null ? "Not saved yet: customerservice@exorgames.com gets it until you save a list." : list.length ? list.length + " address" + (list.length === 1 ? "" : "es") + ", each sent separately" + (c.buylistToAt ? " · saved " + esc(when(c.buylistToAt)) + (c.buylistToBy ? " by " + esc(c.buylistToBy) : "") : "") : "OFF - nobody gets the staff copy"} · blank = off</span></div></form>
+<form method="post" action="${BASE}/admin/control" style="margin-top:6px"><input type="hidden" name="action" value="notify-test"><button type="submit">Send me a sample</button> <span class="muted">A made-up buylist, to your own address only.</span></form></div>`;
+}
+
 // The old staff PIN: its switch, and what still used it lately (src/staff-access.js).
 const PIN_ROUTES = { "/pickups.json": "pickup list (the /pickups page, the POS tile or the BinderPOS add-on)", "/pickups/done": "finishing a pickup (the POS tile)",
   "/alert": "order alerts sent in (Shopify Flow, or the /staff page's test)", "/ws?role=staff": "the /staff order-alerts page", "/ws?role=remote": "a TV remote",
@@ -389,6 +402,7 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 <div style="margin:8px 0"><span class="muted">Permissions (staff only; admins have all):</span>${permChecks(null)}</div>
 <div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>
 ${deviceCard(o)}
+${notifyCard(o.cfg)}
 ${pinCard(o.cfg)}
 ${accessSection(o)}`;
   return shell("Accounts", body, o, true);

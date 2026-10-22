@@ -133,6 +133,77 @@ ${mallowHtml()}
   return { subject, html, text };
 }
 
+/* The staff copy of a submitted buylist (owner, 2026-10-22: "I would also
+   like it to go to us. right now we get an email notification, but it's
+   extremely basic"): who, how to reach them, every card at today's prices
+   with both payouts, the total, the reference and where to open it. The
+   caller sends it ONCE PER ADDRESS (owner: "I don't want any of us to see
+   the other addresses ... no carbon copy"); Reply-To is the customer. */
+export function buildStaffBuylistEmail(rec, o) {
+  const op = o || {};
+  const ref = rec.number || rec.id;
+  const credit = rec.paymentType === "Store Credit";
+  const cards = Array.isArray(rec.cards) ? rec.cards : [];
+  const t = rec.totals || { cash: 0, credit: 0, units: 0, lines: cards.length };
+  const total = credit ? t.credit : t.cash;
+  const name = String(rec.customerName || "").trim() || "a customer";
+  const cid = String(rec.customer || "").replace(/\D/g, "");
+  const subject = `New buylist ${ref}: ${name} - ${t.units} card${t.units === 1 ? "" : "s"}, ${money(total)} ${credit ? "store credit" : "cash"}${op.staged ? " (waiting for approval)" : ""}`;
+  const cm = op.customerMail;
+  const customerNote = !cm ? "" : cm.ok ? `The customer's confirmation (the same list, with the drop-off instructions) went to ${esc(cm.to || rec.customerEmail || "them")}.` : `<strong>The customer's confirmation was NOT sent</strong>${cm.error ? " (" + esc(cm.error) + ")" : ""}${rec.customerEmail ? "" : " - no email address on the Shopify customer"}.`;
+  const rp = rec.repriced || {};
+  const notes = [...(rp.changed || []).map((x) => "price updated: " + x), ...(rp.capped || []).map((x) => "quantity capped: " + x), ...(rp.dropped || []).map((x) => "dropped: " + x)];
+  const cell = (extra) => `style="padding:7px 8px;border-bottom:1px solid ${RULE};${extra || ""}"`;
+  const rows = cards.map((c, i) => `<tr style="background:${i % 2 ? PAPER : "#ffffff"}">
+<td ${cell("text-align:right;white-space:nowrap")}>${qty(c)} ×</td>
+<td ${cell()}><strong>${esc(c.cardName)}</strong><br><span style="color:${MUTED};font-size:12px">${esc(c.setName)} · ${esc(c.conditionName || c.condition)}${c.type && c.type !== "Normal" ? " · " + esc(c.type) : ""}</span></td>
+<td ${cell("text-align:right;white-space:nowrap" + (credit ? ";color:" + MUTED : ""))}>${money(c.cashBuyPrice)}</td>
+<td ${cell("text-align:right;white-space:nowrap" + (credit ? "" : ";color:" + MUTED))}>${money(c.storeCreditBuyPrice)}</td>
+<td ${cell("text-align:right;white-space:nowrap")}><strong>${money(qty(c) * (Number(credit ? c.storeCreditBuyPrice : c.cashBuyPrice) || 0))}</strong></td></tr>`).join("");
+  const line = (k, v) => v ? `<tr><td style="padding:3px 12px 3px 0;color:${MUTED};white-space:nowrap">${k}</td><td style="padding:3px 0">${v}</td></tr>` : "";
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:${PAPER};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${INK};font-size:15px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:${RED};padding:20px 28px;color:#ffffff">
+  <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">${BRAND} · staff copy</div>
+  <div style="font-size:24px;font-weight:700;line-height:1.2;margin-top:4px">New buylist ${esc(ref)}${op.staged ? " - waiting for approval" : ""}</div>
+  <div style="font-size:15px;margin-top:6px;opacity:.95">${esc(name)} · ${t.units} card${t.units === 1 ? "" : "s"} · <strong>${money(total)}</strong> ${credit ? "store credit" : "cash"}</div>
+</td></tr>
+<tr><td style="padding:22px 28px 6px">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:15px">
+  ${line("Customer", `<strong>${esc(name)}</strong>${cid ? ` · <a href="https://admin.shopify.com/store/most-wanted-ca/customers/${cid}" style="color:${RED}">Shopify customer</a>` : ""}`)}
+  ${line("Email", rec.customerEmail ? `<a href="mailto:${esc(rec.customerEmail)}" style="color:${RED}">${esc(rec.customerEmail)}</a>` : `<span style="color:${MUTED}">none on the customer record</span>`)}
+  ${line("Phone", rec.customerPhone ? esc(rec.customerPhone) : "")}
+  ${line("Paid as", esc(rec.paymentType))}
+  ${line("Reference", `<strong>${esc(ref)}</strong>`)}
+  </table>
+  ${op.link ? `<p style="margin:14px 0 0"><a href="${esc(op.link)}" style="display:inline-block;background:${RED};color:#fff;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px">${esc(op.linkLabel || (op.staged ? "Review it on 9Pocket" : "Open the BinderPOS buylists on 9Pocket"))}</a></p>` : ""}
+</td></tr>
+<tr><td style="padding:10px 28px 0">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">
+  <thead><tr style="color:${MUTED};font-size:12px;text-transform:uppercase;letter-spacing:.06em"><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Qty</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid ${RULE}">Card</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Cash</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Credit</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Line</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="4" style="padding:10px 8px;text-align:right;font-weight:700">${credit ? "Store credit" : "Cash"} total (today's buylist prices)</td><td style="padding:10px 8px;text-align:right;font-weight:700;color:${RED};white-space:nowrap">${money(total)}</td></tr></tfoot>
+  </table>
+  ${notes.length ? `<p style="margin:10px 0 0;font-size:13px;color:${MUTED};line-height:1.5"><strong>Changed on the way in:</strong><br>${notes.map(esc).join("<br>")}</p>` : ""}
+  ${customerNote ? `<p style="margin:12px 0 0;font-size:13px;color:${MUTED};line-height:1.5">${customerNote}</p>` : ""}
+</td></tr>
+<tr><td style="background:${PAPER};padding:16px 28px 18px;font-size:12px;color:${MUTED};line-height:1.6">Sent to each address on the buylist list separately (9Pocket › Admin › Buylist emails); nobody sees the others. Reply goes to the customer.</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [
+    `New buylist ${ref}${op.staged ? " - waiting for approval" : ""}`, "",
+    `Customer: ${name}${rec.customerEmail ? " <" + rec.customerEmail + ">" : " (no email on the customer record)"}${rec.customerPhone ? " · " + rec.customerPhone : ""}`,
+    `Paid as: ${rec.paymentType} · ${t.units} card${t.units === 1 ? "" : "s"} · ${credit ? "store credit" : "cash"} total ${money(total)}`,
+    op.link ? `Open: ${op.link}` : "", "",
+    ...cards.map((c) => `${qty(c)} x ${c.cardName} [${c.setName}] ${c.conditionName || c.condition}${c.type && c.type !== "Normal" ? " " + c.type : ""} - cash ${money(c.cashBuyPrice)} / credit ${money(c.storeCreditBuyPrice)}`),
+    ...(notes.length ? ["", "Changed on the way in:", ...notes] : []),
+    ...(customerNote ? ["", customerNote.replace(/<[^>]+>/g, "")] : []),
+    "", "Sent to each address on the buylist list separately; reply goes to the customer.",
+  ].filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n");
+  return { subject, html, text };
+}
+
 // The email staff can choose to send when a list is approved or rejected
 // (owner, 2026-09-22: staff ENABLE the customer getting an email at this
 // stage). Same look as the confirmation; the list at the prices it was

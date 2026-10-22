@@ -249,3 +249,17 @@ test("regrade: some copies move to another condition as a new line, or join the 
   await call(c, "/_stage/mark", { id, status: "rejected" });
   assert.equal((await call(c, "/_stage/regrade", { id, key: "101|2|normal", take: 1, card: { ...lp, condition: 1, conditionName: "Near Mint" } })).status, 409);
 });
+
+test("the buylist staff-copy list: unset until saved (the default applies), saved as cleaned addresses, blank switches it off", async () => {
+  const now = { t: Date.UTC(2026, 9, 22, 12) }; const c = cx(now); const j = async (p, b) => (await call(c, p, b)).body;
+  let cfg = await j("/_stage/cfg");
+  assert.equal(cfg.buylistTo, null, "never saved: the worker falls back to the default address");
+  const r = await j("/_stage/cfg/notify", { buylistTo: "Chaylon@ExorGames.com\nsebastian@exorgames.com\nnot-an-address\nchaylon@exorgames.com", by: "boss@x.test" });
+  assert.deepEqual(r, { ok: true, buylistTo: ["chaylon@exorgames.com", "sebastian@exorgames.com"] });
+  cfg = await j("/_stage/cfg");
+  assert.deepEqual(cfg.buylistTo, ["chaylon@exorgames.com", "sebastian@exorgames.com"]); assert.equal(cfg.buylistToBy, "boss@x.test"); assert.equal(cfg.buylistToAt, now.t);
+  assert.deepEqual((await j("/_stage/cfg/notify", { buylistTo: ["a@x.test", "b@x.test"], by: "boss@x.test" })).buylistTo, ["a@x.test", "b@x.test"], "an array is taken too");
+  assert.deepEqual((await j("/_stage/cfg/notify", { buylistTo: "", by: "boss@x.test" })).buylistTo, [], "blank = off");
+  assert.deepEqual((await j("/_stage/cfg")).buylistTo, []);
+  assert.equal((await j("/_stage/cfg")).pinOff, false, "the PIN switch is untouched");
+});
