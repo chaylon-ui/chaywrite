@@ -1,6 +1,8 @@
 name = "exor-binder"
 main = "src/index.js"
 compatibility_date = "2025-06-01"
+# The Anthropic SDK (src/ask.js) is bundled from node_modules; nodejs_compat gives it the node built-ins it may reach for.
+compatibility_flags = ["nodejs_compat"]
 
 # Dashboard-set plain-text vars (e.g. SHOPIFY_SHOP) survive deploys.
 # Secrets (SHOPIFY_ADMIN_TOKEN) always persist — never redefine them here.

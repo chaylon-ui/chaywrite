@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ask Exor · Exor Games</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#121417;--card:#1a1e23;--ink:#e8ecef;--muted:#9aa4ad;--line:#2a3138;--brand:#e5322d;--ok:#4cc38a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+.top a{color:var(--ink);text-decoration:none;font-weight:700}
+h1{font-size:28px;margin:10px 0 4px}.muted{color:var(--muted);margin:0 0 10px}
+#log{display:flex;flex-direction:column;gap:10px;margin:14px 0}
+.m{max-width:92%;padding:10px 14px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.m.u{align-self:flex-end;background:#2a3138}.m.a{align-self:flex-start;background:var(--card);border:1px solid var(--line)}
+.m a{color:#8ab4f8}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:4px 0 6px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:13px}
+.c img{width:100%;aspect-ratio:1/1;object-fit:contain;background:#0d0f12;border-radius:6px}
+.c .t{font-weight:600;margin-top:6px;display:block;color:var(--ink);text-decoration:none}
+.c .p{color:var(--muted)}.c .p b{color:var(--ink)}
+.c button{margin-top:6px;width:100%;border:0;border-radius:999px;background:var(--brand);color:#fff;padding:7px;font-weight:700;cursor:pointer}
+form{display:flex;gap:8px;margin-top:10px}input{flex:1;padding:12px 14px;border-radius:999px;border:1px solid var(--line);background:#0d0f12;color:var(--ink);font-size:16px}
+button.send{border:0;border-radius:999px;background:var(--brand);color:#fff;padding:12px 18px;font-weight:700;cursor:pointer}
+button[disabled]{opacity:.5}
+small{color:var(--muted)}
+</style>
+</head>
+<body><div class="wrap">
+<div class="top"><a href="https://exorgames.com/">&larr; exorgames.com</a></div>
+<h1>Ask Exor</h1>
+<p class="muted">Ask about cards, sealed product, games, paints and events at Exor Games Charlottetown. Answers come from our live stock and events, prices in Canadian dollars.</p>
+<div id="log"></div>
+<form id="f"><input id="q" maxlength="500" placeholder="e.g. do you have Bloomburrow collector boosters?" autocomplete="off"><button class="send" type="submit">Ask</button></form>
+<small id="note">Try: "what's on Friday", "what do you pay for a Sol Ring", "which singles went up this week".</small>
+<script>
+(function () {
+  var W = location.origin, log = document.getElementById('log'), f = document.getElementById('f'), q = document.getElementById('q'), note = document.getElementById('note');
+  var history = [];
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var linkify = function (s) { return esc(s).replace(/https?:\/\/[^\s)]+/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u.replace(/^https?:\/\//, '') + '</a>'; }); };
+  function add(role, html) { var d = document.createElement('div'); d.className = 'm ' + (role === 'user' ? 'u' : 'a'); d.innerHTML = html; log.appendChild(d); d.scrollIntoView({ block: 'end' }); return d; }
+  function cards(list) {
+    if (!list || !list.length) return '';
+    return '<div class="cards">' + list.map(function (p) { return '<div class="c">' + (p.image ? '<img src="' + esc(p.image) + '" alt="">' : '') + '<a class="t" href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.title) + '</a><div class="p"><b>$' + esc(p.price) + '</b> · ' + (p.available ? 'in stock' : 'sold out') + '</div></div>'; }).join('') + '</div>';
+  }
+  f.addEventListener('submit', function (e) {
+    e.preventDefault(); var text = q.value.trim(); if (!text) return;
+    add('user', esc(text)); q.value = ''; q.disabled = true;
+    var think = add('assistant', '<span class="muted">Looking…</span>');
+    fetch(W + '/ask.json', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text, history: history }) })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (x) {
+        if (!x.j.ok) { think.innerHTML = '<span class="muted">' + esc(x.j.error || 'Something went wrong.') + '</span>'; return; }
+        think.innerHTML = linkify(x.j.answer) + cards(x.j.products);
+        history.push({ role: 'user', content: text }, { role: 'assistant', content: x.j.answer }); history = history.slice(-6);
+        note.textContent = 'Answered in ' + Math.round(x.j.ms / 100) / 10 + ' s.';
+      })
+      .catch(function () { think.innerHTML = '<span class="muted">Could not reach the assistant.</span>'; })
+      .then(function () { q.disabled = false; q.focus(); });
+  });
+})();
+</script>
+</div></body></html>

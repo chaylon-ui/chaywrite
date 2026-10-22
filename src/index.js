@@ -31,6 +31,7 @@ import { gatewayTick } from "./discord-gateway.js";
 import { serveImpact, impactTick } from "./impact.js";
 import { servePulse } from "./pulse.js";
 import { servePush, pushTick } from "./push.js";
+import { serveAsk } from "./ask.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
@@ -378,6 +379,8 @@ async function route(request, env, ctx) {
     // Web push alerts (src/push.js): the sign-up page, its key, subscribe / unsubscribe / test. The
     // service worker and manifest are plain assets (public/alerts-sw.js, public/alerts.webmanifest).
     if (url.pathname === "/alerts" || url.pathname.startsWith("/alerts/")) return servePush(request, env, url, ctx);
+    // Ask Exor (src/ask.js): the shop assistant - its page, its question route, its health.
+    if (url.pathname === "/ask" || url.pathname === "/ask.json" || url.pathname.startsWith("/ask/")) return serveAsk(request, env, url, ctx);
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"), { ctx });
     }

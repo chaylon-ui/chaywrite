@@ -44,6 +44,7 @@ export const TOOLS = {
   "games-like": "Games like this (product tab)",
   "learn": "Learn to play",
   "deck": "Deck Builder",
+  "ask": "Ask Exor assistant",
 };
 export const EVENTS = ["open", "add"];
 export const PAINT_RE = /paint|primer|wash|shade|contrast|speedpaint|xpress|varnish|medium|\bink\b/i;

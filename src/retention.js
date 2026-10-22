@@ -11,6 +11,7 @@ import { WIN_DO } from "./win.js";
 import { SEEN_DO } from "./discord-seen.js";
 import { IMPACT_DO } from "./impact.js";
 import { PUSH_DO } from "./push.js";
+import { ASK_DO } from "./ask.js";
 
 const ORIGIN = "https://exor-binder.internal";
 
@@ -30,6 +31,7 @@ export async function retentionTick(env, opts) {
   try { others.discord = (await call(env, SEEN_DO, "/_seen/sweep")).counts || "failed"; } catch { others.discord = "failed"; }
   try { others.impact = (await call(env, IMPACT_DO, "/_imp/sweep")).counts || "failed"; } catch { others.impact = "failed"; }
   try { others.push = (await call(env, PUSH_DO, "/_push/sweep")).counts || "failed"; } catch { others.push = "failed"; }
+  try { others.ask = (await call(env, ASK_DO, "/_ask/sweep")).counts || "failed"; } catch { others.ask = "failed"; }
   await call(env, STAGE_DO, "/_stage/sweep-note", { others });
   return { ran: true, stage: st.last && st.last.counts, others };
 }

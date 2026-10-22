@@ -1,0 +1,29 @@
+{
+  "name": "exor-binder",
+  "version": "1.0.0",
+  "description": "",
+  "main": "shots.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaylon-ui/chaywrite.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chaylon-ui/chaywrite/issues"
+  },
+  "homepage": "https://github.com/chaylon-ui/chaywrite#readme",
+  "private": "true",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.1.0"
+  }
+}
