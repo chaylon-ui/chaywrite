@@ -30,6 +30,7 @@ import { serveDiscordSeen, serveInteraction, discordSeenTick } from "./discord-s
 import { gatewayTick } from "./discord-gateway.js";
 import { serveImpact, impactTick } from "./impact.js";
 import { servePulse } from "./pulse.js";
+import { servePush, pushTick } from "./push.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
@@ -104,6 +105,9 @@ export default {
     // Sales impact (src/impact.js): new orders attributed to the tools that filled the cart, a few pages every 10 min.
     try { const i = await impactTick(env); if (i && !i.skipped) console.log("impact: " + JSON.stringify(i)); }
     catch (e) { console.log("impact: failed: " + ((e && e.message) || e)); }
+    // Web push digests (src/push.js): the daily arrivals per game and the Monday pulse, 10:00 Atlantic.
+    try { const p = await pushTick(env); if (p && !p.skipped && (p.sent.length || p.error)) console.log("push: " + JSON.stringify(p)); }
+    catch (e) { console.log("push: failed: " + ((e && e.message) || e)); }
   },
 };
 
@@ -371,6 +375,9 @@ async function route(request, env, ctx) {
     if (url.pathname === "/impact") return serveImpact(request, env, url, ctx);
     // Market pulse (src/pulse.js): the nightly price snapshot's biggest movers, public.
     if (url.pathname === "/pulse" || url.pathname === "/pulse.json") return servePulse(request, env, url);
+    // Web push alerts (src/push.js): the sign-up page, its key, subscribe / unsubscribe / test. The
+    // service worker and manifest are plain assets (public/alerts-sw.js, public/alerts.webmanifest).
+    if (url.pathname === "/alerts" || url.pathname.startsWith("/alerts/")) return servePush(request, env, url, ctx);
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"), { ctx });
     }

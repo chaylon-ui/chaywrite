@@ -8,6 +8,7 @@ import { winDoFetch } from "../src/win.js";
 import { retentionTick } from "../src/retention.js";
 import { seenDoFetch } from "../src/discord-seen.js";
 import { impactDoFetch } from "../src/impact.js";
+import { pushDoFetch } from "../src/push.js";
 
 /* The privacy protections of 2026-10-20 (owner: "what other protections can
    you do"): response hardening, the customer-data access log, the nightly
@@ -55,6 +56,7 @@ function envWith(stores) {
     if (url.pathname.startsWith("/_win/")) return winDoFetch(c, req, url);
     if (url.pathname.startsWith("/_seen/")) return seenDoFetch(c, req, url);
     if (url.pathname.startsWith("/_imp/")) return impactDoFetch(c, req, url);
+    if (url.pathname.startsWith("/_push/")) return pushDoFetch(c, req, url);
     return new Response("no such path", { status: 404 });
   };
   return { ROOM: { idFromName: (n) => n, get: (n) => ({ fetch: route(n) }) } };
@@ -192,7 +194,7 @@ test("contest sweep: nothing until the contest has been closed for contestDaysAf
 
 test("retentionTick: the 9Pocket DO decides whether a sweep is due; the other stores follow and their counts are noted", async () => {
   const clock = { t: T0 };
-  const stores = { "buylist-stage": cx(clock), requests: cx(clock), "win-contest": cx(clock), "discord-seen": cx(clock), impact: cx(clock) };
+  const stores = { "buylist-stage": cx(clock), requests: cx(clock), "win-contest": cx(clock), "discord-seen": cx(clock), impact: cx(clock), push: cx(clock) };
   await stores.requests.storage.put("rq:1", { id: "1", ts: T0 - 400 * DAY, status: "open" });
   await stores["discord-seen"].storage.put("seen:1", { id: "1", at: T0 - 800 * DAY });
   await stores["discord-seen"].storage.put("seen:2", { id: "2", at: T0 - 5 * DAY });
@@ -200,7 +202,7 @@ test("retentionTick: the 9Pocket DO decides whether a sweep is due; the other st
   const r1 = await retentionTick(env);
   assert.equal(r1.ran, true);
   assert.deepEqual(r1.stage, { access: 0, buylists: 0 });
-  assert.deepEqual(r1.others, { requests: { requests: 1, rateRows: 0 }, contest: { due: false, entries: 0, pending: 0, draws: 0 }, discord: { members: 1, departed: 0 }, impact: { rows: 0, markers: 0 } });
+  assert.deepEqual(r1.others, { requests: { requests: 1, rateRows: 0 }, contest: { due: false, entries: 0, pending: 0, draws: 0 }, discord: { members: 1, departed: 0 }, impact: { rows: 0, markers: 0 }, push: { digests: 0 } });
   assert.deepEqual((await call(stageDoFetch, stores["buylist-stage"], "/_stage/retention")).last.others, r1.others);
   assert.deepEqual(await retentionTick(env), { skipped: "not due" });
   clock.t += DAY;
@@ -210,7 +212,7 @@ test("retentionTick: the 9Pocket DO decides whether a sweep is due; the other st
   clock.t += DAY;
   const r2 = await retentionTick(broken);
   assert.equal(r2.ran, true);
-  assert.deepEqual(r2.others, { requests: "failed", contest: "failed", discord: "failed", impact: "failed" }, "a store that cannot be reached is reported, not fatal");
+  assert.deepEqual(r2.others, { requests: "failed", contest: "failed", discord: "failed", impact: "failed", push: "failed" }, "a store that cannot be reached is reported, not fatal");
 });
 
 test("logAccess: one bounded row to the 9Pocket DO, riding ctx.waitUntil when there is one", async () => {

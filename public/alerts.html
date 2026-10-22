@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alerts · Exor Games</title>
+<meta name="description" content="Get a notification when new Magic, Pokémon, Yu-Gi-Oh!, One Piece or Lorcana singles and sealed product land on the Exor Games shelf, and the Monday market pulse.">
+<link rel="manifest" href="/alerts.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Exor Alerts">
+<meta name="theme-color" content="#121417">
+<style>
+:root{--bg:#121417;--card:#1a1e23;--ink:#e8ecef;--muted:#9aa4ad;--line:#2a3138;--brand:#e5322d;--ok:#4cc38a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+.top a{color:var(--ink);text-decoration:none;font-weight:700}.top a:hover{color:var(--brand)}
+h1{font-size:28px;margin:10px 0 4px}.muted{color:var(--muted);margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0}
+label.t{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer}label.t:last-child{border-bottom:0}
+label.t input{width:20px;height:20px}
+.btn{display:inline-block;background:var(--brand);color:#fff;border:0;border-radius:999px;padding:12px 20px;font-weight:700;font-size:16px;cursor:pointer}
+.btn[disabled]{opacity:.5;cursor:default}.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.msg{min-height:1.4em;margin-top:10px}.msg.ok{color:var(--ok)}.msg.bad{color:#f27d7d}
+.ios{display:none}.ios.show{display:block}
+small{color:var(--muted)}
+</style>
+</head>
+<body><div class="wrap">
+<div class="top"><a href="https://exorgames.com/">&larr; exorgames.com</a></div>
+<h1>Alerts</h1>
+<p class="muted">A notification on this device when something you care about lands on our shelf. No email, no app. We keep only your browser's push address and what you ticked.</p>
+<div class="card">
+  <div id="topics">
+    <label class="t"><input type="checkbox" value="new-mtg"> New Magic arrivals</label>
+    <label class="t"><input type="checkbox" value="new-pokemon"> New Pokémon arrivals</label>
+    <label class="t"><input type="checkbox" value="new-yugioh"> New Yu-Gi-Oh! arrivals</label>
+    <label class="t"><input type="checkbox" value="new-onepiece"> New One Piece arrivals</label>
+    <label class="t"><input type="checkbox" value="new-lorcana"> New Lorcana arrivals</label>
+    <label class="t"><input type="checkbox" value="new-sealed"> New sealed product</label>
+    <label class="t"><input type="checkbox" value="pulse"> Monday market pulse (the week's risers and fallers)</label>
+  </div>
+  <div class="row"><button class="btn" id="on" type="button">Turn on alerts</button><button class="btn ghost" id="test" type="button" hidden>Send me a test</button><button class="btn ghost" id="off" type="button" hidden>Turn off</button></div>
+  <div class="msg" id="msg"></div>
+  <small>Arrival alerts come once a day around 10 am Atlantic, only on days with arrivals. The market pulse comes Monday mornings.</small>
+</div>
+<div class="card ios" id="ios"><b>On iPhone or iPad</b><p class="muted" style="margin-top:6px">Safari only delivers alerts to a page saved to your Home Screen. Tap Share, then <b>Add to Home Screen</b>, open <b>Exor Alerts</b> from there and turn alerts on.</p></div>
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var msg = function (t, cls) { var m = $('#msg'); m.textContent = t || ''; m.className = 'msg' + (cls ? ' ' + cls : ''); };
+  var boxes = function () { return [].slice.call(document.querySelectorAll('#topics input')); };
+  var picked = function () { return boxes().filter(function (b) { return b.checked; }).map(function (b) { return b.value; }); };
+  var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  var standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  if (ios && !standalone) $('#ios').classList.add('show');
+  var supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  try { var saved = JSON.parse(localStorage.getItem('xgAlerts') || 'null'); if (saved && saved.topics) boxes().forEach(function (b) { b.checked = saved.topics.indexOf(b.value) > -1; }); } catch (e) {}
+  if (!picked().length) boxes().slice(0, 2).forEach(function (b) { b.checked = true; });
+  function b64(s) { var p = '='.repeat((4 - s.length % 4) % 4); var r = (s + p).replace(/-/g, '+').replace(/_/g, '/'); var raw = atob(r); var out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out; }
+  function post(path, body) { return fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok !== false, j: j }; }); }); }
+  var current = null;
+  function show(sub) {
+    current = sub;
+    $('#on').textContent = sub ? 'Update alerts' : 'Turn on alerts';
+    $('#test').hidden = !sub; $('#off').hidden = !sub;
+  }
+  function existing() {
+    if (!supported) return Promise.resolve(null);
+    return navigator.serviceWorker.getRegistration('/').then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; }).catch(function () { return null; });
+  }
+  existing().then(show);
+  $('#on').addEventListener('click', function () {
+    if (!supported) { msg(ios ? 'Add this page to your Home Screen first (see below), then open it from there.' : 'This browser cannot show web notifications.', 'bad'); return; }
+    var topics = picked();
+    if (!topics.length) { msg('Tick at least one thing to hear about.', 'bad'); return; }
+    $('#on').disabled = true; msg('Asking your browser…');
+    navigator.serviceWorker.register('/alerts-sw.js').then(function (reg) {
+      return Notification.requestPermission().then(function (perm) {
+        if (perm !== 'granted') throw new Error('Notifications were not allowed. You can change that in your browser’s site settings.');
+        return reg.pushManager.getSubscription().then(function (sub) {
+          if (sub) return sub;
+          return fetch('/alerts/key.json').then(function (r) { return r.json(); }).then(function (k) {
+            return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(k.publicKey) });
+          });
+        });
+      });
+    }).then(function (sub) {
+      return post('/alerts/subscribe', { subscription: sub.toJSON(), topics: topics }).then(function (r) {
+        if (!r.ok) throw new Error(r.j.error || 'Could not save that');
+        try { localStorage.setItem('xgAlerts', JSON.stringify({ topics: topics })); } catch (e) {}
+        show(sub); msg('Alerts are on for: ' + r.j.topics.length + ' topic' + (r.j.topics.length === 1 ? '' : 's') + '. Tap "Send me a test" to see one.', 'ok');
+      });
+    }).catch(function (e) { msg(String(e && e.message || e), 'bad'); }).then(function () { $('#on').disabled = false; });
+  });
+  $('#test').addEventListener('click', function () {
+    if (!current) return; msg('Sending…');
+    post('/alerts/test', { subscription: current.toJSON() }).then(function (r) { msg(r.ok ? 'Sent. It should appear in a moment.' : (r.j.error || 'The push service answered ' + r.j.status), r.ok ? 'ok' : 'bad'); });
+  });
+  $('#off').addEventListener('click', function () {
+    if (!current) return; var sub = current; msg('Turning off…');
+    post('/alerts/unsubscribe', { subscription: sub.toJSON() }).then(function () { return sub.unsubscribe(); }).then(function () { try { localStorage.removeItem('xgAlerts'); } catch (e) {} show(null); msg('Alerts are off.', 'ok'); }).catch(function (e) { msg(String(e && e.message || e), 'bad'); });
+  });
+})();
+</script>
+</div></body></html>

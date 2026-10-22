@@ -1,0 +1,17 @@
+{
+  "name": "Exor Games alerts",
+  "short_name": "Exor Alerts",
+  "start_url": "/alerts",
+  "scope": "/alerts",
+  "display": "standalone",
+  "background_color": "#121417",
+  "theme_color": "#121417",
+  "icons": [
+    {
+      "src": "/alerts-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

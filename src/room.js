@@ -14,6 +14,7 @@ import { RETENTION } from "./access-log.js";
 import { seenDoFetch, SEEN_DO } from "./discord-seen.js";
 import { gwDoFetch, gwDoAlarm, GW_DO } from "./discord-gateway.js";
 import { impactDoFetch, IMPACT_DO } from "./impact.js";
+import { pushDoFetch, PUSH_DO } from "./push.js";
 
 const THEMES = ["mtg", "pokemon", "yugioh", "starwars", "onepiece", "riftbound", "hockey", "basketball"];
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
@@ -86,6 +87,8 @@ export class BinderRoom {
     try { this.isGwDo = !!env.ROOM?.idFromName(GW_DO)?.equals?.(state.id); } catch {}
     this.isImpactDo = false;
     try { this.isImpactDo = !!env.ROOM?.idFromName(IMPACT_DO)?.equals?.(state.id); } catch {}
+    this.isPushDo = false;
+    try { this.isPushDo = !!env.ROOM?.idFromName(PUSH_DO)?.equals?.(state.id); } catch {}
     this.state.blockConcurrencyWhile?.(async () => {
       try {
         const s = await this.state.storage.get("settings");
@@ -191,7 +194,7 @@ export class BinderRoom {
       else await this.state.storage.setAlarm(Math.max(at, this.now() + 1000));
     } catch {}
   }
-  isScreen() { return !(this.isCacheDo || this.isPriceDo || this.isEnrichDo || this.isHoldDo || this.isStageDo || this.isAutoDo || this.isReqDo || this.isStockDo || this.isWinDo || this.isSeenDo || this.isGwDo || this.isImpactDo); }
+  isScreen() { return !(this.isCacheDo || this.isPriceDo || this.isEnrichDo || this.isHoldDo || this.isStageDo || this.isAutoDo || this.isReqDo || this.isStockDo || this.isWinDo || this.isSeenDo || this.isGwDo || this.isImpactDo || this.isPushDo); }
   async screenAlarm() {
     await this.ensureSess();
     if (this.controllerId) {
@@ -955,7 +958,11 @@ export class BinderRoom {
       if (url.pathname.startsWith("/_imp/")) return impactDoFetch(this.impactCx(), request, url);
       return new Response(null, { status: 404 });
     }
-    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/") || url.pathname.startsWith("/_req/") || url.pathname.startsWith("/_sc/") || url.pathname.startsWith("/_win/") || url.pathname.startsWith("/_seen/") || url.pathname.startsWith("/_gw/") || url.pathname.startsWith("/_imp/")) return new Response(null, { status: 404 });
+    if (this.isPushDo) {
+      if (url.pathname.startsWith("/_push/")) return pushDoFetch(this.impactCx(), request, url);
+      return new Response(null, { status: 404 });
+    }
+    if (url.pathname.startsWith("/_ph/") || url.pathname.startsWith("/_en/") || url.pathname.startsWith("/_hold/") || url.pathname.startsWith("/_stage/") || url.pathname.startsWith("/_ap/") || url.pathname.startsWith("/_req/") || url.pathname.startsWith("/_sc/") || url.pathname.startsWith("/_win/") || url.pathname.startsWith("/_seen/") || url.pathname.startsWith("/_gw/") || url.pathname.startsWith("/_imp/") || url.pathname.startsWith("/_push/")) return new Response(null, { status: 404 });
     if (url.pathname.endsWith("/ws")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
