@@ -172,7 +172,7 @@ test("interactions: signed by Discord's key or refused; ping, /lastseen, /inacti
     const sig = new Uint8Array(await crypto.subtle.sign("Ed25519", keys.privateKey, new TextEncoder().encode(ts + text)));
     const hexSig = [...sig].map((b) => b.toString(16).padStart(2, "0")).join("");
     const url = new URL(ORIGIN + "/discord-seen/interactions");
-    return serveInteraction(new Request(url, { method: "POST", headers: { "content-type": "application/json", "x-signature-ed25519": tamper ? hexSig.replace(/^../, "00") : hexSig, "x-signature-timestamp": ts }, body: text }), env, url);
+    return serveInteraction(new Request(url, { method: "POST", headers: { "content-type": "application/json", "x-signature-ed25519": tamper ? hexSig.replace(/^../, "00") : hexSig, "x-signature-timestamp": ts }, body: text }), env, url, { now: () => T0 });   // the test clock, so "2 days ago" stays true on any date
   };
   let r = await signed({ type: 1 });
   assert.equal(r.status, 200); assert.deepEqual(await r.json(), { type: 1 });
@@ -209,7 +209,7 @@ test("interactions: signed by Discord's key or refused; ping, /lastseen, /inacti
   assert.match(j.data.content, /^\*\*2 quiet for 30 days\*\* \(of 4 members; quietest first\):\n<@333> - posted 100 days ago in <#c1>\n<@777> - never seen, joined May 31, 2025\nOnline status counted since Oct 20, 2026, 12:00 Atlantic; posts/, "Bob was online 9 days ago so he is not quiet; the bot is not a member to list");
   await call(c, "/_seen/members", { left: ["777"] });
   j = await (await signed(cmd("lastseen", [{ name: "member", type: 6, value: "777" }], { users: { 777: { id: "777", username: "newbie" } } }))).json();
-  assert.match(j.data.content, /Left the server .* ago\.$/, "the interaction clock is the real one; the DO's is T0");
+  assert.match(j.data.content, /Left the server just now\.$/);
   j = await (await signed(cmd("whatever", []))).json();
   assert.match(j.data.content, /do not know that command/);
   assert.equal((await signed({ type: 3 })).status, 400);

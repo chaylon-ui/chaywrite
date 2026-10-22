@@ -29,6 +29,7 @@ import { serveDiscordEvents, discordEventsTick } from "./discord-events.js";
 import { serveDiscordSeen, serveInteraction, discordSeenTick } from "./discord-seen.js";
 import { gatewayTick } from "./discord-gateway.js";
 import { serveImpact, impactTick } from "./impact.js";
+import { servePulse } from "./pulse.js";
 import { serveLastSold } from "./lastsold.js";
 import { serveUpc } from "./upc.js";
 import { serveThemeStage, repoDataHealth } from "./repo-data.js";
@@ -368,6 +369,8 @@ async function route(request, env, ctx) {
     if (url.pathname === "/win" || url.pathname.startsWith("/win/")) return serveWin(request, env, url, ctx);
     // Sales impact of the site tools (src/impact.js): the tools' counts-only beacon.
     if (url.pathname === "/impact") return serveImpact(request, env, url, ctx);
+    // Market pulse (src/pulse.js): the nightly price snapshot's biggest movers, public.
+    if (url.pathname === "/pulse" || url.pathname === "/pulse.json") return servePulse(request, env, url);
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"), { ctx });
     }

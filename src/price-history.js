@@ -293,7 +293,7 @@ export function parsePage(data) {
     const minC = toCents(p.priceRangeV2 && p.priceRangeV2.minVariantPrice && p.priceRangeV2.minVariantPrice.amount);
     const maxC = toCents(p.priceRangeV2 && p.priceRangeV2.maxVariantPrice && p.priceRangeV2.maxVariantPrice.amount);
     const max = maxC == null ? cents : Math.max(maxC, cents);
-    items.push({ id, handle: String(p.handle || ""), cents, min: minC == null ? cents : Math.min(minC, cents), max: max >= NO_PRICE_CENTS ? null : max });
+    items.push({ id, handle: String(p.handle || ""), type: String(p.productType || ""), cents, min: minC == null ? cents : Math.min(minC, cents), max: max >= NO_PRICE_CENTS ? null : max });
   }
   const pi = pr.pageInfo || {};
   return { items, cursor: pi.endCursor || null, hasNext: !!pi.hasNextPage };
@@ -311,7 +311,7 @@ async function discoverTypes(cx) {
 
 // Fold one page's items into storage, 128 keys per get/put (the DO batch
 // limit). Unchanged records on an already-seen day are not rewritten.
-export async function storePage(storage, items, day) {
+export async function storePage(storage, items, day, movers) {
   let changed = 0, writes = 0;
   for (let i = 0; i < items.length; i += 128) {
     const chunk = items.slice(i, i + 128);
@@ -321,12 +321,60 @@ export async function storePage(storage, items, day) {
     for (const it of chunk) {
       const k = "ph:" + it.id;
       const r = applySnapshot(cur instanceof Map ? cur.get(k) : (cur || {})[k], day, it.cents, it.min, it.max == null ? null : it.max);
+      if (movers) noteMover(movers, it, r.rec, day);
       if (r.changed) changed++;
       if (r.write) { puts[k] = r.rec; n++; }
     }
     if (n) { await storage.put(puts); writes += n; }
   }
   return { changed, writes };
+}
+
+/* ---- market pulse (src/pulse.js, owner 2026-10-20) ------------------------
+   While a run walks the catalogue, every product's current Near Mint price
+   is compared with the price in effect 7 and 30 days earlier (pointAt on
+   its own record); the biggest percentage moves, at least MOVER_MIN_CENTS
+   on both ends, are kept in run.movers (persisted with the run, capped) and
+   become phs:movers when the run finishes. */
+export const MOVER_WINDOWS = [7, 30];
+const MOVER_KEEP = 250, MOVER_TOP = 40, MOVER_MIN_CENTS = 200;
+export function noteMover(acc, it, rec, day) {
+  if (!rec || !Array.isArray(rec.p)) return;
+  for (const w of MOVER_WINDOWS) {
+    const then = pointAt(rec.p, day - w);
+    if (!then) continue;
+    const from = then[1], to = it.cents;
+    if (!(from >= MOVER_MIN_CENTS) || !(to >= MOVER_MIN_CENTS) || from === to || to >= NO_PRICE_CENTS) continue;
+    const list = acc["w" + w] = acc["w" + w] || [];
+    list.push({ id: it.id, h: it.handle, t: it.type || "", f: from, c: to, p: Math.round(((to - from) / from) * 1000) / 10 });
+    if (list.length > MOVER_KEEP * 2) { list.sort((a, b) => Math.abs(b.p) - Math.abs(a.p)); list.length = MOVER_KEEP; }
+  }
+}
+export function topMovers(list) {
+  const l = Array.isArray(list) ? list : [];
+  return { risers: l.filter((x) => x.p > 0).sort((a, b) => b.p - a.p || b.c - a.c).slice(0, MOVER_TOP), fallers: l.filter((x) => x.p < 0).sort((a, b) => a.p - b.p || b.c - a.c).slice(0, MOVER_TOP), counted: l.length };
+}
+const NODES_GQL = `query($ids:[ID!]!){nodes(ids:$ids){... on Product{id title handle status totalInventory featuredImage{url(transform:{maxWidth:240})}}}}`;
+/* Titles, pictures and stock for the movers, looked up once per run day. */
+export async function moverDetails(cx, mv) {
+  const ids = new Set();
+  for (const w of ["w7", "w30"]) for (const k of ["risers", "fallers"]) for (const m of ((mv[w] || {})[k] || [])) ids.add(String(m.id));
+  const cached = await cx.storage.get("phs:movers:detail");
+  if (cached && cached.day === mv.day && [...ids].every((id) => cached.byId && cached.byId[id])) return cached.byId;
+  const byId = (cached && cached.day === mv.day && cached.byId) || {};
+  const want = [...ids].filter((id) => !byId[id]);
+  try {
+    for (let i = 0; i < want.length; i += 80) {
+      const { data } = await adminGql(cx, NODES_GQL, { ids: want.slice(i, i + 80).map((id) => "gid://shopify/Product/" + id) });
+      for (const n of (data && data.nodes) || []) {
+        if (!n || !n.id) continue;
+        const id = String(n.id).replace(/\D/g, "");
+        byId[id] = { title: String(n.title || "").slice(0, 160), image: (n.featuredImage && n.featuredImage.url) || "", inStock: Number(n.totalInventory) > 0, url: "https://exorgames.com/products/" + String(n.handle || ""), active: n.status === "ACTIVE" };
+      }
+    }
+    await cx.storage.put("phs:movers:detail", { day: mv.day, byId });
+  } catch (e) { cx.log("price-history: mover details: " + msg(e)); }
+  return byId;
 }
 
 const newRun = (day, now) => ({ day, started: now, cursor: null, pages: 0, seen: 0, changed: 0, writes: 0, skipped: 0, errors: 0, errStreak: 0, throttled: 0, ticks: 0, tickAt: now, done: false });
@@ -349,9 +397,13 @@ async function finish(cx, run, error) {
   run.finished = now;
   run.ms = now - run.started;
   if (error) run.error = error; else delete run.error;
+  const mv = run.movers || {};
+  delete run.movers;
   const summary = { ...run };
   delete summary.cursor;
-  await cx.storage.put({ "phs:run": run, "phs:last": summary });
+  const puts = { "phs:run": run, "phs:last": summary };
+  if (!error) puts["phs:movers"] = { day: run.day, date: dateOf(run.day), at: now, w7: topMovers(mv.w7), w30: topMovers(mv.w30) };
+  await cx.storage.put(puts);
   cx.log("price-history: run " + dateOf(run.day) + (error ? " FAILED: " + error : " finished") + " seen=" + run.seen + " changed=" + run.changed + " pages=" + run.pages + " " + run.ms + "ms");
   if (error) return arm(cx, now + RETRY_FAILED_MS, "run failed");
   return arm(cx, dayOf(now) > run.day ? now + 1000 : nextRunAt(now), "run finished");
@@ -401,7 +453,7 @@ export async function priceTick(cx) {
     }
     const kept = [];
     for (const it of page.items) { if (it.cents >= NO_PRICE_CENTS) run.skipped = (run.skipped || 0) + 1; else kept.push(it); }
-    const w = await storePage(st, kept, run.day);
+    const w = await storePage(st, kept, run.day, (run.movers = run.movers || {}));
     run.pages++;
     run.seen += page.items.length;
     run.changed += w.changed;
@@ -531,6 +583,12 @@ export async function priceDoFetch(cx, request, url) {
     return doJson(buildPayload(id, rec, cx.now()));
   }
   if (url.pathname === "/_ph/status") return doJson(await statusOf(cx));
+  if (url.pathname === "/_ph/movers") {
+    const mv = await cx.storage.get("phs:movers");
+    if (!mv) return doJson({ ok: true, ready: false });
+    const detail = url.searchParams.get("enrich") === "1" ? await moverDetails(cx, mv) : {};
+    return doJson({ ok: true, ready: true, ...mv, detail });
+  }
   if (url.pathname === "/_ph/run" && request.method === "POST") return doJson(await kickRun(cx));
   return doJson({ ok: false, error: "not found" }, 404);
 }

@@ -390,7 +390,7 @@ export async function answerCommand(env, body, now) {
   return reply("I do not know that command.");
 }
 
-export async function serveInteraction(request, env, url) {
+export async function serveInteraction(request, env, url, o) {   // o.now: a clock for tests
   if (request.method !== "POST") return json({ error: "POST only" }, 405);
   const text = await request.text();
   const v = await verifySignature(env, request, text);
@@ -398,7 +398,7 @@ export async function serveInteraction(request, env, url) {
   let body = {}; try { body = JSON.parse(text) || {}; } catch {}
   if (body.type === 1) return json({ type: 1 });
   if (body.type === 2) {
-    try { return await answerCommand(env, body, Date.now()); }
+    try { return await answerCommand(env, body, o && o.now ? o.now() : Date.now()); }
     catch (e) { return reply("Something went wrong on my side: " + String((e && e.message) || e).slice(0, 120)); }
   }
   return json({ error: "unsupported interaction" }, 400);
