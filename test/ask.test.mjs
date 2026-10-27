@@ -80,7 +80,11 @@ test("ask: a tool round feeds the store's answer back; products come out as card
   const client = fakeClient([toolCall("search_products", { query: "bloomburrow collector" }), text("Yes: the Bloomburrow Collector Booster Box is in stock at $289.95: https://exorgames.com/products/bloomburrow-collector-booster-box")]);
   const r = await ask({ ANTHROPIC_API_KEY: "k" }, "do you have bloomburrow collector boxes?", [], { client, fetchFn: suggest(PRODUCTS), now: T0 });
   assert.equal(r.ok, true); assert.match(r.answer, /in stock at \$289\.95/); assert.equal(r.rounds, 1); assert.deepEqual(r.toolsUsed, ["search_products"]);
-  assert.equal(r.products.length, 2); assert.equal(r.products[0].title, "Bloomburrow Collector Booster Box");
+  assert.equal(r.products.length, 1, "cards only for the products the answer names"); assert.equal(r.products[0].title, "Bloomburrow Collector Booster Box");
+  const quiet = await ask({ ANTHROPIC_API_KEY: "k" }, "any bloomburrow?", [], { client: fakeClient([toolCall("search_products", { query: "bloomburrow" }), text("Yes, two Bloomburrow boxes are listed; the Play Booster Box is sold out at the moment.")]), fetchFn: suggest(PRODUCTS), now: T0 });
+  assert.deepEqual(quiet.products, [], "no link named, no cards");
+  const both = await ask({ ANTHROPIC_API_KEY: "k" }, "bloomburrow boxes?", [], { client: fakeClient([toolCall("search_products", { query: "bloomburrow" }), text("Play Booster Box (sold out): exorgames.com/products/bloomburrow-play-booster-box. Collector: https://exorgames.com/products/bloomburrow-collector-booster-box.")]), fetchFn: suggest(PRODUCTS), now: T0 });
+  assert.deepEqual(both.products.map((p) => p.title), ["Bloomburrow Play Booster Box", "Bloomburrow Collector Booster Box"], "in the answer's order, bare links count");
   assert.deepEqual(r.usage, { input: 2100, output: 100, cacheRead: 1800 });
   const p1 = client.sent[0];
   assert.equal(p1.model, "claude-opus-5-5"); assert.equal(p1.max_tokens, 1024); assert.deepEqual(p1.betas, ["server-side-fallback-2026-07-01"]); assert.equal(p1.fallbacks, "default");
@@ -150,7 +154,7 @@ test("routes: 503 without a key; the gate; a grounded answer with cards; health 
   r = await go("/ask.json", { q: "bloomburrow?" }, { client, fetchFn: suggest(PRODUCTS) });
   assert.equal(r.status, 200); assert.equal(r.headers.get("access-control-allow-origin"), "https://exorgames.com");
   const j = await r.json();
-  assert.equal(j.ok, true); assert.match(j.answer, /In stock/); assert.equal(j.products.length, 2); assert.ok(typeof j.ms === "number");
+  assert.equal(j.ok, true); assert.match(j.answer, /In stock/); assert.equal(j.products.length, 1, "the one product the answer links"); assert.equal(j.products[0].title, "Bloomburrow Collector Booster Box"); assert.ok(typeof j.ms === "number");
   let h = await (await go("/ask/health")).json();
   assert.equal(h.configured, true); assert.equal(h.today.asks, 1); assert.equal(h.today.answered, 1); assert.equal(h.today.tools, 1); assert.deepEqual(h.tools, ["search_products", "upcoming_events", "buy_price", "market_pulse"]);
   assert.equal(JSON.stringify(h).includes("bloomburrow"), false, "no questions in health");

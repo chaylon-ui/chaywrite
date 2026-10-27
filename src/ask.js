@@ -167,7 +167,18 @@ export async function ask(env, question, history, opts) {
     const kind = e instanceof Anthropic.RateLimitError ? "busy" : e instanceof Anthropic.AuthenticationError ? "key" : e instanceof Anthropic.APIError ? "api" : "network";
     return { ok: false, error: kind === "busy" ? "The assistant is busy right now; try again in a minute." : "The assistant could not answer just now.", kind, status, detail: String((e && e.message) || e).slice(0, 160), toolsUsed, usage };
   }
-  return { ok: true, answer: answer || "I could not find that. Try the search box, or email the store.", products, toolsUsed, rounds, stop, usage };
+  // Cards only for the products the answer itself names (by their /products/<handle>
+  // link), in the answer's order. The search tool's other hits (a "Gorilla
+  // Chieftain" for "Goblin Chieftain", a green Beast Whisperer under "four black
+  // cards") are not recommendations (owner, 2026-10-27: the tiles under the answer
+  // "aren't following" it).
+  const handleOf = (u) => (String(u || "").toLowerCase().match(/\/products\/([a-z0-9][a-z0-9-]*)/) || [, ""])[1];
+  const shown = [];
+  for (const m of answer.matchAll(/\/products\/([a-z0-9][a-z0-9-]*)/gi)) {
+    const p = products.find((x) => handleOf(x.url) === m[1].toLowerCase());
+    if (p && !shown.includes(p)) shown.push(p);
+  }
+  return { ok: true, answer: answer || "I could not find that. Try the search box, or email the store.", products: shown, toolsUsed, rounds, stop, usage };
 }
 
 /* ---- the DO side: limits and counts ---------------------------------------------- */
