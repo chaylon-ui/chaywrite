@@ -7,9 +7,9 @@
 import { shell, esc, BASE, when } from "./stage-ui.js";
 import { GAMES, GRADERS, GRADES, FINISHES } from "./graded.js";
 
-export const JS_V = "2";   // bump when public/graded-add.js changes (browsers cache it)
+export const JS_V = "3";   // bump when public/graded-add.js changes (browsers cache it)
 
-const CSS = `.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 10px}.shot{display:flex;flex-direction:column;gap:6px;border:1px dashed #cbd3d9;border-radius:10px;padding:8px;background:#f8fafb;cursor:pointer;font-size:13px;color:#374151}.shot input{font-size:12px;max-width:100%}.shot img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4}.shot img[hidden]{display:none}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 14px;margin:6px 0}.grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#374151;font-weight:600}.grid label.chk{flex-direction:row;align-items:center;align-self:end;font-weight:600}.grid .text{width:100%;flex:none;font-size:16px}.tp{margin:10px 0;padding:8px 12px;background:#eef2f4;border-radius:8px;font-size:14px;word-break:break-word}#qrstate{margin:0 0 8px;font-size:13px}#qrstate.ok{color:#065f46;font-weight:600}.last{background:#d1fae5;color:#065f46;padding:10px 14px;border-radius:10px;margin:10px 0}.last a{color:#065f46;font-weight:700}.warn{background:#fff8dc;color:#5b4300;padding:8px 12px;border-radius:8px;margin:8px 0;font-size:13px}.rec td img{width:40px;border-radius:4px;background:#eef2f4}textarea.text{font-size:16px}.line{border:1px solid #dde3e7;border-radius:12px;padding:10px 12px;margin:10px 0;background:#fff}.line .ph{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}.line .ph figure{margin:0;width:92px;font-size:11px;color:#6b7780;text-align:center}.line .ph img,.line .ph .ph-none{width:92px;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4;display:flex;align-items:center;justify-content:center;font-size:11px}.line .meta{flex:1 1 160px;font-size:13px;line-height:1.6}.line .meta .ok{color:#065f46;font-weight:600}.line .st{font-size:13px}.line .st.ok{color:#065f46;font-weight:600}.line .st.err{color:#b42318;font-weight:600}.line.done{background:#f3fbf7}.line.busy button{opacity:.6}@media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label.wide{grid-column:1/-1}}`;
+const CSS = `.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 10px}.shot{display:flex;flex-direction:column;gap:6px;border:1px dashed #cbd3d9;border-radius:10px;padding:8px;background:#f8fafb;cursor:pointer;font-size:13px;color:#374151}.shot input{font-size:12px;max-width:100%}.shot img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4}.shot img[hidden]{display:none}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 14px;margin:6px 0}.grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#374151;font-weight:600}.grid label.chk{flex-direction:row;align-items:center;align-self:end;font-weight:600}.grid .text{width:100%;flex:none;font-size:16px}.tp{margin:10px 0;padding:8px 12px;background:#eef2f4;border-radius:8px;font-size:14px;word-break:break-word}#qrstate,#psastate{margin:0 0 8px;font-size:13px}#qrstate.ok,#psastate.ok,.line .psa.ok{color:#065f46;font-weight:600}.last{background:#d1fae5;color:#065f46;padding:10px 14px;border-radius:10px;margin:10px 0}.last a{color:#065f46;font-weight:700}.warn{background:#fff8dc;color:#5b4300;padding:8px 12px;border-radius:8px;margin:8px 0;font-size:13px}.rec td img{width:40px;border-radius:4px;background:#eef2f4}textarea.text{font-size:16px}.line{border:1px solid #dde3e7;border-radius:12px;padding:10px 12px;margin:10px 0;background:#fff}.line .ph{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}.line .ph figure{margin:0;width:92px;font-size:11px;color:#6b7780;text-align:center}.line .ph img,.line .ph .ph-none{width:92px;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4;display:flex;align-items:center;justify-content:center;font-size:11px}.line .meta{flex:1 1 160px;font-size:13px;line-height:1.6}.line .meta .ok{color:#065f46;font-weight:600}.line .st{font-size:13px}.line .st.ok{color:#065f46;font-weight:600}.line .st.err{color:#b42318;font-weight:600}.line.done{background:#f3fbf7}.line.busy button{opacity:.6}@media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label.wide{grid-column:1/-1}}`;
 
 
 
@@ -31,7 +31,7 @@ export function renderGraded(d, o) {
   const body = `<style>${CSS}</style>
 <h1>Graded cards</h1>
 <p class="muted">Photograph the slab, fill in the card, tap Add. The QR code on the label (usually the back) is read from whichever photo shows it and becomes a “View the certificate” link on the listing that opens in a new window. Titles follow the store's graded naming, the card goes in stock at 51 Allen Street on the Online Store, and the auto-pricing box adds it to the nightly PriceCharting run.</p>
-${err}${lastBox}${warn}
+${err}${lastBox}${warn}<p class="muted">${d.psa ? "PSA lookups are on: a PSA certificate number (typed, or read from the QR code) fills in the card, set, number and grade from PSA's records; check them, PSA writes set names its own way." : "PSA lookups are off. An admin can switch them on by adding a PSA access token (psacard.com/publicapi, free) as the PSA_API_TOKEN secret: then a certificate number fills in the card, set, number and grade by itself."}</p>
 <form id="gform" class="card" method="post" action="${BASE}/graded/add" enctype="multipart/form-data">
 <h3>Photos</h3>
 <div class="shots">
@@ -40,6 +40,7 @@ ${err}${lastBox}${warn}
 <label class="shot"><span>Extra</span><input type="file" name="photo3" accept="image/*"><img alt="" hidden></label>
 </div>
 <div id="qrstate" class="muted">Every photo is checked for the QR code (usually on the back of the label).</div>
+<div id="psastate" class="muted"></div>
 <h3>Card</h3>
 <div class="grid">
 <label>Game ${sel("game", Object.keys(GAMES), k.game || "pokemon", (g) => GAMES[g].label)}</label>
@@ -75,7 +76,7 @@ ${err}${lastBox}${warn}
 </div>
 <div class="card rec"><h3>Added from here lately</h3>${rows ? `<table><thead><tr><th></th><th>Card</th><th class="n">Price</th><th class="n">Qty</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">Nothing yet. The first slab you add shows up here.</p>'}</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js" defer></script>
-<script>window.xgGraded=${JSON.stringify({ grades: GRADES, finishes: FINISHES, graders: Object.keys(GRADERS), games: Object.fromEntries(Object.entries(GAMES).map(([k, g]) => [k, g.label])), base: BASE }).replace(/<\//g, "<\\/")}</script>
+<script>window.xgGraded=${JSON.stringify({ grades: GRADES, finishes: FINISHES, graders: Object.keys(GRADERS), games: Object.fromEntries(Object.entries(GAMES).map(([k, g]) => [k, g.label])), base: BASE, psa: !!d.psa }).replace(/<\//g, "<\\/")}</script>
 <script src="/graded-add.js?v=${JS_V}" defer></script>`;
   return shell("Graded cards", body, o, true);
 }

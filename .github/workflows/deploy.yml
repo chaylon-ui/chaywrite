@@ -635,6 +635,8 @@ jobs:
           DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
           # Ask Exor (src/ask.js): an Anthropic API key; without it the assistant stays off.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 9Pocket > Graded cards (src/graded.js): a PSA public-API access token; without it certificate lookups stay off.
+          PSA_API_TOKEN: ${{ secrets.PSA_API_TOKEN }}
           # ntfy push for the sealed auto-pricer's daily digest (src/autoprice.js):
           # AUTOPRICE_NTFY = topic name on ntfy.sh or a full https://server/topic
           # URL; AUTOPRICE_NTFY_TOKEN = optional access token for that server.
@@ -661,7 +663,7 @@ jobs:
           # worker understands (src/discord.js, src/discord-events.js, src/enrich.js, src/autoprice.js, src/repo-data.js) is listed
           # above; each one that is set becomes the worker secret of the same name, the rest are skipped.
           n=0
-          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE DISCORD_BOT_TOKEN DISCORD_GUILD_ID DISCORD_EVENTS_DAYS DISCORD_PUBLIC_KEY ANTHROPIC_API_KEY AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM AUTOPRICE_EMAIL_TO GITHUB_DATA_TOKEN STAFF_AUTOMATION_KEY; do
+          for name in BGG_TOKEN DISCORD_WEBHOOK_URL DISCORD_WEBHOOK_MTG DISCORD_WEBHOOK_POKEMON DISCORD_WEBHOOK_YUGIOH DISCORD_WEBHOOK_LORCANA DISCORD_WEBHOOK_ONEPIECE DISCORD_WEBHOOK_FAB DISCORD_WEBHOOK_SWU DISCORD_WEBHOOK_RIFTBOUND DISCORD_WEBHOOK_SPORTS DISCORD_WEBHOOK_SEALED DISCORD_MIN_PRICE DISCORD_BOT_TOKEN DISCORD_GUILD_ID DISCORD_EVENTS_DAYS DISCORD_PUBLIC_KEY ANTHROPIC_API_KEY PSA_API_TOKEN AUTOPRICE_NTFY AUTOPRICE_NTFY_TOKEN RESEND_API_KEY EMAIL_FROM AUTOPRICE_EMAIL_TO GITHUB_DATA_TOKEN STAFF_AUTOMATION_KEY; do
             val="${!name}"
             if [ -n "$val" ]; then
               printf '%s' "$val" | npx wrangler@4 secret put "$name" && n=$((n+1))

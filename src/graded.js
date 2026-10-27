@@ -236,3 +236,59 @@ export async function recentGraded(cx) {
     }));
   } catch { return []; }
 }
+
+/* ---- PSA certificate lookup (owner, 2026-10-27: "Look into api") ----
+   PSA's public API (psacard.com/publicapi): a bearer access token made with a
+   PSA login, GET /publicapi/cert/GetByCertNumber/<cert> -> { PSACert: {
+   CertNumber, YearIssued, Brand, Category, CardNumber, Subject, Variety,
+   CardGrade ("GEM MT 10"), AutographGrade, TotalPopulation, PopulationHigher,
+   ... } }, {IsValidRequest, ServerMessage: "No data found"} when unknown, 429
+   past the free tier's daily allowance (about 100 a day). CGC, Beckett, SGC,
+   TAG and ACE publish no API (GemRate aggregates them for partners), so the
+   lookup is PSA-only; the token lives on the worker as PSA_API_TOKEN and the
+   browser only ever calls /9pocket/graded/cert.json. Found certs are cached a
+   week so a retried batch costs no calls. */
+export const PSA_API = "https://api.psacard.com/publicapi/cert/GetByCertNumber/";
+export const psaConfigured = (env) => !!(env && env.PSA_API_TOKEN);
+const KEEP_CAPS = /^(GX|EX|V|VMAX|VSTAR|TAG|TEAM|SM|SWSH|XY|BW|DP|HGSS|TCG|MTG|LP|NM|PSA|CGC|BGS|SGC|II|III|IV|VI|VII|VIII|IX|X|XI|XII|HP|MP|SP|SSP|USA|UK|NBA|NFL|MLB|NHL|UFC|WWE|F1|JR|SR|CP|XI|ZX)$/;
+// PSA writes everything in capitals; the store's titles are in title case.
+export function titleCase(s) {
+  return String(s || "").toLowerCase().replace(/[a-z0-9'’]+/g, (w) => { const up = w.toUpperCase(); return KEEP_CAPS.test(up) ? up : w.charAt(0).toUpperCase() + w.slice(1); }).replace(/\s+/g, " ").trim();
+}
+export function psaToForm(c) {
+  const gradeText = String((c && c.CardGrade) || "").replace(/\s+/g, " ").trim();
+  const gm = /(10|[1-9](?:\.5)?)\s*$/.exec(gradeText);
+  const brand = String((c && c.Brand) || "").replace(/\s+/g, " ").trim(), cat = String((c && c.Category) || "").trim();
+  const bl = brand.toLowerCase(), cl = cat.toLowerCase();
+  const game = /pokemon|pokémon/.test(bl) ? "pokemon" : /magic/.test(bl) ? "mtg" : /yu-?gi-?oh/.test(bl) ? "yugioh" : /lorcana/.test(bl) ? "lorcana" : /one piece/.test(bl) ? "onepiece" : /tcg/.test(cl) ? "other" : /basketball|football|baseball|hockey|soccer|wrestling|racing|golf|tennis|ufc|mma|boxing/.test(cl) ? "sports" : "other";
+  const japanese = /japanese/.test(bl);
+  const set = brand.replace(/^pok[eé]mon\s+/i, "").replace(/\bjapanese\b/i, " ").replace(/\s+/g, " ").trim();
+  const num = (v) => (v == null || v === "" ? null : Number(v));
+  return {
+    grader: "PSA", cert: String((c && c.CertNumber) || "").trim(), grade: gm ? gm[1] : "", gradeText,
+    name: titleCase(c && c.Subject), number: String((c && c.CardNumber) || "").trim(), set: titleCase(set), variety: titleCase(c && c.Variety),
+    year: String((c && c.YearIssued) || "").trim(), category: titleCase(cat), game, japanese,
+    population: num(c && c.TotalPopulation), higher: num(c && c.PopulationHigher),
+  };
+}
+export async function certLookup(cx, grader, cert) {
+  const g = String(grader || "").toUpperCase(), n = String(cert || "").replace(/\D/g, "");   // PSA certificates are digits; spaces and dashes from the label are dropped
+  if (g !== "PSA") return { ok: false, error: (g || "That grader") + " has no certificate API we can use yet; type the card in." };
+  if (!/^\d{6,12}$/.test(n)) return { ok: false, error: "That does not look like a PSA certificate number." };
+  if (!psaConfigured(cx.env)) return { ok: false, configured: false, error: "PSA lookups are not switched on yet (no PSA_API_TOKEN on the worker)." };
+  const key = "https://exor-binder.nevski.workers.dev/_psa/" + n;
+  const cache = typeof caches !== "undefined" && caches.default;
+  if (cache) { const h = await cache.match(key).catch(() => null); if (h) { try { return await h.json(); } catch {} } }
+  let r;
+  try { r = await cx.fetch(PSA_API + n, { headers: { authorization: "bearer " + cx.env.PSA_API_TOKEN, accept: "application/json", "user-agent": "ExorGraded/1.0 (+workers.dev)" }, signal: AbortSignal.timeout(12000) }); }
+  catch (e) { return { ok: false, error: "PSA did not answer: " + String((e && e.message) || e).slice(0, 120) }; }
+  if (r.status === 429) return { ok: false, limited: true, error: "PSA's daily lookup allowance is used up; type the card in (it resets tomorrow)." };
+  if (r.status === 401 || r.status === 403) return { ok: false, error: "PSA refused the token (expired or wrong): make a new access token at psacard.com/publicapi and update the PSA_API_TOKEN secret." };
+  if (!r.ok) return { ok: false, error: "PSA HTTP " + r.status };
+  const j = await r.json().catch(() => null);
+  const c = j && j.PSACert;
+  if (!c || !c.CertNumber) return { ok: false, error: (j && j.ServerMessage) || "PSA has no record of that certificate." };
+  const out = { ok: true, ...psaToForm(c) };
+  if (cache) { const put = cache.put(key, Response.json(out, { headers: { "cache-control": "public, max-age=604800" } })).catch(() => {}); if (cx.ctx && cx.ctx.waitUntil) cx.ctx.waitUntil(put); else await put; }
+  return out;
+}

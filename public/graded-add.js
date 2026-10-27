@@ -73,6 +73,29 @@
     return out;
   }
   function which(input) { return input.name === "photo1" ? "front" : input.name === "photo2" ? "back" : "extra"; }
+  // PSA's record for a certificate (through 9Pocket, never from the browser to PSA) fills the empty fields of a form.
+  async function lookupCert(grader, certNo) {
+    if (!cfg.psa || String(grader).toUpperCase() !== "PSA" || !/^\d{6,12}$/.test(String(certNo || ""))) return null;
+    try { var r = await fetch(cfg.base + "/graded/cert.json?grader=PSA&cert=" + encodeURIComponent(certNo), { credentials: "same-origin" }); return await r.json(); } catch (e) { return { ok: false, error: "No answer from 9Pocket." }; }
+  }
+  function setIfEmpty(f, name, val) { var e = f.elements[name]; if (e && val && !String(e.value || "").trim()) e.value = val; }
+  function applyCert(f, d) {
+    if (!d || !d.ok) return "";
+    setIfEmpty(f, "name", d.name); setIfEmpty(f, "number", d.number); setIfEmpty(f, "set", d.set); setIfEmpty(f, "cert", d.cert);
+    if (f.elements.grader) f.elements.grader.value = "PSA";
+    if (d.grade && f.elements.grade) f.elements.grade.value = d.grade;
+    if (d.game && f.elements.game && cfg.games[d.game]) f.elements.game.value = d.game;
+    if (d.japanese && f.elements.japanese) f.elements.japanese.checked = true;
+    return "PSA: " + d.name + (d.number ? " #" + d.number : "") + (d.set ? ", " + d.set : "") + (d.year ? " (" + d.year + ")" : "") + (d.variety ? ", " + d.variety : "") + ", " + (d.gradeText || d.grade) + (d.population != null ? ", pop " + d.population + (d.higher != null ? " (" + d.higher + " higher)" : "") : "");
+  }
+  var psaState = document.getElementById("psastate"), lastLooked = "";
+  async function singleLookup() {
+    var certNo = String(cert.value || "").trim(); if (!certNo || certNo === lastLooked || v("grader").toUpperCase() !== "PSA" || !cfg.psa) return;
+    lastLooked = certNo; psaState.className = "muted"; psaState.textContent = "Asking PSA about certificate " + certNo + "\u2026";
+    var d = await lookupCert("PSA", certNo);
+    if (d && d.ok) { psaState.className = "ok"; psaState.textContent = applyCert(form, d); preview(); } else { psaState.className = "muted"; psaState.textContent = (d && d.error) || ""; }
+  }
+  if (psaState) { cert.addEventListener("change", singleLookup); cert.addEventListener("blur", singleLookup); }
   async function onPhoto(input) {
     var file = input.files && input.files[0]; if (!file) return;
     var img = input.parentNode.querySelector("img");
@@ -80,7 +103,7 @@
     if (p.file !== file) { try { var dt = new DataTransfer(); dt.items.add(p.file); input.files = dt.files; } catch (e) {} }
     if (img) { img.src = p.url; img.hidden = false; }
     if (qrAuto || !qrUrl.value) {
-      if (p.qr) { qrUrl.value = p.qr; qrAuto = true; qrState.className = "ok"; qrState.textContent = "QR code read from the " + which(input) + " photo: " + p.qr; var m = certOfUrl(p.qr); if (m && !cert.value) cert.value = m; var g = graderOfUrl(p.qr); if (g && form.elements.grader) form.elements.grader.value = g; preview(); }
+      if (p.qr) { qrUrl.value = p.qr; qrAuto = true; qrState.className = "ok"; qrState.textContent = "QR code read from the " + which(input) + " photo: " + p.qr; var m = certOfUrl(p.qr); if (m && !cert.value) cert.value = m; var g = graderOfUrl(p.qr); if (g && form.elements.grader) form.elements.grader.value = g; preview(); if (g === "PSA") singleLookup(); }
       else if (!qrAuto) { qrState.className = "muted"; qrState.textContent = p.raw ? "The QR code in the " + which(input) + " photo is not a link (" + p.raw.slice(0, 60) + "); type the certificate number instead." : "No QR code in the " + which(input) + " photo; it is usually on the back of the label. Add that photo, or type the certificate number."; }
     }
   }
@@ -98,7 +121,7 @@
     var g = s.grader || v("grader"), game = v("game") || "pokemon";
     el.innerHTML = '<div class="ph">' + fig(s.front, "front") + fig(s.back, "back") + s.extra.map(function (i) { return fig(i, "extra"); }).join("") +
       '<div class="meta"><b>Slab ' + (k + 1) + "</b><br>" + (s.qr ? '<span class="ok">QR: ' + esc(s.cert || s.qr) + " (" + esc(s.grader || "link") + ")</span>" : '<span class="muted">no QR code read: add the certificate number</span>') +
-      '<br><button type="button" class="sm swap">Swap front/back</button> <button type="button" class="sm drop">Remove line</button></div></div>' +
+      '<br><span class="psa muted"></span><br><button type="button" class="sm swap">Swap front/back</button> <button type="button" class="sm drop">Remove line</button></div></div>' +
       '<div class="grid">' +
       "<label>Game <select name=\"game\">" + opts(Object.keys(cfg.games), game, function (x) { return cfg.games[x]; }) + "</select></label>" +
       "<label>Grader <select name=\"grader\">" + opts(cfg.graders, g) + "</select></label>" +
@@ -155,8 +178,15 @@
     for (var n = 0; n < files.length; n++) { bstate.textContent = "Reading photo " + (n + 1) + " of " + files.length + "…"; var p = await prep(files[n]); p.i = n; photos.push(p); }
     var slabs = pairPhotos(photos);
     bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + ". Check each line (swap if a pair is backwards), fill in the card, then add.";
-    slabs.forEach(function (s, k) { lines.appendChild(lineEl(s, k)); });
+    var els = slabs.map(function (s, k) { var el = lineEl(s, k); lines.appendChild(el); return el; });
     addAll.hidden = !slabs.length;
+    // PSA's records, one slab at a time (the free allowance is about 100 a day).
+    for (var k = 0; k < slabs.length; k++) {
+      var s = slabs[k]; if (!cfg.psa || s.grader !== "PSA" || !s.cert) continue;
+      var meta = els[k].querySelector(".meta .psa"); if (meta) meta.textContent = "Asking PSA\u2026";
+      var d = await lookupCert("PSA", s.cert);
+      if (meta) { if (d && d.ok) { meta.className = "psa ok"; meta.textContent = applyCert(els[k], d); els[k].dispatchEvent(new Event("input")); } else { meta.className = "psa muted"; meta.textContent = (d && d.error) || ""; if (d && d.limited) break; } }
+    }
   });
   addAll.addEventListener("click", async function () {
     addAll.disabled = true;

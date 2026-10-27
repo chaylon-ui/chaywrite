@@ -149,3 +149,28 @@ test("batch pairing: backs are the photos with a QR code, each takes the front s
   assert.deepEqual(pairPhotos([]), []);
   assert.deepEqual(pairPhotos([{ qr: "" }]), [{ front: 0, back: null, extra: [], qr: "", cert: "", grader: "" }]);
 });
+
+import { psaToForm, titleCase, certLookup, psaConfigured } from "../src/graded.js";
+test("PSA lookup: the record becomes the form in the store's title case; the token, the limit and unknown certs are reported plainly", async () => {
+  assert.equal(titleCase("UMBREON VMAX"), "Umbreon VMAX"); assert.equal(titleCase("POKEMON SWSH EVOLVING SKIES"), "Pokemon SWSH Evolving Skies"); assert.equal(titleCase("MARSHADOW & MACHAMP GX"), "Marshadow & Machamp GX"); assert.equal(titleCase("1ST EDITION"), "1st Edition");
+  const rec = { CertNumber: "87654321", YearIssued: "2021", Brand: "POKEMON SWSH EVOLVING SKIES", Category: "TCG CARDS", CardNumber: "215", Subject: "UMBREON VMAX", Variety: "ALT ART", CardGrade: "GEM MT 10", TotalPopulation: 4321, PopulationHigher: 0 };
+  const f = psaToForm(rec);
+  assert.deepEqual(f, { grader: "PSA", cert: "87654321", grade: "10", gradeText: "GEM MT 10", name: "Umbreon VMAX", number: "215", set: "SWSH Evolving Skies", variety: "Alt Art", year: "2021", category: "TCG Cards", game: "pokemon", japanese: false, population: 4321, higher: 0 });
+  const jp = psaToForm({ CertNumber: "1", Brand: "POKEMON JAPANESE SWORD & SHIELD SHINY STAR V", Category: "TCG CARDS", Subject: "CHARIZARD VMAX", CardGrade: "NM-MT+ 8.5" });
+  assert.equal(jp.japanese, true); assert.equal(jp.set, "Sword & Shield Shiny Star V"); assert.equal(jp.grade, "8.5"); assert.equal(jp.game, "pokemon");
+  assert.equal(psaToForm({ Brand: "TOPPS CHROME", Category: "BASKETBALL CARDS", CardGrade: "AUTHENTIC" }).game, "sports"); assert.equal(psaToForm({ CardGrade: "AUTHENTIC" }).grade, "");
+  const calls = [];
+  const mk = (status, body) => ({ env: { PSA_API_TOKEN: "tok" }, fetch: async (u, i) => { calls.push({ u, auth: i.headers.authorization }); return status === "throw" ? Promise.reject(new Error("boom")) : new Response(body == null ? "" : JSON.stringify(body), { status }); } });
+  const ok = await certLookup(mk(200, { PSACert: rec }), "psa", " 8765-4321 ");
+  assert.equal(ok.ok, true); assert.equal(ok.name, "Umbreon VMAX"); assert.equal(calls[0].u, "https://api.psacard.com/publicapi/cert/GetByCertNumber/87654321"); assert.equal(calls[0].auth, "bearer tok");
+  assert.match((await certLookup(mk(200, { IsValidRequest: true, ServerMessage: "No data found" }), "PSA", "12345678")).error, /No data found/);
+  const lim = await certLookup(mk(429, null), "PSA", "12345678"); assert.equal(lim.limited, true); assert.match(lim.error, /daily lookup allowance/);
+  assert.match((await certLookup(mk(401, null), "PSA", "12345678")).error, /refused the token/);
+  assert.match((await certLookup(mk("throw"), "PSA", "12345678")).error, /PSA did not answer: boom/);
+  assert.match((await certLookup(mk(200, {}), "CGC", "12345678")).error, /CGC has no certificate API/);
+  assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
+  const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
+  const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=3"'));
+  assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));
+});
