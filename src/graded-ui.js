@@ -7,25 +7,11 @@
 import { shell, esc, BASE, when } from "./stage-ui.js";
 import { GAMES, GRADERS, GRADES, FINISHES } from "./graded.js";
 
-const CSS = `.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 10px}.shot{display:flex;flex-direction:column;gap:6px;border:1px dashed #cbd3d9;border-radius:10px;padding:8px;background:#f8fafb;cursor:pointer;font-size:13px;color:#374151}.shot input{font-size:12px;max-width:100%}.shot img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4}.shot img[hidden]{display:none}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 14px;margin:6px 0}.grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#374151;font-weight:600}.grid label.chk{flex-direction:row;align-items:center;align-self:end;font-weight:600}.grid .text{width:100%;flex:none;font-size:16px}.tp{margin:10px 0;padding:8px 12px;background:#eef2f4;border-radius:8px;font-size:14px;word-break:break-word}#qrstate{margin:0 0 8px;font-size:13px}#qrstate.ok{color:#065f46;font-weight:600}.last{background:#d1fae5;color:#065f46;padding:10px 14px;border-radius:10px;margin:10px 0}.last a{color:#065f46;font-weight:700}.warn{background:#fff8dc;color:#5b4300;padding:8px 12px;border-radius:8px;margin:8px 0;font-size:13px}.rec td img{width:40px;border-radius:4px;background:#eef2f4}textarea.text{font-size:16px}@media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label.wide{grid-column:1/-1}}`;
+export const JS_V = "2";   // bump when public/graded-add.js changes (browsers cache it)
 
-const JS = `(function(){
-var qrState=document.getElementById('qrstate'),qrUrl=document.getElementById('qr_url'),cert=document.getElementById('cert'),prev=document.getElementById('tprev'),form=document.getElementById('gform'),btn=document.getElementById('addbtn'),qrAuto=false;
-function v(n){var e=form.elements[n];return e?String(e.value||'').replace(/\\s+/g,' ').trim():'';}
-function title(){var name=v('name');if(!name)return '';var gl=v('grade')+(v('label')?' '+v('label'):'');return [name+(v('number')?' ('+v('number')+')':''),v('set')?'['+v('set')+']':'',v('finish'),form.elements.japanese.checked?'Japanese':'','Graded '+v('grader').toUpperCase()+' '+gl].filter(Boolean).join(' ');}
-function preview(){prev.textContent=title()||'(type the card name)';}
-form.addEventListener('input',preview);form.addEventListener('change',preview);preview();
-function fit(bmp,max){var s=Math.min(1,max/Math.max(bmp.width,bmp.height));var c=document.createElement('canvas');c.width=Math.max(1,Math.round(bmp.width*s));c.height=Math.max(1,Math.round(bmp.height*s));c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return c;}
-function decodeCanvas(c){if(!window.jsQR)return null;var d=c.getContext('2d').getImageData(0,0,c.width,c.height);var r=jsQR(d.data,d.width,d.height,{inversionAttempts:'attemptBoth'});return r&&r.data||null;}
-async function detect(bmp){if('BarcodeDetector' in window){try{var det=new BarcodeDetector({formats:['qr_code']});var res=await det.detect(bmp);if(res&&res[0]&&res[0].rawValue)return res[0].rawValue;}catch(e){}}var sizes=[1400,2200,3000];for(var i=0;i<sizes.length;i++){try{var val=decodeCanvas(fit(bmp,sizes[i]));if(val)return val;}catch(e){}}return null;}
-async function onPhoto(input){var file=input.files&&input.files[0];if(!file)return;var img=input.parentNode.querySelector('img');var bmp=null;try{bmp=await createImageBitmap(file);}catch(e){}
-if(bmp){try{var c=fit(bmp,2000);var blob=await new Promise(function(res){c.toBlob(res,'image/jpeg',0.86);});if(blob&&blob.size<file.size){var dt=new DataTransfer();dt.items.add(new File([blob],(file.name||'photo').replace(/\\.[A-Za-z0-9]+$/,'')+'.jpg',{type:'image/jpeg'}));input.files=dt.files;}if(img){img.src=URL.createObjectURL(blob||file);img.hidden=false;}}catch(e){if(img){img.src=URL.createObjectURL(file);img.hidden=false;}}}
-else if(img){img.src=URL.createObjectURL(file);img.hidden=false;}
-if(bmp&&(qrAuto||!qrUrl.value)){qrState.className='muted';qrState.textContent='Reading the QR code\\u2026';var val=await detect(bmp);if(val&&/^https?:\\/\\//i.test(val)){qrUrl.value=val;qrAuto=true;qrState.className='ok';qrState.textContent='QR code read from the '+which(input)+' photo: '+val;var m=/(\\d{6,12})/.exec(val);if(m&&!cert.value)cert.value=m[1];}else if(!qrAuto){qrState.className='muted';qrState.textContent=val?'The QR code in the '+which(input)+' photo is not a link ('+val.slice(0,60)+'); type the certificate number instead.':'No QR code in the '+which(input)+' photo yet; it is usually on the back of the label. Add that photo, or type the certificate number.';}}}
-function which(input){return input.name==='photo1'?'front':input.name==='photo2'?'back':'extra';}
-Array.prototype.forEach.call(form.querySelectorAll('input[type=file]'),function(i){i.addEventListener('change',function(){onPhoto(i);});});
-form.addEventListener('submit',function(){btn.disabled=true;btn.textContent='Adding\\u2026 (uploading photos)';});
-})();`;
+const CSS = `.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 10px}.shot{display:flex;flex-direction:column;gap:6px;border:1px dashed #cbd3d9;border-radius:10px;padding:8px;background:#f8fafb;cursor:pointer;font-size:13px;color:#374151}.shot input{font-size:12px;max-width:100%}.shot img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4}.shot img[hidden]{display:none}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 14px;margin:6px 0}.grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#374151;font-weight:600}.grid label.chk{flex-direction:row;align-items:center;align-self:end;font-weight:600}.grid .text{width:100%;flex:none;font-size:16px}.tp{margin:10px 0;padding:8px 12px;background:#eef2f4;border-radius:8px;font-size:14px;word-break:break-word}#qrstate{margin:0 0 8px;font-size:13px}#qrstate.ok{color:#065f46;font-weight:600}.last{background:#d1fae5;color:#065f46;padding:10px 14px;border-radius:10px;margin:10px 0}.last a{color:#065f46;font-weight:700}.warn{background:#fff8dc;color:#5b4300;padding:8px 12px;border-radius:8px;margin:8px 0;font-size:13px}.rec td img{width:40px;border-radius:4px;background:#eef2f4}textarea.text{font-size:16px}.line{border:1px solid #dde3e7;border-radius:12px;padding:10px 12px;margin:10px 0;background:#fff}.line .ph{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}.line .ph figure{margin:0;width:92px;font-size:11px;color:#6b7780;text-align:center}.line .ph img,.line .ph .ph-none{width:92px;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4;display:flex;align-items:center;justify-content:center;font-size:11px}.line .meta{flex:1 1 160px;font-size:13px;line-height:1.6}.line .meta .ok{color:#065f46;font-weight:600}.line .st{font-size:13px}.line .st.ok{color:#065f46;font-weight:600}.line .st.err{color:#b42318;font-weight:600}.line.done{background:#f3fbf7}.line.busy button{opacity:.6}@media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label.wide{grid-column:1/-1}}`;
+
+
 
 const sel = (name, opts, cur, labels) => `<select name="${name}">${opts.map((o) => `<option value="${esc(o)}"${o === cur ? " selected" : ""}>${esc(labels ? labels(o) : (o || "—"))}</option>`).join("")}</select>`;
 
@@ -49,9 +35,9 @@ ${err}${lastBox}${warn}
 <form id="gform" class="card" method="post" action="${BASE}/graded/add" enctype="multipart/form-data">
 <h3>Photos</h3>
 <div class="shots">
-<label class="shot"><span>Front of the slab</span><input type="file" name="photo1" accept="image/*" capture="environment"><img alt="" hidden></label>
-<label class="shot"><span>Back: the label with the QR code</span><input type="file" name="photo2" accept="image/*" capture="environment"><img alt="" hidden></label>
-<label class="shot"><span>Extra</span><input type="file" name="photo3" accept="image/*" capture="environment"><img alt="" hidden></label>
+<label class="shot"><span>Front of the slab</span><input type="file" name="photo1" accept="image/*"><img alt="" hidden></label>
+<label class="shot"><span>Back: the label with the QR code</span><input type="file" name="photo2" accept="image/*"><img alt="" hidden></label>
+<label class="shot"><span>Extra</span><input type="file" name="photo3" accept="image/*"><img alt="" hidden></label>
 </div>
 <div id="qrstate" class="muted">Every photo is checked for the QR code (usually on the back of the label).</div>
 <h3>Card</h3>
@@ -80,8 +66,16 @@ ${err}${lastBox}${warn}
 <label style="display:block;font-size:13px;font-weight:600;color:#374151">Notes (shown on the listing)<textarea class="text" name="notes" rows="2" placeholder="e.g. light scuff on the case"></textarea></label>
 <div class="act"><button class="save" type="submit" id="addbtn">Add to Shopify</button> <span class="muted">Photos are shrunk on your phone before they upload.</span></div>
 </form>
+<div class="card"><h3>Batch: a pile of slabs at once</h3>
+<p class="muted">Pick every photo in one go (front and back of each slab, in any order). The QR code on each back identifies the slab; the front shot taken next to it is paired with it. Each slab becomes a line below: check the pair, fill in the card, and add them one at a time or all at once.</p>
+<input type="file" id="batch" accept="image/*" multiple>
+<div id="batchstate" class="muted"></div>
+<div id="lines"></div>
+<div class="act"><button type="button" id="addall" class="save" hidden>Add every filled-in line</button></div>
+</div>
 <div class="card rec"><h3>Added from here lately</h3>${rows ? `<table><thead><tr><th></th><th>Card</th><th class="n">Price</th><th class="n">Qty</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">Nothing yet. The first slab you add shows up here.</p>'}</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js" defer></script>
-<script>${JS}</script>`;
+<script>window.xgGraded=${JSON.stringify({ grades: GRADES, finishes: FINISHES, graders: Object.keys(GRADERS), games: Object.fromEntries(Object.entries(GAMES).map(([k, g]) => [k, g.label])), base: BASE }).replace(/<\//g, "<\\/")}</script>
+<script src="/graded-add.js?v=${JS_V}" defer></script>`;
   return shell("Graded cards", body, o, true);
 }

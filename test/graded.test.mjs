@@ -5,6 +5,9 @@ import { titleOf, cleanForm, certUrlOf, cleanUrl, productInput, createGraded, se
 import { parseGraded } from "../src/autoprice.js";
 import { STAFF_PERMS, can } from "../src/stage-auth.js";
 import { renderGraded, renderGradedDenied } from "../src/graded-ui.js";
+import { readFileSync } from "node:fs";
+// The browser script's pure parts, evaluated without a document.
+const client = (() => { const m = { exports: {} }; new Function("module", "window", "document", readFileSync(new URL("../public/graded-add.js", import.meta.url), "utf8"))(m, undefined, undefined); return m.exports; })();
 
 test("titles follow the store's graded naming and the auto-pricer reads them back", () => {
   const t1 = titleOf({ name: "Dark Muk", number: "41/82", set: "Team Rocket 1st Edition", grader: "psa", grade: "9" });
@@ -119,6 +122,30 @@ test("setupCheck names the missing scopes; recentGraded shapes the list; the per
   assert.ok(STAFF_PERMS.some((p) => p.key === "graded"));
   assert.equal(can({ role: "staff", perms: { graded: true } }, "graded"), true); assert.equal(can({ role: "staff", perms: {} }, "graded"), false); assert.equal(can({ role: "admin" }, "graded"), true);
   const page = renderGraded({ recent, setup: c, last: { handle: "dark-muk", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", published: false, publishError: "Access denied", placeholder: true }, keep: { grader: "CGC", set: "Fossil", japanese: true } }, { user: { email: "s@x", role: "admin" } });
-  for (const needle of ['name="photo1"', 'capture="environment"', "jsQR/1.4.0/jsQR.min.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_publications</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", "qrAuto"]) assert.ok(page.includes(needle), needle);
+  for (const needle of ['name="photo1"', "jsQR/1.4.0/jsQR.min.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_publications</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", 'src="/graded-add.js?v=', 'id="batch"', 'accept="image/*" multiple', 'id="addall"', "window.xgGraded="]) assert.ok(page.includes(needle), needle);
+  assert.ok(!page.includes('capture='), "the photo boxes open the library too, not only the camera");
   assert.match(renderGradedDenied({ user: { email: "s@x", role: "staff" } }), /cannot add graded cards/);
+});
+
+test("batch pairing: backs are the photos with a QR code, each takes the front shot beside it; leftovers stay as lines", () => {
+  const { pairPhotos, graderOfUrl, certOfUrl } = client;
+  assert.equal(graderOfUrl("https://www.psacard.com/cert/87654321"), "PSA"); assert.equal(graderOfUrl("https://www.cgccards.com/certlookup/4312345001/"), "CGC"); assert.equal(graderOfUrl("https://example.com/x"), ""); assert.equal(graderOfUrl("nope"), "");
+  assert.equal(certOfUrl("https://www.psacard.com/cert/87654321"), "87654321"); assert.equal(certOfUrl(""), "");
+  const psa = (n) => "https://www.psacard.com/cert/" + n, cgc = (n) => "https://www.cgccards.com/certlookup/" + n + "/";
+  // front, back, front, back
+  let s = pairPhotos([{ qr: "" }, { qr: psa("11111111") }, { qr: "" }, { qr: cgc("2222222001") }]);
+  assert.deepEqual(s.map((x) => [x.front, x.back, x.cert, x.grader]), [[0, 1, "11111111", "PSA"], [2, 3, "2222222001", "CGC"]]);
+  // back first, then its front
+  s = pairPhotos([{ qr: psa("11111111") }, { qr: "" }]);
+  assert.deepEqual(s.map((x) => [x.front, x.back]), [[1, 0]]);
+  // two fronts then two backs still pairs them, the nearest first
+  s = pairPhotos([{ qr: "" }, { qr: "" }, { qr: psa("10000001") }, { qr: psa("10000002") }]);
+  assert.deepEqual(s.map((x) => [x.front, x.back]).sort(), [[0, 3], [1, 2]]);
+  // a second photo of the same certificate joins the slab; a lone front and a far-off back stand alone
+  s = pairPhotos([{ qr: "" }, { qr: psa("55555555") }, { qr: psa("55555555") }, { qr: "" }, { qr: "" }, { qr: "" }, { qr: "" }, { qr: "" }, { qr: psa("99999999") }]);
+  assert.deepEqual(s[0], { front: 0, back: 1, extra: [2], qr: psa("55555555"), cert: "55555555", grader: "PSA" });
+  assert.equal(s.length, 6, "one slab with an extra, four lone fronts, one back with the nearest front within three");
+  const far = s.find((x) => x.cert === "99999999"); assert.equal(far.front, 7);
+  assert.deepEqual(pairPhotos([]), []);
+  assert.deepEqual(pairPhotos([{ qr: "" }]), [{ front: 0, back: null, extra: [], qr: "", cert: "", grader: "" }]);
 });
