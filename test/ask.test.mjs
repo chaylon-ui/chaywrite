@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ask, askDoFetch, serveAsk, searchProducts, runTool, TOOLS, SYSTEM, MODEL, ASK_DO } from "../src/ask.js";
+import { groupBuylistPrintings } from "../src/cards.js";
 
 const T0 = Date.UTC(2026, 9, 22, 15, 0, 0);
 const ORIGIN = "https://w.example";
@@ -42,10 +43,40 @@ test("tools are strict and read-only; search_products shapes the store's answer;
   assert.deepEqual(await searchProducts({ query: "  " }, suggest(PRODUCTS)), { products: [] });
   await assert.rejects(searchProducts({ query: "x" }, async () => new Response("down", { status: 503 })), /search 503/);
   await assert.rejects(runTool("rm_rf", {}, {}), /unknown tool/);
-  assert.match(SYSTEM, /Never state that something is in stock/); assert.equal(MODEL, "claude-opus-5-5");
+  assert.match(SYSTEM, /Never state that something is in stock/); assert.match(SYSTEM, /call buy_price FIRST/); assert.equal(MODEL, "claude-opus-5-5");
 });
 
-test("ask: a tool round feeds the store's answer back; products come out as cards; the request is shaped for caching, low effort and fallbacks", async () => {
+// BinderPOS's buylist search, as its hits look: a card per printing with variants (conditions) x cardBuylistTypes (finishes).
+const bp = (id, cardName, setName, rows) => ({ id, cardName, setName, variants: rows.map(([cond, types]) => ({ variantName: cond, cardBuylistTypes: types.map(([type, buy, credit, max]) => ({ type, buyPrice: buy, creditBuyPrice: credit, maxPurchaseQuantity: max })) })) });
+const BOLTS = [
+  bp(1, "Lightning Bolt", "Magic Player Rewards 2010", [["Lightly Played", [["Foil", 28.72, 40.22, 1]]]]),
+  bp(2, "Lightning Bolt", "Revised Edition", [["Near Mint", [["Normal", 1.5, 2.1, 8]]], ["Lightly Played", [["Normal", 1.2, 1.7, 8]]], ["Damaged", [["Normal", 0.1, 0.2, 8]]]]),
+  bp(3, "Lightning Bolt (Borderless)", "Modern Horizons 3", [["Near Mint", [["Normal", 2.0, 2.8, 4], ["Foil", 3.0, 4.2, 2]]]]),
+  bp(4, "Lightning Bolt", "Limited Edition Alpha", [["Near Mint", [["Normal", 0, 0, 0]]]]),   // on their list, every price 0
+  bp(5, "Lightning Helix", "Ravnica", [["Near Mint", [["Normal", 0.5, 0.7, 8]]]]),
+  bp(2, "Lightning Bolt", "Revised Edition", []),   // a duplicate hit from the next page
+];
+test("buy_price: every printing of the card, best offer first, the named set flagged when missing; the tool wraps it with the staff-quote note", async () => {
+  const r = groupBuylistPrintings(BOLTS, "lightning bolt", "");
+  assert.deepEqual(r.printings.map((p) => p.set), ["Magic Player Rewards 2010", "Modern Horizons 3", "Revised Edition", "Limited Edition Alpha"]);
+  assert.equal(r.printings_on_buylist, 4); assert.equal(r.buying, true);
+  assert.deepEqual(r.printings[2].offers, [{ condition: "Near Mint", finish: "Normal", cash: "1.50", credit: "2.10", max: 8 }, { condition: "Lightly Played", finish: "Normal", cash: "1.20", credit: "1.70", max: 8 }], "Damaged dropped");
+  assert.deepEqual(r.printings[3].offers, [], "all-zero prices = listed but not bought");
+  const beta = groupBuylistPrintings(BOLTS, "Lightning Bolt", "Beta");
+  assert.equal(beta.set_asked, "Beta"); assert.equal(beta.set_on_buylist, false); assert.equal(beta.printings.length, 4, "the whole list still shows");
+  const rev = groupBuylistPrintings(BOLTS, "Lightning Bolt", "revised");
+  assert.equal(rev.set_on_buylist, true); assert.deepEqual(rev.printings.map((p) => p.set), ["Revised Edition"]);
+  assert.deepEqual(groupBuylistPrintings(BOLTS, "Black Lotus", ""), { card: "Black Lotus", printings_on_buylist: 0, buying: false, printings: [] });
+  const calls = [];
+  const searchFn = async (game, kw, off) => { calls.push([game, kw, off]); return off === 0 ? BOLTS : []; };
+  const out = await runTool("buy_price", { card_name: "Lightning Bolt", game: "Magic", set: "Beta" }, { searchFn });
+  assert.deepEqual(calls, [["mtg", "Lightning Bolt", 0]], "one page when it is short");
+  assert.equal(out.game, "mtg"); assert.equal(out.buying, true); assert.equal(out.set_on_buylist, false); assert.match(out.staff_quote, /charlottetown@exorgames.com/); assert.match(out.sellPage, /sell-to-exor-games/);
+  assert.deepEqual(await runTool("buy_price", { card_name: " " }, { searchFn }), { error: "give the card's name" });
+  const t = TOOLS.find((x) => x.name === "buy_price"); assert.deepEqual(Object.keys(t.input_schema.properties), ["card_name", "game", "set"]); assert.deepEqual(t.input_schema.required, ["card_name"]);
+});
+
+test("ask: a tool round feeds the store's answer back; products come out as cards; the request is shaped for caching, medium effort and fallbacks", async () => {
   const client = fakeClient([toolCall("search_products", { query: "bloomburrow collector" }), text("Yes: the Bloomburrow Collector Booster Box is in stock at $289.95: https://exorgames.com/products/bloomburrow-collector-booster-box")]);
   const r = await ask({ ANTHROPIC_API_KEY: "k" }, "do you have bloomburrow collector boxes?", [], { client, fetchFn: suggest(PRODUCTS), now: T0 });
   assert.equal(r.ok, true); assert.match(r.answer, /in stock at \$289\.95/); assert.equal(r.rounds, 1); assert.deepEqual(r.toolsUsed, ["search_products"]);
@@ -53,7 +84,7 @@ test("ask: a tool round feeds the store's answer back; products come out as card
   assert.deepEqual(r.usage, { input: 2100, output: 100, cacheRead: 1800 });
   const p1 = client.sent[0];
   assert.equal(p1.model, "claude-opus-5-5"); assert.equal(p1.max_tokens, 1024); assert.deepEqual(p1.betas, ["server-side-fallback-2026-07-01"]); assert.equal(p1.fallbacks, "default");
-  assert.deepEqual(p1.output_config, { effort: "low" }); assert.equal(p1.thinking, undefined, "adaptive by default on this model");
+  assert.deepEqual(p1.output_config, { effort: "medium" }); assert.equal(p1.thinking, undefined, "adaptive by default on this model");
   assert.deepEqual(p1.system[0].cache_control, { type: "ephemeral" }); assert.equal(p1.tools, TOOLS);
   assert.deepEqual(p1.messages, [{ role: "user", content: "do you have bloomburrow collector boxes?" }]);
   const p2 = client.sent[1];

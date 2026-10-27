@@ -1096,6 +1096,62 @@ export function buylistOffers(card) {
   return out;
 }
 
+/* Every printing of a card on the store's buylist (Ask Exor's buy_price tool;
+   owner 2026-10-27: asked what the store pays for a Beta Lightning Bolt, the
+   assistant first said the store was not buying the card without checking,
+   then quoted the one printing serveBuyPrice picks for the sell page's panel -
+   "the only version listed is the foil Magic Player Rewards 2010" - while the
+   store buys many). BinderPOS's hits whose card name is the one asked for,
+   one entry per printing, best offer first; per printing non-foil then foil,
+   Near Mint to Heavily Played (Damaged dropped), so the assistant sees the
+   whole buylist for the card and can say when a named printing (Beta) is
+   simply not on it rather than "not buying". */
+export function groupBuylistPrintings(hits, name, setWanted) {
+  const want = normText(baseName(name)), wantSet = normText(setWanted);
+  const seen = new Set(), printings = [];
+  for (const h of Array.isArray(hits) ? hits : []) {
+    if (!h || seen.has(h.id)) continue;
+    if (normText(h.cardName) !== want && normText(baseName(h.cardName)) !== want) continue;
+    seen.add(h.id);
+    const offers = buylistOffers(h).filter((o) => !/^damaged/i.test(o.condition)).slice(0, 10)
+      .map((o) => ({ condition: o.condition, finish: o.finish, cash: o.cash, credit: o.credit, max: o.max || null }));
+    printings.push({ set: h.setName || "", offers, top: Math.max(0, ...offers.map((o) => parseFloat(o.cash || o.credit || 0))) });
+  }
+  printings.sort((a, b) => b.top - a.top);
+  const out = printings.slice(0, 10).map(({ top, ...p }) => p);
+  const r = { card: String(name || ""), printings_on_buylist: out.length, buying: out.some((p) => p.offers.length), printings: out };
+  if (wantSet) {
+    const m = out.filter((p) => normText(p.set).includes(wantSet));
+    r.set_asked = setWanted; r.set_on_buylist = m.length > 0;
+    if (m.length) r.printings = m;
+  }
+  return r;
+}
+// Up to three pages of BinderPOS's search (their keyword search ranks promos
+// and art cards first), cached ten minutes per game + name.
+export async function buylistPrintings(game, name, setWanted, opts) {
+  const o = opts || {};
+  const key = String(name || "").trim().slice(0, 80);
+  const bpGame = bpGameId(game || "mtg") || "mtg";
+  const cacheKey = "https://exor-binder.nevski.workers.dev/_askbuy.json?g=" + bpGame + "&n=" + encodeURIComponent(key.toLowerCase());
+  const cache = typeof caches !== "undefined" && caches.default;
+  let hits = cache ? await cache.match(cacheKey).then((h) => (h ? h.json() : null)).catch(() => null) : null;
+  if (!Array.isArray(hits)) {
+    hits = [];
+    const search = o.searchFn || bpCardSearch;
+    for (const off of [0, 20, 40]) {
+      const page = await search(bpGame, key, off);
+      hits = hits.concat(Array.isArray(page) ? page : []);
+      if (!Array.isArray(page) || page.length < 20) break;
+    }
+    if (cache) {
+      const put = cache.put(cacheKey, Response.json(hits, { headers: { "cache-control": "public, max-age=600" } })).catch(() => {});
+      if (o.ctx && o.ctx.waitUntil) o.ctx.waitUntil(put); else await put;
+    }
+  }
+  return groupBuylistPrintings(hits, key, setWanted);
+}
+
 export async function serveBuyPrice(request, env, ctx) {
   const cors = { "access-control-allow-origin": "*" };
   const url = new URL(request.url);
