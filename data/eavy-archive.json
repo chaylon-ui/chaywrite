@@ -1,7 +1,7 @@
 {
 "source": "https://eavy-archive.com/",
 "credit": "'Eavy Archive - box-art recipes collected by The Infernal Brush Discord community (unofficial, not endorsed by Games Workshop)",
-"generated": "2026-10-20T10:11:46Z",
+"generated": "2026-10-27T10:43:10Z",
 "count": 52,
 "pages": {
 "https://eavy-archive.com/40k/adepta-sororitas/": {
@@ -12112,6 +12112,247 @@
 "name": "Tongue",
 "paints": [
 "Galvorbak Red"
+]
+},
+{
+"slug": "basic-metal",
+"name": "Basic Metal",
+"paints": [
+"Iron Hands Steel",
+"Leadbealcher",
+"Nuln Gloss",
+"Nuln Oil",
+"Ironbreaker",
+"Stormhost Silver"
+]
+},
+{
+"slug": "basic-metal-2",
+"name": "Basic Metal 2",
+"paints": [
+"Iron Warriors",
+"Wyldwood",
+"Abaddon Black",
+"Ironbreaker",
+"Stormhost Silver"
+]
+},
+{
+"slug": "pale-brass",
+"name": "Pale Brass",
+"paints": [
+"Runelord Brass",
+"Wyldwood",
+"Canoptek Alloy",
+"Stormhost Silver"
+]
+},
+{
+"slug": "dark-tin",
+"name": "Dark Tin",
+"paints": [
+"Runelord Silver",
+"Warplock Bronze",
+"Wyldwood",
+"Runelord Brass",
+"Stormhost Silver"
+]
+},
+{
+"slug": "bronze",
+"name": "Bronze",
+"paints": [
+"Screaming Bell",
+"Retributor Armour",
+"Carroburg Crimson",
+"Wyldwood",
+"Gal Vorbak Red",
+"Base Mix",
+"Sycorax Bronze",
+"Stormhost Silver"
+]
+},
+{
+"slug": "copper",
+"name": "Copper",
+"paints": [
+"Screaming Bell",
+"Wyldwood",
+"Hashut Copper",
+"Stormhost Silver"
+]
+},
+{
+"slug": "cast-iron",
+"name": "Cast Iron",
+"paints": [
+"Iron Warrior",
+"Black Templar Contrast",
+"Administratum Grey",
+"Grey Seer"
+]
+},
+{
+"slug": "wood-light",
+"name": "Wood - Light",
+"paints": [
+"Grey Seer",
+"Ushabti Bone",
+"Base Mix",
+"Skavenblight",
+"Previous Mix",
+"Abaddon Black",
+"White"
+]
+},
+{
+"slug": "wood-dark-grey",
+"name": "Wood - Dark Grey",
+"paints": [
+"Skavenblight Dinge",
+"Wyldwood",
+"Stormvermin Fur",
+"Stormvermin",
+"Grey Seer",
+"Previous Mix",
+"White"
+]
+},
+{
+"slug": "wood-deep-brown",
+"name": "Wood - Deep Brown",
+"paints": [
+"Dryad Bark",
+"Abbadon Black",
+"Karak Stone",
+"Karak",
+"White"
+]
+},
+{
+"slug": "wood-medium-brown",
+"name": "Wood - Medium Brown",
+"paints": [
+"Mournfang Brown",
+"XV88",
+"Base Mix",
+"Dryad Bark",
+"Wyldwood",
+"Steel Legion DrabHighlight: Karak Stone"
+]
+},
+{
+"slug": "red-binding",
+"name": "Red Binding",
+"paints": [
+"Doombull Brown",
+"XV88",
+"Tau Light Ochre",
+"Ungor Flesh",
+"Carroburg Crimson"
+]
+},
+{
+"slug": "brown-binding",
+"name": "Brown Binding",
+"paints": [
+"Mournfang Brown",
+"Rhinox Hide",
+"Balor Brown",
+"Karak Stone"
+]
+},
+{
+"slug": "dark-binding",
+"name": "Dark Binding",
+"paints": [
+"Rhinox Hide",
+"Nuln Oil",
+"Gorthor Brown",
+"Baneblade Brown"
+]
+},
+{
+"slug": "skareshields-red",
+"name": "Skareshields - Red",
+"paints": [
+"Evil Sunz Scarlet",
+"Mephiston Red",
+"Gal Vorbak Red",
+"Black",
+"Wild Rider Red",
+"Phalanx Yellow",
+"Previous Mix",
+"White"
+]
+},
+{
+"slug": "skareshields-teeth-studs",
+"name": "Skareshields - Teeth & Studs",
+"paints": [
+"Runelord Brass",
+"Wyldwood",
+"Canoptek Alloy",
+"Stormhost Silver"
+]
+},
+{
+"slug": "skareshields-eyes",
+"name": "Skareshields - Eyes updated!",
+"paints": [
+"Liberator Gold",
+"Reikland Fleshshade",
+"Stormhost Silver"
+]
+},
+{
+"slug": "skareshields-rivets-spikes",
+"name": "Skareshields - Rivets & Spikes updated!",
+"paints": [
+"Leadbelcher",
+"Wyldwood",
+"Abbadon Black",
+"Ironbreaker",
+"Stormhost Silver"
+]
+},
+{
+"slug": "skareshields-verdigris",
+"name": "Skareshields - Verdigris updated!",
+"paints": [
+"Kabalite Green",
+"Deepkin Flesh Shade: Akhelian Green",
+"Vulkan Green"
+]
+},
+{
+"slug": "bases-sand",
+"name": "Bases - Sand updated!",
+"paints": [
+"Dryad Bark",
+"Dark Reaper",
+"Baneblade Brown",
+"Deepkin Flesh"
+]
+},
+{
+"slug": "bases-rocks",
+"name": "Bases - Rocks updated!",
+"paints": [
+"Administratum Grey",
+"Dryad Bark",
+"Grey Seer",
+"White"
+]
+},
+{
+"slug": "bases-weathering",
+"name": "Bases - Weathering updated!",
+"paints": [
+"Mournfang Brown",
+"Deathcore Drab",
+"Wyldwood into sand around rocks",
+"Stegadon Green"
 ]
 }
 ]
