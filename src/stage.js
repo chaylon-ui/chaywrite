@@ -71,6 +71,8 @@ import { serveWinStaff } from "./win.js";
 import { serveImpactStaff } from "./impact.js";
 import { RETENTION, accessWhat, logAccess } from "./access-log.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage, when } from "./stage-ui.js";
+import { createGraded, setupCheck, recentGraded } from "./graded.js";
+import { renderGraded, renderGradedDenied } from "./graded-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
   CODE_TTL_MS, CODE_TRIES, CODE_SENDS, CODE_RESEND_MS, CODE_STARTS, DEVICE_DAYS, DEVICE_KEEP, CHALLENGE_COOKIE } from "./stage-auth.js";
@@ -1123,6 +1125,24 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   }
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.
+  // Graded cards (src/graded.js): the add form, the add itself, the setup check.
+  if (p === BASE + "/graded" || p === BASE + "/graded/add" || p === BASE + "/graded/setup.json") {
+    if (!user) return toLogin();
+    if (!can(user, "graded")) return html(renderGradedDenied(opts), 403);
+    const cx = { env, fetch: (u, i) => fetch(u, i), now: () => Date.now(), log: (m) => console.log(m) };
+    if (p === BASE + "/graded/setup.json") return Response.json(await setupCheck(cx), { headers: noStore });
+    const sp = url.searchParams;
+    if (p === BASE + "/graded/add" && request.method === "POST") {
+      const photos = [1, 2, 3, 4].map((i) => form && form["photo" + i]).filter((x) => x && typeof x.arrayBuffer === "function" && x.size > 0);
+      const r = await createGraded(cx, form || {}, photos);
+      if (form && form.json) return Response.json(r, { status: r.ok ? 200 : 400, headers: noStore });
+      const keep = { game: String((form && form.game) || ""), grader: String((form && form.grader) || ""), set: String((form && form.set) || ""), finish: String((form && form.finish) || ""), japanese: form && form.japanese ? "1" : "" };
+      return redirect(BASE + "/graded" + q(r.ok ? { ...keep, added: r.handle, title: r.title, pub: r.published ? "1" : "", puberr: r.publishError || "", ph: r.placeholder ? "1" : "" } : { ...keep, err: r.error || "failed" }));
+    }
+    const [recent, setup] = await Promise.all([recentGraded(cx), user.role === "admin" ? setupCheck(cx) : Promise.resolve(null)]);
+    const last = sp.get("added") ? { handle: sp.get("added"), title: sp.get("title") || "", published: sp.get("pub") === "1", publishError: sp.get("puberr") || "", placeholder: sp.get("ph") === "1" } : null;
+    return html(renderGraded({ recent, setup, last, keep: { game: sp.get("game") || "", grader: sp.get("grader") || "", set: sp.get("set") || "", finish: sp.get("finish") || "", japanese: sp.get("japanese") === "1" } }, opts));
+  }
   if (p === BASE + "/held" || p === BASE + "/held.json" || p === BASE + "/held/control") {
     const stub = env.ROOM.get(env.ROOM.idFromName(HOLD_DO));
     const hold = async (path, body) => { const r = await stub.fetch(new Request(origin + path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {})); try { return await r.json(); } catch { return { ok: false, error: "hold DO: HTTP " + r.status }; } };
