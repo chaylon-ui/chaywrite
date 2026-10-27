@@ -1,7 +1,8 @@
 /* 9Pocket > Graded cards: the add form (phone first), the "added lately" list.
    The browser shrinks each photo to <= 2000 px before upload, reads the QR
-   code on the label (BarcodeDetector where the phone has it, jsQR from cdnjs
-   otherwise) into the certificate-link box, and previews the title as it
+   code on the label from whichever photo shows it - usually the back (owner,
+   2026-10-27) - with BarcodeDetector where the phone has it, jsQR from cdnjs
+   otherwise, into the certificate-link box, and previews the title as it
    will be listed. Everything else happens in src/graded.js. */
 import { shell, esc, BASE, when } from "./stage-ui.js";
 import { GAMES, GRADERS, GRADES, FINISHES } from "./graded.js";
@@ -9,7 +10,7 @@ import { GAMES, GRADERS, GRADES, FINISHES } from "./graded.js";
 const CSS = `.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 10px}.shot{display:flex;flex-direction:column;gap:6px;border:1px dashed #cbd3d9;border-radius:10px;padding:8px;background:#f8fafb;cursor:pointer;font-size:13px;color:#374151}.shot input{font-size:12px;max-width:100%}.shot img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#eef2f4}.shot img[hidden]{display:none}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 14px;margin:6px 0}.grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#374151;font-weight:600}.grid label.chk{flex-direction:row;align-items:center;align-self:end;font-weight:600}.grid .text{width:100%;flex:none;font-size:16px}.tp{margin:10px 0;padding:8px 12px;background:#eef2f4;border-radius:8px;font-size:14px;word-break:break-word}#qrstate{margin:0 0 8px;font-size:13px}#qrstate.ok{color:#065f46;font-weight:600}.last{background:#d1fae5;color:#065f46;padding:10px 14px;border-radius:10px;margin:10px 0}.last a{color:#065f46;font-weight:700}.warn{background:#fff8dc;color:#5b4300;padding:8px 12px;border-radius:8px;margin:8px 0;font-size:13px}.rec td img{width:40px;border-radius:4px;background:#eef2f4}textarea.text{font-size:16px}@media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label.wide{grid-column:1/-1}}`;
 
 const JS = `(function(){
-var qrState=document.getElementById('qrstate'),qrUrl=document.getElementById('qr_url'),cert=document.getElementById('cert'),prev=document.getElementById('tprev'),form=document.getElementById('gform'),btn=document.getElementById('addbtn');
+var qrState=document.getElementById('qrstate'),qrUrl=document.getElementById('qr_url'),cert=document.getElementById('cert'),prev=document.getElementById('tprev'),form=document.getElementById('gform'),btn=document.getElementById('addbtn'),qrAuto=false;
 function v(n){var e=form.elements[n];return e?String(e.value||'').replace(/\\s+/g,' ').trim():'';}
 function title(){var name=v('name');if(!name)return '';var gl=v('grade')+(v('label')?' '+v('label'):'');return [name+(v('number')?' ('+v('number')+')':''),v('set')?'['+v('set')+']':'',v('finish'),form.elements.japanese.checked?'Japanese':'','Graded '+v('grader').toUpperCase()+' '+gl].filter(Boolean).join(' ');}
 function preview(){prev.textContent=title()||'(type the card name)';}
@@ -20,7 +21,8 @@ async function detect(bmp){if('BarcodeDetector' in window){try{var det=new Barco
 async function onPhoto(input){var file=input.files&&input.files[0];if(!file)return;var img=input.parentNode.querySelector('img');var bmp=null;try{bmp=await createImageBitmap(file);}catch(e){}
 if(bmp){try{var c=fit(bmp,2000);var blob=await new Promise(function(res){c.toBlob(res,'image/jpeg',0.86);});if(blob&&blob.size<file.size){var dt=new DataTransfer();dt.items.add(new File([blob],(file.name||'photo').replace(/\\.[A-Za-z0-9]+$/,'')+'.jpg',{type:'image/jpeg'}));input.files=dt.files;}if(img){img.src=URL.createObjectURL(blob||file);img.hidden=false;}}catch(e){if(img){img.src=URL.createObjectURL(file);img.hidden=false;}}}
 else if(img){img.src=URL.createObjectURL(file);img.hidden=false;}
-if(bmp&&(input.name==='photo1'||!qrUrl.value)){qrState.className='muted';qrState.textContent='Reading the QR code\\u2026';var val=await detect(bmp);if(val&&/^https?:\\/\\//i.test(val)){qrUrl.value=val;qrState.className='ok';qrState.textContent='QR code read: '+val;var m=/(\\d{6,12})/.exec(val);if(m&&!cert.value)cert.value=m[1];}else{qrState.className='muted';qrState.textContent=val?'The QR code is not a link ('+val.slice(0,60)+'); type the certificate number instead.':'No QR code found in that photo; you can type the certificate number instead, or retake it closer to the label.';}}}
+if(bmp&&(qrAuto||!qrUrl.value)){qrState.className='muted';qrState.textContent='Reading the QR code\\u2026';var val=await detect(bmp);if(val&&/^https?:\\/\\//i.test(val)){qrUrl.value=val;qrAuto=true;qrState.className='ok';qrState.textContent='QR code read from the '+which(input)+' photo: '+val;var m=/(\\d{6,12})/.exec(val);if(m&&!cert.value)cert.value=m[1];}else if(!qrAuto){qrState.className='muted';qrState.textContent=val?'The QR code in the '+which(input)+' photo is not a link ('+val.slice(0,60)+'); type the certificate number instead.':'No QR code in the '+which(input)+' photo yet; it is usually on the back of the label. Add that photo, or type the certificate number.';}}}
+function which(input){return input.name==='photo1'?'front':input.name==='photo2'?'back':'extra';}
 Array.prototype.forEach.call(form.querySelectorAll('input[type=file]'),function(i){i.addEventListener('change',function(){onPhoto(i);});});
 form.addEventListener('submit',function(){btn.disabled=true;btn.textContent='Adding\\u2026 (uploading photos)';});
 })();`;
@@ -42,16 +44,16 @@ export function renderGraded(d, o) {
   const rows = (d.recent || []).map((r) => `<tr><td class="t">${r.image ? `<img src="${esc(r.image)}" alt="" loading="lazy">` : ""}</td><td><a href="${esc(r.adminUrl)}" target="_blank" rel="noopener">${esc(r.title)}</a><br><span class="muted">${esc(when(Date.parse(r.createdAt)))}${r.autoPrice ? " · auto-pricing" : ""}${r.status !== "ACTIVE" ? " · " + esc(r.status.toLowerCase()) : ""}</span></td><td class="n">${r.price === "999999.00" ? '<span class="muted">placeholder</span>' : "$" + esc(r.price)}</td><td class="n">${esc(r.qty)}</td><td class="n"><a href="${esc(r.url)}" target="_blank" rel="noopener">site</a></td></tr>`).join("");
   const body = `<style>${CSS}</style>
 <h1>Graded cards</h1>
-<p class="muted">Photograph the slab, fill in the card, tap Add. The QR code on the label is read from the first photo and becomes a “View the certificate” link on the listing that opens in a new window. Titles follow the store's graded naming, the card goes in stock at 51 Allen Street on the Online Store, and the auto-pricing box adds it to the nightly PriceCharting run.</p>
+<p class="muted">Photograph the slab, fill in the card, tap Add. The QR code on the label (usually the back) is read from whichever photo shows it and becomes a “View the certificate” link on the listing that opens in a new window. Titles follow the store's graded naming, the card goes in stock at 51 Allen Street on the Online Store, and the auto-pricing box adds it to the nightly PriceCharting run.</p>
 ${err}${lastBox}${warn}
 <form id="gform" class="card" method="post" action="${BASE}/graded/add" enctype="multipart/form-data">
 <h3>Photos</h3>
 <div class="shots">
-<label class="shot"><span>Front: the label with the QR code</span><input type="file" name="photo1" accept="image/*" capture="environment"><img alt="" hidden></label>
-<label class="shot"><span>Back</span><input type="file" name="photo2" accept="image/*" capture="environment"><img alt="" hidden></label>
+<label class="shot"><span>Front of the slab</span><input type="file" name="photo1" accept="image/*" capture="environment"><img alt="" hidden></label>
+<label class="shot"><span>Back: the label with the QR code</span><input type="file" name="photo2" accept="image/*" capture="environment"><img alt="" hidden></label>
 <label class="shot"><span>Extra</span><input type="file" name="photo3" accept="image/*" capture="environment"><img alt="" hidden></label>
 </div>
-<div id="qrstate" class="muted">The QR code is read from the first photo.</div>
+<div id="qrstate" class="muted">Every photo is checked for the QR code (usually on the back of the label).</div>
 <h3>Card</h3>
 <div class="grid">
 <label>Game ${sel("game", Object.keys(GAMES), k.game || "pokemon", (g) => GAMES[g].label)}</label>
