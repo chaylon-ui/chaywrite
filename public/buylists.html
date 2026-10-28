@@ -75,7 +75,12 @@
                  background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 11px; margin: 14px 0; }
   .login input:focus { outline: 2px solid var(--amber); }
   a { color: var(--teal); }
-  @media (max-width: 640px) { .card .v { font-size: 18px; } th, td { padding: 7px 6px; } }
+  .cardsearch { display: inline-flex; gap: 6px; align-items: center; }
+  .cardsearch input { min-width: 240px; }
+  .hits { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+  .hits .hit { font-size: 13px; color: var(--ink); }
+  .hits .hit small { font-size: 12px; }
+  @media (max-width: 640px) { .card .v { font-size: 18px; } th, td { padding: 7px 6px; } .cardsearch input { min-width: 0; } }
   @media print {
     body { background: #fff; color: #000; font-size: 12px; }
     .noprint, .note { display: none !important; }
@@ -104,7 +109,7 @@
   var page = document.getElementById('page');
   var TABS = [['pending', 'Pending'], ['approved', 'Approved'], ['completed', 'Completed'], ['carts', 'In-store buys']];
   var S = { status: 'pending', days: '90', cartDays: '3', rows: [], skip: 0, take: 50, more: false, total: null, totals: null,
-            q: '', busy: false, error: '', loaded: false, detail: null, detailId: '', detailKind: '' };
+            q: '', card: '', cardDraft: '', busy: false, error: '', loaded: false, detail: null, detailId: '', detailKind: '' };
   try {
     var saved = JSON.parse(localStorage.getItem('xgbl') || '{}');
     if (/^(pending|approved|completed|carts)$/.test(saved.status || '')) S.status = saved.status;
@@ -215,9 +220,13 @@
   /* ---------------- list ---------------- */
   function listPath() {
     if (isCarts()) return '/portal/carts.json?days=' + S.cartDays + '&take=' + S.take + '&skip=' + S.skip;
-    return '/portal/buylists.json?status=' + S.status + '&take=' + S.take + '&skip=' + S.skip + (S.days !== 'all' ? '&days=' + S.days : '');
+    return '/portal/buylists.json?status=' + S.status + '&take=' + S.take + '&skip=' + S.skip + (S.days !== 'all' ? '&days=' + S.days : '') + (S.card ? '&card=' + encodeURIComponent(S.card) : '');
   }
-  function viewKey() { return S.status + '|' + S.days + '|' + S.cartDays; }
+  function viewKey() { return S.status + '|' + S.days + '|' + S.cartDays + '|' + S.card; }
+  // Search by card name (owner, 2026-10-28): asks BinderPOS for the buylists
+  // in this tab and window that carry a line with that name, and shows the
+  // matching lines under each row. The name filter box stays local.
+  function searchCard(v) { S.card = String(v || '').trim().slice(0, 80); S.cardDraft = S.card; S.loaded = false; loadList(false); }
   function loadList(append) {
     S.busy = true; S.error = '';
     if (!append) { S.skip = 0; S.rows = []; S.total = null; S.totals = null; }
@@ -258,11 +267,13 @@
     var html =
       '<div class="bar split noprint"><div><h1>Buylists</h1>' +
       '<p class="sub">Online buylists and in-store buys from BinderPOS, read-only. Approving, declining and completing stay in BinderPOS, one click away on each row.</p></div>' +
-      '<div><button class="btn-dim" id="refresh">Refresh</button> <button class="btn-dim" id="logout">Log out</button></div></div>' +
+      '<div><a class="btn btn-dim" href="/9pocket">‹ Back to 9Pocket</a> <button class="btn-dim" id="refresh">Refresh</button> <button class="btn-dim" id="logout">Log out</button></div></div>' +
       '<div class="bar noprint"><div class="tabs">' +
       TABS.map(function (t) { return '<button data-tab="' + t[0] + '"' + (S.status === t[0] ? ' class="on"' : '') + '>' + t[1] + '</button>'; }).join('') +
       '</div>' + windowSelect() +
-      '<input type="search" id="q" placeholder="' + (isCarts() ? 'Filter by name, email, staff or cart number' : 'Filter by name, email or number') + '" value="' + esc(S.q) + '"></div>';
+      '<input type="search" id="q" placeholder="' + (isCarts() ? 'Filter by name, email, staff or cart number' : 'Filter by name, email or number') + '" value="' + esc(S.q) + '">' +
+      (isCarts() ? '' : '<span class="cardsearch"><input type="search" id="card" placeholder="Card name, then Enter (searches BinderPOS)" value="' + esc(S.cardDraft) + '" autocomplete="off"><button class="btn-dim" id="cardgo">Search</button>' + (S.card ? '<button class="btn-dim" id="cardclear" title="Show every buylist again">×</button>' : '') + '</span>') + '</div>';
+    if (S.card && !isCarts()) html += '<p class="sub">Buylists with a card named like <strong>' + esc(S.card) + '</strong>' + (S.loaded && !S.busy ? ' · ' + S.rows.length + ' found in this window' : '') + '. Matching lines are listed under each customer.</p>';
     if (S.error) html += '<p class="err">' + esc(S.error) + '</p>';
     if (isCarts() && S.partial && S.partial.length && !S.busy) {
       html += '<div class="notes"><strong>Incomplete:</strong> BinderPOS did not answer for ' +
@@ -282,7 +293,7 @@
         (t.flagged ? '<div class="flagnote"><b>' + esc(t.flagged) + ' cart' + (t.flagged === 1 ? '' : 's') + ' need' + (t.flagged === 1 ? 's' : '') + ' a look</b> · store credit paid to no customer, or cards bought above 75% of their sell price. Marked in red below.</div>' : '');
     }
     if (S.busy && !S.rows.length) html += '<div class="empty">Loading ' + (isCarts() ? 'in-store buys (a fresh day takes a few seconds)' : esc(S.status) + ' buylists') + '…</div>';
-    else if (!rows.length) html += '<div class="empty">' + (S.q ? 'Nothing matches that filter.' : isCarts() ? 'No in-store buys in this window.' : 'No ' + esc(S.status) + ' buylists in this range.') + '</div>';
+    else if (!rows.length) html += '<div class="empty">' + (S.q ? 'Nothing matches that filter.' : isCarts() ? 'No in-store buys in this window.' : S.card ? 'No ' + esc(S.status) + ' buylist in this range has a card named like "' + esc(S.card) + '". Try a shorter name, or a wider window.' : 'No ' + esc(S.status) + ' buylists in this range.') + '</div>';
     else if (isCarts()) {
       html += '<div class="scroll"><table><thead><tr><th>Rang up</th><th>Customer</th><th>Staff</th><th>Paid out</th><th class="num">Cards</th><th class="num">#</th><th class="noprint"></th></tr></thead><tbody>';
       rows.forEach(function (r) {
@@ -304,7 +315,8 @@
         var d = S.status === 'approved' ? r.approved : S.status === 'completed' ? r.completed : r.submitted;
         html += '<tr class="row-link" data-href="#/b/' + esc(r.id) + '">' +
           '<td class="nw"><div>' + esc(when(d)) + '</div><small class="muted">' + esc(ago(d)) + '</small></td>' +
-          '<td><span class="who">' + esc(r.customer.name || '(no name)') + '<small>' + esc(r.customer.email) + '</small></span></td>' +
+          '<td><span class="who">' + esc(r.customer.name || '(no name)') + '<small>' + esc(r.customer.email) + '</small></span>' +
+          (r.hits && r.hits.length ? '<div class="hits">' + r.hits.map(function (h) { return '<span class="hit">' + esc(h.qty != null && h.qty > 1 ? h.qty + '× ' : '') + esc(h.name) + (h.set ? ' <small class="muted">' + esc(h.set) + '</small>' : '') + (h.cash != null || h.credit != null ? ' <small class="muted">' + (h.cash != null ? money(h.cash) + ' cash' : '') + (h.cash != null && h.credit != null ? ' / ' : '') + (h.credit != null ? money(h.credit) + ' credit' : '') + '</small>' : '') + '</span>'; }).join('') + '</div>' : '') + '</td>' +
           '<td>' + payBadge(r.paymentType) + '</td>' +
           '<td class="num muted">' + esc(r.id) + '</td>' +
           '<td class="nw noprint"><a href="#/b/' + esc(r.id) + '" class="btn btn-dim">View</a> ' +
@@ -328,6 +340,15 @@
       var nq = document.getElementById('q');
       if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} }
     });
+    var card = document.getElementById('card');
+    if (card) {
+      card.addEventListener('input', function () { S.cardDraft = card.value; });
+      card.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); searchCard(card.value); } });
+    }
+    var cardgo = document.getElementById('cardgo');
+    if (cardgo) cardgo.addEventListener('click', function () { searchCard(card ? card.value : ''); });
+    var cardclear = document.getElementById('cardclear');
+    if (cardclear) cardclear.addEventListener('click', function () { searchCard(''); });
     var more = document.getElementById('more');
     if (more) more.addEventListener('click', function () { loadList(true); });
     var refresh = document.getElementById('refresh');
@@ -359,7 +380,7 @@
     });
   }
   function backLink() {
-    return '<div class="bar noprint"><a href="#/" class="btn btn-dim">‹ All ' + (isCarts() ? 'in-store buys' : esc(S.status)) + '</a></div>';
+    return '<div class="bar noprint"><a href="#/" class="btn btn-dim">‹ All ' + (isCarts() ? 'in-store buys' : esc(S.status)) + '</a> <a href="/9pocket" class="btn btn-dim">‹ Back to 9Pocket</a></div>';
   }
   function linesTable(lines, withLive) {
     var html = '<div class="scroll"><table><thead><tr><th></th><th>Card</th><th>Condition</th><th class="num">Qty</th><th class="num">Quoted cash</th><th class="num">Quoted credit</th>' +

@@ -140,16 +140,53 @@ function customerOf(c) {
    the store has pending rows back to 2022 that were never processed, so
    the page defaults to a recent window. There is no count query (the API
    has no aggregate); `more` is inferred from a full page. */
-export async function listBuylists(env, { status = "pending", take = 50, skip = 0, since = null } = {}) {
+export function buylistWhere({ status, since, card, rel } = {}) {
   const st = status === "approved" || status === "completed" ? status : "pending";
   const dateField = st === "approved" ? "dateApproved" : st === "completed" ? "dateCompleted" : "dateSubmitted";
   const where = st === "approved" ? { approved: { equals: true }, completed: { equals: false } }
     : st === "completed" ? { completed: { equals: true } }
     : { approved: { equals: false }, completed: { equals: false } };
   where[dateField] = since ? { not: null, gte: since } : { not: null };
+  if (card && rel) where[rel] = { some: { cardName: { contains: card } } };
+  return { st, dateField, where };
+}
+
+/* Search by card name (owner, 2026-10-28, /portal/buylists: "can we add
+   search by card name as well"). The lines live on a relation of the
+   buylist; BinderPOS's Prisma-style GraphQL has introspection off, so the
+   relation's name is found by trying its likely names once and the one the
+   API accepts is remembered for the worker's life. The same relation,
+   filtered the same way, is selected on each row so the page can show which
+   cards matched. */
+export const DETAIL_RELS = ["ShopifyCustomerBuylistDetail", "ShopifyCustomerBuylistDetails", "shopifyCustomerBuylistDetails", "ShopifyCustomerBuylistDetailss"];
+let detailRel = null;
+export function resetDetailRel() { detailRel = null; }
+export const cardQuery = (v) => String(v == null ? "" : v).replace(/[\u0000-\u001f"\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+const searchQ = (rel, card) => `query SearchBuylists($where: ShopifyCustomerBuylistWhereInput, $orderBy: [ShopifyCustomerBuylistOrderByWithRelationInput!], $take: Int, $skip: Int) {
+  ShopifyCustomerBuylist(take: $take, skip: $skip, where: $where, orderBy: $orderBy) {
+    id dateSubmitted dateApproved dateCompleted paymentType approved completed
+    ShopifyCustomer { firstName lastName email }
+    ${rel}(where: { cardName: { contains: ${JSON.stringify(card)} } }) { cardName setName quantity cashBuyPrice storeCreditBuyPrice }
+  }
+}`;
+const SCHEMA_ERR = /not defined|unknown (argument|field)|cannot query field|does not exist|did you mean/i;
+
+export async function listBuylists(env, { status = "pending", take = 50, skip = 0, since = null, card = "" } = {}, gqlFn = gql) {
+  card = cardQuery(card);
   take = Math.max(1, Math.min(100, take | 0));
   skip = Math.max(0, skip | 0);
-  const data = await gql(env, LIST_Q, { where, take, skip, orderBy: [{ [dateField]: "desc" }] });
+  let data, rel = null, { st, dateField, where } = buylistWhere({ status, since });
+  if (!card) data = await gqlFn(env, LIST_Q, { where, take, skip, orderBy: [{ [dateField]: "desc" }] });
+  else {
+    let lastErr = null;
+    for (const r of detailRel ? [detailRel] : DETAIL_RELS) {
+      const w = buylistWhere({ status, since, card, rel: r }).where;
+      try { data = await gqlFn(env, searchQ(r, card), { where: w, take, skip, orderBy: [{ [dateField]: "desc" }] }); detailRel = rel = r; where = w; break; }
+      catch (e) { lastErr = e; if (!SCHEMA_ERR.test(String(e && e.message))) throw e; }
+    }
+    if (!data) throw lastErr || new Error("card search failed");
+  }
+  const hitOf = (l) => ({ name: str(l.cardName), set: str(l.setName), qty: num(l.quantity), cash: num(l.cashBuyPrice), credit: num(l.storeCreditBuyPrice) });
   const rows = (data.ShopifyCustomerBuylist || []).map((b) => ({
     id: String(b.id),
     stage: stageOf(b),
@@ -159,8 +196,9 @@ export async function listBuylists(env, { status = "pending", take = 50, skip = 
     paymentType: b.paymentType || "",
     customer: customerOf(b.ShopifyCustomer),
     portalUrl: portalUrl(stageOf(b), b.id),
+    ...(rel ? { hits: (Array.isArray(b[rel]) ? b[rel] : []).map(hitOf) } : {}),
   }));
-  return { ok: true, status: st, take, skip, since: since || null, rows, more: rows.length === take };
+  return { ok: true, status: st, take, skip, since: since || null, card: card || null, rows, more: rows.length === take };
 }
 
 /* -------------------------------------------------------------- detail */
@@ -715,6 +753,7 @@ export async function servePortal(request, env, url, staffOk) {
         take: parseInt(url.searchParams.get("take") || "50", 10) || 50,
         skip: parseInt(url.searchParams.get("skip") || "0", 10) || 0,
         since,
+        card: url.searchParams.get("card") || "",
       });
       return Response.json(out, { headers: NO_STORE });
     }
