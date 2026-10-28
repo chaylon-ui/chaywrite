@@ -1070,7 +1070,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     return serveRequestsStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts });
   }
   // Stock check (src/stock-check.js): go look / reorder / missing / dismissed.
-  if (p === BASE + "/stock" || p === BASE + "/stock.json" || p.startsWith(BASE + "/stock/")) {
+  if (p === BASE + "/stock" || p === BASE + "/stock.json" || p === BASE + "/stock.csv" || p.startsWith(BASE + "/stock/")) {
     return serveStockStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, pinOk, fetchFn: sopts && sopts.fetchFn });
   }
   // Sales impact of the site tools (src/impact.js): admins only.

@@ -217,6 +217,7 @@ jobs:
           echo "=== Stock check (src/stock-check.js) ==="
           curl -sS -o /dev/null -w '/9pocket/stock signed out: HTTP %{http_code} (expect 303 to login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/stock" || true
           curl -sS -o /dev/null -w '/9pocket/stock.json no session: HTTP %{http_code} (expect 403)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/stock.json" || true
+          curl -sS -o /dev/null -w '/9pocket/stock.csv signed out: HTTP %{http_code} (expect 303 to login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/stock.csv?tab=reorder" || true
           echo -n "stock check health: "; curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/stock/health" | head -c 600; echo
           echo "=== Contests (src/win.js) ==="
           curl -sS -o /dev/null -w '/win: HTTP %{http_code} (expect 200: the holding page while closed, the form once an admin opens it)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/win" || true

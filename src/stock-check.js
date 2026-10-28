@@ -262,6 +262,10 @@ const cents = (s) => { const n = Number(s); return Number.isFinite(n) && n >= 0 
 const doJson = (body, status) => new Response(JSON.stringify(body), { status: status || 200, headers: { "content-type": "application/json" } });
 async function bodyOf(request) { try { return (await request.json()) || {}; } catch { return {}; } }
 const safeImage = (u) => { const s = String(u == null ? "" : u).trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) && s.length <= 400 ? s : ""; };
+// Owner, 2026-10-28: "add product cost to stock check screens". The variant's
+// unit cost from Shopify, in cents; null when none is set (never 0).
+const costOf = (ii) => { const a = ii && ii.unitCost && ii.unitCost.amount; const n = Number(a); return a != null && Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null; };
+export const marginPct = (cents, cost) => cents > 0 && cost != null ? Math.round(((cents - cost) / cents) * 100) : null;
 
 /* ---- scope ---- */
 
@@ -386,8 +390,8 @@ export function visibleReorder(state, now, qtyNow) {
 
 export const ORDERS_Q = `query($q:String!,$after:String){orders(first:${ORDERS_PAGE},query:$q,sortKey:CREATED_AT,after:$after){pageInfo{hasNextPage endCursor}nodes{id name createdAt lineItems(first:${LINES_PER_ORDER}){nodes{quantity variant{id}product{id title productType vendor}}}}}}`;
 export const TYPES_Q = `query($after:String){productTypes(first:250,after:$after){pageInfo{hasNextPage endCursor}edges{node}}}`;
-export const SCAN_Q = `query($q:String!,$after:String){productVariants(first:${SCAN_PAGE},query:$q,after:$after){pageInfo{hasNextPage endCursor}nodes{id title sku barcode price inventoryQuantity product{id title productType vendor handle featuredMedia{preview{image{url}}}}}}}`;
-export const LOOKUP_Q = `query($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{id title sku barcode price inventoryQuantity product{id title productType vendor handle status featuredMedia{preview{image{url}}}}inventoryItem{inventoryLevels(first:1){nodes{quantities(names:["available","committed","on_hand","quality_control","damaged","reserved","incoming"]){name quantity}}}}}}}`;
+export const SCAN_Q = `query($q:String!,$after:String){productVariants(first:${SCAN_PAGE},query:$q,after:$after){pageInfo{hasNextPage endCursor}nodes{id title sku barcode price inventoryQuantity inventoryItem{unitCost{amount}}product{id title productType vendor handle featuredMedia{preview{image{url}}}}}}}`;
+export const LOOKUP_Q = `query($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{id title sku barcode price inventoryQuantity product{id title productType vendor handle status featuredMedia{preview{image{url}}}}inventoryItem{inventoryHistoryUrl unitCost{amount}inventoryLevels(first:1){nodes{quantities(names:["available","committed","on_hand","quality_control","damaged","reserved","incoming"]){name quantity}}}}}}}`;
 export const openQuery = (items) => `query{${items.map((it, i) => `o${i}:orders(first:5,query:${JSON.stringify("sku:" + it.sku + " fulfillment_status:unfulfilled status:open")}){nodes{name createdAt displayFulfillmentStatus shippingLine{title}}}`).join(" ")}}`;
 
 // One orders page -> what the DO stores. Lines without a variant or a product
@@ -418,7 +422,8 @@ export function parseTypesPage(data) {
 const shapeVariant = (v) => {
   const p = v.product || {};
   const img = p.featuredMedia && p.featuredMedia.preview && p.featuredMedia.preview.image && p.featuredMedia.preview.image.url;
-  return { vid: digits(v.id), pid: digits(p.id), title: text(p.title, 200), vtitle: text(v.title, 120), sku: text(v.sku, 60), barcode: text(v.barcode, 40), cents: cents(v.price), qty: Number.isFinite(Number(v.inventoryQuantity)) ? Number(v.inventoryQuantity) : 0, type: text(p.productType, 80), vendor: text(p.vendor, 80), handle: text(p.handle, 200), image: safeImage(img), status: text(p.status, 20) };
+  const ii = v.inventoryItem || null;
+  return { vid: digits(v.id), pid: digits(p.id), title: text(p.title, 200), vtitle: text(v.title, 120), sku: text(v.sku, 60), barcode: text(v.barcode, 40), cents: cents(v.price), cost: costOf(ii), hist: safeImage(ii && ii.inventoryHistoryUrl), qty: Number.isFinite(Number(v.inventoryQuantity)) ? Number(v.inventoryQuantity) : 0, type: text(p.productType, 80), vendor: text(p.vendor, 80), handle: text(p.handle, 200), image: safeImage(img), status: text(p.status, 20) };
 };
 export function parseScanPage(data) {
   const pv = data && data.productVariants;
@@ -551,6 +556,12 @@ export function shouldStart(cfg, now) {
   return new Date(now).getUTCHours() >= RUN_HOUR_UTC;
 }
 
+// The last stock increase a record knows of: its own, or (records from before
+// `up` existed) the restock day the stall rule already kept.
+const upOf = (old) => old && old.up ? old.up : old && old.restockDay ? { day: old.restockDay, from: null, to: null } : null;
+// Durable Object storage takes at most 128 keys per put.
+async function putMany(cx, puts) { const keys = Object.keys(puts); for (let i = 0; i < keys.length; i += 128) { const chunk = {}; for (const k of keys.slice(i, i + 128)) chunk[k] = puts[k]; await cx.storage.put(chunk); } }
+
 async function ledgersFor(cx, today, days) {
   const keys = [];
   for (let d = today - days + 1; d <= today; d++) keys.push("sc:l:" + d);
@@ -631,12 +642,15 @@ async function finalize(cx, run, cfg, now) {
     const l = lk.get(c.vid);
     const q = (l && l.q) || {};
     if (l && Number.isFinite(l.qty) && l.qty <= 0) continue;   // sold out between scan and lookup
-    look.push({ vid: c.vid, pid: item.pid, title: item.title, vtitle: item.vtitle, sku: (l && l.sku) || item.sku, barcode: (l && l.barcode) || item.barcode, cents: item.cents, type: item.type, vendor: item.vendor, handle: item.handle, image: item.image || (l && l.image) || "",
-      qty: l && Number.isFinite(l.qty) ? l.qty : item.qty, q, open: (l && l.open) || [], restockDay: item.restockDay || null, ...c.f });
+    look.push({ vid: c.vid, pid: item.pid, title: item.title, vtitle: item.vtitle, sku: (l && l.sku) || item.sku, barcode: (l && l.barcode) || item.barcode, cents: item.cents, cost: l && l.cost != null ? l.cost : item.cost ?? null, hist: (l && l.hist) || item.hist || "", type: item.type, vendor: item.vendor, handle: item.handle, image: item.image || (l && l.image) || "",
+      qty: l && Number.isFinite(l.qty) ? l.qty : item.qty, q, open: (l && l.open) || [], restockDay: item.restockDay || null, up: upOf(item), ...c.f });
   }
   look.sort((a, b) => b.score - a.score);
   const reorderRows = [];
-  for (const vid of cand.reorderIds || []) {
+  const vrecs = new Map();
+  const rids = cand.reorderIds || [];
+  for (let i = 0; i < rids.length; i += 128) { const m = await cx.storage.get(rids.slice(i, i + 128).map((v) => "sc:v:" + v)); for (const [k, v] of m) vrecs.set(k.slice(5), v); }
+  for (const vid of rids) {
     const l = lk.get(vid);
     if (!l) continue;
     if (l.status && l.status !== "ACTIVE") continue;
@@ -645,7 +659,7 @@ async function finalize(cx, run, cfg, now) {
     const f = reorder(l, s, today, l.qty);
     if (!f) continue;
     f.catDrop = categoryDrop(typeSeries[l.type], f.lastDay, today, 60, s);
-    reorderRows.push({ vid, pid: l.pid, title: l.title, vtitle: l.vtitle, sku: l.sku, barcode: l.barcode, cents: l.cents, type: l.type, vendor: l.vendor, handle: l.handle, image: l.image, qty: l.qty, q: l.q || {}, ...f });
+    reorderRows.push({ vid, pid: l.pid, title: l.title, vtitle: l.vtitle, sku: l.sku, barcode: l.barcode, cents: l.cents, cost: l.cost ?? null, hist: l.hist || "", type: l.type, vendor: l.vendor, handle: l.handle, image: l.image, qty: l.qty, q: l.q || {}, up: upOf(vrecs.get(vid)), ...f });
   }
   reorderRows.sort((a, b) => b.score - a.score);
   // Order now: the fastest sellers among them, by the 30-day rate before the stockout
@@ -672,12 +686,12 @@ async function finalize(cx, run, cfg, now) {
   const hotMin = Number(cfg.hotMin) >= 1 ? Number(cfg.hotMin) : HOT_MIN;
   const meta = { at: now, day: today, runId: run.id, links: run.links || null, counts: { look: look.length, reorder: reorderRows.length, hot: hot.filter((r) => r.sold30 >= hotMin).length, scanned: run.scanned, orders: run.orders, lines: run.lines, lookedUp: run.lookupDone }, errors: (run.errors || []).slice(-10), ordersSince: run.newest || run.since, ordersDenied: !!cfg.ordersDenied, ledgerDays: Object.keys(ledgers).length };
   await cx.storage.put({ "sc:res:look": look.slice(0, MAX_ROWS), "sc:res:reorder": reorderRows.slice(0, MAX_ROWS), "sc:res:hot": hot, "sc:res:meta": meta });
-  // prune: ledgers older than KEEP_DAYS, in-stock records not seen for 30 days, lookups outside this run
+  // prune: ledgers older than KEEP_DAYS, variant records not seen (in a scan or a lookup) for KEEP_DAYS, lookups outside this run
   try {
     const old = await cx.storage.list({ prefix: "sc:l:" });
     for (const [k] of old) if (parseInt(k.slice(5), 10) < today - KEEP_DAYS) dels.push(k);
     const v = await cx.storage.list({ prefix: "sc:v:" });
-    for (const [k, rec] of v) if (rec && rec.seenDay && rec.seenDay < today - 30) dels.push(k);
+    for (const [k, rec] of v) if (rec && rec.seenDay && rec.seenDay < today - KEEP_DAYS) dels.push(k);
     const keep = new Set(ids);
     const lks = await cx.storage.list({ prefix: "sc:lk:" });
     for (const [k] of lks) if (!keep.has(k.slice(6))) dels.push(k);
@@ -802,19 +816,38 @@ async function ingest(cx, b, now) {
     for (const v of b.variants || []) {
       if (!v.vid || !inScopeType(v.type)) continue;
       const old = have.get("sc:v:" + v.vid);
-      const rec = { ...v, run: run.id, seenDay: run.day, firstDay: (old && old.firstDay) || run.day, restockDay: (old && old.restockDay) || null, prevQty: old ? old.qty : null };
-      if (old && Number.isFinite(old.qty) && v.qty > old.qty) rec.restockDay = run.day;
+      const rec = { ...v, run: run.id, seenDay: run.day, firstDay: (old && old.firstDay) || run.day, restockDay: (old && old.restockDay) || null, prevQty: old ? old.qty : null, up: upOf(old) };
+      // Owner, 2026-10-28: "the last time we increased stock for that item".
+      // The check only sees stock between its daily scans, so `up` is the last
+      // rise it witnessed: yesterday's count (a lookup's 0 for a sold-out
+      // item) to today's. Shopify's own adjustment history is a link away.
+      if (old && Number.isFinite(old.qty) && v.qty > old.qty) { rec.restockDay = run.day; rec.up = { day: run.day, from: old.qty, to: v.qty }; }
       puts["sc:v:" + v.vid] = rec;
       run.scanned++;
     }
-    if (Object.keys(puts).length) await cx.storage.put(puts);
+    await putMany(cx, puts);
     if (b.hasNext && b.cursor) run.cursor = b.cursor;
     else { run.cursor = null; run.typeIdx++; }
     if (run.typeIdx >= (run.types || []).length) run.phase = "compute";
   } else if (b.kind === "lookup") {
     const puts = {};
-    for (const it of b.items || []) if (it.vid) puts["sc:lk:" + it.vid] = { ...it, run: run.id };
-    if (Object.keys(puts).length) await cx.storage.put(puts);
+    const items = (b.items || []).filter((it) => it && it.vid);
+    const have = items.length ? await cx.storage.get(items.map((it) => "sc:v:" + it.vid)) : new Map();
+    for (const it of items) {
+      puts["sc:lk:" + it.vid] = { ...it, run: run.id };
+      // An item the scan did not see is out of stock (or was never seen in
+      // stock): today's count becomes the baseline the next scan compares
+      // with, so 0 -> 6 tomorrow reads as a stock increase. The record keeps
+      // the run of the scan that last saw it in stock (null = never).
+      const old = have.get("sc:v:" + it.vid);
+      if (old && old.run === run.id) continue;
+      const prev = old && Number.isFinite(old.qty) ? old.qty : null;
+      const { q, open, status, ...facts } = it;
+      const rec = { ...(old || { firstDay: run.day, restockDay: null, prevQty: null }), ...facts, qty: it.qty, seenDay: run.day, run: old ? old.run || null : null, up: upOf(old) };
+      if (prev != null && Number.isFinite(it.qty) && it.qty > prev) { rec.restockDay = run.day; rec.up = { day: run.day, from: prev, to: it.qty }; }
+      puts["sc:v:" + it.vid] = rec;
+    }
+    await putMany(cx, puts);
     run.lookupDone += (b.ids || []).length || (b.items || []).length;
   } else if (b.kind === "open") {
     const puts = {};
@@ -907,7 +940,7 @@ async function view(cx, now) {
   }
   missing.sort((a, b) => (b.at || 0) - (a.at || 0)); dismissed.sort((a, b) => (b.at || 0) - (a.at || 0));
   // name missing/dismissed items from whatever we know
-  const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; } return s; };
+  const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; s.cost = v.cost ?? null; s.sku = v.sku || ""; s.barcode = v.barcode || ""; s.pid = s.pid || v.pid; s.hist = v.hist || ""; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
   return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, links, meta: meta || null, status: { hotMin, distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
@@ -955,6 +988,37 @@ const whenH = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "Ame
 const LIST_LABEL = { look: "Go look", hot: "Order now", reorder: "Reorder", missing: "Missing" };
 
 // Facts worth a line in the email, per list.
+/* ---- CSV export (owner, 2026-10-28: "export a csv with the product name,
+   date details, missed sales, selling price, sku, distributor") ----
+   One file per tab with the page's filter applied. Dates are ISO days;
+   money is plain numbers so a spreadsheet can sum them. */
+export function filterRows(rows, o) {
+  const words = String((o && o.q) || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const hay = (r) => [r.title, r.vtitle, r.sku, r.barcode, r.vendor, r.type].map((x) => String(x || "")).join(" ").toLowerCase();
+  return (rows || []).filter((r) => (!o || !o.type || (r.type || "Other") === o.type) && (!words.length || words.every((w) => hay(r).includes(w))));
+}
+export const CSV_HEAD = ["Product", "Variant", "Type", "Distributor", "SKU", "UPC", "Selling price", "Cost", "Margin %", "Stock on system", "Last sold", "Days since last sale", "Sold before it stopped", "Sales missed", "Missed revenue", "Should have sold", "Dollars at risk", "Last stock increase", "Stock from", "Stock to", "Status", "Marked by", "Marked on", "Note", "Reorder link", "Shopify"];
+const csvCell = (v) => { const s = v == null ? "" : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+const csvMoney = (c) => c == null ? "" : (Number(c) / 100).toFixed(2);
+const csvWhen = (ms) => ms ? new Date(ms).toISOString().slice(0, 10) : "";
+export function stockCsv(d, o) {
+  const tab = ["look", "hot", "reorder", "missing", "dismissed"].includes(o && o.tab) ? o.tab : "look";
+  const rows = tab === "look" ? filterRows(d && d.look, o) : tab === "hot" ? filterRows(d && d.hot, o) : tab === "reorder" ? filterRows(d && d.reorder, o) : tab === "missing" ? ((d && d.missing) || []).filter((s) => !s.closed) : (d && d.dismissed) || [];
+  const lo = { distributors: d && d.status && d.status.distributors, links: (d && d.links) || {} };
+  const line = (r) => {
+    const st = r.state && r.state.state ? r.state : r.state == null && r.by ? r : null;   // card rows carry .state; missing/dismissed rows ARE the state
+    const lastDay = r.lastDay ? dayIso(r.lastDay) : "";
+    const since = r.daysSince != null ? r.daysSince : r.daysOut != null ? r.daysOut : "";
+    const soldBefore = r.soldWindow != null ? r.soldWindow + " in " + r.window + " days" : r.sold60 != null ? r.sold60 + " in 60 days" : "";
+    return [r.title, r.vtitle && r.vtitle !== "Default Title" ? r.vtitle : "", r.type, r.vendor, r.sku, r.barcode && r.barcode !== r.sku ? r.barcode : "", csvMoney(r.cents), csvMoney(r.cost), marginPct(r.cents, r.cost) ?? "",
+      r.qty != null ? r.qty : "", lastDay, since, soldBefore, r.missed != null ? r.missed : "", r.missedRevenue != null ? r.missedRevenue.toFixed(2) : "", r.expected != null ? r.expected : "", r.atRisk != null ? r.atRisk.toFixed(2) : "",
+      r.up && r.up.day ? dayIso(r.up.day) : "", r.up && r.up.from != null ? r.up.from : "", r.up && r.up.to != null ? r.up.to : "",
+      st ? (STATE_LABEL[st.state] || st.state) + (st.state === "fewer" && st.count != null ? " (found " + st.count + ")" : "") : "", st ? st.byName || st.by || "" : "", st ? csvWhen(st.at) : "", st && st.note ? st.note : "",
+      r.vendor || r.pid ? reorderLink(r, lo).url : "", r.pid ? ADMIN_PRODUCT + r.pid : ""].map(csvCell).join(",");
+  };
+  return [CSV_HEAD.map(csvCell).join(",")].concat(rows.map(line)).join("\r\n") + "\r\n";
+}
+
 export function itemFacts(list, r) {
   const f = [];
   if (list === "look") { f.push(r.qty + " on the system"); if (r.daysSince != null) f.push("last sold " + r.daysSince + " days ago"); if (r.expected != null) f.push("should have sold ~" + Math.round(r.expected) + " since"); if (r.atRisk != null) f.push("$" + Number(r.atRisk).toFixed(2) + " at risk"); }
@@ -1035,6 +1099,12 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
   if (!user) return toLogin();
   if (!canView(user)) return html(renderStockDenied(opts), 403);
   const tab = String(url.searchParams.get("tab") || (form && form.tab) || "look");
+  if (p === R + ".csv") {
+    const d = await doCall(env, "/_sc/view");
+    const csv = stockCsv(d, { tab, type: url.searchParams.get("type") || "", q: url.searchParams.get("q") || "" });
+    const name = "stock-check-" + tab.replace(/[^a-z]/g, "") + "-" + dayIso(dayOf(Date.now())) + ".csv";
+    return new Response("\ufeff" + csv, { headers: { ...noStore, "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="' + name + '"' } });
+  }
   if (p === R + "/control" && request.method === "POST") {
     const f = form || {};
     const action = String(f.action || "");

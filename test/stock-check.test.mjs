@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
+import { stockCsv, filterRows, dayIso, inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
 import { renderStock, renderStockDenied } from "../src/stock-check-ui.js";
 import { SC_PERMS, ALL_PERMS, permsFrom, can } from "../src/stage-auth.js";
 
@@ -122,7 +122,7 @@ test("Shopify page shapes", () => {
   assert.equal(o.orders.length, 1); assert.equal(o.orders[0].lines.length, 1); assert.deepEqual(o.orders[0].lines[0], { vid: "11", pid: "1", qty: 2, type: "Magic Sealed Product", vendor: "UD", title: "Box" });
   assert.equal(o.newest, "2026-10-01T10:00:00Z"); assert.equal(o.cursor, "c1"); assert.equal(o.hasNext, true);
   const s = parseScanPage({ productVariants: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: "gid://shopify/ProductVariant/11", title: "Default Title", sku: "824968", barcode: "824968", price: "99.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "Box", productType: "Magic Sealed Product", vendor: "UD", handle: "box", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/x.jpg" } } } } }] } });
-  assert.deepEqual(s.variants[0], { vid: "11", pid: "1", title: "Box", vtitle: "Default Title", sku: "824968", barcode: "824968", cents: 9995, qty: 3, type: "Magic Sealed Product", vendor: "UD", handle: "box", image: "https://cdn.shopify.com/x.jpg", status: "" });
+  assert.deepEqual(s.variants[0], { vid: "11", pid: "1", title: "Box", vtitle: "Default Title", sku: "824968", barcode: "824968", cents: 9995, cost: null, hist: "", qty: 3, type: "Magic Sealed Product", vendor: "UD", handle: "box", image: "https://cdn.shopify.com/x.jpg", status: "" });
   const l = parseLookup({ nodes: [{ id: "gid://shopify/ProductVariant/11", title: "Default Title", price: "99.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "Box", productType: "Magic Sealed Product", vendor: "UD", handle: "box", status: "ACTIVE" }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 3 }, { name: "committed", quantity: 1 }, { name: "on_hand", quantity: 4 }] }] } } }, null] });
   assert.equal(l.length, 1); assert.deepEqual(l[0].q, { available: 3, committed: 1, on_hand: 4 }); assert.equal(l[0].status, "ACTIVE");
   const items = [{ vid: "11", sku: "824968" }, { vid: "12", sku: "1234" }];
@@ -237,7 +237,7 @@ test("Universal: UPCs match on their digits; the leaves to read come from the pr
 // A fake Shopify: two orders pages (a sealed box selling steadily, a single
 // that must be ignored, a sold-out sleeve pack), two product types, one scan
 // page, a lookup, an open-orders page.
-function fakeShopify(clock) {
+function fakeShopify(clock, opts) {
   const day = (d, h) => new Date((TODAY - d) * DAY_MS + (h || 10) * 3600e3).toISOString();
   const box = (d, n) => ({ id: "gid://shopify/Order/" + d, name: "#" + (2000 + d), createdAt: day(d), lineItems: { nodes: [
     { quantity: n, variant: { id: "gid://shopify/ProductVariant/11" }, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution" } },
@@ -255,14 +255,16 @@ function fakeShopify(clock) {
     }
     if (q === TYPES_Q) return { data: { productTypes: { pageInfo: { hasNextPage: false, endCursor: null }, edges: [{ node: "Magic Sealed Product" }, { node: "MTG Single" }, { node: "Sleeves & Toploaders" }, { node: "Pokemon Sealed Product" }] } }, cost: null };
     if (q === SCAN_Q) {
-      if (/Magic Sealed/.test(v.q)) return { data: { productVariants: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: "gid://shopify/ProductVariant/11", title: "Default Title", sku: "195166", barcode: "195166150611", price: "159.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } } }] } }, cost: null };
+      if (/Magic Sealed/.test(v.q)) return { data: { productVariants: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: "gid://shopify/ProductVariant/11", title: "Default Title", sku: "195166", barcode: "195166150611", price: "159.95", inventoryQuantity: 3, inventoryItem: { unitCost: { amount: "89.50" } }, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } } }] } }, cost: null };
+      // the sleeves back on the shelf (a later run)
+      if (/Sleeves/.test(v.q) && opts && opts.sleevesQty > 0) return { data: { productVariants: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: "gid://shopify/ProductVariant/22", title: "Default Title", sku: "DS-BLK", barcode: "", price: "12.99", inventoryQuantity: opts.sleevesQty, inventoryItem: { unitCost: { amount: "6.10" } }, product: { id: "gid://shopify/Product/2", title: "Dragon Shield Matte Black", productType: "Sleeves & Toploaders", vendor: "Arcane Tinmen", handle: "ds-black", featuredMedia: null } }] } }, cost: null };
       return { data: { productVariants: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } }, cost: null };
     }
     if (q === LOOKUP_Q) return { data: { nodes: v.ids.map((id) => id.endsWith("/33")
       ? { id, title: "Default Title", sku: "PK151B", barcode: "", price: "54.95", inventoryQuantity: -1, product: { id: "gid://shopify/Product/3", title: "POKEMON 151 BOOSTER BUNDLE", productType: "Pokemon Sealed Product", vendor: "Universal Distribution", handle: "pk-151-bundle", status: "ACTIVE", featuredMedia: null }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: -1 }, { name: "committed", quantity: 0 }] }] } } }
       : id.endsWith("/11")
-      ? { id, title: "Default Title", sku: "195166", barcode: "195166150611", price: "159.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", status: "ACTIVE", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 3 }, { name: "committed", quantity: 1 }, { name: "on_hand", quantity: 4 }, { name: "quality_control", quantity: 0 }] }] } } }
-      : { id, title: "Default Title", sku: "DS-BLK", barcode: "", price: "12.99", inventoryQuantity: 0, product: { id: "gid://shopify/Product/2", title: "Dragon Shield Matte Black", productType: "Sleeves & Toploaders", vendor: "Arcane Tinmen", handle: "ds-black", status: "ACTIVE", featuredMedia: null }, inventoryItem: { inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 0 }, { name: "committed", quantity: 0 }] }] } } }) }, cost: null };
+      ? { id, title: "Default Title", sku: "195166", barcode: "195166150611", price: "159.95", inventoryQuantity: 3, product: { id: "gid://shopify/Product/1", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", productType: "Magic Sealed Product", vendor: "Universal Distribution", handle: "bloomburrow-box", status: "ACTIVE", featuredMedia: { preview: { image: { url: "https://cdn.shopify.com/box.jpg" } } } }, inventoryItem: { inventoryHistoryUrl: "https://admin.shopify.com/store/most-wanted-ca/products/1/variants/11/inventory_history", unitCost: { amount: "89.50" }, inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 3 }, { name: "committed", quantity: 1 }, { name: "on_hand", quantity: 4 }, { name: "quality_control", quantity: 0 }] }] } } }
+      : { id, title: "Default Title", sku: "DS-BLK", barcode: "", price: "12.99", inventoryQuantity: 0, product: { id: "gid://shopify/Product/2", title: "Dragon Shield Matte Black", productType: "Sleeves & Toploaders", vendor: "Arcane Tinmen", handle: "ds-black", status: "ACTIVE", featuredMedia: null }, inventoryItem: { unitCost: { amount: "6.10" }, inventoryLevels: { nodes: [{ quantities: [{ name: "available", quantity: 0 }, { name: "committed", quantity: 0 }] }] } } }) }, cost: null };
     if (/^query\{o0:orders/.test(q)) return { data: { o0: { nodes: [{ name: "#2101", createdAt: day(2), displayFulfillmentStatus: "UNFULFILLED", shippingLine: null }] } }, cost: null };
     throw new Error("unexpected query " + q.slice(0, 60));
   };
@@ -291,6 +293,7 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   assert.equal(b.vid, "11"); assert.equal(b.qty, 3); assert.equal(b.daysSince, 24); assert.equal(b.soldWindow, 9); assert.equal(b.window, 30);
   assert.deepEqual(b.q, { available: 3, committed: 1, on_hand: 4, quality_control: 0 });
   assert.deepEqual(b.open, [{ name: "#2101", at: b.open[0].at, ship: "pickup" }], "the committed unit's order number rides along");
+  assert.equal(b.cost, 8950, "unit cost from Shopify, in cents"); assert.equal(b.hist, "https://admin.shopify.com/store/most-wanted-ca/products/1/variants/11/inventory_history"); assert.equal(b.up, null, "first scan: no increase seen yet");
   assert.equal(v.reorder.length, 2, "the sleeves and the bundle sold steadily and are at 0 or less");
   const sl = v.reorder.find((x) => x.vid === "22");
   // Order now: the bundle sold 9 in its last 30 days (fast); the sleeves only 3
@@ -302,6 +305,21 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   const v3 = await call(c, "/_sc/view");
   assert.deepEqual(v3.hot.map((x) => x.vid), ["33", "22"], "a lower threshold applies at once, fastest first");
   await call(c, "/_sc/cfg", { hotMin: 6 });
+  assert.equal(sl.cost, 610); assert.equal(v.hot[0].cost, null, "no unit cost on the bundle");
+  // the CSV (owner, 2026-10-28): the tab's rows with the filter applied, plain numbers, ISO days
+  const csv = stockCsv(v, { tab: "reorder" });
+  const lines = csv.split("\r\n").filter(Boolean);
+  assert.equal(lines.length, 3);
+  assert.match(lines[0], /^Product,Variant,Type,Distributor,SKU,UPC,Selling price,Cost,Margin %,Stock on system,Last sold,Days since last sale,Sold before it stopped,Sales missed,Missed revenue,Should have sold,Dollars at risk,Last stock increase,Stock from,Stock to,Status,Marked by,Marked on,Note,Reorder link,Shopify$/);
+  const slLine = lines.find((l) => l.startsWith("Dragon Shield Matte Black,"));
+  assert.ok(slLine.includes(",Sleeves & Toploaders,Arcane Tinmen,DS-BLK,,12.99,6.10,53,0," + dayIso(TODAY - 20) + ",20,8 in 60 days,2.7,34.64,,,,,,,,,,"), slLine);
+  assert.ok(slLine.endsWith(",https://admin.shopify.com/store/most-wanted-ca/products/2"), slLine);
+  assert.equal(stockCsv(v, { tab: "reorder", q: "dragon" }).split("\r\n").filter(Boolean).length, 2, "the filter applies");
+  assert.equal(stockCsv(v, { tab: "reorder", type: "Nope" }).split("\r\n").filter(Boolean).length, 1);
+  const lookLine = stockCsv(v, { tab: "look" }).split("\r\n")[1];
+  assert.ok(lookLine.includes(",Universal Distribution,195166,195166150611,159.95,89.50,44,3," + dayIso(TODAY - 24) + ",24,9 in 30 days,,,7.2,479.85,,,,"), lookLine);
+  assert.equal(stockCsv({ look: [{ title: 'Box, "Big"', cents: 100, qty: 1 }] }, { tab: "look" }).split("\r\n")[1].slice(0, 16), '"Box, ""Big"' + '"",,', "commas and quotes are quoted");
+  assert.equal(filterRows([{ title: "A", type: "T" }, { title: "B" }], { type: "Other" }).length, 1);
   assert.equal(sl.vid, "22"); assert.equal(sl.daysOut, 20); assert.equal(sl.sold60, 8, "70, 50, 35 and 20 days ago all fall in the 60 days before the last sale"); assert.equal(sl.vendor, "Arcane Tinmen"); assert.equal(sl.missed, 2.7); assert.equal(sl.missedRevenue, 34.64);
   const ledger = await c.storage.get("sc:l:" + (TODAY - 50));
   assert.deepEqual(ledger, { 11: 1, 22: 3 }, "the box and the sleeves sold that day; the single on the box order is not in the ledger");
@@ -318,6 +336,33 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   clock.t = Date.UTC(2026, 9, 15, 9, 5);
   const p = await call(c, "/_sc/plan", { now: clock.t });
   assert.equal(p.kind, "orders"); assert.ok(p.since > "2026-09-23", "incremental, not another 60-day backfill: " + p.since);
+});
+
+/* Owner, 2026-10-28: "the last time we increased stock for that item". The
+   lookup's 0 for a sold-out item is the baseline; tomorrow's scan finding 6
+   on the shelf is the increase, kept on the record for the card and the CSV. */
+test("stock increase: a sold-out item back on the shelf shows when it came back and from what", async () => {
+  const clock = { t: T0 };
+  const c = cx(clock);
+  const env = envWith(c);
+  const nolinks = async () => new Response("{}", { status: 404 });
+  await stockCheckTick(env, { gql: fakeShopify(clock).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9, udFetch: nolinks });
+  const d1 = await c.storage.get("sc:v:22");
+  assert.equal(d1.qty, 0, "the lookup wrote the sold-out baseline"); assert.equal(d1.run, null, "never seen in a scan"); assert.equal(d1.up, null);
+  clock.t = Date.UTC(2026, 9, 15, 9, 5);
+  const r2 = await stockCheckTick(env, { gql: fakeShopify(clock, { sleevesQty: 6 }).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9, udFetch: nolinks });
+  assert.equal(r2.phase, "done");
+  const d2 = await c.storage.get("sc:v:22");
+  assert.deepEqual(d2.up, { day: TODAY + 1, from: 0, to: 6 });
+  assert.equal(d2.restockDay, TODAY + 1); assert.equal(d2.cost, 610); assert.equal(d2.qty, 6);
+  assert.equal((await c.storage.get("sc:v:11")).up, null, "the box stayed at 3: nothing to report");
+  const v2 = await call(c, "/_sc/view");
+  assert.ok(!v2.reorder.some((x) => x.vid === "22") && !v2.hot.some((x) => x.vid === "22"), "back in stock: off the reorder lists");
+  // a record from before `up` existed keeps its restock day, without a from/to it cannot vouch for
+  await c.storage.put("sc:v:22", { ...d2, up: undefined, restockDay: TODAY - 3 });
+  clock.t = Date.UTC(2026, 9, 16, 9, 5);
+  await stockCheckTick(env, { gql: fakeShopify(clock, { sleevesQty: 6 }).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9, udFetch: nolinks });
+  assert.deepEqual((await c.storage.get("sc:v:22")).up, { day: TODAY - 3, from: null, to: null });
 });
 
 test("two overlapping ticks: the second is told busy and a stale ingest is refused", async () => {
@@ -448,6 +493,14 @@ test("permissions and pages", async () => {
   assert.equal((await serve("/9pocket/stock", other)).status, 403);
   const page = await (await serve("/9pocket/stock", actor)).text();
   assert.match(page, /Stock check/); assert.match(page, /MTG BLOOMBURROW PLAY BOOSTER BOX/); assert.match(page, /Where to look/);
+  assert.match(page, /cost \$89\.50 · margin 44%/, "the unit cost on the card"); assert.match(page, /stock history ↗/); assert.match(page, /no stock increase seen yet/); assert.match(page, /Export CSV/);
+  const csvR = await serve("/9pocket/stock.csv?tab=reorder", viewer);
+  assert.equal(csvR.status, 200); assert.match(csvR.headers.get("content-type"), /text\/csv/); assert.match(csvR.headers.get("content-disposition"), /stock-check-reorder-\d{4}-\d\d-\d\d\.csv/);
+  const buf = new Uint8Array(await csvR.arrayBuffer());
+  assert.deepEqual([...buf.slice(0, 3)], [0xef, 0xbb, 0xbf], "BOM for Excel (text() would strip it)");
+  const csvText = new TextDecoder().decode(buf);
+  assert.match(csvText, /^Product,/); assert.match(csvText, /Dragon Shield Matte Black,/);
+  assert.equal((await serve("/9pocket/stock.csv", null)).status, 303); assert.equal((await serve("/9pocket/stock.csv", other)).status, 403);
   assert.match(page, /1 unit in open online order: #2101 \(pickup\)/, "the committed unit's order is named");
   assert.match(page, /data-confirm="This marks MTG BLOOMBURROW PLAY BOOSTER BOX as missing/, "Not found asks first");
   assert.match(page, /data-places="1"/, "and lists the places to check");
