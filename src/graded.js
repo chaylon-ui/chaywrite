@@ -216,7 +216,7 @@ export async function createGraded(cx, form, photos) {
     try {
       const g = GAMES[f.game] || GAMES.other;
       const stub = cx.env.ROOM.get(cx.env.ROOM.idFromName(AUTOPRICE_DO));
-      const r = await stub.fetch(new Request((cx.origin || SHOP_URL) + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "add", id: product.id, title: product.title || f.title, handle: product.handle, type: g.type, stock: f.qty, price: f.placeholder ? 0 : Number(f.price), by: cx.by || "9pocket graded" }) }));
+      const r = await stub.fetch(new Request((cx.origin || SHOP_URL) + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "add", id: product.id, title: product.title || f.title, handle: product.handle, type: g.type, stock: f.qty, price: f.placeholder ? 0 : Number(f.price), who: cx.by || "9pocket graded" }) }));   // "who": the pricer's audit column
       const j = await r.json().catch(() => null);
       if (j && j.ok) priced = true; else priceError = (j && j.error) || "the pricer did not answer";
     } catch (e) { priceError = String((e && e.message) || e).slice(0, 120); }

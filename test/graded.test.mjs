@@ -90,7 +90,7 @@ test("createGraded: photos staged and uploaded, one productSet, published to the
   const r = await createGraded(s.cx, form, [photo(1), photo(2)]);
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.deepEqual(s.calls.map((c) => c.op), ["staged", "upload", "staged", "upload", "set", "publish", "do:autoprice/_ap/control"]);
-  assert.deepEqual(s.calls[6].vars, { action: "add", id: "gid://shopify/Product/123", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk-41-82-team-rocket-1st-edition-graded-psa-9", type: "Pokemon Single Graded", stock: 1, price: 99.95, by: "owner@example.com" });
+  assert.deepEqual(s.calls[6].vars, { action: "add", id: "gid://shopify/Product/123", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk-41-82-team-rocket-1st-edition-graded-psa-9", type: "Pokemon Single Graded", stock: 1, price: 99.95, who: "owner@example.com" });
   assert.equal(r.priced, true); assert.equal(r.priceError, "");
   assert.equal(s.calls[0].vars.input[0].resource, "IMAGE"); assert.equal(s.calls[0].vars.input[0].fileSize, "3"); assert.equal(s.calls[0].vars.input[0].mimeType, "image/jpeg");
   const up = s.calls[1]; assert.equal(up.url, "https://bucket.example/up"); assert.ok(up.body instanceof FormData); assert.equal(up.body.get("key"), "tmp/1"); assert.ok(up.body.get("file") instanceof Blob, "the file is the last part");
