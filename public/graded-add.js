@@ -13,26 +13,30 @@
   var HOSTS = [[/(^|\.)psacard\.com$/i, "PSA"], [/(^|\.)cgccards\.com$/i, "CGC"], [/(^|\.)beckett\.com$/i, "BGS"], [/(^|\.)gosgc\.com$/i, "SGC"], [/(^|\.)taggrading\.com$/i, "TAG"], [/(^|\.)acegrading\.com$/i, "ACE"]];
   function graderOfUrl(u) { try { var h = new URL(String(u || "")).hostname; for (var i = 0; i < HOSTS.length; i++) if (HOSTS[i][0].test(h)) return HOSTS[i][1]; } catch (e) {} return ""; }
   function certOfUrl(u) { var m = /(\d{6,12})/.exec(String(u || "")); return m ? m[1] : ""; }
+  // A QR code that is not a link (Beckett labels can carry just the serial, "BGS 0012345678" or similar): the serial inside it.
+  function certOfText(t) { var m = /(\d{6,14})/.exec(String(t || "").replace(/\s+/g, "")); return m ? m[1] : ""; }
+  // What a scan tells us: the link (if any), the raw text, and whether the photo carries a code at all.
+  function codeOf(s) { var qr = String((s && s.qr) || ""), raw = String((s && s.raw) || ""); return { qr: qr, raw: raw, code: qr || raw, cert: certOfUrl(qr) || certOfText(raw), grader: graderOfUrl(qr) }; }
   /* scans: [{i, qr}] in the order the photos were taken. A photo with a QR
      link is a back; it takes the nearest unpaired front (no QR) within three
      positions, the one just before it first. A second back with the same
      certificate joins that slab as an extra photo. Fronts left over become
      slabs of their own, so nothing is dropped; the line shows what it got. */
   function pairPhotos(scans) {
-    var items = (scans || []).map(function (s, n) { return { i: s.i == null ? n : s.i, qr: String(s.qr || ""), used: false }; });
+    var items = (scans || []).map(function (s, n) { var c = codeOf(s); return { i: s.i == null ? n : s.i, qr: c.qr, raw: c.raw, code: c.code, cert: c.cert, grader: c.grader, used: false }; });
     var slabs = [], byCert = {};
     items.forEach(function (it) {
-      if (!it.qr) return;
-      var key = certOfUrl(it.qr) || it.qr.toLowerCase();
+      if (!it.code) return;
+      var key = it.cert || it.code.toLowerCase();
       if (byCert[key]) { byCert[key].extra.push(it.i); it.used = true; return; }
       var front = null, best = Infinity;
-      items.forEach(function (c) { if (c.qr || c.used) return; var d = Math.abs(c.i - it.i) - (c.i < it.i ? 0.5 : 0); if (d < best) { best = d; front = c; } });
+      items.forEach(function (c) { if (c.code || c.used) return; var d = Math.abs(c.i - it.i) - (c.i < it.i ? 0.5 : 0); if (d < best) { best = d; front = c; } });
       if (front && best <= 3) front.used = true; else front = null;
       it.used = true;
-      var slab = { front: front ? front.i : null, back: it.i, extra: [], qr: it.qr, cert: certOfUrl(it.qr), grader: graderOfUrl(it.qr) };
+      var slab = { front: front ? front.i : null, back: it.i, extra: [], qr: it.qr, raw: it.raw, cert: it.cert, grader: it.grader };
       byCert[key] = slab; slabs.push(slab);
     });
-    items.forEach(function (it) { if (!it.used && !it.qr) { it.used = true; slabs.push({ front: it.i, back: null, extra: [], qr: "", cert: "", grader: "" }); } });
+    items.forEach(function (it) { if (!it.used && !it.code) { it.used = true; slabs.push({ front: it.i, back: null, extra: [], qr: "", raw: "", cert: "", grader: "" }); } });
     var first = function (s) { return Math.min(s.front == null ? 1e9 : s.front, s.back == null ? 1e9 : s.back); };
     slabs.sort(function (a, b) { return first(a) - first(b); });
     return slabs;
@@ -43,14 +47,14 @@
      last photo stands alone. The owner's natural flow (2026-10-28: fronts and
      backs shot in turn) - the QR is a bonus here, not the pairing key. */
   function pairByOrder(scans, backFirst) {
-    var items = (scans || []).map(function (s, n) { return { i: s.i == null ? n : s.i, qr: String(s.qr || "") }; });
+    var items = (scans || []).map(function (s, n) { var c = codeOf(s); return { i: s.i == null ? n : s.i, qr: c.qr, raw: c.raw, code: c.code, cert: c.cert, grader: c.grader }; });
     var slabs = [];
     for (var n = 0; n < items.length; n += 2) {
       var a = items[n], b = items[n + 1] || null;
       var front = backFirst ? b : a, back = backFirst ? a : b;
-      if (front && front.qr && !(back && back.qr)) { var t = front; front = back; back = t; }
-      var qr = (back && back.qr) || (front && front.qr) || "";
-      slabs.push({ front: front ? front.i : null, back: back ? back.i : null, extra: [], qr: qr, cert: certOfUrl(qr), grader: graderOfUrl(qr) });
+      if (front && front.code && !(back && back.code)) { var t = front; front = back; back = t; }
+      var src = (back && back.code) ? back : (front && front.code) ? front : null;
+      slabs.push({ front: front ? front.i : null, back: back ? back.i : null, extra: [], qr: src ? src.qr : "", raw: src ? src.raw : "", cert: src ? src.cert : "", grader: src ? src.grader : "" });
     }
     return slabs;
   }
@@ -62,7 +66,7 @@
      the right (owner, 2026-10-28: "sometimes when you take the photo of the
      cards it is sideways and you dont notice"). */
   function rotationFor(width, height, qrSide) { if (!(width > height)) return 0; return qrSide === "left" ? 90 : -90; }
-  if (typeof module !== "undefined" && module.exports) module.exports = { pairPhotos, pairByOrder, graderOfUrl, certOfUrl, rotationFor };
+  if (typeof module !== "undefined" && module.exports) module.exports = { pairPhotos, pairByOrder, graderOfUrl, certOfUrl, certOfText, codeOf, rotationFor };
   if (typeof document === "undefined") return;
 
   /* ---------------- the page ---------------- */
@@ -147,6 +151,7 @@
       var big = fit(bmp, 3200), W = big.width, H = big.height, tiles = [];
       for (var y = 0; y < 2; y++) for (var x = 0; x < 2; x++) tiles.push([x * W * 0.4, y * H * 0.4, W * 0.6, H * 0.6]);
       tiles.push([W * 0.2, H * 0.2, W * 0.6, H * 0.6]);
+      for (var y3 = 0; y3 < 3; y3++) for (var x3 = 0; x3 < 3; x3++) tiles.push([x3 * W * 0.3, y3 * H * 0.3, W * 0.4, H * 0.4]);
       for (var k = 0; k < tiles.length; k++) {
         var t = tiles[k], c = document.createElement("canvas"); c.width = Math.round(t[2]); c.height = Math.round(t[3]);
         c.getContext("2d").drawImage(big, t[0], t[1], t[2], t[3], 0, 0, c.width, c.height);
@@ -217,7 +222,7 @@
     showSingle(input, p);
     if (qrAuto || !qrUrl.value) {
       if (p.qr) { qrUrl.value = p.qr; qrAuto = true; qrState.className = "ok"; qrState.textContent = "QR code read from the " + which(input) + " photo: " + p.qr; var m = certOfUrl(p.qr); if (m && !cert.value) cert.value = m; var g = graderOfUrl(p.qr); if (g && form.elements.grader) form.elements.grader.value = g; preview(); if (g === "PSA") singleLookup(); }
-      else if (!qrAuto) { qrState.className = "muted"; qrState.textContent = p.raw ? "The QR code in the " + which(input) + " photo is not a link (" + p.raw.slice(0, 60) + "); type the certificate number instead." : "No QR code in the " + which(input) + " photo; it is usually on the back of the label. Add that photo, or type the certificate number."; }
+      else if (!qrAuto) { var rc = certOfText(p.raw); if (rc && !cert.value) cert.value = rc; qrState.className = p.raw ? "ok" : "muted"; qrState.textContent = p.raw ? "QR code read from the " + which(input) + " photo (not a link): " + p.raw.slice(0, 60) + (rc ? " - certificate " + rc : "") : "No QR code in the " + which(input) + " photo; it is usually on the back of the label. Add that photo, or type the certificate number."; }
     }
   }
   Array.prototype.forEach.call(form.querySelectorAll("input[type=file]"), function (i) { i.addEventListener("change", function () { onPhoto(i); }); });
@@ -235,7 +240,7 @@
     var el = document.createElement("form"); el.className = "line"; el.setAttribute("data-k", k);
     var g = s.grader || v("grader"), game = v("game") || "pokemon";
     el.innerHTML = '<div class="ph"><div class="figs">' + figures(s) + "</div>" +
-      '<div class="meta"><b>Slab ' + (k + 1) + "</b><br>" + (s.qr ? '<span class="ok">QR: ' + esc(s.cert || s.qr) + " (" + esc(s.grader || "link") + ")</span>" : '<span class="muted">no QR code read: add the certificate number</span>') +
+      '<div class="meta"><b>Slab ' + (k + 1) + "</b><br>" + (s.qr ? '<span class="ok">QR: ' + esc(s.cert || s.qr) + " (" + esc(s.grader || "link") + ")</span>" : s.raw ? '<span class="ok">QR text: ' + esc(s.raw.slice(0, 40)) + (s.cert ? " - certificate " + esc(s.cert) : "") + "</span>" : '<span class="muted">no QR code read: add the certificate number</span>') +
       '<br><span class="psa muted"></span><br><button type="button" class="sm swap">Swap front/back</button> <button type="button" class="sm drop">Remove line</button></div></div>' +
       '<div class="grid">' +
       "<label>Game <select name=\"game\">" + opts(Object.keys(cfg.games), game, function (x) { return cfg.games[x]; }) + "</select></label>" +
@@ -300,7 +305,7 @@
     var slabs = mode === "qr" ? pairPhotos(photos) : pairByOrder(photos, mode === "bf");
     // A front turned upright by guesswork follows its back when the back's QR code settled the direction.
     for (var q = 0; q < slabs.length; q++) { var sb = slabs[q], fp = sb.front != null && photos[sb.front], bp = sb.back != null && photos[sb.back]; if (fp && bp && bp.basis === "qr" && fp.basis === "default" && fp.rot !== bp.rot) { await turn(fp, 180); fp.basis = "qr"; } }
-    var withQr = photos.filter(function (p) { return p.qr; }).length, turned = photos.filter(function (p) { return p.rot; }).length;
+    var withQr = photos.filter(function (p) { return p.qr || p.raw; }).length, turned = photos.filter(function (p) { return p.rot; }).length;
     var badNote = bad ? " " + bad + " photo" + (bad === 1 ? "" : "s") + " could not be read in this browser" + (heicNote ? " (" + heicNote + ")" : "") + ": they are skipped on upload; shoot JPEG (iPhone: Settings > Camera > Formats > Most Compatible) or add them from the phone." : "";
     var reader = readerNote || (("BarcodeDetector" in root) ? "built-in reader" : (root.jsQR ? "jsQR" : "no reader"));
     bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + (mode === "qr" ? ", paired by QR code" : ", paired in order (" + (mode === "bf" ? "back then front" : "front then back") + ")") + "; QR codes read in " + withQr + " of " + files.length + " (" + reader + ")" + (turned ? "; " + turned + " sideways photo" + (turned === 1 ? "" : "s") + " turned upright (tap ↻ on a thumbnail if one is wrong)" : "") + ". Check each line (swap if a pair is backwards), fill in the card, then add." + badNote;

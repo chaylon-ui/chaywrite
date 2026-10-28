@@ -128,7 +128,14 @@ test("setupCheck names the missing scopes; recentGraded shapes the list; the per
 });
 
 test("batch pairing: backs are the photos with a QR code, each takes the front shot beside it; leftovers stay as lines", () => {
-  const { pairPhotos, pairByOrder, graderOfUrl, certOfUrl, rotationFor } = client;
+  const { pairPhotos, pairByOrder, graderOfUrl, certOfUrl, certOfText, codeOf, rotationFor } = client;
+  // a Beckett-style code that is only a serial still marks the back and gives the certificate
+  assert.equal(certOfText("BGS 0012345678"), "0012345678"); assert.equal(certOfText("12 34 56 78"), "12345678"); assert.equal(certOfText("hello"), "");
+  assert.deepEqual(codeOf({ raw: "0012345678" }), { qr: "", raw: "0012345678", code: "0012345678", cert: "0012345678", grader: "" });
+  const bgs = pairByOrder([{ qr: "" }, { raw: "0012345678" }]);
+  assert.deepEqual(bgs.map((x) => [x.front, x.back, x.cert, x.grader, x.raw]), [[0, 1, "0012345678", "", "0012345678"]]);
+  const bgsQ = pairPhotos([{ qr: "" }, { raw: "BGS 0012345678" }, { qr: "" }, { qr: "https://www.psacard.com/cert/11111111" }]);
+  assert.deepEqual(bgsQ.map((x) => [x.front, x.back, x.cert]), [[0, 1, "0012345678"], [2, 3, "11111111"]]);
   // portrait stays; landscape turns counter-clockwise unless the QR code sits on the left
   assert.equal(rotationFor(3000, 4000, null), 0); assert.equal(rotationFor(4000, 3000, null), -90); assert.equal(rotationFor(4000, 3000, "right"), -90); assert.equal(rotationFor(4000, 3000, "left"), 90); assert.equal(rotationFor(4000, 4000, "left"), 0);
   assert.equal(graderOfUrl("https://www.psacard.com/cert/87654321"), "PSA"); assert.equal(graderOfUrl("https://www.cgccards.com/certlookup/4312345001/"), "CGC"); assert.equal(graderOfUrl("https://example.com/x"), ""); assert.equal(graderOfUrl("nope"), "");
@@ -181,7 +188,7 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=9"'));
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=10"'));
   assert.ok(readFileSync(new URL("../public/vendor/libheif-1.23.5.bundle.js", import.meta.url)).length > 1500000, "the HEIC decoder is vendored");
   assert.ok(readFileSync(new URL("../public/vendor/jsQR-1.4.0.js", import.meta.url)).length > 200000, "the QR reader is vendored"); assert.ok(page.includes('class="sm rot" hidden'), "a Rotate button per photo box");
   assert.ok(!page.includes("cdnjs.cloudflare.com"), "the QR reader is served by the worker, not a CDN that may 404");
