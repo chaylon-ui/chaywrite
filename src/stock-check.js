@@ -78,6 +78,26 @@ export const SNOOZE_DAYS = 14;
 export const RUN_HOUR_UTC = 9;           // 05:00 Atlantic
 export const ORDERS_PAGE = 20, LINES_PER_ORDER = 15, SCAN_PAGE = 120, LOOKUP_PAGE = 100, OPEN_PER_PAGE = 20;
 export const MAX_ROWS = 200;             // per result list
+/* The Reorder list at a bar of 1 is ~1,000 items (2026-10-28, first widened
+   scan: 986), and the 200 with the most missed revenue were all sealed TCG,
+   wargames and figures - the board games the owner asked for fell off the
+   end. Kept: the top MAX_REORDER by score, plus the top TYPE_FLOOR of every
+   product type that has any, so each type is on the page; the type filter
+   shows one type whole. */
+export const MAX_REORDER = 500;
+export const TYPE_FLOOR = 10;
+export function keepFair(rows, max, floor) {
+  const keep = new Set(rows.slice(0, max));
+  const perType = {};
+  for (const r of rows) {
+    const t = r.type || "Other";
+    const n = perType[t] || 0;
+    if (n >= floor) continue;
+    if (!keep.has(r)) keep.add(r);
+    perType[t] = n + 1;
+  }
+  return rows.filter((r) => keep.has(r));
+}
 export const HOT_MIN = 6;                // Order now: at least this many sold in the 30 days before it ran out (admins change it)
 /* Owner, 2026-10-28: "The stock check should work on more than just Cards.
    It should be doing all the product that shows up like board games and
@@ -696,7 +716,7 @@ async function finalize(cx, run, cfg, now) {
   if (Object.keys(puts).length) await cx.storage.put(puts);
   const hotMin = Number(cfg.hotMin) >= 1 ? Number(cfg.hotMin) : HOT_MIN;
   const meta = { at: now, day: today, runId: run.id, links: run.links || null, counts: { look: look.length, reorder: reorderRows.length, hot: hot.filter((r) => r.sold30 >= hotMin).length, scanned: run.scanned, orders: run.orders, lines: run.lines, lookedUp: run.lookupDone }, errors: (run.errors || []).slice(-10), ordersSince: run.newest || run.since, ordersDenied: !!cfg.ordersDenied, ledgerDays: Object.keys(ledgers).length };
-  await cx.storage.put({ "sc:res:look": look.slice(0, MAX_ROWS), "sc:res:reorder": reorderRows.slice(0, MAX_ROWS), "sc:res:hot": hot, "sc:res:meta": meta });
+  await cx.storage.put({ "sc:res:look": look.slice(0, MAX_ROWS), "sc:res:reorder": keepFair(reorderRows, MAX_REORDER, TYPE_FLOOR), "sc:res:hot": hot, "sc:res:meta": meta });
   // prune: ledgers older than KEEP_DAYS, variant records not seen (in a scan or a lookup) for KEEP_DAYS, lookups outside this run
   try {
     const old = await cx.storage.list({ prefix: "sc:l:" });

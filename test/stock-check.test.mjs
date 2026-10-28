@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stockCsv, filterRows, dayIso, inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
+import { keepFair, stockCsv, filterRows, dayIso, inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
 import { renderStock, renderStockDenied } from "../src/stock-check-ui.js";
 import { SC_PERMS, ALL_PERMS, permsFrom, can } from "../src/stage-auth.js";
 
@@ -72,6 +72,20 @@ test("reorder: the bar is the admin's; a board game that sold twice in 60 days i
   assert.equal(r1.sold60, 2); assert.equal(r1.daysOut, 29); assert.equal(r1.missed, 1);
   assert.equal(reorder(meta, s, 100, 0).sold60, 2, "no bar given: the default of 1");
   assert.equal(reorder(meta, series({ 50: 1 }), 100, 0, 1).sold60, 1, "one sale is enough at 1");
+});
+
+test("keepFair: the top of the list, plus every product type's own top rows", () => {
+  const rows = [];
+  for (let i = 0; i < 30; i++) rows.push({ id: "s" + i, type: "Sealed", score: 1000 - i });
+  for (let i = 0; i < 15; i++) rows.push({ id: "b" + i, type: "Board Games", score: 100 - i });
+  rows.push({ id: "p0", type: "Paint", score: 5 });
+  const kept = keepFair(rows, 20, 3);
+  assert.equal(kept.length, 24, "20 by score, then 3 board games and the one paint");
+  assert.deepEqual(kept.slice(0, 20).map((r) => r.id), rows.slice(0, 20).map((r) => r.id), "order kept: score first");
+  assert.deepEqual(kept.filter((r) => r.type === "Board Games").map((r) => r.id), ["b0", "b1", "b2"]);
+  assert.equal(kept.some((r) => r.id === "p0"), true);
+  assert.equal(keepFair(rows, 1000, 3).length, rows.length, "under the cap, everything");
+  assert.equal(keepFair([], 10, 3).length, 0);
 });
 
 test("reorder: sold out after steady sales; missed sales from the rate before", () => {
