@@ -260,7 +260,12 @@ export async function createGraded(cx, form, photos) {
 }
 
 // What the screen shows at the top for admins: the token's scopes vs what an add needs, and the location.
-export const NEEDED_SCOPES = ["write_products", "write_inventory", "write_publications"];
+/* write_publications is NOT required: the custom app's token never lists it
+   in accessScopes, yet every add publishes fine (2026-10-28: four slabs,
+   the last at 17:20Z, all live on the Online Store) - the owner: "why am i
+   receiving this in graded?". A publish that does fail is reported on the
+   add itself (publishError), which is the real test. */
+export const NEEDED_SCOPES = ["write_products", "write_inventory"];
 export async function setupCheck(cx) {
   if (!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) return { ok: false, error: "no SHOPIFY_ADMIN_TOKEN on the worker" };
   try {

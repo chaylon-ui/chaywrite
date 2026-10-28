@@ -143,17 +143,18 @@ test("createGraded: photos staged and uploaded, one productSet, published to the
 });
 
 test("setupCheck names the missing scopes; recentGraded shapes the list; the permission and the page", async () => {
-  const s = fakeShopify({ scopes: ["write_products", "write_inventory", "read_orders"] });
+  const s = fakeShopify({ scopes: ["write_products", "read_orders"] });
   const c = await setupCheck(s.cx);
-  assert.equal(c.ok, false); assert.deepEqual(c.missing, ["write_publications"]); assert.equal(c.location, "51 Allen Street");
-  const ok = await setupCheck(fakeShopify({ scopes: ["write_products", "write_inventory", "write_publications"] }).cx);
+  assert.equal(c.ok, false); assert.deepEqual(c.missing, ["write_inventory"]); assert.equal(c.location, "51 Allen Street");
+  // write_publications never shows on the token's list, yet adds publish: not demanded (owner, 2026-10-28)
+  const ok = await setupCheck(fakeShopify({ scopes: ["write_products", "write_inventory", "read_orders"] }).cx);
   assert.equal(ok.ok, true); assert.deepEqual(ok.missing, []);
   const recent = await recentGraded(s.cx);
   assert.equal(recent.length, 1); assert.equal(recent[0].price, "99.95"); assert.equal(recent[0].autoPrice, true); assert.equal(recent[0].adminUrl, "https://admin.shopify.com/store/most-wanted-ca/products/123"); assert.equal(recent[0].image, "https://cdn.example/a.jpg");
   assert.ok(STAFF_PERMS.some((p) => p.key === "graded"));
   assert.equal(can({ role: "staff", perms: { graded: true } }, "graded"), true); assert.equal(can({ role: "staff", perms: {} }, "graded"), false); assert.equal(can({ role: "admin" }, "graded"), true);
   const page = renderGraded({ recent, setup: c, last: { handle: "dark-muk", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", published: false, publishError: "Access denied", placeholder: true }, keep: { grader: "CGC", set: "Fossil", japanese: true } }, { user: { email: "s@x", role: "admin" } });
-  for (const needle of ['name="photo1"', "/vendor/jsQR-1.4.0.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_publications</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", 'src="/graded-add.js?v=', 'id="batch"', 'accept="image/*" multiple', 'id="addall"', "window.xgGraded=", 'id="pairmode"', 'value="fb"']) assert.ok(page.includes(needle), needle);
+  for (const needle of ['name="photo1"', "/vendor/jsQR-1.4.0.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_inventory</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", 'src="/graded-add.js?v=', 'id="batch"', 'accept="image/*" multiple', 'id="addall"', "window.xgGraded=", 'id="pairmode"', 'value="fb"']) assert.ok(page.includes(needle), needle);
   assert.ok(!page.includes('capture='), "the photo boxes open the library too, not only the camera");
   assert.match(renderGradedDenied({ user: { email: "s@x", role: "staff" } }), /cannot add graded cards/);
 });
