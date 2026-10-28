@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keepFair, stockCsv, filterRows, dayIso, inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
+import { keepFair, orderSheetRows, stockCsv, filterRows, dayIso, inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
 import { renderStock, renderStockDenied } from "../src/stock-check-ui.js";
 import { SC_PERMS, ALL_PERMS, permsFrom, can } from "../src/stage-auth.js";
 
@@ -468,6 +468,21 @@ test("staff states: found hides for 14 days then is due; not found goes to Missi
   await call(c, "/_sc/mark", { vid: "22", state: "ordered", by: "sam@x.test", now: clock.t });
   await call(c, "/_sc/mark", { vid: "33", state: "ordered", by: "sam@x.test", now: clock.t });
   v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 0); assert.equal(hotN(v), 0, "ordered hides it from Order now as well");
+  // the Ordered tab lists them, named; the undo puts one straight back (owner 2026-10-28)
+  assert.deepEqual(v.ordered.map((x) => x.vid).sort(), ["22", "33"], "both ordered");
+  const od = v.ordered.find((x) => x.vid === "22"); assert.equal(od.title, "Dragon Shield Matte Black"); assert.equal(od.sku, "DS-BLK"); assert.equal(od.vendor, "Arcane Tinmen"); assert.equal(od.due, false);
+  const sheet = orderSheetRows(v, { tab: "ordered" });
+  assert.deepEqual(sheet[0], ["SKU", "Product Name", "Quantity"]);
+  assert.deepEqual(sheet.slice(1).sort((a, b) => a[0].localeCompare(b[0])), [["DS-BLK", "Dragon Shield Matte Black", 1], ["PK151B", "POKEMON 151 BOOSTER BUNDLE", 1]], "the SKU when there is no UPC, one line each, quantity 1");
+  assert.deepEqual(orderSheetRows(v, { tab: "reorder" }).length, 1, "ordered items are off the Reorder sheet");
+  assert.deepEqual(orderSheetRows(v, { tab: "ordered", q: "dragon" }), [["SKU", "Product Name", "Quantity"], ["DS-BLK", "Dragon Shield Matte Black", 1]]);
+  assert.equal((await call(c, "/_sc/mark", { vid: "11", state: "unordered", by: "sam@x.test" })).ok, false, "only an ordered item can be un-ordered");
+  const un = await call(c, "/_sc/mark", { vid: "22", state: "unordered", by: "sam@x.test", byName: "Sam", now: clock.t });
+  assert.equal(un.ok, true); assert.equal(un.state.closed.state, "unordered");
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 1, "back on Reorder at once"); assert.deepEqual(v.ordered.map((x) => x.vid), ["33"]); assert.equal(v.reorder.find((x) => x.vid === "22").state.closed.state, "unordered");
+  assert.equal((await call(c, "/_sc/mark", { vid: "22", state: "unordered", by: "sam@x.test" })).ok, false, "not twice");
+  await call(c, "/_sc/mark", { vid: "22", state: "ordered", by: "sam@x.test", now: clock.t });
+  v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 0);
   clock.t += (SNOOZE_DAYS + 1) * DAY_MS;
   v = await call(c, "/_sc/view", { now: clock.t }); assert.equal(re(v), 1); assert.equal(v.reorder.find((x) => x.vid === "22").due, true); assert.equal(hotN(v), 1);
   await call(c, "/_sc/mark", { vid: "22", state: "cant_reorder", by: "boss@x.test", byName: "Boss", note: "LOTR collector boxes are gone", now: clock.t });
@@ -528,6 +543,12 @@ test("permissions and pages", async () => {
   assert.match(page, /cost \$89\.50 · margin 44%/, "the unit cost on the card"); assert.match(page, /stock history ↗/); assert.match(page, /no stock increase seen yet/); assert.match(page, /Export CSV/);
   const csvR = await serve("/9pocket/stock.csv?tab=reorder", viewer);
   assert.equal(csvR.status, 200); assert.match(csvR.headers.get("content-type"), /text\/csv/); assert.match(csvR.headers.get("content-disposition"), /stock-check-reorder-\d{4}-\d\d-\d\d\.csv/);
+  const xl = await serve("/9pocket/stock.xlsx?tab=reorder", viewer);
+  assert.equal(xl.status, 200); assert.match(xl.headers.get("content-type"), /spreadsheetml/); assert.match(xl.headers.get("content-disposition"), /order-reorder-\d{4}-\d\d-\d\d\.xlsx/);
+  const xb = new Uint8Array(await xl.arrayBuffer()); assert.deepEqual([...xb.slice(0, 2)], [0x50, 0x4b], "a zip"); assert.ok(xb.length > 1500);
+  assert.equal((await serve("/9pocket/stock.xlsx", null)).status, 303);
+  const orderedPage = await (await serve("/9pocket/stock?tab=ordered", actor)).text();
+  assert.match(orderedPage, /Nothing is marked as ordered/); assert.match(orderedPage, /Order sheet \.xlsx/);
   const buf = new Uint8Array(await csvR.arrayBuffer());
   assert.deepEqual([...buf.slice(0, 3)], [0xef, 0xbb, 0xbf], "BOM for Excel (text() would strip it)");
   const csvText = new TextDecoder().decode(buf);

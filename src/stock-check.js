@@ -66,6 +66,7 @@ import { BASE } from "./stage-ui.js";
 import { STAGE_DO } from "./stage.js";
 import { sendEmail, emailConfigured } from "./stage-email.js";
 import { renderStock, renderStockDenied } from "./stock-check-ui.js";
+import { xlsxFile, XLSX_TYPE } from "./xlsx.js";
 
 export const STOCK_DO = "stock-check";
 export const DAY_MS = 86400e3;
@@ -121,6 +122,7 @@ export const STATE_LABEL = {
   fewer: "Found fewer than listed", damaged: "Damaged or unsellable", not_found: "Not found",
   ordered: "Ordered", snooze: "Snoozed", cant_reorder: "Can't reorder", not_restocking: "Not restocking (our choice)",
   adjusted: "Adjusted in BinderPOS", turned_up: "Turned up", restored: "Restored", note: "Note",
+  unordered: "Not ordered after all",
 };
 export const PLACES = ["Overstock shelf / back room", "Pickup shelf (online orders)", "Customer holds behind the counter", "Display case", "Event prize support", "Returns / damaged bin"];
 export const ADMIN_PRODUCT = "https://admin.shopify.com/store/most-wanted-ca/products/";
@@ -408,6 +410,7 @@ export function visibleLook(state, now, soldSinceMark) {
 export function visibleReorder(state, now, qtyNow) {
   if (!state || !state.state) return { show: true };
   if (PERMANENT_STATES.includes(state.state) && !state.closed) return { show: false, dismissed: true };
+  if (state.closed) return { show: true };   // undone ("not ordered after all"), arrived, restored: back on the list
   if (state.state === "ordered" || state.state === "snooze") {
     if (qtyNow > 0) return { show: false, arrived: true };
     if (state.until && now < state.until) return { show: false, snoozed: true };
@@ -930,6 +933,11 @@ async function mark(cx, b, now) {
   } else if (state === "restore") {
     if (!PERMANENT_STATES.includes(cur.state)) return { ok: false, error: "That item is not dismissed." };
     cur.closed = { at: now, by, byName, state: "restored", note }; push({ at: now, by, byName, state: "restored", note });
+  } else if (state === "unordered") {
+    // Owner, 2026-10-28: "an ordered tab that lets us remove it from ordered
+    // in case we accidently click we ordered the wrong product".
+    if (!(cur.state === "ordered" || cur.state === "snooze") || cur.closed) return { ok: false, error: "That item is not marked as ordered." };
+    cur.closed = { at: now, by, byName, state: "unordered", note }; push({ at: now, by, byName, state: "unordered", note });
   } else return { ok: false, error: "unknown state" };
   await cx.storage.put("sc:s:" + vid, cur);
   return { ok: true, state: cur };
@@ -946,7 +954,7 @@ async function view(cx, now) {
   const links = {};
   for (const [k, v] of linkRows) if (v && v.url) links[k.slice(6)] = v;
   const today = dayOf(now);
-  const outLook = [], outReorder = [], outHot = [], missing = [], dismissed = [];
+  const outLook = [], outReorder = [], outHot = [], missing = [], dismissed = [], ordered = [];
   const hotMin = Number(cfg.hotMin) >= 1 ? Number(cfg.hotMin) : HOT_MIN;
   for (const r of hotRows || []) {
     if (!(r.sold30 >= hotMin)) continue;
@@ -968,13 +976,15 @@ async function view(cx, now) {
     if (!s || !s.state) continue;
     if (MISSING_STATES.includes(s.state)) missing.push(s);
     else if (PERMANENT_STATES.includes(s.state) && !s.closed) dismissed.push(s);
+    else if (s.state === "ordered" && !s.closed) ordered.push({ ...s, due: !!(s.until && now >= s.until) });
   }
-  missing.sort((a, b) => (b.at || 0) - (a.at || 0)); dismissed.sort((a, b) => (b.at || 0) - (a.at || 0));
+  missing.sort((a, b) => (b.at || 0) - (a.at || 0)); dismissed.sort((a, b) => (b.at || 0) - (a.at || 0)); ordered.sort((a, b) => (b.at || 0) - (a.at || 0));
   // name missing/dismissed items from whatever we know
   const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; s.cost = v.cost ?? null; s.sku = v.sku || ""; s.barcode = v.barcode || ""; s.pid = s.pid || v.pid; s.hist = v.hist || ""; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
-  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, links, meta: meta || null, status: { hotMin, reorderMin: reorderMinOf(cfg), distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
+  for (const s of ordered) await name(s);
+  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, ordered, missing, dismissed, links, meta: meta || null, status: { hotMin, reorderMin: reorderMinOf(cfg), distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
 }
 
 export async function stockDoFetch(cx, request, url) {
@@ -1050,6 +1060,18 @@ export function stockCsv(d, o) {
   };
   return [CSV_HEAD.map(csvCell).join(",")].concat(rows.map(line)).join("\r\n") + "\r\n";
 }
+
+/* The order sheet (owner, 2026-10-28): "a xlsx file where it has headers
+   of SKU (with the UPC), Product Name and Quantity where each line has a 1
+   for quantity" - the tab's rows, filter applied, one line each, the UPC in
+   the SKU column when there is one (the SKU otherwise). */
+export const SHEET_HEAD = ["SKU", "Product Name", "Quantity"];
+export function orderSheetRows(d, o) {
+  const tab = ["hot", "reorder", "ordered", "look"].includes(o && o.tab) ? o.tab : "reorder";
+  const rows = tab === "ordered" ? filterRows((d && d.ordered) || [], o) : filterRows((d && d[tab]) || [], o);
+  return [SHEET_HEAD].concat(rows.map((r) => [upcOf(r) || String(r.sku || ""), String(r.title || "") + (r.vtitle && r.vtitle !== "Default Title" ? " - " + r.vtitle : ""), 1]));
+}
+export function orderSheet(d, o) { return xlsxFile("Order", orderSheetRows(d, o), [18, 70, 10]); }
 
 export function itemFacts(list, r) {
   const f = [];
@@ -1131,6 +1153,12 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
   if (!user) return toLogin();
   if (!canView(user)) return html(renderStockDenied(opts), 403);
   const tab = String(url.searchParams.get("tab") || (form && form.tab) || "look");
+  if (p === R + ".xlsx") {
+    const d = await doCall(env, "/_sc/view");
+    const body = orderSheet(d, { tab, type: url.searchParams.get("type") || "", q: url.searchParams.get("q") || "" });
+    const name = "order-" + tab.replace(/[^a-z]/g, "") + "-" + dayIso(dayOf(Date.now())) + ".xlsx";
+    return new Response(body, { headers: { ...noStore, "content-type": XLSX_TYPE, "content-disposition": 'attachment; filename="' + name + '"' } });
+  }
   if (p === R + ".csv") {
     const d = await doCall(env, "/_sc/view");
     const csv = stockCsv(d, { tab, type: url.searchParams.get("type") || "", q: url.searchParams.get("q") || "" });
