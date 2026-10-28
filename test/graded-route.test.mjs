@@ -34,4 +34,6 @@ test("9Pocket > Graded renders for an admin, refuses a staff account without the
   assert.equal(out.status, 303); assert.match(out.headers.get("location"), /^\/9pocket\/login\?next=/);
   const cert = await get({ ROOM: room(admin) }, "/9pocket/graded/cert.json?grader=PSA&cert=12345678", TOKEN);
   assert.equal(cert.status, 200); const cj = await cert.json(); assert.equal(cj.ok, false); assert.equal(cj.configured, false);
+  const listed = await get({ ROOM: room(admin) }, "/9pocket/graded/listed.json?grader=PSA&cert=12345678", TOKEN);
+  assert.equal(listed.status, 200); const lj = await listed.json(); assert.equal(lj.listed, null); assert.equal(lj.cert, "12345678");
 });

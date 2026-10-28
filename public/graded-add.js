@@ -201,6 +201,14 @@
     if (d.japanese && f.elements.japanese) f.elements.japanese.checked = true;
     return "PSA: " + d.name + (d.number ? " #" + d.number : "") + (d.set ? ", " + d.set : "") + (d.year ? " (" + d.year + ")" : "") + (d.variety ? ", " + d.variety : "") + ", " + (d.gradeText || d.grade) + (d.population != null ? ", pop " + d.population + (d.higher != null ? " (" + d.higher + " higher)" : "") : "");
   }
+  // Owner, 2026-10-28: "make it we can not accidently upload the same cert number ... its only active
+  // listing". 9Pocket looks the certificate up among the ACTIVE products (SKU GRADER-cert or barcode);
+  // a hit greys the Add button and names the listing. The server refuses the add as well.
+  async function checkListed(grader, certNo) {
+    certNo = String(certNo || "").replace(/\D/g, ""); if (!certNo) return null;
+    try { var r = await fetch(cfg.base + "/graded/listed.json?grader=" + encodeURIComponent(grader || "") + "&cert=" + encodeURIComponent(certNo), { credentials: "same-origin" }); var d = await r.json(); return d && d.listed ? d.listed : null; } catch (e) { return null; }
+  }
+  function dupHtml(l) { return "Already listed and active: " + esc(l.title) + ' - not added. <a href="' + esc(l.adminUrl) + '" target="_blank" rel="noopener">Open it in Shopify</a>'; }
   // Claude reads the label photos through 9Pocket (never from the browser to Anthropic) and fills the empty fields.
   // Both sides go, front first (owner, 2026-10-28: a Beckett back carries only the serial; the
   // grade and the card are on the front label, so a batch line read from its back photo got nothing).
@@ -231,6 +239,17 @@
     if (d && d.ok) { psaState.className = "ok"; psaState.textContent = applyCert(form, d); preview(); } else { psaState.className = "muted"; psaState.textContent = (d && d.error) || ""; }
   }
   if (psaState) { cert.addEventListener("change", singleLookup); cert.addEventListener("blur", singleLookup); }
+  var dupState = document.getElementById("dupstate"), addBtn = document.getElementById("addbtn"), lastDupKey = "";
+  async function singleDup() {
+    if (!dupState) return;
+    var key = v("grader") + "|" + String(cert.value || "").replace(/\D/g, "");
+    if (key === lastDupKey) return; lastDupKey = key;
+    var l = await checkListed(v("grader"), cert.value);
+    if (key !== lastDupKey) return;
+    dupState.hidden = !l; dupState.innerHTML = l ? dupHtml(l) : "";
+    if (addBtn) addBtn.disabled = !!l;
+  }
+  if (dupState) { cert.addEventListener("change", singleDup); cert.addEventListener("blur", singleDup); if (form.elements.grader) form.elements.grader.addEventListener("change", singleDup); form.addEventListener("input", function () { if (!String(cert.value || "").replace(/\D/g, "")) { lastDupKey = ""; dupState.hidden = true; if (addBtn) addBtn.disabled = false; } }); }
 
   /* ---- the single form's photo boxes ---- */
   var single = {};
@@ -242,9 +261,9 @@
     if (p.unreadable) { showSingle(input, p); return; }
     if (p.file !== file) setInputFile(input, p);
     showSingle(input, p);
-    if (cfg.vision && (input.name === "photo2" || (input.name === "photo1" && !single.photo2))) { psaState.className = "muted"; psaState.textContent = "Reading the label\u2026"; readLabel(single.photo1, single.photo2).then(function (d) { if (d && d.ok) { psaState.className = "ok"; psaState.textContent = applyLabel(form, d); preview(); if (form.elements.grader.value === "PSA" && cert.value) singleLookup(); } else { psaState.className = "muted"; psaState.textContent = (d && d.error) || ""; } }); }
+    if (cfg.vision && (input.name === "photo2" || (input.name === "photo1" && !single.photo2))) { psaState.className = "muted"; psaState.textContent = "Reading the label\u2026"; readLabel(single.photo1, single.photo2).then(function (d) { if (d && d.ok) { psaState.className = "ok"; psaState.textContent = applyLabel(form, d); preview(); singleDup(); if (form.elements.grader.value === "PSA" && cert.value) singleLookup(); } else { psaState.className = "muted"; psaState.textContent = (d && d.error) || ""; } }); }
     if (qrAuto || !qrUrl.value) {
-      if (p.qr) { qrUrl.value = p.qr; qrAuto = true; qrState.className = "ok"; qrState.textContent = "QR code read from the " + which(input) + " photo: " + p.qr; var m = certOfUrl(p.qr); if (m && !cert.value) cert.value = m; var g = graderOfUrl(p.qr); if (g && form.elements.grader) form.elements.grader.value = g; preview(); if (g === "PSA") singleLookup(); }
+      if (p.qr) { qrUrl.value = p.qr; qrAuto = true; qrState.className = "ok"; qrState.textContent = "QR code read from the " + which(input) + " photo: " + p.qr; var m = certOfUrl(p.qr); if (m && !cert.value) cert.value = m; var g = graderOfUrl(p.qr); if (g && form.elements.grader) form.elements.grader.value = g; preview(); singleDup(); if (g === "PSA") singleLookup(); }
       else if (!qrAuto) { var rc = certOfText(p.raw); if (rc && !cert.value) cert.value = rc; qrState.className = p.raw ? "ok" : "muted"; qrState.textContent = p.raw ? "QR code read from the " + which(input) + " photo (not a link): " + p.raw.slice(0, 60) + (rc ? " - certificate " + rc : "") : "No QR code in the " + which(input) + " photo; it is usually on the back of the label. Add that photo, or type the certificate number."; }
     }
   }
@@ -264,7 +283,7 @@
     var g = s.grader || v("grader"), game = v("game") || "pokemon";
     el.innerHTML = '<div class="ph"><div class="figs">' + figures(s) + "</div>" +
       '<div class="meta"><b>Slab ' + (k + 1) + "</b><br>" + (s.qr ? '<span class="ok">QR: ' + esc(s.cert || s.qr) + " (" + esc(s.grader || "link") + ")</span>" : s.raw ? '<span class="ok">QR text: ' + esc(s.raw.slice(0, 40)) + (s.cert ? " - certificate " + esc(s.cert) : "") + "</span>" : '<span class="muted">no QR code read: add the certificate number</span>') +
-      '<br><span class="psa muted"></span><br><button type="button" class="sm swap">Swap front/back</button> <button type="button" class="sm drop">Remove line</button></div></div>' +
+      '<br><span class="psa muted"></span><span class="dup err"></span><br><button type="button" class="sm swap">Swap front/back</button> <button type="button" class="sm drop">Remove line</button></div></div>' +
       '<div class="grid">' +
       "<label>Game <select name=\"game\">" + opts(Object.keys(cfg.games), game, function (x) { return cfg.games[x]; }) + "</select></label>" +
       "<label>Grader <select name=\"grader\">" + opts(cfg.graders, g) + "</select></label>" +
@@ -295,12 +314,23 @@
       else if (b.classList.contains("rot")) { var p = photos[Number(b.getAttribute("data-i"))]; if (!p) return; b.disabled = true; await turn(p, 90); el.querySelector(".figs").innerHTML = figures(s); }
     });
     el.addEventListener("submit", function (ev) { ev.preventDefault(); addLine(el, s); });
+    el.addEventListener("change", function (ev) { if (ev.target && (ev.target.name === "cert" || ev.target.name === "grader")) lineDup(el); });
     el._slab = s;
     return el;
+  }
+  async function lineDup(el) {
+    var key = v("grader", el) + "|" + v("cert", el).replace(/\D/g, "");
+    if (key === el._dupKey) return; el._dupKey = key;
+    var l = key.split("|")[1] ? await checkListed(v("grader", el), v("cert", el)) : null;
+    if (key !== el._dupKey || !el.isConnected) return;
+    el._dup = l;
+    var sp = el.querySelector(".meta .dup"); if (sp) sp.innerHTML = l ? "<br>" + dupHtml(l) : "";
+    var b = el.querySelector("button[type=submit]"); if (b) b.disabled = !!l;
   }
   async function addLine(el, s) {
     if (el.classList.contains("done") || el.classList.contains("busy")) return;
     var st = el.querySelector(".st");
+    if (el._dup) { st.className = "st err"; st.textContent = "Already listed and active - not added."; return; }
     if (!v("name", el)) { st.className = "st err"; st.textContent = "Type the card name first."; return; }
     el.classList.add("busy"); st.className = "st muted"; st.textContent = "Adding… (uploading photos)";
     var fd = new FormData();
@@ -334,12 +364,14 @@
     bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + (mode === "qr" ? ", paired by QR code" : ", paired in order (" + (mode === "bf" ? "back then front" : "front then back") + ")") + "; QR codes read in " + withQr + " of " + files.length + " (" + reader + ")" + (turned ? "; " + turned + " sideways photo" + (turned === 1 ? "" : "s") + " turned upright (tap ↻ on a thumbnail if one is wrong)" : "") + ". Check each line (swap if a pair is backwards), fill in the card, then add." + badNote;
     var els = slabs.map(function (s, k) { var el = lineEl(s, k); lines.appendChild(el); return el; });
     addAll.hidden = !slabs.length;
+    // Certificates read from the QR codes: is any already on an active listing?
+    await Promise.all(els.map(function (el) { return lineDup(el); }));
     // PSA's records, one slab at a time (the free allowance is about 100 a day).
     for (var k = 0; k < slabs.length; k++) {
       var s = slabs[k]; if (!cfg.psa || s.grader !== "PSA" || !s.cert) continue;
       var meta = els[k].querySelector(".meta .psa"); if (meta) meta.textContent = "Asking PSA…";
       var d = await lookupCert("PSA", s.cert);
-      if (meta) { if (d && d.ok) { meta.className = "psa ok"; meta.textContent = applyCert(els[k], d); els[k].dispatchEvent(new Event("input")); els[k]._filled = true; } else { meta.className = "psa muted"; meta.textContent = (d && d.error) || ""; if (d && d.limited) break; } }
+      if (meta) { if (d && d.ok) { meta.className = "psa ok"; meta.textContent = applyCert(els[k], d); els[k].dispatchEvent(new Event("input")); els[k]._filled = true; lineDup(els[k]); } else { meta.className = "psa muted"; meta.textContent = (d && d.error) || ""; if (d && d.limited) break; } }
     }
     // Claude reads the label of every slab PSA did not fill, one at a time (a cent or two each).
     if (cfg.vision) for (var k2 = 0; k2 < slabs.length; k2++) {
@@ -348,13 +380,13 @@
       if ((!fr2 || fr2.unreadable) && (!bk2 || bk2.unreadable)) continue;
       var m2 = el2.querySelector(".meta .psa"); if (m2) { m2.className = "psa muted"; m2.textContent = "Reading the label\u2026"; }
       var d2 = await readLabel(fr2, bk2);
-      if (m2) { if (d2 && d2.ok) { m2.className = "psa ok"; m2.textContent = applyLabel(el2, d2); el2.dispatchEvent(new Event("input")); } else { m2.className = "psa muted"; m2.textContent = (d2 && d2.error) || ""; if (d2 && d2.configured === false) break; } }
+      if (m2) { if (d2 && d2.ok) { m2.className = "psa ok"; m2.textContent = applyLabel(el2, d2); el2.dispatchEvent(new Event("input")); lineDup(el2); } else { m2.className = "psa muted"; m2.textContent = (d2 && d2.error) || ""; if (d2 && d2.configured === false) break; } }
     }
   });
   addAll.addEventListener("click", async function () {
     addAll.disabled = true;
     var els = Array.prototype.slice.call(lines.querySelectorAll("form.line"));
-    for (var i = 0; i < els.length; i++) if (!els[i].classList.contains("done") && v("name", els[i])) await addLine(els[i], els[i]._slab);
+    for (var i = 0; i < els.length; i++) if (!els[i].classList.contains("done") && !els[i]._dup && v("name", els[i])) await addLine(els[i], els[i]._slab);
     addAll.disabled = false;
   });
 })(typeof window !== "undefined" ? window : {});

@@ -158,6 +158,32 @@ export function productInput(f, resourceUrls) {
 const SU_M = `mutation($input: [StagedUploadInput!]!) { stagedUploadsCreate(input: $input) { stagedTargets { url resourceUrl parameters { name value } } userErrors { field message } } }`;
 const SET_M = `mutation($input: ProductSetInput!) { productSet(input: $input, synchronous: true) { product { id handle title } userErrors { field message code } } }`;
 const PUB_M = `mutation($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { field message } } }`;
+const FIND_Q = `query FindListed($q: String!) { products(first: 10, query: $q) { nodes { id title handle status productType tags variants(first: 10) { nodes { sku barcode } } } } }`;
+
+/* Owner, 2026-10-28: "make it we can not accidently upload the same cert
+   number to prevent us from double listing a card? if we had it before its
+   ok its only active listing". A certificate number names one slab, so a
+   second ACTIVE product carrying it is a double listing. Looked up by the
+   variant SKU (GRADER-cert) and the barcode (the cert), both of which this
+   screen writes; archived or draft copies (sold, then bought back) do not
+   count, and neither does a non-graded product that happens to share the
+   digits. */
+export async function findListed(cx, grader, cert) {
+  const c = String(cert == null ? "" : cert).replace(/\D/g, "");
+  const g = String(grader || "").toUpperCase().replace(/[^A-Z]/g, "");
+  if (!c) return { ok: true, cert: "", listed: null };
+  if (!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) return { ok: false, cert: c, listed: null, error: "The worker has no Shopify admin token." };
+  const q = "status:active AND (barcode:" + c + (g ? " OR sku:" + g + "-" + c : "") + ")";
+  try {
+    const r = await adminGql(cx, FIND_Q, { q });
+    const nodes = (r.data && r.data.products && r.data.products.nodes) || [];
+    const skuRe = new RegExp("(^|-)" + c + "$", "i");
+    const hit = nodes.find((p) => p && p.status === "ACTIVE"
+      && (/graded/i.test(p.productType || "") || (p.tags || []).some((t) => /^graded$/i.test(String(t))))
+      && ((p.variants && p.variants.nodes) || []).some((v) => String(v.barcode || "").replace(/\D/g, "") === c || skuRe.test(String(v.sku || ""))));
+    return { ok: true, cert: c, listed: hit ? { id: hit.id, title: hit.title, handle: hit.handle, url: SHOP_URL + "/products/" + hit.handle, adminUrl: ADMIN_URL + "/products/" + String(hit.id).split("/").pop() } : null };
+  } catch (e) { return { ok: false, cert: c, listed: null, error: "Could not check Shopify for an existing listing: " + String((e && e.message) || e).slice(0, 160) }; }
+}
 const SETUP_Q = `{ currentAppInstallation { accessScopes { handle } } location(id: "${LOCATION}") { name isActive } }`;
 const RECENT_Q = `{ products(first: 12, sortKey: CREATED_AT, reverse: true, query: "tag:${ADD_TAG}") { nodes { id title handle status createdAt totalInventory tags variants(first: 1) { nodes { price } } media(first: 1) { nodes { ... on MediaImage { image { url } } } } } } }`;
 
@@ -188,6 +214,14 @@ export async function createGraded(cx, form, photos) {
   if (!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) return { ok: false, error: "The worker has no Shopify admin token." };
   const f = cleanForm(form);
   if (f.error) return { ok: false, error: f.error };
+  // The same certificate on an active listing is the same slab twice: refused
+  // before any photo goes up. A failed check refuses too - the point is never
+  // to double-list, and the staff can try again in a moment.
+  if (f.cert) {
+    const dup = await findListed(cx, f.grader, f.cert);
+    if (!dup.ok) return { ok: false, error: dup.error + " Not added; try again in a moment." };
+    if (dup.listed) return { ok: false, duplicate: dup.listed, error: "Already listed and active: \"" + dup.listed.title + "\" carries certificate " + dup.cert + ". Not added, so the slab is not listed twice. Open it in Shopify: " + dup.listed.adminUrl };
+  }
   const list = (photos || []).filter((p) => p && typeof p.arrayBuffer === "function" && (p.size == null || p.size > 0)).slice(0, MAX_PHOTOS);
   const urls = [];
   try {

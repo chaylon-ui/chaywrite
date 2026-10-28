@@ -71,7 +71,7 @@ import { serveWinStaff } from "./win.js";
 import { serveImpactStaff } from "./impact.js";
 import { RETENTION, accessWhat, logAccess } from "./access-log.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage, when } from "./stage-ui.js";
-import { createGraded, setupCheck, recentGraded, certLookup, psaConfigured, readLabel, visionConfigured } from "./graded.js";
+import { createGraded, setupCheck, recentGraded, certLookup, psaConfigured, readLabel, visionConfigured, findListed } from "./graded.js";
 import { renderGraded, renderGradedDenied } from "./graded-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
@@ -1126,13 +1126,14 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.
   // Graded cards (src/graded.js): the add form, the add itself, the setup check.
-  if (p === BASE + "/graded" || p === BASE + "/graded/add" || p === BASE + "/graded/setup.json" || p === BASE + "/graded/cert.json" || p === BASE + "/graded/read.json") {
+  if (p === BASE + "/graded" || p === BASE + "/graded/add" || p === BASE + "/graded/setup.json" || p === BASE + "/graded/cert.json" || p === BASE + "/graded/listed.json" || p === BASE + "/graded/read.json") {
     if (!user) return toLogin();
     if (!can(user, "graded")) return html(renderGradedDenied(opts), 403);
     const cx = { env, ctx: sopts && sopts.ctx, origin, by: user.email, fetch: (u, i) => fetch(u, i), now: () => Date.now(), log: (m) => console.log(m) };   // sopts.ctx: a bare `ctx` here threw a ReferenceError for every signed-in visit (owner, 2026-10-28, Error 1101)
     if (p === BASE + "/graded/setup.json") return Response.json(await setupCheck(cx), { headers: noStore });
     const sp = url.searchParams;
     if (p === BASE + "/graded/cert.json") return Response.json(await certLookup(cx, sp.get("grader"), sp.get("cert")), { headers: noStore });
+    if (p === BASE + "/graded/listed.json") return Response.json(await findListed(cx, sp.get("grader"), sp.get("cert")), { headers: noStore });
     if (p === BASE + "/graded/read.json") {
       if (request.method !== "POST") return Response.json({ ok: false, error: "POST a photo" }, { status: 405, headers: noStore });
       const r = await readLabel(cx, form && form.photo, { second: form && form.photo2 });

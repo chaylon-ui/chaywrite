@@ -67,8 +67,9 @@ function fakeShopify(o) {
     const u = String(url);
     if (u.includes("/admin/api/")) {
       const body = JSON.parse(init.body);
-      const op = /stagedUploadsCreate/.test(body.query) ? "staged" : /productSet/.test(body.query) ? "set" : /publishablePublish/.test(body.query) ? "publish" : /currentAppInstallation/.test(body.query) ? "setup" : /tag:9pocket-graded/.test(body.query) ? "recent" : "?";
+      const op = /stagedUploadsCreate/.test(body.query) ? "staged" : /productSet/.test(body.query) ? "set" : /publishablePublish/.test(body.query) ? "publish" : /currentAppInstallation/.test(body.query) ? "setup" : /tag:9pocket-graded/.test(body.query) ? "recent" : /FindListed/.test(body.query) ? "find" : "?";
       calls.push({ op, vars: body.variables });
+      if (op === "find") return Response.json({ data: { products: { nodes: o.listed || [] } } });
       if (op === "staged") return Response.json({ data: { stagedUploadsCreate: { stagedTargets: [{ url: "https://bucket.example/up", resourceUrl: "https://bucket.example/tmp/" + calls.length + ".jpg", parameters: [{ name: "key", value: "tmp/" + calls.length }, { name: "policy", value: "p" }] }], userErrors: [] } } });
       if (op === "set") return Response.json({ data: { productSet: o.setErrors ? { product: null, userErrors: o.setErrors } : { product: { id: "gid://shopify/Product/123", handle: "dark-muk-41-82-team-rocket-1st-edition-graded-psa-9", title: body.variables.input.title }, userErrors: [] } } });
       if (op === "publish") return Response.json({ data: { publishablePublish: { userErrors: o.publishErrors || [] } } });
@@ -89,14 +90,15 @@ test("createGraded: photos staged and uploaded, one productSet, published to the
   const form = { name: "Dark Muk", number: "41/82", set: "Team Rocket 1st Edition", grader: "PSA", grade: "9", price: "99.95", cert: "87654321", auto_price: "1" };
   const r = await createGraded(s.cx, form, [photo(1), photo(2)]);
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.deepEqual(s.calls.map((c) => c.op), ["staged", "upload", "staged", "upload", "set", "publish", "do:autoprice/_ap/control"]);
-  assert.deepEqual(s.calls[6].vars, { action: "add", id: "gid://shopify/Product/123", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk-41-82-team-rocket-1st-edition-graded-psa-9", type: "Pokemon Single Graded", stock: 1, price: 99.95, who: "owner@example.com" });
+  assert.deepEqual(s.calls.map((c) => c.op), ["find", "staged", "upload", "staged", "upload", "set", "publish", "do:autoprice/_ap/control"]);
+  assert.equal(s.calls[0].vars.q, "status:active AND (barcode:87654321 OR sku:PSA-87654321)", "the double-listing check comes first");
+  assert.deepEqual(s.calls[7].vars, { action: "add", id: "gid://shopify/Product/123", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk-41-82-team-rocket-1st-edition-graded-psa-9", type: "Pokemon Single Graded", stock: 1, price: 99.95, who: "owner@example.com" });
   assert.equal(r.priced, true); assert.equal(r.priceError, "");
-  assert.equal(s.calls[0].vars.input[0].resource, "IMAGE"); assert.equal(s.calls[0].vars.input[0].fileSize, "3"); assert.equal(s.calls[0].vars.input[0].mimeType, "image/jpeg");
-  const up = s.calls[1]; assert.equal(up.url, "https://bucket.example/up"); assert.ok(up.body instanceof FormData); assert.equal(up.body.get("key"), "tmp/1"); assert.ok(up.body.get("file") instanceof Blob, "the file is the last part");
-  const input = s.calls[4].vars.input;
-  assert.equal(input.title, "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9"); assert.deepEqual(input.files.map((f) => f.originalSource), ["https://bucket.example/tmp/1.jpg", "https://bucket.example/tmp/3.jpg"]);
-  assert.deepEqual(s.calls[5].vars, { id: "gid://shopify/Product/123", input: [{ publicationId: ONLINE_STORE_PUBLICATION }] });
+  assert.equal(s.calls[1].vars.input[0].resource, "IMAGE"); assert.equal(s.calls[1].vars.input[0].fileSize, "3"); assert.equal(s.calls[1].vars.input[0].mimeType, "image/jpeg");
+  const up = s.calls[2]; assert.equal(up.url, "https://bucket.example/up"); assert.ok(up.body instanceof FormData); assert.equal(up.body.get("key"), "tmp/2"); assert.ok(up.body.get("file") instanceof Blob, "the file is the last part");
+  const input = s.calls[5].vars.input;
+  assert.equal(input.title, "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9"); assert.deepEqual(input.files.map((f) => f.originalSource), ["https://bucket.example/tmp/2.jpg", "https://bucket.example/tmp/4.jpg"]);
+  assert.deepEqual(s.calls[6].vars, { id: "gid://shopify/Product/123", input: [{ publicationId: ONLINE_STORE_PUBLICATION }] });
   assert.equal(r.handle, "dark-muk-41-82-team-rocket-1st-edition-graded-psa-9"); assert.equal(r.url, "https://exorgames.com/products/dark-muk-41-82-team-rocket-1st-edition-graded-psa-9"); assert.equal(r.adminUrl, "https://admin.shopify.com/store/most-wanted-ca/products/123");
   assert.equal(r.photos, 2); assert.equal(r.published, true); assert.equal(r.placeholder, false); assert.equal(r.autoPrice, true); assert.equal(r.certUrl, "https://www.psacard.com/cert/87654321");
   // no photos is fine; the product still goes up
@@ -110,11 +112,30 @@ test("createGraded: photos staged and uploaded, one productSet, published to the
   const s6 = fakeShopify({ apError: "pricer down" });
   const r6 = await createGraded(s6.cx, form, []);
   assert.equal(r6.ok, true); assert.equal(r6.priced, false); assert.equal(r6.priceError, "pricer down");
-  assert.equal(s2.calls[0].vars.input.variants[0].price, PLACEHOLDER_PRICE); assert.deepEqual(s2.calls[0].vars.input.files, []);
+  assert.equal(s2.calls[1].vars.input.variants[0].price, PLACEHOLDER_PRICE); assert.deepEqual(s2.calls[1].vars.input.files, []);
   // Shopify refusing the product
   const s3 = fakeShopify({ setErrors: [{ field: ["input", "title"], message: "Title can't be blank" }] });
   const r3 = await createGraded(s3.cx, form, []);
-  assert.equal(r3.ok, false); assert.match(r3.error, /Shopify refused the product: input.title: Title can't be blank/); assert.deepEqual(s3.calls.map((c) => c.op), ["set"]);
+  assert.equal(r3.ok, false); assert.match(r3.error, /Shopify refused the product: input.title: Title can't be blank/); assert.deepEqual(s3.calls.map((c) => c.op), ["find", "set"]);
+  // the same certificate on an ACTIVE listing: refused before any photo goes up (owner, 2026-10-28)
+  const active = { id: "gid://shopify/Product/555", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk-old", status: "ACTIVE", productType: "Pokemon Single Graded", tags: ["Graded"], variants: { nodes: [{ sku: "PSA-87654321", barcode: "87654321" }] } };
+  const s7 = fakeShopify({ listed: [active] });
+  const r7 = await createGraded(s7.cx, form, [photo(1)]);
+  assert.equal(r7.ok, false); assert.match(r7.error, /Already listed and active: "Dark Muk \(41\/82\).*certificate 87654321.*products\/555/); assert.equal(r7.duplicate.id, "gid://shopify/Product/555");
+  assert.deepEqual(s7.calls.map((c) => c.op), ["find"], "nothing uploaded, nothing created");
+  // sold and archived, a different cert, or a non-graded product with the same digits: not a double listing
+  for (const other of [{ ...active, status: "ARCHIVED" }, { ...active, variants: { nodes: [{ sku: "PSA-876543210", barcode: "876543210" }] } }, { ...active, productType: "Pokemon Sealed Product", tags: ["auto-price"] }]) {
+    const sx = fakeShopify({ listed: [other] });
+    assert.equal((await createGraded(sx.cx, form, [])).ok, true, JSON.stringify(other));
+  }
+  const fl = await findListed(s7.cx, "psa", " 8765 4321 ");
+  assert.deepEqual(fl, { ok: true, cert: "87654321", listed: { id: "gid://shopify/Product/555", title: active.title, handle: "dark-muk-old", url: "https://exorgames.com/products/dark-muk-old", adminUrl: "https://admin.shopify.com/store/most-wanted-ca/products/555" } });
+  assert.deepEqual(await findListed(s7.cx, "PSA", ""), { ok: true, cert: "", listed: null });
+  assert.equal((await findListed({ env: {} }, "PSA", "1")).ok, false);
+  // the check itself failing refuses the add too
+  const s8 = fakeShopify({}); const badFetch = s8.cx.fetch; s8.cx.fetch = async (u, i) => (/FindListed/.test(String(i && i.body)) ? Response.json({ errors: [{ message: "Throttled" }] }) : badFetch(u, i));
+  const r8 = await createGraded(s8.cx, form, []);
+  assert.equal(r8.ok, false); assert.match(r8.error, /Could not check Shopify for an existing listing/);
   // a bad form never reaches Shopify; no token says so
   const s4 = fakeShopify({});
   assert.deepEqual(await createGraded(s4.cx, { grader: "PSA", grade: "9" }, []), { ok: false, error: "Type the card's name." }); assert.equal(s4.calls.length, 0);
@@ -198,14 +219,14 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=12"'));
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=13"'));
   assert.ok(readFileSync(new URL("../public/vendor/libheif-1.23.5.bundle.js", import.meta.url)).length > 1500000, "the HEIC decoder is vendored");
   assert.ok(readFileSync(new URL("../public/vendor/jsQR-1.4.0.js", import.meta.url)).length > 200000, "the QR reader is vendored"); assert.ok(page.includes('class="sm rot" hidden'), "a Rotate button per photo box");
   assert.ok(!page.includes("cdnjs.cloudflare.com"), "the QR reader is served by the worker, not a CDN that may 404");
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));
 });
 
-import { readLabel, labelToForm, LABEL_SCHEMA, LABEL_MODEL, LABEL_PROMPT } from "../src/graded.js";
+import { readLabel, labelToForm, LABEL_SCHEMA, LABEL_MODEL, LABEL_PROMPT, findListed } from "../src/graded.js";
 test("label reading: Claude's JSON becomes the form; the request shape; refusals, bad answers and the key", async () => {
   const f = labelToForm({ grader: "psa", grade: "GEM MT 10", grade_label: "", cert: "14927 2769", card_name: "Umbreon VMAX", card_number: "215/203", set_name: "Sword & Shield: Evolving Skies", year: "2021", game: "pokemon", japanese: false, notes: "", confidence: 0.93 });
   assert.deepEqual(f, { grader: "PSA", grade: "10", label: "", cert: "149272769", name: "Umbreon VMAX", number: "215/203", set: "Sword & Shield: Evolving Skies", year: "2021", game: "pokemon", japanese: false, notes: "", confidence: 0.93 });
