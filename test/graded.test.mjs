@@ -198,14 +198,14 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=11"'));
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=12"'));
   assert.ok(readFileSync(new URL("../public/vendor/libheif-1.23.5.bundle.js", import.meta.url)).length > 1500000, "the HEIC decoder is vendored");
   assert.ok(readFileSync(new URL("../public/vendor/jsQR-1.4.0.js", import.meta.url)).length > 200000, "the QR reader is vendored"); assert.ok(page.includes('class="sm rot" hidden'), "a Rotate button per photo box");
   assert.ok(!page.includes("cdnjs.cloudflare.com"), "the QR reader is served by the worker, not a CDN that may 404");
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));
 });
 
-import { readLabel, labelToForm, LABEL_SCHEMA, LABEL_MODEL } from "../src/graded.js";
+import { readLabel, labelToForm, LABEL_SCHEMA, LABEL_MODEL, LABEL_PROMPT } from "../src/graded.js";
 test("label reading: Claude's JSON becomes the form; the request shape; refusals, bad answers and the key", async () => {
   const f = labelToForm({ grader: "psa", grade: "GEM MT 10", grade_label: "", cert: "14927 2769", card_name: "Umbreon VMAX", card_number: "215/203", set_name: "Sword & Shield: Evolving Skies", year: "2021", game: "pokemon", japanese: false, notes: "", confidence: 0.93 });
   assert.deepEqual(f, { grader: "PSA", grade: "10", label: "", cert: "149272769", name: "Umbreon VMAX", number: "215/203", set: "Sword & Shield: Evolving Skies", year: "2021", game: "pokemon", japanese: false, notes: "", confidence: 0.93 });
@@ -220,7 +220,7 @@ test("label reading: Claude's JSON becomes the form; the request shape; refusals
   const p = sent[0];
   assert.equal(p.model, LABEL_MODEL); assert.equal(p.max_tokens, 600); assert.deepEqual(p.betas, ["server-side-fallback-2026-07-01"]); assert.equal(p.fallbacks, "default");
   assert.equal(p.output_config.effort, "low"); assert.deepEqual(p.output_config.format, { type: "json_schema", schema: LABEL_SCHEMA });
-  assert.equal(p.messages[0].content[0].type, "image"); assert.equal(p.messages[0].content[0].source.media_type, "image/jpeg"); assert.equal(p.messages[0].content[0].source.data, "/9j/AQ=="); assert.match(p.messages[0].content[1].text, /Read its label/);
+  assert.equal(p.messages[0].content[0].type, "image"); assert.equal(p.messages[0].content[0].source.media_type, "image/jpeg"); assert.equal(p.messages[0].content[0].source.data, "/9j/AQ=="); assert.equal(p.messages[0].content[1].text, LABEL_PROMPT);
   // a 400 on the format parameter -> the plain-JSON request; JSON inside prose still parses
   const bad = Object.assign(new Error("output_config.format unsupported"), { status: 400 });
   const r2 = await readLabel(cx, photo, { client: client([bad, answer(null) && { stop_reason: "end_turn", content: [{ type: "text", text: "Here you go: {\"grader\":\"CGC\",\"grade\":\"10\",\"grade_label\":\"Pristine\",\"cert\":\"4312345001\",\"card_name\":\"Charizard\",\"card_number\":\"4/102\",\"set_name\":\"Base Set\",\"year\":\"1999\",\"game\":\"pokemon\",\"japanese\":false,\"notes\":\"\",\"confidence\":0.8}" }], usage: {} }]) });
@@ -231,6 +231,20 @@ test("label reading: Claude's JSON becomes the form; the request shape; refusals
   assert.match((await readLabel(cx, photo, { client: client([Object.assign(new Error("busy"), { status: 529 })]) })).error, /HTTP 529/);
   const off = await readLabel({ env: {} }, photo, {}); assert.equal(off.configured, false);
   assert.match((await readLabel(cx, null, {})).error, /Send one photo/);
+  // both sides in one request, front first (a Beckett back carries only the serial)
+  const back = { type: "image/png", arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer };
+  sent.length = 0;
+  const both = await readLabel(cx, photo, { second: back, client: client([answer({ grader: "BGS", grade: "10", grade_label: "Pristine", cert: "0020150360", card_name: "Dark Muk", card_number: "41/82", set_name: "Team Rocket", game: "pokemon", confidence: 0.8 })]) });
+  assert.equal(both.ok, true); assert.equal(both.name, "Dark Muk"); assert.equal(both.grader, "BGS");
+  const c2 = sent[0].messages[0].content;
+  assert.deepEqual(c2.map((b) => b.type), ["image", "image", "text"]);
+  assert.equal(c2[0].source.media_type, "image/jpeg"); assert.equal(c2[1].source.media_type, "image/png");
+  assert.match(c2[2].text, /front first, then the back/);
+  // the back alone still works (a single photo in the second slot never happens, but an empty front must not)
+  sent.length = 0;
+  const backOnly = await readLabel(cx, { type: "image/jpeg", arrayBuffer: async () => new ArrayBuffer(0) }, { second: back, client: client([answer({ grader: "PSA", grade: "9", cert: "1", card_name: "x", confidence: 0.5 })]) });
+  assert.equal(backOnly.ok, true); assert.equal(sent[0].messages[0].content.length, 2);
+  assert.match((await readLabel(cx, photo, { second: { type: "image/jpeg", arrayBuffer: async () => new ArrayBuffer(5 * 1024 * 1024) }, client: client([]) })).error, /under 4 MB/);
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, vision: true, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("Label reading is on"));
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, vision: true, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes('"vision":true'));
 });

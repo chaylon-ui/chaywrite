@@ -1135,7 +1135,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     if (p === BASE + "/graded/cert.json") return Response.json(await certLookup(cx, sp.get("grader"), sp.get("cert")), { headers: noStore });
     if (p === BASE + "/graded/read.json") {
       if (request.method !== "POST") return Response.json({ ok: false, error: "POST a photo" }, { status: 405, headers: noStore });
-      const r = await readLabel(cx, form && form.photo);
+      const r = await readLabel(cx, form && form.photo, { second: form && form.photo2 });
       return Response.json(r, { status: r.ok || r.configured === false ? 200 : 400, headers: noStore });
     }
     if (p === BASE + "/graded/add" && request.method === "POST") {

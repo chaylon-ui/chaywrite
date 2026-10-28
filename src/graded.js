@@ -335,7 +335,7 @@ export const LABEL_SCHEMA = {
     confidence: { type: "number", description: "0 to 1" },
   },
 };
-export const LABEL_PROMPT = "This photo shows one graded trading-card slab (PSA, CGC, BGS/Beckett, SGC, TAG or ACE). Read its label and fill in every field. Use empty strings for anything you cannot read; never guess a certificate number. If it is not a graded slab, leave grader empty and say why in notes.";
+export const LABEL_PROMPT = "These photos show one graded trading-card slab (PSA, CGC, BGS/Beckett, SGC, TAG or ACE): the front first, then the back when there are two. Read the labels on both sides together and fill in every field. The front label normally carries the grader, the grade, the card name, its number and its set; the back label may carry only the certificate or serial number and a QR code, so never report the fields as unreadable just because one side lacks them. Use empty strings for anything neither side shows; never guess a certificate number. If it is not a graded slab, leave grader empty and say why in notes.";
 
 const GRADER_WORDS = { PSA: "PSA", CGC: "CGC", BGS: "BGS", BECKETT: "BGS", SGC: "SGC", TAG: "TAG", ACE: "ACE" };
 export function labelToForm(j) {
@@ -352,16 +352,33 @@ export function labelToForm(j) {
     game, japanese: o.japanese === true, notes: s(o.notes, 200), confidence: Number.isFinite(conf) ? Math.max(0, Math.min(1, conf)) : null,
   };
 }
+// One photo as a Claude image block, or a string saying why not.
+async function imageBlock(photo) {
+  if (!photo || typeof photo.arrayBuffer !== "function") return null;
+  const bytes = await photo.arrayBuffer();
+  if (!bytes.byteLength) return null;
+  if (bytes.byteLength > 4 * 1024 * 1024) return "The photo must be under 4 MB (the page shrinks them; reload it).";
+  const mime = /^image\/(jpeg|png|webp|gif)$/i.test(photo.type || "") ? photo.type.toLowerCase() : "image/jpeg";
+  const data = btoa(Array.from(new Uint8Array(bytes), (b) => String.fromCharCode(b)).join(""));
+  return { type: "image", source: { type: "base64", media_type: mime, data } };
+}
+
+/* photo = the front (the label with the grade and the card), opts.second =
+   the back (often only a serial and a QR code). Both go in one request,
+   front first, so a Beckett slab is read from the side that says what it
+   is (owner, 2026-10-28, batch lines read from the back came back empty). */
 export async function readLabel(cx, photo, opts) {
   const o = opts || {};
   if (!visionConfigured(cx.env)) return { ok: false, configured: false, error: "Label reading is not switched on (no Anthropic key on the worker)." };
-  if (!photo || typeof photo.arrayBuffer !== "function") return { ok: false, error: "Send one photo." };
-  const bytes = await photo.arrayBuffer();
-  if (!bytes.byteLength || bytes.byteLength > 4 * 1024 * 1024) return { ok: false, error: "The photo must be under 4 MB (the page shrinks them; reload it)." };
-  const mime = /^image\/(jpeg|png|webp|gif)$/i.test(photo.type || "") ? photo.type.toLowerCase() : "image/jpeg";
-  const data = btoa(Array.from(new Uint8Array(bytes), (b) => String.fromCharCode(b)).join(""));
+  const blocks = [];
+  for (const ph of [photo, o.second]) {
+    const b = await imageBlock(ph);
+    if (typeof b === "string") return { ok: false, error: b };
+    if (b) blocks.push(b);
+  }
+  if (!blocks.length) return { ok: false, error: "Send one photo." };
   const client = o.client || new (await import("@anthropic-ai/sdk")).default({ apiKey: cx.env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60_000 });
-  const content = [{ type: "image", source: { type: "base64", media_type: mime, data } }, { type: "text", text: LABEL_PROMPT }];
+  const content = [...blocks, { type: "text", text: LABEL_PROMPT }];
   const base = { model: LABEL_MODEL, max_tokens: 600, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default", output_config: { effort: "low" }, messages: [{ role: "user", content }] };
   let res, usedFormat = true;
   try {

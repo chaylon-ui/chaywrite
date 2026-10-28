@@ -201,10 +201,17 @@
     if (d.japanese && f.elements.japanese) f.elements.japanese.checked = true;
     return "PSA: " + d.name + (d.number ? " #" + d.number : "") + (d.set ? ", " + d.set : "") + (d.year ? " (" + d.year + ")" : "") + (d.variety ? ", " + d.variety : "") + ", " + (d.gradeText || d.grade) + (d.population != null ? ", pop " + d.population + (d.higher != null ? " (" + d.higher + " higher)" : "") : "");
   }
-  // Claude reads the label photo through 9Pocket (never from the browser to Anthropic) and fills the empty fields.
-  async function readLabel(p) {
-    if (!cfg.vision || !p || p.unreadable) return null;
-    var fd = new FormData(); fd.append("photo", p.file, p.file.name || "label.jpg");
+  // Claude reads the label photos through 9Pocket (never from the browser to Anthropic) and fills the empty fields.
+  // Both sides go, front first (owner, 2026-10-28: a Beckett back carries only the serial; the
+  // grade and the card are on the front label, so a batch line read from its back photo got nothing).
+  async function readLabel(front, back) {
+    if (!cfg.vision) return null;
+    if (front && front.unreadable) front = null;
+    if (back && back.unreadable) back = null;
+    if (!front && !back) return null;
+    var fd = new FormData();
+    if (front) fd.append("photo", front.file, front.file.name || "front.jpg");
+    if (back) fd.append(front ? "photo2" : "photo", back.file, back.file.name || "back.jpg");
     try { var r = await fetch(cfg.base + "/graded/read.json", { method: "POST", body: fd, credentials: "same-origin" }); return await r.json(); } catch (e) { return { ok: false, error: "No answer from 9Pocket." }; }
   }
   function applyLabel(f, d) {
@@ -235,7 +242,7 @@
     if (p.unreadable) { showSingle(input, p); return; }
     if (p.file !== file) setInputFile(input, p);
     showSingle(input, p);
-    if (cfg.vision && (input.name === "photo2" || (input.name === "photo1" && !single.photo2))) { psaState.className = "muted"; psaState.textContent = "Reading the label\u2026"; readLabel(p).then(function (d) { if (d && d.ok) { psaState.className = "ok"; psaState.textContent = applyLabel(form, d); preview(); if (form.elements.grader.value === "PSA" && cert.value) singleLookup(); } else { psaState.className = "muted"; psaState.textContent = (d && d.error) || ""; } }); }
+    if (cfg.vision && (input.name === "photo2" || (input.name === "photo1" && !single.photo2))) { psaState.className = "muted"; psaState.textContent = "Reading the label\u2026"; readLabel(single.photo1, single.photo2).then(function (d) { if (d && d.ok) { psaState.className = "ok"; psaState.textContent = applyLabel(form, d); preview(); if (form.elements.grader.value === "PSA" && cert.value) singleLookup(); } else { psaState.className = "muted"; psaState.textContent = (d && d.error) || ""; } }); }
     if (qrAuto || !qrUrl.value) {
       if (p.qr) { qrUrl.value = p.qr; qrAuto = true; qrState.className = "ok"; qrState.textContent = "QR code read from the " + which(input) + " photo: " + p.qr; var m = certOfUrl(p.qr); if (m && !cert.value) cert.value = m; var g = graderOfUrl(p.qr); if (g && form.elements.grader) form.elements.grader.value = g; preview(); if (g === "PSA") singleLookup(); }
       else if (!qrAuto) { var rc = certOfText(p.raw); if (rc && !cert.value) cert.value = rc; qrState.className = p.raw ? "ok" : "muted"; qrState.textContent = p.raw ? "QR code read from the " + which(input) + " photo (not a link): " + p.raw.slice(0, 60) + (rc ? " - certificate " + rc : "") : "No QR code in the " + which(input) + " photo; it is usually on the back of the label. Add that photo, or type the certificate number."; }
@@ -337,9 +344,10 @@
     // Claude reads the label of every slab PSA did not fill, one at a time (a cent or two each).
     if (cfg.vision) for (var k2 = 0; k2 < slabs.length; k2++) {
       var s2 = slabs[k2], el2 = els[k2]; if (el2._filled || !el2.isConnected) continue;
-      var ph = s2.back != null ? photos[s2.back] : s2.front != null ? photos[s2.front] : null; if (!ph || ph.unreadable) continue;
+      var fr2 = s2.front != null ? photos[s2.front] : null, bk2 = s2.back != null ? photos[s2.back] : null;
+      if ((!fr2 || fr2.unreadable) && (!bk2 || bk2.unreadable)) continue;
       var m2 = el2.querySelector(".meta .psa"); if (m2) { m2.className = "psa muted"; m2.textContent = "Reading the label\u2026"; }
-      var d2 = await readLabel(ph);
+      var d2 = await readLabel(fr2, bk2);
       if (m2) { if (d2 && d2.ok) { m2.className = "psa ok"; m2.textContent = applyLabel(el2, d2); el2.dispatchEvent(new Event("input")); } else { m2.className = "psa muted"; m2.textContent = (d2 && d2.error) || ""; if (d2 && d2.configured === false) break; } }
     }
   });
