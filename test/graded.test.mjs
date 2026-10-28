@@ -122,13 +122,13 @@ test("setupCheck names the missing scopes; recentGraded shapes the list; the per
   assert.ok(STAFF_PERMS.some((p) => p.key === "graded"));
   assert.equal(can({ role: "staff", perms: { graded: true } }, "graded"), true); assert.equal(can({ role: "staff", perms: {} }, "graded"), false); assert.equal(can({ role: "admin" }, "graded"), true);
   const page = renderGraded({ recent, setup: c, last: { handle: "dark-muk", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", published: false, publishError: "Access denied", placeholder: true }, keep: { grader: "CGC", set: "Fossil", japanese: true } }, { user: { email: "s@x", role: "admin" } });
-  for (const needle of ['name="photo1"', "jsQR/1.4.0/jsQR.min.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_publications</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", 'src="/graded-add.js?v=', 'id="batch"', 'accept="image/*" multiple', 'id="addall"', "window.xgGraded="]) assert.ok(page.includes(needle), needle);
+  for (const needle of ['name="photo1"', "jsQR/1.4.0/jsQR.min.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_publications</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", 'src="/graded-add.js?v=', 'id="batch"', 'accept="image/*" multiple', 'id="addall"', "window.xgGraded=", 'id="pairmode"', 'value="fb"', "cdn.jsdelivr.net/npm/jsqr@1.4.0"]) assert.ok(page.includes(needle), needle);
   assert.ok(!page.includes('capture='), "the photo boxes open the library too, not only the camera");
   assert.match(renderGradedDenied({ user: { email: "s@x", role: "staff" } }), /cannot add graded cards/);
 });
 
 test("batch pairing: backs are the photos with a QR code, each takes the front shot beside it; leftovers stay as lines", () => {
-  const { pairPhotos, graderOfUrl, certOfUrl } = client;
+  const { pairPhotos, pairByOrder, graderOfUrl, certOfUrl } = client;
   assert.equal(graderOfUrl("https://www.psacard.com/cert/87654321"), "PSA"); assert.equal(graderOfUrl("https://www.cgccards.com/certlookup/4312345001/"), "CGC"); assert.equal(graderOfUrl("https://example.com/x"), ""); assert.equal(graderOfUrl("nope"), "");
   assert.equal(certOfUrl("https://www.psacard.com/cert/87654321"), "87654321"); assert.equal(certOfUrl(""), "");
   const psa = (n) => "https://www.psacard.com/cert/" + n, cgc = (n) => "https://www.cgccards.com/certlookup/" + n + "/";
@@ -147,6 +147,14 @@ test("batch pairing: backs are the photos with a QR code, each takes the front s
   assert.equal(s.length, 6, "one slab with an extra, four lone fronts, one back with the nearest front within three");
   const far = s.find((x) => x.cert === "99999999"); assert.equal(far.front, 7);
   assert.deepEqual(pairPhotos([]), []);
+  // by shooting order: (front, back) pairs, the QR a bonus; a QR in the front slot swaps the pair; an odd last photo stands alone
+  const fb = pairByOrder([{ qr: "" }, { qr: psa("11111111") }, { qr: "" }, { qr: "" }, { qr: "" }]);
+  assert.deepEqual(fb.map((x) => [x.front, x.back, x.cert, x.grader]), [[0, 1, "11111111", "PSA"], [2, 3, "", ""], [4, null, "", ""]]);
+  const bf = pairByOrder([{ qr: psa("11111111") }, { qr: "" }], true);
+  assert.deepEqual(bf.map((x) => [x.front, x.back, x.cert]), [[1, 0, "11111111"]]);
+  const swapped = pairByOrder([{ qr: psa("22222222") }, { qr: "" }]);
+  assert.deepEqual(swapped.map((x) => [x.front, x.back, x.cert]), [[1, 0, "22222222"]], "the QR photo is the back whichever slot it landed in");
+  assert.deepEqual(pairByOrder([]), []);
   assert.deepEqual(pairPhotos([{ qr: "" }]), [{ front: 0, back: null, extra: [], qr: "", cert: "", grader: "" }]);
 });
 
@@ -171,6 +179,6 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=3"'));
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=4"'));
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));
 });

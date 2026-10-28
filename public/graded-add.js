@@ -37,7 +37,24 @@
     slabs.sort(function (a, b) { return first(a) - first(b); });
     return slabs;
   }
-  if (typeof module !== "undefined" && module.exports) module.exports = { pairPhotos, graderOfUrl, certOfUrl };
+  /* Pairing by the order the photos were shot: (front, back), (front, back)...
+     or back first. A QR code found in either photo of a pair gives the
+     certificate; if it sits in the "front" slot the pair is swapped. An odd
+     last photo stands alone. The owner's natural flow (2026-10-28: fronts and
+     backs shot in turn) - the QR is a bonus here, not the pairing key. */
+  function pairByOrder(scans, backFirst) {
+    var items = (scans || []).map(function (s, n) { return { i: s.i == null ? n : s.i, qr: String(s.qr || "") }; });
+    var slabs = [];
+    for (var n = 0; n < items.length; n += 2) {
+      var a = items[n], b = items[n + 1] || null;
+      var front = backFirst ? b : a, back = backFirst ? a : b;
+      if (front && front.qr && !(back && back.qr)) { var t = front; front = back; back = t; }
+      var qr = (back && back.qr) || (front && front.qr) || "";
+      slabs.push({ front: front ? front.i : null, back: back ? back.i : null, extra: [], qr: qr, cert: certOfUrl(qr), grader: graderOfUrl(qr) });
+    }
+    return slabs;
+  }
+  if (typeof module !== "undefined" && module.exports) module.exports = { pairPhotos, pairByOrder, graderOfUrl, certOfUrl };
   if (typeof document === "undefined") return;
 
   /* ---------------- the page ---------------- */
@@ -55,10 +72,25 @@
 
   function fit(bmp, max) { var s = Math.min(1, max / Math.max(bmp.width, bmp.height)); var c = document.createElement("canvas"); c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s)); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); return c; }
   function decodeCanvas(c) { if (!root.jsQR) return null; var d = c.getContext("2d").getImageData(0, 0, c.width, c.height); var r = root.jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" }); return (r && r.data) || null; }
+  // The library loads deferred (cdnjs, then jsdelivr if that fails): give it a moment before the first decode.
+  function ensureQr() { return new Promise(function (res) { var t = 0; (function tick() { if (root.jsQR || t > 40) return res(!!root.jsQR); t++; setTimeout(tick, 100); })(); }); }
+  var readerNote = "";
   async function detect(bmp) {
     if ("BarcodeDetector" in root) { try { var det = new root.BarcodeDetector({ formats: ["qr_code"] }); var res = await det.detect(bmp); if (res && res[0] && res[0].rawValue) return res[0].rawValue; } catch (e) {} }
-    var sizes = [1400, 2200, 3000];
+    if (!(await ensureQr())) { readerNote = "the QR reader did not load"; return null; }
+    var sizes = [1200, 2000];
     for (var i = 0; i < sizes.length; i++) { try { var val = decodeCanvas(fit(bmp, sizes[i])); if (val) return val; } catch (e) {} }
+    // A small QR code on a whole-slab photo: look at the big picture in tiles (2x2 with overlap, then the middle).
+    try {
+      var big = fit(bmp, 3200), W = big.width, H = big.height, tiles = [];
+      for (var y = 0; y < 2; y++) for (var x = 0; x < 2; x++) tiles.push([x * W * 0.4, y * H * 0.4, W * 0.6, H * 0.6]);
+      tiles.push([W * 0.2, H * 0.2, W * 0.6, H * 0.6]);
+      for (var k = 0; k < tiles.length; k++) {
+        var t = tiles[k], c = document.createElement("canvas"); c.width = Math.round(t[2]); c.height = Math.round(t[3]);
+        c.getContext("2d").drawImage(big, t[0], t[1], t[2], t[3], 0, 0, c.width, c.height);
+        var v2 = decodeCanvas(c); if (v2) return v2;
+      }
+    } catch (e) {}
     return null;
   }
   // One photo -> {file (shrunk JPEG when smaller), url (preview), qr (link or "")}.
@@ -176,8 +208,11 @@
     files.sort(function (a, b) { return (a.lastModified || 0) - (b.lastModified || 0); });
     lines.innerHTML = ""; photos = []; addAll.hidden = true;
     for (var n = 0; n < files.length; n++) { bstate.textContent = "Reading photo " + (n + 1) + " of " + files.length + "…"; var p = await prep(files[n]); p.i = n; photos.push(p); }
-    var slabs = pairPhotos(photos);
-    bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + ". Check each line (swap if a pair is backwards), fill in the card, then add.";
+    var mode = (document.getElementById("pairmode") || {}).value || "fb";
+    var slabs = mode === "qr" ? pairPhotos(photos) : pairByOrder(photos, mode === "bf");
+    var withQr = photos.filter(function (p) { return p.qr; }).length;
+    var reader = readerNote || (("BarcodeDetector" in root) ? "built-in reader" : (root.jsQR ? "jsQR" : "no reader"));
+    bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + (mode === "qr" ? ", paired by QR code" : ", paired in order (" + (mode === "bf" ? "back then front" : "front then back") + ")") + "; QR codes read in " + withQr + " of " + files.length + " (" + reader + "). Check each line (swap if a pair is backwards), fill in the card, then add.";
     var els = slabs.map(function (s, k) { var el = lineEl(s, k); lines.appendChild(el); return el; });
     addAll.hidden = !slabs.length;
     // PSA's records, one slab at a time (the free allowance is about 100 a day).
