@@ -12,6 +12,13 @@ on:
       - "wrangler.toml"
       - ".github/workflows/deploy.yml"
 
+# One deploy at a time: a manual run and a push run in parallel both write
+# worker secrets, and Cloudflare refuses the second ("The Worker was modified
+# concurrently by another request", code 11024; 2026-10-28). Queued, not cancelled,
+# so every push still deploys in order.
+concurrency:
+  group: deploy-exor-binder
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
