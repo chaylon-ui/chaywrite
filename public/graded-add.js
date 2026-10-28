@@ -72,7 +72,7 @@
 
   function fit(bmp, max) { var s = Math.min(1, max / Math.max(bmp.width, bmp.height)); var c = document.createElement("canvas"); c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s)); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); return c; }
   function decodeCanvas(c) { if (!root.jsQR) return null; var d = c.getContext("2d").getImageData(0, 0, c.width, c.height); var r = root.jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" }); return (r && r.data) || null; }
-  // The library loads deferred (cdnjs, then jsdelivr if that fails): give it a moment before the first decode.
+  // The library (public/vendor/jsQR-1.4.0.js, served by the worker) loads deferred: give it a moment before the first decode.
   function ensureQr() { return new Promise(function (res) { var t = 0; (function tick() { if (root.jsQR || t > 40) return res(!!root.jsQR); t++; setTimeout(tick, 100); })(); }); }
   var readerNote = "";
   async function detect(bmp) {

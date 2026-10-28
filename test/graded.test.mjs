@@ -122,7 +122,7 @@ test("setupCheck names the missing scopes; recentGraded shapes the list; the per
   assert.ok(STAFF_PERMS.some((p) => p.key === "graded"));
   assert.equal(can({ role: "staff", perms: { graded: true } }, "graded"), true); assert.equal(can({ role: "staff", perms: {} }, "graded"), false); assert.equal(can({ role: "admin" }, "graded"), true);
   const page = renderGraded({ recent, setup: c, last: { handle: "dark-muk", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", published: false, publishError: "Access denied", placeholder: true }, keep: { grader: "CGC", set: "Fossil", japanese: true } }, { user: { email: "s@x", role: "admin" } });
-  for (const needle of ['name="photo1"', "jsQR/1.4.0/jsQR.min.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_publications</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", 'src="/graded-add.js?v=', 'id="batch"', 'accept="image/*" multiple', 'id="addall"', "window.xgGraded=", 'id="pairmode"', 'value="fb"', "cdn.jsdelivr.net/npm/jsqr@1.4.0"]) assert.ok(page.includes(needle), needle);
+  for (const needle of ['name="photo1"', "/vendor/jsQR-1.4.0.js", 'id="tprev"', 'id="qr_url"', 'name="auto_price" value="1" checked', "<b>write_publications</b>", "not published to the Online Store", "placeholder until auto-pricing", 'value="CGC" selected', 'value="Fossil"', 'name="japanese" value="1" checked', "Dark Muk (41/82)", "/9pocket/graded/add", 'enctype="multipart/form-data"', 'href="/9pocket/graded">Graded</a>', "Back: the label with the QR code", "Every photo is checked for the QR code", 'src="/graded-add.js?v=', 'id="batch"', 'accept="image/*" multiple', 'id="addall"', "window.xgGraded=", 'id="pairmode"', 'value="fb"']) assert.ok(page.includes(needle), needle);
   assert.ok(!page.includes('capture='), "the photo boxes open the library too, not only the camera");
   assert.match(renderGradedDenied({ user: { email: "s@x", role: "staff" } }), /cannot add graded cards/);
 });
@@ -179,6 +179,7 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=4"'));
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=5"'));
+  assert.ok(!page.includes("cdnjs.cloudflare.com"), "the QR reader is served by the worker, not a CDN that may 404");
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));
 });
