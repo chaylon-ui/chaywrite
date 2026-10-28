@@ -181,8 +181,8 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=8"'));
-  assert.ok(readFileSync(new URL("../public/vendor/heic2any-0.0.4.min.js", import.meta.url)).length > 1000000, "the HEIC decoder is vendored");
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=9"'));
+  assert.ok(readFileSync(new URL("../public/vendor/libheif-1.23.5.bundle.js", import.meta.url)).length > 1500000, "the HEIC decoder is vendored");
   assert.ok(readFileSync(new URL("../public/vendor/jsQR-1.4.0.js", import.meta.url)).length > 200000, "the QR reader is vendored"); assert.ok(page.includes('class="sm rot" hidden'), "a Rotate button per photo box");
   assert.ok(!page.includes("cdnjs.cloudflare.com"), "the QR reader is served by the worker, not a CDN that may 404");
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));

@@ -86,8 +86,10 @@
   /* Decoding a photo. createImageBitmap reads JPEG/PNG/WebP everywhere; an
      iPhone's HEIC is read natively only by Safari (which also converts it for
      file inputs), so on a PC 200 iPhone photos decode nowhere and every
-     thumbnail breaks (owner, 2026-10-28). HEIC goes through heic2any
-     (public/vendor/heic2any-0.0.4.min.js, loaded only when first needed). */
+     thumbnail breaks (owner, 2026-10-28). HEIC goes through libheif
+     (public/vendor/libheif-1.23.5.bundle.js, the libheif-js wasm bundle, loaded
+     only when first needed; heic2any 0.0.4 was tried first and answered
+     "ERR_LIBHEIF format not supported" for the owner's iPhone files). */
   var scriptLoads = {};
   function loadScript(src) { if (!scriptLoads[src]) scriptLoads[src] = new Promise(function (res, rej) { var s = document.createElement("script"); s.src = src; s.onload = function () { res(true); }; s.onerror = function () { rej(new Error("could not load " + src)); }; document.head.appendChild(s); }); return scriptLoads[src]; }
   async function isHeic(file) {
@@ -99,15 +101,36 @@
     try { return await createImageBitmap(file); } catch (e) {}
     var url = ""; try { url = URL.createObjectURL(file); var img = await loadImg(url); var b = await createImageBitmap(img); URL.revokeObjectURL(url); return b; } catch (e) { if (url) URL.revokeObjectURL(url); }
     if (await isHeic(file)) {
-      try {
-        await loadScript("/vendor/heic2any-0.0.4.min.js");
-        var out = await root.heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-        var jpg = Array.isArray(out) ? out[0] : out;
-        return await createImageBitmap(jpg);
-      } catch (e) { heicNote = "HEIC conversion failed: " + String((e && e.message) || e).slice(0, 80); }
+      try { return await heifToBitmap(await file.arrayBuffer()); }
+      catch (e) { heicNote = "HEIC conversion failed: " + String((e && e.message) || e).slice(0, 80); }
     }
     return null;
   }
+  // libheif's decoder on a HEIC's bytes -> an ImageBitmap of its primary image.
+  var heifLib = null;
+  async function heifLibrary() {
+    if (heifLib) return heifLib;
+    await loadScript("/vendor/libheif-1.23.5.bundle.js");
+    var lib = root.libheif;
+    if (lib && typeof lib === "function" && !lib.HeifDecoder) lib = lib();
+    if (lib && typeof lib.then === "function") lib = await lib;
+    if (!lib || !lib.HeifDecoder) throw new Error("libheif did not load");
+    heifLib = lib; return lib;
+  }
+  async function heifToBitmap(bytes) {
+    var lib = await heifLibrary();
+    var dec = new lib.HeifDecoder(), imgs = dec.decode(new Uint8Array(bytes));
+    if (!imgs || !imgs.length) throw new Error("no image in the HEIC");
+    var im = imgs[0], w = im.get_width(), h = im.get_height();
+    var c = document.createElement("canvas"); c.width = w; c.height = h;
+    var ctx = c.getContext("2d"), id = ctx.createImageData(w, h);
+    try {
+      await new Promise(function (res, rej) { im.display(id, function (d) { d ? res() : rej(new Error("libheif could not render the image")); }); });
+    } finally { imgs.forEach(function (x) { try { x.free(); } catch (e) {} }); }
+    ctx.putImageData(id, 0, 0);
+    return await createImageBitmap(c);
+  }
+  root.xgHeifToBitmap = heifToBitmap;   // for the runner's decode check
   var heicNote = "";
   // jsQR on a canvas: the text and where the code sits, as a fraction of the canvas width.
   function decodeCanvas(c) { if (!root.jsQR) return null; var d = c.getContext("2d").getImageData(0, 0, c.width, c.height); var r = root.jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" }); if (!r || !r.data) return null; var L = r.location || {}, xs = [L.topLeftCorner, L.topRightCorner, L.bottomLeftCorner, L.bottomRightCorner].filter(Boolean).map(function (p) { return p.x; }); return { value: r.data, cx: xs.length ? xs.reduce(function (a, b) { return a + b; }, 0) / xs.length / c.width : null }; }
