@@ -79,7 +79,8 @@ function fakeShopify(o) {
     calls.push({ op: "upload", url: u, body: init.body });
     return new Response(null, { status: 201 });
   };
-  return { calls, cx: { env: { SHOPIFY_ADMIN_TOKEN: "t" }, fetch: fetchFn, now: () => 1, log: () => {} } };
+  const ROOM = { idFromName: (n) => n, get: (n) => ({ fetch: async (req) => { calls.push({ op: "do:" + n + new URL(req.url).pathname, vars: JSON.parse(await req.text()) }); return Response.json(o.apError ? { ok: false, error: o.apError } : { ok: true, listed: true, kicked: { ok: true } }); } }) };
+  return { calls, cx: { env: { SHOPIFY_ADMIN_TOKEN: "t", ROOM }, origin: "https://w.example", by: "owner@example.com", fetch: fetchFn, now: () => 1, log: () => {} } };
 }
 const photo = (n) => ({ name: "p" + n + ".jpg", type: "image/jpeg", size: 3, arrayBuffer: async () => new Uint8Array([1, 2, n]).buffer });
 
@@ -88,7 +89,9 @@ test("createGraded: photos staged and uploaded, one productSet, published to the
   const form = { name: "Dark Muk", number: "41/82", set: "Team Rocket 1st Edition", grader: "PSA", grade: "9", price: "99.95", cert: "87654321", auto_price: "1" };
   const r = await createGraded(s.cx, form, [photo(1), photo(2)]);
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.deepEqual(s.calls.map((c) => c.op), ["staged", "upload", "staged", "upload", "set", "publish"]);
+  assert.deepEqual(s.calls.map((c) => c.op), ["staged", "upload", "staged", "upload", "set", "publish", "do:autoprice/_ap/control"]);
+  assert.deepEqual(s.calls[6].vars, { action: "add", id: "gid://shopify/Product/123", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk-41-82-team-rocket-1st-edition-graded-psa-9", type: "Pokemon Single Graded", stock: 1, price: 99.95, by: "owner@example.com" });
+  assert.equal(r.priced, true); assert.equal(r.priceError, "");
   assert.equal(s.calls[0].vars.input[0].resource, "IMAGE"); assert.equal(s.calls[0].vars.input[0].fileSize, "3"); assert.equal(s.calls[0].vars.input[0].mimeType, "image/jpeg");
   const up = s.calls[1]; assert.equal(up.url, "https://bucket.example/up"); assert.ok(up.body instanceof FormData); assert.equal(up.body.get("key"), "tmp/1"); assert.ok(up.body.get("file") instanceof Blob, "the file is the last part");
   const input = s.calls[4].vars.input;
@@ -100,6 +103,13 @@ test("createGraded: photos staged and uploaded, one productSet, published to the
   const s2 = fakeShopify({ publishErrors: [{ field: null, message: "Access denied for publishablePublish" }] });
   const r2 = await createGraded(s2.cx, { ...form, price: "" }, []);
   assert.equal(r2.ok, true); assert.equal(r2.photos, 0); assert.equal(r2.placeholder, true); assert.equal(r2.published, false); assert.match(r2.publishError, /Access denied/);
+  assert.equal(s2.calls.find((c) => c.op.startsWith("do:")).vars.price, 0, "the placeholder is not a price");
+  const s5 = fakeShopify({});
+  const r5 = await createGraded(s5.cx, { ...form, auto_price: "" }, []);
+  assert.equal(r5.ok, true); assert.equal(r5.priced, false); assert.ok(!s5.calls.some((c) => c.op.startsWith("do:")), "no pricer call without the tick");
+  const s6 = fakeShopify({ apError: "pricer down" });
+  const r6 = await createGraded(s6.cx, form, []);
+  assert.equal(r6.ok, true); assert.equal(r6.priced, false); assert.equal(r6.priceError, "pricer down");
   assert.equal(s2.calls[0].vars.input.variants[0].price, PLACEHOLDER_PRICE); assert.deepEqual(s2.calls[0].vars.input.files, []);
   // Shopify refusing the product
   const s3 = fakeShopify({ setErrors: [{ field: ["input", "title"], message: "Title can't be blank" }] });

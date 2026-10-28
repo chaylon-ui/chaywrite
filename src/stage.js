@@ -1129,7 +1129,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   if (p === BASE + "/graded" || p === BASE + "/graded/add" || p === BASE + "/graded/setup.json" || p === BASE + "/graded/cert.json" || p === BASE + "/graded/read.json") {
     if (!user) return toLogin();
     if (!can(user, "graded")) return html(renderGradedDenied(opts), 403);
-    const cx = { env, ctx: sopts && sopts.ctx, fetch: (u, i) => fetch(u, i), now: () => Date.now(), log: (m) => console.log(m) };   // sopts.ctx: a bare `ctx` here threw a ReferenceError for every signed-in visit (owner, 2026-10-28, Error 1101)
+    const cx = { env, ctx: sopts && sopts.ctx, origin, by: user.email, fetch: (u, i) => fetch(u, i), now: () => Date.now(), log: (m) => console.log(m) };   // sopts.ctx: a bare `ctx` here threw a ReferenceError for every signed-in visit (owner, 2026-10-28, Error 1101)
     if (p === BASE + "/graded/setup.json") return Response.json(await setupCheck(cx), { headers: noStore });
     const sp = url.searchParams;
     if (p === BASE + "/graded/cert.json") return Response.json(await certLookup(cx, sp.get("grader"), sp.get("cert")), { headers: noStore });

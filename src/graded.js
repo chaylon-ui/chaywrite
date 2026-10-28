@@ -22,7 +22,7 @@
    Nothing here touches BinderPOS. Admin API 2025-01 like the rest of the
    worker (src/price-history.js adminGql). */
 import { adminGql } from "./price-history.js";
-import { TAG as AUTO_PRICE_TAG } from "./autoprice.js";
+import { TAG as AUTO_PRICE_TAG, AUTOPRICE_DO } from "./autoprice.js";
 
 export const ONLINE_STORE_PUBLICATION = "gid://shopify/Publication/63498813593";   // "Online Store" (publications query, 2026-10-27)
 export const LOCATION = "gid://shopify/Location/53483602073";                       // 51 Allen Street, the store's only location
@@ -207,8 +207,22 @@ export async function createGraded(cx, form, photos) {
     const pe = errsOf(r.data.publishablePublish);
     if (pe) publishError = pe; else published = true;
   } catch (e) { publishError = String((e && e.message) || e).slice(0, 200); }
+  // Auto-pricing ticked: the pricer's own "add" path lists the slab on the
+  // Auto-pricing page at once and prices it within a minute (owner, 2026-10-28:
+  // "I put a check to add lopunny to auto pricing but I dont see it" - the page
+  // otherwise only picks new products up on its nightly run).
+  let priced = false, priceError = "";
+  if (f.autoPrice && cx.env.ROOM) {
+    try {
+      const g = GAMES[f.game] || GAMES.other;
+      const stub = cx.env.ROOM.get(cx.env.ROOM.idFromName(AUTOPRICE_DO));
+      const r = await stub.fetch(new Request((cx.origin || SHOP_URL) + "/_ap/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "add", id: product.id, title: product.title || f.title, handle: product.handle, type: g.type, stock: f.qty, price: f.placeholder ? 0 : Number(f.price), by: cx.by || "9pocket graded" }) }));
+      const j = await r.json().catch(() => null);
+      if (j && j.ok) priced = true; else priceError = (j && j.error) || "the pricer did not answer";
+    } catch (e) { priceError = String((e && e.message) || e).slice(0, 120); }
+  }
   const num = String(product.id).split("/").pop();
-  return { ok: true, id: product.id, handle: product.handle, title: product.title || f.title, url: SHOP_URL + "/products/" + product.handle, adminUrl: ADMIN_URL + "/products/" + num, photos: urls.length, published, publishError, placeholder: f.placeholder, autoPrice: f.autoPrice, certUrl: f.certUrl };
+  return { ok: true, id: product.id, handle: product.handle, title: product.title || f.title, url: SHOP_URL + "/products/" + product.handle, adminUrl: ADMIN_URL + "/products/" + num, photos: urls.length, published, publishError, placeholder: f.placeholder, autoPrice: f.autoPrice, priced, priceError, certUrl: f.certUrl };
 }
 
 // What the screen shows at the top for admins: the token's scopes vs what an add needs, and the location.
