@@ -929,6 +929,11 @@ const PRODUCT_BY_ID_Q = `query($id: ID!) { product(id: $id) { id title handle pr
 // ("one price per product only"). The owner can now say which variant the
 // auto price is for - exor.ap_variant, set from the row's settings form -
 // and that variant's price, cost and barcode are the ones this job reads.
+// The raw card's condition ladder, as BinderPOS names it.
+export const CONDITION_RE = /^(near mint|lightly played|moderately played|heavily played|damaged)\b/i;
+// Which variants a price is written to: the ladder as one, else the picked one.
+export const priceTargets = (row, price) => ((row && row.variantIds && row.variantIds.length ? row.variantIds : [row && row.variantId]).filter(Boolean).map((id) => ({ id, price: Number(price).toFixed(2) })));
+
 export function variantOf(vs, chosen) {
   const want = String(chosen || "").trim();
   if (!want) return null;
@@ -974,7 +979,16 @@ export function readProduct(node) {
   const mf = {};
   for (const e of (node.mf && node.mf.edges) || []) mf[e.node.key] = e.node.value;
   const picked = variantOf(vs, mf.ap_variant);
-  const v = picked || vs[0] || {};
+  /* A graded slab made by duplicating the raw card keeps the raw card's
+     condition variants (Near Mint ... Damaged Holofoil, 2026-10-28: Perrin
+     PSA 10 and six more). One slab has no condition ladder, so there is
+     nothing to pick: the stocked variant stands for the row and EVERY
+     variant gets the price, so the shop shows it whichever one is open.
+     A graded product whose variants are real choices (PSA 9 / PSA 10) is
+     not a ladder and still asks. */
+  const ladder = !picked && isGradedType(node.productType) && vs.length > 1 && vs.every((x) => CONDITION_RE.test(String(x.title || "")));
+  const stocked = ladder ? vs.find((x) => Number(x.inventoryQuantity) > 0) || vs.find((x) => Number(x.price) > 0 && Number(x.price) <= 500000) || vs[0] : null;
+  const v = picked || stocked || vs[0] || {};
   const num = (s) => { const n = Number(s); return Number.isFinite(n) ? n : null; };
   const cost = v.inventoryItem && v.inventoryItem.unitCost ? num(v.inventoryItem.unitCost.amount) : null;
   return {
@@ -982,7 +996,8 @@ export function readProduct(node) {
     // A graded single is never a sealed TCGplayer product: no category, so
     // phaseIndex leaves it alone and PriceCharting alone prices it.
     category: isGradedType(node.productType) ? null : categoryOf(node.productType), variants: vs.length, variantId: v.id || null, variantTitle: v.title || "",
-    variantChosen: !!picked, variantMeta: picked ? String(picked.id) : "",
+    variantChosen: !!picked || !!stocked, variantMeta: picked ? String(picked.id) : "",
+    variantIds: ladder ? vs.map((x) => x.id) : null,
     variantList: vs.length > 1 ? vs.map((x) => ({ id: x.id, title: x.title || "", price: num(x.price), stock: Number(x.inventoryQuantity) || 0 })) : null,
     price: num(v.price), cost, upc: normUpc(v.barcode || v.sku), stock: vs.reduce((a, x) => a + (Number(x.inventoryQuantity) || 0), 0),
     floor: num(mf.ap_floor), markupPct: num(mf.ap_markup), round: mf.ap_round || "auto",
@@ -1317,7 +1332,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     if (p.variants > 1 && !p.variantChosen && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: choose which one this price is for"; }
     if (p.match && !p.tcgId && !p.graded && d.action === "skip") d.reason = p.match;   // never explain a graded skip with TCGplayer
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId, images: p.images || [],
-      variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null,
+      variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null, variantIds: p.variantIds || null,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
       pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null,
       settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId, variant: p.variantMeta || "", anchor: p.anchor ? String(p.anchor.price) : "" }, ...d });
@@ -1363,7 +1378,7 @@ async function phaseWrite(cx, run, cfg, deadline) {
         applied: false };
       if (apply && (row.action === "raise" || row.action === "lower" || row.action === "set") && row.variantId && row.suggested > 0) {
         try {
-          const r = await adminGql(cx, PRICE_SET, { pid: row.id, v: [{ id: row.variantId, price: row.suggested.toFixed(2) }] });
+          const r = await adminGql(cx, PRICE_SET, { pid: row.id, v: priceTargets(row, row.suggested) });
           const errs = (r.data.productVariantsBulkUpdate || {}).userErrors || [];
           if (errs.length) { row.writeError = errs.map((e) => e.message).join("; "); run.errors.push("price " + row.handle + ": " + row.writeError); }
           else { note.applied = true; row.applied = true; run.written++; await recordChange(cx, row.id, { at: cx.now(), from: row.current, to: row.suggested, by: "auto" }); }
@@ -1441,7 +1456,8 @@ async function publishPrice(cx, b) {
   if (lim) return { ok: false, error: limitText(lim), overLimit: lim };
   const who = String((b && b.who) || "").slice(0, 120);
   try {
-    const r = await adminGql(cx, PRICE_SET, { pid, v: [{ id: variantId, price: price.toFixed(2) }] });
+    const ids = row && row.variantIds && row.variantIds.includes(variantId) ? row.variantIds : [variantId];
+    const r = await adminGql(cx, PRICE_SET, { pid, v: ids.map((id) => ({ id, price: price.toFixed(2) })) });
     const errs = (r.data.productVariantsBulkUpdate || {}).userErrors || [];
     if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
   } catch (e) { return { ok: false, error: msg(e) }; }
@@ -2031,7 +2047,7 @@ export function renderPage(s, rep, view) {
     // make; "not chosen" keeps the row in review rather than pricing a
     // variant nobody picked.
     const variantField = vlist.length > 1
-      ? `<label class="wide" title="This product has ${vlist.length} variants. The auto price is written to the one you pick here."><span>Price which variant</span>${sel("variant", st.variant, [["", "not chosen — leave in review"], ...vlist.map((x) => [x.id, (x.title || "variant") + (x.price != null ? " · " + money(x.price) : "") + " · stock " + x.stock])])}</label>`
+      ? `<label class="wide" title="${r.variantIds ? "A graded slab has no condition ladder: these are the raw card's variants, so the price is written to all of them unless you pick one." : "This product has " + vlist.length + " variants. The auto price is written to the one you pick here."}"><span>Price which variant</span>${sel("variant", st.variant, [["", r.variantIds ? "all " + vlist.length + " — one graded slab, every variant gets the price" : "not chosen — leave in review"], ...vlist.map((x) => [x.id, (x.title || "variant") + (x.price != null ? " · " + money(x.price) : "") + " · stock " + x.stock])])}</label>`
       : "";
     return `<form method="post" action="/autoprice/control" class="setf">${hidden("action", "settings")}${hidden("id", r.id)}${keepView()}
 ${variantField}

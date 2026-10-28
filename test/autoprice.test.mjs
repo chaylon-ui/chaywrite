@@ -603,7 +603,7 @@ test("a promo our title names by its own set matches PriceCharting's bracketed p
 /* Staging, the variant picker and the PriceCharting shortlist (owner
    2026-09-16, after a graded Charizard VMAX went live at a price taken from
    the wrong printing: "from now on prices don't go live until confirmed"). */
-import { variantOf, pcCandidates, parsePrice, MODES, MODE_LABEL } from "../src/autoprice.js";
+import { variantOf, pcCandidates, parsePrice, MODES, MODE_LABEL, priceTargets } from "../src/autoprice.js";
 
 const VS = [
   { id: "gid://shopify/ProductVariant/11", title: "PSA 9", price: "3299.95", inventoryQuantity: 1, inventoryItem: { unitCost: { amount: "1200.00" } } },
@@ -630,6 +630,39 @@ test("a multi-variant product prices the variant the owner picked, by gid or by 
   assert.equal(picked.price, 8999.95);
   assert.equal(picked.cost, 4000);
   assert.equal(picked.stock, 1);                           // stock is still the whole product
+  assert.equal(picked.variantIds, null);
+});
+
+/* A slab duplicated from the raw card keeps the card's condition ladder
+   (owner 2026-10-28, Perrin PSA 10 with Near Mint ... Damaged Holofoil:
+   "why is this asking me to choose variant? its graded"). One slab: the
+   stocked variant stands for the row and every variant gets the price. */
+test("a graded product with the raw card's condition ladder is one slab: no choice, every variant priced", () => {
+  const ladder = ["Near Mint Holofoil", "Lightly Played Holofoil", "Moderately Played Holofoil", "Heavily Played Holofoil", "Damaged Holofoil"].map((title, i) =>
+    ({ id: "gid://shopify/ProductVariant/" + (100 + i), title, price: i === 0 ? "5599.95" : "999999.00", inventoryQuantity: i === 0 ? 1 : 0 }));
+  const slab = (mf, vs) => ({ id: "gid://shopify/Product/8", title: "Perrin (209/167) [Scarlet & Violet: Twilight Masquerade] GRADED PSA 10", handle: "perrin", productType: "Pokemon Single Graded",
+    variants: { edges: (vs || ladder).map((n) => ({ node: n })) }, mf: { edges: Object.entries(mf || {}).map(([key, value]) => ({ node: { key, value } })) } });
+  const r = readProduct(slab({}));
+  assert.equal(r.variants, 5);
+  assert.equal(r.variantChosen, true);                     // nothing to choose
+  assert.equal(r.variantId, "gid://shopify/ProductVariant/100");   // the stocked one stands for the row
+  assert.equal(r.price, 5599.95);
+  assert.deepEqual(r.variantIds, [100, 101, 102, 103, 104].map((n) => "gid://shopify/ProductVariant/" + n));
+  assert.deepEqual(priceTargets(r, 139.95).map((x) => x.price), ["139.95", "139.95", "139.95", "139.95", "139.95"]);
+  // no stock anywhere: the first priced variant, else the first
+  const none = readProduct(slab({}, ladder.map((x) => ({ ...x, inventoryQuantity: 0 }))));
+  assert.equal(none.variantId, "gid://shopify/ProductVariant/100");
+  // the owner's own pick still wins and prices that one only
+  const one = readProduct(slab({ ap_variant: "103" }));
+  assert.equal(one.variantId, "gid://shopify/ProductVariant/103");
+  assert.equal(one.variantIds, null);
+  assert.deepEqual(priceTargets(one, 10), [{ id: "gid://shopify/ProductVariant/103", price: "10.00" }]);
+  // a raw single with the same ladder still asks (it is five real conditions)
+  const raw = readProduct({ ...slab({}), productType: "Pokemon Single" });
+  assert.equal(raw.variantChosen, false);
+  assert.equal(raw.variantIds, null);
+  // graded with real choices (PSA 9 / PSA 10) is not a ladder and still asks
+  assert.equal(readProduct(node({})).variantChosen, false);
 });
 
 test("the PriceCharting shortlist: the chosen card is marked, priced ones first, at our grade", () => {
