@@ -152,7 +152,7 @@ test("batch pairing: backs are the photos with a QR code, each takes the front s
   assert.deepEqual(s.map((x) => [x.front, x.back]).sort(), [[0, 3], [1, 2]]);
   // a second photo of the same certificate joins the slab; a lone front and a far-off back stand alone
   s = pairPhotos([{ qr: "" }, { qr: psa("55555555") }, { qr: psa("55555555") }, { qr: "" }, { qr: "" }, { qr: "" }, { qr: "" }, { qr: "" }, { qr: psa("99999999") }]);
-  assert.deepEqual(s[0], { front: 0, back: 1, extra: [2], qr: psa("55555555"), cert: "55555555", grader: "PSA" });
+  assert.deepEqual(s[0], { front: 0, back: 1, extra: [2], qr: psa("55555555"), raw: "", cert: "55555555", grader: "PSA" });
   assert.equal(s.length, 6, "one slab with an extra, four lone fronts, one back with the nearest front within three");
   const far = s.find((x) => x.cert === "99999999"); assert.equal(far.front, 7);
   assert.deepEqual(pairPhotos([]), []);
@@ -164,7 +164,7 @@ test("batch pairing: backs are the photos with a QR code, each takes the front s
   const swapped = pairByOrder([{ qr: psa("22222222") }, { qr: "" }]);
   assert.deepEqual(swapped.map((x) => [x.front, x.back, x.cert]), [[1, 0, "22222222"]], "the QR photo is the back whichever slot it landed in");
   assert.deepEqual(pairByOrder([]), []);
-  assert.deepEqual(pairPhotos([{ qr: "" }]), [{ front: 0, back: null, extra: [], qr: "", cert: "", grader: "" }]);
+  assert.deepEqual(pairPhotos([{ qr: "" }]), [{ front: 0, back: null, extra: [], qr: "", raw: "", cert: "", grader: "" }]);
 });
 
 import { psaToForm, titleCase, certLookup, psaConfigured } from "../src/graded.js";
