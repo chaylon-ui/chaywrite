@@ -71,7 +71,7 @@ import { serveWinStaff } from "./win.js";
 import { serveImpactStaff } from "./impact.js";
 import { RETENTION, accessWhat, logAccess } from "./access-log.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage, when } from "./stage-ui.js";
-import { createGraded, setupCheck, recentGraded, certLookup, psaConfigured } from "./graded.js";
+import { createGraded, setupCheck, recentGraded, certLookup, psaConfigured, readLabel, visionConfigured } from "./graded.js";
 import { renderGraded, renderGradedDenied } from "./graded-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
@@ -1126,13 +1126,18 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.
   // Graded cards (src/graded.js): the add form, the add itself, the setup check.
-  if (p === BASE + "/graded" || p === BASE + "/graded/add" || p === BASE + "/graded/setup.json" || p === BASE + "/graded/cert.json") {
+  if (p === BASE + "/graded" || p === BASE + "/graded/add" || p === BASE + "/graded/setup.json" || p === BASE + "/graded/cert.json" || p === BASE + "/graded/read.json") {
     if (!user) return toLogin();
     if (!can(user, "graded")) return html(renderGradedDenied(opts), 403);
     const cx = { env, ctx: sopts && sopts.ctx, fetch: (u, i) => fetch(u, i), now: () => Date.now(), log: (m) => console.log(m) };   // sopts.ctx: a bare `ctx` here threw a ReferenceError for every signed-in visit (owner, 2026-10-28, Error 1101)
     if (p === BASE + "/graded/setup.json") return Response.json(await setupCheck(cx), { headers: noStore });
     const sp = url.searchParams;
     if (p === BASE + "/graded/cert.json") return Response.json(await certLookup(cx, sp.get("grader"), sp.get("cert")), { headers: noStore });
+    if (p === BASE + "/graded/read.json") {
+      if (request.method !== "POST") return Response.json({ ok: false, error: "POST a photo" }, { status: 405, headers: noStore });
+      const r = await readLabel(cx, form && form.photo);
+      return Response.json(r, { status: r.ok || r.configured === false ? 200 : 400, headers: noStore });
+    }
     if (p === BASE + "/graded/add" && request.method === "POST") {
       const photos = [1, 2, 3, 4].map((i) => form && form["photo" + i]).filter((x) => x && typeof x.arrayBuffer === "function" && x.size > 0);
       const r = await createGraded(cx, form || {}, photos);
@@ -1142,7 +1147,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     }
     const [recent, setup] = await Promise.all([recentGraded(cx), user.role === "admin" ? setupCheck(cx) : Promise.resolve(null)]);
     const last = sp.get("added") ? { handle: sp.get("added"), title: sp.get("title") || "", published: sp.get("pub") === "1", publishError: sp.get("puberr") || "", placeholder: sp.get("ph") === "1" } : null;
-    return html(renderGraded({ recent, setup, last, psa: psaConfigured(env), keep: { game: sp.get("game") || "", grader: sp.get("grader") || "", set: sp.get("set") || "", finish: sp.get("finish") || "", japanese: sp.get("japanese") === "1" } }, opts));
+    return html(renderGraded({ recent, setup, last, psa: psaConfigured(env), vision: visionConfigured(env), keep: { game: sp.get("game") || "", grader: sp.get("grader") || "", set: sp.get("set") || "", finish: sp.get("finish") || "", japanese: sp.get("japanese") === "1" } }, opts));
   }
   if (p === BASE + "/held" || p === BASE + "/held.json" || p === BASE + "/held/control") {
     const stub = env.ROOM.get(env.ROOM.idFromName(HOLD_DO));

@@ -292,3 +292,80 @@ export async function certLookup(cx, grader, cert) {
   if (cache) { const put = cache.put(key, Response.json(out, { headers: { "cache-control": "public, max-age=604800" } })).catch(() => {}); if (cx.ctx && cx.ctx.waitUntil) cx.ctx.waitUntil(put); else await put; }
   return out;
 }
+
+/* ---- Reading the label with Claude (owner, 2026-10-28: "is there any other
+   way to generate it?" - the PSA token page would not play; the Anthropic key
+   is already on the worker for Ask Exor). One photo of the slab -> the
+   grader, grade, certificate, card name, number, set, year, game and whether
+   it is Japanese, as JSON (structured output; a plain-JSON request if the
+   format parameter is refused). Works for PSA, CGC, Beckett, SGC, TAG and
+   ACE labels alike; about a cent or two a slab at claude-opus-5-5. The photo
+   never leaves 9Pocket except to Anthropic; nothing is stored. */
+export const visionConfigured = (env) => !!(env && env.ANTHROPIC_API_KEY);
+export const LABEL_MODEL = "claude-opus-5-5";
+export const LABEL_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["grader", "grade", "grade_label", "cert", "card_name", "card_number", "set_name", "year", "game", "japanese", "notes", "confidence"],
+  properties: {
+    grader: { type: "string", description: "PSA, CGC, BGS, SGC, TAG, ACE, or empty if no grading label is visible" },
+    grade: { type: "string", description: "the numeric grade as printed: 10, 9.5, 9 ... or empty" },
+    grade_label: { type: "string", description: "a word printed with the grade such as Pristine, Gem Mint, Black Label, Perfect; empty for a plain PSA GEM MT 10" },
+    cert: { type: "string", description: "the certificate or serial number on the label" },
+    card_name: { type: "string", description: "the card's name as a shop lists it: title case, GX EX V VMAX VSTAR in capitals" },
+    card_number: { type: "string", description: "the card number as printed, such as 41/82 or 215" },
+    set_name: { type: "string", description: "the set in full as a card shop lists it, e.g. Sword & Shield: Evolving Skies, Team Rocket 1st Edition" },
+    year: { type: "string" },
+    game: { type: "string", enum: ["pokemon", "mtg", "yugioh", "lorcana", "onepiece", "sports", "other"] },
+    japanese: { type: "boolean" },
+    notes: { type: "string", description: "anything odd: not a slab, label unreadable, two slabs in frame" },
+    confidence: { type: "number", description: "0 to 1" },
+  },
+};
+export const LABEL_PROMPT = "This photo shows one graded trading-card slab (PSA, CGC, BGS/Beckett, SGC, TAG or ACE). Read its label and fill in every field. Use empty strings for anything you cannot read; never guess a certificate number. If it is not a graded slab, leave grader empty and say why in notes.";
+
+const GRADER_WORDS = { PSA: "PSA", CGC: "CGC", BGS: "BGS", BECKETT: "BGS", SGC: "SGC", TAG: "TAG", ACE: "ACE" };
+export function labelToForm(j) {
+  const o = j && typeof j === "object" ? j : {};
+  const s = (v, n) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, n || 120);
+  const grader = GRADER_WORDS[s(o.grader, 12).toUpperCase().replace(/[^A-Z]/g, "")] || "";
+  const gm = /(?<![\d.])(10|[1-9](?:\.5)?)(?![\d.])/.exec(s(o.grade, 24));   // "GEM MT 10" -> 10, "NM-MT+ 8.5" -> 8.5, "11" -> nothing
+  const grade = gm && GRADES.includes(gm[1]) ? gm[1] : "";
+  const game = GAMES[s(o.game, 12).toLowerCase()] ? s(o.game, 12).toLowerCase() : "";
+  const conf = Number(o.confidence);
+  return {
+    grader, grade, label: s(o.grade_label, 24), cert: s(o.cert, 24).replace(/[^0-9A-Za-z-]/g, ""),
+    name: s(o.card_name), number: s(o.card_number, 24), set: s(o.set_name, 80), year: s(o.year, 8),
+    game, japanese: o.japanese === true, notes: s(o.notes, 200), confidence: Number.isFinite(conf) ? Math.max(0, Math.min(1, conf)) : null,
+  };
+}
+export async function readLabel(cx, photo, opts) {
+  const o = opts || {};
+  if (!visionConfigured(cx.env)) return { ok: false, configured: false, error: "Label reading is not switched on (no Anthropic key on the worker)." };
+  if (!photo || typeof photo.arrayBuffer !== "function") return { ok: false, error: "Send one photo." };
+  const bytes = await photo.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > 4 * 1024 * 1024) return { ok: false, error: "The photo must be under 4 MB (the page shrinks them; reload it)." };
+  const mime = /^image\/(jpeg|png|webp|gif)$/i.test(photo.type || "") ? photo.type.toLowerCase() : "image/jpeg";
+  const data = btoa(Array.from(new Uint8Array(bytes), (b) => String.fromCharCode(b)).join(""));
+  const client = o.client || new (await import("@anthropic-ai/sdk")).default({ apiKey: cx.env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60_000 });
+  const content = [{ type: "image", source: { type: "base64", media_type: mime, data } }, { type: "text", text: LABEL_PROMPT }];
+  const base = { model: LABEL_MODEL, max_tokens: 600, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default", output_config: { effort: "low" }, messages: [{ role: "user", content }] };
+  let res, usedFormat = true;
+  try {
+    res = await client.beta.messages.create({ ...base, output_config: { ...base.output_config, format: { type: "json_schema", schema: LABEL_SCHEMA } } });
+  } catch (e) {
+    const st = e && e.status;
+    if (st !== 400) return { ok: false, error: "Claude could not read the label just now" + (st ? " (HTTP " + st + ")" : "") + "." };
+    usedFormat = false;
+    try { res = await client.beta.messages.create({ ...base, messages: [{ role: "user", content: [...content, { type: "text", text: "Answer with one JSON object only, with these keys: " + Object.keys(LABEL_SCHEMA.properties).join(", ") + "." }] }] }); }
+    catch (e2) { return { ok: false, error: "Claude could not read the label just now." }; }
+  }
+  if (res && res.stop_reason === "refusal") return { ok: false, error: "Claude declined to read this photo." };
+  const text = ((res && res.content) || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch { const m = /\{[\s\S]*\}/.exec(text); if (m) { try { parsed = JSON.parse(m[0]); } catch {} } }
+  if (!parsed) return { ok: false, error: "Claude's answer was not readable." };
+  const f = labelToForm(parsed);
+  const usage = res.usage ? { input: res.usage.input_tokens || 0, output: res.usage.output_tokens || 0 } : null;
+  if (!f.grader && !f.name) return { ok: false, error: f.notes || "No grading label could be read in that photo.", usage };
+  return { ok: true, ...f, source: "label", usedFormat, usage };
+}

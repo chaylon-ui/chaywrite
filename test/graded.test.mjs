@@ -188,9 +188,39 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=10"'));
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=11"'));
   assert.ok(readFileSync(new URL("../public/vendor/libheif-1.23.5.bundle.js", import.meta.url)).length > 1500000, "the HEIC decoder is vendored");
   assert.ok(readFileSync(new URL("../public/vendor/jsQR-1.4.0.js", import.meta.url)).length > 200000, "the QR reader is vendored"); assert.ok(page.includes('class="sm rot" hidden'), "a Rotate button per photo box");
   assert.ok(!page.includes("cdnjs.cloudflare.com"), "the QR reader is served by the worker, not a CDN that may 404");
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));
+});
+
+import { readLabel, labelToForm, LABEL_SCHEMA, LABEL_MODEL } from "../src/graded.js";
+test("label reading: Claude's JSON becomes the form; the request shape; refusals, bad answers and the key", async () => {
+  const f = labelToForm({ grader: "psa", grade: "GEM MT 10", grade_label: "", cert: "14927 2769", card_name: "Umbreon VMAX", card_number: "215/203", set_name: "Sword & Shield: Evolving Skies", year: "2021", game: "pokemon", japanese: false, notes: "", confidence: 0.93 });
+  assert.deepEqual(f, { grader: "PSA", grade: "10", label: "", cert: "149272769", name: "Umbreon VMAX", number: "215/203", set: "Sword & Shield: Evolving Skies", year: "2021", game: "pokemon", japanese: false, notes: "", confidence: 0.93 });
+  assert.equal(labelToForm({ grader: "Beckett", grade: "9.5", grade_label: "Gem Mint", game: "basketball", confidence: 2 }).grader, "BGS"); assert.equal(labelToForm({ grader: "Beckett", grade: "9.5", confidence: 2 }).confidence, 1); assert.equal(labelToForm({ grade: "11" }).grade, ""); assert.equal(labelToForm({ game: "basketball" }).game, "");
+  const sent = [];
+  const client = (script) => ({ beta: { messages: { create: async (params) => { sent.push(params); const next = script.shift(); if (next instanceof Error) throw next; return next; } } } });
+  const photo = { type: "image/jpeg", arrayBuffer: async () => new Uint8Array([255, 216, 255, 1]).buffer };
+  const answer = (o, stop) => ({ stop_reason: stop || "end_turn", content: [{ type: "text", text: JSON.stringify(o) }], usage: { input_tokens: 2500, output_tokens: 90 } });
+  const cx = { env: { ANTHROPIC_API_KEY: "k" } };
+  const r = await readLabel(cx, photo, { client: client([answer({ grader: "PSA", grade: "10", grade_label: "", cert: "149272769", card_name: "Umbreon VMAX", card_number: "215", set_name: "Sword & Shield: Evolving Skies", year: "2021", game: "pokemon", japanese: false, notes: "", confidence: 0.9 })]) });
+  assert.equal(r.ok, true); assert.equal(r.name, "Umbreon VMAX"); assert.equal(r.cert, "149272769"); assert.equal(r.usedFormat, true); assert.deepEqual(r.usage, { input: 2500, output: 90 });
+  const p = sent[0];
+  assert.equal(p.model, LABEL_MODEL); assert.equal(p.max_tokens, 600); assert.deepEqual(p.betas, ["server-side-fallback-2026-07-01"]); assert.equal(p.fallbacks, "default");
+  assert.equal(p.output_config.effort, "low"); assert.deepEqual(p.output_config.format, { type: "json_schema", schema: LABEL_SCHEMA });
+  assert.equal(p.messages[0].content[0].type, "image"); assert.equal(p.messages[0].content[0].source.media_type, "image/jpeg"); assert.equal(p.messages[0].content[0].source.data, "/9j/AQ=="); assert.match(p.messages[0].content[1].text, /Read its label/);
+  // a 400 on the format parameter -> the plain-JSON request; JSON inside prose still parses
+  const bad = Object.assign(new Error("output_config.format unsupported"), { status: 400 });
+  const r2 = await readLabel(cx, photo, { client: client([bad, answer(null) && { stop_reason: "end_turn", content: [{ type: "text", text: "Here you go: {\"grader\":\"CGC\",\"grade\":\"10\",\"grade_label\":\"Pristine\",\"cert\":\"4312345001\",\"card_name\":\"Charizard\",\"card_number\":\"4/102\",\"set_name\":\"Base Set\",\"year\":\"1999\",\"game\":\"pokemon\",\"japanese\":false,\"notes\":\"\",\"confidence\":0.8}" }], usage: {} }]) });
+  assert.equal(r2.ok, true); assert.equal(r2.usedFormat, false); assert.equal(r2.grader, "CGC"); assert.equal(r2.label, "Pristine"); assert.equal(sent.length, 3); assert.equal(sent[2].output_config.format, undefined); assert.match(sent[2].messages[0].content[2].text, /one JSON object only/);
+  assert.match((await readLabel(cx, photo, { client: client([answer({}, "refusal")]) })).error, /declined/);
+  assert.match((await readLabel(cx, photo, { client: client([{ stop_reason: "end_turn", content: [{ type: "text", text: "no idea" }] }]) })).error, /not readable/);
+  assert.match((await readLabel(cx, photo, { client: client([answer({ grader: "", card_name: "", notes: "a coffee cup, not a slab" })]) })).error, /coffee cup/);
+  assert.match((await readLabel(cx, photo, { client: client([Object.assign(new Error("busy"), { status: 529 })]) })).error, /HTTP 529/);
+  const off = await readLabel({ env: {} }, photo, {}); assert.equal(off.configured, false);
+  assert.match((await readLabel(cx, null, {})).error, /Send one photo/);
+  assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, vision: true, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("Label reading is on"));
+  assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, vision: true, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes('"vision":true'));
 });
