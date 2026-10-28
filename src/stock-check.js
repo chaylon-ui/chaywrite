@@ -79,6 +79,16 @@ export const RUN_HOUR_UTC = 9;           // 05:00 Atlantic
 export const ORDERS_PAGE = 20, LINES_PER_ORDER = 15, SCAN_PAGE = 120, LOOKUP_PAGE = 100, OPEN_PER_PAGE = 20;
 export const MAX_ROWS = 200;             // per result list
 export const HOT_MIN = 6;                // Order now: at least this many sold in the 30 days before it ran out (admins change it)
+/* Owner, 2026-10-28: "The stock check should work on more than just Cards.
+   It should be doing all the product that shows up like board games and
+   magic gathering boxes". Every type but singles and slabs was already
+   scanned; what hid board games was the "steady seller" bar of MIN_SALES
+   (3) in the 60 days before a stockout, which a game selling one copy a
+   month never clears. Reorder now lists every sold-out item that sold at
+   least this many in those 60 days (admins change it); Order now keeps its
+   own bar, and Go look keeps MIN_SALES, which its odds need. */
+export const REORDER_MIN = 1;
+export const reorderMinOf = (cfg) => (Number(cfg && cfg.reorderMin) >= 1 ? Number(cfg.reorderMin) : REORDER_MIN);
 export const HOT_FLOOR = 3;              // the stored Order now list keeps everything down to this, so a lower threshold applies at once
 export const MAX_PHASE_ERRORS = 3;
 export const LEASE_MS = 150e3;            // a unit of work handed to a worker tick is held this long
@@ -326,7 +336,7 @@ export function stalled(item, series, today) {
 }
 
 // Sold steadily, now at zero. qtyNow comes from the lookup. Null when not flagged.
-export function reorder(meta, series, today, qtyNow) {
+export function reorder(meta, series, today, qtyNow, min) {
   if (qtyNow > 0) return null;
   if (isPreorder(meta && meta.title)) return null;
   let lastIdx = -1;
@@ -334,7 +344,7 @@ export function reorder(meta, series, today, qtyNow) {
   if (lastIdx < 0) return null;
   const lastDay = today - (series.length - 1 - lastIdx);
   const soldBefore = sum(series, lastIdx - 59, lastIdx);
-  if (soldBefore < MIN_SALES) return null;
+  if (soldBefore < (min >= 1 ? min : REORDER_MIN)) return null;
   const rate = soldBefore / 60;
   const daysOut = today - lastDay;
   const missed = rate * daysOut;
@@ -534,7 +544,7 @@ export async function stockCheckTick(env, o) {
 
 /* ---- the Durable Object side ---- */
 
-const CFG0 = () => ({ ordersSince: null, lastRunDay: null, lastRunAt: 0, lastError: "", ordersDenied: false, kick: false, runs: 0, hotMin: HOT_MIN, distributors: {} });
+const CFG0 = () => ({ ordersSince: null, lastRunDay: null, lastRunAt: 0, lastError: "", ordersDenied: false, kick: false, runs: 0, hotMin: HOT_MIN, reorderMin: REORDER_MIN, distributors: {} });
 async function loadCfg(cx) { return { ...CFG0(), ...((await cx.storage.get("sc:cfg")) || {}) }; }
 async function saveCfg(cx, cfg) { await cx.storage.put("sc:cfg", cfg); }
 
@@ -577,6 +587,7 @@ async function ledgersFor(cx, today, days) {
 // in-stock records. Writes sc:cand, sc:lookup (the variant ids the lookup phase fetches) and sc:types.
 async function compute(cx, run) {
   const today = run.day;
+  const reorderMin = reorderMinOf(await loadCfg(cx));
   const ledgers = await ledgersFor(cx, today, WINDOW_DAYS);
   const inStock = await cx.storage.list({ prefix: "sc:v:" });
   const typeSeries = {};
@@ -605,7 +616,7 @@ async function compute(cx, run) {
     const rec = inStock.get("sc:v:" + vid);
     if (rec && rec.run === run.id) continue;   // in stock: not a reorder
     const s = series[vid];
-    if (sum(s, 0, s.length - 1) < MIN_SALES) continue;
+    if (sum(s, 0, s.length - 1) < reorderMin) continue;
     reorderIds.push(vid);
   }
   look.sort((a, b) => b.f.score - a.f.score);
@@ -656,7 +667,7 @@ async function finalize(cx, run, cfg, now) {
     if (l.status && l.status !== "ACTIVE") continue;
     if (!inScopeType(l.type)) continue;
     const s = seriesOf(ledgers, vid, today, WINDOW_DAYS);
-    const f = reorder(l, s, today, l.qty);
+    const f = reorder(l, s, today, l.qty, reorderMinOf(cfg));
     if (!f) continue;
     f.catDrop = categoryDrop(typeSeries[l.type], f.lastDay, today, 60, s);
     reorderRows.push({ vid, pid: l.pid, title: l.title, vtitle: l.vtitle, sku: l.sku, barcode: l.barcode, cents: l.cents, cost: l.cost ?? null, hist: l.hist || "", type: l.type, vendor: l.vendor, handle: l.handle, image: l.image, qty: l.qty, q: l.q || {}, up: upOf(vrecs.get(vid)), ...f });
@@ -943,7 +954,7 @@ async function view(cx, now) {
   const name = async (s) => { const v = (await cx.storage.get("sc:v:" + s.vid)) || (await cx.storage.get("sc:lk:" + s.vid)) || (await cx.storage.get("sc:m:" + s.vid)); if (v) { if (!s.title) s.title = v.title; s.vtitle = v.vtitle; s.type = v.type; s.vendor = v.vendor; s.image = v.image || ""; s.cents = v.cents || 0; s.cost = v.cost ?? null; s.sku = v.sku || ""; s.barcode = v.barcode || ""; s.pid = s.pid || v.pid; s.hist = v.hist || ""; } return s; };
   for (const s of missing) await name(s);
   for (const s of dismissed) await name(s);
-  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, links, meta: meta || null, status: { hotMin, distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
+  return { ok: true, look: outLook, hot: outHot, reorder: outReorder, missing, dismissed, links, meta: meta || null, status: { hotMin, reorderMin: reorderMinOf(cfg), distributors: mergedDistributors(cfg), ownDistributors: cfg.distributors || {}, lastRunAt: cfg.lastRunAt || 0, lastRunDay: cfg.lastRunDay || null, ordersSince: cfg.ordersSince || null, ordersDenied: !!cfg.ordersDenied, kick: !!cfg.kick, runs: cfg.runs || 0, lastError: cfg.lastError || "", running: run ? { phase: run.phase, pages: run.pages, scanned: run.scanned, orders: run.orders, typeIdx: run.typeIdx, types: run.types ? run.types.length : null, lookupDone: run.lookupDone, lookupTotal: run.lookupTotal || 0, startedAt: run.startedAt, errors: (run.errors || []).slice(-3) } : null, today } };
 }
 
 export async function stockDoFetch(cx, request, url) {
@@ -968,9 +979,10 @@ export async function stockDoFetch(cx, request, url) {
     if (p === "/_sc/cfg" && post) {
       const cfg = await loadCfg(cx);
       if (b.hotMin != null) { const n = parseInt(b.hotMin, 10); if (!(n >= 1 && n <= 1000)) return doJson({ ok: false, error: "Order now needs a whole number of sales, 1 or more." }, 400); cfg.hotMin = n; }
+      if (b.reorderMin != null) { const n = parseInt(b.reorderMin, 10); if (!(n >= 1 && n <= 1000)) return doJson({ ok: false, error: "Reorder needs a whole number of sales, 1 or more." }, 400); cfg.reorderMin = n; }
       if (b.distributors != null) cfg.distributors = parseDistributors(b.distributors);
       await saveCfg(cx, cfg);
-      return doJson({ ok: true, hotMin: cfg.hotMin, distributors: cfg.distributors });
+      return doJson({ ok: true, hotMin: cfg.hotMin, reorderMin: reorderMinOf(cfg), distributors: cfg.distributors });
     }
     if (p === "/_sc/view") return doJson(await view(cx, now));
     if (p === "/_sc/health") {
@@ -1121,6 +1133,7 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
     } else if (action === "cfg") {
       if (user.role !== "admin") result = { ok: false, error: "Only an admin can change these settings." };
       else if (f.distributors != null) { const r = await doCall(env, "/_sc/cfg", { distributors: f.distributors }); result = r.ok ? { ok: true, message: "Distributor websites saved: " + Object.keys(r.distributors || {}).length + " vendor" + (Object.keys(r.distributors || {}).length === 1 ? "" : "s") + " with their own search address." } : r; }
+      else if (f.reorderMin != null) { const r = await doCall(env, "/_sc/cfg", { reorderMin: f.reorderMin }); result = r.ok ? { ok: true, message: "From the next scan, Reorder lists sold-out items that sold " + r.reorderMin + " or more in the 60 days before running out." } : r; }
       else { const r = await doCall(env, "/_sc/cfg", { hotMin: f.hotMin }); result = r.ok ? { ok: true, message: "Order now lists items that sold " + r.hotMin + " or more in the 30 days before running out." } : r; }
     } else if (action === "link") {
       if (!canAct(user)) result = { ok: false, error: "Your account can look but not save links." };

@@ -63,6 +63,17 @@ test("stalled: steady seller gone quiet with stock is flagged; the exclusions ho
   assert.equal(rateWindow(series({ 89: 1 }), 89), null);
 });
 
+test("reorder: the bar is the admin's; a board game that sold twice in 60 days is listed at 1 or 2, not at 3", () => {
+  const s = series({ 30: 1, 60: 1 });              // two copies, 60 and 30 days ago; last sale 29 days before today
+  const meta = { title: "Catan", cents: 6995 };
+  assert.equal(reorder(meta, s, 100, 0, 3), null);
+  assert.equal(reorder(meta, s, 100, 0, 2).sold60, 2);
+  const r1 = reorder(meta, s, 100, 0, 1);
+  assert.equal(r1.sold60, 2); assert.equal(r1.daysOut, 29); assert.equal(r1.missed, 1);
+  assert.equal(reorder(meta, s, 100, 0).sold60, 2, "no bar given: the default of 1");
+  assert.equal(reorder(meta, series({ 50: 1 }), 100, 0, 1).sold60, 1, "one sale is enough at 1");
+});
+
 test("reorder: sold out after steady sales; missed sales from the rate before", () => {
   const s = series({ 30: 2, 40: 1, 50: 2, 60: 1, 69: 2 });   // 8 in the 60 days before the last sale (day 69), out 20 days
   const f = reorder({ title: "Sleeves", cents: 1299 }, s, TODAY, 0);
@@ -71,7 +82,8 @@ test("reorder: sold out after steady sales; missed sales from the rate before", 
   assert.equal(f.missed, 2.7); assert.equal(f.missedRevenue, 34.64, "from the unrounded rate: 8/60 x 20 x 12.99");
   assert.equal(reorder({ title: "Sleeves", cents: 1299 }, s, TODAY, 2), null, "in stock: not a reorder");
   assert.equal(reorder({ title: "Box PRE ORDER ^ DEC 1", cents: 1 }, s, TODAY, 0), null);
-  assert.equal(reorder({ title: "x", cents: 1 }, series({ 69: 2 }), TODAY, 0), null, "2 sales do not make a steady seller");
+  assert.equal(reorder({ title: "x", cents: 1 }, series({ 69: 2 }), TODAY, 0, 3), null, "2 sales do not make a steady seller at the old bar of 3");
+  assert.equal(reorder({ title: "x", cents: 1 }, series({ 69: 2 }), TODAY, 0).sold60, 2, "listed at the default bar of 1");
   assert.equal(reorder({ title: "x", cents: 1 }, series({}), TODAY, 0), null);
 });
 
@@ -300,6 +312,12 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   assert.deepEqual(v.hot.map((x) => x.vid), ["33"]);
   assert.equal(v.hot[0].sold30, 9); assert.equal(v.hot[0].perWeek, 2.1); assert.equal(v.hot[0].qty, -1, "below zero counts as out");
   assert.equal(v.status.hotMin, 6);
+  // Reorder's own bar (owner 2026-10-28, board games): every sold-out item that sold at all, unless an admin raises it
+  assert.equal(v.status.reorderMin, 1);
+  assert.equal((await call(c, "/_sc/cfg", { reorderMin: "0" })).ok, false);
+  assert.equal((await call(c, "/_sc/cfg", { reorderMin: "3" })).reorderMin, 3);
+  assert.equal((await call(c, "/_sc/view")).status.reorderMin, 3);
+  await call(c, "/_sc/cfg", { reorderMin: "1" });
   assert.equal((await call(c, "/_sc/cfg", { hotMin: "0" })).ok, false);
   assert.equal((await call(c, "/_sc/cfg", { hotMin: "3" })).hotMin, 3);
   const v3 = await call(c, "/_sc/view");
@@ -516,6 +534,12 @@ test("permissions and pages", async () => {
   assert.match(hotPage, /Order now<b>1<\/b>/); assert.match(hotPage, /POKEMON 151 BOOSTER BUNDLE/); assert.doesNotMatch(hotPage, /Dragon Shield/); assert.match(hotPage, /sells ~2\.1 a week/); assert.match(hotPage, /name="hotMin"/);
   const hotStaff = await (await serve("/9pocket/stock?tab=hot", actor)).text();
   assert.doesNotMatch(hotStaff, /name="hotMin"/); assert.match(hotStaff, /sold at least 6/);
+  const reorderAdmin = await (await serve("/9pocket/stock?tab=reorder", admin)).text();
+  assert.match(reorderAdmin, /name="reorderMin"[^>]*value="1"/); assert.match(reorderAdmin, /board games and sealed boxes included/);
+  const rm = await (await serve("/9pocket/stock/control", admin, { action: "cfg", reorderMin: "2", json: "1" })).json();
+  assert.equal(rm.ok, true); assert.match(rm.message, /sold 2 or more in the 60 days/);
+  assert.match(await (await serve("/9pocket/stock?tab=reorder", actor)).text(), /sold at least 2 in the 60 days/);
+  await serve("/9pocket/stock/control", admin, { action: "cfg", reorderMin: "1", json: "1" });
   let rc = await serve("/9pocket/stock/control", actor, { action: "cfg", hotMin: "3", json: "1" });
   assert.equal(rc.status, 400);
   rc = await serve("/9pocket/stock/control", admin, { action: "cfg", hotMin: "3", json: "1" });
