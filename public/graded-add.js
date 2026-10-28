@@ -83,6 +83,32 @@
   function rotateCanvas(src, deg) { var c = document.createElement("canvas"), swap = Math.abs(deg) === 90; c.width = swap ? src.height : src.width; c.height = swap ? src.width : src.height; var ctx = c.getContext("2d"); ctx.translate(c.width / 2, c.height / 2); ctx.rotate(deg * Math.PI / 180); ctx.drawImage(src, -src.width / 2, -src.height / 2); return c; }
   function toJpeg(c) { return new Promise(function (res) { c.toBlob(res, "image/jpeg", 0.86); }); }
   function closeBmp(b) { try { if (b && b.close) b.close(); } catch (e) {} }
+  /* Decoding a photo. createImageBitmap reads JPEG/PNG/WebP everywhere; an
+     iPhone's HEIC is read natively only by Safari (which also converts it for
+     file inputs), so on a PC 200 iPhone photos decode nowhere and every
+     thumbnail breaks (owner, 2026-10-28). HEIC goes through heic2any
+     (public/vendor/heic2any-0.0.4.min.js, loaded only when first needed). */
+  var scriptLoads = {};
+  function loadScript(src) { if (!scriptLoads[src]) scriptLoads[src] = new Promise(function (res, rej) { var s = document.createElement("script"); s.src = src; s.onload = function () { res(true); }; s.onerror = function () { rej(new Error("could not load " + src)); }; document.head.appendChild(s); }); return scriptLoads[src]; }
+  async function isHeic(file) {
+    if (/^image\/hei[cf]$/i.test(file.type || "") || /\.hei[cf]$/i.test(file.name || "")) return true;
+    try { var head = new Uint8Array(await file.slice(0, 16).arrayBuffer()); var s = String.fromCharCode.apply(null, head); return s.slice(4, 8) === "ftyp" && /^(heic|heix|hevc|hevx|mif1|msf1|heim|heis|avif)$/.test(s.slice(8, 12)); } catch (e) { return false; }
+  }
+  function loadImg(url) { return new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = function () { rej(new Error("img")); }; i.src = url; }); }
+  async function toBitmap(file) {
+    try { return await createImageBitmap(file); } catch (e) {}
+    var url = ""; try { url = URL.createObjectURL(file); var img = await loadImg(url); var b = await createImageBitmap(img); URL.revokeObjectURL(url); return b; } catch (e) { if (url) URL.revokeObjectURL(url); }
+    if (await isHeic(file)) {
+      try {
+        await loadScript("/vendor/heic2any-0.0.4.min.js");
+        var out = await root.heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+        var jpg = Array.isArray(out) ? out[0] : out;
+        return await createImageBitmap(jpg);
+      } catch (e) { heicNote = "HEIC conversion failed: " + String((e && e.message) || e).slice(0, 80); }
+    }
+    return null;
+  }
+  var heicNote = "";
   // jsQR on a canvas: the text and where the code sits, as a fraction of the canvas width.
   function decodeCanvas(c) { if (!root.jsQR) return null; var d = c.getContext("2d").getImageData(0, 0, c.width, c.height); var r = root.jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" }); if (!r || !r.data) return null; var L = r.location || {}, xs = [L.topLeftCorner, L.topRightCorner, L.bottomLeftCorner, L.bottomRightCorner].filter(Boolean).map(function (p) { return p.x; }); return { value: r.data, cx: xs.length ? xs.reduce(function (a, b) { return a + b; }, 0) / xs.length / c.width : null }; }
   // The library (public/vendor/jsQR-1.4.0.js, served by the worker) loads deferred: give it a moment before the first decode.
@@ -108,14 +134,16 @@
   }
   // One photo -> {file (upright, shrunk JPEG), url (preview), qr (link or ""), raw, rot (degrees applied), basis ("qr" | "default" | "manual" | "none")}.
   async function prep(file) {
-    var out = { file: file, url: "", qr: "", raw: "", rot: 0, basis: "none", name: (file.name || "photo").replace(/\.[A-Za-z0-9]+$/, "") + ".jpg" }, bmp = null;
-    try { bmp = await createImageBitmap(file); } catch (e) {}
+    var out = { file: file, url: "", qr: "", raw: "", rot: 0, basis: "none", unreadable: false, name: (file.name || "photo").replace(/\.[A-Za-z0-9]+$/, "") + ".jpg" }, bmp = null;
+    bmp = await toBitmap(file);
+    if (!bmp) { out.unreadable = true; return out; }
     if (bmp) {
       var found = null; try { found = await detect(bmp); } catch (e) {}
       if (found && found.value) { if (/^https?:\/\//i.test(found.value)) out.qr = found.value; else out.raw = found.value; }
       var side = found && found.cx != null ? (found.cx < 0.5 ? "left" : "right") : null;
       out.rot = rotationFor(bmp.width, bmp.height, side); out.basis = out.rot ? (side ? "qr" : "default") : "none";
-      try { var c = fit(bmp, 2000); if (out.rot) c = rotateCanvas(c, out.rot); var blob = await toJpeg(c); if (blob && (out.rot || blob.size < file.size)) out.file = new File([blob], out.name, { type: "image/jpeg" }); } catch (e) {}
+      // Always re-encoded as JPEG (a HEIC must be; a JPEG only shrinks), so Shopify never sees a format it cannot show.
+      try { var c = fit(bmp, 2000); if (out.rot) c = rotateCanvas(c, out.rot); var blob = await toJpeg(c); if (blob) out.file = new File([blob], out.name, { type: "image/jpeg" }); } catch (e) {}
       closeBmp(bmp);
     }
     out.url = URL.createObjectURL(out.file);
@@ -157,10 +185,11 @@
   /* ---- the single form's photo boxes ---- */
   var single = {};
   function setInputFile(input, p) { try { var dt = new DataTransfer(); dt.items.add(p.file); input.files = dt.files; } catch (e) {} }
-  function showSingle(input, p) { var box = input.closest(".shot"), img = box.querySelector("img"), rot = box.querySelector(".rot"), note = box.querySelector(".turned"); if (img) { img.src = p.url; img.hidden = false; } if (rot) rot.hidden = false; if (note) note.textContent = p.basis === "qr" || p.basis === "default" ? "turned upright" : p.basis === "manual" ? "rotated" : ""; }
+  function showSingle(input, p) { var box = input.closest(".shot"), img = box.querySelector("img"), rot = box.querySelector(".rot"), note = box.querySelector(".turned"); if (p.unreadable) { if (img) img.hidden = true; if (rot) rot.hidden = true; if (note) note.textContent = "This photo cannot be read in this browser" + (heicNote ? " (" + heicNote + ")" : "") + "; try a JPEG, or add it from the phone."; return; } if (img) { img.src = p.url; img.hidden = false; } if (rot) rot.hidden = false; if (note) note.textContent = p.basis === "qr" || p.basis === "default" ? "turned upright" : p.basis === "manual" ? "rotated" : ""; }
   async function onPhoto(input) {
     var file = input.files && input.files[0]; if (!file) return;
     var p = await prep(file); single[input.name] = p;
+    if (p.unreadable) { showSingle(input, p); return; }
     if (p.file !== file) setInputFile(input, p);
     showSingle(input, p);
     if (qrAuto || !qrUrl.value) {
@@ -177,7 +206,7 @@
   if (!batch) return;
   var photos = [];
   function opts(list, cur, labels) { return list.map(function (o) { return '<option value="' + esc(o) + '"' + (o === cur ? " selected" : "") + ">" + esc(labels ? labels(o) : (o || "none")) + "</option>"; }).join(""); }
-  function fig(i, cap) { var p = i != null ? photos[i] : null; return p ? '<figure data-i="' + i + '"><img src="' + esc(p.url) + '" alt=""><figcaption>' + cap + ' <button type="button" class="sm rot" data-i="' + i + '" title="Rotate a quarter turn">↻</button></figcaption></figure>' : '<figure class="none"><div class="ph-none">no ' + cap + "</div><figcaption>&nbsp;</figcaption></figure>"; }
+  function fig(i, cap) { var p = i != null ? photos[i] : null; if (p && p.unreadable) return '<figure class="none"><div class="ph-none">cannot read</div><figcaption>' + cap + "</figcaption></figure>"; return p ? '<figure data-i="' + i + '"><img src="' + esc(p.url) + '" alt=""><figcaption>' + cap + ' <button type="button" class="sm rot" data-i="' + i + '" title="Rotate a quarter turn">↻</button></figcaption></figure>' : '<figure class="none"><div class="ph-none">no ' + cap + "</div><figcaption>&nbsp;</figcaption></figure>"; }
   function figures(s) { return fig(s.front, "front") + fig(s.back, "back") + s.extra.map(function (i) { return fig(i, "extra"); }).join(""); }
   function lineEl(s, k) {
     var el = document.createElement("form"); el.className = "line"; el.setAttribute("data-k", k);
@@ -229,7 +258,7 @@
     if (el.elements.auto_price.checked) fd.append("auto_price", "1");
     fd.append("json", "1");
     var n = 1;
-    [s.front, s.back].concat(s.extra).forEach(function (i) { if (i != null && photos[i]) { fd.append("photo" + n, photos[i].file, photos[i].file.name || ("photo" + n + ".jpg")); n++; } });
+    [s.front, s.back].concat(s.extra).forEach(function (i) { if (i != null && photos[i] && !photos[i].unreadable) { fd.append("photo" + n, photos[i].file, photos[i].file.name || ("photo" + n + ".jpg")); n++; } });
     var j = null;
     try { var r = await fetch(cfg.base + "/graded/add", { method: "POST", body: fd, credentials: "same-origin" }); j = await r.json(); } catch (e) { j = { ok: false, error: "No answer from 9Pocket (signed out? reload the page)." }; }
     el.classList.remove("busy");
@@ -241,14 +270,17 @@
     if (!files.length) return;
     files.sort(function (a, b) { return (a.lastModified || 0) - (b.lastModified || 0); });
     lines.innerHTML = ""; photos = []; addAll.hidden = true;
-    for (var n = 0; n < files.length; n++) { bstate.textContent = "Reading photo " + (n + 1) + " of " + files.length + "…"; var p = await prep(files[n]); p.i = n; photos.push(p); }
+    heicNote = "";
+    for (var n = 0; n < files.length; n++) { bstate.textContent = "Reading photo " + (n + 1) + " of " + files.length + "…" + (await isHeic(files[n]) ? " (converting HEIC)" : ""); var p = await prep(files[n]); p.i = n; photos.push(p); }
+    var bad = photos.filter(function (p) { return p.unreadable; }).length;
     var mode = (document.getElementById("pairmode") || {}).value || "fb";
     var slabs = mode === "qr" ? pairPhotos(photos) : pairByOrder(photos, mode === "bf");
     // A front turned upright by guesswork follows its back when the back's QR code settled the direction.
     for (var q = 0; q < slabs.length; q++) { var sb = slabs[q], fp = sb.front != null && photos[sb.front], bp = sb.back != null && photos[sb.back]; if (fp && bp && bp.basis === "qr" && fp.basis === "default" && fp.rot !== bp.rot) { await turn(fp, 180); fp.basis = "qr"; } }
     var withQr = photos.filter(function (p) { return p.qr; }).length, turned = photos.filter(function (p) { return p.rot; }).length;
+    var badNote = bad ? " " + bad + " photo" + (bad === 1 ? "" : "s") + " could not be read in this browser" + (heicNote ? " (" + heicNote + ")" : "") + ": they are skipped on upload; shoot JPEG (iPhone: Settings > Camera > Formats > Most Compatible) or add them from the phone." : "";
     var reader = readerNote || (("BarcodeDetector" in root) ? "built-in reader" : (root.jsQR ? "jsQR" : "no reader"));
-    bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + (mode === "qr" ? ", paired by QR code" : ", paired in order (" + (mode === "bf" ? "back then front" : "front then back") + ")") + "; QR codes read in " + withQr + " of " + files.length + " (" + reader + ")" + (turned ? "; " + turned + " sideways photo" + (turned === 1 ? "" : "s") + " turned upright (tap ↻ on a thumbnail if one is wrong)" : "") + ". Check each line (swap if a pair is backwards), fill in the card, then add.";
+    bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + (mode === "qr" ? ", paired by QR code" : ", paired in order (" + (mode === "bf" ? "back then front" : "front then back") + ")") + "; QR codes read in " + withQr + " of " + files.length + " (" + reader + ")" + (turned ? "; " + turned + " sideways photo" + (turned === 1 ? "" : "s") + " turned upright (tap ↻ on a thumbnail if one is wrong)" : "") + ". Check each line (swap if a pair is backwards), fill in the card, then add." + badNote;
     var els = slabs.map(function (s, k) { var el = lineEl(s, k); lines.appendChild(el); return el; });
     addAll.hidden = !slabs.length;
     // PSA's records, one slab at a time (the free allowance is about 100 a day).
