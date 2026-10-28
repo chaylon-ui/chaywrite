@@ -128,7 +128,9 @@ test("setupCheck names the missing scopes; recentGraded shapes the list; the per
 });
 
 test("batch pairing: backs are the photos with a QR code, each takes the front shot beside it; leftovers stay as lines", () => {
-  const { pairPhotos, pairByOrder, graderOfUrl, certOfUrl } = client;
+  const { pairPhotos, pairByOrder, graderOfUrl, certOfUrl, rotationFor } = client;
+  // portrait stays; landscape turns counter-clockwise unless the QR code sits on the left
+  assert.equal(rotationFor(3000, 4000, null), 0); assert.equal(rotationFor(4000, 3000, null), -90); assert.equal(rotationFor(4000, 3000, "right"), -90); assert.equal(rotationFor(4000, 3000, "left"), 90); assert.equal(rotationFor(4000, 4000, "left"), 0);
   assert.equal(graderOfUrl("https://www.psacard.com/cert/87654321"), "PSA"); assert.equal(graderOfUrl("https://www.cgccards.com/certlookup/4312345001/"), "CGC"); assert.equal(graderOfUrl("https://example.com/x"), ""); assert.equal(graderOfUrl("nope"), "");
   assert.equal(certOfUrl("https://www.psacard.com/cert/87654321"), "87654321"); assert.equal(certOfUrl(""), "");
   const psa = (n) => "https://www.psacard.com/cert/" + n, cgc = (n) => "https://www.cgccards.com/certlookup/" + n + "/";
@@ -179,7 +181,7 @@ test("PSA lookup: the record becomes the form in the store's title case; the tok
   assert.match((await certLookup(mk(200, {}), "PSA", "12")).error, /does not look like a PSA certificate number/);
   const off = await certLookup({ env: {}, fetch: async () => { throw new Error("never"); } }, "PSA", "12345678"); assert.equal(off.configured, false); assert.equal(psaConfigured({ PSA_API_TOKEN: "x" }), true);
   const page = renderGraded({ recent: [], setup: null, last: null, psa: true, keep: {} }, { user: { email: "s@x", role: "staff", perms: { graded: true } } });
-  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=5"'));
+  assert.ok(page.includes("PSA lookups are on")); assert.ok(page.includes('"psa":true')); assert.ok(page.includes('id="psastate"')); assert.ok(page.includes('src="/graded-add.js?v=6"')); assert.ok(page.includes('class="sm rot" hidden'), "a Rotate button per photo box");
   assert.ok(!page.includes("cdnjs.cloudflare.com"), "the QR reader is served by the worker, not a CDN that may 404");
   assert.ok(renderGraded({ recent: [], setup: null, last: null, psa: false, keep: {} }, { user: { email: "s@x", role: "admin" } }).includes("PSA lookups are off"));
 });

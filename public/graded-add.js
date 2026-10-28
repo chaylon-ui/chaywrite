@@ -54,11 +54,19 @@
     }
     return slabs;
   }
-  if (typeof module !== "undefined" && module.exports) module.exports = { pairPhotos, pairByOrder, graderOfUrl, certOfUrl };
+  /* A sideways photo of an upright slab: which way to turn it to portrait. The
+     QR code, when read, sits in the label at the slab's top: on the right of a
+     landscape frame the top is on the right (turn counter-clockwise), on the
+     left it is on the left (turn clockwise). With no QR code the phone was most
+     likely turned the usual way, top to the left, which puts the slab's top on
+     the right (owner, 2026-10-28: "sometimes when you take the photo of the
+     cards it is sideways and you dont notice"). */
+  function rotationFor(width, height, qrSide) { if (!(width > height)) return 0; return qrSide === "left" ? 90 : -90; }
+  if (typeof module !== "undefined" && module.exports) module.exports = { pairPhotos, pairByOrder, graderOfUrl, certOfUrl, rotationFor };
   if (typeof document === "undefined") return;
 
   /* ---------------- the page ---------------- */
-  var cfg = root.xgGraded || { grades: ["10"], finishes: [""], graders: ["PSA"], games: { pokemon: "Pokémon" }, base: "/9pocket" };
+  var cfg = root.xgGraded || { grades: ["10"], finishes: [""], graders: ["PSA"], games: { pokemon: "Pokémon" }, base: "/9pocket", psa: false };
   var form = document.getElementById("gform"), qrState = document.getElementById("qrstate"), qrUrl = document.getElementById("qr_url"), cert = document.getElementById("cert"), prev = document.getElementById("tprev"), btn = document.getElementById("addbtn"), qrAuto = false;
   function v(n, f) { var e = (f || form).elements[n]; return e ? String(e.value || "").replace(/\s+/g, " ").trim() : ""; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -70,13 +78,18 @@
   function preview() { prev.textContent = titleOf(form) || "(type the card name)"; }
   form.addEventListener("input", preview); form.addEventListener("change", preview); preview();
 
+  /* ---- photos: shrink, read the QR code, turn sideways shots upright ---- */
   function fit(bmp, max) { var s = Math.min(1, max / Math.max(bmp.width, bmp.height)); var c = document.createElement("canvas"); c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s)); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); return c; }
-  function decodeCanvas(c) { if (!root.jsQR) return null; var d = c.getContext("2d").getImageData(0, 0, c.width, c.height); var r = root.jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" }); return (r && r.data) || null; }
+  function rotateCanvas(src, deg) { var c = document.createElement("canvas"), swap = Math.abs(deg) === 90; c.width = swap ? src.height : src.width; c.height = swap ? src.width : src.height; var ctx = c.getContext("2d"); ctx.translate(c.width / 2, c.height / 2); ctx.rotate(deg * Math.PI / 180); ctx.drawImage(src, -src.width / 2, -src.height / 2); return c; }
+  function toJpeg(c) { return new Promise(function (res) { c.toBlob(res, "image/jpeg", 0.86); }); }
+  function closeBmp(b) { try { if (b && b.close) b.close(); } catch (e) {} }
+  // jsQR on a canvas: the text and where the code sits, as a fraction of the canvas width.
+  function decodeCanvas(c) { if (!root.jsQR) return null; var d = c.getContext("2d").getImageData(0, 0, c.width, c.height); var r = root.jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" }); if (!r || !r.data) return null; var L = r.location || {}, xs = [L.topLeftCorner, L.topRightCorner, L.bottomLeftCorner, L.bottomRightCorner].filter(Boolean).map(function (p) { return p.x; }); return { value: r.data, cx: xs.length ? xs.reduce(function (a, b) { return a + b; }, 0) / xs.length / c.width : null }; }
   // The library (public/vendor/jsQR-1.4.0.js, served by the worker) loads deferred: give it a moment before the first decode.
   function ensureQr() { return new Promise(function (res) { var t = 0; (function tick() { if (root.jsQR || t > 40) return res(!!root.jsQR); t++; setTimeout(tick, 100); })(); }); }
   var readerNote = "";
   async function detect(bmp) {
-    if ("BarcodeDetector" in root) { try { var det = new root.BarcodeDetector({ formats: ["qr_code"] }); var res = await det.detect(bmp); if (res && res[0] && res[0].rawValue) return res[0].rawValue; } catch (e) {} }
+    if ("BarcodeDetector" in root) { try { var det = new root.BarcodeDetector({ formats: ["qr_code"] }); var res = await det.detect(bmp); if (res && res[0] && res[0].rawValue) { var bb = res[0].boundingBox; return { value: res[0].rawValue, cx: bb ? (bb.x + bb.width / 2) / bmp.width : null }; } } catch (e) {} }
     if (!(await ensureQr())) { readerNote = "the QR reader did not load"; return null; }
     var sizes = [1200, 2000];
     for (var i = 0; i < sizes.length; i++) { try { var val = decodeCanvas(fit(bmp, sizes[i])); if (val) return val; } catch (e) {} }
@@ -88,21 +101,33 @@
       for (var k = 0; k < tiles.length; k++) {
         var t = tiles[k], c = document.createElement("canvas"); c.width = Math.round(t[2]); c.height = Math.round(t[3]);
         c.getContext("2d").drawImage(big, t[0], t[1], t[2], t[3], 0, 0, c.width, c.height);
-        var v2 = decodeCanvas(c); if (v2) return v2;
+        var v2 = decodeCanvas(c); if (v2) { if (v2.cx != null) v2.cx = (t[0] + v2.cx * c.width) / W; return v2; }
       }
     } catch (e) {}
     return null;
   }
-  // One photo -> {file (shrunk JPEG when smaller), url (preview), qr (link or "")}.
+  // One photo -> {file (upright, shrunk JPEG), url (preview), qr (link or ""), raw, rot (degrees applied), basis ("qr" | "default" | "manual" | "none")}.
   async function prep(file) {
-    var out = { file: file, url: "", qr: "" }, bmp = null;
+    var out = { file: file, url: "", qr: "", raw: "", rot: 0, basis: "none", name: (file.name || "photo").replace(/\.[A-Za-z0-9]+$/, "") + ".jpg" }, bmp = null;
     try { bmp = await createImageBitmap(file); } catch (e) {}
     if (bmp) {
-      try { var c = fit(bmp, 2000); var blob = await new Promise(function (res) { c.toBlob(res, "image/jpeg", 0.86); }); if (blob && blob.size < file.size) out.file = new File([blob], (file.name || "photo").replace(/\.[A-Za-z0-9]+$/, "") + ".jpg", { type: "image/jpeg" }); } catch (e) {}
-      try { var val = await detect(bmp); if (val && /^https?:\/\//i.test(val)) out.qr = val; else if (val) out.raw = val; } catch (e) {}
+      var found = null; try { found = await detect(bmp); } catch (e) {}
+      if (found && found.value) { if (/^https?:\/\//i.test(found.value)) out.qr = found.value; else out.raw = found.value; }
+      var side = found && found.cx != null ? (found.cx < 0.5 ? "left" : "right") : null;
+      out.rot = rotationFor(bmp.width, bmp.height, side); out.basis = out.rot ? (side ? "qr" : "default") : "none";
+      try { var c = fit(bmp, 2000); if (out.rot) c = rotateCanvas(c, out.rot); var blob = await toJpeg(c); if (blob && (out.rot || blob.size < file.size)) out.file = new File([blob], out.name, { type: "image/jpeg" }); } catch (e) {}
+      closeBmp(bmp);
     }
     out.url = URL.createObjectURL(out.file);
     return out;
+  }
+  // Turn a prepared photo further (the Rotate buttons): a quarter turn clockwise each tap.
+  async function turn(p, deg) {
+    var bmp = null; try { bmp = await createImageBitmap(p.file); } catch (e) { return p; }
+    var c = rotateCanvas(bmp, deg); closeBmp(bmp);
+    var blob = await toJpeg(c); if (!blob) return p;
+    p.file = new File([blob], p.name || "photo.jpg", { type: "image/jpeg" }); p.url = URL.createObjectURL(p.file); p.rot = (p.rot + deg) % 360; p.basis = "manual";
+    return p;
   }
   function which(input) { return input.name === "photo1" ? "front" : input.name === "photo2" ? "back" : "extra"; }
   // PSA's record for a certificate (through 9Pocket, never from the browser to PSA) fills the empty fields of a form.
@@ -123,23 +148,28 @@
   var psaState = document.getElementById("psastate"), lastLooked = "";
   async function singleLookup() {
     var certNo = String(cert.value || "").trim(); if (!certNo || certNo === lastLooked || v("grader").toUpperCase() !== "PSA" || !cfg.psa) return;
-    lastLooked = certNo; psaState.className = "muted"; psaState.textContent = "Asking PSA about certificate " + certNo + "\u2026";
+    lastLooked = certNo; psaState.className = "muted"; psaState.textContent = "Asking PSA about certificate " + certNo + "…";
     var d = await lookupCert("PSA", certNo);
     if (d && d.ok) { psaState.className = "ok"; psaState.textContent = applyCert(form, d); preview(); } else { psaState.className = "muted"; psaState.textContent = (d && d.error) || ""; }
   }
   if (psaState) { cert.addEventListener("change", singleLookup); cert.addEventListener("blur", singleLookup); }
+
+  /* ---- the single form's photo boxes ---- */
+  var single = {};
+  function setInputFile(input, p) { try { var dt = new DataTransfer(); dt.items.add(p.file); input.files = dt.files; } catch (e) {} }
+  function showSingle(input, p) { var box = input.closest(".shot"), img = box.querySelector("img"), rot = box.querySelector(".rot"), note = box.querySelector(".turned"); if (img) { img.src = p.url; img.hidden = false; } if (rot) rot.hidden = false; if (note) note.textContent = p.basis === "qr" || p.basis === "default" ? "turned upright" : p.basis === "manual" ? "rotated" : ""; }
   async function onPhoto(input) {
     var file = input.files && input.files[0]; if (!file) return;
-    var img = input.parentNode.querySelector("img");
-    var p = await prep(file);
-    if (p.file !== file) { try { var dt = new DataTransfer(); dt.items.add(p.file); input.files = dt.files; } catch (e) {} }
-    if (img) { img.src = p.url; img.hidden = false; }
+    var p = await prep(file); single[input.name] = p;
+    if (p.file !== file) setInputFile(input, p);
+    showSingle(input, p);
     if (qrAuto || !qrUrl.value) {
       if (p.qr) { qrUrl.value = p.qr; qrAuto = true; qrState.className = "ok"; qrState.textContent = "QR code read from the " + which(input) + " photo: " + p.qr; var m = certOfUrl(p.qr); if (m && !cert.value) cert.value = m; var g = graderOfUrl(p.qr); if (g && form.elements.grader) form.elements.grader.value = g; preview(); if (g === "PSA") singleLookup(); }
       else if (!qrAuto) { qrState.className = "muted"; qrState.textContent = p.raw ? "The QR code in the " + which(input) + " photo is not a link (" + p.raw.slice(0, 60) + "); type the certificate number instead." : "No QR code in the " + which(input) + " photo; it is usually on the back of the label. Add that photo, or type the certificate number."; }
     }
   }
   Array.prototype.forEach.call(form.querySelectorAll("input[type=file]"), function (i) { i.addEventListener("change", function () { onPhoto(i); }); });
+  Array.prototype.forEach.call(form.querySelectorAll(".shot .rot"), function (b) { b.addEventListener("click", async function () { var input = b.closest(".shot").querySelector("input[type=file]"); var p = single[input.name]; if (!p) return; b.disabled = true; await turn(p, 90); setInputFile(input, p); showSingle(input, p); b.disabled = false; }); });
   form.addEventListener("submit", function () { btn.disabled = true; btn.textContent = "Adding… (uploading photos)"; });
 
   /* ---------------- batch ---------------- */
@@ -147,11 +177,12 @@
   if (!batch) return;
   var photos = [];
   function opts(list, cur, labels) { return list.map(function (o) { return '<option value="' + esc(o) + '"' + (o === cur ? " selected" : "") + ">" + esc(labels ? labels(o) : (o || "none")) + "</option>"; }).join(""); }
-  function fig(i, cap) { var p = photos[i]; return p ? '<figure><img src="' + esc(p.url) + '" alt=""><figcaption>' + cap + "</figcaption></figure>" : '<figure class="none"><div class="ph-none">no ' + cap + "</div><figcaption>&nbsp;</figcaption></figure>"; }
+  function fig(i, cap) { var p = i != null ? photos[i] : null; return p ? '<figure data-i="' + i + '"><img src="' + esc(p.url) + '" alt=""><figcaption>' + cap + ' <button type="button" class="sm rot" data-i="' + i + '" title="Rotate a quarter turn">↻</button></figcaption></figure>' : '<figure class="none"><div class="ph-none">no ' + cap + "</div><figcaption>&nbsp;</figcaption></figure>"; }
+  function figures(s) { return fig(s.front, "front") + fig(s.back, "back") + s.extra.map(function (i) { return fig(i, "extra"); }).join(""); }
   function lineEl(s, k) {
     var el = document.createElement("form"); el.className = "line"; el.setAttribute("data-k", k);
     var g = s.grader || v("grader"), game = v("game") || "pokemon";
-    el.innerHTML = '<div class="ph">' + fig(s.front, "front") + fig(s.back, "back") + s.extra.map(function (i) { return fig(i, "extra"); }).join("") +
+    el.innerHTML = '<div class="ph"><div class="figs">' + figures(s) + "</div>" +
       '<div class="meta"><b>Slab ' + (k + 1) + "</b><br>" + (s.qr ? '<span class="ok">QR: ' + esc(s.cert || s.qr) + " (" + esc(s.grader || "link") + ")</span>" : '<span class="muted">no QR code read: add the certificate number</span>') +
       '<br><span class="psa muted"></span><br><button type="button" class="sm swap">Swap front/back</button> <button type="button" class="sm drop">Remove line</button></div></div>' +
       '<div class="grid">' +
@@ -174,12 +205,15 @@
       "</div>" +
       '<div class="tp">Title: <b class="lt"></b></div>' +
       '<div class="act"><button type="submit" class="save">Add this slab</button> <span class="st muted"></span></div>';
-    var lt = el.querySelector(".lt"), st = el.querySelector(".st");
+    var lt = el.querySelector(".lt");
     var pv = function () { lt.textContent = titleOf(el) || "(type the card name)"; };
     el.addEventListener("input", pv); el.addEventListener("change", pv); pv();
-    el.querySelector(".swap").addEventListener("click", function () { var t = s.front; s.front = s.back; s.back = t; el.querySelector(".ph").innerHTML = fig(s.front, "front") + fig(s.back, "back") + s.extra.map(function (i) { return fig(i, "extra"); }).join("") + el.querySelector(".meta").outerHTML; wire(); });
-    el.querySelector(".drop").addEventListener("click", function () { el.remove(); });
-    function wire() { el.querySelector(".swap").addEventListener("click", function () { el.querySelector(".swap").dispatchEvent(new Event("click")); }); }
+    el.addEventListener("click", async function (ev) {
+      var b = ev.target.closest("button"); if (!b || b.type === "submit") return;
+      if (b.classList.contains("swap")) { var t = s.front; s.front = s.back; s.back = t; el.querySelector(".figs").innerHTML = figures(s); }
+      else if (b.classList.contains("drop")) el.remove();
+      else if (b.classList.contains("rot")) { var p = photos[Number(b.getAttribute("data-i"))]; if (!p) return; b.disabled = true; await turn(p, 90); el.querySelector(".figs").innerHTML = figures(s); }
+    });
     el.addEventListener("submit", function (ev) { ev.preventDefault(); addLine(el, s); });
     el._slab = s;
     return el;
@@ -210,15 +244,17 @@
     for (var n = 0; n < files.length; n++) { bstate.textContent = "Reading photo " + (n + 1) + " of " + files.length + "…"; var p = await prep(files[n]); p.i = n; photos.push(p); }
     var mode = (document.getElementById("pairmode") || {}).value || "fb";
     var slabs = mode === "qr" ? pairPhotos(photos) : pairByOrder(photos, mode === "bf");
-    var withQr = photos.filter(function (p) { return p.qr; }).length;
+    // A front turned upright by guesswork follows its back when the back's QR code settled the direction.
+    for (var q = 0; q < slabs.length; q++) { var sb = slabs[q], fp = sb.front != null && photos[sb.front], bp = sb.back != null && photos[sb.back]; if (fp && bp && bp.basis === "qr" && fp.basis === "default" && fp.rot !== bp.rot) { await turn(fp, 180); fp.basis = "qr"; } }
+    var withQr = photos.filter(function (p) { return p.qr; }).length, turned = photos.filter(function (p) { return p.rot; }).length;
     var reader = readerNote || (("BarcodeDetector" in root) ? "built-in reader" : (root.jsQR ? "jsQR" : "no reader"));
-    bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + (mode === "qr" ? ", paired by QR code" : ", paired in order (" + (mode === "bf" ? "back then front" : "front then back") + ")") + "; QR codes read in " + withQr + " of " + files.length + " (" + reader + "). Check each line (swap if a pair is backwards), fill in the card, then add.";
+    bstate.textContent = slabs.length + " slab" + (slabs.length === 1 ? "" : "s") + " from " + files.length + " photo" + (files.length === 1 ? "" : "s") + (mode === "qr" ? ", paired by QR code" : ", paired in order (" + (mode === "bf" ? "back then front" : "front then back") + ")") + "; QR codes read in " + withQr + " of " + files.length + " (" + reader + ")" + (turned ? "; " + turned + " sideways photo" + (turned === 1 ? "" : "s") + " turned upright (tap ↻ on a thumbnail if one is wrong)" : "") + ". Check each line (swap if a pair is backwards), fill in the card, then add.";
     var els = slabs.map(function (s, k) { var el = lineEl(s, k); lines.appendChild(el); return el; });
     addAll.hidden = !slabs.length;
     // PSA's records, one slab at a time (the free allowance is about 100 a day).
     for (var k = 0; k < slabs.length; k++) {
       var s = slabs[k]; if (!cfg.psa || s.grader !== "PSA" || !s.cert) continue;
-      var meta = els[k].querySelector(".meta .psa"); if (meta) meta.textContent = "Asking PSA\u2026";
+      var meta = els[k].querySelector(".meta .psa"); if (meta) meta.textContent = "Asking PSA…";
       var d = await lookupCert("PSA", s.cert);
       if (meta) { if (d && d.ok) { meta.className = "psa ok"; meta.textContent = applyCert(els[k], d); els[k].dispatchEvent(new Event("input")); } else { meta.className = "psa muted"; meta.textContent = (d && d.error) || ""; if (d && d.limited) break; } }
     }
