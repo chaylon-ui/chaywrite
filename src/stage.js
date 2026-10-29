@@ -1142,13 +1142,21 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     let msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
     if (p === BASE + "/ask/control" && request.method === "POST") {
       const f = form || {};
+      const back = String(f.back || "").startsWith("?") ? String(f.back).slice(0, 200) : "";
+      const to = (extra) => BASE + "/ask" + (back ? back + "&" + q(extra).slice(1) : q(extra));
       if (String(f.action || "") === "flag") {
         const r = await askDo(env, "/_ask/flag", { id: f.id, wrong: String(f.wrong || "") !== "0", by: user.email });
-        return redirect(BASE + "/ask" + q(r.ok ? { msg: r.flag ? "Marked wrong. Thank you - that is how it gets fixed." : "Mark cleared." } : { err: r.error || "failed" }));
+        return redirect(to(r.ok ? { msg: r.flag ? "Marked wrong. Thank you - that is how it gets fixed." : "Mark cleared." } : { err: r.error || "failed" }));
       }
-      return redirect(BASE + "/ask" + q({ err: "unknown action" }));
+      if (String(f.action || "") === "delete") {
+        if (user.role !== "admin") return redirect(to({ err: "Only an admin can delete a row." }));
+        const r = await askDo(env, "/_ask/delete", { id: f.id });
+        return redirect(to(r.ok ? { msg: "Row deleted." } : { err: r.error || "failed" }));
+      }
+      return redirect(to({ err: "unknown action" }));
     }
-    const d = await askDo(env, "/_ask/logs");
+    const lp = new URLSearchParams(); for (const k of ["before", "q", "flagged"]) if (url.searchParams.get(k)) lp.set(k, url.searchParams.get(k));
+    const d = await askDo(env, "/_ask/logs" + (lp.toString() ? "?" + lp.toString() : ""));
     return html(renderAskLog(d.ok ? d : { rows: [], on: false }, { ...opts, msg, err: err || (d.ok ? "" : d.error || ""), act: true, admin: user.role === "admin" }));
   }
   // Graded cards (src/graded.js): the add form, the add itself, the setup check.

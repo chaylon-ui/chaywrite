@@ -1,7 +1,7 @@
 // Ask Exor (owner 2026-10-20, "do one"): the tools, the grounded loop, the limits, the routes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ask, askDoFetch, serveAsk, searchProducts, runTool, TOOLS, SYSTEM, MODEL, ASK_DO, LOG_DAYS } from "../src/ask.js";
+import { ask, askDoFetch, serveAsk, searchProducts, runTool, TOOLS, SYSTEM, MODEL, ASK_DO, MAX_LOG } from "../src/ask.js";
 import { renderAskLog } from "../src/ask-ui.js";
 import { groupBuylistPrintings } from "../src/cards.js";
 
@@ -10,9 +10,10 @@ const ORIGIN = "https://w.example";
 class MemStorage {
   constructor() { this.m = new Map(); }
   async get(k) { return this.m.get(k); }
-  async put(k, v) { this.m.set(k, JSON.parse(JSON.stringify(v))); }
+  async put(k, v) { if (typeof k === "object") { for (const [a, b] of Object.entries(k)) this.m.set(a, JSON.parse(JSON.stringify(b))); return; } this.m.set(k, JSON.parse(JSON.stringify(v))); }
   async delete(k) { for (const x of Array.isArray(k) ? k : [k]) this.m.delete(x); }
-  async list(o) { const out = new Map(); for (const k of [...this.m.keys()].sort()) if (!o || !o.prefix || k.startsWith(o.prefix)) out.set(k, this.m.get(k)); return out; }
+  // prefix, start/end, reverse and limit, as the real Durable Object storage has them
+  async list(o) { o = o || {}; let keys = [...this.m.keys()].sort().filter((k) => (!o.prefix || k.startsWith(o.prefix)) && (!o.start || k >= o.start) && (!o.end || k < o.end)); if (o.reverse) keys.reverse(); if (o.limit) keys = keys.slice(0, o.limit); const out = new Map(); for (const k of keys) out.set(k, this.m.get(k)); return out; }
 }
 const cx = (clock) => ({ storage: new MemStorage(), env: {}, now: () => clock.t, log: () => {} });
 async function call(c, path, body) { const url = new URL(ORIGIN + path); const req = body !== undefined ? new Request(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) : new Request(url); return (await askDoFetch(c, req, url)).json(); }
@@ -137,7 +138,7 @@ test("DO: limits per address per hour and per day; day counts; sweep", async () 
   assert.deepEqual(h.today, { day: "2026-10-22", asks: 21, answered: 1, failed: 1, limited: 1, tools: 2, input: 2000, output: 100, cacheRead: 1500 });
   clock.t = T0 + 2 * 3600e3;
   assert.equal((await call(c, "/_ask/allow", { ipHash: "abc" })).allowed, true, "a new hour");
-  assert.deepEqual((await call(c, "/_ask/sweep", {})).counts, { rows: 2, logs: 0 }, "the two old hourly rows");
+  assert.deepEqual((await call(c, "/_ask/sweep", {})).counts, { rows: 2 }, "the two old hourly rows");
   await c.storage.put("day:2026-10-22", { asks: 1500, answered: 0, failed: 0, limited: 0, tools: 0, input: 0, output: 0, cacheRead: 0 });
   clock.t = T0;
   const full = await call(c, "/_ask/allow", { ipHash: "zzz" });
@@ -146,22 +147,30 @@ test("DO: limits per address per hour and per day; day counts; sweep", async () 
 
 /* Owner, 2026-10-29: the switch (off until an admin turns it on), the log
    (30 days, no addresses) and the flags (shopper or staff). */
-test("DO: the switch is off by default; the log keeps questions 30 days; flags from the shopper and the staff", async () => {
+test("DO: the switch is off by default; the log keeps questions until deleted, with who asked; flags from the shopper and the staff; pages and search", async () => {
   const clock = { t: T0 }; const c = cx(clock);
   assert.deepEqual(await call(c, "/_ask/cfg"), { ok: true, on: false, at: 0, by: "" });
   assert.equal((await call(c, "/_ask/health")).on, false);
   const on = await call(c, "/_ask/cfg", { on: true, by: "boss@x.test" });
   assert.equal(on.on, true); assert.equal(on.by, "boss@x.test"); assert.equal(on.at, T0);
   assert.equal((await call(c, "/_ask/cfg")).on, true);
-  const l1 = await call(c, "/_ask/log", { q: "Do you have Bloomburrow?", a: "Yes: https://exorgames.com/products/bb", tools: ["search_products"], ok: true, ms: 1234, products: 1 });
-  assert.ok(/^[a-z0-9]+-[a-z0-9]+$/.test(l1.id), l1.id);
+  const l1 = await call(c, "/_ask/log", { q: "Do you have Bloomburrow?", a: "Yes: https://exorgames.com/products/bb", tools: ["search_products"], ok: true, ms: 1234, products: 1, who: { email: " Sam@Example.TEST ", visitor: "ab12cd" } });
+  assert.ok(/^[a-z0-9]{9}-[a-z0-9]+$/.test(l1.id), l1.id);
   clock.t = T0 + 1000;
-  const l2 = await call(c, "/_ask/log", { q: "x".repeat(900), a: "no", tools: [], ok: false, ms: 50 });
+  const l2 = await call(c, "/_ask/log", { q: "x".repeat(900), a: "no", tools: [], ok: false, ms: 50, who: { email: "not an email", visitor: "zz-99!" } });
   let logs = await call(c, "/_ask/logs");
-  assert.equal(logs.total, 2); assert.equal(logs.flagged, 0); assert.equal(logs.on, true);
+  assert.equal(logs.total, 2); assert.equal(logs.flagged, 0); assert.equal(logs.on, true); assert.equal(logs.next, null);
   assert.deepEqual(logs.rows.map((r) => r.id), [l2.id, l1.id], "newest first");
   assert.equal(logs.rows[0].q.length, 500, "questions are clipped"); assert.equal(logs.rows[1].tools[0], "search_products"); assert.equal(logs.rows[1].products, 1);
+  assert.deepEqual(logs.rows[1].who, { email: "sam@example.test", visitor: "ab12cd" }, "who asked: the customer's email, lower-cased, and the session tag");
+  assert.deepEqual(logs.rows[0].who, { email: "", visitor: "zz99" }, "a non-email is dropped; the tag is letters and digits only");
   assert.equal(JSON.stringify(logs).includes("ipHash"), false);
+  // search: the question, the answer, the email, the tag; flagged only
+  assert.deepEqual((await call(c, "/_ask/logs?q=bloomburrow")).rows.map((r) => r.id), [l1.id]);
+  assert.deepEqual((await call(c, "/_ask/logs?q=sam@example")).rows.map((r) => r.id), [l1.id]);
+  assert.deepEqual((await call(c, "/_ask/logs?q=zz99")).rows.map((r) => r.id), [l2.id]);
+  assert.deepEqual((await call(c, "/_ask/logs?q=nothing-here")).rows, []);
+  assert.deepEqual((await call(c, "/_ask/logs?flagged=1")).rows, []);
   // the shopper's "Not right?"
   assert.deepEqual((await call(c, "/_ask/flag", { id: l1.id })).flag, { at: clock.t, by: "shopper", wrong: true });
   // staff clear it, then mark the other one
@@ -170,13 +179,26 @@ test("DO: the switch is off by default; the log keeps questions 30 days; flags f
   assert.equal((await call(c, "/_ask/flag", { id: "nope" })).ok, false);
   logs = await call(c, "/_ask/logs");
   assert.equal(logs.flagged, 1); assert.equal(logs.rows.find((r) => r.id === l2.id).flag.by, "sam@x.test");
-  // the sweep forgets rows after LOG_DAYS
-  clock.t = T0 + (LOG_DAYS + 1) * 864e5;
+  assert.deepEqual((await call(c, "/_ask/logs?flagged=1")).rows.map((r) => r.id), [l2.id]);
+  // the sweep never touches the log (owner, 2026-10-29: "make the log run forever")
+  clock.t = T0 + 400 * 864e5;
   const sw = await call(c, "/_ask/sweep", {});
-  assert.equal(sw.counts.logs, 2); assert.equal((await call(c, "/_ask/logs")).total, 0);
+  assert.equal("logs" in sw.counts, false); assert.equal((await call(c, "/_ask/logs")).total, 2);
+  // an admin deletes one row; the counters follow
+  assert.equal((await call(c, "/_ask/delete", { id: l2.id })).ok, true);
+  assert.equal((await call(c, "/_ask/delete", { id: l2.id })).ok, false);
+  logs = await call(c, "/_ask/logs"); assert.equal(logs.total, 1); assert.equal(logs.flagged, 0); assert.deepEqual(logs.rows.map((r) => r.id), [l1.id]);
+  // pages: MAX_LOG + 50 rows -> a full first page, then the rest through ?before=
+  for (let i = 0; i < MAX_LOG + 49; i++) { clock.t += 1000; await call(c, "/_ask/log", { q: "q" + i, a: "a", ok: true, who: {} }); }
+  const p1 = await call(c, "/_ask/logs");
+  assert.equal(p1.rows.length, MAX_LOG); assert.equal(p1.rows[0].q, "q" + (MAX_LOG + 48)); assert.ok(p1.next, "more to come");
+  const p2 = await call(c, "/_ask/logs?before=" + p1.next);
+  assert.equal(p2.rows.length, 50, "the 49 older ones and Bloomburrow"); assert.equal(p2.rows[49].id, l1.id); assert.equal(p2.next, null);
+  assert.equal((await call(c, "/_ask/logs?q=q7")).rows.length, 11, "q7 and q70-q79, across pages");
   // the page
-  const html = renderAskLog({ ok: true, on: true, total: 2, flagged: 1, rows: [{ id: "a1", at: T0, q: "Beta Bolt?", a: "Not on the list: https://exorgames.com/pages/sell", tools: ["buy_price"], ok: true, ms: 2100, products: 0, flag: { at: T0, by: "shopper", wrong: true } }, { id: "b2", at: T0, q: "Hi <b>", a: "Hello", tools: [], ok: true, ms: 300, products: 0, flag: null }] }, { user: { email: "s@x", role: "admin" }, act: true, admin: true });
-  for (const needle of ["Marked wrong", "marked wrong by the shopper", "Beta Bolt?", 'href="https://exorgames.com/pages/sell"', "Hi &lt;b&gt;", 'name="wrong" value="1"', 'name="wrong" value="0"', "used buy_price", "The assistant is <b>on</b>", "1 marked wrong"]) assert.ok(html.includes(needle), needle);
+  const html = renderAskLog({ ok: true, on: true, total: 2, flagged: 1, next: "abc-1", q: "", onlyFlagged: false, rows: [{ id: "a1", at: T0, q: "Beta Bolt?", a: "Not on the list: https://exorgames.com/pages/sell", tools: ["buy_price"], ok: true, ms: 2100, products: 0, flag: { at: T0, by: "shopper", wrong: true }, who: { email: "sam@example.test", visitor: "ab12cd" } }, { id: "b2", at: T0, q: "Hi <b>", a: "Hello", tools: [], ok: true, ms: 300, products: 0, flag: null, who: { email: "", visitor: "zz99" } }] }, { user: { email: "s@x", role: "admin" }, act: true, admin: true });
+  for (const needle of ["Marked wrong", "marked wrong by the shopper", "Beta Bolt?", 'href="https://exorgames.com/pages/sell"', "Hi &lt;b&gt;", 'name="wrong" value="1"', 'name="wrong" value="0"', "used buy_price", "The assistant is <b>on</b>", "1 marked wrong", 'asked by <a href="mailto:sam@example.test">sam@example.test</a>', "customers?query=sam%40example.test", "a visitor #zz99", 'name="action" value="delete"', "?before=abc-1", 'name="q"', "until an admin deletes"]) assert.ok(html.includes(needle), needle);
+  assert.equal(renderAskLog({ ok: true, on: true, total: 0, flagged: 0, rows: [], q: "zzz" }, { user: { email: "s@x", role: "staff" }, act: true }).includes("Nothing matches"), true);
 });
 
 test("routes: 503 without a key; the gate; a grounded answer with cards; health counts only; CORS for the store", async () => {
@@ -193,13 +215,14 @@ test("routes: 503 without a key; the gate; a grounded answer with cards; health 
   assert.equal(r.status, 503); const off = await r.json(); assert.equal(off.off, true); assert.match(off.error, /switched off/);
   await call(c, "/_ask/cfg", { on: true, by: "boss@x.test" });
   const client = fakeClient([toolCall("search_products", { query: "bloomburrow" }), text("In stock: https://exorgames.com/products/bloomburrow-collector-booster-box")]);
-  r = await go("/ask.json", { q: "bloomburrow?" }, { client, fetchFn: suggest(PRODUCTS) });
+  r = await go("/ask.json", { q: "bloomburrow?", email: "Pat@Example.test", visitor: "v1v1v1" }, { client, fetchFn: suggest(PRODUCTS) });
   assert.equal(r.status, 200); assert.equal(r.headers.get("access-control-allow-origin"), "https://exorgames.com");
   const j = await r.json();
   assert.equal(j.ok, true); assert.match(j.answer, /In stock/); assert.equal(j.products.length, 1, "the one product the answer links"); assert.equal(j.products[0].title, "Bloomburrow Collector Booster Box"); assert.ok(typeof j.ms === "number");
   assert.ok(j.id, "the answer carries its log id");
   const logged = await call(c, "/_ask/logs");
   assert.equal(logged.rows[0].q, "bloomburrow?"); assert.match(logged.rows[0].a, /In stock/); assert.deepEqual(logged.rows[0].tools, ["search_products"]); assert.equal(logged.rows[0].products, 1);
+  assert.deepEqual(logged.rows[0].who, { email: "pat@example.test", visitor: "v1v1v1" }, "who asked rides from the widget");
   // the shopper's "Not right?" through the public route
   r = await go("/ask/flag.json", { id: j.id });
   assert.equal(r.status, 200); assert.match((await r.json()).note, /charlottetown@exorgames.com/);

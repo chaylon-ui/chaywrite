@@ -33,9 +33,13 @@
    - THE SWITCH: cfg.on in the DO, OFF until an admin turns it on at
      9Pocket > Admin. Off, /ask/health says configured:false (so the widget
      never mounts) and /ask.json answers 503.
-   - THE LOG: every question and answer (no address, no name) is kept
-     LOG_DAYS days as log:<id> and shown at 9Pocket > Ask Exor, where staff
-     mark an answer wrong (or clear the mark).
+   - THE LOG: every question and answer is kept as log:<id> until an admin
+     deletes it (owner, 2026-10-29: "make the log run forever"), with who
+     asked: the signed-in customer's email when the storefront knows one,
+     else a per-session visitor tag ("see who asked the question"). Shown
+     at 9Pocket > Ask Exor, newest first, 200 a page, searchable; staff mark
+     an answer wrong (or clear the mark). Keys are log:<ms in base36>-<rand>,
+     so the store's own key order is time order and a page is one list call.
    - THE FLAG: the widget's "Not right?" posts the answer's id to
      /ask/flag.json, which marks it in the log as flagged by the shopper. */
 
@@ -55,8 +59,8 @@ const noStore = { "cache-control": "no-store" };
 const ALLOWED_ORIGINS = [SHOP, "https://exor-binder.nevski.workers.dev", "https://most-wanted-ca.myshopify.com"];
 
 export const askConfigured = (env) => !!(env && env.ANTHROPIC_API_KEY);
-export const LOG_DAYS = 30;     // questions and answers kept this long
-export const MAX_LOG = 200;     // rows the log page shows
+export const MAX_LOG = 200;     // rows per page of the log
+const SCAN_MAX = 5000;          // rows a search looks through before giving up
 export const STAFF_FALLBACK = "For a sure answer, email charlottetown@exorgames.com or ask staff in store.";
 
 export const SYSTEM = `You are Ask Exor, the shop assistant on exorgames.com, the website of Exor Games: a trading card, board game, miniatures and hobby store at 51 Allen Street, Charlottetown, Prince Edward Island, Canada, with sister Exor stores across Atlantic Canada and a sister video game store, Mallow Games (mallowgames.com, which buys and sells used video games).
@@ -212,23 +216,59 @@ export async function askDoFetch(cx, request, url) {
   }
   if (p === "/_ask/log" && post) {
     const b = await bodyOf(request); const now = cx.now();
-    const id = now.toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-    const row = { id, at: now, q: clip(b.q, 500), a: clip(b.a, 2000), tools: Array.isArray(b.tools) ? b.tools.map((t) => clip(t, 40)).slice(0, 12) : [], ok: !!b.ok, ms: Number(b.ms) || 0, products: Number(b.products) || 0, flag: null };
-    await cx.storage.put("log:" + id, row);
+    const id = now.toString(36).padStart(9, "0") + "-" + Math.random().toString(36).slice(2, 8);
+    const who = b.who && typeof b.who === "object" ? b.who : {};
+    const email = clip(who.email, 120).trim().toLowerCase();
+    const row = { id, at: now, q: clip(b.q, 500), a: clip(b.a, 2000), tools: Array.isArray(b.tools) ? b.tools.map((t) => clip(t, 40)).slice(0, 12) : [], ok: !!b.ok, ms: Number(b.ms) || 0, products: Number(b.products) || 0, flag: null,
+      who: { email: /^[^\s@]+@[^\s@]+$/.test(email) ? email : "", visitor: clip(who.visitor, 16).replace(/[^a-z0-9]/gi, "") } };
+    const st = (await cx.storage.get("stats")) || { total: 0, flagged: 0 };
+    st.total++;
+    await cx.storage.put({ ["log:" + id]: row, stats: st });
     return json({ ok: true, id });
   }
   if (p === "/_ask/flag" && post) {
     const b = await bodyOf(request); const id = clip(b.id, 40).replace(/[^a-z0-9-]/g, "");
     const row = id ? await cx.storage.get("log:" + id) : null;
     if (!row) return json({ ok: false, error: "That answer is no longer in the log." }, 404);
+    const was = !!row.flag;
     row.flag = b.wrong === false ? null : { at: cx.now(), by: clip(b.by, 120) || "shopper", wrong: true };
-    await cx.storage.put("log:" + id, row);
+    const st = (await cx.storage.get("stats")) || { total: 0, flagged: 0 };
+    st.flagged = Math.max(0, st.flagged + (row.flag ? 1 : 0) - (was ? 1 : 0));
+    await cx.storage.put({ ["log:" + id]: row, stats: st });
     return json({ ok: true, flag: row.flag });
   }
+  if (p === "/_ask/delete" && post) {
+    const b = await bodyOf(request); const id = clip(b.id, 40).replace(/[^a-z0-9-]/g, "");
+    const row = id ? await cx.storage.get("log:" + id) : null;
+    if (!row) return json({ ok: false, error: "That row is not in the log." }, 404);
+    const st = (await cx.storage.get("stats")) || { total: 0, flagged: 0 };
+    st.total = Math.max(0, st.total - 1); if (row.flag) st.flagged = Math.max(0, st.flagged - 1);
+    await cx.storage.delete("log:" + id); await cx.storage.put("stats", st);
+    return json({ ok: true });
+  }
   if (p === "/_ask/logs") {
-    const m = await cx.storage.list({ prefix: "log:" });
-    const rows = [...m.values()].sort((a, b) => b.at - a.at);
-    return json({ ok: true, total: rows.length, flagged: rows.filter((r) => r.flag).length, rows: rows.slice(0, MAX_LOG), on: (await cfgOf(cx)).on });
+    // newest first, MAX_LOG a page: ?before=<id> continues, ?q= searches the
+    // question, the answer and who asked, ?flagged=1 keeps only marked rows.
+    const sp = url.searchParams;
+    const before = clip(sp.get("before"), 40).replace(/[^a-z0-9-]/g, ""), q = clip(sp.get("q"), 80).trim().toLowerCase(), onlyFlagged = sp.get("flagged") === "1";
+    const rows = []; let scanned = 0, end = before ? "log:" + before : undefined, next = null;
+    while (rows.length < MAX_LOG && scanned < SCAN_MAX) {
+      const page = await cx.storage.list({ prefix: "log:", reverse: true, limit: MAX_LOG, ...(end ? { end } : {}) });
+      if (!page.size) break;
+      let last = null;
+      for (const [k, r] of page) {
+        last = k; scanned++;
+        if (!r) continue;
+        if (onlyFlagged && !r.flag) continue;
+        if (q && !((r.q || "").toLowerCase().includes(q) || (r.a || "").toLowerCase().includes(q) || ((r.who && r.who.email) || "").includes(q) || ((r.who && r.who.visitor) || "").toLowerCase().includes(q))) continue;
+        if (rows.length < MAX_LOG) rows.push(r); else break;
+      }
+      if (page.size < MAX_LOG) { end = null; break; }
+      end = last;
+    }
+    if (rows.length >= MAX_LOG && end) next = rows[rows.length - 1].id;
+    const st = (await cx.storage.get("stats")) || { total: 0, flagged: 0 };
+    return json({ ok: true, total: st.total, flagged: st.flagged, rows, next, q, onlyFlagged, scanned, on: (await cfgOf(cx)).on });
   }
   if (p === "/_ask/allow" && post) {
     const b = await bodyOf(request); const now = cx.now();
@@ -258,10 +298,9 @@ export async function askDoFetch(cx, request, url) {
     const now = cx.now(), hour = Math.floor(now / 3600e3), gone = [];
     for (const k of (await cx.storage.list({ prefix: "rl:" })).keys()) if (Number(k.split(":")[1]) < hour - 1) gone.push(k);
     for (const k of (await cx.storage.list({ prefix: "day:" })).keys()) if (now - Date.parse(k.slice(4) + "T12:00:00Z") > 400 * 864e5) gone.push(k);
-    let logs = 0;
-    for (const [k, v] of await cx.storage.list({ prefix: "log:" })) if (!v || now - (v.at || 0) > LOG_DAYS * 864e5) { gone.push(k); logs++; }
+    // the question log is kept until an admin deletes a row (owner, 2026-10-29)
     for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
-    return json({ ok: true, counts: { rows: gone.length - logs, logs } });
+    return json({ ok: true, counts: { rows: gone.length } });
   }
   return json({ ok: false, error: "no such path" }, 404);
 }
@@ -309,7 +348,7 @@ export async function serveAsk(request, env, url, ctx, opts) {
     const note = env.ROOM ? doCall(env, "/_ask/note", { ok: !!r.ok, tools: (r.toolsUsed || []).length, input: r.usage && r.usage.input, output: r.usage && r.usage.output, cacheRead: r.usage && r.usage.cacheRead }).catch(() => {}) : Promise.resolve();
     if (ctx && ctx.waitUntil) ctx.waitUntil(note); else await note;
     const ms = Date.now() - t0;
-    const logged = env.ROOM ? await doCall(env, "/_ask/log", { q: b.q, a: r.ok ? r.answer : r.error, tools: r.toolsUsed || [], ok: !!r.ok, ms, products: r.ok ? (r.products || []).length : 0 }).catch(() => ({})) : {};
+    const logged = env.ROOM ? await doCall(env, "/_ask/log", { q: b.q, a: r.ok ? r.answer : r.error, tools: r.toolsUsed || [], ok: !!r.ok, ms, products: r.ok ? (r.products || []).length : 0, who: { email: b.email, visitor: b.visitor } }).catch(() => ({})) : {};
     if (!r.ok) return json({ ok: false, error: r.error, kind: r.kind, id: logged.id || null }, r.kind === "busy" ? 503 : 502, cors);
     return json({ ok: true, answer: r.answer, products: r.products, ms, id: logged.id || null }, 200, cors);
   }
