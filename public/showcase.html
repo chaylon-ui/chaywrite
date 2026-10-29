@@ -51,13 +51,13 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .board .note{font-family:Caveat,cursive;font-size:19px;color:#e8dcb8;transform:rotate(-2deg);text-shadow:0 1px 0 #000}
 .lip{position:absolute;left:0;right:0;bottom:0;height:14px;background:linear-gradient(180deg,#2b170b,#5a3a1d 40%,#20110a);box-shadow:0 -3px 8px rgba(0,0,0,.5)}
 .lane{position:absolute;left:0;top:0;height:100%;will-change:transform}
-.card{position:absolute;width:var(--cw);aspect-ratio:63/88;left:var(--x);top:var(--y);transform:rotate(var(--r)) scale(var(--s,1));transform-origin:50% 60%;cursor:pointer}
+.card{position:absolute;width:var(--cw);aspect-ratio:63/88;left:var(--x);top:var(--y);transform:rotate(var(--r)) scale(var(--s,1));transform-origin:50% 60%;cursor:pointer;z-index:var(--z,1)}
 .card .tl{position:absolute;inset:0;border-radius:6px;background:#111;box-shadow:0 10px 18px rgba(0,0,0,.55),0 2px 4px rgba(0,0,0,.6);overflow:hidden;border:3px solid rgba(255,255,255,.12)}
 .card .tl:after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.04) 28%,transparent 45%,rgba(255,255,255,.08) 70%,transparent 80%);pointer-events:none}
 .card img{display:block;width:100%;height:100%;object-fit:cover;background:#1b1b1f}
 .card .noimg{position:absolute;inset:0;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10);display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;font-family:"Permanent Marker",cursive;font-size:15px;line-height:1.15;color:#d9d2c4;text-shadow:0 1px 0 #000}
 .card .noimg:before{content:"";position:absolute;inset:8px;border:1px dashed rgba(255,255,255,.18);border-radius:4px}
-.card.r0{z-index:1}.card.r1{z-index:2}.card.r0 .tl{filter:brightness(.86)}
+.card.r0 .tl{filter:brightness(.86)}
 .card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
 .card.stand:before{content:"";position:absolute;left:30%;right:30%;bottom:-8px;height:10px;background:#0c0608;border-radius:40%;filter:blur(2px)}
 
@@ -66,9 +66,9 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   background-image:repeating-linear-gradient(0deg,transparent 0 9px,rgba(60,80,160,.12) 9px 10px)}
 .stk small{display:block;font-family:"Special Elite",monospace;font-size:9px;letter-spacing:.06em;color:#4a4a52;margin-top:2px}
 .stk.was:before{content:attr(data-was);display:block;font-size:14px;color:#8a2a2a;text-decoration:line-through;line-height:.9}
-.foil{position:absolute;left:-8px;top:-6px;width:34px;height:34px;border-radius:50%;background:#c43d2f;color:#fff;font-family:"Permanent Marker",cursive;font-size:9px;line-height:34px;text-align:center;transform:rotate(-14deg);box-shadow:0 2px 3px rgba(0,0,0,.5)}
+.foil{position:absolute;right:6px;top:30px;width:30px;height:30px;border-radius:50%;background:#c43d2f;color:#fff;font-family:"Permanent Marker",cursive;font-size:9px;line-height:30px;text-align:center;transform:rotate(-14deg);box-shadow:0 2px 3px rgba(0,0,0,.5)}
 .sold .tl{filter:grayscale(.9) brightness(.5)}.sold .stk:after{content:"SOLD";display:block;font-family:"Permanent Marker",cursive;color:#c43d2f;font-size:13px}
-.tape{position:absolute;left:var(--tx);top:8px;padding:5px 16px;background:var(--tape);color:#2a2320;font-family:"Permanent Marker",cursive;font-size:14px;letter-spacing:.04em;transform:rotate(var(--tr));
+.tape{position:absolute;left:var(--tx);bottom:20px;z-index:5;padding:5px 16px;background:var(--tape);color:#2a2320;font-family:"Permanent Marker",cursive;font-size:14px;letter-spacing:.04em;transform:rotate(var(--tr));
   box-shadow:0 2px 3px rgba(0,0,0,.4);opacity:.92;clip-path:polygon(2% 0,98% 4%,100% 100%,1% 96%);white-space:nowrap}
 .pola{position:absolute;left:var(--x);top:var(--y);width:calc(var(--cw) * .95);padding:8px 8px 30px;background:#f3eee0;transform:rotate(var(--r));box-shadow:0 10px 18px rgba(0,0,0,.55);cursor:pointer}
 .pola img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#222}
@@ -78,7 +78,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   background:linear-gradient(100deg,rgba(255,255,255,0) 20%,rgba(255,255,255,.07) 34%,rgba(255,255,255,.015) 42%,transparent 55%,rgba(255,255,255,.05) 78%,transparent 86%)}
 .smudge{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 23% 64%,rgba(255,255,255,.035),transparent 6%),radial-gradient(circle at 71% 38%,rgba(255,255,255,.03),transparent 5%),radial-gradient(ellipse at 50% 100%,rgba(0,0,0,.35),transparent 60%)}
 .vig{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 120px rgba(0,0,0,.75)}
-.hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(10,8,9,.72);color:var(--ink);padding:8px 14px;border-radius:999px;font-size:13px;pointer-events:none;transition:opacity .6s;white-space:nowrap}
+.hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(10,8,9,.72);color:var(--ink);padding:8px 14px;border-radius:999px;font-size:13px;pointer-events:none;transition:opacity .6s;width:max-content;max-width:calc(100% - 48px);text-align:center}
 .hint.gone{opacity:0}
 .state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:Caveat,cursive;font-size:30px;text-align:center;padding:20px}
 /* controls and the map */
@@ -145,7 +145,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   // Two rows deep, the front row standing lower and in front of the back one.
   var ROWS = 2;
   function cardH() { return Math.round(cardW() * 88 / 63); }
-  function shelfH() { return Math.round(cardH() * 1.48 + 70); }
+  function shelfH() { return Math.round(cardH() * 1.48 + 78); }
 
   // Lay one shelf by hand: uneven gaps, the odd overlap, a tilt per card, a
   // sticker at its own angle; pricey rows stand their cards up.
@@ -160,7 +160,10 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
       if (i >= ROWS) xs[row] += gap;
       var stand = shelf.key === 'high' || shelf.key === 'picks', pick = shelf.key === 'picks' && i === 0;
       var sc = (pick ? 1.08 : stand ? 1.04 : 1) * (row === 0 ? .9 : 1);
-      items.push({ c: c, row: row, x: xs[row], y: (row === 0 ? 24 : 24 + Math.round(ch * .48)) + Math.round((q() - .5) * 12), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
+      // Later cards lie on top, except one laid overlapping its neighbour: that
+      // one slides underneath, so the neighbour's price sticker stays readable.
+      var z = row * 1000 + i * 2; if (overlap) z = items[i - ROWS].z - 1;
+      items.push({ c: c, row: row, z: z, x: xs[row], y: (row === 0 ? 14 : 14 + Math.round(ch * .48)) + Math.round((q() - .5) * 12), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
       xs[row] += cw;
     });
     var x = Math.max(xs[0], xs[1]);
@@ -182,10 +185,10 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   function foilDot(c) { return c.foil && c.game !== 'pokemon' ? '<div class="foil">FOIL</div>' : ''; }
   function cardHtml(it, i) {
     var c = it.c;
-    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + sticker(c) + foilDot(c) + '</div>';
+    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + sticker(c) + foilDot(c) + '</div>';
   }
   function render() {
-    var sh = shelfH(); state.shelfH = sh; state.lanes = [];
+    var sh = shelfH(); state.shelfH = sh; state.cardW = cardW(); state.lanes = [];
     var board = '<div class="board" style="--bh:' + BOARD + 'px"><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><span class="note">ask us to pull any card out for a closer look</span></div>';
     track.innerHTML = board + state.shelves.map(function (shelf, idx) {
       var L = layout(shelf, idx); state.lanes.push(L);
