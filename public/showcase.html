@@ -3,6 +3,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>The Showcase — Exor Games</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Caveat:wght@600;700&family=Permanent+Marker&family=Special+Elite&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -50,6 +51,8 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .card .tl{position:absolute;inset:0;border-radius:6px;background:#111;box-shadow:0 10px 18px rgba(0,0,0,.55),0 2px 4px rgba(0,0,0,.6);overflow:hidden;border:3px solid rgba(255,255,255,.12)}
 .card .tl:after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.04) 28%,transparent 45%,rgba(255,255,255,.08) 70%,transparent 80%);pointer-events:none}
 .card img{display:block;width:100%;height:100%;object-fit:cover;background:#1b1b1f}
+.card .noimg{position:absolute;inset:0;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10);display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;font-family:"Permanent Marker",cursive;font-size:15px;line-height:1.15;color:#d9d2c4;text-shadow:0 1px 0 #000}
+.card .noimg:before{content:"";position:absolute;inset:8px;border:1px dashed rgba(255,255,255,.18);border-radius:4px}
 .card.stand{--s:1.07}.card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
 .card.stand:before{content:"";position:absolute;left:30%;right:30%;bottom:-8px;height:10px;background:#0c0608;border-radius:40%;filter:blur(2px)}
 .card.pick{--s:1.1}
@@ -74,9 +77,8 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .hint.gone{opacity:0}
 .state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:Caveat,cursive;font-size:30px;text-align:center;padding:20px}
 /* controls and the map */
-.ctl{position:absolute;right:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}
-.ctl button,.walk button{width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(10,8,9,.6);color:var(--ink);font-size:17px}
-.walk{position:absolute;left:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}
+.ctl,.walk{display:flex;gap:6px}
+.ctl button,.walk button{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:#1a1411;color:var(--ink);font-size:15px}
 .map{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:6px 16px 10px;flex-wrap:wrap}
 .map .shelves{display:flex;gap:6px;flex-wrap:wrap}
 .map .shelves button{background:transparent;border:1px dashed #4a3a2e;color:var(--muted);border-radius:6px;padding:5px 10px;font-family:"Permanent Marker",cursive;font-size:12px}
@@ -101,7 +103,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .lift .acts .buy{background:var(--ember);border-color:var(--ember);color:#1a0f05}
 .lift .x{position:absolute;right:16px;top:12px;background:none;border:0;color:var(--muted);font-size:34px}
 .lift .note{font-family:Caveat,cursive;font-size:19px;color:var(--muted);margin-top:14px}
-@media (max-width:720px){:root{--cw:118px}header h1{font-size:16px}.lift .in{flex-direction:column;gap:14px}.lift .big{width:min(60vw,260px)}.ctl,.walk{display:none}.tabs button{padding:6px 10px;font-size:12px}}
+@media (max-width:720px){:root{--cw:118px}header h1{font-size:16px}.lift .in{flex-direction:column;gap:14px}.lift .big{width:min(60vw,260px)}.tabs button{padding:6px 10px;font-size:12px}.map .n{display:none}}
 @media (prefers-reduced-motion:reduce){.track,.case,.shelf{transition:none!important}.lift .in{animation:none}}
 </style></head>
 <body>
@@ -109,12 +111,10 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 <div class="room"><div class="case" id="case">
   <div class="track" id="track"></div>
   <div class="glass" id="glass"></div><div class="smudge"></div><div class="vig"></div>
-  <div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div>
-  <div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div>
   <div class="hint" id="hint">Swipe to walk the case · swipe up to crouch to the next shelf · tap a card</div>
   <div class="state" id="state">Unlocking the case…</div>
 </div></div>
-<div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><span class="n" id="count"></span></div>
+<div class="map"><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
 <div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="big"><img id="liftImg" alt=""></div><div class="txt"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="stk" id="liftStk"></div><div class="acts" id="liftActs"></div><div class="note" id="liftNote"></div></div></div></div>
 <script>
 (function () {
@@ -153,12 +153,20 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
     if (shelf.key === 'low') { extras.push({ guide: true, x: x + 30, y: shelfH() - 70, r: ((r() - .5) * 20).toFixed(1) }); x += 110; }
     return { items: items, extras: extras, width: x + 60, tapeX: tapeX, tapeR: tapeR, p1: Math.round(20 + r() * 60) + '%', p2: Math.round(10 + r() * 80) + '%' };
   }
-  function sticker(c, cls) {
-    return '<div class="stk ' + (cls || '') + '" style="--sr:' + ((seed(String(c.variantId || c.name))() - .5) * 14).toFixed(1) + 'deg">' + money(c.price) + (c.condition ? '<small>' + esc(c.condition) + '</small>' : '') + '</div>';
+  function cond(c) {
+    return String(c.condition || '').replace(/near mint/i, 'NM').replace(/lightly played/i, 'LP').replace(/moderately played/i, 'MP').replace(/heavily played/i, 'HP').replace(/damaged/i, 'DMG').replace(/1st edition/i, '1st Ed').replace(/unlimited/i, 'Unl').replace(/\s+/g, ' ').trim().slice(0, 14);
   }
+  function sticker(c, cls) {
+    return '<div class="stk ' + (cls || '') + '" style="--sr:' + ((seed(String(c.variantId || c.name))() - .5) * 14).toFixed(1) + 'deg">' + money(c.price) + (cond(c) ? '<small>' + esc(cond(c)) + '</small>' : '') + '</div>';
+  }
+  // The store's "image coming soon" placeholder is not a card photo.
+  function hasPhoto(c) { return !!c.image && !/placeholder|coming|no[-_]?image|missing/i.test(c.image); }
+  // Pokémon rares are holo as a rule, so a FOIL dot there says nothing; it
+  // stays for games where foil is the exception.
+  function foilDot(c) { return c.foil && c.game !== 'pokemon' ? '<div class="foil">FOIL</div>' : ''; }
   function cardHtml(it, i) {
     var c = it.c;
-    return '<div class="card' + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg"><div class="tl">' + (c.image ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '') + '</div>' + sticker(c) + (c.foil ? '<div class="foil">FOIL</div>' : '') + '</div>';
+    return '<div class="card' + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + sticker(c) + foilDot(c) + '</div>';
   }
   function render() {
     var sh = shelfH(); state.shelfH = sh; state.lanes = [];
@@ -167,7 +175,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
       var caseNo = Math.max(1, state.cases.findIndex(function (c) { return c.key === state.game; }) + 1);
       var tape = '<div class="tape" style="--tx:' + L.tapeX + 'px;--tr:' + L.tapeR.toFixed(1) + 'deg">Case ' + caseNo + ' · ' + esc(shelfLetter(idx)) + ' · ' + esc(shelf.tape) + '</div>';
       var extras = L.extras.map(function (e) {
-        if (e.pola) return '<div class="pola" data-pick="1" style="--x:' + e.x + 'px;--y:' + e.y + 'px;--r:' + e.r + 'deg"><img src="' + esc(img(e.pola.image, 300)) + '" alt="" loading="lazy" draggable="false"><span>pick of the case ★</span></div>';
+        if (e.pola) return '<div class="pola" data-pick="1" style="--x:' + e.x + 'px;--y:' + e.y + 'px;--r:' + e.r + 'deg">' + (hasPhoto(e.pola) ? '<img src="' + esc(img(e.pola.image, 300)) + '" alt="" loading="lazy" draggable="false">' : '<div class="noimg" style="position:relative;aspect-ratio:1/1">' + esc(e.pola.name) + '</div>') + '<span>pick of the case ★</span></div>';
         if (e.guide) return '<div class="guide" style="--x:' + e.x + 'px;--y:' + e.y + 'px;--r:' + e.r + 'deg">PRICE GUIDE<br>monthly<br>(well-thumbed)</div>';
         return '';
       }).join('');
@@ -276,7 +284,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   }
   function lift(c) {
     lifted = c;
-    $('#liftImg').src = img(c.image, 800) || ''; $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, c.condition, c.foil ? 'Foil' : ''].filter(Boolean).join(' · ');
+    $('#liftImg').src = hasPhoto(c) ? img(c.image, 800) : ''; $('#liftImg').alt = c.name; $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, c.condition, c.foil ? 'Foil' : ''].filter(Boolean).join(' · ');
     $('#liftStk').innerHTML = money(c.price) + (c.condition ? '<small>' + esc(c.condition) + '</small>' : '');
     $('#liftActs').innerHTML = (ON_STORE && c.variantId ? '<button type="button" class="buy" data-buy="' + esc(c.variantId) + '">Add to cart</button>' : '') + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
     $('#liftNote').textContent = 'Live price from the shop. Put it back with × or Esc.';
