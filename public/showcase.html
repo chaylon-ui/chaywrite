@@ -57,9 +57,10 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .card img{display:block;width:100%;height:100%;object-fit:cover;background:#1b1b1f}
 .card .noimg{position:absolute;inset:0;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10);display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;font-family:"Permanent Marker",cursive;font-size:15px;line-height:1.15;color:#d9d2c4;text-shadow:0 1px 0 #000}
 .card .noimg:before{content:"";position:absolute;inset:8px;border:1px dashed rgba(255,255,255,.18);border-radius:4px}
-.card.stand{--s:1.07}.card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
+.card.r0{z-index:1}.card.r1{z-index:2}.card.r0 .tl{filter:brightness(.86)}
+.card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
 .card.stand:before{content:"";position:absolute;left:30%;right:30%;bottom:-8px;height:10px;background:#0c0608;border-radius:40%;filter:blur(2px)}
-.card.pick{--s:1.1}
+
 .stk{position:absolute;right:-10px;top:-8px;min-width:54px;padding:3px 7px 2px;background:var(--label);color:#1c1a16;border-radius:2px;transform:rotate(var(--sr));
   box-shadow:0 2px 4px rgba(0,0,0,.5);font-family:Caveat,cursive;font-weight:700;font-size:21px;line-height:1;text-align:center;
   background-image:repeating-linear-gradient(0deg,transparent 0 9px,rgba(60,80,160,.12) 9px 10px)}
@@ -93,11 +94,14 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 /* the lift */
 .lift{position:fixed;inset:0;background:rgba(5,3,4,.82);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
 .lift.on{display:flex}
-.lift .in{display:flex;gap:22px;align-items:center;max-width:860px;width:100%;animation:lift .45s cubic-bezier(.2,.8,.2,1)}
+.lift .in{display:flex;gap:22px;align-items:center;max-width:860px;width:100%;animation:lift .45s cubic-bezier(.2,.8,.2,1);perspective:1100px}
 @keyframes lift{from{transform:translateY(60px) scale(.6) rotate(-3deg);opacity:0}to{transform:none;opacity:1}}
-.lift .big{width:min(46vw,340px);aspect-ratio:63/88;border-radius:10px;overflow:hidden;border:4px solid rgba(255,255,255,.14);box-shadow:0 30px 60px rgba(0,0,0,.8);flex-shrink:0;position:relative;background:#111}
+/* held: the wrapper tilts with the finger or the phone, the card inside drifts as a hand never quite holds still */
+.lift .hold{flex-shrink:0;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;transition:transform .14s ease-out;touch-action:none}
+.lift .big{width:min(46vw,340px);aspect-ratio:63/88;border-radius:10px;overflow:hidden;border:4px solid rgba(255,255,255,.14);box-shadow:0 30px 60px rgba(0,0,0,.8);position:relative;background:#111;animation:hover 5.5s ease-in-out infinite}
+@keyframes hover{0%,100%{transform:translateY(0) rotate(-.8deg);box-shadow:0 28px 50px rgba(0,0,0,.8)}50%{transform:translateY(-12px) rotate(.8deg);box-shadow:0 48px 70px rgba(0,0,0,.7)}}
 .lift .big img{width:100%;height:100%;object-fit:cover;display:block}
-.lift .big:after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.25),transparent 40%,rgba(255,255,255,.08) 70%,transparent 80%);pointer-events:none}
+.lift .big:after{content:"";position:absolute;inset:0;background:radial-gradient(circle at var(--gx,30%) var(--gy,25%),rgba(255,255,255,.32),rgba(255,255,255,.06) 28%,transparent 50%),linear-gradient(115deg,rgba(255,255,255,.14),transparent 40%,rgba(255,255,255,.06) 70%,transparent 80%);pointer-events:none}
 .lift .txt{flex:1;min-width:0}
 .lift h2{font-family:Cinzel,serif;font-size:22px;line-height:1.2;margin-bottom:4px}
 .lift .set{color:var(--muted);font-size:14px;margin-bottom:12px}
@@ -108,7 +112,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .lift .x{position:absolute;right:16px;top:12px;background:none;border:0;color:var(--muted);font-size:34px}
 .lift .note{font-family:Caveat,cursive;font-size:19px;color:var(--muted);margin-top:14px}
 @media (max-width:720px){:root{--cw:118px}header h1{font-size:16px}.lift .in{flex-direction:column;gap:14px}.lift .big{width:min(60vw,260px)}.tabs button{padding:6px 10px;font-size:12px}.map .n{display:none}}
-@media (prefers-reduced-motion:reduce){.track,.case,.shelf{transition:none!important}.lift .in{animation:none}}
+@media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big{animation:none}}
 </style></head>
 <body>
 <header><h1>The Showcase<small>Exor Games · browse the cases</small></h1><div class="tabs" id="tabs"></div></header>
@@ -119,7 +123,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   <div class="state" id="state">Unlocking the case…</div>
 </div></div>
 <div class="map"><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
-<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="big"><img id="liftImg" alt=""></div><div class="txt"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="stk" id="liftStk"></div><div class="acts" id="liftActs"></div><div class="note" id="liftNote"></div></div></div></div>
+<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="hold" id="hold"><div class="big"><img id="liftImg" alt=""></div></div><div class="txt"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="stk" id="liftStk"></div><div class="acts" id="liftActs"></div><div class="note" id="liftNote"></div></div></div></div>
 <script>
 (function () {
   'use strict';
@@ -138,21 +142,28 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   var BOARD = 72;   // the case's top board, above the first shelf
 
   function cardW() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cw')) || 150; }
-  function shelfH() { return Math.round(cardW() * 88 / 63 + 86); }
+  // Two rows deep, the front row standing lower and in front of the back one.
+  var ROWS = 2;
+  function cardH() { return Math.round(cardW() * 88 / 63); }
+  function shelfH() { return Math.round(cardH() * 1.48 + 70); }
 
   // Lay one shelf by hand: uneven gaps, the odd overlap, a tilt per card, a
   // sticker at its own angle; pricey rows stand their cards up.
   function layout(shelf, idx) {
-    var cw = cardW(), r = seed(state.game + '|' + shelf.key), x = 46 + Math.round(r() * 30), items = [];
+    var cw = cardW(), ch = cardH(), r = seed(state.game + '|' + shelf.key), items = [];
+    var xs = [46 + Math.round(r() * 30), 46 + Math.round(cw * .55) + Math.round(r() * 30)];   // the front row sits staggered half a card along
     var tapeX = 24 + Math.round(r() * 60), tapeR = (r() - .5) * 4;
     shelf.cards.forEach(function (c, i) {
-      var q = seed(String(c.variantId || c.url || c.name) + '|' + i);
-      var overlap = q() < .14 && i > 0;
+      var row = i % ROWS, q = seed(String(c.variantId || c.url || c.name) + '|' + i);
+      var overlap = q() < .14 && i >= ROWS;
       var gap = overlap ? -Math.round(cw * (.12 + q() * .1)) : Math.round(6 + q() * 26);
-      if (i) x += gap;
-      items.push({ c: c, x: x, y: 44 + Math.round((q() - .5) * 14), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), stand: shelf.key === 'high' || shelf.key === 'picks', pick: shelf.key === 'picks' && i === 0 });
-      x += cw;
+      if (i >= ROWS) xs[row] += gap;
+      var stand = shelf.key === 'high' || shelf.key === 'picks', pick = shelf.key === 'picks' && i === 0;
+      var sc = (pick ? 1.08 : stand ? 1.04 : 1) * (row === 0 ? .9 : 1);
+      items.push({ c: c, row: row, x: xs[row], y: (row === 0 ? 24 : 24 + Math.round(ch * .48)) + Math.round((q() - .5) * 12), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
+      xs[row] += cw;
     });
+    var x = Math.max(xs[0], xs[1]);
     var extras = [];
     if (shelf.key === 'picks' && shelf.cards.length) { extras.push({ pola: shelf.cards[0], x: x + 34, y: 40 + Math.round(r() * 20), r: ((r() - .5) * 10).toFixed(1) }); x += cw + 50; }
     if (shelf.key === 'low') { extras.push({ guide: true, x: x + 30, y: shelfH() - 70, r: ((r() - .5) * 20).toFixed(1) }); x += 110; }
@@ -171,7 +182,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   function foilDot(c) { return c.foil && c.game !== 'pokemon' ? '<div class="foil">FOIL</div>' : ''; }
   function cardHtml(it, i) {
     var c = it.c;
-    return '<div class="card' + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + sticker(c) + foilDot(c) + '</div>';
+    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + sticker(c) + foilDot(c) + '</div>';
   }
   function render() {
     var sh = shelfH(); state.shelfH = sh; state.lanes = [];
@@ -294,7 +305,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
     var si = Number(shelfEl.getAttribute('data-shelf')); if (si !== state.shelf) { goShelf(si, si > state.shelf ? 1 : -1); return; }
     var cardEl = el.closest('.card'), pola = el.closest('.pola');
     var c = cardEl ? state.shelves[si].cards[Number(cardEl.getAttribute('data-i'))] : pola ? state.shelves[si].cards[0] : null;
-    if (c) lift(c);
+    if (c) { askOrientation(); lift(c); }
   }
   function lift(c) {
     lifted = c;
@@ -302,10 +313,38 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
     $('#liftStk').innerHTML = money(c.price) + (c.condition ? '<small>' + esc(c.condition) + '</small>' : '');
     $('#liftActs').innerHTML = (ON_STORE && c.variantId ? '<button type="button" class="buy" data-buy="' + esc(c.variantId) + '">Add to cart</button>' : '') + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
     $('#liftNote').textContent = 'Live price from the shop. Put it back with × or Esc.';
+    orientBase = null; tiltTo(0, 0, 30, 25);
     $('#lift').classList.add('on'); hint.classList.add('gone');
   }
-  function putBack() { $('#lift').classList.remove('on'); lifted = null; }
+  function putBack() { $('#lift').classList.remove('on'); lifted = null; tiltTo(0, 0); orientBase = null; }
   $('#lift').addEventListener('click', function (e) { if (e.target === e.currentTarget) putBack(); });
+  // In the hand: the finger (or mouse) over the card tilts it and slides the
+  // glare; on a phone the tilt follows how you hold it, relative to the
+  // position when the card came out.
+  var hold = $('#hold'), orientBase = null, askedOrient = false;
+  function tiltTo(rx, ry, gx, gy) {
+    hold.style.setProperty('--rx', rx.toFixed(1) + 'deg'); hold.style.setProperty('--ry', ry.toFixed(1) + 'deg');
+    if (gx != null) { hold.style.setProperty('--gx', gx.toFixed(0) + '%'); hold.style.setProperty('--gy', gy.toFixed(0) + '%'); }
+  }
+  $('#lift').addEventListener('pointermove', function (e) {
+    if (reduce || !lifted) return;
+    var b = hold.getBoundingClientRect(); if (!b.width) return;
+    var cx = (e.clientX - b.left) / b.width, cy = (e.clientY - b.top) / b.height;
+    if (cx < -.6 || cx > 1.6 || cy < -.6 || cy > 1.6) { tiltTo(0, 0); return; }
+    cx = Math.max(0, Math.min(1, cx)); cy = Math.max(0, Math.min(1, cy));
+    tiltTo((cy - .5) * -16, (cx - .5) * 18, cx * 100, cy * 100);
+  });
+  $('#lift').addEventListener('pointerleave', function () { tiltTo(0, 0); });
+  window.addEventListener('deviceorientation', function (e) {
+    if (reduce || !lifted || e.beta == null || e.gamma == null) return;
+    if (!orientBase) { orientBase = { beta: e.beta, gamma: e.gamma }; return; }
+    var rx = Math.max(-14, Math.min(14, (e.beta - orientBase.beta) * -.6)), ry = Math.max(-16, Math.min(16, (e.gamma - orientBase.gamma) * .8));
+    tiltTo(rx, ry, 50 + ry * 2, 50 - rx * 2);
+  });
+  function askOrientation() {
+    if (askedOrient) return; askedOrient = true;
+    try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') DeviceOrientationEvent.requestPermission().catch(function () {}); } catch (x) {}
+  }
   function buy(b) {
     if (b.disabled) return; b.disabled = true; b.textContent = 'Adding…';
     fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(b.getAttribute('data-buy')), quantity: 1, properties: { _xg: 'showcase' } }] }) })
