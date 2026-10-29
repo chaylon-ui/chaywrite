@@ -66,6 +66,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   background-image:repeating-linear-gradient(0deg,transparent 0 9px,rgba(60,80,160,.12) 9px 10px)}
 .stk small{display:block;font-family:"Special Elite",monospace;font-size:9px;letter-spacing:.06em;color:#4a4a52;margin-top:2px}
 .stk.was:before{content:attr(data-was);display:block;font-size:14px;color:#8a2a2a;text-decoration:line-through;line-height:.9}
+.stkp{position:absolute;left:var(--x);top:var(--y);width:0;height:0;z-index:var(--z,3000);cursor:pointer}.stkp .stk{right:6px}
 .foil{position:absolute;right:6px;top:30px;width:30px;height:30px;border-radius:50%;background:#c43d2f;color:#fff;font-family:"Permanent Marker",cursive;font-size:9px;line-height:30px;text-align:center;transform:rotate(-14deg);box-shadow:0 2px 3px rgba(0,0,0,.5)}
 .sold .tl{filter:grayscale(.9) brightness(.5)}.sold .stk:after{content:"SOLD";display:block;font-family:"Permanent Marker",cursive;color:#c43d2f;font-size:13px}
 .tape{position:absolute;left:var(--tx);bottom:20px;z-index:5;padding:5px 16px;background:var(--tape);color:#2a2320;font-family:"Permanent Marker",cursive;font-size:14px;letter-spacing:.04em;transform:rotate(var(--tr));
@@ -163,7 +164,8 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
       // Later cards lie on top, except one laid overlapping its neighbour: that
       // one slides underneath, so the neighbour's price sticker stays readable.
       var z = row * 1000 + i * 2; if (overlap) z = items[i - ROWS].z - 1;
-      items.push({ c: c, row: row, z: z, x: xs[row], y: (row === 0 ? 14 : 14 + Math.round(ch * .48)) + Math.round((q() - .5) * 12), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
+      var y = (row === 0 ? 14 : 14 + Math.round(ch * .48)) + Math.round((q() - .5) * 12);
+      items.push({ c: c, row: row, z: z, x: xs[row], y: y, sx: Math.round(xs[row] + cw * (.5 + .5 * sc)), sy: Math.round(y + .6 * ch * (1 - sc)), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
       xs[row] += cw;
     });
     var x = Math.max(xs[0], xs[1]);
@@ -185,7 +187,9 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   function foilDot(c) { return c.foil && c.game !== 'pokemon' ? '<div class="foil">FOIL</div>' : ''; }
   function cardHtml(it, i) {
     var c = it.c;
-    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + sticker(c) + foilDot(c) + '</div>';
+    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + foilDot(c) + '</div>'
+      // the price sticker rides above every card, so no toploader ever covers a price
+      + '<div class="stkp" data-i="' + i + '" style="--x:' + it.sx + 'px;--y:' + it.sy + 'px;--z:' + (3000 + i) + '">' + sticker(c) + '</div>';
   }
   function render() {
     var sh = shelfH(); state.shelfH = sh; state.cardW = cardW(); state.lanes = [];
@@ -306,7 +310,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
     var el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return;
     var shelfEl = el.closest('.shelf'); if (!shelfEl) return;
     var si = Number(shelfEl.getAttribute('data-shelf')); if (si !== state.shelf) { goShelf(si, si > state.shelf ? 1 : -1); return; }
-    var cardEl = el.closest('.card'), pola = el.closest('.pola');
+    var cardEl = el.closest('.card,.stkp'), pola = el.closest('.pola');
     var c = cardEl ? state.shelves[si].cards[Number(cardEl.getAttribute('data-i'))] : pola ? state.shelves[si].cards[0] : null;
     if (c) { askOrientation(); lift(c); }
   }
