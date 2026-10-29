@@ -61,7 +61,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
 .card.stand:before{content:"";position:absolute;left:30%;right:30%;bottom:-8px;height:10px;background:#0c0608;border-radius:40%;filter:blur(2px)}
 
-.stk{position:absolute;right:-10px;top:-8px;min-width:54px;padding:3px 7px 2px;background:var(--label);color:#1c1a16;border-radius:2px;transform:rotate(var(--sr));
+.stk{position:absolute;right:-6px;top:-8px;min-width:54px;padding:3px 7px 2px;background:var(--label);color:#1c1a16;border-radius:2px;transform:rotate(var(--sr));
   box-shadow:0 2px 4px rgba(0,0,0,.5);font-family:Caveat,cursive;font-weight:700;font-size:21px;line-height:1;text-align:center;
   background-image:repeating-linear-gradient(0deg,transparent 0 9px,rgba(60,80,160,.12) 9px 10px)}
 .stk small{display:block;font-family:"Special Elite",monospace;font-size:9px;letter-spacing:.06em;color:#4a4a52;margin-top:2px}
@@ -156,7 +156,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
     shelf.cards.forEach(function (c, i) {
       var row = i % ROWS, q = seed(String(c.variantId || c.url || c.name) + '|' + i);
       var overlap = q() < .14 && i >= ROWS;
-      var gap = overlap ? -Math.round(cw * (.12 + q() * .1)) : Math.round(6 + q() * 26);
+      var gap = overlap ? -Math.round(cw * (.12 + q() * .1)) : Math.round(10 + q() * 24);
       if (i >= ROWS) xs[row] += gap;
       var stand = shelf.key === 'high' || shelf.key === 'picks', pick = shelf.key === 'picks' && i === 0;
       var sc = (pick ? 1.08 : stand ? 1.04 : 1) * (row === 0 ? .9 : 1);
