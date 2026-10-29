@@ -43,6 +43,7 @@ export function accessWhat(p) {
   let m = /^\/9pocket\/b\/([A-Za-z0-9-]{1,40})$/.exec(p); if (m) return { what: "buylist", id: m[1] };
   if (p === B + "/held" || p === B + "/held.json") return { what: "held stock" };
   if (p === B + "/graded" || p === B + "/graded/add") return { what: "graded cards" };
+  if (p === B + "/ask" || p === B + "/ask/control") return { what: "Ask Exor log" };
   if (p === B + "/requests" || p === B + "/requests.json") return { what: "requests" };
   m = /^\/9pocket\/requests\/([A-Za-z0-9-]{1,40})$/.exec(p); if (m) return { what: "request", id: m[1] };
   // /9pocket/win itself is the contests list (counts, no names): not logged.

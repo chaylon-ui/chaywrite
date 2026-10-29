@@ -26,7 +26,18 @@
    Limits and counts: PER_IP_HOUR questions per address an hour and PER_DAY
    a day in all (the "ask" Durable Object; addresses are hashed and kept
    two hours), day rows of asks / tool calls / tokens / answered-or-not
-   for the health page. Questions and answers are not stored. */
+   for the health page.
+
+   Owner, 2026-10-29 ("I'm worried exor assistant is going to keep giving
+   wrong information"): three guards.
+   - THE SWITCH: cfg.on in the DO, OFF until an admin turns it on at
+     9Pocket > Admin. Off, /ask/health says configured:false (so the widget
+     never mounts) and /ask.json answers 503.
+   - THE LOG: every question and answer (no address, no name) is kept
+     LOG_DAYS days as log:<id> and shown at 9Pocket > Ask Exor, where staff
+     mark an answer wrong (or clear the mark).
+   - THE FLAG: the widget's "Not right?" posts the answer's id to
+     /ask/flag.json, which marks it in the log as flagged by the shopper. */
 
 import Anthropic from "@anthropic-ai/sdk";
 import { fetchEvents, HOME_ORIGIN } from "./events.js";
@@ -44,6 +55,9 @@ const noStore = { "cache-control": "no-store" };
 const ALLOWED_ORIGINS = [SHOP, "https://exor-binder.nevski.workers.dev", "https://most-wanted-ca.myshopify.com"];
 
 export const askConfigured = (env) => !!(env && env.ANTHROPIC_API_KEY);
+export const LOG_DAYS = 30;     // questions and answers kept this long
+export const MAX_LOG = 200;     // rows the log page shows
+export const STAFF_FALLBACK = "For a sure answer, email charlottetown@exorgames.com or ask staff in store.";
 
 export const SYSTEM = `You are Ask Exor, the shop assistant on exorgames.com, the website of Exor Games: a trading card, board game, miniatures and hobby store at 51 Allen Street, Charlottetown, Prince Edward Island, Canada, with sister Exor stores across Atlantic Canada and a sister video game store, Mallow Games (mallowgames.com, which buys and sells used video games).
 
@@ -186,8 +200,36 @@ async function bodyOf(request) { try { return (await request.json()) || {}; } ca
 const json = (o, status, extra) => Response.json(o, { status: status || 200, headers: { ...noStore, ...(extra || {}) } });
 const dayOf = (ms) => new Date(ms).toLocaleDateString("en-CA", { timeZone: ATL });
 
+const cfgOf = async (cx) => ({ on: false, at: 0, by: "", ...((await cx.storage.get("cfg")) || {}) });
+const clip = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u0008\u000b-\u001f]/g, "").slice(0, n);
+
 export async function askDoFetch(cx, request, url) {
   const p = url.pathname, post = request.method === "POST";
+  if (p === "/_ask/cfg") {
+    const cfg = await cfgOf(cx);
+    if (post) { const b = await bodyOf(request); cfg.on = !!b.on; cfg.at = cx.now(); cfg.by = clip(b.by, 120); await cx.storage.put("cfg", cfg); }
+    return json({ ok: true, on: cfg.on, at: cfg.at, by: cfg.by });
+  }
+  if (p === "/_ask/log" && post) {
+    const b = await bodyOf(request); const now = cx.now();
+    const id = now.toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+    const row = { id, at: now, q: clip(b.q, 500), a: clip(b.a, 2000), tools: Array.isArray(b.tools) ? b.tools.map((t) => clip(t, 40)).slice(0, 12) : [], ok: !!b.ok, ms: Number(b.ms) || 0, products: Number(b.products) || 0, flag: null };
+    await cx.storage.put("log:" + id, row);
+    return json({ ok: true, id });
+  }
+  if (p === "/_ask/flag" && post) {
+    const b = await bodyOf(request); const id = clip(b.id, 40).replace(/[^a-z0-9-]/g, "");
+    const row = id ? await cx.storage.get("log:" + id) : null;
+    if (!row) return json({ ok: false, error: "That answer is no longer in the log." }, 404);
+    row.flag = b.wrong === false ? null : { at: cx.now(), by: clip(b.by, 120) || "shopper", wrong: true };
+    await cx.storage.put("log:" + id, row);
+    return json({ ok: true, flag: row.flag });
+  }
+  if (p === "/_ask/logs") {
+    const m = await cx.storage.list({ prefix: "log:" });
+    const rows = [...m.values()].sort((a, b) => b.at - a.at);
+    return json({ ok: true, total: rows.length, flagged: rows.filter((r) => r.flag).length, rows: rows.slice(0, MAX_LOG), on: (await cfgOf(cx)).on });
+  }
   if (p === "/_ask/allow" && post) {
     const b = await bodyOf(request); const now = cx.now();
     const hour = Math.floor(now / 3600e3), ip = String(b.ipHash || "").replace(/[^0-9a-f]/g, "").slice(0, 32) || "none";
@@ -210,14 +252,16 @@ export async function askDoFetch(cx, request, url) {
   if (p === "/_ask/health") {
     const m = await cx.storage.list({ prefix: "day:" });
     const days = [...m].map(([k, v]) => ({ day: k.slice(4), ...v })).sort((a, b) => (a.day < b.day ? 1 : -1)).slice(0, 14);
-    return json({ ok: true, today: days[0] || null, days });
+    return json({ ok: true, on: (await cfgOf(cx)).on, today: days[0] || null, days });
   }
   if (p === "/_ask/sweep" && post) {
     const now = cx.now(), hour = Math.floor(now / 3600e3), gone = [];
     for (const k of (await cx.storage.list({ prefix: "rl:" })).keys()) if (Number(k.split(":")[1]) < hour - 1) gone.push(k);
     for (const k of (await cx.storage.list({ prefix: "day:" })).keys()) if (now - Date.parse(k.slice(4) + "T12:00:00Z") > 400 * 864e5) gone.push(k);
+    let logs = 0;
+    for (const [k, v] of await cx.storage.list({ prefix: "log:" })) if (!v || now - (v.at || 0) > LOG_DAYS * 864e5) { gone.push(k); logs++; }
     for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
-    return json({ ok: true, counts: { rows: gone.length } });
+    return json({ ok: true, counts: { rows: gone.length - logs, logs } });
   }
   return json({ ok: false, error: "no such path" }, 404);
 }
@@ -242,7 +286,13 @@ export async function serveAsk(request, env, url, ctx, opts) {
   const p = url.pathname;
   if (p === "/ask/health") {
     const h = env.ROOM ? await doCall(env, "/_ask/health") : {};
-    return json({ ...h, configured: askConfigured(env), model: MODEL, tools: TOOLS.map((t) => t.name) }, 200, cors);
+    // configured = the widget may mount: a key AND the admin switch on
+    return json({ ...h, on: !!h.on, key: askConfigured(env), configured: askConfigured(env) && !!h.on, model: MODEL, tools: TOOLS.map((t) => t.name) }, 200, cors);
+  }
+  if (p === "/ask/flag.json" && request.method === "POST") {
+    const b = await bodyOf(request);
+    const r = env.ROOM ? await doCall(env, "/_ask/flag", { id: b.id, wrong: true, by: "shopper" }) : { ok: false };
+    return json({ ok: !!r.ok, note: STAFF_FALLBACK }, r.ok ? 200 : 404, cors);
   }
   if (p === "/ask" || p === "/ask/") {
     const r = await env.ASSETS.fetch(new Request(new URL("/ask.html", url).toString(), request));
@@ -250,6 +300,7 @@ export async function serveAsk(request, env, url, ctx, opts) {
   }
   if (p === "/ask.json" && request.method === "POST") {
     if (!askConfigured(env)) return json({ ok: false, error: "The assistant is not switched on yet.", configured: false }, 503, cors);
+    if (env.ROOM && !(await doCall(env, "/_ask/cfg")).on) return json({ ok: false, error: "The assistant is switched off at the moment. " + STAFF_FALLBACK, configured: false, off: true }, 503, cors);
     const b = await bodyOf(request);
     const gate = env.ROOM ? await doCall(env, "/_ask/allow", { ipHash: await ipHash(request) }) : { allowed: true };
     if (!gate.allowed) return json({ ok: false, error: gate.reason, limited: true }, 429, cors);
@@ -257,8 +308,10 @@ export async function serveAsk(request, env, url, ctx, opts) {
     const r = await ask(env, b.q, b.history, { ctx, client: o.client, fetchFn: o.fetchFn, now: o.now });
     const note = env.ROOM ? doCall(env, "/_ask/note", { ok: !!r.ok, tools: (r.toolsUsed || []).length, input: r.usage && r.usage.input, output: r.usage && r.usage.output, cacheRead: r.usage && r.usage.cacheRead }).catch(() => {}) : Promise.resolve();
     if (ctx && ctx.waitUntil) ctx.waitUntil(note); else await note;
-    if (!r.ok) return json({ ok: false, error: r.error, kind: r.kind }, r.kind === "busy" ? 503 : 502, cors);
-    return json({ ok: true, answer: r.answer, products: r.products, ms: Date.now() - t0 }, 200, cors);
+    const ms = Date.now() - t0;
+    const logged = env.ROOM ? await doCall(env, "/_ask/log", { q: b.q, a: r.ok ? r.answer : r.error, tools: r.toolsUsed || [], ok: !!r.ok, ms, products: r.ok ? (r.products || []).length : 0 }).catch(() => ({})) : {};
+    if (!r.ok) return json({ ok: false, error: r.error, kind: r.kind, id: logged.id || null }, r.kind === "busy" ? 503 : 502, cors);
+    return json({ ok: true, answer: r.answer, products: r.products, ms, id: logged.id || null }, 200, cors);
   }
   return json({ ok: false, error: "no such path" }, 404, cors);
 }

@@ -260,6 +260,7 @@ jobs:
           echo "=== Ask Exor (src/ask.js) ==="
           echo -n "ask health (configured = ANTHROPIC_API_KEY present; counts only): "; curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/ask/health" | head -c 500; echo
           curl -sS -o /dev/null -w '/ask page: HTTP %{http_code} %{content_type} (expect 200 text/html)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/ask" || true
+          curl -sS -o /dev/null -w '/9pocket/ask signed out: HTTP %{http_code} (expect 303 to login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/ask" || true
           curl -sS -o /dev/null -w '/ask.json empty question: HTTP %{http_code} (expect 503 while the key is not set; 429/502/200 after)\n' --max-time 60 -X POST -H 'content-type: application/json' -d '{"q":""}' "https://exor-binder.nevski.workers.dev/ask.json" || true
           curl -sS -o /dev/null -w '/9pocket/b/x no session: HTTP %{http_code} (expect 303 to /login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/b/01700000000000-abcd" || true
           curl -sS -o /dev/null -w '/9pocket/admin no session: HTTP %{http_code} (expect 303 to /login)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/9pocket/admin" || true

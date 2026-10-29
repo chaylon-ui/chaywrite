@@ -72,6 +72,15 @@ import { serveImpactStaff } from "./impact.js";
 import { RETENTION, accessWhat, logAccess } from "./access-log.js";
 import { BASE, renderLoginForm, renderCodeForm, renderSetup, renderAdmin, renderList, renderSheet, renderDenied, renderHeld, safeImage, when } from "./stage-ui.js";
 import { createGraded, setupCheck, recentGraded, certLookup, psaConfigured, readLabel, visionConfigured, findListed } from "./graded.js";
+import { ASK_DO } from "./ask.js";
+import { renderAskLog, renderAskDenied } from "./ask-ui.js";
+
+// One call to the Ask Exor Durable Object (src/ask.js): the switch, the log, the flags.
+async function askDo(env, path, body) {
+  if (!env.ROOM) return { ok: false, error: "no ROOM binding" };
+  try { return await (await env.ROOM.get(env.ROOM.idFromName(ASK_DO)).fetch(new Request("https://exor-binder.internal" + path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}))).json(); }
+  catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 160) }; }
+}
 import { renderGraded, renderGradedDenied } from "./graded-ui.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
@@ -1121,10 +1130,27 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     const dv = await doCall(env, origin, "/_stage/device-keys");
     const acc = await doCall(env, origin, "/_stage/access?limit=200");
     const ret = await doCall(env, origin, "/_stage/retention");
-    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin), devices: dv.ok ? dv.devices : [], newKey, origin, access: acc.ok ? acc.rows : [], retention: ret.ok ? ret : null }));
+    const askCfg = await askDo(env, "/_ask/cfg");
+    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin), devices: dv.ok ? dv.devices : [], newKey, origin, access: acc.ok ? acc.rows : [], retention: ret.ok ? ret : null, ask: askCfg.ok ? askCfg : null }));
   }
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.
+  // Ask Exor log (src/ask-ui.js): what the assistant answered; mark answers wrong.
+  if (p === BASE + "/ask" || p === BASE + "/ask/control") {
+    if (!user) return toLogin();
+    if (!(user.role === "admin" || can(user, "asklog"))) return html(renderAskDenied(opts), 403);
+    let msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
+    if (p === BASE + "/ask/control" && request.method === "POST") {
+      const f = form || {};
+      if (String(f.action || "") === "flag") {
+        const r = await askDo(env, "/_ask/flag", { id: f.id, wrong: String(f.wrong || "") !== "0", by: user.email });
+        return redirect(BASE + "/ask" + q(r.ok ? { msg: r.flag ? "Marked wrong. Thank you - that is how it gets fixed." : "Mark cleared." } : { err: r.error || "failed" }));
+      }
+      return redirect(BASE + "/ask" + q({ err: "unknown action" }));
+    }
+    const d = await askDo(env, "/_ask/logs");
+    return html(renderAskLog(d.ok ? d : { rows: [], on: false }, { ...opts, msg, err: err || (d.ok ? "" : d.error || ""), act: true, admin: user.role === "admin" }));
+  }
   // Graded cards (src/graded.js): the add form, the add itself, the setup check.
   if (p === BASE + "/graded" || p === BASE + "/graded/add" || p === BASE + "/graded/setup.json" || p === BASE + "/graded/cert.json" || p === BASE + "/graded/listed.json" || p === BASE + "/graded/read.json") {
     if (!user) return toLogin();
@@ -1450,6 +1476,11 @@ async function adminControl(env, origin, f, admin) {
     if (self) return { ok: false, error: "You cannot delete your own account." };
     const r = await doCall(env, origin, "/_stage/user/del", { email });
     return r.ok ? { ok: true, message: "Deleted " + email + "." } : { ok: false, error: r.error };
+  }
+  if (action === "ask") {
+    // Owner, 2026-10-29: the Ask Exor switch; off by default, no deploy needed.
+    const r = await askDo(env, "/_ask/cfg", { on: String(f.on || "") === "1", by: admin.email });
+    return r.ok ? { ok: true, message: r.on ? "Ask Exor is on: the widget shows on the site within a minute." : "Ask Exor is off: the widget disappears from the site within a minute." } : { ok: false, error: r.error || "The assistant did not answer." };
   }
   return { ok: false, error: "unknown action" };
 }

@@ -55,6 +55,7 @@ export const STAFF_PERMS = [
   { key: "decks", label: "Deck Builder stats and bans" },
   // Owner, 2026-10-27: a fast slab-listing screen (src/graded.js) - creates Shopify products.
   { key: "graded", label: "Graded cards: add slabs to Shopify (photos, certificate link, auto-pricing)" },
+  { key: "asklog", label: "Ask Exor: the question log (mark wrong answers)" },
 ];
 // The stock check (src/stock-check.js): the screen itself, and marking items.
 // Owner, 2026-10-14: a standalone 9Pocket screen, not behind the PIN.
