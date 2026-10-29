@@ -46,7 +46,8 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   linear-gradient(180deg,var(--felt),var(--felt2) 70%,#2a0d12)}
 .felt:after{content:"";position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");mix-blend-mode:overlay;opacity:.5}
 .board{height:var(--bh);background:linear-gradient(180deg,#3a2413,#5a3a1d 50%,#2b170b);box-shadow:inset 0 -6px 12px rgba(0,0,0,.5);position:relative;display:flex;align-items:center;justify-content:center;gap:18px}
-.board .plaque{background:linear-gradient(180deg,#d8b86a,#9a7a3a);color:#2a1a08;font-family:Cinzel,serif;font-weight:700;font-size:15px;letter-spacing:.14em;padding:7px 18px;border-radius:3px;box-shadow:0 2px 4px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.5);text-transform:uppercase}
+.board .logo{height:46px;width:auto;display:block;filter:drop-shadow(0 3px 5px rgba(0,0,0,.7))}
+@media (max-width:720px){.board .logo{height:36px}.board .note{font-size:15px}}
 .board .note{font-family:Caveat,cursive;font-size:19px;color:#e8dcb8;transform:rotate(-2deg);text-shadow:0 1px 0 #000}
 .lip{position:absolute;left:0;right:0;bottom:0;height:14px;background:linear-gradient(180deg,#2b170b,#5a3a1d 40%,#20110a);box-shadow:0 -3px 8px rgba(0,0,0,.5)}
 .lane{position:absolute;left:0;top:0;height:100%;will-change:transform}
@@ -174,7 +175,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   }
   function render() {
     var sh = shelfH(); state.shelfH = sh; state.lanes = [];
-    var board = '<div class="board" style="--bh:' + BOARD + 'px"><span class="plaque">Exor Games · Singles</span><span class="note">ask us to pull any card out for a closer look</span></div>';
+    var board = '<div class="board" style="--bh:' + BOARD + 'px"><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><span class="note">ask us to pull any card out for a closer look</span></div>';
     track.innerHTML = board + state.shelves.map(function (shelf, idx) {
       var L = layout(shelf, idx); state.lanes.push(L);
       var caseNo = Math.max(1, state.cases.findIndex(function (c) { return c.key === state.game; }) + 1);
@@ -196,7 +197,14 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   function shelfLetter(i) { return 'Shelf ' + String.fromCharCode(65 + i); }
   function place() {
     var x = Math.round(state.x);
-    for (var i = 0; i < track.children.length; i++) { var ln = track.children[i].querySelector('.lane'); if (ln) ln.style.transform = 'translateX(' + (-x) + 'px)'; }
+    var shelvesEls = track.querySelectorAll('.shelf');
+    for (var i = 0; i < shelvesEls.length; i++) {
+      var ln = shelvesEls[i].querySelector('.lane'), L = state.lanes[i];
+      if (!ln || !L) continue;
+      var own = Math.max(0, L.width - state.width);
+      var lx = state.maxX > 0 ? Math.round(x * own / state.maxX) : 0;
+      ln.style.transform = 'translateX(' + (-lx) + 'px)';
+    }
     glass.style.transform = 'translateX(' + (-x * .22) + 'px)';
     $('#pos').style.setProperty('--pos', (state.maxX ? (x / state.maxX) * 100 : 0) + '%');
   }
