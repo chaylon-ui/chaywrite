@@ -5,7 +5,7 @@
 <title>The Showcase — Exor Games</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Caveat:wght@600;700&family=Permanent+Marker&family=Special+Elite&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Caveat:wght@600;700&family=Permanent+Marker&family=Special+Elite&family=Cutive+Mono&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ---------------- The Showcase (owner, 2026-10-29) ----------------
    Browse singles the way you browse the store's glass cases: swipe along to
@@ -93,26 +93,43 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .map .bar i{position:absolute;top:-4px;width:14px;height:14px;border-radius:50%;background:var(--ember);left:var(--pos);transform:translateX(-50%);transition:left .1s linear}
 .map .n{font-size:12px;color:var(--muted);white-space:nowrap}
 /* the lift */
-.lift{position:fixed;inset:0;background:rgba(5,3,4,.82);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.lift{position:fixed;inset:0;background:rgba(5,3,4,.94);display:none;flex-direction:column;z-index:20}
 .lift.on{display:flex}
-.lift .in{display:flex;gap:22px;align-items:center;max-width:860px;width:100%;animation:lift .45s cubic-bezier(.2,.8,.2,1);perspective:1100px}
+.lift .in{flex:1;min-height:0;display:flex;flex-direction:column;animation:lift .45s cubic-bezier(.2,.8,.2,1);perspective:1100px}
 @keyframes lift{from{transform:translateY(60px) scale(.6) rotate(-3deg);opacity:0}to{transform:none;opacity:1}}
+/* the card fills the stage; its details sit in their own panel below (beside it on a wide screen) */
+.lift .stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:14px 16px 12px}
 /* held: the wrapper tilts with the finger or the phone, the card inside drifts as a hand never quite holds still */
 .lift .hold{flex-shrink:0;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;transition:transform .14s ease-out;touch-action:none}
-.lift .big{width:min(46vw,340px);aspect-ratio:63/88;border-radius:10px;overflow:hidden;border:4px solid rgba(255,255,255,.14);box-shadow:0 30px 60px rgba(0,0,0,.8);position:relative;background:#111;animation:hover 5.5s ease-in-out infinite}
-@keyframes hover{0%,100%{transform:translateY(0) rotate(-.8deg);box-shadow:0 28px 50px rgba(0,0,0,.8)}50%{transform:translateY(-12px) rotate(.8deg);box-shadow:0 48px 70px rgba(0,0,0,.7)}}
-.lift .big img{width:100%;height:100%;object-fit:cover;display:block}
-.lift .big:after{content:"";position:absolute;inset:0;background:radial-gradient(circle at var(--gx,30%) var(--gy,25%),rgba(255,255,255,.32),rgba(255,255,255,.06) 28%,transparent 50%),linear-gradient(115deg,rgba(255,255,255,.14),transparent 40%,rgba(255,255,255,.06) 70%,transparent 80%);pointer-events:none}
-.lift .txt{flex:1;min-width:0}
-.lift h2{font-family:Cinzel,serif;font-size:22px;line-height:1.2;margin-bottom:4px}
-.lift .set{color:var(--muted);font-size:14px;margin-bottom:12px}
-.lift .stk{position:static;display:inline-block;transform:rotate(-3deg);font-size:34px;padding:6px 14px 4px;margin-bottom:14px}
+/* the toploader: a rigid clear sleeve a shade bigger than the card, open along the top */
+.lift .big{--bw:300px;width:var(--bw);aspect-ratio:63/88;position:relative;border-radius:7px;background:linear-gradient(160deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 45%,rgba(255,255,255,.11));box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 30px 60px rgba(0,0,0,.8);animation:hover 5.5s ease-in-out infinite}
+@keyframes hover{0%,100%{transform:translateY(0) rotate(-.8deg);box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 28px 50px rgba(0,0,0,.8)}50%{transform:translateY(-12px) rotate(.8deg);box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 48px 70px rgba(0,0,0,.7)}}
+.lift .big:before{content:"";position:absolute;left:14%;right:14%;top:-2px;height:3px;border-radius:2px;background:rgba(255,255,255,.4)}
+.lift .art{position:absolute;left:3.4%;right:3.4%;top:3.2%;bottom:3.8%;border-radius:4.5%/3.2%;overflow:hidden;background:#111;box-shadow:0 2px 6px rgba(0,0,0,.6)}
+.lift .art img{width:100%;height:100%;object-fit:cover;display:block}
+.lift .art .noimg{display:none;position:absolute;inset:0;align-items:center;justify-content:center;padding:10%;text-align:center;font-family:"Permanent Marker",cursive;font-size:calc(var(--bw) * .08);line-height:1.15;color:#d9d2c4;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10)}
+.lift .art.none .noimg{display:flex}.lift .art.none img{display:none}
+.lift .big:after{content:"";position:absolute;inset:0;border-radius:7px;background:radial-gradient(circle at var(--gx,30%) var(--gy,25%),rgba(255,255,255,.32),rgba(255,255,255,.06) 28%,transparent 50%),linear-gradient(115deg,rgba(255,255,255,.14),transparent 40%,rgba(255,255,255,.06) 70%,transparent 80%);pointer-events:none;z-index:9}
+/* the kiosk's stickers, stuck on the sleeve: price-gun label, handwritten Holo/foil, the condition in red ballpoint */
+.lift .psticker{position:absolute;right:5%;bottom:40%;z-index:7;transform:rotate(-3deg);background:#fbfbf4;padding:.24em .32em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.55),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .105)}
+.lift .psticker:before,.lift .psticker:after{content:"";position:absolute;left:7%;right:7%;height:2px;background:#c0392b}
+.lift .psticker:before{top:14%}.lift .psticker:after{bottom:14%}
+.lift .pink{display:block;font-family:"Cutive Mono","Courier New",monospace;font-weight:700;font-size:1em;line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
+.lift .fsticker{position:absolute;right:8%;bottom:52%;z-index:8;transform:rotate(4deg);background:#fbfbf4;padding:.1em .28em .16em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .12)}
+.lift .fink{display:block;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.75;color:#123bbf;filter:url(#ink)}
+.lift .csticker{position:absolute;right:5.5%;top:12.5%;z-index:8;transform:rotate(2deg);background:#fbfbf4;padding:.1em .32em .16em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .085)}
+.lift .cink{display:block;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.8;color:#d02b20;filter:url(#ink)}
+.lift .fsticker.off,.lift .csticker.off{display:none}
+.lift .panel{flex-shrink:0;background:#0f0b0c;border-top:1px solid rgba(255,255,255,.1);padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}
+.lift h2{font-family:Cinzel,serif;font-size:20px;line-height:1.15;margin-bottom:4px}
+.lift .set{color:var(--muted);font-size:13px;margin-bottom:10px}
 .lift .acts{display:flex;gap:10px;flex-wrap:wrap}
 .lift .acts a,.lift .acts button{display:inline-block;padding:11px 16px;border-radius:999px;font-weight:700;font-size:14px;text-decoration:none;border:1px solid rgba(255,255,255,.25);background:#1a1411;color:var(--ink)}
 .lift .acts .buy{background:var(--ember);border-color:var(--ember);color:#1a0f05}
-.lift .x{position:absolute;right:16px;top:12px;background:none;border:0;color:var(--muted);font-size:34px}
-.lift .note{font-family:Caveat,cursive;font-size:19px;color:var(--muted);margin-top:14px}
-@media (max-width:720px){:root{--cw:118px}header h1{font-size:16px}.lift .in{flex-direction:column;gap:14px}.lift .big{width:min(60vw,260px)}.tabs button{padding:6px 10px;font-size:12px}.map .n{display:none}}
+.lift .x{position:absolute;right:14px;top:6px;z-index:3;background:none;border:0;color:var(--ink);font-size:34px;line-height:1;text-shadow:0 1px 3px #000}
+.lift .note{font-family:Caveat,cursive;font-size:18px;color:var(--muted);margin-top:10px}
+@media (min-width:721px){.lift .in{flex-direction:row}.lift .panel{width:360px;border-top:0;border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;justify-content:center;padding:24px}.lift h2{font-size:24px}.lift .set{font-size:14px}}
+@media (max-width:720px){:root{--cw:118px}header h1{font-size:16px}.tabs button{padding:6px 10px;font-size:12px}.map .n{display:none}}
 @media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big{animation:none}}
 </style></head>
 <body>
@@ -124,7 +141,8 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   <div class="state" id="state">Unlocking the case…</div>
 </div></div>
 <div class="map"><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
-<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="hold" id="hold"><div class="big"><img id="liftImg" alt=""></div></div><div class="txt"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="stk" id="liftStk"></div><div class="acts" id="liftActs"></div><div class="note" id="liftNote"></div></div></div></div>
+<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="note" id="liftNote"></div></div></div></div>
+<svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
 (function () {
   'use strict';
@@ -133,6 +151,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   var $ = function (s) { return document.querySelector(s); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var money = function (p) { var n = Number(p) || 0; return '$' + (n >= 100 ? Math.round(n).toLocaleString('en-CA') : n.toFixed(2)); };
+  var gunPrice = function (p) { return (Number(p) || 0).toFixed(2) + ' $'; };   // what the kiosk's price gun prints
   var img = function (u, w) { if (!u) return ''; u = String(u); if (/cdn\.shopify\.com/.test(u)) return u + (u.indexOf('?') > -1 ? '&' : '?') + 'width=' + w; return u; };
   // A card's own randomness: the same card tilts the same way every visit.
   function seed(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return function () { h += 0x6D2B79F5; var t = Math.imul(h ^ (h >>> 15), 1 | h); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -316,15 +335,28 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   }
   function lift(c) {
     lifted = c;
-    $('#liftImg').src = hasPhoto(c) ? img(c.image, 800) : ''; $('#liftImg').alt = c.name; $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, c.condition, c.foil ? 'Foil' : ''].filter(Boolean).join(' · ');
-    $('#liftStk').innerHTML = money(c.price) + (c.condition ? '<small>' + esc(c.condition) + '</small>' : '');
+    $('#liftArt').classList.toggle('none', !hasPhoto(c));
+    $('#liftImg').src = hasPhoto(c) ? img(c.image, 1000) : ''; $('#liftImg').alt = c.name; $('#liftNo').textContent = c.name;
+    $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, c.condition].filter(Boolean).join(' · ');
+    // the kiosk's labels: the price-gun sticker, Holo/foil in blue ink (Pokemon players say Holo), the condition in red ballpoint
+    $('#liftPrice').textContent = gunPrice(c.price);
+    $('#liftFoil').classList.toggle('off', !c.foil); $('#liftFoilInk').textContent = c.game === 'pokemon' ? 'Holo' : 'foil';
+    var cd = cond(c); $('#liftCond').classList.toggle('off', !cd); $('#liftCondInk').textContent = cd;
     $('#liftActs').innerHTML = (ON_STORE && c.variantId ? '<button type="button" class="buy" data-buy="' + esc(c.variantId) + '">Add to cart</button>' : '') + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
     $('#liftNote').textContent = 'Live price from the shop. Put it back with × or Esc.';
     orientBase = null; tiltTo(0, 0, 30, 25);
-    $('#lift').classList.add('on'); hint.classList.add('gone');
+    $('#lift').classList.add('on'); hint.classList.add('gone'); fitLift();
   }
+  // The sleeve takes all the stage allows: full width on a phone, full height on a desktop.
+  function fitLift() {
+    if (!lifted) return;
+    var st = $('#stage'), big = $('#big');
+    var w = Math.max(140, Math.min(st.clientWidth - 32, (st.clientHeight - 26) * 63 / 88));
+    big.style.width = w + 'px'; big.style.setProperty('--bw', w + 'px');
+  }
+  window.addEventListener('resize', fitLift);
   function putBack() { $('#lift').classList.remove('on'); lifted = null; tiltTo(0, 0); orientBase = null; }
-  $('#lift').addEventListener('click', function (e) { if (e.target === e.currentTarget) putBack(); });
+  $('#lift').addEventListener('click', function (e) { if (e.target === e.currentTarget || e.target.classList.contains('stage')) putBack(); });
   // In the hand: the finger (or mouse) over the card tilts it and slides the
   // glare; on a phone the tilt follows how you hold it, relative to the
   // position when the card came out.
