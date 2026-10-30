@@ -33,10 +33,11 @@ header .walk button{margin-right:4px}
 .tabs button.on{background:var(--ember);border-color:var(--ember);color:#1a0f05}
 /* a tab with the kiosk's logo: the picture, the name hidden but read out; the chosen one lit */
 .tabs button{position:relative}
-.tabs button.ic{padding:4px 10px;display:flex;align-items:center;background:#2a211c}
-.tabs button.ic img{height:34px;width:auto;max-width:120px;object-fit:contain;display:block;opacity:.92;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+/* the logos sit on a cream label chip (owner: "the black logos look bad" on the dark pill), the chosen one white with the ember ring */
+.tabs button.ic{padding:4px 10px;display:flex;align-items:center;background:#ece4d2;border-color:#cdbf9f}
+.tabs button.ic img{height:34px;width:auto;max-width:120px;object-fit:contain;display:block;opacity:.9}
 .tabs button.ic span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.tabs button.ic.on{background:rgba(217,130,43,.22);border-color:var(--ember);box-shadow:0 0 0 2px rgba(217,130,43,.35),0 0 14px rgba(217,130,43,.35)}
+.tabs button.ic.on{background:#fbf7ec;border-color:var(--ember);box-shadow:0 0 0 2px rgba(217,130,43,.55),0 0 14px rgba(217,130,43,.45)}
 .tabs button.ic.on img{opacity:1}
 /* the room and the case */
 .room{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px 10px 8px;position:relative}
