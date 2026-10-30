@@ -21,9 +21,8 @@ body{display:flex;flex-direction:column;background:radial-gradient(ellipse at 50
 button{font:inherit;cursor:pointer}
 a{color:inherit}
 /* header */
-header{display:flex;align-items:center;gap:14px;padding:10px 16px 6px;flex-shrink:0;flex-wrap:wrap}
-header h1{font-family:Cinzel,serif;font-size:19px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
-header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:.3em;color:var(--muted);text-transform:uppercase}
+header{display:flex;align-items:center;gap:10px;padding:8px 12px 4px;flex-shrink:0;flex-wrap:wrap}
+header .walk{display:flex;gap:6px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
 .tabs button{background:#1a1411;color:var(--muted);border:1px solid #3a2d24;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600}
 .tabs button.on{background:var(--ember);border-color:var(--ember);color:#1a0f05}
@@ -61,20 +60,28 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
 .card.stand:before{content:"";position:absolute;left:30%;right:30%;bottom:-8px;height:10px;background:#0c0608;border-radius:40%;filter:blur(2px)}
 
-.stk{position:absolute;right:-6px;top:-8px;min-width:54px;padding:3px 7px 2px;background:var(--label);color:#1c1a16;border-radius:2px;transform:rotate(var(--sr));
-  box-shadow:0 2px 4px rgba(0,0,0,.5);font-family:Caveat,cursive;font-weight:700;font-size:21px;line-height:1;text-align:center;
-  background-image:repeating-linear-gradient(0deg,transparent 0 9px,rgba(60,80,160,.12) 9px 10px)}
-.stk small{display:block;font-family:"Special Elite",monospace;font-size:9px;letter-spacing:.06em;color:#4a4a52;margin-top:2px}
-.stk.was:before{content:attr(data-was);display:block;font-size:14px;color:#8a2a2a;text-decoration:line-through;line-height:.9}
-.stkp{position:absolute;left:var(--x);top:var(--y);width:0;height:0;z-index:var(--z,3000);cursor:pointer}.stkp .stk{right:6px}
-.foil{position:absolute;right:6px;top:30px;width:30px;height:30px;border-radius:50%;background:#c43d2f;color:#fff;font-family:"Permanent Marker",cursive;font-size:9px;line-height:30px;text-align:center;transform:rotate(-14deg);box-shadow:0 2px 3px rgba(0,0,0,.5)}
+/* the kiosk's labels (tv.html) on every sleeve: the price as the gun prints it, Holo/foil in blue ink, the condition in red ballpoint.
+   The ink spans carry their own side padding: WebKit clips a filtered element to its box, and Caveat's strokes overhang the advance width. */
+.stkp{position:absolute;left:var(--x);top:var(--y);width:0;height:0;z-index:var(--z,3000);cursor:pointer}
+.psticker{position:absolute;z-index:7;transform:rotate(-3deg);background:#fbfbf4;padding:.22em .18em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.55),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .105)}
+.psticker:before,.psticker:after{content:"";position:absolute;left:7%;right:7%;height:2px;background:#c0392b}
+.psticker:before{top:14%}.psticker:after{bottom:14%}
+.pink{display:inline-block;padding:0 .14em;font-family:"Cutive Mono","Courier New",monospace;font-weight:700;font-size:1em;line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
+.fsticker{position:absolute;z-index:8;transform:rotate(4deg);background:#fbfbf4;padding:.04em .12em .1em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .12)}
+.fink{display:inline-block;padding:0 .16em;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.9;color:#123bbf;white-space:nowrap;filter:url(#ink)}
+.csticker{position:absolute;z-index:8;transform:rotate(2deg);background:#fbfbf4;padding:.04em .14em .1em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .085)}
+.cink{display:inline-block;padding:0 .16em;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.9;color:#d02b20;white-space:nowrap;filter:url(#ink)}
+.fsticker.off,.csticker.off{display:none}
+/* on a shelf the holder sits at the sleeve's top-right corner; the labels hang down its right side as on the kiosk */
+.stkp .csticker{right:calc(var(--bw) * .055);top:calc(var(--bh) * .05)}
+.stkp .fsticker{right:calc(var(--bw) * .08);top:calc(var(--bh) * .22)}
+.stkp .psticker{right:calc(var(--bw) * .05);top:calc(var(--bh) * .38)}
 .sold .tl{filter:grayscale(.9) brightness(.5)}.sold .stk:after{content:"SOLD";display:block;font-family:"Permanent Marker",cursive;color:#c43d2f;font-size:13px}
 .tape{position:absolute;left:var(--tx);bottom:20px;z-index:5;padding:5px 16px;background:var(--tape);color:#2a2320;font-family:"Permanent Marker",cursive;font-size:14px;letter-spacing:.04em;transform:rotate(var(--tr));
   box-shadow:0 2px 3px rgba(0,0,0,.4);opacity:.92;clip-path:polygon(2% 0,98% 4%,100% 100%,1% 96%);white-space:nowrap}
 .pola{position:absolute;left:var(--x);top:var(--y);width:calc(var(--cw) * .95);padding:8px 8px 30px;background:#f3eee0;transform:rotate(var(--r));box-shadow:0 10px 18px rgba(0,0,0,.55);cursor:pointer}
 .pola img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#222}
 .pola span{position:absolute;left:8px;right:8px;bottom:6px;font-family:Caveat,cursive;font-size:17px;color:#2a2320;text-align:center;line-height:1}
-.guide{position:absolute;left:var(--x);top:var(--y);width:70px;height:46px;background:linear-gradient(180deg,#d9c48a,#b89a5a);transform:rotate(var(--r));box-shadow:0 6px 10px rgba(0,0,0,.5);border-radius:2px;font-family:"Special Elite",monospace;font-size:8px;color:#3a2a10;padding:6px 5px;line-height:1.1}
 .glass{position:absolute;inset:0;pointer-events:none;will-change:transform;
   background:linear-gradient(100deg,rgba(255,255,255,0) 20%,rgba(255,255,255,.07) 34%,rgba(255,255,255,.015) 42%,transparent 55%,rgba(255,255,255,.05) 78%,transparent 86%)}
 .smudge{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 23% 64%,rgba(255,255,255,.035),transparent 6%),radial-gradient(circle at 71% 38%,rgba(255,255,255,.03),transparent 5%),radial-gradient(ellipse at 50% 100%,rgba(0,0,0,.35),transparent 60%)}
@@ -111,15 +118,9 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 .lift .art.none .noimg{display:flex}.lift .art.none img{display:none}
 .lift .big:after{content:"";position:absolute;inset:0;border-radius:7px;background:radial-gradient(circle at var(--gx,30%) var(--gy,25%),rgba(255,255,255,.32),rgba(255,255,255,.06) 28%,transparent 50%),linear-gradient(115deg,rgba(255,255,255,.14),transparent 40%,rgba(255,255,255,.06) 70%,transparent 80%);pointer-events:none;z-index:9}
 /* the kiosk's stickers, stuck on the sleeve: price-gun label, handwritten Holo/foil, the condition in red ballpoint */
-.lift .psticker{position:absolute;right:5%;bottom:40%;z-index:7;transform:rotate(-3deg);background:#fbfbf4;padding:.24em .32em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.55),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .105)}
-.lift .psticker:before,.lift .psticker:after{content:"";position:absolute;left:7%;right:7%;height:2px;background:#c0392b}
-.lift .psticker:before{top:14%}.lift .psticker:after{bottom:14%}
-.lift .pink{display:block;font-family:"Cutive Mono","Courier New",monospace;font-weight:700;font-size:1em;line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
-.lift .fsticker{position:absolute;right:8%;bottom:52%;z-index:8;transform:rotate(4deg);background:#fbfbf4;padding:.1em .28em .16em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .12)}
-.lift .fink{display:block;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.75;color:#123bbf;filter:url(#ink)}
-.lift .csticker{position:absolute;right:5.5%;top:12.5%;z-index:8;transform:rotate(2deg);background:#fbfbf4;padding:.1em .32em .16em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .085)}
-.lift .cink{display:block;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.8;color:#d02b20;filter:url(#ink)}
-.lift .fsticker.off,.lift .csticker.off{display:none}
+.lift .psticker{right:5%;bottom:40%}
+.lift .fsticker{right:8%;bottom:52%}
+.lift .csticker{right:5.5%;top:12.5%}
 .lift .panel{flex-shrink:0;background:#0f0b0c;border-top:1px solid rgba(255,255,255,.1);padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}
 .lift h2{font-family:Cinzel,serif;font-size:20px;line-height:1.15;margin-bottom:4px}
 .lift .set{color:var(--muted);font-size:13px;margin-bottom:10px}
@@ -133,14 +134,14 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
 @media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big{animation:none}}
 </style></head>
 <body>
-<header><h1>The Showcase<small>Exor Games · browse the cases</small></h1><div class="tabs" id="tabs"></div></header>
+<header><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><div class="tabs" id="tabs"></div></header>
 <div class="room"><div class="case" id="case">
   <div class="track" id="track"></div>
   <div class="glass" id="glass"></div><div class="smudge"></div><div class="vig"></div>
   <div class="hint" id="hint">Swipe to walk the case · swipe up to crouch to the next shelf · tap a card</div>
-  <div class="state" id="state">Unlocking the case…</div>
+  <div class="state" id="state">Viewing the case…</div>
 </div></div>
-<div class="map"><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
+<div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
 <div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="note" id="liftNote"></div></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
@@ -184,31 +185,33 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
       // one slides underneath, so the neighbour's price sticker stays readable.
       var z = row * 1000 + i * 2; if (overlap) z = items[i - ROWS].z - 1;
       var y = (row === 0 ? 14 : 14 + Math.round(ch * .48)) + Math.round((q() - .5) * 12);
-      items.push({ c: c, row: row, z: z, x: xs[row], y: y, sx: Math.round(xs[row] + cw * (.5 + .5 * sc)), sy: Math.round(y + .6 * ch * (1 - sc)), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
+      items.push({ c: c, row: row, z: z, x: xs[row], y: y, sx: Math.round(xs[row] + cw * (.5 + .5 * sc)), sy: Math.round(y + .6 * ch * (1 - sc)), bw: Math.round(cw * sc), bh: Math.round(ch * sc), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
       xs[row] += cw;
     });
     var x = Math.max(xs[0], xs[1]);
     var extras = [];
     if (shelf.key === 'picks' && shelf.cards.length) { extras.push({ pola: shelf.cards[0], x: x + 34, y: 40 + Math.round(r() * 20), r: ((r() - .5) * 10).toFixed(1) }); x += cw + 50; }
-    if (shelf.key === 'low') { extras.push({ guide: true, x: x + 30, y: shelfH() - 70, r: ((r() - .5) * 20).toFixed(1) }); x += 110; }
     return { items: items, extras: extras, width: x + 60, tapeX: tapeX, tapeR: tapeR, p1: Math.round(20 + r() * 60) + '%', p2: Math.round(10 + r() * 80) + '%' };
   }
+  // The variant's language is not a condition: English comes off, Japanese shortens to JP (the Japanese shelf says it anyway).
+  function condText(c) { return String(c.condition || '').replace(/\s*\/\s*english\b/i, '').replace(/\s*\/\s*$/, '').trim(); }
   function cond(c) {
-    return String(c.condition || '').replace(/near mint/i, 'NM').replace(/lightly played/i, 'LP').replace(/moderately played/i, 'MP').replace(/heavily played/i, 'HP').replace(/damaged/i, 'DMG').replace(/1st edition/i, '1st Ed').replace(/unlimited/i, 'Unl').replace(/\s+/g, ' ').trim().slice(0, 14);
+    return condText(c).replace(/\s*\/?\s*japanese\b/i, ' JP').replace(/near mint/i, 'NM').replace(/lightly played/i, 'LP').replace(/moderately played/i, 'MP').replace(/heavily played/i, 'HP').replace(/damaged/i, 'DMG').replace(/1st edition/i, '1st Ed').replace(/unlimited/i, 'Unl').replace(/\s+/g, ' ').trim().slice(0, 14);
   }
-  function sticker(c, cls) {
-    return '<div class="stk ' + (cls || '') + '" style="--sr:' + ((seed(String(c.variantId || c.name))() - .5) * 14).toFixed(1) + 'deg">' + money(c.price) + (cond(c) ? '<small>' + esc(cond(c)) + '</small>' : '') + '</div>';
+  // The kiosk's three labels: the price as the gun prints it, Holo (Pokémon players say Holo) or foil in blue ink only when the card is foil, the condition in red ballpoint.
+  function stickers(c) {
+    var cd = cond(c);
+    return (cd ? '<div class="csticker"><span class="cink">' + esc(cd) + '</span></div>' : '')
+      + (c.foil ? '<div class="fsticker"><span class="fink">' + (c.game === 'pokemon' ? 'Holo' : 'foil') + '</span></div>' : '')
+      + '<div class="psticker"><span class="pink">' + esc(gunPrice(c.price)) + '</span></div>';
   }
   // The store's "image coming soon" placeholder is not a card photo.
   function hasPhoto(c) { return !!c.image && !/placeholder|coming|no[-_]?image|missing/i.test(c.image); }
-  // Pokémon rares are holo as a rule, so a FOIL dot there says nothing; it
-  // stays for games where foil is the exception.
-  function foilDot(c) { return c.foil && c.game !== 'pokemon' ? '<div class="foil">FOIL</div>' : ''; }
   function cardHtml(it, i) {
     var c = it.c;
-    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div>' + foilDot(c) + '</div>'
-      // the price sticker rides above every card, so no toploader ever covers a price
-      + '<div class="stkp" data-i="' + i + '" style="--x:' + it.sx + 'px;--y:' + it.sy + 'px;--z:' + (3000 + i) + '">' + sticker(c) + '</div>';
+    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div></div>'
+      // the labels ride above every card in a holder at the sleeve's top-right corner, so no toploader ever covers a price
+      + '<div class="stkp" data-i="' + i + '" style="--x:' + it.sx + 'px;--y:' + it.sy + 'px;--z:' + (3000 + i) + ';--bw:' + it.bw + 'px;--bh:' + it.bh + 'px">' + stickers(c) + '</div>';
   }
   function render() {
     var sh = shelfH(); state.shelfH = sh; state.cardW = cardW(); state.lanes = [];
@@ -219,7 +222,6 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
       var tape = '<div class="tape" style="--tx:' + L.tapeX + 'px;--tr:' + L.tapeR.toFixed(1) + 'deg">Case ' + caseNo + ' · ' + esc(shelfLetter(idx)) + ' · ' + esc(shelf.tape) + '</div>';
       var extras = L.extras.map(function (e) {
         if (e.pola) return '<div class="pola" data-pick="1" style="--x:' + e.x + 'px;--y:' + e.y + 'px;--r:' + e.r + 'deg">' + (hasPhoto(e.pola) ? '<img src="' + esc(img(e.pola.image, 300)) + '" alt="" loading="lazy" draggable="false">' : '<div class="noimg" style="position:relative;aspect-ratio:1/1">' + esc(e.pola.name) + '</div>') + '<span>pick of the case ★</span></div>';
-        if (e.guide) return '<div class="guide" style="--x:' + e.x + 'px;--y:' + e.y + 'px;--r:' + e.r + 'deg">PRICE GUIDE<br>monthly<br>(well-thumbed)</div>';
         return '';
       }).join('');
       return '<div class="shelf' + (idx === state.shelf ? ' on' : '') + '" data-shelf="' + idx + '" style="--sh:' + sh + 'px;--p1:' + L.p1 + ';--p2:' + L.p2 + '"><div class="felt"></div><div class="lane" style="width:' + L.width + 'px">' + tape + L.items.map(cardHtml).join('') + extras + '</div><div class="lip"></div></div>';
@@ -337,7 +339,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
     lifted = c;
     $('#liftArt').classList.toggle('none', !hasPhoto(c));
     $('#liftImg').src = hasPhoto(c) ? img(c.image, 1000) : ''; $('#liftImg').alt = c.name; $('#liftNo').textContent = c.name;
-    $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, c.condition].filter(Boolean).join(' · ');
+    $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, condText(c)].filter(Boolean).join(' · ');
     // the kiosk's labels: the price-gun sticker, Holo/foil in blue ink (Pokemon players say Holo), the condition in red ballpoint
     $('#liftPrice').textContent = gunPrice(c.price);
     $('#liftFoil').classList.toggle('off', !c.foil); $('#liftFoilInk').textContent = c.game === 'pokemon' ? 'Holo' : 'foil';
@@ -396,7 +398,7 @@ header h1 small{display:block;font:500 10px/1.2 Inter,sans-serif;letter-spacing:
   function tabs() { $('#tabs').innerHTML = state.cases.map(function (c) { return '<button type="button" data-game="' + esc(c.key) + '"' + (c.key === state.game ? ' class="on"' : '') + '>' + esc(c.label) + '</button>'; }).join(''); }
   function load(game) {
     if (state.busy) return; state.busy = true;
-    stateEl.style.display = 'flex'; stateEl.textContent = 'Unlocking the case…'; track.innerHTML = '';
+    stateEl.style.display = 'flex'; stateEl.textContent = 'Viewing the case…'; track.innerHTML = '';
     fetch(W + '/showcase.json?game=' + encodeURIComponent(game || ''), { headers: { accept: 'application/json' } })
       .then(function (r) { return r.json(); })
       .then(function (d) {

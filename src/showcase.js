@@ -19,7 +19,10 @@ import { serveCards } from "./cards.js";
 
 export const CASES = [
   { key: "mtg", label: "Magic", collection: "new-arrivals" },
-  { key: "pokemon", label: "Pokémon", collection: "pokemon-singles-new-arrivals" },
+  // Owner, 2026-10-30: "Would be cool to add a Japanese shelf to Pokemon" - the
+  // kiosk's Japanese collection, its own shelf at the bottom of the case.
+  { key: "pokemon", label: "Pokémon", collection: "pokemon-singles-new-arrivals",
+    extras: [{ key: "jp", label: "Japanese", tape: "Japanese singles · 日本語", collection: "pokemon-japanese-singles" }] },
   { key: "yugioh", label: "Yu-Gi-Oh!", collection: "yu-gi-oh-singles-new-arrivals" },
   { key: "onepiece", label: "One Piece", collection: "one-piece-in-stock" },
   { key: "starwars", label: "Star Wars", collection: "star-wars-unlimited-singles-in-stock" },
@@ -40,20 +43,28 @@ const slim = (c) => ({
 const keyOf = (c) => (c.name + "|" + c.set).toLowerCase();
 
 // picks: the physical showcase's cards for this game; cards: the game's own
-// feed. Pure, so the layout rules are testable without any feed.
-export function shelvesFor(picks, cards) {
+// feed; extras: named shelves with their own feed (the Japanese Pokémon
+// shelf), laid after the price bands but taking their cards first, so a card
+// in both feeds sits on its own shelf. Pure, so the layout rules are testable
+// without any feed.
+export function shelvesFor(picks, cards, extras) {
   const seen = new Set();
   const take = (list) => { const out = []; for (const c of list) { const k = keyOf(c); if (seen.has(k) || !(+c.price > 0)) continue; seen.add(k); out.push(slim(c)); } return out; };
   const byPrice = (a, b) => +b.price - +a.price;
   const shelves = [];
   const top = take([...(picks || [])].sort(byPrice)).slice(0, SHELF_MAX);
   if (top.length) shelves.push({ key: "picks", label: "Showcase picks", tape: "the case up front", cards: top });
+  const own = [];
+  for (const e of extras || []) {
+    const got = take([...(e.cards || [])].sort(byPrice)).slice(0, SHELF_MAX);
+    if (got.length) own.push({ key: e.key, label: e.label, tape: e.tape, cards: got });
+  }
   const rest = take([...(cards || [])].sort(byPrice));
   for (const b of BANDS) {
     const band = rest.filter((c) => +c.price >= b.min && (b.key === "high" || +c.price < (b.key === "mid" ? 100 : 25))).slice(0, SHELF_MAX);
     if (band.length) shelves.push({ key: b.key, label: b.label, tape: b.tape, cards: band });
   }
-  return shelves;
+  return shelves.concat(own);
 }
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS", vary: "origin" };
@@ -70,10 +81,18 @@ export async function serveShowcase(request, env, ctx, opts) {
     return Array.isArray(j.cards) ? j.cards : [];
   });
   let picks = [], cards = [], trouble = [];
-  const [p, c] = await Promise.allSettled([cardsFn(SHOWCASE_COLLECTION, true), cardsFn(which.collection, false)]);
+  const extras = which.extras || [];
+  const settled = await Promise.allSettled([cardsFn(SHOWCASE_COLLECTION, true), cardsFn(which.collection, false), ...extras.map((e) => cardsFn(e.collection, false))]);
+  const [p, c] = settled;
   if (p.status === "fulfilled") picks = p.value.filter((x) => x.game === which.key); else trouble.push("showcase: " + String(p.reason && p.reason.message || p.reason).slice(0, 120));
   if (c.status === "fulfilled") cards = c.value; else trouble.push("feed: " + String(c.reason && c.reason.message || c.reason).slice(0, 120));
-  const shelves = shelvesFor(picks, cards);
+  const own = extras.map((e, i) => {
+    const r = settled[2 + i];
+    if (r.status === "fulfilled") return { ...e, cards: r.value };
+    trouble.push(e.key + ": " + String(r.reason && r.reason.message || r.reason).slice(0, 120));
+    return { ...e, cards: [] };
+  });
+  const shelves = shelvesFor(picks, cards, own);
   const ok = shelves.length > 0;
   return Response.json(
     { ok, game: which.key, label: which.label, cases: CASES.map((x) => ({ key: x.key, label: x.label })), shelves, count: shelves.reduce((n, s) => n + s.cards.length, 0), updated: new Date().toISOString(), ...(trouble.length ? { trouble } : {}) },
