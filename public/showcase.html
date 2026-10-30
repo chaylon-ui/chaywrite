@@ -89,9 +89,9 @@ header .walk button{margin-right:4px}
 .lift .big .pink,.lift .big .fink,.lift .big .cink{filter:url(#ink)}
 .fsticker.off,.csticker.off{display:none}
 /* on a shelf the holder sits at the sleeve's top-right corner; the labels hang down its right side as on the kiosk */
-.stkp .csticker{right:calc(var(--bw) * .055);top:calc(var(--bh) * .05)}
-.stkp .fsticker{right:calc(var(--bw) * .08);top:calc(var(--bh) * .22)}
-.stkp .psticker{right:calc(var(--bw) * .05);top:calc(var(--bh) * .38)}
+.stkp .csticker{right:calc(var(--bw) * .055);top:calc(var(--bh) * .125)}
+.stkp .fsticker{right:calc(var(--bw) * .08);top:calc(var(--bh) * .27)}
+.stkp .psticker{right:calc(var(--bw) * .05);top:calc(var(--bh) * .405)}
 .sold .tl{filter:grayscale(.9) brightness(.5)}.sold .stk:after{content:"SOLD";display:block;font-family:"Permanent Marker",cursive;color:#c43d2f;font-size:13px}
 .tape{position:absolute;left:var(--tx);bottom:20px;z-index:5;padding:5px 16px;background:var(--tape);color:#2a2320;font-family:"Permanent Marker",cursive;font-size:14px;letter-spacing:.04em;transform:rotate(var(--tr));
   box-shadow:0 2px 3px rgba(0,0,0,.4);opacity:.92;clip-path:polygon(2% 0,98% 4%,100% 100%,1% 96%);white-space:nowrap}
@@ -134,9 +134,10 @@ header .walk button{margin-right:4px}
 .lift .art.none .noimg{display:flex}.lift .art.none img{display:none}
 .lift .big:after{content:"";position:absolute;inset:0;border-radius:7px;background:radial-gradient(circle at var(--gx,30%) var(--gy,25%),rgba(255,255,255,.2),rgba(255,255,255,.04) 28%,transparent 50%),linear-gradient(115deg,rgba(255,255,255,.1),transparent 40%,rgba(255,255,255,.04) 70%,transparent 80%);pointer-events:none;z-index:9}
 /* the kiosk's stickers, stuck on the sleeve: price-gun label, handwritten Holo/foil, the condition in red ballpoint */
-.lift .psticker{right:5%;bottom:40%}
-.lift .fsticker{right:8%;bottom:52%}
-.lift .csticker{right:5.5%;top:12.5%}
+/* on the big sleeve: the condition under the mana cost, the foil mark, the price just above the type line (the set and rarity symbol stay clear) */
+.lift .big .psticker{right:5%;top:43%}
+.lift .big .fsticker{right:8%;top:29.5%}
+.lift .big .csticker{right:5.5%;top:12.5%}
 .lift .panel{flex-shrink:0;background:#0f0b0c;border-top:1px solid rgba(255,255,255,.1);padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}
 .lift h2{font-family:Cinzel,serif;font-size:20px;line-height:1.15;margin-bottom:4px}
 .lift .set{color:var(--muted);font-size:13px;margin-bottom:10px}
@@ -155,7 +156,7 @@ header .walk button{margin-right:4px}
 .lift .mini .tl img{width:100%;height:100%;object-fit:cover;display:block}
 .lift .mini .stkp{left:100%;top:0}
 @media (min-width:721px){.lift .in{flex-direction:row}.lift .panel{width:360px;border-top:0;border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;justify-content:center;padding:24px}.lift h2{font-size:24px}.lift .set{font-size:14px}}
-@media (max-width:720px){:root{--cw:118px}.hnote{display:none}.hlogo{height:24px}.tabs button{padding:6px 9px;font-size:12px}.tabs button.ic{padding:3px 7px}.tabs button.ic img{height:27px;max-width:90px}.map .n{display:none}.lift .panel{max-height:62vh;max-height:62dvh}}
+@media (max-width:720px){:root{--cw:138px}.hnote{display:none}.hlogo{height:24px}.tabs button{padding:6px 9px;font-size:12px}.tabs button.ic{padding:3px 7px}.tabs button.ic img{height:27px;max-width:90px}.map .n{display:none}.lift .panel{max-height:62vh;max-height:62dvh}}
 @media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big,.card.foil .tl:before,.mini.foil .tl:before{animation:none}}
 </style></head>
 <body>
@@ -191,7 +192,7 @@ header .walk button{margin-right:4px}
   // "add one or two more rows per shelf"), each row standing lower and in
   // front of the one behind it, so a shelf fills the case.
   function cardH() { return Math.round(cardW() * 88 / 63); }
-  function rowsFor() { var H = caseEl.clientHeight || 600, ch = cardH(); return Math.max(2, Math.min(4, 1 + Math.floor((H - 92 - ch) / (ch * .48)))); }
+  function rowsFor() { var H = caseEl.clientHeight || 600, ch = cardH(), cap = window.innerWidth <= 720 ? 3 : 4; return Math.max(2, Math.min(cap, 1 + Math.floor((H - 92 - ch) / (ch * .48)))); }
   function shelfH() { return Math.round(cardH() * (1 + .48 * (state.rows - 1)) + 78); }
 
   // Lay one shelf by hand: uneven gaps, the odd overlap, a tilt per card, a
