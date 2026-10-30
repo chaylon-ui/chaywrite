@@ -16,15 +16,17 @@
 :root{--wood1:#4a2c15;--wood2:#7a4a22;--wood3:#2a170a;--felt:#4a1c22;--felt2:#3a141a;--ink:#f1eadb;--muted:#a79c8c;--ember:#d9822b;--tape:#e8dcb8;--label:#fbf7ec;
   --cw:150px;--pad:18px}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#0a0809;color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+html,body{height:100%;overflow:hidden;background:#0a0809;color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-text-size-adjust:100%;touch-action:manipulation}
 body{display:flex;flex-direction:column;background:radial-gradient(ellipse at 50% 0%,#1d1612,#0a0809 70%)}
-button{font:inherit;cursor:pointer}
+button{font:inherit;cursor:pointer;touch-action:manipulation}
 a{color:inherit}
 /* header */
 /* the walk arrows and the game tabs share the header rows: on a phone they wrap together (two rows, not three); on a wide screen the tabs sit at the right */
 header{display:flex;align-items:center;gap:6px;padding:8px 12px 4px;flex-shrink:0;flex-wrap:wrap}
 header .walk{display:contents}
 header .walk button{margin-right:4px}
+.hlogo{height:30px;width:auto;display:block;filter:drop-shadow(0 2px 4px rgba(0,0,0,.7));margin:0 6px 0 2px}
+.hnote{font-family:Caveat,cursive;font-size:17px;color:#e8dcb8;transform:rotate(-2deg);text-shadow:0 1px 0 #000;margin-right:8px}
 .tabs{display:contents}
 @media (min-width:721px){.tabs button:first-child{margin-left:auto}}
 .tabs button{background:#1a1411;color:var(--muted);border:1px solid #3a2d24;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600}
@@ -47,19 +49,19 @@ header .walk button{margin-right:4px}
   repeating-linear-gradient(90deg,rgba(0,0,0,.05) 0 2px,transparent 2px 5px),
   linear-gradient(180deg,var(--felt),var(--felt2) 70%,#2a0d12)}
 .felt:after{content:"";position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");mix-blend-mode:overlay;opacity:.5}
-.board{height:var(--bh);background:linear-gradient(180deg,#3a2413,#5a3a1d 50%,#2b170b);box-shadow:inset 0 -6px 12px rgba(0,0,0,.5);position:relative;display:flex;align-items:center;justify-content:center;gap:18px}
-.board .logo{height:46px;width:auto;display:block;filter:drop-shadow(0 3px 5px rgba(0,0,0,.7))}
-@media (max-width:720px){.board .logo{height:36px}.board .note{font-size:15px}}
-.board .note{font-family:Caveat,cursive;font-size:19px;color:#e8dcb8;transform:rotate(-2deg);text-shadow:0 1px 0 #000}
 .lip{position:absolute;left:0;right:0;bottom:0;height:14px;background:linear-gradient(180deg,#2b170b,#5a3a1d 40%,#20110a);box-shadow:0 -3px 8px rgba(0,0,0,.5)}
 .lane{position:absolute;left:0;top:0;height:100%;will-change:transform}
 .card{position:absolute;width:var(--cw);aspect-ratio:63/88;left:var(--x);top:var(--y);transform:rotate(var(--r)) scale(var(--s,1));transform-origin:50% 60%;cursor:pointer;z-index:var(--z,1)}
-.card .tl{position:absolute;inset:0;border-radius:6px;background:#111;box-shadow:0 10px 18px rgba(0,0,0,.55),0 2px 4px rgba(0,0,0,.6);overflow:hidden;border:3px solid rgba(255,255,255,.12)}
-.card .tl:after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.04) 28%,transparent 45%,rgba(255,255,255,.08) 70%,transparent 80%);pointer-events:none}
+.card .tl{position:absolute;inset:0;border-radius:6px;background:#111;box-shadow:0 10px 18px rgba(0,0,0,.55),0 2px 4px rgba(0,0,0,.6);overflow:hidden;border:3px solid rgba(255,255,255,.12);filter:brightness(var(--dim,1))}
+.card .tl:after{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(115deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.03) 28%,transparent 45%,rgba(255,255,255,.05) 70%,transparent 80%);pointer-events:none}
 .card img{display:block;width:100%;height:100%;object-fit:cover;background:#1b1b1f}
-.card .noimg{position:absolute;inset:0;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10);display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;font-family:"Permanent Marker",cursive;font-size:15px;line-height:1.15;color:#d9d2c4;text-shadow:0 1px 0 #000}
-.card .noimg:before{content:"";position:absolute;inset:8px;border:1px dashed rgba(255,255,255,.18);border-radius:4px}
-.card.r0 .tl{filter:brightness(.86)}
+.card .noimg,.mini .noimg{position:absolute;inset:0;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10);display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;font-family:"Permanent Marker",cursive;font-size:15px;line-height:1.15;color:#d9d2c4;text-shadow:0 1px 0 #000}
+.card .noimg:before,.mini .noimg:before{content:"";position:absolute;inset:8px;border:1px dashed rgba(255,255,255,.18);border-radius:4px}
+/* foil and holo cards wear the kiosk's oily rainbow film (tv.html .oil): it drifts on the shelf in view and follows the tilt in the hand; plain cards keep only the sleeve's faint sheen */
+.card.foil .tl:before,.mini.foil .tl:before,.lift .art.foil:before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:hard-light;opacity:.72;background:linear-gradient(115deg,rgba(255,90,90,.3) 4%,rgba(255,190,60,.33) 18%,rgba(248,255,120,.27) 33%,rgba(95,255,155,.33) 48%,rgba(80,190,255,.36) 63%,rgba(165,95,255,.33) 78%,rgba(255,95,215,.3) 93%);background-size:230% 230%}
+.shelf.on .card.foil .tl:before,.mini.foil .tl:before{animation:oily 7s ease-in-out infinite alternate}
+@keyframes oily{from{background-position:0% 0%}to{background-position:100% 100%}}
+.lift .art.foil:before{background-position:var(--gx,30%) var(--gy,25%);transition:background-position .14s ease-out;opacity:.8}
 .card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
 .card.stand:before{content:"";position:absolute;left:30%;right:30%;bottom:-8px;height:10px;background:#0c0608;border-radius:40%;filter:blur(2px)}
 
@@ -110,7 +112,7 @@ header .walk button{margin-right:4px}
 /* the card fills the stage; its details sit in their own panel below (beside it on a wide screen) */
 .lift .stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:14px 16px 12px}
 /* held: the wrapper tilts with the finger or the phone, the card inside drifts as a hand never quite holds still */
-.lift .hold{flex-shrink:0;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;transition:transform .14s ease-out;touch-action:none}
+.lift .hold{flex-shrink:0;transform:perspective(1000px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;transition:transform .14s ease-out;touch-action:none}
 /* the toploader: a rigid clear sleeve a shade bigger than the card, open along the top */
 .lift .big{--bw:300px;width:var(--bw);aspect-ratio:63/88;position:relative;border-radius:7px;background:linear-gradient(160deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 45%,rgba(255,255,255,.11));box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 30px 60px rgba(0,0,0,.8);animation:hover 5.5s ease-in-out infinite}
 @keyframes hover{0%,100%{transform:translateY(0) rotate(-.8deg);box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 28px 50px rgba(0,0,0,.8)}50%{transform:translateY(-12px) rotate(.8deg);box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 48px 70px rgba(0,0,0,.7)}}
@@ -119,7 +121,7 @@ header .walk button{margin-right:4px}
 .lift .art img{width:100%;height:100%;object-fit:cover;display:block}
 .lift .art .noimg{display:none;position:absolute;inset:0;align-items:center;justify-content:center;padding:10%;text-align:center;font-family:"Permanent Marker",cursive;font-size:calc(var(--bw) * .08);line-height:1.15;color:#d9d2c4;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10)}
 .lift .art.none .noimg{display:flex}.lift .art.none img{display:none}
-.lift .big:after{content:"";position:absolute;inset:0;border-radius:7px;background:radial-gradient(circle at var(--gx,30%) var(--gy,25%),rgba(255,255,255,.32),rgba(255,255,255,.06) 28%,transparent 50%),linear-gradient(115deg,rgba(255,255,255,.14),transparent 40%,rgba(255,255,255,.06) 70%,transparent 80%);pointer-events:none;z-index:9}
+.lift .big:after{content:"";position:absolute;inset:0;border-radius:7px;background:radial-gradient(circle at var(--gx,30%) var(--gy,25%),rgba(255,255,255,.2),rgba(255,255,255,.04) 28%,transparent 50%),linear-gradient(115deg,rgba(255,255,255,.1),transparent 40%,rgba(255,255,255,.04) 70%,transparent 80%);pointer-events:none;z-index:9}
 /* the kiosk's stickers, stuck on the sleeve: price-gun label, handwritten Holo/foil, the condition in red ballpoint */
 .lift .psticker{right:5%;bottom:40%}
 .lift .fsticker{right:8%;bottom:52%}
@@ -131,13 +133,22 @@ header .walk button{margin-right:4px}
 .lift .acts a,.lift .acts button{display:inline-block;padding:11px 16px;border-radius:999px;font-weight:700;font-size:14px;text-decoration:none;border:1px solid rgba(255,255,255,.25);background:#1a1411;color:var(--ink)}
 .lift .acts .buy{background:var(--ember);border-color:var(--ember);color:#1a0f05}
 .lift .x{position:absolute;right:14px;top:6px;z-index:3;background:none;border:0;color:var(--ink);font-size:34px;line-height:1;text-shadow:0 1px 3px #000}
-.lift .note{font-family:Caveat,cursive;font-size:18px;color:var(--muted);margin-top:10px}
+/* "More like this": a strip of mini sleeves in the panel (owner: upsell), the same labels and film, a tap swaps the card in the hand */
+.lift .panel{position:relative;z-index:1;overflow-y:auto}
+.lift .more{margin-top:12px}
+.lift .more h3{font-family:Caveat,cursive;font-size:18px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.lift .minis{display:flex;gap:14px;overflow-x:auto;padding:6px 2px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x}
+.lift .minis::-webkit-scrollbar{display:none}
+.lift .mini{position:relative;flex:0 0 auto;width:var(--bw);height:var(--bh);cursor:pointer}
+.lift .mini .tl{position:absolute;inset:0;border-radius:5px;overflow:hidden;background:#111;border:2px solid rgba(255,255,255,.14);box-shadow:0 6px 12px rgba(0,0,0,.6)}
+.lift .mini .tl img{width:100%;height:100%;object-fit:cover;display:block}
+.lift .mini .stkp{left:100%;top:0}
 @media (min-width:721px){.lift .in{flex-direction:row}.lift .panel{width:360px;border-top:0;border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;justify-content:center;padding:24px}.lift h2{font-size:24px}.lift .set{font-size:14px}}
-@media (max-width:720px){:root{--cw:118px}header h1{font-size:16px}.tabs button{padding:6px 10px;font-size:12px}.map .n{display:none}}
-@media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big{animation:none}}
+@media (max-width:720px){:root{--cw:118px}.hnote{display:none}.hlogo{height:24px}.tabs button{padding:6px 9px;font-size:12px}.map .n{display:none}.lift .panel{max-height:62vh;max-height:62dvh}}
+@media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big,.card.foil .tl:before,.mini.foil .tl:before{animation:none}}
 </style></head>
 <body>
-<header><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><div class="tabs" id="tabs"></div></header>
+<header><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><img class="hlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><span class="hnote">ask us to pull any card out for a closer look</span><div class="tabs" id="tabs"></div></header>
 <div class="room"><div class="case" id="case">
   <div class="track" id="track"></div>
   <div class="glass" id="glass"></div><div class="smudge"></div><div class="vig"></div>
@@ -145,7 +156,7 @@ header .walk button{margin-right:4px}
   <div class="state" id="state">Viewing the case…</div>
 </div></div>
 <div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
-<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="note" id="liftNote"></div></div></div></div>
+<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftMore"></div></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
 (function () {
@@ -161,37 +172,39 @@ header .walk button{margin-right:4px}
   function seed(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return function () { h += 0x6D2B79F5; var t = Math.imul(h ^ (h >>> 15), 1 | h); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  var state = { game: '', cases: [], shelves: [], shelf: 0, x: 0, vx: 0, maxX: 0, width: 0, cardW: 150, shelfH: 300, lanes: [], busy: false };
+  var state = { game: '', cases: [], shelves: [], shelf: 0, x: 0, vx: 0, maxX: 0, width: 0, cardW: 150, shelfH: 300, rows: 2, lanes: [], busy: false };
   var track = $('#track'), caseEl = $('#case'), glass = $('#glass'), hint = $('#hint'), stateEl = $('#state');
-  var BOARD = 72;   // the case's top board, above the first shelf
 
   function cardW() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cw')) || 150; }
-  // Two rows deep, the front row standing lower and in front of the back one.
-  var ROWS = 2;
+  // Rows deep: as many as the case is tall, two to four (owner, 2026-10-30:
+  // "add one or two more rows per shelf"), each row standing lower and in
+  // front of the one behind it, so a shelf fills the case.
   function cardH() { return Math.round(cardW() * 88 / 63); }
-  function shelfH() { return Math.round(cardH() * 1.48 + 78); }
+  function rowsFor() { var H = caseEl.clientHeight || 600, ch = cardH(); return Math.max(2, Math.min(4, 1 + Math.floor((H - 92 - ch) / (ch * .48)))); }
+  function shelfH() { return Math.round(cardH() * (1 + .48 * (state.rows - 1)) + 78); }
 
   // Lay one shelf by hand: uneven gaps, the odd overlap, a tilt per card, a
   // sticker at its own angle; pricey rows stand their cards up.
   function layout(shelf, idx) {
     var cw = cardW(), ch = cardH(), r = seed(state.game + '|' + shelf.key), items = [];
-    var xs = [46 + Math.round(r() * 30), 46 + Math.round(cw * .55) + Math.round(r() * 30)];   // the front row sits staggered half a card along
+    var rows = state.rows, xs = [];
+    for (var k = 0; k < rows; k++) xs.push(46 + Math.round(cw * ((k % 2) * .55 + Math.floor(k / 2) * .18)) + Math.round(r() * 30));   // each row starts staggered along, so the rows behind show between the cards in front
     var tapeX = 24 + Math.round(r() * 60), tapeR = (r() - .5) * 4;
     shelf.cards.forEach(function (c, i) {
-      var row = i % ROWS, q = seed(String(c.variantId || c.url || c.name) + '|' + i);
-      var overlap = q() < .14 && i >= ROWS;
+      var row = i % rows, q = seed(String(c.variantId || c.url || c.name) + '|' + i);
+      var overlap = q() < .14 && i >= rows;
       var gap = overlap ? -Math.round(cw * (.12 + q() * .1)) : Math.round(10 + q() * 24);
-      if (i >= ROWS) xs[row] += gap;
+      if (i >= rows) xs[row] += gap;
       var stand = shelf.key === 'high' || shelf.key === 'picks', pick = shelf.key === 'picks' && i === 0;
-      var sc = (pick ? 1.08 : stand ? 1.04 : 1) * (row === 0 ? .9 : 1);
+      var depth = rows - 1 - row, sc = (pick ? 1.08 : stand ? 1.04 : 1) * (1 - depth * .05);   // the rows behind a shade smaller and darker
       // Later cards lie on top, except one laid overlapping its neighbour: that
       // one slides underneath, so the neighbour's price sticker stays readable.
-      var z = row * 1000 + i * 2; if (overlap) z = items[i - ROWS].z - 1;
-      var y = (row === 0 ? 14 : 14 + Math.round(ch * .48)) + Math.round((q() - .5) * 12);
-      items.push({ c: c, row: row, z: z, x: xs[row], y: y, sx: Math.round(xs[row] + cw * (.5 + .5 * sc)), sy: Math.round(y + .6 * ch * (1 - sc)), bw: Math.round(cw * sc), bh: Math.round(ch * sc), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
+      var z = row * 1000 + i * 2; if (overlap) z = items[i - rows].z - 1;
+      var y = 14 + Math.round(ch * .48 * row) + Math.round((q() - .5) * 12);
+      items.push({ c: c, row: row, z: z, x: xs[row], y: y, sx: Math.round(xs[row] + cw * (.5 + .5 * sc)), sy: Math.round(y + .6 * ch * (1 - sc)), bw: Math.round(cw * sc), bh: Math.round(ch * sc), dim: (1 - depth * .07).toFixed(2), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
       xs[row] += cw;
     });
-    var x = Math.max(xs[0], xs[1]);
+    var x = Math.max.apply(null, xs);
     var extras = [];
     if (shelf.key === 'picks' && shelf.cards.length) { extras.push({ pola: shelf.cards[0], x: x + 34, y: 40 + Math.round(r() * 20), r: ((r() - .5) * 10).toFixed(1) }); x += cw + 50; }
     return { items: items, extras: extras, width: x + 60, tapeX: tapeX, tapeR: tapeR, p1: Math.round(20 + r() * 60) + '%', p2: Math.round(10 + r() * 80) + '%' };
@@ -212,14 +225,13 @@ header .walk button{margin-right:4px}
   function hasPhoto(c) { return !!c.image && !/placeholder|coming|no[-_]?image|missing/i.test(c.image); }
   function cardHtml(it, i) {
     var c = it.c;
-    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div></div>'
+    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + (c.foil ? ' foil' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + ';--dim:' + it.dim + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div></div>'
       // the labels ride above every card in a holder at the sleeve's top-right corner, so no toploader ever covers a price
       + '<div class="stkp" data-i="' + i + '" style="--x:' + it.sx + 'px;--y:' + it.sy + 'px;--z:' + (3000 + i) + ';--bw:' + it.bw + 'px;--bh:' + it.bh + 'px">' + stickers(c) + '</div>';
   }
   function render() {
-    var sh = shelfH(); state.shelfH = sh; state.cardW = cardW(); state.lanes = [];
-    var board = '<div class="board" style="--bh:' + BOARD + 'px"><img class="logo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><span class="note">ask us to pull any card out for a closer look</span></div>';
-    track.innerHTML = board + state.shelves.map(function (shelf, idx) {
+    state.rows = rowsFor(); var sh = shelfH(); state.shelfH = sh; state.cardW = cardW(); state.lanes = [];
+    track.innerHTML = state.shelves.map(function (shelf, idx) {
       var L = layout(shelf, idx); state.lanes.push(L);
       var caseNo = Math.max(1, state.cases.findIndex(function (c) { return c.key === state.game; }) + 1);
       var tape = '<div class="tape" style="--tx:' + L.tapeX + 'px;--tr:' + L.tapeR.toFixed(1) + 'deg">Case ' + caseNo + ' · ' + esc(shelfLetter(idx)) + ' · ' + esc(shelf.tape) + '</div>';
@@ -253,7 +265,9 @@ header .walk button{margin-right:4px}
   // Crouch: the stack slides so the chosen shelf sits at eye level; the
   // case leans for a moment the way you do when you bend down.
   function focusShelf(animate, dir) {
-    var H = caseEl.clientHeight, y = Math.round(H / 2 - state.shelfH / 2 - BOARD - state.shelf * state.shelfH);
+    var H = caseEl.clientHeight, total = state.shelves.length * state.shelfH, y = Math.round(H / 2 - state.shelfH / 2 - state.shelf * state.shelfH);
+    // the first shelf starts at the top of the case and the last ends at its bottom; a stack shorter than the case sits centred
+    y = total > H ? Math.max(Math.min(y, 0), H - total) : Math.round((H - total) / 2);
     track.style.transform = 'translateY(' + y + 'px)';
     var shelvesEls = track.querySelectorAll('.shelf');
     for (var i = 0; i < shelvesEls.length; i++) shelvesEls[i].classList.toggle('on', i === state.shelf);
@@ -307,7 +321,21 @@ header .walk button{margin-right:4px}
     if (Math.abs(state.vx) > 1) momentum();
   }
   caseEl.addEventListener('pointerup', endDrag); caseEl.addEventListener('pointercancel', endDrag);
-  caseEl.addEventListener('wheel', function (e) { if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { e.preventDefault(); state.x = Math.max(0, Math.min(state.maxX, state.x + e.deltaX)); place(); } }, { passive: false });
+  // The mouse wheel crouches to the next shelf (owner, 2026-10-30: "use scroll
+  // wheel on mouse to go up and down shelves"): one shelf per notch, a short
+  // lock so a trackpad's stream of small deltas reads as one gesture; sideways
+  // scrolling or Shift+wheel walks the case.
+  var wheelAcc = 0, wheelLock = false, wheelIdle = null;
+  caseEl.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { state.x = Math.max(0, Math.min(state.maxX, state.x + (e.shiftKey ? e.deltaY : e.deltaX))); place(); return; }
+    clearTimeout(wheelIdle); wheelIdle = setTimeout(function () { wheelAcc = 0; }, 220);
+    if (wheelLock) return;
+    wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) < 24) return;
+    var dir = wheelAcc > 0 ? 1 : -1; wheelAcc = 0; wheelLock = true; setTimeout(function () { wheelLock = false; }, 560);
+    goShelf(state.shelf + dir, dir);
+  }, { passive: false });
   document.addEventListener('keydown', function (e) {
     if ($('#lift').classList.contains('on')) { if (e.key === 'Escape') putBack(); return; }
     if (e.key === 'ArrowRight') { state.x = Math.min(state.maxX, state.x + 240); place(); }
@@ -338,6 +366,29 @@ header .walk button{margin-right:4px}
     var c = cardEl ? state.shelves[si].cards[Number(cardEl.getAttribute('data-i'))] : pola ? state.shelves[si].cards[0] : null;
     if (c) { askOrientation(); lift(c); }
   }
+  // "More like this" in the hand: the same colour or lane first, then the same
+  // set, a foil for a foil, nearest in price; six of them, never the card itself.
+  function similar(c) {
+    var out = [], pc = Number(c.price) || 0;
+    state.shelves.forEach(function (sh, si) {
+      sh.cards.forEach(function (o, ci) {
+        if (o === c || (o.variantId && o.variantId === c.variantId)) return;
+        var sc = 0;
+        if (o.color && o.color === c.color) sc += 3;
+        if (o.set && o.set === c.set) sc += 2;
+        if (!!o.foil === !!c.foil) sc += 1;
+        if (hasPhoto(o)) sc += .5;
+        var po = Number(o.price) || 0; if (pc > 0 && po > 0) sc -= Math.abs(Math.log(po / pc)) * 1.5;
+        out.push({ o: o, si: si, ci: ci, sc: sc });
+      });
+    });
+    out.sort(function (a, b) { return b.sc - a.sc; });
+    return out.slice(0, 6);
+  }
+  function miniHtml(m) {
+    var o = m.o, bw = 90, bh = Math.round(bw * 88 / 63);
+    return '<div class="mini' + (o.foil ? ' foil' : '') + '" data-si="' + m.si + '" data-ci="' + m.ci + '" style="--bw:' + bw + 'px;--bh:' + bh + 'px"><div class="tl">' + (hasPhoto(o) ? '<img src="' + esc(img(o.image, 240)) + '" alt="' + esc(o.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(o.name) + '</div>') + '</div><div class="stkp">' + stickers(o) + '</div></div>';
+  }
   function lift(c) {
     lifted = c;
     $('#liftArt').classList.toggle('none', !hasPhoto(c));
@@ -348,7 +399,8 @@ header .walk button{margin-right:4px}
     $('#liftFoil').classList.toggle('off', !c.foil); $('#liftFoilInk').textContent = c.game === 'pokemon' ? 'Holo' : 'foil';
     var cd = cond(c); $('#liftCond').classList.toggle('off', !cd); $('#liftCondInk').textContent = cd;
     $('#liftActs').innerHTML = (ON_STORE && c.variantId ? '<button type="button" class="buy" data-buy="' + esc(c.variantId) + '">Add to cart</button>' : '') + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
-    $('#liftNote').textContent = 'Live price from the shop. Put it back with × or Esc.';
+    $('#liftArt').classList.toggle('foil', !!c.foil);
+    var sims = similar(c); $('#liftMore').innerHTML = sims.length ? '<h3>More like this</h3><div class="minis">' + sims.map(miniHtml).join('') + '</div>' : '';
     orientBase = null; tiltTo(0, 0, 30, 25);
     $('#lift').classList.add('on'); hint.classList.add('gone'); fitLift();
   }
@@ -361,7 +413,12 @@ header .walk button{margin-right:4px}
   }
   window.addEventListener('resize', fitLift);
   function putBack() { $('#lift').classList.remove('on'); lifted = null; tiltTo(0, 0); orientBase = null; }
-  $('#lift').addEventListener('click', function (e) { if (e.target === e.currentTarget || e.target.classList.contains('stage')) putBack(); });
+  // a tap on a mini swaps it into the hand; a tap on the held card, the stage or the backdrop puts it back (owner: "if you click the expanded card it goes away")
+  $('#lift').addEventListener('click', function (e) {
+    var m = e.target.closest('.mini');
+    if (m) { var sh = state.shelves[Number(m.getAttribute('data-si'))], c2 = sh && sh.cards[Number(m.getAttribute('data-ci'))]; if (c2) lift(c2); return; }
+    if (e.target === e.currentTarget || e.target.classList.contains('stage') || e.target.closest('#hold')) putBack();
+  });
   // In the hand: the finger (or mouse) over the card tilts it and slides the
   // glare; on a phone the tilt follows how you hold it, relative to the
   // position when the card came out.
