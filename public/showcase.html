@@ -226,8 +226,8 @@ header .walk button{margin-right:4px}
   function cardHtml(it, i) {
     var c = it.c;
     return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + (c.foil ? ' foil' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + ';--dim:' + it.dim + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div></div>'
-      // the labels ride above every card in a holder at the sleeve's top-right corner, so no toploader ever covers a price
-      + '<div class="stkp" data-i="' + i + '" style="--x:' + it.sx + 'px;--y:' + it.sy + 'px;--z:' + (3000 + i) + ';--bw:' + it.bw + 'px;--bh:' + it.bh + 'px">' + stickers(c) + '</div>';
+      // the labels ride above every card (rows reach z 3000+) in a holder at the sleeve's top-right corner, so no toploader ever covers a price
+      + '<div class="stkp" data-i="' + i + '" style="--x:' + it.sx + 'px;--y:' + it.sy + 'px;--z:' + (10000 + i) + ';--bw:' + it.bw + 'px;--bh:' + it.bh + 'px">' + stickers(c) + '</div>';
   }
   function render() {
     state.rows = rowsFor(); var sh = shelfH(); state.shelfH = sh; state.cardW = cardW(); state.lanes = [];
