@@ -21,9 +21,12 @@ body{display:flex;flex-direction:column;background:radial-gradient(ellipse at 50
 button{font:inherit;cursor:pointer}
 a{color:inherit}
 /* header */
-header{display:flex;align-items:center;gap:10px;padding:8px 12px 4px;flex-shrink:0;flex-wrap:wrap}
-header .walk{display:flex;gap:6px}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+/* the walk arrows and the game tabs share the header rows: on a phone they wrap together (two rows, not three); on a wide screen the tabs sit at the right */
+header{display:flex;align-items:center;gap:6px;padding:8px 12px 4px;flex-shrink:0;flex-wrap:wrap}
+header .walk{display:contents}
+header .walk button{margin-right:4px}
+.tabs{display:contents}
+@media (min-width:721px){.tabs button:first-child{margin-left:auto}}
 .tabs button{background:#1a1411;color:var(--muted);border:1px solid #3a2d24;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600}
 .tabs button.on{background:var(--ember);border-color:var(--ember);color:#1a0f05}
 /* the room and the case */
@@ -194,7 +197,7 @@ header .walk{display:flex;gap:6px}
     return { items: items, extras: extras, width: x + 60, tapeX: tapeX, tapeR: tapeR, p1: Math.round(20 + r() * 60) + '%', p2: Math.round(10 + r() * 80) + '%' };
   }
   // The variant's language is not a condition: English comes off, Japanese shortens to JP (the Japanese shelf says it anyway).
-  function condText(c) { return String(c.condition || '').replace(/\s*\/\s*english\b/i, '').replace(/\s*\/\s*$/, '').trim(); }
+  function condText(c) { return String(c.condition || '').replace(/\s*\/\s*(english|normal)\b/gi, '').replace(/\s*\/\s*$/, '').trim(); }
   function cond(c) {
     return condText(c).replace(/\s*\/?\s*japanese\b/i, ' JP').replace(/near mint/i, 'NM').replace(/lightly played/i, 'LP').replace(/moderately played/i, 'MP').replace(/heavily played/i, 'HP').replace(/damaged/i, 'DMG').replace(/1st edition/i, '1st Ed').replace(/unlimited/i, 'Unl').replace(/\s+/g, ' ').trim().slice(0, 14);
   }
