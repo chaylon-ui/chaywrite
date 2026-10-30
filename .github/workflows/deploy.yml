@@ -259,6 +259,7 @@ jobs:
           curl -sS -o /dev/null -w 'exorgames.com/alerts: HTTP %{http_code} -> %{redirect_url} (expect 301 to the worker /alerts)\n' --max-time 20 "https://exorgames.com/alerts" || true
           echo "=== The Showcase (src/showcase.js) ==="
           curl -sS -o /dev/null -w '/showcase page: HTTP %{http_code} %{content_type} (expect 200 text/html)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/showcase" || true
+          curl -sS -o /dev/null -w '/showcase/icon/mtg.png: HTTP %{http_code} %{content_type} %{size_download} bytes (expect 200 image/png when the kiosk has a Magic logo)\n' --max-time 20 "https://exor-binder.nevski.workers.dev/showcase/icon/mtg.png" || true
           echo -n "showcase.json pokemon: "; curl -sS --max-time 60 "https://exor-binder.nevski.workers.dev/showcase.json?game=pokemon" | python3 -c 'import sys,json;j=json.load(sys.stdin);print({"ok":j.get("ok"),"game":j.get("game"),"count":j.get("count"),"shelves":[(s["key"],len(s["cards"])) for s in j.get("shelves",[])],"trouble":j.get("trouble")})' || true
           echo "=== Ask Exor (src/ask.js) ==="
           echo -n "ask health (configured = ANTHROPIC_API_KEY present; counts only): "; curl -sS --max-time 20 "https://exor-binder.nevski.workers.dev/ask/health" | head -c 500; echo

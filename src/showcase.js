@@ -69,6 +69,29 @@ export function shelvesFor(picks, cards, extras) {
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS", vary: "origin" };
 
+// The kiosk's game logos: the admin uploads one per game (a small data-URL
+// PNG, stored as gicon:<game> in the DEFAULT room's settings). The page draws
+// them on the game tabs (owner, 2026-10-30: "use the game logos for the
+// buttons instead of the text") via GET /showcase/icon/<game>.png.
+const ICON_RE = /^data:(image\/(?:png|webp|jpeg));base64,([A-Za-z0-9+/=]+)$/;
+async function roomSettings(request, env, opts) {
+  if (opts && opts.settingsFn) return opts.settingsFn();
+  const r = await env.ROOM.get(env.ROOM.idFromName("default")).fetch(new Request(new URL(request.url).origin + "/settings"));
+  return r.json();
+}
+export function iconKeys(settings) {
+  const g = (settings && settings.gicons) || {};
+  return CASES.map((c) => c.key).filter((k) => ICON_RE.test(String(g[k] || "")));
+}
+export async function serveShowcaseIcon(request, env, ctx, game, opts) {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  let m = null;
+  try { const s = await roomSettings(request, env, opts); m = ICON_RE.exec(String((s && s.gicons && s.gicons[game]) || "")); } catch { m = null; }
+  if (!m || !CASES.some((c) => c.key === game)) return new Response("no icon", { status: 404, headers: { ...CORS, "cache-control": "public, max-age=300" } });
+  const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+  return new Response(bytes, { headers: { ...CORS, "content-type": m[1], "cache-control": "public, max-age=3600" } });
+}
+
 export async function serveShowcase(request, env, ctx, opts) {
   const o = opts || {};
   const url = new URL(request.url);
@@ -82,12 +105,14 @@ export async function serveShowcase(request, env, ctx, opts) {
   });
   let picks = [], cards = [], trouble = [];
   const extras = which.extras || [];
-  const settled = await Promise.allSettled([cardsFn(SHOWCASE_COLLECTION, true), cardsFn(which.collection, false), ...extras.map((e) => cardsFn(e.collection, false))]);
+  const settled = await Promise.allSettled([cardsFn(SHOWCASE_COLLECTION, true), cardsFn(which.collection, false), ...extras.map((e) => cardsFn(e.collection, false)), roomSettings(request, env, o)]);
   const [p, c] = settled;
+  const sr = settled[settled.length - 1];
+  const icons = sr.status === "fulfilled" ? iconKeys(sr.value) : [];   // the tabs with a kiosk logo; a settings hiccup just means text tabs
   if (p.status === "fulfilled") picks = p.value.filter((x) => x.game === which.key); else trouble.push("showcase: " + String(p.reason && p.reason.message || p.reason).slice(0, 120));
   if (c.status === "fulfilled") cards = c.value; else trouble.push("feed: " + String(c.reason && c.reason.message || c.reason).slice(0, 120));
   const own = extras.map((e, i) => {
-    const r = settled[2 + i];
+    const r = settled[2 + i];   // the settings answer sits last, after the extras
     if (r.status === "fulfilled") return { ...e, cards: r.value };
     trouble.push(e.key + ": " + String(r.reason && r.reason.message || r.reason).slice(0, 120));
     return { ...e, cards: [] };
@@ -95,7 +120,7 @@ export async function serveShowcase(request, env, ctx, opts) {
   const shelves = shelvesFor(picks, cards, own);
   const ok = shelves.length > 0;
   return Response.json(
-    { ok, game: which.key, label: which.label, cases: CASES.map((x) => ({ key: x.key, label: x.label })), shelves, count: shelves.reduce((n, s) => n + s.cards.length, 0), updated: new Date().toISOString(), ...(trouble.length ? { trouble } : {}) },
+    { ok, game: which.key, label: which.label, cases: CASES.map((x) => ({ key: x.key, label: x.label })), icons, shelves, count: shelves.reduce((n, s) => n + s.cards.length, 0), updated: new Date().toISOString(), ...(trouble.length ? { trouble } : {}) },
     { status: ok ? 200 : 503, headers: { ...CORS, "cache-control": ok ? "public, max-age=300" : "no-store" } },
   );
 }

@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shelvesFor, serveShowcase, CASES, SHELF_MAX, SHOWCASE_COLLECTION } from "../src/showcase.js";
+import { shelvesFor, serveShowcase, serveShowcaseIcon, iconKeys, CASES, SHELF_MAX, SHOWCASE_COLLECTION } from "../src/showcase.js";
+
+// a 1x1 PNG, the shape the kiosk admin stores (data URL, base64)
+const PNG1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const settingsFn = async () => ({ gicons: { mtg: PNG1, pokemon: PNG1, sleeves: PNG1, yugioh: "javascript:alert(1)" } });
 
 /* The Showcase (owner, 2026-10-29): the physical showcase's cards on the top
    shelf, the game's singles below in price bands, priciest first, no card
@@ -37,12 +41,13 @@ test("serveShowcase: one case per game from the showcase feed and the game's fee
     if (collection === "pokemon-japanese-singles") return [card("Lillie", 95, { set: "Dream League" })];
     throw new Error("feed down");
   };
-  const go = (q) => serveShowcase(new Request("https://w.example/showcase.json" + q), {}, {}, { cardsFn });
+  const go = (q) => serveShowcase(new Request("https://w.example/showcase.json" + q), {}, {}, { cardsFn, settingsFn });
   let r = await go("?game=pokemon");
   assert.equal(r.status, 200); assert.equal(r.headers.get("access-control-allow-origin"), "*"); assert.match(r.headers.get("cache-control"), /max-age=300/);
   let j = await r.json();
   assert.equal(j.ok, true); assert.equal(j.game, "pokemon"); assert.equal(j.label, "Pokémon"); assert.equal(j.count, 4);
   assert.deepEqual(j.cases.map((c) => c.key), CASES.map((c) => c.key));
+  assert.deepEqual(j.icons, ["mtg", "pokemon"], "only the cases with a real data-URL icon; sleeves is not a case, the bad yugioh value is dropped");
   assert.deepEqual(j.shelves.map((s) => [s.key, s.cards.map((c) => c.name)]), [["picks", ["Charizard"]], ["high", ["Mewtwo"]], ["low", ["Pidgey"]], ["jp", ["Lillie"]]], "the showcase's Magic card stays out of the Pokémon case; the Japanese shelf sits last");
   assert.equal(j.trouble, undefined);
   assert.deepEqual(asked, [[SHOWCASE_COLLECTION, true], ["pokemon-singles-new-arrivals", false], ["pokemon-japanese-singles", false]]);
@@ -53,4 +58,21 @@ test("serveShowcase: one case per game from the showcase feed and the game's fee
   r = await go("?game=yugioh"); assert.equal(r.status, 503); assert.equal(r.headers.get("cache-control"), "no-store");
   assert.equal((await (await go("?game=nope")).json()).game, "mtg");
   assert.equal((await serveShowcase(new Request("https://w.example/showcase.json", { method: "OPTIONS" }), {}, {}, { cardsFn })).status, 204);
+  // a settings failure means text tabs, not a broken case
+  const noSettings = async () => { throw new Error("room down"); };
+  j = await (await serveShowcase(new Request("https://w.example/showcase.json?game=pokemon"), {}, {}, { cardsFn, settingsFn: noSettings })).json();
+  assert.equal(j.ok, true); assert.deepEqual(j.icons, []);
+});
+
+test("serveShowcaseIcon: the kiosk's data-URL logo served as an image, cached an hour; no icon or no such case = 404", async () => {
+  const icon = (g, fn) => serveShowcaseIcon(new Request("https://w.example/showcase/icon/" + g + ".png"), {}, {}, g, { settingsFn: fn || settingsFn });
+  let r = await icon("mtg");
+  assert.equal(r.status, 200); assert.equal(r.headers.get("content-type"), "image/png"); assert.equal(r.headers.get("cache-control"), "public, max-age=3600"); assert.equal(r.headers.get("access-control-allow-origin"), "*");
+  const b = new Uint8Array(await r.arrayBuffer());
+  assert.deepEqual([...b.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "PNG signature");
+  assert.equal((await icon("riftbound")).status, 404, "no icon uploaded");
+  assert.equal((await icon("yugioh")).status, 404, "not a data URL");
+  assert.equal((await icon("sleeves")).status, 404, "not a case");
+  assert.equal((await icon("mtg", async () => { throw new Error("room down"); })).status, 404);
+  assert.deepEqual(iconKeys(null), []);
 });

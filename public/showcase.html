@@ -31,6 +31,13 @@ header .walk button{margin-right:4px}
 @media (min-width:721px){.tabs button:first-child{margin-left:auto}}
 .tabs button{background:#1a1411;color:var(--muted);border:1px solid #3a2d24;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600}
 .tabs button.on{background:var(--ember);border-color:var(--ember);color:#1a0f05}
+/* a tab with the kiosk's logo: the picture, the name hidden but read out; the chosen one lit */
+.tabs button{position:relative}
+.tabs button.ic{padding:4px 9px;display:flex;align-items:center}
+.tabs button.ic img{height:30px;width:auto;max-width:110px;object-fit:contain;display:block;opacity:.78;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.tabs button.ic span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tabs button.ic.on{background:rgba(217,130,43,.22);border-color:var(--ember);box-shadow:0 0 0 2px rgba(217,130,43,.35),0 0 14px rgba(217,130,43,.35)}
+.tabs button.ic.on img{opacity:1}
 /* the room and the case */
 .room{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px 10px 8px;position:relative}
 .case{position:relative;width:100%;height:100%;max-width:1500px;border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
@@ -41,7 +48,7 @@ header .walk button{margin-right:4px}
 .case.crouch-up{transform:perspective(1400px) rotateX(-4deg) translateY(6px) scale(.985)}
 .track{position:absolute;left:0;top:0;width:100%;will-change:transform;transition:transform .65s cubic-bezier(.3,.7,.2,1)}
 .track.dragging{transition:none}
-.shelf{position:relative;height:var(--sh);transition:filter .6s,opacity .6s}
+.shelf{position:relative;height:var(--sh);transition:filter .4s,opacity .4s}
 .shelf:not(.on){filter:blur(2.2px) brightness(.45) saturate(.7)}
 .felt{position:absolute;inset:0;background:
   radial-gradient(ellipse at var(--p1) 30%,rgba(255,255,255,.07),transparent 28%),
@@ -52,14 +59,15 @@ header .walk button{margin-right:4px}
 .lip{position:absolute;left:0;right:0;bottom:0;height:14px;background:linear-gradient(180deg,#2b170b,#5a3a1d 40%,#20110a);box-shadow:0 -3px 8px rgba(0,0,0,.5)}
 .lane{position:absolute;left:0;top:0;height:100%;will-change:transform}
 .card{position:absolute;width:var(--cw);aspect-ratio:63/88;left:var(--x);top:var(--y);transform:rotate(var(--r)) scale(var(--s,1));transform-origin:50% 60%;cursor:pointer;z-index:var(--z,1)}
-.card .tl{position:absolute;inset:0;border-radius:6px;background:#111;box-shadow:0 10px 18px rgba(0,0,0,.55),0 2px 4px rgba(0,0,0,.6);overflow:hidden;border:3px solid rgba(255,255,255,.12);filter:brightness(var(--dim,1))}
-.card .tl:after{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(115deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.03) 28%,transparent 45%,rgba(255,255,255,.05) 70%,transparent 80%);pointer-events:none}
+.card .tl{position:absolute;inset:0;border-radius:6px;background:#111;box-shadow:0 10px 18px rgba(0,0,0,.55),0 2px 4px rgba(0,0,0,.6);overflow:hidden;border:3px solid rgba(255,255,255,.12)}
+.card .tl:after{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(rgba(0,0,0,var(--dimA,0)),rgba(0,0,0,var(--dimA,0))),linear-gradient(115deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.03) 28%,transparent 45%,rgba(255,255,255,.05) 70%,transparent 80%);pointer-events:none}
 .card img{display:block;width:100%;height:100%;object-fit:cover;background:#1b1b1f}
 .card .noimg,.mini .noimg{position:absolute;inset:0;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10);display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;font-family:"Permanent Marker",cursive;font-size:15px;line-height:1.15;color:#d9d2c4;text-shadow:0 1px 0 #000}
 .card .noimg:before,.mini .noimg:before{content:"";position:absolute;inset:8px;border:1px dashed rgba(255,255,255,.18);border-radius:4px}
 /* foil and holo cards wear the kiosk's oily rainbow film (tv.html .oil): it drifts on the shelf in view and follows the tilt in the hand; plain cards keep only the sleeve's faint sheen */
 .card.foil .tl:before,.mini.foil .tl:before,.lift .art.foil:before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:hard-light;opacity:.72;background:linear-gradient(115deg,rgba(255,90,90,.3) 4%,rgba(255,190,60,.33) 18%,rgba(248,255,120,.27) 33%,rgba(95,255,155,.33) 48%,rgba(80,190,255,.36) 63%,rgba(165,95,255,.33) 78%,rgba(255,95,215,.3) 93%);background-size:230% 230%}
-.shelf.on .card.foil .tl:before,.mini.foil .tl:before{animation:oily 7s ease-in-out infinite alternate}
+.card.foil .tl:before,.mini.foil .tl:before{background-position:35% 40%}
+.shelf.on .card.foil:hover .tl:before{animation:oily 4s ease-in-out infinite alternate}
 @keyframes oily{from{background-position:0% 0%}to{background-position:100% 100%}}
 .lift .art.foil:before{background-position:var(--gx,30%) var(--gy,25%);transition:background-position .14s ease-out;opacity:.8}
 .card.stand .tl{box-shadow:0 22px 26px rgba(0,0,0,.65),0 2px 4px rgba(0,0,0,.6)}
@@ -71,11 +79,13 @@ header .walk button{margin-right:4px}
 .psticker{position:absolute;z-index:7;transform:rotate(-3deg);background:#fbfbf4;padding:.22em .18em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.55),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .105)}
 .psticker:before,.psticker:after{content:"";position:absolute;left:7%;right:7%;height:2px;background:#c0392b}
 .psticker:before{top:14%}.psticker:after{bottom:14%}
-.pink{display:inline-block;padding:0 .14em;font-family:"Cutive Mono","Courier New",monospace;font-weight:700;font-size:1em;line-height:1;color:#1c2a52;white-space:nowrap;filter:url(#ink)}
+.pink{display:inline-block;padding:0 .14em;font-family:"Cutive Mono","Courier New",monospace;font-weight:700;font-size:1em;line-height:1;color:#1c2a52;white-space:nowrap}
 .fsticker{position:absolute;z-index:8;transform:rotate(4deg);background:#fbfbf4;padding:.04em .12em .1em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .12)}
-.fink{display:inline-block;padding:0 .16em;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.9;color:#123bbf;white-space:nowrap;filter:url(#ink)}
+.fink{display:inline-block;padding:0 .16em;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.9;color:#123bbf;white-space:nowrap}
 .csticker{position:absolute;z-index:8;transform:rotate(2deg);background:#fbfbf4;padding:.04em .14em .1em;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.12);font-size:calc(var(--bw) * .085)}
-.cink{display:inline-block;padding:0 .16em;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.9;color:#d02b20;white-space:nowrap;filter:url(#ink)}
+.cink{display:inline-block;padding:0 .16em;font-family:Caveat,cursive;font-weight:700;font-size:1em;line-height:.9;color:#d02b20;white-space:nowrap}
+/* the ink bleed only on the three labels in the hand: an SVG filter per label on a shelf of sixty is what made the desktop choppy */
+.lift .big .pink,.lift .big .fink,.lift .big .cink{filter:url(#ink)}
 .fsticker.off,.csticker.off{display:none}
 /* on a shelf the holder sits at the sleeve's top-right corner; the labels hang down its right side as on the kiosk */
 .stkp .csticker{right:calc(var(--bw) * .055);top:calc(var(--bh) * .05)}
@@ -114,8 +124,8 @@ header .walk button{margin-right:4px}
 /* held: the wrapper tilts with the finger or the phone, the card inside drifts as a hand never quite holds still */
 .lift .hold{flex-shrink:0;transform:perspective(1000px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;transition:transform .14s ease-out;touch-action:none}
 /* the toploader: a rigid clear sleeve a shade bigger than the card, open along the top */
-.lift .big{--bw:300px;width:var(--bw);aspect-ratio:63/88;position:relative;border-radius:7px;background:linear-gradient(160deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 45%,rgba(255,255,255,.11));box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 30px 60px rgba(0,0,0,.8);animation:hover 5.5s ease-in-out infinite}
-@keyframes hover{0%,100%{transform:translateY(0) rotate(-.8deg);box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 28px 50px rgba(0,0,0,.8)}50%{transform:translateY(-12px) rotate(.8deg);box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 48px 70px rgba(0,0,0,.7)}}
+.lift .big{--bw:300px;width:var(--bw);aspect-ratio:63/88;position:relative;border-radius:7px;background:linear-gradient(160deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 45%,rgba(255,255,255,.11));box-shadow:0 0 0 1.5px rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.12),0 36px 60px rgba(0,0,0,.75);animation:hover 5.5s ease-in-out infinite;will-change:transform}
+@keyframes hover{0%,100%{transform:translateY(0) rotate(-.8deg)}50%{transform:translateY(-12px) rotate(.8deg)}}
 .lift .big:before{content:"";position:absolute;left:14%;right:14%;top:-2px;height:3px;border-radius:2px;background:rgba(255,255,255,.4)}
 .lift .art{position:absolute;left:3.4%;right:3.4%;top:3.2%;bottom:3.8%;border-radius:4.5%/3.2%;overflow:hidden;background:#111;box-shadow:0 2px 6px rgba(0,0,0,.6)}
 .lift .art img{width:100%;height:100%;object-fit:cover;display:block}
@@ -144,7 +154,7 @@ header .walk button{margin-right:4px}
 .lift .mini .tl img{width:100%;height:100%;object-fit:cover;display:block}
 .lift .mini .stkp{left:100%;top:0}
 @media (min-width:721px){.lift .in{flex-direction:row}.lift .panel{width:360px;border-top:0;border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;justify-content:center;padding:24px}.lift h2{font-size:24px}.lift .set{font-size:14px}}
-@media (max-width:720px){:root{--cw:118px}.hnote{display:none}.hlogo{height:24px}.tabs button{padding:6px 9px;font-size:12px}.map .n{display:none}.lift .panel{max-height:62vh;max-height:62dvh}}
+@media (max-width:720px){:root{--cw:118px}.hnote{display:none}.hlogo{height:24px}.tabs button{padding:6px 9px;font-size:12px}.tabs button.ic{padding:3px 6px}.tabs button.ic img{height:24px;max-width:84px}.map .n{display:none}.lift .panel{max-height:62vh;max-height:62dvh}}
 @media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big,.card.foil .tl:before,.mini.foil .tl:before{animation:none}}
 </style></head>
 <body>
@@ -201,7 +211,7 @@ header .walk button{margin-right:4px}
       // one slides underneath, so the neighbour's price sticker stays readable.
       var z = row * 1000 + i * 2; if (overlap) z = items[i - rows].z - 1;
       var y = 14 + Math.round(ch * .48 * row) + Math.round((q() - .5) * 12);
-      items.push({ c: c, row: row, z: z, x: xs[row], y: y, sx: Math.round(xs[row] + cw * (.5 + .5 * sc)), sy: Math.round(y + .6 * ch * (1 - sc)), bw: Math.round(cw * sc), bh: Math.round(ch * sc), dim: (1 - depth * .07).toFixed(2), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
+      items.push({ c: c, row: row, z: z, x: xs[row], y: y, sx: Math.round(xs[row] + cw * (.5 + .5 * sc)), sy: Math.round(y + .6 * ch * (1 - sc)), bw: Math.round(cw * sc), bh: Math.round(ch * sc), dimA: (depth * .09).toFixed(2), r: ((q() - .5) * 7).toFixed(2), sr: ((q() - .5) * 14).toFixed(1), s: sc.toFixed(3), stand: stand, pick: pick });
       xs[row] += cw;
     });
     var x = Math.max.apply(null, xs);
@@ -225,7 +235,7 @@ header .walk button{margin-right:4px}
   function hasPhoto(c) { return !!c.image && !/placeholder|coming|no[-_]?image|missing/i.test(c.image); }
   function cardHtml(it, i) {
     var c = it.c;
-    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + (c.foil ? ' foil' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + ';--dim:' + it.dim + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div></div>'
+    return '<div class="card r' + it.row + (it.stand ? ' stand' : '') + (it.pick ? ' pick' : '') + (c.foil ? ' foil' : '') + '" data-i="' + i + '" style="--x:' + it.x + 'px;--y:' + it.y + 'px;--r:' + it.r + 'deg;--s:' + it.s + ';--z:' + it.z + ';--dimA:' + it.dimA + '"><div class="tl">' + (hasPhoto(c) ? '<img src="' + esc(img(c.image, 360)) + '" alt="' + esc(c.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(c.name) + '</div>') + '</div></div>'
       // the labels ride above every card (rows reach z 3000+) in a holder at the sleeve's top-right corner, so no toploader ever covers a price
       + '<div class="stkp" data-i="' + i + '" style="--x:' + it.sx + 'px;--y:' + it.sy + 'px;--z:' + (10000 + i) + ';--bw:' + it.bw + 'px;--bh:' + it.bh + 'px">' + stickers(c) + '</div>';
   }
@@ -455,7 +465,15 @@ header .walk button{margin-right:4px}
   }
 
   /* ---- loading a case ---- */
-  function tabs() { $('#tabs').innerHTML = state.cases.map(function (c) { return '<button type="button" data-game="' + esc(c.key) + '"' + (c.key === state.game ? ' class="on"' : '') + '>' + esc(c.label) + '</button>'; }).join(''); }
+  // The game tabs wear the kiosk's logos where the admin uploaded one (served
+  // at /showcase/icon/<game>.png); the name stays for screen readers and as
+  // the fallback when an image fails.
+  function tabs() {
+    $('#tabs').innerHTML = state.cases.map(function (c) {
+      var ic = (state.icons || []).indexOf(c.key) > -1;
+      return '<button type="button" data-game="' + esc(c.key) + '" class="' + (ic ? 'ic' : '') + (c.key === state.game ? ' on' : '') + '" title="' + esc(c.label) + '">' + (ic ? '<img src="' + esc(W + '/showcase/icon/' + c.key + '.png') + '" alt="" draggable="false" onerror="this.parentNode.classList.remove(&quot;ic&quot;)">' : '') + '<span>' + esc(c.label) + '</span></button>';
+    }).join('');
+  }
   function load(game) {
     if (state.busy) return; state.busy = true;
     stateEl.style.display = 'flex'; stateEl.textContent = 'Viewing the case…'; track.innerHTML = '';
@@ -464,7 +482,7 @@ header .walk button{margin-right:4px}
       .then(function (d) {
         state.busy = false;
         if (!d || !d.ok) { stateEl.textContent = 'This case is locked right now - the shop feed did not answer. Try again in a minute.'; if (d && d.cases) { state.cases = d.cases; state.game = d.game; tabs(); } return; }
-        state.cases = d.cases; state.game = d.game; state.shelves = d.shelves; state.shelf = 0; state.x = 0; state.vx = 0;
+        state.cases = d.cases; state.icons = d.icons || []; state.game = d.game; state.shelves = d.shelves; state.shelf = 0; state.x = 0; state.vx = 0;
         try { history.replaceState(null, '', location.pathname + '?game=' + encodeURIComponent(d.game)); } catch (x) {}
         tabs(); stateEl.style.display = 'none'; render();
       })

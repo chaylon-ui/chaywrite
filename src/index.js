@@ -6,7 +6,7 @@ import { serveEvents } from "./events.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql, PRICE_DO } from "./price-history.js";
-import { serveShowcase } from "./showcase.js";
+import { serveShowcase, serveShowcaseIcon } from "./showcase.js";
 import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
@@ -385,6 +385,7 @@ async function route(request, env, ctx) {
     // The Showcase (src/showcase.js, public/showcase.html): browse singles like the store's glass cases.
     if (url.pathname === "/showcase" || url.pathname === "/showcase/") return serveAsset(env, "/showcase.html", request);
     if (url.pathname === "/showcase.json") return serveShowcase(request, env, ctx);
+    { const im = /^\/showcase\/icon\/([a-z0-9]+)\.png$/.exec(url.pathname); if (im) return serveShowcaseIcon(request, env, ctx, im[1]); }
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"), { ctx });
     }
