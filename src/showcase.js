@@ -15,7 +15,7 @@
    priciest highest, so the case reads the way a real one is arranged. Every
    card comes from src/cards.js (serveCards) with its live price and stock. */
 
-import { serveCards } from "./cards.js";
+import { serveCards, serveSimilar, findInStock, mapLimit } from "./cards.js";
 
 export const CASES = [
   { key: "mtg", label: "Magic", collection: "new-arrivals" },
@@ -39,6 +39,8 @@ const BANDS = [
 const slim = (c) => ({
   name: String(c.name || ""), set: String(c.set || ""), price: String(c.price || ""), image: c.image || null, url: String(c.url || ""),
   variantId: c.variantId || null, foil: !!c.foil, condition: String(c.condition || ""), game: c.game || null, color: c.color || null,
+  // what the card does, for the "similar effects" strip: the type line and (Magic) the rules text
+  type: String(c.type || ""), text: String(c.text || ""),
 });
 const keyOf = (c) => (c.name + "|" + c.set).toLowerCase();
 
@@ -83,6 +85,34 @@ export function iconKeys(settings) {
   const g = (settings && settings.gicons) || {};
   return CASES.map((c) => c.key).filter((k) => ICON_RE.test(String(g[k] || "")));
 }
+// "Similar effects" beyond the case (owner, 2026-10-30: "I also want the
+// cards with similar effects"): EDHREC's functional "similar cards" names for
+// a Magic card (serveSimilar, cached a day), each mapped onto the cheapest
+// in-stock printing (findInStock, as the kiosk's Similar strip does). Other
+// games have no such source, so they answer an empty list and the page keeps
+// its own text/type matching within the case.
+const ALIKE_NAMES = 10, ALIKE_MAX = 8;
+export async function serveShowcaseAlike(request, env, ctx, opts) {
+  const o = opts || {};
+  const url = new URL(request.url);
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  const key = String(url.searchParams.get("game") || "mtg").toLowerCase();
+  const game = (CASES.find((c) => c.key === key) || CASES[0]).key;
+  const name = String(url.searchParams.get("name") || "").trim().slice(0, 80);
+  const out = { ok: true, game, name, names: [], cards: [] };
+  if (name.length < 2 || game !== "mtg") return Response.json(out, { headers: { ...CORS, "cache-control": "no-store" } });
+  try {
+    const sim = o.similarFn ? await o.similarFn(name) : await (await serveSimilar(new Request(url.origin + "/similar.json?name=" + encodeURIComponent(name)), ctx)).json();
+    out.names = ((sim && sim.names) || []).filter((n) => typeof n === "string").slice(0, ALIKE_NAMES);
+  } catch { out.names = []; }
+  if (out.names.length) {
+    const headers = { accept: "application/json", "user-agent": "ExorShowcaseTV/1.0 (+workers.dev)" };
+    const found = await mapLimit(out.names, 4, (n) => Promise.resolve(o.stockFn ? o.stockFn(n, game) : findInStock(n, headers, env, game)).catch(() => null));
+    out.cards = found.filter(Boolean).slice(0, ALIKE_MAX).map((c) => slim({ ...c, game, text: c.text || "" }));
+  }
+  return Response.json(out, { headers: { ...CORS, "cache-control": "public, max-age=900" } });
+}
+
 export async function serveShowcaseIcon(request, env, ctx, game, opts) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   let m = null;

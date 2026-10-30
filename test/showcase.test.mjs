@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shelvesFor, serveShowcase, serveShowcaseIcon, iconKeys, CASES, SHELF_MAX, SHOWCASE_COLLECTION } from "../src/showcase.js";
+import { shelvesFor, serveShowcase, serveShowcaseIcon, serveShowcaseAlike, iconKeys, CASES, SHELF_MAX, SHOWCASE_COLLECTION } from "../src/showcase.js";
+import { oracleOf } from "../src/cards.js";
 
 // a 1x1 PNG, the shape the kiosk admin stores (data URL, base64)
 const PNG1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -20,7 +21,7 @@ test("shelvesFor: picks on top, then $100+, $25-$100, under $25; duplicates and 
   assert.deepEqual(shelves[1].cards.map((c) => c.name), ["Mewtwo", "Zapdos"], "$100 and up; the Charizard already on the top shelf is not laid twice");
   assert.deepEqual(shelves[2].cards.map((c) => c.name), ["Mew", "Raichu"]);
   assert.deepEqual(shelves[3].cards.map((c) => c.name), ["Pidgey"], "Rattata has no price");
-  assert.deepEqual(Object.keys(shelves[0].cards[0]).sort(), ["color", "condition", "foil", "game", "image", "name", "price", "set", "url", "variantId"], "only what the page draws");
+  assert.deepEqual(Object.keys(shelves[0].cards[0]).sort(), ["color", "condition", "foil", "game", "image", "name", "price", "set", "text", "type", "url", "variantId"], "only what the page draws");
   assert.equal(shelves[0].tape, "the case up front"); assert.equal(shelves[1].tape, "$100 and up");
   const many = Array.from({ length: 90 }, (_, i) => card("Card" + i, 30 + i));
   assert.equal(shelvesFor([], many).find((s) => s.key === "mid").cards.length, SHELF_MAX);
@@ -75,4 +76,28 @@ test("serveShowcaseIcon: the kiosk's data-URL logo served as an image, cached an
   assert.equal((await icon("sleeves")).status, 404, "not a case");
   assert.equal((await icon("mtg", async () => { throw new Error("room down"); })).status, 404);
   assert.deepEqual(iconKeys(null), []);
+});
+
+test("oracleOf: the rules text out of a BinderPOS description, entities and tags cleaned; nothing for other games", () => {
+  const html = '<table class="singles-description-table"><tr><td>Type:</td><td>Legendary Artifact</td></tr></table><div class="single-description-div"><div class="oracle-text">\n  {T}: Add one mana of any color &amp; <i>draw</i> a card.\n </div><div class="flavor-text">A moment in time.</div></div>';
+  assert.equal(oracleOf(html), "{T}: Add one mana of any color & draw a card.");
+  assert.equal(oracleOf('<div class="oracle-text">' + "x".repeat(500) + "</div>").length, 400);
+  assert.equal(oracleOf('<table><tr><td>Type:</td><td>Supporter</td></tr></table>'), "");
+  assert.equal(oracleOf(null), "");
+});
+
+test("serveShowcaseAlike: EDHREC's names mapped onto stock for a Magic card; other games and short names answer empty", async () => {
+  const similarFn = async (name) => ({ name, names: ["Mox Opal", "Chrome Mox", "Lotus Petal", 42, "Mana Crypt"] });
+  const stockFn = async (n) => n === "Lotus Petal" ? null : n === "Mana Crypt" ? Promise.reject(new Error("search down")) : { name: n, set: "Masters", price: "99.00", foil: false, condition: "Near Mint", image: "https://cdn.example/" + n + ".jpg", variantId: 7, url: "https://exorgames.com/products/" + n.toLowerCase().replace(/ /g, "-") };
+  const go = (q) => serveShowcaseAlike(new Request("https://w.example/showcase/alike.json" + q), {}, {}, { similarFn, stockFn });
+  let r = await go("?game=mtg&name=Mox%20Amber"); let j = await r.json();
+  assert.equal(r.status, 200); assert.match(r.headers.get("cache-control"), /max-age=900/); assert.equal(r.headers.get("access-control-allow-origin"), "*");
+  assert.deepEqual(j.names, ["Mox Opal", "Chrome Mox", "Lotus Petal", "Mana Crypt"], "strings only, in EDHREC's order");
+  assert.deepEqual(j.cards.map((c) => c.name), ["Mox Opal", "Chrome Mox"], "the ones in stock, a failed lookup dropped");
+  assert.equal(j.cards[0].game, "mtg"); assert.deepEqual(Object.keys(j.cards[0]).sort(), ["color", "condition", "foil", "game", "image", "name", "price", "set", "text", "type", "url", "variantId"]);
+  j = await (await go("?game=pokemon&name=Steven")).json(); assert.deepEqual(j.cards, []); assert.deepEqual(j.names, []);
+  j = await (await go("?game=mtg&name=M")).json(); assert.deepEqual(j.cards, []);
+  j = await (await serveShowcaseAlike(new Request("https://w.example/showcase/alike.json?game=mtg&name=Mox%20Amber"), {}, {}, { similarFn: async () => { throw new Error("edhrec down"); }, stockFn })).json();
+  assert.equal(j.ok, true); assert.deepEqual(j.cards, []);
+  assert.equal((await serveShowcaseAlike(new Request("https://w.example/showcase/alike.json", { method: "OPTIONS" }), {}, {}, {})).status, 204);
 });

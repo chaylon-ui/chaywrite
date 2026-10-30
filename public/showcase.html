@@ -167,7 +167,7 @@ header .walk button{margin-right:4px}
   <div class="state" id="state">Viewing the case…</div>
 </div></div>
 <div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
-<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftMore"></div></div></div></div>
+<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
 (function () {
@@ -368,7 +368,7 @@ header .walk button{margin-right:4px}
   });
 
   /* ---- the lift: a card comes out from under the glass ---- */
-  var lifted = null;
+  var lifted = null, liftSeq = 0;
   function tap(e) {
     var el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return;
     var shelfEl = el.closest('.shelf'); if (!shelfEl) return;
@@ -377,6 +377,41 @@ header .walk button{margin-right:4px}
     var c = cardEl ? state.shelves[si].cards[Number(cardEl.getAttribute('data-i'))] : pola ? state.shelves[si].cards[0] : null;
     if (c) { askOrientation(); lift(c); }
   }
+  // "Similar effects" (owner, 2026-10-30): what a card DOES, scored on its type
+  // line and rules text (Magic singles carry the oracle text; other games only
+  // the type line) with idf over the case so common words count for little;
+  // the name counts too, so another printing of the same card comes first.
+  var STOP = /^(the|a|an|of|to|and|or|you|your|it|its|this|that|for|on|in|is|are|as|at|by|with|from|be|if|then|each|any|all|may|when|whenever|until|end|card|cards|put|into|have|has|can|only|instead|onto|under|up|top|their|they|who|where|other|than|but|not|no|more|less|get|gets|player|players|opponent|opponents|among|would|was|were|do|does|so|those|these|own|his|her|them|itself|choose|chosen|rather|during|beginning|step|phase|next|additional|turn|turns|battlefield|enters|control|controls|target|single)$/;
+  function toks(c) {
+    var t = {}, own = {};
+    function add(w, wt) { if (w.length < 3 || STOP.test(w)) return; if (w.length > 4 && /s$/.test(w) && !/ss$/.test(w)) w = w.slice(0, -1); t[w] = (t[w] || 0) + wt; }
+    String(c.name || '').toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9]+/).forEach(function (w) { own[w] = 1; add(w, 1.2); });
+    String(c.type || '').toLowerCase().split(/[^a-z0-9]+/).forEach(function (w) { add(w, 2); });
+    // the rules text, minus the card naming itself ("Sacrifice Lotus Petal"), which says nothing about what it does
+    String(c.text || '').toLowerCase().replace(/\{t\}/g, ' tap ').replace(/\{[^}]*\}/g, ' mana ').split(/[^a-z0-9]+/).forEach(function (w) { if (!own[w]) add(w, 1); });
+    return t;
+  }
+  function idf() {
+    if (state.idf) return state.idf;
+    var df = {}, all = [];
+    state.shelves.forEach(function (sh, si) { sh.cards.forEach(function (o, ci) { var m = { o: o, si: si, ci: ci, t: toks(o) }; all.push(m); Object.keys(m.t).forEach(function (w) { df[w] = (df[w] || 0) + 1; }); }); });
+    var n = all.length || 1, w = {}; Object.keys(df).forEach(function (k) { w[k] = Math.log((n + 1) / (df[k] + .5)); });
+    state.idf = { w: w, all: all };
+    return state.idf;
+  }
+  function cosine(a, b, w) {
+    var dot = 0, na = 0, nb = 0, k, x, y;
+    for (k in a) { x = a[k] * (w[k] || 1); na += x * x; if (b[k]) dot += x * b[k] * (w[k] || 1); }
+    for (k in b) { y = b[k] * (w[k] || 1); nb += y * y; }
+    return na && nb ? dot / Math.sqrt(na * nb) : 0;
+  }
+  function alikeLocal(c) {
+    var I = idf(), tc = toks(c), out = [];
+    I.all.forEach(function (m) { if (m.o === c) return; var sc = cosine(tc, m.t, I.w); if (sc >= .15) out.push({ o: m.o, si: m.si, ci: m.ci, sc: sc }); });
+    out.sort(function (a, b) { return b.sc - a.sc; });
+    return out.slice(0, 8);
+  }
+  function renderAlike(list) { $('#liftAlike').innerHTML = list.length ? '<h3>Similar effects</h3><div class="minis">' + list.map(miniHtml).join('') + '</div>' : ''; }
   // "More like this" in the hand: the same colour or lane first, then the same
   // set, a foil for a foil, nearest in price; six of them, never the card itself.
   function similar(c) {
@@ -398,7 +433,7 @@ header .walk button{margin-right:4px}
   }
   function miniHtml(m) {
     var o = m.o, bw = 90, bh = Math.round(bw * 88 / 63);
-    return '<div class="mini' + (o.foil ? ' foil' : '') + '" data-si="' + m.si + '" data-ci="' + m.ci + '" style="--bw:' + bw + 'px;--bh:' + bh + 'px"><div class="tl">' + (hasPhoto(o) ? '<img src="' + esc(img(o.image, 240)) + '" alt="' + esc(o.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(o.name) + '</div>') + '</div><div class="stkp">' + stickers(o) + '</div></div>';
+    return '<div class="mini' + (o.foil ? ' foil' : '') + '" ' + (m.ext != null ? 'data-ext="' + m.ext + '"' : 'data-si="' + m.si + '" data-ci="' + m.ci + '"') + ' style="--bw:' + bw + 'px;--bh:' + bh + 'px"><div class="tl">' + (hasPhoto(o) ? '<img src="' + esc(img(o.image, 240)) + '" alt="' + esc(o.name) + '" loading="lazy" draggable="false">' : '<div class="noimg">' + esc(o.name) + '</div>') + '</div><div class="stkp">' + stickers(o) + '</div></div>';
   }
   function lift(c) {
     lifted = c;
@@ -411,7 +446,24 @@ header .walk button{margin-right:4px}
     var cd = cond(c); $('#liftCond').classList.toggle('off', !cd); $('#liftCondInk').textContent = cd;
     $('#liftActs').innerHTML = (ON_STORE && c.variantId ? '<button type="button" class="buy" data-buy="' + esc(c.variantId) + '">Add to cart</button>' : '') + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
     $('#liftArt').classList.toggle('foil', !!c.foil);
-    var sims = similar(c); $('#liftMore').innerHTML = sims.length ? '<h3>More like this</h3><div class="minis">' + sims.map(miniHtml).join('') + '</div>' : '';
+    // similar effects first (in the case now; EDHREC's functional matches mapped onto stock arrive a moment later), then the rest of "more like this"
+    var seq = ++liftSeq, al = alikeLocal(c), seen = {};
+    al.forEach(function (m) { seen[m.o.name.toLowerCase()] = 1; });
+    renderAlike(al);
+    var sims = similar(c).filter(function (m) { return !seen[m.o.name.toLowerCase()]; }).slice(0, 6);
+    $('#liftMore').innerHTML = sims.length ? '<h3>More like this</h3><div class="minis">' + sims.map(miniHtml).join('') + '</div>' : '';
+    if (c.game === 'mtg') {
+      fetch(W + '/showcase/alike.json?game=mtg&name=' + encodeURIComponent(String(c.name).replace(/\s*\([^)]*\)/g, '').trim()), { headers: { accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (seq !== liftSeq || !d || !d.cards || !d.cards.length) return;
+          var byName = {}; idf().all.forEach(function (m) { byName[m.o.name.toLowerCase()] = m; });
+          var merged = [], have = {}; have[String(c.name).toLowerCase()] = 1;
+          d.cards.forEach(function (o) { var k = String(o.name).toLowerCase(); if (have[k]) return; have[k] = 1; var m = byName[k]; if (m) merged.push({ o: m.o, si: m.si, ci: m.ci }); else { state.ext.push(o); merged.push({ o: o, ext: state.ext.length - 1 }); } });
+          al.forEach(function (m) { var k = m.o.name.toLowerCase(); if (!have[k]) { have[k] = 1; merged.push(m); } });
+          renderAlike(merged.slice(0, 8));
+        }).catch(function () {});
+    }
     orientBase = null; tiltTo(0, 0, 30, 25);
     $('#lift').classList.add('on'); hint.classList.add('gone'); fitLift();
   }
@@ -427,7 +479,7 @@ header .walk button{margin-right:4px}
   // a tap on a mini swaps it into the hand; a tap on the held card, the stage or the backdrop puts it back (owner: "if you click the expanded card it goes away")
   $('#lift').addEventListener('click', function (e) {
     var m = e.target.closest('.mini');
-    if (m) { var sh = state.shelves[Number(m.getAttribute('data-si'))], c2 = sh && sh.cards[Number(m.getAttribute('data-ci'))]; if (c2) lift(c2); return; }
+    if (m) { var c2; if (m.hasAttribute('data-ext')) c2 = (state.ext || [])[Number(m.getAttribute('data-ext'))]; else { var sh = state.shelves[Number(m.getAttribute('data-si'))]; c2 = sh && sh.cards[Number(m.getAttribute('data-ci'))]; } if (c2) lift(c2); return; }
     if (e.target === e.currentTarget || e.target.classList.contains('stage') || e.target.closest('#hold')) putBack();
   });
   // In the hand: the finger (or mouse) over the card tilts it and slides the
@@ -483,7 +535,7 @@ header .walk button{margin-right:4px}
       .then(function (d) {
         state.busy = false;
         if (!d || !d.ok) { stateEl.textContent = 'This case is locked right now - the shop feed did not answer. Try again in a minute.'; if (d && d.cases) { state.cases = d.cases; state.game = d.game; tabs(); } return; }
-        state.cases = d.cases; state.icons = d.icons || []; state.game = d.game; state.shelves = d.shelves; state.shelf = 0; state.x = 0; state.vx = 0;
+        state.cases = d.cases; state.icons = d.icons || []; state.game = d.game; state.shelves = d.shelves; state.shelf = 0; state.x = 0; state.vx = 0; state.idf = null; state.ext = [];
         try { history.replaceState(null, '', location.pathname + '?game=' + encodeURIComponent(d.game)); } catch (x) {}
         tabs(); stateEl.style.display = 'none'; render();
       })

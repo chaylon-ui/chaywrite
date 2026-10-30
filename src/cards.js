@@ -169,6 +169,16 @@ const GAMES = {
    Sports cards aren't conditioned at the store, and "Default Title" is
    Shopify's no-variant placeholder — both come back empty. */
 const SPORTS_GAMES = new Set(["hockey", "basketball"]);
+/* The rules text of a Magic single, as BinderPOS writes it into the product
+   description (<div class="oracle-text">); other games' descriptions carry
+   no rules text, so this is "" for them. The Showcase scores "similar
+   effects" on it (owner, 2026-10-30). */
+export function oracleOf(html) {
+  const m = /<div class="oracle-text">([\s\S]*?)<\/div>/i.exec(String(html || ""));
+  if (!m) return "";
+  return m[1].replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/\s+/g, " ").trim().slice(0, 400);
+}
+
 function condOf(vtitle, game) {
   if (game && SPORTS_GAMES.has(game)) return "";
   const t = String(vtitle || "");
@@ -1821,6 +1831,7 @@ function buildCards(products, opts = {}) {
       set,
       game: ownGame || game, // per-card, so foil/Holo wording survives mixed decks (search, showcase)
       type: ownGame === game ? spec.typeOf(tags, p.title, body) : (p.product_type || "Single"),
+      text: oracleOf(p.body_html),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
       condition: condOf(v.title, ownGame || game),
@@ -1881,6 +1892,7 @@ function buildShowcase(products) {
       set,
       game: g || null,
       type: spec ? spec.typeOf(tags, p.title, body) : (p.product_type || "Single"),
+      text: oracleOf(p.body_html),
       price: (+v.price).toFixed(2),
       foil: /foil/i.test(v.title || ""),
       condition: condOf(v.title, g),
@@ -2048,3 +2060,6 @@ function fnv(s) {
   }
   return (h >>> 0).toString(36);
 }
+
+// The Showcase's "similar effects" strip maps EDHREC's names onto stock the way the kiosk's Similar strip does.
+export { findInStock, mapLimit };
