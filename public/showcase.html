@@ -254,7 +254,10 @@ header .walk button{margin-right:4px}
       return '<div class="shelf' + (idx === state.shelf ? ' on' : '') + '" data-shelf="' + idx + '" style="--sh:' + sh + 'px;--p1:' + L.p1 + ';--p2:' + L.p2 + '"><div class="felt"></div><div class="lane" style="width:' + L.width + 'px">' + tape + L.items.map(cardHtml).join('') + extras + '</div><div class="lip"></div></div>';
     }).join('');
     state.width = caseEl.clientWidth;
-    state.maxX = Math.max(0, Math.max.apply(null, state.lanes.map(function (L) { return L.width; })) - state.width);
+    // The shelf in view walks one-to-one with the finger (owner, 2026-10-31: a
+    // short shelf scrolled slowly); the others move in proportion to it so
+    // every shelf still reaches its end together.
+    state.maxX = ownOf(state.shelf);
     state.x = Math.min(state.x, state.maxX);
     $('#mapShelves').innerHTML = state.shelves.map(function (s, i) { return '<button type="button" data-go="' + i + '"' + (i === state.shelf ? ' class="on"' : '') + '>' + esc(shelfLetter(i)) + ' · ' + esc(s.label) + '</button>'; }).join('');
     $('#count').textContent = state.shelves.reduce(function (n, s) { return n + s.cards.length; }, 0) + ' cards under the glass';
@@ -286,7 +289,13 @@ header .walk button{margin-right:4px}
     var btns = $('#mapShelves').children; for (var j = 0; j < btns.length; j++) btns[j].classList.toggle('on', j === state.shelf);
     if (animate && !reduce && dir) { caseEl.classList.add(dir > 0 ? 'crouch-down' : 'crouch-up'); setTimeout(function () { caseEl.classList.remove('crouch-down', 'crouch-up'); }, 520); }
   }
-  function goShelf(i, dir) { var n = Math.max(0, Math.min(state.shelves.length - 1, i)); if (n === state.shelf) return; state.shelf = n; focusShelf(true, dir || (n > state.shelf ? 1 : -1)); hint.classList.add('gone'); }
+  function ownOf(i) { var L = state.lanes[i]; return L ? Math.max(0, L.width - state.width) : 0; }
+  function goShelf(i, dir) {
+    var n = Math.max(0, Math.min(state.shelves.length - 1, i)); if (n === state.shelf) return;
+    var d = dir || (n > state.shelf ? 1 : -1), p = state.maxX ? state.x / state.maxX : 0;
+    state.shelf = n; state.maxX = ownOf(n); state.x = p * state.maxX; state.vx = 0;   // the same proportion along the new shelf, so nothing jumps
+    place(); focusShelf(true, d); hint.classList.add('gone');
+  }
 
   /* ---- walking: the finger moves the case, momentum carries it ---- */
   var drag = null, raf = null;
