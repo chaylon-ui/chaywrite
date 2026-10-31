@@ -79,6 +79,7 @@ export const SNOOZE_DAYS = 14;
 export const RUN_HOUR_UTC = 9;           // 05:00 Atlantic
 export const ORDERS_PAGE = 20, LINES_PER_ORDER = 15, SCAN_PAGE = 120, LOOKUP_PAGE = 100, OPEN_PER_PAGE = 20;
 export const MAX_ROWS = 200;             // per result list
+export const SEEN_SESSION_MS = 2 * 3600e3;  // views closer together than this are one sitting ("since last viewed")
 /* The Reorder list at a bar of 1 is ~1,000 items (2026-10-28, first widened
    scan: 986), and the 200 with the most missed revenue were all sealed TCG,
    wargames and figures - the board games the owner asked for fell off the
@@ -593,6 +594,33 @@ export function shouldStart(cfg, now) {
 // `up` existed) the restock day the stall rule already kept.
 const upOf = (old) => old && old.up ? old.up : old && old.restockDay ? { day: old.restockDay, from: null, to: null } : null;
 // Durable Object storage takes at most 128 keys per put.
+/* Owner, 2026-10-31: "filter to newly added to stock check for items that
+   were added since last being viewed". Every result row carries `since`,
+   the finish time of the run that first listed it, carried from one run's
+   list to the next by vid; a row the lists held before this existed gets 0
+   (never new). Each account's baseline (sc:seen:<email>) is the last view
+   of its previous sitting, so what the next sitting shows as new is what
+   arrived since they last looked; views within SEEN_SESSION_MS of each
+   other are one sitting, so the badges survive refreshes and tab changes. */
+export function carrySince(rows, prevRows, now) {
+  const m = new Map();
+  for (const r of prevRows || []) if (r && r.vid != null) m.set(String(r.vid), r.since == null ? 0 : r.since);
+  for (const r of rows || []) r.since = m.has(String(r.vid)) ? m.get(String(r.vid)) : now;
+  return rows;
+}
+export function seenBase(rec, now) {
+  if (!rec || !rec.last) return { base: now, last: now, first: true };
+  if (now - rec.last > SEEN_SESSION_MS) return { base: rec.last, last: now, first: false };
+  return { base: rec.base, last: now, first: false };
+}
+async function seen(cx, b, now) {
+  const who = String((b && b.who) || "").trim().toLowerCase().slice(0, 200);
+  if (!who) return { ok: false, error: "who" };
+  const k = "sc:seen:" + who;
+  const next = seenBase(await cx.storage.get(k), now);
+  await cx.storage.put(k, { base: next.base, last: next.last });
+  return { ok: true, base: next.base, last: next.last, first: next.first };
+}
 async function putMany(cx, puts) { const keys = Object.keys(puts); for (let i = 0; i < keys.length; i += 128) { const chunk = {}; for (const k of keys.slice(i, i + 128)) chunk[k] = puts[k]; await cx.storage.put(chunk); } }
 
 async function ledgersFor(cx, today, days) {
@@ -697,7 +725,10 @@ async function finalize(cx, run, cfg, now) {
   }
   reorderRows.sort((a, b) => b.score - a.score);
   // Order now: the fastest sellers among them, by the 30-day rate before the stockout
-  const hot = reorderRows.filter((r) => r.sold30 >= HOT_FLOOR).sort((a, b) => b.sold30 - a.sold30 || b.score - a.score).slice(0, MAX_ROWS);
+  const hot = reorderRows.filter((r) => r.sold30 >= HOT_FLOOR).sort((a, b) => b.sold30 - a.sold30 || b.score - a.score).slice(0, MAX_ROWS).map((r) => ({ ...r }));
+  // first listed: carried by vid from the lists this run replaces (per list: Order now is its own list)
+  const prev = await cx.storage.get(["sc:res:look", "sc:res:reorder", "sc:res:hot"]);
+  carrySince(look, prev.get("sc:res:look"), now); carrySince(reorderRows, prev.get("sc:res:reorder"), now); carrySince(hot, prev.get("sc:res:hot"), now);
   // auto-close: a missing item that sold again turned up; one BinderPOS took to 0 was adjusted;
   // an ordered item back in stock arrived.
   const states = await cx.storage.list({ prefix: "sc:s:" });
@@ -1014,6 +1045,7 @@ export async function stockDoFetch(cx, request, url) {
       await saveCfg(cx, cfg);
       return doJson({ ok: true, hotMin: cfg.hotMin, reorderMin: reorderMinOf(cfg), distributors: cfg.distributors });
     }
+    if (p === "/_sc/seen" && post) return doJson(await seen(cx, b, now));
     if (p === "/_sc/view") return doJson(await view(cx, now));
     if (p === "/_sc/health") {
       const cfg = await loadCfg(cx); const run = await cx.storage.get("sc:run"); const meta = await cx.storage.get("sc:res:meta");
@@ -1039,7 +1071,7 @@ export function filterRows(rows, o) {
   const hay = (r) => [r.title, r.vtitle, r.sku, r.barcode, r.vendor, r.type].map((x) => String(x || "")).join(" ").toLowerCase();
   return (rows || []).filter((r) => (!o || !o.type || (r.type || "Other") === o.type) && (!words.length || words.every((w) => hay(r).includes(w))));
 }
-export const CSV_HEAD = ["Product", "Variant", "Type", "Distributor", "SKU", "UPC", "Selling price", "Cost", "Margin %", "Stock on system", "Last sold", "Days since last sale", "Sold before it stopped", "Sales missed", "Missed revenue", "Should have sold", "Dollars at risk", "Last stock increase", "Stock from", "Stock to", "Status", "Marked by", "Marked on", "Note", "Reorder link", "Shopify"];
+export const CSV_HEAD = ["Product", "Variant", "Type", "Distributor", "SKU", "UPC", "Selling price", "Cost", "Margin %", "Stock on system", "Last sold", "Days since last sale", "Sold before it stopped", "Sales missed", "Missed revenue", "Should have sold", "Dollars at risk", "Last stock increase", "Stock from", "Stock to", "Status", "Marked by", "Marked on", "Note", "Reorder link", "Shopify", "First listed"];
 const csvCell = (v) => { const s = v == null ? "" : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 const csvMoney = (c) => c == null ? "" : (Number(c) / 100).toFixed(2);
 const csvWhen = (ms) => ms ? new Date(ms).toISOString().slice(0, 10) : "";
@@ -1056,7 +1088,7 @@ export function stockCsv(d, o) {
       r.qty != null ? r.qty : "", lastDay, since, soldBefore, r.missed != null ? r.missed : "", r.missedRevenue != null ? r.missedRevenue.toFixed(2) : "", r.expected != null ? r.expected : "", r.atRisk != null ? r.atRisk.toFixed(2) : "",
       r.up && r.up.day ? dayIso(r.up.day) : "", r.up && r.up.from != null ? r.up.from : "", r.up && r.up.to != null ? r.up.to : "",
       st ? (STATE_LABEL[st.state] || st.state) + (st.state === "fewer" && st.count != null ? " (found " + st.count + ")" : "") : "", st ? st.byName || st.by || "" : "", st ? csvWhen(st.at) : "", st && st.note ? st.note : "",
-      r.vendor || r.pid ? reorderLink(r, lo).url : "", r.pid ? ADMIN_PRODUCT + r.pid : ""].map(csvCell).join(",");
+      r.vendor || r.pid ? reorderLink(r, lo).url : "", r.pid ? ADMIN_PRODUCT + r.pid : "", r.since ? csvWhen(r.since) : ""].map(csvCell).join(",");
   };
   return [CSV_HEAD.map(csvCell).join(",")].concat(rows.map(line)).join("\r\n") + "\r\n";
 }
@@ -1222,8 +1254,8 @@ export async function serveStockStaff(request, env, url, user, form, helpers) {
     return redirect(R + q({ tab, type: f.type, q: f.q, ...(result.ok ? { msg: result.message } : { err: result.error || "failed" }) }));
   }
   if (p === R) {
-    const d = await doCall(env, "/_sc/view");
-    return html(renderStock(d, { ...opts, tab, type: url.searchParams.get("type") || "", q: url.searchParams.get("q") || "", act: canAct(user), admin: user.role === "admin", emailOn: emailConfigured(env) }));
+    const [d, sn] = await Promise.all([doCall(env, "/_sc/view"), doCall(env, "/_sc/seen", { who: user.email })]);
+    return html(renderStock(d, { ...opts, tab, type: url.searchParams.get("type") || "", q: url.searchParams.get("q") || "", act: canAct(user), admin: user.role === "admin", emailOn: emailConfigured(env), seen: sn && sn.ok ? { base: sn.base, first: !!sn.first } : null }));
   }
   return html(renderStock(null, { ...opts, tab, err: "No such page." }), 404);
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keepFair, orderSheetRows, stockCsv, filterRows, dayIso, inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
+import { carrySince, seenBase, SEEN_SESSION_MS, keepFair, orderSheetRows, stockCsv, filterRows, dayIso, inScopeType, isPreorder, seriesOf, rateWindow, stalled, reorder, categoryDrop, visibleLook, visibleReorder, shouldStart, parseOrdersPage, parseScanPage, parseLookup, parseOpen, openQuery, doWork, stockCheckTick, stockDoFetch, serveStockStaff, canView, canAct, dayOf, STOCK_DO, RUN_HOUR_UTC, SNOOZE_DAYS, DAY_MS, ORDERS_Q, SCAN_Q, LOOKUP_Q, TYPES_Q, distributorUrl, parseDistributors, distributorsText, buildStockEmail, itemFacts, adminEmails, reorderLink, validLink, normUpc, udIndex, udPickLeaves, udWords, udGroupFor, resolveUniversal, UD_ITEM } from "../src/stock-check.js";
 import { renderStock, renderStockDenied } from "../src/stock-check-ui.js";
 import { SC_PERMS, ALL_PERMS, permsFrom, can } from "../src/stage-auth.js";
 
@@ -342,10 +342,10 @@ test("a whole run: orders -> types -> scan -> compute -> lookup -> open -> final
   const csv = stockCsv(v, { tab: "reorder" });
   const lines = csv.split("\r\n").filter(Boolean);
   assert.equal(lines.length, 3);
-  assert.match(lines[0], /^Product,Variant,Type,Distributor,SKU,UPC,Selling price,Cost,Margin %,Stock on system,Last sold,Days since last sale,Sold before it stopped,Sales missed,Missed revenue,Should have sold,Dollars at risk,Last stock increase,Stock from,Stock to,Status,Marked by,Marked on,Note,Reorder link,Shopify$/);
+  assert.match(lines[0], /^Product,Variant,Type,Distributor,SKU,UPC,Selling price,Cost,Margin %,Stock on system,Last sold,Days since last sale,Sold before it stopped,Sales missed,Missed revenue,Should have sold,Dollars at risk,Last stock increase,Stock from,Stock to,Status,Marked by,Marked on,Note,Reorder link,Shopify,First listed$/);
   const slLine = lines.find((l) => l.startsWith("Dragon Shield Matte Black,"));
   assert.ok(slLine.includes(",Sleeves & Toploaders,Arcane Tinmen,DS-BLK,,12.99,6.10,53,0," + dayIso(TODAY - 20) + ",20,8 in 60 days,2.7,34.64,,,,,,,,,,"), slLine);
-  assert.ok(slLine.endsWith(",https://admin.shopify.com/store/most-wanted-ca/products/2"), slLine);
+  assert.ok(slLine.endsWith(",https://admin.shopify.com/store/most-wanted-ca/products/2," + dayIso(TODAY)), "the day it was first listed: " + slLine);
   assert.equal(stockCsv(v, { tab: "reorder", q: "dragon" }).split("\r\n").filter(Boolean).length, 2, "the filter applies");
   assert.equal(stockCsv(v, { tab: "reorder", type: "Nope" }).split("\r\n").filter(Boolean).length, 1);
   const lookLine = stockCsv(v, { tab: "look" }).split("\r\n")[1];
@@ -395,6 +395,74 @@ test("stock increase: a sold-out item back on the shelf shows when it came back 
   clock.t = Date.UTC(2026, 9, 16, 9, 5);
   await stockCheckTick(env, { gql: fakeShopify(clock, { sleevesQty: 6 }).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9, udFetch: nolinks });
   assert.deepEqual((await c.storage.get("sc:v:22")).up, { day: TODAY - 3, from: null, to: null });
+});
+
+/* Owner, 2026-10-31: "filter to newly added to stock check for items that were
+   added since last being viewed". */
+test("new since your last visit: rows carry the run that first listed them; each account's baseline is its previous sitting", async () => {
+  // the stamp travels with the vid; a row the old lists held before stamps existed is never new
+  const rows = [{ vid: "1" }, { vid: "2" }, { vid: "3" }];
+  carrySince(rows, [{ vid: "1", since: 5 }, { vid: "3" }], 100);
+  assert.deepEqual(rows.map((r) => r.since), [5, 100, 0]);
+  assert.deepEqual(carrySince([{ vid: 7 }], undefined, 9).map((r) => r.since), [9]);
+  // the baseline: first visit counts from now; the same sitting keeps it; a later sitting moves it to the last view
+  assert.deepEqual(seenBase(undefined, 1000), { base: 1000, last: 1000, first: true });
+  assert.deepEqual(seenBase({ base: 1000, last: 1000 }, 1000 + 600e3), { base: 1000, last: 1000 + 600e3, first: false });
+  assert.deepEqual(seenBase({ base: 1000, last: 1000 + 600e3 }, 1000 + 600e3 + SEEN_SESSION_MS + 1), { base: 1000 + 600e3, last: 1000 + 600e3 + SEEN_SESSION_MS + 1, first: false });
+
+  const clock = { t: T0 };
+  const c = cx(clock);
+  const env = envWith(c);
+  const nolinks = async () => new Response("{}", { status: 404 });
+  await stockCheckTick(env, { gql: fakeShopify(clock).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9, udFetch: nolinks });
+  const look1 = await c.storage.get("sc:res:look");
+  assert.equal(look1[0].since, T0, "stamped with the run that listed it");
+  assert.ok((await c.storage.get("sc:res:hot")).every((r) => r.since === T0) && (await c.storage.get("sc:res:reorder")).every((r) => r.since === T0));
+  const html = (x, status) => new Response(x, { status: status || 200, headers: { "content-type": "text/html" } });
+  const redirect = (to) => new Response(null, { status: 303, headers: { location: to } });
+  const q = (o) => { const u = new URLSearchParams(); for (const [a, b] of Object.entries(o)) if (b) u.set(a, b); const t = u.toString(); return t ? "?" + t : ""; };
+  const actor = { email: "a@x.test", name: "Ann", role: "staff", perms: permsFrom({ perms: ["sc_act"] }) };
+  const serve = (path, user, form) => { const url = new URL("https://w.example" + path); const req = new Request(url, form ? { method: "POST" } : {}); return serveStockStaff(req, env, url, user, form, { html, redirect, q, toLogin: () => redirect("/9pocket/login"), opts: { user }, pinOk: false }); };
+  // visit 1, an hour after the run: nothing is new on a first visit, the toggle says so
+  clock.t = T0 + 3600e3;
+  let page = await (await serve("/9pocket/stock", actor)).text();
+  assert.match(page, /class="newonly" disabled title="Your first visit/); assert.match(page, /New since your last visit<b>0<\/b>/);
+  assert.doesNotMatch(page, / data-new="1">/); assert.match(page, / data-new="0">/); assert.doesNotMatch(page, /<i class="nw">/);
+  assert.deepEqual(await c.storage.get("sc:seen:a@x.test"), { base: T0 + 3600e3, last: T0 + 3600e3 });
+  // a run two hours later lists a second item
+  await c.storage.put("sc:res:look", look1.concat([{ ...look1[0], vid: "12", pid: "1", title: "MTG DUSKMOURN PLAY BOOSTER BOX", since: T0 + 2 * 3600e3 }]));
+  // visit 2, a new sitting: the second item is new, the first is not; the badge counts it on the tab and the toggle
+  clock.t = T0 + 4 * 3600e3;
+  page = await (await serve("/9pocket/stock", actor)).text();
+  assert.match(page, /Go look<b>2<\/b><i class="nw">1 new<\/i>/); assert.match(page, /class="newonly" title="Only the items added since your last visit/); assert.match(page, /New since your last visit<b>1<\/b>/);
+  assert.match(page, /data-new="1"><div class="sc-head">[^]*?MTG DUSKMOURN PLAY BOOSTER BOX/); assert.match(page, /sc-chip new" title="On this list since [^"]+">new · Oct 14</);
+  assert.match(page, /data-new="0"><div class="sc-head">[^]*?MTG BLOOMBURROW PLAY BOOSTER BOX/);
+  assert.doesNotMatch(page, /Reorder<b>2<\/b><i/, "nothing new on the other tabs");
+  // visit 3, ten minutes on: the same sitting, still new
+  clock.t += 600e3;
+  page = await (await serve("/9pocket/stock", actor)).text();
+  assert.match(page, /New since your last visit<b>1<\/b>/);
+  // a Not found marked during this sitting shows as new on Missing in the next one, while the box no longer is
+  clock.t += 60e3;
+  assert.equal((await serve("/9pocket/stock/control", actor, { action: "mark", state: "not_found", vid: "11", title: "MTG BLOOMBURROW PLAY BOOSTER BOX", json: "1" })).status, 200);
+  clock.t = T0 + 7 * 3600e3;
+  page = await (await serve("/9pocket/stock", actor)).text();
+  assert.match(page, /New since your last visit<b>0<\/b>/); assert.doesNotMatch(page, / data-new="1">/); assert.match(page, /Missing<b>1<\/b><i class="nw">1 new<\/i>/);
+  const missingPage = await (await serve("/9pocket/stock?tab=missing", actor)).text();
+  assert.match(missingPage, /data-new="1">/); assert.match(missingPage, /<span class="tag-new" title="Since your last visit">new<\/span>/);
+  // another account has its own baseline: a first visit, nothing new
+  const boss = { email: "boss@x.test", role: "admin", perms: {} };
+  assert.match(await (await serve("/9pocket/stock", boss)).text(), /New since your last visit<b>0<\/b>/);
+  // the JSON for the runners does not count as a visit
+  assert.equal(await c.storage.get("sc:seen:v@x.test"), undefined);
+  // the next real run carries the stamps; lists written before stamps existed come through as 0
+  await c.storage.put("sc:res:hot", (await c.storage.get("sc:res:hot")).map((r) => { const x = { ...r }; delete x.since; return x; }));
+  clock.t = Date.UTC(2026, 9, 15, 9, 5);
+  await stockCheckTick(env, { gql: fakeShopify(clock).gql, now: () => clock.t, sleep: async () => {}, budgetMs: 1e9, udFetch: nolinks });
+  assert.equal((await c.storage.get("sc:res:look")).find((r) => r.vid === "11").since, T0, "carried from the first run");
+  assert.ok((await c.storage.get("sc:res:reorder")).every((r) => r.since === T0));
+  assert.ok((await c.storage.get("sc:res:hot")).every((r) => r.since === 0), "pre-stamp rows are never new");
+  assert.match(stockCsv(await call(c, "/_sc/view"), { tab: "reorder" }), /products\/2,2026-10-14\r\n/);
 });
 
 test("two overlapping ticks: the second is told busy and a stale ingest is refused", async () => {
@@ -628,7 +696,7 @@ test("permissions and pages", async () => {
   assert.match(await (await serve("/9pocket/stock", actor)).text(), /Universal Distribution reorder page ↗/);
   // live keyword filter, chips and the floating Top button, on every tab
   assert.match(page, /<input type="search" id="scq" name="q"/); assert.match(page, /class="kw" data-kw="booster"/); assert.match(page, /class="kw" data-kw="blind"/);
-  assert.match(page, /<div class="sc-card" data-hay="mtg bloomburrow play booster box default title 195166 195166150611 universal distribution magic sealed product">/);
+  assert.match(page, /<div class="sc-card" data-hay="mtg bloomburrow play booster box default title 195166 195166150611 universal distribution magic sealed product" data-new="0">/);
   assert.match(page, /<button type="button" id="sctop"/);
   // card actions post in place (no reload): the script sends json=1 and retires the card; a full reload keeps the scroll position
   assert.match(page, /fd\.set\('json','1'\)/); assert.match(page, /function retire\(card,msg\)/); assert.match(page, /sessionStorage\.setItem\('scY'/); assert.match(page, /<div id="sctoast" role="status"><\/div>/);
