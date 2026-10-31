@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-10-30",
+  "updated": "2026-10-31",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -737,6 +737,31 @@
         "MTG SINGLES $100+"
       ],
       "sets": {
+        "star trek commander": {
+          "name": "Star trek commander delete nov 20th",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
         "final fantasy art series": {
           "name": "MTG Final Fantasy Art Series",
           "conds": {
@@ -909,6 +934,41 @@
             "NM": {
               "cash": 0.0,
               "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "star trek": {
+          "name": "Star trek squash delete nov 20th",
+          "conds": {
+            "NM": {
+              "cash": 0.2,
+              "credit": 0.3,
+              "rarities": {
+                "common": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                },
+                "uncommon": {
+                  "cash": 0.0,
+                  "credit": 0.0
+                }
+              }
             },
             "LP": {
               "cash": 0.0,
