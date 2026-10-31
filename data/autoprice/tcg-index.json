@@ -1,22 +1,22 @@
 {
- "builtAt": "2026-10-30T00:56:55Z",
+ "builtAt": "2026-10-31T00:44:25Z",
  "categories": {
   "3": {
    "groups": 220,
    "rows": 5093,
-   "priced": 3407,
+   "priced": 3405,
    "withUpc": 943
   },
   "1": {
-   "groups": 456,
-   "rows": 4003,
-   "priced": 2929,
-   "withUpc": 1052
+   "groups": 457,
+   "rows": 4008,
+   "priced": 2930,
+   "withUpc": 1060
   },
   "2": {
    "groups": 659,
    "rows": 1534,
-   "priced": 1008,
+   "priced": 1006,
    "withUpc": 431
   },
   "71": {
@@ -28,7 +28,7 @@
   "68": {
    "groups": 87,
    "rows": 1538,
-   "priced": 1289,
+   "priced": 1300,
    "withUpc": 0
   },
   "79": {
@@ -40,25 +40,25 @@
   "62": {
    "groups": 109,
    "rows": 324,
-   "priced": 263,
+   "priced": 264,
    "withUpc": 0
   },
   "63": {
    "groups": 103,
-   "rows": 1758,
-   "priced": 1614,
+   "rows": 1760,
+   "priced": 1613,
    "withUpc": 0
   },
   "80": {
    "groups": 54,
    "rows": 750,
-   "priced": 667,
+   "priced": 666,
    "withUpc": 0
   },
   "27": {
    "groups": 107,
    "rows": 2054,
-   "priced": 1570,
+   "priced": 1566,
    "withUpc": 0
   },
   "24": {
@@ -76,19 +76,19 @@
   "86": {
    "groups": 28,
    "rows": 389,
-   "priced": 346,
+   "priced": 348,
    "withUpc": 0
   },
   "81": {
    "groups": 82,
-   "rows": 515,
-   "priced": 475,
+   "rows": 526,
+   "priced": 474,
    "withUpc": 0
   },
   "89": {
    "groups": 14,
    "rows": 110,
-   "priced": 87,
+   "priced": 89,
    "withUpc": 0
   },
   "72": {
@@ -100,7 +100,7 @@
   "66": {
    "groups": 42,
    "rows": 295,
-   "priced": 137,
+   "priced": 138,
    "withUpc": 0
   },
   "84": {
@@ -117,7 +117,7 @@
   },
   "92": {
    "groups": 13,
-   "rows": 18,
+   "rows": 19,
    "priced": 13,
    "withUpc": 0
   },
@@ -129,14 +129,14 @@
   },
   "20": {
    "groups": 177,
-   "rows": 1220,
-   "priced": 744,
+   "rows": 1222,
+   "priced": 741,
    "withUpc": 577
   },
   "16": {
    "groups": 272,
    "rows": 1169,
-   "priced": 721,
+   "priced": 729,
    "withUpc": 254
   },
   "77": {
