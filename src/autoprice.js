@@ -62,6 +62,7 @@ import { currentUser, stageCfg } from "./stage.js";
 import { apPerms } from "./stage-auth.js";
 import { sendEmail, buildNoticeEmail, emailConfigured } from "./stage-email.js";
 import { repoFetch } from "./repo-data.js";
+import { KEEP_SCROLL_JS } from "./keep-scroll.js";
 
 export const AUTOPRICE_DO = "autoprice";
 export const TAG = "auto-price";
@@ -1903,6 +1904,10 @@ export async function serveAutoprice(request, env, url, staffOk) {
     if (body.action === "keep") { try { const j = JSON.parse(text); flash = j.ok ? "Kept today's price; that suggestion will not be offered again." : "Keep failed: " + (j.error || "unknown"); } catch { flash = "Keep: no answer"; } }
     if (body.action === "publish-all") { try { const j = JSON.parse(text); flash = j.ok ? j.published + " price" + (j.published === 1 ? "" : "s") + " published" + (j.failed ? ", " + j.failed + " failed (" + j.errors.join("; ").slice(0, 120) + ")" : "") + (j.overLimit ? ", " + j.overLimit + " left waiting: over your limit" : "") + (j.left ? ", " + j.left + " still waiting - press again" : "") : "Publish all failed: " + (j.error || "unknown"); } catch { flash = "Publish all: no answer"; } }
     const qs = [...qsBase, flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
+    // json=1: the page posted the form itself (fetch) to update the row in
+    // place instead of reloading (owner, 2026-11-01); it gets the room's
+    // answer plus the same flash text the reload would have shown
+    if (form && body.json === "1") { let j = {}; try { j = JSON.parse(text) || {}; } catch {} return Response.json({ ...j, ok: !!j.ok, flash }, { status: r.status, headers: { "cache-control": "no-store" } }); }
     if (form) return html("", 303, { location: backPath + (qs ? "?" + qs : "") });
     return new Response(text, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
@@ -2226,7 +2231,7 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .drop{position:relative}.drop>.dd{position:absolute;z-index:30;top:calc(100% + 6px);left:0;width:min(680px,calc(100vw - 40px));background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(16,24,40,.14);padding:14px}.drop.right>.dd{left:auto;right:0}.drop>.dd p{margin:8px 0 0}.drop[open]>summary{border-color:var(--acc)}
 .find{display:flex;gap:8px}.find input{flex:1;min-width:0;font-size:15px}.found{list-style:none;margin:10px 0 0;padding:0;max-height:52vh;overflow:auto}.found li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
 .setf{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px 14px;margin-top:10px}.setf label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut)}.setf label span{font-weight:600}.setf .wide{grid-column:1/-1}.setf input,.setf select{width:100%}.formend{display:flex;align-items:center;gap:10px}.modef{display:flex;align-items:end;gap:10px;flex-wrap:wrap}.modef label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut);font-weight:600}
-.flash{margin:10px 0;padding:10px 14px;border-radius:10px;background:var(--up-bg);color:var(--up);font-weight:600}.flash.bad{background:var(--down-bg);color:var(--down)}
+.flash{margin:10px 0;padding:10px 14px;border-radius:10px;background:var(--up-bg);color:var(--up);font-weight:600}.flash.bad{background:var(--down-bg);color:var(--down)}.flash.aptoast{position:fixed;left:50%;bottom:18px;transform:translate(-50%,20px);margin:0;max-width:calc(100% - 32px);box-shadow:0 10px 30px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}.flash.aptoast.on{opacity:1;transform:translate(-50%,0)}.item.busy{opacity:.6;pointer-events:none}
 .banner{margin:8px 0;border:1px solid var(--warn-line);background:var(--warn-bg);color:var(--ink);border-radius:10px;padding:9px 14px;font-size:13px}.banner>summary{cursor:pointer}.banner b{color:var(--warn)}.banner ul{margin:8px 0 2px;padding-left:18px}.banner li{margin:3px 0}
 .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 8px}.segs{display:inline-flex;background:var(--soft);border-radius:9px;padding:3px}.seg{padding:6px 12px;border-radius:7px;color:var(--mut);text-decoration:none;font-weight:600;font-size:13px}.seg.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}.seg .n{font-weight:500;color:var(--mut)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}.tab{padding:5px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mut);text-decoration:none;font-size:12.5px;font-weight:600;background:var(--card)}.tab.on{background:var(--ink);color:var(--card);border-color:var(--ink)}.tab.warn:not(.on){border-color:var(--warn-line)}.tab .n{font-weight:500;opacity:.8}.tab .wt{color:var(--wait)}.tab.on .wt{color:inherit}.tab .err{color:var(--down)}.tab .al{color:var(--warn)}.tab.on .err,.tab.on .al{color:inherit}
@@ -2277,5 +2282,26 @@ document.addEventListener("click",function(e){var line=e.target.closest(".line")
 // one drop-down open at a time
 [].slice.call(document.querySelectorAll("details.drop")).forEach(function(d){d.addEventListener("toggle",function(){if(d.open)[].slice.call(document.querySelectorAll("details.drop")).forEach(function(o){if(o!==d)o.open=false})})});
 })();
+// Publish and Keep without a reload (owner, 2026-11-01: "When u click publish it
+// reloads the screen and I lose my place"): the form is posted by fetch with
+// json=1, the row is updated where it stands, and the flash shows as a toast.
+// Any other form still reloads, and the place is kept (keep-scroll.js below).
+(function(){var money=function(n){return "$"+(Math.round(Number(n)*100)/100).toFixed(2)};var toastEl=null,toastT=null;
+function toast(msg,bad){if(!toastEl){toastEl=document.createElement("p");toastEl.className="flash aptoast";document.body.appendChild(toastEl)}toastEl.textContent=msg;toastEl.classList.toggle("bad",!!bad);toastEl.classList.add("on");clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove("on")},bad?7000:4000)}
+function actionOf(f){var i=f.querySelector("input[name=action]");return i?i.value:""}
+document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.getAttribute||f.getAttribute("action")!=="/autoprice/control")return;var act=actionOf(f);if(act!=="publish"&&act!=="keep")return;if(!window.fetch||!window.FormData)return;
+e.preventDefault();var art=f.closest("article.item"),btn=f.querySelector("button");if(btn)btn.disabled=true;if(art)art.classList.add("busy");
+var fd=new FormData(f);fd.set("json","1");
+fetch(f.getAttribute("action"),{method:"POST",body:fd,credentials:"same-origin"}).then(function(r){return r.json()}).then(function(j){
+if(!j||!j.ok){if(btn)btn.disabled=false;if(art)art.classList.remove("busy");toast((j&&(j.flash||j.error))||"That did not go through.",true);return}
+toast(j.flash||"Done.");if(!art)return;art.classList.remove("busy","awaiting");art.className=art.className.split(" ").filter(function(c){return c&&c.indexOf("s-")!==0}).join(" ")+(act==="publish"?" s-ok":" s-hold");
+var price=act==="publish"?Number(j.price||fd.get("price")):null;
+if(act==="publish"&&price>0){var now=art.querySelector(".c-now b");if(now)now.textContent=money(price);var sug=art.querySelector(".c-sug");if(sug)sug.innerHTML='<span class="sub">up to date</span>'}
+var st=art.querySelector(".c-st");if(st)st.innerHTML=act==="publish"?'<span class="badge b-ok">Published \u2713</span><div class="sub two">just now'+(j.anchored?" \u00b7 tracking the market from here":"")+"</div>":'<span class="badge b-hold">Kept</span><div class="sub two">the price stays today; that suggestion is not offered again</div>';
+var ca=art.querySelector(".c-act");if(ca)ca.innerHTML='<div class="sub">'+(act==="publish"?"published "+money(price):"kept "+(fd.get("suggested")?"over "+money(fd.get("suggested")):""))+"</div>";
+var tr=art.querySelector("form.pubf.track");if(tr&&tr.parentNode)tr.parentNode.removeChild(tr);
+}).catch(function(){if(btn)btn.disabled=false;if(art)art.classList.remove("busy");try{sessionStorage.setItem("xgScroll:"+location.pathname,JSON.stringify({y:window.scrollY||0,t:Date.now()}))}catch(x){}f.submit()});
+},true);})();
+${KEEP_SCROLL_JS}
 </script></body></html>`;
 }

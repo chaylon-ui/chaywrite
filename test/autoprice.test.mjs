@@ -706,6 +706,8 @@ test("staged rows wait on the page with an editable price, and publishing writes
   assert.match(page, new RegExp('name="price" value="' + d.suggested.toFixed(2) + '"'));
   assert.match(page, /<button class="btn go">Publish<\/button>/);
   assert.match(page, /Keep \$219\.95/);
+  // Publish and Keep post by fetch and update the row in place; other forms reload with the place kept (owner 2026-11-01)
+  assert.ok(page.includes('fd.set("json","1")') && page.includes("xgScroll:") && page.includes("aptoast"), "in-place publish, the toast and the scroll keeper");
   assert.match(page, /STAGED/);
   assert.match(page, /tcgplayer\.com\/search\/all\/product\?q=Box%20A/);   // manual review link
   assert.match(page, /LH_Sold=1/);

@@ -82,6 +82,11 @@ test("the auto-pricer opens for 9Pocket accounts by their permissions: admin eve
   assert.equal(j.ok, false); assert.ok(/20% drop; your account may drop a price by at most 10%/.test(j.error));
   const all = JSON.parse((await hit(w, "/autoprice/control", { cookie: "np_s=" + TOKEN2, json: { action: "publish-all" } })).text);
   assert.deepEqual({ published: all.published, overLimit: all.overLimit, failed: all.failed }, { published: 0, overLimit: 1, failed: 0 });
+  // the page posting a form itself (json=1) gets JSON with the flash instead of a redirect (owner 2026-11-01: no reload on Publish / Keep)
+  const kept = await hit(w, "/autoprice/control", { cookie: "np_s=" + TOKEN2, form: { action: "keep", id: "gid://shopify/Product/999", suggested: "80", json: "1" } });
+  assert.notEqual(kept.status, 303); assert.equal(kept.location, null);
+  const kj = JSON.parse(kept.text);
+  assert.equal(typeof kj.ok, "boolean"); assert.match(kj.flash, /^Kep/, "the same flash text the reload would have shown: " + kj.flash);
   const denied = await hit(w, "/autoprice/control", { cookie: "np_s=" + TOKEN2, form: { action: "run" } });
   assert.equal(denied.status, 303); assert.ok(/flash=Your\+account\+may\+not\+do\+that/.test(denied.location.replace(/%20/g, "+")) || /may%20not%20do%20that/.test(denied.location));
   // the activity table shows the admin's mode change under her name

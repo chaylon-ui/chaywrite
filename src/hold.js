@@ -43,6 +43,7 @@
    /hold/health is counts only. Nothing here changes inventory. */
 
 import { liveFetch, pollLive, liveOnRise, liveHealth, liveBusy, POLL_MS } from "./hold-live.js";
+import { KEEP_SCROLL_JS } from "./keep-scroll.js";
 
 export const HOLD_DO = "buylist-hold";
 export const HOLD_MODE = "shadow";
@@ -520,5 +521,5 @@ ${orders.length ? orders.map((o) => `<div class="cart"><h3>Cart ${esc(o.cart)} <
 <h2>Singles that rose with no cart and no buylist · ${none.length} <span class="muted">· would NOT be held; a counter buy in here means the window is wrong</span></h2>
 <table><thead><tr><th>Stock rose at</th><th>Card</th><th>Qty</th><th>Available</th><th>Type</th><th></th><th>Re-read</th></tr></thead><tbody>${rows(none.slice(0, 200), riseRow)}</tbody></table>
 <p class="muted">${notSingle} rises on products that are not singles were ignored.</p>
-</div></body></html>`;
+</div><script>${KEEP_SCROLL_JS}</script></body></html>`;
 }

@@ -18,6 +18,7 @@
    follows the signed-in account's permissions (src/stage-auth.js can()). */
 
 import { PERMS, AP_PERMS, STAFF_PERMS, SC_PERMS, LIMITS, can, apPerms } from "./stage-auth.js";
+import { KEEP_SCROLL_JS } from "./keep-scroll.js";
 
 export const BASE = "/9pocket";
 export const BRAND = "9Pocket by Exor";
@@ -69,7 +70,7 @@ form.login{max-width:400px;margin:60px auto;background:#fff;border:1px solid #dd
 
 export const shell = (title, body, o, back) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>
 <div class="bar">${back ? `<a class="back" href="${BASE}">← Back to 9Pocket</a>` : ""}<a class="brand" href="${BASE}" aria-label="${BRAND}">${brandMark()}<small>buylists</small></a><span class="sp"></span><span class="links">${o && o.user ? `<span class="who">${esc(o.user.name || o.user.email)}${o.user.role === "admin" ? " · admin" : ""}</span>${o.user.role === "admin" ? `<a href="${BASE}/admin">Admin</a><a href="${BASE}/win">Contests</a><a href="${BASE}/impact">Impact</a>` : ""}${apPerms(o.user) ? `<a href="/autoprice">Auto-pricing</a>` : ""}${can(o.user, "release") ? `<a href="${BASE}/held">Held stock</a>` : ""}${can(o.user, "graded") ? `<a href="${BASE}/graded">Graded</a>` : ""}${can(o.user, "asklog") ? `<a href="${BASE}/ask">Ask Exor</a>` : ""}${can(o.user, "requests") ? `<a href="${BASE}/requests">Requests</a>` : ""}${can(o.user, "sc_view") || can(o.user, "sc_act") ? `<a href="${BASE}/stock">Stock check</a>` : ""}` : ""}<a href="/portal/buylists">BinderPOS's list</a>${o && o.user ? `<form method="post" action="${BASE}/logout"><button type="submit">Sign out</button></form>` : ""}</span></div>
-<div class="wrap">${body}</div></body></html>`;
+<div class="wrap">${body}</div><script>${KEEP_SCROLL_JS}</script></body></html>`;
 
 const plain = (title, inner) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · ${BRAND}</title><style>${CSS}</style></head><body>${inner}</body></html>`;
 

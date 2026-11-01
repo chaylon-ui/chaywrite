@@ -150,6 +150,7 @@ test("the staff pages: list rows link to worksheets; the worksheet's controls fo
   assert.ok(list.includes('href="/9pocket/admin"') && list.includes("Sign out") && list.includes("Chaylon"));
   const sheet = renderSheet(r, o);
   assert.ok(sheet.includes("Back to 9Pocket"));
+  assert.ok(sheet.includes("xgScroll:") && list.includes("xgScroll:"), "every staff page keeps the reader's place across a form post (owner 2026-11-01)");
   assert.ok(sheet.includes('<input class="q" type="number" min="0"') && sheet.includes('<input class="p cash"'));
   assert.ok(sheet.includes('img class="thumb" src="https://product-images.tcgplayer.com/1.jpg"'));
   assert.ok(sheet.includes("Approve → send to BinderPOS"));
