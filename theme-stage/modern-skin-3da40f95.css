@@ -1,0 +1,1281 @@
+/* ==========================================================================
+   Exor Games — modern skin
+   Loaded last in layout/theme.liquid so it wins the cascade.
+
+   LAYER A — tokens, primitives, and the new xg- sections (hero, trust, locations)
+   LAYER B — overrides that modernize the legacy theme (typography, buttons,
+             header, product cards, homepage sections, footer)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   LAYER A · 1. Design tokens
+   -------------------------------------------------------------------------- */
+:root {
+  /* Brand */
+  --xg-red: #d62c28;
+  --xg-red-hover: #b3211e;
+  --xg-red-soft: rgba(214, 44, 40, 0.08);
+  --xg-accent: #ffd800;            /* the ONE yellow — badges + small accents only */
+  --xg-charcoal: #27302f;          /* brand chrome (header/footer) */
+  --xg-charcoal-deep: #1c2322;
+  --xg-charcoal-soft: #333e3d;
+
+  /* Neutrals (light UI) */
+  --xg-bg: #f5f6f7;
+  --xg-surface: #ffffff;
+  --xg-border: #e3e6e8;
+  --xg-ink: #171b1d;
+  --xg-text: #3d454b;
+  --xg-muted: #707a83;
+  --xg-inverse-text: #f4f6f6;
+  --xg-inverse-muted: #b9c2c1;
+
+  /* States */
+  --xg-success: #17784a;
+  --xg-danger: #c22a26;
+
+  /* Type */
+  --xg-font-body: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --xg-font-display: "Oswald", "Barlow Condensed", "Arial Narrow", sans-serif;
+
+  /* Shape & elevation */
+  --xg-radius-lg: 16px;
+  --xg-radius: 10px;
+  --xg-radius-sm: 8px;
+  --xg-shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --xg-shadow-2: 0 10px 28px rgba(16, 24, 40, 0.12);
+
+  /* Motion */
+  --xg-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --xg-fast: 150ms;
+}
+
+/* --------------------------------------------------------------------------
+   LAYER A · 2. Primitives
+   -------------------------------------------------------------------------- */
+.xg-container {
+  max-width: 1360px;
+  margin-inline: auto;
+  padding-inline: clamp(14px, 3vw, 32px);
+}
+
+/* Button system — used by new sections and mapped onto legacy buttons in Layer B */
+.xg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--xg-font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  padding: 12px 22px;
+  border-radius: var(--xg-radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color var(--xg-fast) var(--xg-ease),
+    border-color var(--xg-fast) var(--xg-ease),
+    color var(--xg-fast) var(--xg-ease),
+    transform var(--xg-fast) var(--xg-ease),
+    box-shadow var(--xg-fast) var(--xg-ease);
+}
+.xg-btn:active { transform: translateY(1px); }
+.xg-btn--lg { padding: 15px 28px; font-size: 16px; }
+.xg-btn--primary { background: var(--xg-red); color: #fff; }
+.xg-btn--primary:hover,
+.xg-btn--primary:focus-visible { background: var(--xg-red-hover); color: #fff; }
+.xg-btn--ghost { background: rgba(255, 255, 255, 0.04); color: #fff; border-color: rgba(255, 255, 255, 0.45); }
+.xg-btn--ghost:hover,
+.xg-btn--ghost:focus-visible { background: rgba(255, 255, 255, 0.12); border-color: #fff; color: #fff; }
+
+.xg-btn:focus-visible,
+.xg-tile:focus-visible,
+.xg-loc__card:focus-visible {
+  outline: 2px solid var(--xg-red);
+  outline-offset: 2px;
+}
+
+/* Section header pattern: title left, optional sub */
+.xg-section-head { margin: 0 0 18px; }
+.xg-section-head__title {
+  font-family: var(--xg-font-display);
+  font-size: clamp(22px, 2.6vw, 30px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--xg-ink);
+  margin: 0;
+}
+.xg-section-head__sub {
+  font-family: var(--xg-font-body);
+  font-size: 15px;
+  color: var(--xg-muted);
+  margin: 6px 0 0;
+}
+
+/* --------------------------------------------------------------------------
+   LAYER A · 3. Hero (bento)
+   -------------------------------------------------------------------------- */
+.xg-hero { padding: clamp(14px, 2.2vw, 28px) 0 0; background: var(--xg-bg); }
+.xg-hero__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.xg-hero__grid--solo { grid-template-columns: minmax(0, 1fr); }
+.xg-hero__main {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--xg-radius-lg);
+  min-height: clamp(340px, 38vw, 480px);
+  display: flex;
+  align-items: center;
+  background:
+    radial-gradient(900px 420px at 88% -12%, rgba(214, 44, 40, 0.38), transparent 62%),
+    radial-gradient(700px 380px at -10% 110%, rgba(255, 216, 0, 0.10), transparent 55%),
+    linear-gradient(158deg, #2d3737 0%, #1f2727 52%, #161c1c 100%);
+}
+.xg-hero__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+.xg-hero__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(92deg, rgba(20, 25, 26, 0.95) 8%, rgba(20, 25, 26, 0.62) 52%, rgba(20, 25, 26, 0.28) 100%);
+}
+.xg-hero__content {
+  position: relative;
+  z-index: 2;
+  padding: clamp(26px, 4.5vw, 56px);
+  max-width: 660px;
+}
+.xg-hero__kicker {
+  font-family: var(--xg-font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--xg-accent);
+  margin: 0 0 14px;
+}
+.xg-hero__title {
+  font-family: var(--xg-font-display);
+  font-size: clamp(30px, 4.6vw, 54px);
+  line-height: 1.06;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.015em;
+  color: #fff;
+  margin: 0 0 14px;
+}
+.xg-hero__sub {
+  font-family: var(--xg-font-body);
+  font-size: clamp(15px, 1.4vw, 17px);
+  line-height: 1.6;
+  color: var(--xg-inverse-muted);
+  margin: 0 0 26px;
+  max-width: 54ch;
+}
+.xg-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.xg-hero__side { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; min-width: 0; }
+.xg-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--xg-radius-lg);
+  display: flex;
+  align-items: flex-end;
+  min-height: 150px;
+  text-decoration: none;
+  background: linear-gradient(150deg, #313c3b 0%, #232b2a 60%, #1b2221 100%);
+  transition: transform var(--xg-fast) var(--xg-ease), box-shadow var(--xg-fast) var(--xg-ease);
+}
+.xg-tile:hover { transform: translateY(-2px); box-shadow: var(--xg-shadow-2); }
+.xg-tile--flat {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    radial-gradient(420px 200px at 100% 0%, rgba(214, 44, 40, 0.22), transparent 60%),
+    linear-gradient(150deg, #313c3b 0%, #232b2a 60%, #1b2221 100%);
+}
+.xg-tile__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  transition: transform 400ms var(--xg-ease);
+}
+.xg-tile:hover .xg-tile__bg { transform: scale(1.03); }
+.xg-tile__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(18, 22, 23, 0.05) 30%, rgba(18, 22, 23, 0.78) 100%);
+}
+.xg-tile__content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 58px 20px 22px;
+  width: 100%;
+}
+.xg-tile__kicker {
+  font-family: var(--xg-font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--xg-accent);
+}
+.xg-tile__title {
+  font-family: var(--xg-font-display);
+  font-size: clamp(18px, 1.8vw, 23px);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  color: #fff;
+}
+.xg-tile__arrow {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--xg-red);
+  color: #fff;
+  transition: background-color var(--xg-fast) var(--xg-ease), transform var(--xg-fast) var(--xg-ease);
+}
+.xg-tile:hover .xg-tile__arrow { background: var(--xg-red-hover); transform: translateX(2px); }
+
+@media (max-width: 989px) {
+  .xg-hero__grid { grid-template-columns: 1fr; }
+  .xg-hero__main { min-height: 380px; }
+  .xg-hero__side { grid-template-rows: none; grid-template-columns: 1fr 1fr; }
+  .xg-tile { min-height: 128px; }
+  .xg-tile__content { padding: 14px 46px 14px 16px; }
+  .xg-tile__arrow { width: 28px; height: 28px; right: 12px; bottom: 12px; }
+}
+@media (max-width: 579px) {
+  .xg-hero__side { grid-template-columns: 1fr; }
+  .xg-tile { min-height: 108px; }
+}
+
+/* --------------------------------------------------------------------------
+   LAYER A · 4. Trust bar
+   -------------------------------------------------------------------------- */
+.xg-trust { background: var(--xg-bg); padding: 18px 0 6px; }
+.xg-trust__row {
+  list-style: none;
+  margin: 0;
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 18px 26px;
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius-lg);
+  box-shadow: var(--xg-shadow-1);
+}
+.xg-trust__item { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.xg-trust__icon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--xg-red-soft);
+  color: var(--xg-red);
+}
+.xg-trust__icon svg { width: 22px; height: 22px; }
+.xg-trust__copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.xg-trust__title {
+  font-family: var(--xg-font-body);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--xg-ink);
+  line-height: 1.3;
+}
+.xg-trust__text {
+  font-family: var(--xg-font-body);
+  font-size: 13px;
+  color: var(--xg-muted);
+  line-height: 1.35;
+}
+
+/* --------------------------------------------------------------------------
+   LAYER A · 5. Locations strip
+   -------------------------------------------------------------------------- */
+.xg-loc { background: var(--xg-bg); padding: 34px 0 44px; }
+.xg-loc__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.xg-loc__card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius);
+  text-decoration: none;
+  transition: border-color var(--xg-fast) var(--xg-ease), box-shadow var(--xg-fast) var(--xg-ease), transform var(--xg-fast) var(--xg-ease);
+}
+a.xg-loc__card:hover { border-color: #cdd3d6; box-shadow: var(--xg-shadow-1); transform: translateY(-1px); }
+.xg-loc__pin {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--xg-red-soft);
+  color: var(--xg-red);
+}
+.xg-loc__pin svg { width: 19px; height: 19px; }
+.xg-loc__copy { display: flex; flex-direction: column; min-width: 0; }
+.xg-loc__name { font-family: var(--xg-font-body); font-size: 14.5px; font-weight: 600; color: var(--xg-ink); }
+.xg-loc__region { font-family: var(--xg-font-body); font-size: 12.5px; color: var(--xg-muted); }
+.xg-loc__arrow { margin-left: auto; color: var(--xg-muted); display: grid; place-items: center; transition: color var(--xg-fast) var(--xg-ease), transform var(--xg-fast) var(--xg-ease); }
+a.xg-loc__card:hover .xg-loc__arrow { color: var(--xg-red); transform: translateX(2px); }
+
+/* --------------------------------------------------------------------------
+   Motion preferences
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .xg-btn, .xg-tile, .xg-tile__bg, .xg-tile__arrow, .xg-loc__card, .xg-loc__arrow {
+    transition: none !important;
+  }
+  .xg-tile:hover { transform: none; }
+  .xg-tile:hover .xg-tile__bg { transform: none; }
+}
+
+/* ==========================================================================
+   LAYER B — legacy theme overrides
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   LAYER B · 1. Retokenize the legacy theme
+   binderVariables.css.liquid defines these from settings; this file loads
+   last, so redefining them re-themes every component that consumes them.
+   -------------------------------------------------------------------------- */
+:root {
+  --primary-font: var(--xg-font-body);
+  --secondary-font: var(--xg-font-display);
+  --font-stack-header: var(--xg-font-display);
+  --font-stack-body: var(--xg-font-body);
+
+  --button-bg-color: var(--xg-red);
+  --button-text-color: #ffffff;
+  --button-bg-hover-color: var(--xg-red-hover);   /* was yellow — hue swap gone */
+  --button-text-hover-color: #ffffff;
+
+  --product-bg-color: var(--xg-red);
+  --product-icon-color: #ffffff;
+  --product-bg-hover-color: var(--xg-red-hover);
+  --product-icon-hover-color: #ffffff;
+
+  --navbar-background-color: var(--xg-charcoal);
+  --navbar-text-color: #ffffff;
+  --navbar-text-hover-color: var(--xg-accent);
+
+  --color-btn-primary: var(--xg-red);             /* was slate #7796a8 */
+  --color-btn-primary-text: #ffffff;
+
+  --color-text: var(--xg-ink);
+  --color-body-text: var(--xg-text);              /* was low-contrast #788188 */
+  --color-sale-text: var(--xg-danger);            /* was slate blue */
+  --color-border: var(--xg-border);
+
+  --footer-bg-color: var(--xg-charcoal-deep);
+  --footer-text-hover-color: var(--xg-accent);
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 2. Base typography & surfaces
+   -------------------------------------------------------------------------- */
+body {
+  font-family: var(--xg-font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--xg-text);
+  background-color: var(--xg-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--xg-font-display);
+  color: var(--xg-ink);
+  letter-spacing: 0.015em;
+}
+input, select, textarea, button {
+  font-family: var(--xg-font-body);
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--xg-red);
+  outline-offset: 2px;
+}
+
+/* Prices align in columns */
+.product-price__price,
+.cart-qty,
+.money {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 3. Buttons — one shape system (colors come from the vars above)
+   -------------------------------------------------------------------------- */
+.btn,
+button.btn,
+input.btn,
+.addToCart {
+  font-family: var(--xg-font-body);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  border-radius: var(--xg-radius-sm);
+  transition: background-color var(--xg-fast) var(--xg-ease),
+    border-color var(--xg-fast) var(--xg-ease),
+    color var(--xg-fast) var(--xg-ease),
+    box-shadow var(--xg-fast) var(--xg-ease);
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 4. Header — logo left, search grows in the middle, cart/account right
+   Markup: sections/header-top.liquid (.nav-menu > .page-width(logo) +
+   .header-user-selection > #_desktop_cart / #_desktop_user_info / #_desktop_search)
+   -------------------------------------------------------------------------- */
+/* Main header keeps a light ground — the current logo asset is only proven
+   legible on white. Dark chrome stays on the utility bar and footer. */
+#header .site-header {
+  background: #ffffff;
+}
+
+/* Slim utility bar (social left, checkout/wishlist right).
+   Legacy rule is #header .nav-header (1,1,0) with a 3px border + heavy
+   box-shadow — match the ID to actually win. */
+#header .nav-header {
+  background: var(--xg-charcoal-deep);
+  padding: 5px 0;
+  box-shadow: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 0;
+  font-size: 12.5px;
+}
+#header .nav-header .desktop-checkout ul li a {
+  font-family: var(--xg-font-body);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--xg-inverse-muted);
+}
+#header .nav-header .desktop-checkout ul li a:hover {
+  color: var(--xg-accent);
+}
+#header .site-header .social-icons li a,
+#header .site-header .social-icons li a i {
+  color: var(--xg-inverse-muted);
+  font-size: 14px;
+  transition: color var(--xg-fast) var(--xg-ease);
+}
+#header .site-header .social-icons li a:hover,
+#header .site-header .social-icons li a:hover i {
+  color: var(--xg-accent);
+}
+
+/* Main header row becomes a flex bar. Legacy rules here are ID-prefixed
+   (#header .header-top ..., #header .header-logo-section-img{width:8%}),
+   so every override carries the same ID. */
+#header .header-top.site-header-inner {
+  background: #ffffff;
+  border-bottom: 1px solid var(--xg-border);
+}
+#header .header-top .nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 12px 0;
+}
+#header .header-top .nav-menu > .page-width {
+  display: block;
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+#header .header-logo-section-img,
+#header .header-logo-section {
+  float: none;
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+#header .header__logo {
+  margin: 0;
+  line-height: 0;
+}
+#header .header__logo img {
+  display: block;
+  width: auto;
+  max-height: 52px !important; /* inline style attr sets 120px — cap it */
+}
+#header .header-user-selection {
+  float: none;
+  width: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  padding: 0;
+}
+#_desktop_cart,
+#_desktop_user_info {
+  flex: 0 0 auto;
+  float: none;
+}
+#_desktop_search {
+  order: -1;
+  flex: 1 1 auto;
+  max-width: 680px;
+  margin-right: auto;
+  float: none;
+}
+
+/* The search omnibox — the primary action on a 226k-singles store */
+#_desktop_search .search-title,
+#_desktop_search .search-info { width: 100%; }
+#_desktop_search .search-header {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+#_desktop_search .search-header__input {
+  width: 100%;
+  height: 44px;
+  background: #f3f5f6;
+  border: 1px solid var(--xg-border);
+  border-radius: 999px;
+  padding: 0 52px 0 20px;
+  font-family: var(--xg-font-body);
+  font-size: 14.5px;
+  color: var(--xg-ink);
+  box-shadow: none;
+  transition: box-shadow var(--xg-fast) var(--xg-ease), border-color var(--xg-fast) var(--xg-ease), background-color var(--xg-fast) var(--xg-ease);
+}
+#_desktop_search .search-header__input::placeholder {
+  color: var(--xg-muted);
+  opacity: 1;
+}
+#_desktop_search .search-header__input:focus {
+  background: #ffffff;
+  border-color: var(--xg-red);
+  box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.16);
+  outline: none;
+}
+#_desktop_search .search-header__submit {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--xg-red);
+  color: #ffffff;
+  border: 0;
+  transition: background-color var(--xg-fast) var(--xg-ease);
+}
+#_desktop_search .search-header__submit:hover { background: var(--xg-red-hover); }
+#_desktop_search .search-header__submit .search-logo,
+#_desktop_search .search-header__submit .material-icons {
+  color: #ffffff;
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* Cart + account icons (dark on the white bar) */
+#header .site-header__cart,
+#header .userinfo-title,
+#header .cart-title {
+  color: var(--xg-ink);
+}
+.cart-qty {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--xg-red);
+  color: #ffffff;
+  font-family: var(--xg-font-body);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Mobile header bar */
+#header .site-header-mobile {
+  background: #ffffff;
+  border-bottom: 1px solid var(--xg-border);
+}
+
+/* Search drawer (mobile/off-canvas) */
+.search-bar__form .search__input {
+  font-family: var(--xg-font-body);
+  font-size: 15px;
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 5. Theme mega-menu row (used when the qikify app menu is off;
+   matches the same language either way)
+   -------------------------------------------------------------------------- */
+.megamenu-header { float: none; }
+#top-menu > li > a,
+#top-menu > li button {
+  font-family: var(--xg-font-body);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.top-menu.mainmenu-dropdown {
+  border-radius: var(--xg-radius);
+  box-shadow: var(--xg-shadow-2);
+  border: 1px solid var(--xg-border);
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 6. Product cards
+   Markup: snippets/product-card-grid.liquid (.grid-view-item). JS-bound
+   classes kept verbatim: #tag-container overlays, .nm-addToCart, .qv-*,
+   .extra-img, .rainbowFoil, .add-in-wishlist-js.
+   -------------------------------------------------------------------------- */
+.products-display .grid-view-item {
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius);
+  padding: 10px 12px 14px;
+  height: 100%;
+  transition: box-shadow var(--xg-fast) var(--xg-ease), border-color var(--xg-fast) var(--xg-ease);
+}
+.products-display .grid-view-item:hover {
+  border-color: #ccd2d6;
+  box-shadow: var(--xg-shadow-2);
+}
+.products-display .grid__item .grid-view-item .grid-view-item__image-container .grid-view-item__image-wrapper a .image-inner {
+  background: #fff;
+  border-radius: var(--xg-radius-sm);
+}
+
+/* Card title: real two-line clamp instead of the fixed 54px crop */
+.products-display .grid__item .grid-view-item .grid-view-item__image-container .product-description .product-detail .grid-view-item__title {
+  color: var(--xg-ink);
+  font-family: var(--xg-font-body);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: none;
+  height: auto;
+  min-height: 39px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+/* Price: was muted gray #acaaa6 — make it the strongest element after the image */
+.product-price .product-price__price {
+  color: var(--xg-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+.product-price .product-price__sale,
+.product__price--sale {
+  color: var(--xg-danger);
+}
+
+/* Sale flag → pill badge */
+.product-flags .flag.sale {
+  background: var(--xg-red);
+  color: #fff;
+  font-family: var(--xg-font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+/* Stock overlays (#tag-container classes set by card JS) — badge language.
+   Positioning is owned by the legacy CSS; only surface styling is changed. */
+.outstock-overlay,
+.backorder-overlay,
+.preorder-overlay {
+  font-family: var(--xg-font-body) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 6px !important;
+}
+.outstock-overlay { background: rgba(23, 27, 29, 0.82) !important; color: #fff !important; }
+.backorder-overlay { background: rgba(112, 122, 131, 0.9) !important; color: #fff !important; }
+.preorder-overlay { background: var(--xg-accent) !important; color: var(--xg-ink) !important; }
+
+/* Condition / variant dropdown on singles cards */
+.product-description .custom-dropdown__small select {
+  font-family: var(--xg-font-body);
+  font-size: 12.5px;
+  color: var(--xg-text);
+  background-color: #fff;
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius-sm);
+  padding: 5px 26px 5px 10px;
+}
+
+/* Hover action row (quick view / wishlist / add to cart) */
+.thumbnail-buttons .btn {
+  font-size: 12.5px;
+  padding: 7px 12px;
+  border-radius: var(--xg-radius-sm);
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 7. Homepage sections — shared header pattern, tabs, tiles,
+   services, banners
+   -------------------------------------------------------------------------- */
+/* Section headers: left-aligned display type, ornament separators off */
+.section-header.main-title {
+  text-align: left;
+  margin-bottom: 16px;
+}
+.section-header .home-title {
+  font-family: var(--xg-font-display);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 600;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--xg-ink);
+  padding: 0;
+}
+.section-header .seperator { display: none !important; }
+.section-header .sub-title { color: var(--xg-muted); }
+
+/* Products-block tab bar → pill tabs (Bootstrap .active class preserved) */
+ul#products-tab.nav.nav-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 0;
+  margin-bottom: 14px;
+}
+ul#products-tab .nav-item { float: none; margin: 0; }
+ul#products-tab .nav-item > a.nav-link {
+  font-family: var(--xg-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--xg-text);
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border) !important;
+  border-radius: 999px;
+  padding: 8px 16px;
+  transition: background-color var(--xg-fast) var(--xg-ease), color var(--xg-fast) var(--xg-ease), border-color var(--xg-fast) var(--xg-ease);
+}
+ul#products-tab .nav-item > a.nav-link:hover {
+  border-color: #c6cdd1 !important;
+  color: var(--xg-ink);
+  background: var(--xg-surface);
+}
+ul#products-tab .nav-item.active > a.nav-link,
+ul#products-tab .nav-item.active > a.nav-link:hover,
+ul#products-tab .nav-item.active > a.nav-link:focus {
+  background: var(--xg-charcoal);
+  border-color: var(--xg-charcoal) !important;
+  color: #fff;
+}
+/* Phones (owner, 2026-11-01, iPhone screenshot of the In-Stock Singles games
+   stacked one per line: "looks a little ugly with them all in a line like
+   this"). theme.css makes the list display:block and, under 544px, every
+   .nav-item display:block (two ids: it beat the flex row above), so each game
+   sat alone on its own centred row with square corners. Here, at two ids and
+   more: a centred wrapping row of pill chips, a touch-sized 38px tall, so six
+   games fit in two or three rows. */
+@media (max-width: 767px) {
+  #product-block-carousel ul#products-tab.products-tab {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 0 4px;
+  }
+  #product-block-carousel ul#products-tab > li.nav-item {
+    display: block;
+    float: none;
+    width: auto;
+    margin: 0;
+    flex: 0 1 auto;
+  }
+  #product-block-carousel ul#products-tab > li.nav-item > a.nav-link {
+    display: inline-block;
+    padding: 9px 15px;
+    font-size: 13px;
+    line-height: 1.25;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+}
+
+/* View-all → quiet outline button */
+.view-all-btn a.btn,
+.view-all .view-all-link {
+  background: transparent;
+  border: 1px solid var(--xg-charcoal);
+  color: var(--xg-charcoal);
+  border-radius: var(--xg-radius-sm);
+}
+.view-all-btn a.btn:hover,
+.view-all-btn a.btn:focus {
+  background: var(--xg-charcoal);
+  border-color: var(--xg-charcoal);
+  color: #fff;
+}
+
+/* Collection tiles (collection-list section) */
+.collection-grid-item {
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius);
+  overflow: hidden;
+  transition: box-shadow var(--xg-fast) var(--xg-ease), border-color var(--xg-fast) var(--xg-ease), transform var(--xg-fast) var(--xg-ease);
+}
+.collection-grid-item:hover {
+  border-color: #ccd2d6;
+  box-shadow: var(--xg-shadow-2);
+  transform: translateY(-2px);
+}
+.collection-grid-item__overlay {
+  background: #fff;
+  padding: 14px;
+}
+.collection-grid-item__overlay img {
+  width: 100% !important;
+  height: 190px !important;
+  object-fit: contain !important;
+  display: block;
+}
+.collection-grid-item__title-wrapper {
+  padding: 0 14px 14px;
+  text-align: center;
+}
+.collection-grid-item__title-wrapper h3.collection-grid-item__title {
+  font-family: var(--xg-font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--xg-ink);
+  text-transform: none;
+  letter-spacing: 0;
+  margin: 0 0 10px;
+}
+.collection-grid-item__title-wrapper .collection-grid-total_item.btn {
+  font-size: 12.5px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--xg-border);
+  color: var(--xg-text);
+}
+.collection-grid-item:hover .collection-grid-total_item.btn {
+  background: var(--xg-red);
+  border-color: var(--xg-red);
+  color: #fff;
+}
+
+/* Services row → cards */
+.shopify-section.service-block .services.col-md-3 a,
+.shopify-section.service-block .services.col-sm-6 a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius);
+  padding: 14px 16px;
+  text-decoration: none;
+  transition: border-color var(--xg-fast) var(--xg-ease), box-shadow var(--xg-fast) var(--xg-ease);
+}
+.shopify-section.service-block .services a:hover {
+  border-color: #ccd2d6;
+  box-shadow: var(--xg-shadow-1);
+}
+.shopify-section.service-block .service-img { margin: 0; }
+.shopify-section.service-block .service-img img {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+}
+.shopify-section.service-block .service-text { text-align: left; }
+.shopify-section.service-block .service-title {
+  font-family: var(--xg-font-body);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--xg-ink);
+}
+.shopify-section.service-block .service-desc {
+  font-family: var(--xg-font-body);
+  font-size: 12.5px;
+  color: var(--xg-muted);
+}
+
+/* Promo banners: rounded, and the 2015 hover choreography switched off */
+.banner-section .image-container,
+.banner-section .image-container a,
+.banner-section .image-container img {
+  border-radius: var(--xg-radius-lg);
+}
+.banner-section .image-container { overflow: hidden; }
+.banner-section .image-container img { width: 100%; display: block; }
+.banner-section .image-container a[class*="-customhover-"]::before,
+.banner-section .image-container a[class*="-customhover-"]::after {
+  content: none !important;
+  display: none !important;
+}
+.banner-section .image-container a[class*="-customhover-"],
+.banner-section .image-container a[class*="-customhover-"] img {
+  animation: none !important;
+  transform: none !important;
+}
+.banner-section .image-container a img {
+  transition: transform 300ms var(--xg-ease) !important;
+}
+.banner-section .image-container a:hover img {
+  transform: scale(1.02) !important;
+}
+
+/* Special-product strip (NEW & PRE-ORDERS / SPORTS CARDS) title polish */
+.specialproducts .title-left .title h2 {
+  font-family: var(--xg-font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 8. Footer
+   -------------------------------------------------------------------------- */
+.site-footer {
+  font-family: var(--xg-font-body);
+  font-size: 14px;
+}
+.site-footer .footer-heading,
+.site-footer h2.footer-heading,
+.site-footer h3.footer-heading,
+.site-footer .block-heading {
+  font-family: var(--xg-font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+.site-footer .site-footer__linklist-item a {
+  color: var(--xg-inverse-muted);
+  font-size: 14px;
+  line-height: 2.1;
+  transition: color var(--xg-fast) var(--xg-ease);
+}
+.site-footer .site-footer__linklist-item a:hover { color: var(--xg-accent); }
+.site-footer .contact-info .content,
+.site-footer .contact-info .content p,
+.site-footer .contact-info .content a,
+.site-footer .block-newsletter-label,
+.site-footer .block-newsletter-label p {
+  color: var(--xg-inverse-muted);
+}
+.site-footer .newsletter__input,
+.site-footer .input-group__field {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--xg-radius-sm);
+  color: #fff;
+  height: 42px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.site-footer .newsletter__input::placeholder { color: rgba(255, 255, 255, 0.55); opacity: 1; }
+.site-footer .newsletter__submit {
+  border-radius: var(--xg-radius-sm);
+  height: 42px;
+}
+.site-footer .footer-bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  margin-top: 22px;
+}
+.site-footer .site-footer__copyright--bottom p {
+  color: var(--xg-inverse-muted);
+  font-size: 12.5px;
+}
+.site-footer .payment-icons .logo-bar__item { opacity: 0.9; }
+.site-footer .social-icons li a i { color: var(--xg-inverse-muted); }
+.site-footer .social-icons li a:hover i { color: var(--xg-accent); }
+
+/* --------------------------------------------------------------------------
+   LAYER B · 9. Odds and ends
+   -------------------------------------------------------------------------- */
+.rte p { font-size: 15px !important; }
+::selection { background: var(--xg-red); color: #fff; }
+#slidetop {
+  background: var(--xg-charcoal);
+  color: #fff;
+  border-radius: 999px;
+}
+/* Align the new xg- sections with the legacy .page-width container metrics */
+.xg-container { max-width: 1400px; padding-inline: 15px; }
+@media (max-width: 1199px) { .xg-container { max-width: 940px; } }
+@media (max-width: 991px) { .xg-container { max-width: 720px; } }
+@media (max-width: 767px) { .xg-container { max-width: 576px; } }
+@media (max-width: 543px) { .xg-container { max-width: none; } }
+
+/* --------------------------------------------------------------------------
+   LAYER B · 10. Search results (/search) — list rows become a dense card grid
+   Markup: sections/search-template.liquid + snippets/product-card-list2.liquid.
+   The row markup is untouched (productCardList2.js binds to it); the grid is
+   pure CSS. Card surface/title/price styling composes from Layer B·6 because
+   each result carries .products-display > .grid__item > .grid-view-item.
+   -------------------------------------------------------------------------- */
+.template-search .search_page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 18px 15px 40px;
+}
+.template-search .search_page hr { display: none; }
+
+/* Header row: count left, search box right */
+.template-search .search_page .section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 18px;
+  text-align: left;
+  margin-bottom: 16px;
+}
+.template-search .search_page .section-header h1.h2 {
+  float: none;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  font-family: var(--xg-font-display);
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  color: var(--xg-ink);
+}
+.template-search .search_page .section-header .grid.col-sm-6 {
+  float: none;
+  width: auto;
+  flex: 1 1 320px;
+  max-width: 520px;
+  margin: 0;
+  padding: 0;
+}
+.template-search .search-page-form .input-group {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+.template-search .search-page-form .search__input {
+  flex: 1 1 auto;
+  height: 44px;
+  background: #f3f5f6;
+  border: 1px solid var(--xg-border);
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+  padding: 0 18px;
+  font-family: var(--xg-font-body);
+  font-size: 14.5px;
+  color: var(--xg-ink);
+}
+.template-search .search-page-form .search__input:focus {
+  background: #fff;
+  border-color: var(--xg-red);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(214, 44, 40, 0.14);
+}
+.template-search .search-page-form .input-group__btn { display: flex; }
+.template-search .search-page-form .btn.search__submit {
+  height: 44px;
+  border-radius: 0 999px 999px 0;
+  padding: 0 22px;
+}
+
+/* THE grid: list rows -> responsive card grid */
+.template-search .list-view-items.products-display {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+  gap: 14px;
+}
+.template-search .product-card-list2 {
+  float: none;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+.template-search .product-card-list2 .grid-view-item {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+/* Stack the (image | details) bootstrap columns vertically inside the card */
+.template-search .product-card-list2 .grid-view-item__image-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.template-search .product-card-list2__image-wrapper,
+.template-search .product-card-list2__details {
+  float: none !important;
+  width: 100% !important;
+  max-width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+.template-search .product-card-list2__details { margin-top: 10px; }
+.template-search .product-card-list2 .grid-view-item__title {
+  font-size: 14px;
+  line-height: 1.4;
+  height: auto;
+  min-height: 39px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Pagination: square 35px pagers -> quiet modern pills */
+.pagination { margin-top: 26px; }
+.pagination .page-view .btn,
+.pagination .page-view a,
+.pagination .page-view span {
+  width: auto;
+  min-width: 36px;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius-sm);
+  background-color: #fff;
+  color: var(--xg-text);
+  font-family: var(--xg-font-body);
+  font-weight: 500;
+  transition: border-color var(--xg-fast) var(--xg-ease), background-color var(--xg-fast) var(--xg-ease), color var(--xg-fast) var(--xg-ease);
+}
+.pagination .page-view a:hover {
+  border-color: var(--xg-charcoal);
+  color: var(--xg-ink);
+}
+.pagination .page-view span.current,
+.pagination .page-view .current {
+  background-color: var(--xg-charcoal);
+  border-color: var(--xg-charcoal);
+  color: #fff;
+}
+
+@media (max-width: 543px) {
+  .template-search .list-view-items.products-display {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .template-search .product-card-list2 .grid-view-item { padding: 8px 8px 12px; }
+}
+
+/* --------------------------------------------------------------------------
+   LAYER B · 11. Searchanise results (/a/search pages) — the app renders its
+   own .snize-* DOM inside the theme layout; align it with the card language.
+   Harmless no-ops if the app markup is absent.
+   -------------------------------------------------------------------------- */
+.snize-search-results-header {
+  font-family: var(--xg-font-body);
+  color: var(--xg-text);
+}
+.snize-product {
+  background: var(--xg-surface);
+  border: 1px solid var(--xg-border) !important;
+  border-radius: var(--xg-radius);
+  padding: 10px 12px 14px;
+  transition: box-shadow var(--xg-fast) var(--xg-ease), border-color var(--xg-fast) var(--xg-ease);
+}
+.snize-product:hover {
+  border-color: #ccd2d6 !important;
+  box-shadow: var(--xg-shadow-2);
+}
+.snize-product .snize-title {
+  font-family: var(--xg-font-body) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: var(--xg-ink) !important;
+  line-height: 1.4 !important;
+}
+.snize-product .snize-price,
+.snize-product .snize-price-list {
+  font-family: var(--xg-font-body) !important;
+  color: var(--xg-ink) !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums;
+}
+.snize-product .snize-discounted-price { color: var(--xg-danger) !important; }
+.snize-view-link a,
+.snize-button {
+  border-radius: var(--xg-radius-sm) !important;
+  font-family: var(--xg-font-body) !important;
+  font-weight: 600 !important;
+}
+.snize-searchbar input[type="text"],
+.snize-input-style {
+  border-radius: 999px !important;
+  border: 1px solid var(--xg-border) !important;
+  font-family: var(--xg-font-body) !important;
+}
+.snize-pagination a,
+.snize-pagination span {
+  border-radius: var(--xg-radius-sm) !important;
+  font-family: var(--xg-font-body) !important;
+}
