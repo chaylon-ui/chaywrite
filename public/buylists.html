@@ -114,7 +114,7 @@
     var saved = JSON.parse(localStorage.getItem('xgbl') || '{}');
     if (/^(pending|approved|completed|carts)$/.test(saved.status || '')) S.status = saved.status;
     if (/^(30|90|365|all)$/.test(String(saved.days || ''))) S.days = String(saved.days);
-    if (/^(1|3|7|14|31)$/.test(String(saved.cartDays || ''))) S.cartDays = String(saved.cartDays);
+    if (/^(1|3|7|14|31|90|365)$/.test(String(saved.cartDays || ''))) S.cartDays = String(saved.cartDays);
   } catch (e) {}
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -218,8 +218,10 @@
   window.addEventListener('hashchange', route);
 
   /* ---------------- list ---------------- */
-  function listPath() {
-    if (isCarts()) return '/portal/carts.json?days=' + S.cartDays + '&take=' + S.take + '&skip=' + S.skip;
+  function listPath(take, skip) {
+    if (take == null) take = S.take;
+    if (skip == null) skip = S.skip;
+    if (isCarts()) return '/portal/carts.json?days=' + S.cartDays + '&take=' + take + '&skip=' + skip;
     return '/portal/buylists.json?status=' + S.status + '&take=' + S.take + '&skip=' + S.skip + (S.days !== 'all' ? '&days=' + S.days : '') + (S.card ? '&card=' + encodeURIComponent(S.card) : '');
   }
   function viewKey() { return S.status + '|' + S.days + '|' + S.cartDays + '|' + S.card; }
@@ -227,21 +229,30 @@
   // in this tab and window that carry a line with that name, and shows the
   // matching lines under each row. The name filter box stays local.
   function searchCard(v) { S.card = String(v || '').trim().slice(0, 80); S.cardDraft = S.card; S.loaded = false; loadList(false); }
-  function loadList(append) {
-    S.busy = true; S.error = '';
-    if (!append) { S.skip = 0; S.rows = []; S.total = null; S.totals = null; }
-    renderList();
+  // quiet: an in-store window still being read from BinderPOS (older days
+  // arrive a few per request, see `pending`); the rows already shown stay
+  // put and are replaced when the next batch answers.
+  function loadList(append, quiet) {
+    if (S.pendTimer) { clearTimeout(S.pendTimer); S.pendTimer = null; }
+    S.error = '';
+    if (!quiet) S.busy = true;
+    if (!append && !quiet) { S.skip = 0; S.rows = []; S.total = null; S.totals = null; S.pending = null; }
+    if (!quiet) renderList();
     var wanted = viewKey();
-    api(listPath()).then(function (d) {
+    var path = quiet ? listPath(Math.max(S.take, Math.min(200, S.rows.length)), 0) : listPath();
+    api(path).then(function (d) {
       if (wanted !== viewKey()) return;   // the user switched tabs meanwhile
       S.rows = append ? S.rows.concat(d.rows || []) : (d.rows || []);
       S.more = !!d.more;
       S.total = d.total != null ? d.total : null;
       S.totals = d.totals || null;
       S.partial = d.partial || null;
-      S.skip = S.skip + (d.rows || []).length;
+      S.pending = d.pending || null;
+      S.keepAfterDays = d.keepAfterDays || 31;
+      S.skip = (append ? S.skip : 0) + (d.rows || []).length;
       S.busy = false; S.loaded = true;
       renderList();
+      if (isCarts() && S.pending && S.pending.length) S.pendTimer = setTimeout(function () { if (wanted === viewKey()) loadList(false, true); }, 800);
     }).catch(function (e) {
       if (e.message === 'pin') return pinLost();
       S.busy = false; S.error = e.message; renderList();
@@ -256,7 +267,7 @@
   function dateHead() { return S.status === 'approved' ? 'Approved' : S.status === 'completed' ? 'Completed' : isCarts() ? 'Rang up' : 'Submitted'; }
   function windowSelect() {
     if (isCarts()) {
-      return '<select id="days">' + [['1', 'Last 24 hours'], ['3', 'Last 3 days'], ['7', 'Last 7 days'], ['14', 'Last 14 days'], ['31', 'Last 31 days']]
+      return '<select id="days">' + [['1', 'Last 24 hours'], ['3', 'Last 3 days'], ['7', 'Last 7 days'], ['14', 'Last 14 days'], ['31', 'Last 31 days'], ['90', 'Last 90 days'], ['365', 'Last year']]
         .map(function (o) { return '<option value="' + o[0] + '"' + (S.cartDays === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
     }
     return '<select id="days">' + [['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last year'], ['all', 'All time']]
@@ -275,6 +286,9 @@
       (isCarts() ? '' : '<span class="cardsearch"><input type="search" id="card" placeholder="Card name, then Enter (searches BinderPOS)" value="' + esc(S.cardDraft) + '" autocomplete="off"><button class="btn-dim" id="cardgo">Search</button>' + (S.card ? '<button class="btn-dim" id="cardclear" title="Show every buylist again">×</button>' : '') + '</span>') + '</div>';
     if (S.card && !isCarts()) html += '<p class="sub">Buylists with a card named like <strong>' + esc(S.card) + '</strong>' + (S.loaded && !S.busy ? ' · ' + S.rows.length + ' found in this window' : '') + '. Matching lines are listed under each customer.</p>';
     if (S.error) html += '<p class="err">' + esc(S.error) + '</p>';
+    if (isCarts() && S.pending && S.pending.length && !S.busy) {
+      html += '<div class="notes"><strong>Still reading ' + S.pending.length + ' older day' + (S.pending.length === 1 ? '' : 's') + ' from BinderPOS</strong> (back to ' + esc(S.pending[S.pending.length - 1]) + '). The list and the totals fill in as each batch arrives; a day older than ' + esc(S.keepAfterDays || 31) + ' days is read once and then kept, so this is only slow the first time.</div>';
+    }
     if (isCarts() && S.partial && S.partial.length && !S.busy) {
       html += '<div class="notes"><strong>Incomplete:</strong> BinderPOS did not answer for ' +
         S.partial.map(function (p) { return esc(p.day) + ' (' + esc(p.windows.join(', ')) + ')'; }).join('; ') +
@@ -328,7 +342,7 @@
       html += '<p class="muted" style="margin-top:10px">' + rows.length + ' shown' + (S.total != null ? ' of ' + S.total : '') +
         (S.more ? ' · <button class="btn-dim" id="more"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'Loading…' : 'Load 50 more') + '</button>' : '') + '</p>';
     }
-    html += '<p class="note">Read straight from BinderPOS each time this page opens or refreshes; in-store days are cached for a few minutes so the page stays quick. Times are in this device\'s time zone.</p>';
+    html += '<p class="note">Read straight from BinderPOS each time this page opens or refreshes; recent in-store days are cached for a few minutes so the page stays quick, and in-store days older than ' + esc(S.keepAfterDays || 31) + ' days are read once and kept for good, never re-read. Times are in this device\'s time zone.</p>';
     page.innerHTML = html;
     var days = document.getElementById('days');
     if (days) days.addEventListener('change', function () { if (isCarts()) S.cartDays = days.value; else S.days = days.value; saveView(); S.loaded = false; loadList(false); });

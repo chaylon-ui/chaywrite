@@ -423,25 +423,44 @@ export async function buylistDetail(env, id) {
    (shopifyPrice); a negative tender is money out (cash) or credit issued. A
    pure buy cart has no Shopify order at all. Read-only, like the rest. */
 const PORTAL_DO = "portal-cache";
+/* Owner, 2026-11-01 ("9Pocket binderPOS list.. I want it to always keep the
+   list after 31 days but without refreshing it each time after it has been
+   refreshed once when it was older than 31 days"): the In-store buys window
+   now reaches a year back; a day that ended more than KEEP_AFTER_DAYS ago is
+   read from BinderPOS once and then kept for good (KEEP_FOREVER_MS, past the
+   DO's old 30-day cap), never re-read. Days not yet in the cache are read
+   newest first, a few per request (FETCH_DAYS_PER_CALL within
+   FETCH_BUDGET_MS), and the rest come back as `pending` so the page asks
+   again until the window is complete. */
+const KEEP_AFTER_DAYS = 31;
+const KEEP_FOREVER_MS = 100 * 365 * 86400e3;
+export const MAX_CART_DAYS = 365;
+const FETCH_DAYS_PER_CALL = 8;
+const FETCH_BUDGET_MS = 25e3;
 const DO_ORIGIN = "https://" + PORTAL_DO + ".internal"; // the DO only reads the path
 const CARTS_VER = "v4";   // v3: per-unit paid from actualPrice; v4: pricedPaid / unpricedCards (2026-10-01)
 const DAY_MS = 86400e3;
 export const PORTAL_CART = "https://portal.binderpos.com/#/pointOfSale/carts/";
 
 const kvStub = (env) => env.ROOM.get(env.ROOM.idFromName(PORTAL_DO));
+// The read side is started first so the writes never wait on backpressure;
+// the writes are awaited so a bad chunk surfaces here instead of as an
+// unhandled rejection (Node, which runs the tests, takes a Uint8Array only).
 async function gzipText(text) {
   const cs = new CompressionStream("gzip");
+  const out = new Response(cs.readable).arrayBuffer();
   const w = cs.writable.getWriter();
-  w.write(new TextEncoder().encode(text));
-  w.close();
-  return new Response(cs.readable).arrayBuffer();
+  await w.write(new TextEncoder().encode(text));
+  await w.close();
+  return out;
 }
 async function gunzipBuf(buf) {
   const ds = new DecompressionStream("gzip");
+  const out = new Response(ds.readable).text();
   const w = ds.writable.getWriter();
-  w.write(buf);
-  w.close();
-  return new Response(ds.readable).text();
+  await w.write(buf instanceof Uint8Array ? buf : new Uint8Array(buf));
+  await w.close();
+  return out;
 }
 // Also used by src/discord.js for its per-day "already posted" memory.
 export async function kvGet(env, key) {
@@ -611,18 +630,29 @@ async function fetchDayCarts(env, day) {
   return { carts, missing };
 }
 
-async function dayCarts(env, day) {
-  const key = "carts:" + CARTS_VER + ":" + day;
-  const cached = await kvGet(env, key);
+const cartsKey = (day) => "carts:" + CARTS_VER + ":" + day;
+async function cachedDayCarts(env, day) {
+  const cached = await kvGet(env, cartsKey(day));
   if (cached) { try { const v = JSON.parse(cached); if (v && Array.isArray(v.carts)) return v; } catch {} }
-  const rec = await fetchDayCarts(env, day);
-  const now = Date.now();
+  return null;
+}
+export function cartsTtl(day, missing, now) {
   const dayEnd = Date.parse(day + "T23:59:59.999Z");
   // a day with missing windows: two minutes, then try again; today: three
   // minutes; a day that ended within the last two hours: ten minutes (late
-  // syncs around midnight); older complete days: a week
-  const ttl = rec.missing.length ? 2 * 60e3 : now <= dayEnd ? 3 * 60e3 : now - dayEnd < 2 * 3600e3 ? 10 * 60e3 : 7 * DAY_MS;
-  await kvPut(env, key, JSON.stringify(rec), ttl);
+  // syncs around midnight); a complete day older than KEEP_AFTER_DAYS: kept
+  // for good (read once, never again); other complete days: a week
+  if (missing) return 2 * 60e3;
+  if (now <= dayEnd) return 3 * 60e3;
+  if (now - dayEnd < 2 * 3600e3) return 10 * 60e3;
+  if (now - dayEnd > KEEP_AFTER_DAYS * DAY_MS) return KEEP_FOREVER_MS;
+  return 7 * DAY_MS;
+}
+async function dayCarts(env, day) {
+  const hit = await cachedDayCarts(env, day);
+  if (hit) return hit;
+  const rec = await fetchDayCarts(env, day);
+  await kvPut(env, cartsKey(day), JSON.stringify(rec), cartsTtl(day, rec.missing.length > 0, Date.now()));
   return rec;
 }
 
@@ -688,18 +718,31 @@ const withFlags = (c) => {
 };
 const cartSummary = (c) => Object.assign({}, withFlags(c), { lines: undefined, tenders: undefined });
 
-export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
-  days = Math.max(1, Math.min(31, days | 0));
+export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}, o = {}) {
+  days = Math.max(1, Math.min(MAX_CART_DAYS, days | 0));
   take = Math.max(1, Math.min(200, take | 0));
   skip = Math.max(0, skip | 0);
   const now = Date.now();
   const since = now - days * DAY_MS;
   const keys = new Set();
   for (let t = now; t >= since - DAY_MS; t -= DAY_MS) keys.add(dayKey(t));
-  const perDay = [], partial = [];
-  for (const d of keys) {                                      // newest day first, one at a time
-    const rec = await dayCarts(env, d);
-    perDay.push(rec.carts);
+  const perDay = [], partial = [], pending = [];
+  // every cached day at once (one DO read each, in parallel) ...
+  const dayList = [...keys];
+  const cached = new Map();
+  for (let i = 0; i < dayList.length; i += 40) await Promise.all(dayList.slice(i, i + 40).map(async (d) => { const v = await cachedDayCarts(env, d); if (v) cached.set(d, v); }));
+  // ... then the missing ones from BinderPOS, newest first, a few per request;
+  // the rest are reported as pending and the page asks again
+  const maxFetch = o.maxDays != null ? o.maxDays : FETCH_DAYS_PER_CALL, budget = o.budgetMs != null ? o.budgetMs : FETCH_BUDGET_MS, t0 = Date.now();
+  let fetched = 0;
+  for (const d of dayList) {
+    let rec = cached.get(d) || null;
+    if (!rec) {
+      if (fetched >= maxFetch || Date.now() - t0 > budget) { pending.push(d); continue; }
+      fetched++;
+      rec = await dayCarts(env, d);
+    }
+    perDay.push(rec.carts.map(cartSummary));                  // summaries only: a year of days must fit in memory
     if (rec.missing.length) partial.push({ day: d, windows: rec.missing });
   }
   // A BinderPOS return (cartType "return": the store takes an item back and
@@ -713,8 +756,8 @@ export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}) {
   const totals = { carts: all.length, cards: 0, paid: 0, cash: 0, credit: 0, sells: 0, pricedPaid: 0, unpricedCards: 0 };
   for (const c of all) { totals.cards += c.bought.cards; totals.paid += c.bought.total; totals.cash += c.payout.cash; totals.credit += c.payout.credit; totals.sells += c.bought.sells; totals.pricedPaid += c.bought.pricedPaid || 0; totals.unpricedCards += c.bought.unpricedCards || 0; }
   for (const k of ["paid", "cash", "credit", "sells", "pricedPaid"]) totals[k] = round2(totals[k]);
-  totals.flagged = all.reduce((n, c) => { const f = cartFlags(c); return n + (f.creditNoCustomer || f.lowMargin ? 1 : 0); }, 0);
-  return { ok: true, days, take, skip, total: all.length, totals, partial, rows: all.slice(skip, skip + take).map(cartSummary), more: skip + take < all.length };
+  totals.flagged = all.reduce((n, c) => n + (c.flags && (c.flags.creditNoCustomer || c.flags.lowMargin) ? 1 : 0), 0);
+  return { ok: true, days, take, skip, total: all.length, totals, partial, pending, keepAfterDays: KEEP_AFTER_DAYS, rows: all.slice(skip, skip + take), more: skip + take < all.length };
 }
 
 export async function cartDetail(env, id, day) {

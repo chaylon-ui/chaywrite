@@ -26,6 +26,8 @@ const cleanIcon = (v) =>
 // Tab-icon slots shared across every screen: one per game plus the virtual tabs.
 const ICON_SLOTS = [...THEMES, "showcase", "sleeves", "board", "wh"];
 
+export const KV_FOREVER_MS = 100 * 365 * 86400e3;   // /_kv/put ttl cap: "keep for good"
+
 export class BinderRoom {
   constructor(state, env) {
     this.state = state;
@@ -669,6 +671,7 @@ export class BinderRoom {
   // user: src/portal.js, one entry per day of BinderPOS POS carts, in its
   // own instance ("portal-cache"); any instance answers these paths.
   //   GET  /_kv/get?k=            404 when absent or past its ttl; else the gz bytes + x-age
+  //   (ttl is clamped to KV_FOREVER_MS, a hundred years: "keep")
   //   POST /_kv/put?k=&ttl=<ms>   body = gz bytes (<= 126 KiB)
   async kvOp(request, url) {
     const now = Date.now();
@@ -682,7 +685,8 @@ export class BinderRoom {
     if (url.pathname === "/_kv/put" && request.method === "POST") {
       const gz = await request.arrayBuffer();
       if (!gz.byteLength || gz.byteLength > 126 * 1024) return Response.json({ error: "bad size" }, { status: 413 });
-      const ttl = Math.max(1000, Math.min(30 * 86400e3, parseInt(url.searchParams.get("ttl"), 10) || 3600e3));
+      // up to KV_FOREVER_MS: an in-store day older than 31 days is read once and kept (owner, 2026-11-01)
+      const ttl = Math.max(1000, Math.min(KV_FOREVER_MS, parseInt(url.searchParams.get("ttl"), 10) || 3600e3));
       await this.state.storage.put({ ["pkv:" + k]: { ts: now, ttl, gz }, ["pkvt:" + k]: { ts: now, ttl } });
       if (now - (this.pkvSweepAt || 0) > 36e5) {
         this.pkvSweepAt = now;
