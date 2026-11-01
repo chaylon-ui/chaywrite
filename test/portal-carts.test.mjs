@@ -93,5 +93,18 @@ test("a window past 31 days: old days are read once and kept; uncached days arri
   assert.match(await kvGet(room.env, "carts:v4:" + d(40)), /Lightning Bolt/);
   // the window is capped at a year
   assert.equal((await listCarts(room.env, { days: 9999 }, { maxDays: 0 })).days, 365);
+  // a BinderPOS failure: that day's remaining windows are skipped and come back
+  // as partial (two-minute retry); the days after it wait as pending instead of
+  // being stored as twelve missing windows
+  const before = room.puts.length;
+  const real = globalThis.fetch;
+  let failed = false;
+  globalThis.fetch = async (url, init) => { if (/carts\/all/.test(String(url)) && !failed) { failed = true; return new Response("gateway", { status: 502 }); } return real(url, init); };
+  r = await listCarts(room.env, { days: 60 }, { maxDays: 10, budgetMs: 1e9 });
+  assert.equal(r.partial.length, 1, "the day that hit the failure is partial"); assert.equal(r.partial[0].day, d(47), "the first day the 45-day window had not cached");
+  assert.ok(r.partial[0].windows.length >= 1);
+  assert.ok(r.pending.length === 14 && r.pending[0] === d(48), "the days behind it wait for the back-off: " + r.pending.length);
+  assert.equal(room.puts.length - before, 1, "only the partial day was stored (for two minutes)");
+  assert.equal(room.puts[room.puts.length - 1].ttl, 2 * 60e3);
   delete globalThis.fetch;
 });

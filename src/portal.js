@@ -738,7 +738,9 @@ export async function listCarts(env, { days = 3, take = 50, skip = 0 } = {}, o =
   for (const d of dayList) {
     let rec = cached.get(d) || null;
     if (!rec) {
-      if (fetched >= maxFetch || Date.now() - t0 > budget) { pending.push(d); continue; }
+      // after a BinderPOS failure the windows are skipped for a minute: a day
+      // read then would be stored as twelve missing windows, so it waits instead
+      if (fetched >= maxFetch || Date.now() - t0 > budget || Date.now() - cartsFailAt < 60e3) { pending.push(d); continue; }
       fetched++;
       rec = await dayCarts(env, d);
     }
