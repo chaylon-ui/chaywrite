@@ -53,7 +53,8 @@ test("cartsTtl: today minutes, a fresh day a week, a day past 31 days for good",
   assert.equal(cartsTtl("2026-10-31", false, now), 7 * DAY);
   assert.equal(cartsTtl("2026-10-20", false, now), 7 * DAY);
   assert.equal(cartsTtl("2026-09-20", false, now), 100 * 365 * DAY, "older than 31 days: kept");
-  assert.equal(cartsTtl("2026-09-20", true, now), 2 * 60e3, "missing windows are retried whatever the age");
+  assert.equal(cartsTtl("2026-10-20", true, now), 2 * 60e3, "a recent day with missing windows is retried in two minutes");
+  assert.equal(cartsTtl("2026-09-20", true, now), DAY, "an old day with a window BinderPOS never answers: once a day, not every view");
   assert.equal(MAX_CART_DAYS, 365);
 });
 
@@ -93,18 +94,30 @@ test("a window past 31 days: old days are read once and kept; uncached days arri
   assert.match(await kvGet(room.env, "carts:v4:" + d(40)), /Lightning Bolt/);
   // the window is capped at a year
   assert.equal((await listCarts(room.env, { days: 9999 }, { maxDays: 0 })).days, 365);
-  // a BinderPOS failure: that day's remaining windows are skipped and come back
-  // as partial (two-minute retry); the days after it wait as pending instead of
-  // being stored as twelve missing windows
-  const before = room.puts.length;
+  // a window BinderPOS fails once but answers in two one-hour halves: the day is whole
+  let before = room.puts.length;
   const real = globalThis.fetch;
-  let failed = false;
-  globalThis.fetch = async (url, init) => { if (/carts\/all/.test(String(url)) && !failed) { failed = true; return new Response("gateway", { status: 502 }); } return real(url, init); };
-  r = await listCarts(room.env, { days: 60 }, { maxDays: 10, budgetMs: 1e9 });
-  assert.equal(r.partial.length, 1, "the day that hit the failure is partial"); assert.equal(r.partial[0].day, d(47), "the first day the 45-day window had not cached");
-  assert.ok(r.partial[0].windows.length >= 1);
-  assert.ok(r.pending.length === 14 && r.pending[0] === d(48), "the days behind it wait for the back-off: " + r.pending.length);
-  assert.equal(room.puts.length - before, 1, "only the partial day was stored (for two minutes)");
-  assert.equal(room.puts[room.puts.length - 1].ttl, 2 * 60e3);
+  let fullFails = 0;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (/carts\/all/.test(u)) { const q = new URL(u).searchParams; const span = Date.parse(q.get("endDate")) - Date.parse(q.get("startDate")); if (span > 3600e3 && /T10:00:00/.test(q.get("startDate")) && q.get("startDate").startsWith(d(47))) { fullFails++; return new Response("gateway", { status: 502 }); } }
+    return real(url, init);
+  };
+  r = await listCarts(room.env, { days: 48 }, { maxDays: 10, budgetMs: 1e9 });
+  assert.equal(fullFails, 1); assert.equal(r.partial.length, 0, "the halves answered: nothing missing"); assert.equal(r.pending.length, 0, "and no back-off");
+  assert.equal(room.puts[room.puts.length - 1].ttl, 100 * 365 * DAY, "whole and old: kept");
+  // a window that fails whole and in halves: that day is partial (an old day: retried daily, not every
+  // two minutes) and the days behind it wait as pending instead of being stored as twelve missing windows
+  before = room.puts.length;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (/carts\/all/.test(u)) { const q = new URL(u).searchParams; if (q.get("startDate").startsWith(d(50)) && /T1[01]:/.test(q.get("startDate"))) return new Response("gateway", { status: 502 }); }
+    return real(url, init);
+  };
+  r = await listCarts(room.env, { days: 62 }, { maxDays: 10, budgetMs: 1e9 });
+  assert.equal(r.partial.length, 1, "the day whose window failed twice is partial"); assert.equal(r.partial[0].day, d(50), "the first day the 48-day window had not cached"); assert.equal(r.partial[0].windows[0], "10-12Z"); assert.equal(r.partial[0].windows.length, 7, "the rest of that day is skipped during the minute's back-off");
+  assert.ok(r.pending.length === 13 && r.pending[0] === d(51), "the days behind it wait for the back-off: " + r.pending.length);
+  assert.equal(room.puts.length - before, 1, "only the partial day was stored");
+  assert.equal(room.puts[room.puts.length - 1].ttl, DAY, "old and partial: retried daily");
   delete globalThis.fetch;
 });

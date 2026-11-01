@@ -619,12 +619,24 @@ async function fetchDayCarts(env, day) {
     if (Date.parse(start) > now) break;                      // the rest of today has not happened
     const label = pad2(h) + "-" + pad2(h1) + "Z";
     if (now - cartsFailAt < 60e3) { missing.push(label); continue; }
+    const one = (s, e) => (cartsChain = cartsChain.catch(() => {}).then(() => fetchWindow(env, s, e)));
     try {
-      const got = await (cartsChain = cartsChain.catch(() => {}).then(() => fetchWindow(env, start, end)));
-      carts.push(...got);
+      carts.push(...await one(start, end));
     } catch (e) {
-      cartsFailAt = Date.now();
-      missing.push(label);
+      // a window BinderPOS could not answer in time (their query plan goes bad
+      // on a busy stretch): once, in two one-hour halves - most answer that
+      // way (2026-11-01: three days a quarter old kept one window missing and
+      // were re-read every two minutes); only then is it missing and the
+      // minute's back-off starts
+      try {
+        const s = Date.parse(start), t = Date.parse(end), mid = s + Math.floor((t - s + 1) / 2);
+        const h1 = await one(start, new Date(mid - 1).toISOString());
+        const h2 = await one(new Date(mid).toISOString(), end);
+        carts.push(...h1, ...h2);
+      } catch (e2) {
+        cartsFailAt = Date.now();
+        missing.push(label);
+      }
     }
   }
   return { carts, missing };
@@ -638,11 +650,13 @@ async function cachedDayCarts(env, day) {
 }
 export function cartsTtl(day, missing, now) {
   const dayEnd = Date.parse(day + "T23:59:59.999Z");
-  // a day with missing windows: two minutes, then try again; today: three
-  // minutes; a day that ended within the last two hours: ten minutes (late
-  // syncs around midnight); a complete day older than KEEP_AFTER_DAYS: kept
-  // for good (read once, never again); other complete days: a week
-  if (missing) return 2 * 60e3;
+  // a day with missing windows: two minutes, then try again - a day (not two
+  // minutes) once it is older than KEEP_AFTER_DAYS, so a window BinderPOS never
+  // answers is retried daily, not on every view; today: three minutes; a day
+  // that ended within the last two hours: ten minutes (late syncs around
+  // midnight); a complete day older than KEEP_AFTER_DAYS: kept for good (read
+  // once, never again); other complete days: a week
+  if (missing) return now - dayEnd > KEEP_AFTER_DAYS * DAY_MS ? DAY_MS : 2 * 60e3;
   if (now <= dayEnd) return 3 * 60e3;
   if (now - dayEnd < 2 * 3600e3) return 10 * 60e3;
   if (now - dayEnd > KEEP_AFTER_DAYS * DAY_MS) return KEEP_FOREVER_MS;
