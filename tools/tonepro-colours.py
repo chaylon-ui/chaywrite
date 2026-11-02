@@ -72,7 +72,8 @@ def main():
     print("tone pro swatches", len(pots), "| generated", j.get("generated"))
     out, missing = {}, []
     for g in sorted(pots, key=lambda g: g["n"]):
-        name = g["n"]
+        # the worker's name, cased once more here: a capital after a space only (Ta'unar, not Ta'Unar)
+        name = re.sub(r"(^|\s)([a-z])", lambda m: m.group(1) + m.group(2).upper(), g["n"].lower())
         it = g["items"][0]
         img = it.get("i")
         code = ""
