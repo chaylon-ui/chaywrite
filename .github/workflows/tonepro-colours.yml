@@ -28,7 +28,7 @@ jobs:
         run: |
           ARGS=""
           if [ "$DRY" = "true" ]; then ARGS="--dry"; fi
-          python3 -I tools/tonepro-colours.py $ARGS
+          python3 -P tools/tonepro-colours.py $ARGS
       - name: Commit the file when it changed
         if: ${{ inputs.dry_run != 'true' }}
         run: |
