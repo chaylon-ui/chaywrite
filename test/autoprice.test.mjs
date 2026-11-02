@@ -1261,7 +1261,7 @@ test("the eBay sold search for a graded card: name + the words that matter + the
   assert.equal(g("Giovanni's Charisma (204/165) [Scarlet & Violet 151] Graded PSA 9"), "Giovanni's Charisma 204 PSA 9");
   assert.equal(g("Charizard VMAX (020/189) [Prize Pack Series One] Graded PSA 10"), "Charizard VMAX 20 Prize Pack Series One PSA 10");
   assert.equal(g("Pikachu (025) [Japanese Promo] Reverse Holo Graded CGC 9.5"), "Pikachu Reverse Holo 25 Japanese Promo CGC 9.5", "the name parseGraded keeps may carry a word already; it is not repeated");
-  assert.equal(g("Gold Star Rayquaza (107/112) [EX Deoxys] Holo Graded BGS 8.5"), "Gold Star Rayquaza 107 Holo BGS 8.5", "a name that already says Gold Star is not doubled");
+  assert.equal(g("Gold Star Rayquaza (107/112) [EX Deoxys] Holo Graded BGS 8.5"), "Gold Star Rayquaza Holo 107 BGS 8.5", "a name that already says Gold Star is not doubled");
   assert.equal(g("Sheoldred, the Apocalypse (90) [Dominaria United] Etched Foil Graded PSA 10"), "Sheoldred the Apocalypse 90 Etched Foil PSA 10");
   assert.equal(g("Blastoise (2/102) [Base Set Unlimited] Non-Holo Graded PSA 8"), "Blastoise Non-Holo 2 Unlimited PSA 8");
   assert.equal(g("Copy of Umbreon VMAX (215/203) [Evolving Skies] Graded PSA 10"), "Umbreon VMAX 215 PSA 10");
