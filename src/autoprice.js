@@ -292,22 +292,26 @@ export function pcCandidates(g, products, chosen, limit) {
    page the "PriceCharting sales" link opens, read for them. */
 export const PC_IMG_RE = /https:\/\/storage\.googleapis\.com\/images\.pricecharting\.com\/[0-9a-f]{16,}\//i;
 export function pcImageBase(html) { const m = PC_IMG_RE.exec(String(html || "")); return m ? m[0] : null; }
-export async function pcImageUrl(env, id, fetcher) {
+export async function pcImageUrl(env, id, fetcher) { return (await pcImagePick(env, id, fetcher)).u; }
+// The same with its working (status, bytes read, the base found), for ?why=1 on the route; fresh = skip the memory
+export async function pcImagePick(env, id, fetcher, fresh) {
   const f = fetcher || fetch, key = "ap:pcimg:" + id;
-  const hit = await kvGet(env, key);
-  if (hit != null) { try { return JSON.parse(hit).u || null; } catch {} }
-  let u = null, read = false;
+  const hit = fresh ? null : await kvGet(env, key);
+  if (hit != null) { try { return { u: JSON.parse(hit).u || null, cached: true }; } catch {} }
+  let u = null, read = false, status = 0, bytes = 0, base = null, error = null, big = null;
   try {
     const r = await f("https://www.pricecharting.com/game/" + id, { headers: { "user-agent": "exor-binder (exorgames.com staff tool; one card page per click)", accept: "text/html" }, signal: AbortSignal.timeout(10000) });
-    read = r.ok;
-    const base = r.ok ? pcImageBase(await r.text()) : null;
+    status = r.status; read = r.ok;
+    const html = r.ok ? await r.text() : "";
+    bytes = html.length;
+    base = r.ok ? pcImageBase(html) : null;
     if (base) {
       u = base + "240.jpg";
-      try { const h = await f(base + "1600.jpg", { method: "HEAD", signal: AbortSignal.timeout(6000) }); if (h.ok) u = base + "1600.jpg"; } catch {}
+      try { const h = await f(base + "1600.jpg", { method: "HEAD", signal: AbortSignal.timeout(6000) }); big = h.status; if (h.ok) u = base + "1600.jpg"; } catch (e) { big = msg(e); }
     }
-  } catch {}
+  } catch (e) { error = msg(e); }
   if (u || read) await kvPut(env, key, JSON.stringify({ u }), u ? 30 * 86400e3 : 86400e3);
-  return u;
+  return { u, cached: false, status, bytes, base, big, error };
 }
 
 // Only sealed-looking TCGplayer products are indexed (singles are 95% of a group).
@@ -1942,6 +1946,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
   if (url.pathname === "/autoprice/pcimg") {
     const id = String(url.searchParams.get("id") || "").replace(/\D/g, "").slice(0, 12);
     if (!id) return Response.json({ error: "id?" }, { status: 400, headers: { "cache-control": "no-store" } });
+    if (url.searchParams.get("why") === "1") return Response.json(await pcImagePick(env, id, null, true), { headers: { "cache-control": "no-store" } });
     const u = await pcImageUrl(env, id);
     if (!u) return Response.json({ error: "no photo on PriceCharting" }, { status: 404, headers: { "cache-control": "no-store" } });
     return new Response("", { status: 302, headers: { location: u, "cache-control": "private, max-age=86400" } });
