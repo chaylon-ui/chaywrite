@@ -63,6 +63,7 @@ import { apPerms } from "./stage-auth.js";
 import { sendEmail, buildNoticeEmail, emailConfigured } from "./stage-email.js";
 import { repoFetch } from "./repo-data.js";
 import { KEEP_SCROLL_JS } from "./keep-scroll.js";
+import { kvGet, kvPut } from "./portal.js";
 
 export const AUTOPRICE_DO = "autoprice";
 export const TAG = "auto-price";
@@ -172,6 +173,40 @@ export function parseGraded(title) {
   const japanese = /japanese/i.test(set) || /japanese/i.test(String(title || ""));
   return { name, number, set, grader, grade, japanese };
 }
+
+/* The eBay sold-listings search for a graded card (owner 2026-11-02, two
+   marked-up titles): the card name and the grade, plus only the words that
+   change what the card is - 1st Edition, Shadowless, Unlimited, Prize Pack
+   with its series, promo, holo / reverse holo / non-holo, the language, an
+   MTG foil treatment and the like - never the collector number, the set
+   brackets or the word Graded. "Dark Muk (41/82) [Team Rocket 1st Edition]
+   Graded PSA 9" -> "Dark Muk 1st Edition PSA 9". The words are taken from
+   the title OUTSIDE the name, so a name like Gold Star Rayquaza is not
+   doubled. A product that is not a graded card searches its full title. */
+export const EBAY_KEEP = [/\bprize pack(?:\s+series\s+\w+)?/i, /\b1st edition\b/i, /\bfirst edition\b/i, /\bshadowless\b/i, /\bunlimited\b/i, /\bpromo\b/i, /\bpre-?release\b/i, /\bstaff\b/i,
+  /\bnon[- ]?holo(?:foil)?\b/i, /\breverse holo(?:foil)?\b/i, /\bcosmos holo\b/i, /\bholo(?:foil)?\b/i, /\bnon[- ]?foil\b/i, /\b(?:etched|surge|galaxy|textured|halo|confetti|oil slick|rainbow|raised|silver|gold|ripple|dragon scale|fracture|double rainbow)\s+foil\b/i, /\bfoil\b/i,
+  /\b(?:japanese|korean|chinese|german|french|italian|spanish|portuguese|thai|indonesian|russian|dutch)\b/i, /\bborderless\b/i, /\bextended art\b/i, /\bshowcase\b/i, /\bfull art\b/i, /\balt(?:ernate)? art\b/i, /\bsecret rare\b/i, /\bgold star\b/i, /\bshining\b/i, /\bcrystal\b/i, /\bstamped\b/i, /\bw stamp\b/i, /\berror\b/i, /\bmisprint\b/i, /\bserialized\b/i, /\bsigned\b/i, /\bautograph(?:ed)?\b/i];
+export function ebayQuery(r) {
+  const g = r && r.graded, title = String((r && r.title) || "");
+  if (!g || !g.name) return title;
+  let rest = title.replace(/^copy of\s+/i, " ");
+  const at = rest.toLowerCase().indexOf(g.name.toLowerCase());
+  if (at >= 0) rest = rest.slice(0, at) + " " + rest.slice(at + g.name.length);
+  rest = rest.replace(/\b(psa|bgs|beckett|cgc|sgc|ags|tag|ace)\s*:?\s*-?\s*(10|[1-9](?:\.5)?)\b/gi, " ").replace(/\bgraded\b/gi, " ").replace(/\(\s*#?[A-Za-z]{0,5}\d{1,3}[a-z]?(?:\s*\/\s*[A-Za-z]{0,5}\d{1,3})?\s*\)|#[A-Za-z]{0,5}\d{1,3}[a-z]?\b|\b[A-Za-z]{0,5}\d{1,3}[a-z]?\s*\/\s*[A-Za-z]{0,5}\d{1,3}\b/g, " ");
+  const found = [];
+  for (const re of EBAY_KEEP) {
+    const m = re.exec(rest);
+    if (!m) continue;
+    const a = m.index, b = a + m[0].length;
+    if (found.some((f) => a < f.b && b > f.a)) continue;   // inside a longer match already kept (reverse holo vs holo)
+    found.push({ a, b, w: m[0].replace(/\s+/g, " ").trim() });
+  }
+  found.sort((x, y) => x.a - y.a);
+  const seen = new Set(), words = [], name = " " + g.name.toLowerCase().replace(/\s+/g, " ") + " ";
+  for (const f of found) { const k = f.w.toLowerCase(); if (!seen.has(k) && !name.includes(" " + k + " ")) { seen.add(k); words.push(f.w); } }   // a word the name itself carries is not repeated
+  const grade = g.grader && g.grade ? g.grader + " " + g.grade : g.grade ? "grade " + g.grade : "";
+  return [g.name, ...words, grade].filter(Boolean).join(" ");
+}
 // The PriceCharting column for a grade (and what to call it on the page).
 export function gradeField(grader, grade) {
   const g = Number(grade);
@@ -246,6 +281,33 @@ export function pcCandidates(g, products, chosen, limit) {
   // why it was not picked), but the priced ones come first.
   rows.sort((a, b) => (b.chosen ? 1 : 0) - (a.chosen ? 1 : 0) || (b.price != null) - (a.price != null));
   return rows.slice(0, limit || 6);
+}
+
+/* PriceCharting's photo of a card (owner 2026-11-02: "click and open a popup
+   of the image of the card to compare side by side with our card"). The API
+   has no image field; the product page shows the card from
+   storage.googleapis.com/images.pricecharting.com/<hash>/240.jpg and a
+   1600.jpg sits beside it (probes 41448406984 / 41448597269). One page read
+   per card the owner clicks, remembered 30 days (a miss one day): the same
+   page the "PriceCharting sales" link opens, read for them. */
+export const PC_IMG_RE = /https:\/\/storage\.googleapis\.com\/images\.pricecharting\.com\/[0-9a-f]{16,}\//i;
+export function pcImageBase(html) { const m = PC_IMG_RE.exec(String(html || "")); return m ? m[0] : null; }
+export async function pcImageUrl(env, id, fetcher) {
+  const f = fetcher || fetch, key = "ap:pcimg:" + id;
+  const hit = await kvGet(env, key);
+  if (hit != null) { try { return JSON.parse(hit).u || null; } catch {} }
+  let u = null, read = false;
+  try {
+    const r = await f("https://www.pricecharting.com/game/" + id, { headers: { "user-agent": "exor-binder (exorgames.com staff tool; one card page per click)", accept: "text/html" }, signal: AbortSignal.timeout(10000) });
+    read = r.ok;
+    const base = r.ok ? pcImageBase(await r.text()) : null;
+    if (base) {
+      u = base + "240.jpg";
+      try { const h = await f(base + "1600.jpg", { method: "HEAD", signal: AbortSignal.timeout(6000) }); if (h.ok) u = base + "1600.jpg"; } catch {}
+    }
+  } catch {}
+  if (u || read) await kvPut(env, key, JSON.stringify({ u }), u ? 30 * 86400e3 : 86400e3);
+  return u;
 }
 
 // Only sealed-looking TCGplayer products are indexed (singles are 95% of a group).
@@ -1876,6 +1938,14 @@ export async function serveAutoprice(request, env, url, staffOk) {
     const r = await stub.fetch(new Request(url.origin + (url.pathname === "/autoprice/status" ? "/_ap/status" : "/_ap/report")));
     return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
+  // GET /autoprice/pcimg?id=N -> 302 to PriceCharting's photo of card N (pcImageUrl); 404 when they show none
+  if (url.pathname === "/autoprice/pcimg") {
+    const id = String(url.searchParams.get("id") || "").replace(/\D/g, "").slice(0, 12);
+    if (!id) return Response.json({ error: "id?" }, { status: 400, headers: { "cache-control": "no-store" } });
+    const u = await pcImageUrl(env, id);
+    if (!u) return Response.json({ error: "no photo on PriceCharting" }, { status: 404, headers: { "cache-control": "no-store" } });
+    return new Response("", { status: 302, headers: { location: u, "cache-control": "private, max-age=86400" } });
+  }
   let body = null, form = false;
   if (request.method === "POST") {
     const ct = request.headers.get("content-type") || "";
@@ -2076,7 +2146,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
     l.push(`<a href="${r.tcgId ? "https://www.tcgplayer.com/product/" + esc(r.tcgId) : "https://www.tcgplayer.com/search/all/product?q=" + q(r.title)}" target="_blank" rel="noopener">TCGplayer ↗</a>`);
     if (r.pcId) l.push(`<a href="https://www.pricecharting.com/game/${esc(String(r.pcId).replace(/\D/g, ""))}" target="_blank" rel="noopener" title="PriceCharting's page for the matched card: sale dates per grade are under its price table">PriceCharting sales ↗</a>`);
     else if (r.pcName || r.graded) l.push(`<a href="https://www.pricecharting.com/search-products?type=prices&q=${q(r.pcName ? r.pcName.split(" · ")[0].replace(/^[^/]*\//, "") : r.title)}" target="_blank" rel="noopener">PriceCharting ↗</a>`);
-    l.push(`<a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(r.title)}" target="_blank" rel="noopener">eBay sold ↗</a>`);
+    l.push(`<a href="https://www.ebay.ca/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=${q(ebayQuery(r))}" target="_blank" rel="noopener" title="Sold listings for: ${esc(ebayQuery(r))}">eBay sold ↗</a>`);
     if (!r.graded) l.push(`<a href="${esc(COMP.base + (r.comp && r.comp.handle ? "/products/" + r.comp.handle : "/search?q=" + q(compQuery(r.title))))}" target="_blank" rel="noopener">${esc(COMP.name)} ↗</a>`);
     l.push(`<a href="https://exorgames.com/products/${esc(r.handle)}" target="_blank" rel="noopener">our page ↗</a>`);
     return `<div class="links">${l.join("")}</div>`;
@@ -2087,8 +2157,9 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
   const pcPicker = (r) => {
     const c = r.pcCandidates || [];
     if (!c.length) return "";
-    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><span class="cn">${esc(x.console)}</span> ${esc(x.name)} <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="sub">' + esc(x.volume) + " sales</span>" : ""}${x.chosen ? '<span class="badge b-hold">using</span>' : P.settings ? `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${keepView()}<button class="btn sm">use this</button></form>` : ""}</li>`;
-    return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"}><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""}</summary><ul>${c.map(line).join("")}</ul></details>`;
+    const im = (r.images || [])[0], ours = im ? imageUrl(im, 1600) : "";
+    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><a class="cmp" href="https://www.pricecharting.com/game/${x.id}" target="_blank" rel="noopener" data-pc="${x.id}" data-pcn="${esc(x.console + " · " + x.name)}" title="Their photo beside ours"><span class="cn">${esc(x.console)}</span> ${esc(x.name)}</a> <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="sub">' + esc(x.volume) + " sales</span>" : ""}${x.chosen ? '<span class="badge b-hold">using</span>' : P.settings ? `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${keepView()}<button class="btn sm">use this</button></form>` : ""}</li>`;
+    return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"} data-ours="${esc(ours)}" data-ttl="${esc(r.title)}"><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""} <span class="sub">· click a card to see its photo beside ours</span></summary><ul>${c.map(line).join("")}</ul></details>`;
   };
   // A hand-set price has to show its working: what it was pegged to, and how
   // far the source has moved since.
@@ -2171,7 +2242,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
     // just added, with nothing to show yet, has no panel.
     const panel = pending && !(r.sources || []).length && !r.pcId && !r.tcgId ? "" : `<details class="more"${openPanel ? " open" : ""}><summary title="Details, settings and links"><svg class="chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="vh">Details</span></summary><div class="panel">
 ${photoStrip(r)}<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}${r.reason && r.reason !== "market" || r.writeError ? `<div class="muted rsn">${r.reason && r.reason !== "market" ? esc(r.reason) : ""}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>` : ""}${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}</section>
-<section><h4>Today</h4><div><b>${money(r.current)}</b> <span class="sub">cost ${r.cost != null ? money(r.cost) : "—"}</span></div>${marginLine(r.marginNow, r.current, r.cost)}<h4>${esc(COMP.name)}</h4>${compCell(r)}<h4>Last change</h4>${change(r.lastChange)}<h4>Check by hand</h4>${reviewLinks(r)}</section>
+<section><h4>Today</h4><div class="p-now"><b>${money(r.current)}</b> <span class="sub">cost ${r.cost != null ? money(r.cost) : "—"}</span></div>${marginLine(r.marginNow, r.current, r.cost)}<h4>${esc(COMP.name)}</h4>${compCell(r)}<h4>Last change</h4>${change(r.lastChange)}<h4>Check by hand</h4>${reviewLinks(r)}</section>
 <section class="setsec"><h4>Settings <span class="sub">${esc(custom.length ? custom.join(" · ") : "page defaults")}</span></h4>${P.settings ? settingsForm(r) : '<div class="sub">your account cannot change them</div>'}</section>
 ${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
 </div></details>`;
@@ -2246,7 +2317,8 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .c-act{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}.pubf{display:inline-flex;align-items:center;gap:6px}.px{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--card);padding-left:8px;color:var(--mut)}.px input{border:0;width:86px;padding:6px 8px 6px 3px;font-weight:700;font-variant-numeric:tabular-nums;background:transparent}.px:focus-within{outline:2px solid var(--acc)}
 .more>summary{position:absolute;top:10px;right:8px;width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;list-style:none;color:var(--mut)}.more>summary::-webkit-details-marker{display:none}.more>summary:hover{background:var(--soft)}.chev{transition:transform .15s}.more[open]>summary .chev{transform:rotate(180deg)}
 .panel{display:grid;grid-template-columns:1.2fr 1fr 1.4fr;gap:14px 22px;padding:12px 14px 14px;border-top:1px solid var(--line);background:var(--soft);border-radius:0 0 12px 12px;font-size:13px}.panel h4{margin:10px 0 3px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.panel h4:first-child{margin-top:0}.panel h4 .sub{text-transform:none;letter-spacing:0;font-weight:500}.panel .full{grid-column:1/-1}.panel .end{display:flex;justify-content:flex-end}.rsn{margin-top:6px}.anch{margin-top:3px;color:var(--wait);font-size:12px;font-weight:600}.links{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px}.pubf.track{flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}.trk{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mut)}
-.cands>summary{cursor:pointer;font-size:12.5px;color:var(--mut)}.cands ul{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cands li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line)}.cands li.on{font-weight:600}.cands .cn{color:var(--mut)}
+.cands>summary{cursor:pointer;font-size:12.5px;color:var(--mut)}.cands ul{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cands li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line)}.cands li.on{font-weight:600}.cands .cn{color:var(--mut)}.cands a.cmp{color:inherit;text-decoration:none;cursor:zoom-in;border-bottom:1px dotted var(--mut)}.cands a.cmp:hover{border-bottom-style:solid}
+.cmpv{position:fixed;inset:0;z-index:90;background:rgba(8,10,12,.94);display:flex;gap:14px;padding:46px 14px 40px;align-items:stretch;justify-content:center}.cmpv[hidden]{display:none}.cmpv .pane{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;align-items:center;gap:6px}.cmpv .lab{font-size:12px;font-weight:700;letter-spacing:.1em;color:#fff;background:#2f6f3e;padding:4px 10px;border-radius:999px}.cmpv .pane.src .lab{background:#4a5b8a}.cmpv .ttl{color:#e6e9ec;font-size:13px;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cmpv .pic{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center;cursor:zoom-in}.cmpv .pic img{max-width:100%;max-height:100%;object-fit:contain;display:block}.cmpv .none{color:#9fb0bb;font-size:13px;text-align:center;padding:24px 10px}.cmpv .none a{color:#cfd8dd}.cmpv .cap{position:absolute;left:0;right:0;bottom:12px;text-align:center;color:#9fb0bb;font-size:12.5px;pointer-events:none}.cmpv .x{position:absolute;top:10px;right:14px;color:#fff;font:700 26px/1 inherit;background:none;border:0;cursor:pointer}
 .empty{padding:28px;text-align:center;color:var(--mut);background:var(--card);border:1px dashed var(--line);border-radius:12px}
 .hist{margin-top:26px}.hist>details{margin:8px 0;background:var(--card);border:1px solid var(--line);border-radius:12px}.hist>details>summary{cursor:pointer;padding:10px 14px;font-weight:600}.hist table{width:100%;border-collapse:collapse;font-size:12.5px}.hist th{text-align:left;padding:6px 14px;color:var(--mut);font-weight:600;border-top:1px solid var(--line)}.hist td{padding:6px 14px;border-top:1px solid var(--line);vertical-align:top}.hist .scroll{overflow-x:auto}.foot{margin-top:14px;font-size:12px;color:var(--mut)}
 @media (max-width:1000px){.lhead{display:none}.line{grid-template-columns:minmax(0,1fr) 110px 140px;row-gap:8px}.c-prod{grid-column:1/-1}.c-now{text-align:left}.c-sug{text-align:left}.c-act{grid-column:1/-1;justify-content:flex-start}.c-now::before,.c-sug::before,.c-st::before{content:attr(data-l);display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.c-act:empty,.c-st:empty{display:none}.panel{grid-template-columns:1fr 1fr}.panel .setsec{grid-column:1/-1}}
@@ -2267,9 +2339,10 @@ ${waiting.length ? `<div class="pubbar"><span><b>⏳ ${waiting.length} price${wa
 <p class="foot">Report ${rep.at ? esc(whenShort(rep.at)) : "not built yet"} · <a href="/autoprice/report.json">json</a></p></section>
 </div>
 <div class="zoom" id="zoom" hidden><button class="x" type="button" aria-label="Close">×</button><img alt=""><div class="cap"></div></div>
+<div class="cmpv" id="cmpv" hidden><button class="x" type="button" aria-label="Close">×</button><div class="pane ours"><span class="lab">OURS</span><div class="ttl"></div><a class="pic"><img alt=""></a></div><div class="pane src"><span class="lab">PRICECHARTING</span><div class="ttl"></div><a class="pic"><img alt=""></a></div><div class="cap">our photo on the left, PriceCharting's on the right · click a photo to zoom, Esc to close</div></div>
 <script>
-(function(){var z=document.getElementById("zoom"),zi=z.querySelector("img"),zc=z.querySelector(".cap");
-function closeZoom(){z.hidden=true;z.classList.remove("in");zi.src="";document.body.style.overflow=""}
+(function(){var z=document.getElementById("zoom"),zi=z.querySelector("img"),zc=z.querySelector(".cap"),cv=document.getElementById("cmpv");
+function closeZoom(){z.hidden=true;z.classList.remove("in");zi.src="";document.body.style.overflow=cv&&!cv.hidden?"hidden":""}
 document.addEventListener("click",function(e){var a=e.target.closest("a[data-zoom]");if(!a)return;e.preventDefault();zi.src=a.getAttribute("data-zoom");zi.alt=a.getAttribute("data-ttl")||"";zc.textContent=(a.getAttribute("data-ttl")||"")+" · click to zoom, Esc to close";z.hidden=false;z.classList.remove("in");document.body.style.overflow="hidden"});
 z.addEventListener("click",function(e){if(e.target.closest(".x")){closeZoom();return}if(e.target===zi){var r=zi.getBoundingClientRect();zi.style.transformOrigin=((e.clientX-r.left)/r.width*100)+"% "+((e.clientY-r.top)/r.height*100)+"%";z.classList.toggle("in")}else closeZoom()});
 document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!z.hidden)closeZoom()});})();
@@ -2279,6 +2352,18 @@ if(f)f.addEventListener("input",apply);
 document.addEventListener("keydown",function(e){if(e.key==="/"&&f&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="SELECT"&&document.activeElement.tagName!=="TEXTAREA"){e.preventDefault();f.focus()}});
 // a click on the empty part of a row opens its panel
 document.addEventListener("click",function(e){var line=e.target.closest(".line");if(!line||e.target.closest("a,button,input,select,label,form,summary"))return;var d=line.parentNode.querySelector(".more");if(d)d.open=!d.open});
+// a form posted from a row folds its panel (owner 2026-11-02: "when I make a change in this drop down, it collapses the drop down on submit/publish")
+document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.closest||!/^post$/i.test(f.getAttribute("method")||"get"))return;var art=f.closest("article.item");if(!art)return;var d=art.querySelector("details.more");if(d)d.open=false});
+// PriceCharting candidates (owner 2026-11-02): a click on a card shows their photo beside ours, each labelled
+(function(){var v=document.getElementById("cmpv");if(!v)return;var panes=v.querySelectorAll(".pane");
+function fill(p,src,ttl,none){var t=p.querySelector(".ttl"),a=p.querySelector(".pic");t.textContent=ttl||"";a.removeAttribute("data-zoom");if(!src){a.innerHTML='<div class="none">'+none+'</div>';return}a.innerHTML='<div class="none">loading\u2026</div>';var im=new Image();im.alt=ttl||"";im.onload=function(){a.innerHTML="";a.appendChild(im);a.setAttribute("data-zoom",src);a.setAttribute("data-ttl",ttl||"")};im.onerror=function(){a.innerHTML='<div class="none">'+none+'</div>'};im.src=src}
+function close(){v.hidden=true;document.body.style.overflow=""}
+document.addEventListener("click",function(e){var a=e.target.closest("a.cmp");if(!a)return;e.preventDefault();var d=a.closest(".cands");
+fill(panes[0],d&&d.getAttribute("data-ours"),d&&d.getAttribute("data-ttl"),"no photo on our listing");
+fill(panes[1],"/autoprice/pcimg?id="+encodeURIComponent(a.getAttribute("data-pc")||""),a.getAttribute("data-pcn"),'no photo on PriceCharting \u2014 <a href="'+a.href+'" target="_blank" rel="noopener">open their page \u2197</a>');
+v.hidden=false;document.body.style.overflow="hidden"});
+v.addEventListener("click",function(e){if(e.target.closest(".x")||e.target===v)close()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!v.hidden&&document.getElementById("zoom").hidden)close()},true);})();
 // one drop-down open at a time
 [].slice.call(document.querySelectorAll("details.drop")).forEach(function(d){d.addEventListener("toggle",function(){if(d.open)[].slice.call(document.querySelectorAll("details.drop")).forEach(function(o){if(o!==d)o.open=false})})});
 })();
@@ -2296,7 +2381,7 @@ fetch(f.getAttribute("action"),{method:"POST",body:fd,credentials:"same-origin"}
 if(!j||!j.ok){if(btn)btn.disabled=false;if(art)art.classList.remove("busy");toast((j&&(j.flash||j.error))||"That did not go through.",true);return}
 toast(j.flash||"Done.");if(!art)return;art.classList.remove("busy","awaiting");art.className=art.className.split(" ").filter(function(c){return c&&c.indexOf("s-")!==0}).join(" ")+(act==="publish"?" s-ok":" s-hold");
 var price=act==="publish"?Number(j.price||fd.get("price")):null;
-if(act==="publish"&&price>0){var now=art.querySelector(".c-now b");if(now)now.textContent=money(price);var sug=art.querySelector(".c-sug");if(sug)sug.innerHTML='<span class="sub">up to date</span>'}
+if(act==="publish"&&price>0){var now=art.querySelector(".c-now b");if(now)now.textContent=money(price);var mg=art.querySelector(".c-now .mg"),cm=mg&&/cost \\$([0-9.]+)/.exec(mg.getAttribute("title")||"");if(cm){var cost=Number(cm[1]),pr=price-cost,pc=Math.round(pr/price*1000)/10;mg.textContent="margin "+money(pr)+" \u00b7 "+pc+"%";mg.classList.toggle("neg",pr<0);mg.setAttribute("title","price "+money(price)+" \u2212 cost "+money(cost)+": "+money(pr)+" profit, "+pc+"% of the price")}var pn=art.querySelector(".p-now b");if(pn)pn.textContent=money(price);var sug=art.querySelector(".c-sug");if(sug)sug.innerHTML='<span class="sub">up to date</span>'}
 var st=art.querySelector(".c-st");if(st)st.innerHTML=act==="publish"?'<span class="badge b-ok">Published \u2713</span><div class="sub two">just now'+(j.anchored?" \u00b7 tracking the market from here":"")+"</div>":'<span class="badge b-hold">Kept</span><div class="sub two">the price stays today; that suggestion is not offered again</div>';
 var ca=art.querySelector(".c-act");if(ca)ca.innerHTML='<div class="sub">'+(act==="publish"?"published "+money(price):"kept "+(fd.get("suggested")?"over "+money(fd.get("suggested")):""))+"</div>";
 var tr=art.querySelector("form.pubf.track");if(tr&&tr.parentNode)tr.parentNode.removeChild(tr);

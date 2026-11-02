@@ -1215,3 +1215,59 @@ test("the Everything screen (/autoprice/all): every row, quiet ones labelled, li
   assert.match(renderPage(st, { rows, stage: true }, { configured: true, view: "all" }), /<span class="sub quiet">tracking from your \$13999\.99<\/span>/, "the All chip view carries the note too");
   assert.doesNotMatch(main, /sub quiet/, "Needs you never shows quiet rows, so no note");
 });
+
+import { pcImageBase, pcImageUrl } from "../src/autoprice.js";
+test("PriceCharting candidates: each card opens the compare view with our photo; a posted form folds the row; a publish updates the panel's Today too", async () => {
+  const { renderPage } = await import("../src/autoprice.js");
+  const rows = [{ id: "gid://shopify/Product/9", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk", type: "Pokemon Single Graded", game: "Pokemon Graded", stock: 1,
+    current: 999999, suggested: 64.95, action: "lower", awaiting: true, images: [{ u: "products/muk.jpg" }], pcId: 123, pcGrade: { label: "grade 9" },
+    pcCandidates: [{ id: 123, name: "Dark Muk [1st Edition] #41", console: "Pokemon Team Rocket", price: 39.73, gradeLabel: "grade 9", volume: 231, chosen: true },
+      { id: 456, name: "Dark Muk #41", console: "Pokemon Team Rocket", price: 20, gradeLabel: "grade 9", volume: 10, chosen: false }] }];
+  const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows }, { configured: true, view: "all" });
+  assert.match(page, /<details class="cands" data-ours="https:\/\/cdn\.shopify\.com\/[^"]*products\/muk\.jpg\?width=1600" data-ttl="Dark Muk \(41\/82\) \[Team Rocket 1st Edition\] Graded PSA 9">/, "the list carries our big photo and title");
+  assert.match(page, /<a class="cmp" href="https:\/\/www\.pricecharting\.com\/game\/456" target="_blank" rel="noopener" data-pc="456" data-pcn="Pokemon Team Rocket · Dark Muk #41" title="Their photo beside ours"><span class="cn">Pokemon Team Rocket<\/span> Dark Muk #41<\/a> <b>\$20\.00 US<\/b>/);
+  assert.match(page, /<a class="cmp" href="https:\/\/www\.pricecharting\.com\/game\/123"[^>]*data-pc="123"/, "the chosen card too");
+  assert.match(page, /<div class="cmpv" id="cmpv" hidden>.*<span class="lab">OURS<\/span>.*<span class="lab">PRICECHARTING<\/span>/, "the two labelled panes");
+  assert.match(page, /"\/autoprice\/pcimg\?id="\+encodeURIComponent/, "their photo comes through the worker");
+  assert.match(page, /var d=art\.querySelector\("details\.more"\);if\(d\)d\.open=false/, "a posted form folds the row");
+  assert.match(page, /<h4>Today<\/h4><div class="p-now"><b>\$999999\.00<\/b>/, "the panel's Today figure has its hook");
+  assert.match(page, /var pn=art\.querySelector\("\.p-now b"\);if\(pn\)pn\.textContent=money\(price\)/, "and the in-place publish moves it");
+  assert.match(page, /mg\.textContent="margin "\+money\(pr\)/, "the row margin is recomputed from the cost in its tooltip");
+  // a row without a photo: the list still opens the view (the pane says so)
+  const bare = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows: [{ ...rows[0], images: [] }] }, { configured: true, view: "all" });
+  assert.match(bare, /<details class="cands" data-ours="" data-ttl="Dark Muk/);
+
+  // the photo on their product page: the storage URL, 1600 when it exists, else 240; none -> null, kept a day; a failed read is not kept
+  const html = '<html><img src="https://storage.googleapis.com/images.pricecharting.com/2ac7eafaf79dd7b569321dd97993809d3ac52ff28c3b5f6e1f568afe8a3a5bd3/240.jpg"></html>';
+  assert.equal(pcImageBase(html), "https://storage.googleapis.com/images.pricecharting.com/2ac7eafaf79dd7b569321dd97993809d3ac52ff28c3b5f6e1f568afe8a3a5bd3/");
+  assert.equal(pcImageBase("<html>no card here</html>"), null);
+  const puts = [];
+  const env = { ROOM: { idFromName: (n) => n, get: () => ({ fetch: async (req) => { const u = new URL(req.url); if (u.pathname === "/_kv/put") { puts.push({ k: u.searchParams.get("k"), ttl: Number(u.searchParams.get("ttl")) }); return new Response("ok"); } return new Response(null, { status: 404 }); } }) } };
+  const calls = [];
+  const fetcher = (big, pageOk = true) => async (u, init) => { calls.push({ u, m: (init && init.method) || "GET", ua: init && init.headers && init.headers["user-agent"] }); if (/\/game\/\d+$/.test(u)) return new Response(pageOk ? html : "nope", { status: pageOk ? 200 : 503 }); if (/1600\.jpg$/.test(u)) return new Response(null, { status: big ? 200 : 404 }); throw new Error("unexpected " + u); };
+  assert.equal(await pcImageUrl(env, "964156", fetcher(true)), "https://storage.googleapis.com/images.pricecharting.com/2ac7eafaf79dd7b569321dd97993809d3ac52ff28c3b5f6e1f568afe8a3a5bd3/1600.jpg");
+  assert.deepEqual(calls.map((c) => c.m + " " + c.u.replace(/^.*\.com\//, "")), ["GET game/964156", "HEAD 2ac7eafaf79dd7b569321dd97993809d3ac52ff28c3b5f6e1f568afe8a3a5bd3/1600.jpg"]);
+  assert.match(calls[0].ua, /^exor-binder /, "the worker says who it is");
+  assert.equal(await pcImageUrl(env, "964156", fetcher(false)), "https://storage.googleapis.com/images.pricecharting.com/2ac7eafaf79dd7b569321dd97993809d3ac52ff28c3b5f6e1f568afe8a3a5bd3/240.jpg");
+  assert.equal(await pcImageUrl(env, "1", async () => new Response("<html>no card</html>")), null);
+  assert.equal(await pcImageUrl(env, "2", fetcher(true, false)), null, "their page did not answer");
+  assert.deepEqual(puts, [{ k: "ap:pcimg:964156", ttl: 30 * 86400e3 }, { k: "ap:pcimg:964156", ttl: 30 * 86400e3 }, { k: "ap:pcimg:1", ttl: 86400e3 }], "a miss is kept a day, a failed read not at all");
+});
+
+import { ebayQuery } from "../src/autoprice.js";
+test("the eBay sold search for a graded card: name + the words that matter + the grade; never the number, the set or 'Graded'", () => {
+  const g = (title) => ebayQuery({ title, graded: parseGraded(title) });
+  assert.equal(g("Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9"), "Dark Muk 1st Edition PSA 9");
+  assert.equal(g("Giovanni's Charisma (204/165) [Scarlet & Violet 151] Graded PSA 9"), "Giovanni's Charisma PSA 9");
+  assert.equal(g("Charizard VMAX (020/189) [Prize Pack Series One] Graded PSA 10"), "Charizard VMAX Prize Pack Series One PSA 10");
+  assert.equal(g("Pikachu (025) [Japanese Promo] Reverse Holo Graded CGC 9.5"), "Pikachu Reverse Holo Japanese Promo CGC 9.5", "the name parseGraded keeps may carry a word already; it is not repeated");
+  assert.equal(g("Gold Star Rayquaza (107/112) [EX Deoxys] Holo Graded BGS 8.5"), "Gold Star Rayquaza Holo BGS 8.5", "a name that already says Gold Star is not doubled");
+  assert.equal(g("Sheoldred, the Apocalypse (90) [Dominaria United] Etched Foil Graded PSA 10"), "Sheoldred the Apocalypse Etched Foil PSA 10");
+  assert.equal(g("Blastoise (2/102) [Base Set Unlimited] Non-Holo Graded PSA 8"), "Blastoise Non-Holo Unlimited PSA 8");
+  assert.equal(g("Copy of Umbreon VMAX (215/203) [Evolving Skies] Graded PSA 10"), "Umbreon VMAX PSA 10");
+  assert.equal(ebayQuery({ title: "Pokemon 151 Booster Bundle", graded: null }), "Pokemon 151 Booster Bundle", "sealed: the full title");
+  // the link on the row carries it
+  const rows = [{ id: "gid://shopify/Product/9", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk", type: "Pokemon Single Graded", game: "Pokemon Graded", stock: 1, current: 50, suggested: 64.95, action: "raise", awaiting: true, graded: parseGraded("Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9"), pcId: 123, sources: ["x"] }];
+  const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows }, { configured: true, view: "all" });
+  assert.match(page, /ebay\.ca\/sch\/i\.html\?LH_Sold=1&LH_Complete=1&_nkw=Dark%20Muk%201st%20Edition%20PSA%209" target="_blank" rel="noopener" title="Sold listings for: Dark Muk 1st Edition PSA 9">eBay sold/);
+});

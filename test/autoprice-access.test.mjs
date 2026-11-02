@@ -170,3 +170,23 @@ test("the 401 runner's door opens only with the relay bearer, lists what to sear
   // a session cookie is not the runner's key
   assert.equal((await call("POST", "", { op: "put", rows: [] })).status, 401);
 });
+
+test("GET /autoprice/pcimg?id=N sends a signed-in account to PriceCharting's photo of card N, and nobody else", async () => {
+  const w = world();
+  await seed(w);
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (u, init) => { seen.push(String(u)); if (/pricecharting\.com\/game\/777$/.test(String(u))) return new Response('<img src="https://storage.googleapis.com/images.pricecharting.com/abcdef0123456789abcdef0123456789/240.jpg">'); if (/pricecharting\.com\/game\/778$/.test(String(u))) return new Response("<html>no photo</html>"); if (/1600\.jpg$/.test(String(u))) return new Response(null, { status: 200 }); throw new Error("unexpected " + u); };
+  try {
+    const none = await hit(w, "/autoprice/pcimg?id=777");
+    assert.equal(none.status, 401, "no session: refused");
+    assert.deepEqual(seen, [], "and PriceCharting is not asked");
+    const ok = await hit(w, "/autoprice/pcimg?id=777", { cookie: "np_s=" + TOKEN });
+    assert.equal(ok.status, 302);
+    assert.equal(ok.location, "https://storage.googleapis.com/images.pricecharting.com/abcdef0123456789abcdef0123456789/1600.jpg");
+    const miss = await hit(w, "/autoprice/pcimg?id=778", { cookie: "np_s=" + TOKEN });
+    assert.equal(miss.status, 404);
+    const bad = await hit(w, "/autoprice/pcimg?id=abc", { cookie: "np_s=" + TOKEN });
+    assert.equal(bad.status, 400);
+  } finally { globalThis.fetch = realFetch; }
+});
