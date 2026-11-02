@@ -1,0 +1,41 @@
+name: tonepro-colours
+# Reads the colour of every Warhammer Tone Pro pot from its product photo (the band at
+# the pot's foot; tools/tonepro-colours.py) and commits data/tonepro-colours.json, the
+# second colour chart the worker's /paints.json merges in (src/paints.js). One photo
+# every 0.4 s through the worker's own /paints.json listing.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read and print, commit nothing
+        default: "false"
+  schedule:
+    # Tuesdays 06:10 UTC, after the paint chart refresh
+    - cron: "10 6 * * 2"
+permissions:
+  contents: write
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pillow
+        run: pip install --quiet pillow
+      - name: Read the pot photos
+        env:
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          ARGS=""
+          if [ "$DRY" = "true" ]; then ARGS="--dry"; fi
+          python3 -I tools/tonepro-colours.py $ARGS
+      - name: Commit the file when it changed
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          set -e
+          if [ -z "$(git status --porcelain data/tonepro-colours.json)" ]; then echo "no change"; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/tonepro-colours.json
+          git commit -m "tonepro-colours: refresh $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
