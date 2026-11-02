@@ -149,7 +149,7 @@ export function buildSwatches(chart, byBrand) {
       const v = vs.find((x) => x.availableForSale) || vs[0];
       if (!v) { c.skipped++; continue; }
       col ? c.matched++ : c.photo++;
-      const name = col ? col.name : titleCase(parsed.name);
+      const name = col ? col.name : parsed.tone ? parsed.name : titleCase(parsed.name);   // a Tone Pro name is cased already (Ta'unar, not Ta'Unar)
       const gk = brand + "|" + (col ? key(name) : "p:" + p.handle);
       let g = groups.get(gk);
       if (!g) { g = { b: brand, n: name, h: col ? "#" + col.hex : null, items: [] }; if (parsed.tone) { g.g = parsed.group; g.o = parsed.tone; } groups.set(gk, g); }

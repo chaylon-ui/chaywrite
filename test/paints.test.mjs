@@ -54,12 +54,12 @@ eq('tone pro apostrophe group', parseTitle('Tone Pro', "WARHAMMER TONE PRO TA'UN
 eq('tone pro mediums and brushes are not pots', [parseTitle('Tone Pro', 'WARHAMMER TONE PRO BLENDING MEDIUM 18ML'), parseTitle('Tone Pro', 'WARHAMMER PRO TONE DRYBRUSH M'), parseTitle('Tone Pro', 'WARHAMMER TONE PRO BLENDING MEDIUM 2 18ML')], [null, null, null]);
 eq('citadel leaves tone pro alone', [parseTitle('Citadel', 'WARHAMMER TONE PRO BLOODTOOF RED 3 12ML'), parseTitle('Citadel', 'WARHAMMER PRO TONE DRYBRUSH M')], [null, null]);
 const tpChart = { ...chart, 'Tone Pro': { 'Tone Pro': { bloodtoofred3: ['20-153', 'BB4255', 'Bloodtoof Red 3'], bloodtoofred1: ['20-151', '7D544C', 'Bloodtoof Red 1'] } } };
-const res3 = buildSwatches(tpChart, [{ brand: 'Tone Pro', products: [P('WARHAMMER TONE PRO BLOODTOOF RED 3 12ML', 'tp-br3'), P('WARHAMMER TONE PRO BLOODTOOF RED 1 12ML', 'tp-br1', false), P('WARHAMMER TONE PRO BLOODTOOF RED 5 12ML', 'tp-br5'), P('WARHAMMER TONE PRO BLENDING MEDIUM 18ML', 'tp-bm'), P('WARHAMMER PRO TONE DRYBRUSH M', 'tp-db')] },
+const res3 = buildSwatches(tpChart, [{ brand: 'Tone Pro', products: [P('WARHAMMER TONE PRO BLOODTOOF RED 3 12ML', 'tp-br3'), P('WARHAMMER TONE PRO BLOODTOOF RED 1 12ML', 'tp-br1', false), P('WARHAMMER TONE PRO BLOODTOOF RED 5 12ML', 'tp-br5'), P("WARHAMMER TONE PRO TA'UNAR OCHRE 5 12ML", 'tp-ta5'), P('WARHAMMER TONE PRO BLENDING MEDIUM 18ML', 'tp-bm'), P('WARHAMMER PRO TONE DRYBRUSH M', 'tp-db')] },
   { brand: 'Citadel', products: [P('WARHAMMER TONE PRO BLOODTOOF RED 3 12ML', 'tp-br3')] }]);
 eq('tone pro swatches carry group and tone; a pot the chart lacks keeps its photo; mediums and brushes are left out',
   res3.swatches.map((s) => [s.b, s.n, s.h, s.g, s.o, s.items[0].r, s.items[0].c, s.items[0].a]),
-  [['Tone Pro', 'Bloodtoof Red 3', '#BB4255', 'Bloodtoof Red', 3, 'Tone 3', '20-153', true], ['Tone Pro', 'Bloodtoof Red 1', '#7D544C', 'Bloodtoof Red', 1, 'Tone 1', '20-151', false], ['Tone Pro', 'Bloodtoof Red 5', null, 'Bloodtoof Red', 5, 'Tone 5', '', true]]);
-eq('tone pro counts', [res3.counts['Tone Pro'], res3.counts.Citadel.skipped], [{ products: 5, matched: 2, photo: 1, skipped: 2 }, 1]);
+  [['Tone Pro', 'Bloodtoof Red 3', '#BB4255', 'Bloodtoof Red', 3, 'Tone 3', '20-153', true], ['Tone Pro', 'Bloodtoof Red 1', '#7D544C', 'Bloodtoof Red', 1, 'Tone 1', '20-151', false], ['Tone Pro', 'Bloodtoof Red 5', null, 'Bloodtoof Red', 5, 'Tone 5', '', true], ['Tone Pro', "Ta'unar Ochre 5", null, "Ta'unar Ochre", 5, 'Tone 5', '', true]]);
+eq('tone pro counts', [res3.counts['Tone Pro'], res3.counts.Citadel.skipped], [{ products: 6, matched: 2, photo: 2, skipped: 2 }, 1]);
 // the real chart: a few of our real titles resolve
 // (PAINT_CHART=path/to/data/paint-colours.json from chaywrite main; skipped when unset)
 const real = process.env.PAINT_CHART ? JSON.parse(readFileSync(process.env.PAINT_CHART, 'utf8')).brands : null;
