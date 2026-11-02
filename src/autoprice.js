@@ -560,7 +560,13 @@ export function decide(p, cfg, fx) {
   const followAlert = follow && !followOk && !down ? (comp ? COMP.name + " is out of stock: priced from TCGplayer instead" : COMP.name + " does not list it: priced from TCGplayer instead") : null;
   const alert = thin || followAlert;
   // A hand-set price tracks the source by ratio and stands in for the markup.
-  const anchor = p.anchor && p.anchor.price > 0 && p.anchor.market > 0 ? p.anchor : null;
+  // One set while the product had no source (a graded card PriceCharting has no
+  // grade price for; owner 2026-11-02: "I can't seem to set the price and have
+  // it track my price") carries no market: it is held as the price until a
+  // source appears, then pegs to the first market seen (pegNow, written back
+  // to the product by phaseDecide).
+  const held = p.anchor && p.anchor.price > 0 ? p.anchor : null;
+  const anchor = held && held.market > 0 ? held : null;
   const ratio = anchorRatio(anchor);
   const out = { current, cost, fx, markupPct: ratio ? null : markup, sources: srcs, round: p.round || "auto", marginNow: margin(current, cost), comp, alert, thin: !!thin,
     anchor: anchor ? { ...anchor, ratio: Math.round(ratio * 10000) / 10000 } : null,
@@ -578,6 +584,13 @@ export function decide(p, cfg, fx) {
   } else {
     const skip = (reason) => ({ ...out, action: "skip", reason: followAlert ? followAlert.replace(/: priced from TCGplayer instead$/, "") + ", and " + reason : reason });
     if (!fx) return skip("no FX rate");
+    if (!srcs.length && held && !anchor) {
+      const suggested = held.price, why = p.graded ? (p.pcMiss || "no PriceCharting price") : "no price from the sources today";
+      const action = !current ? "set" : suggested > current ? "raise" : suggested < current ? "lower" : "hold";
+      return { ...out, anchor: { ...held, ratio: null }, marketUsd: null, marketCad: null, raw: suggested, compPct, floor: round2(floor), floorSrc, capped: null, target: suggested, suggested, action,
+        marginSuggested: margin(suggested, cost), anchorMovePct: null, pegNow: null, compDown: down, held: null,
+        reason: (action === "hold" ? "held at your price" : "your price " + money2(suggested) + ", held until a source appears") + " (" + why + ")" };
+    }
     if (!srcs.length) return skip(p.graded ? (p.pcMiss || "no PriceCharting price: set exor.ap_pc_id on the product") : p.tcgId || p.pcId ? "no price from the sources today" : "no match: set exor.ap_tcg_id (or ap_pc_id) on the product");
     marketUsd = srcs.reduce((a, s) => a + s.usd, 0) / srcs.length;
     marketCad = marketUsd * fx;
@@ -599,14 +612,18 @@ export function decide(p, cfg, fx) {
   // the grid must not nudge his own number. It applies again as soon as the
   // source does move.
   if (anchor && Math.abs(target - anchor.price) < 0.005) suggested = anchor.price;
+  // a price held without a market meets its first one today: his number stays, the peg is this market
+  let pegNow = null;
+  if (held && !anchor && (followOk ? comp.price : marketCad) > 0) { pegNow = round2(followOk ? comp.price : marketCad); suggested = held.price; target = held.price; raw = held.price; }
   if (floor > 0 && suggested < floor) suggested = niceUp(floor, p.round);
   const action = !current ? "set" : suggested > current ? "raise" : suggested < current ? "lower" : "hold";
   const compNote = comp ? COMP.name + (followOk ? " at " : " has it at ") + money2(comp.price) + " in stock" + (compPct ? " (+" + compPct + "%)" : "") : "";
   const res = {
-    ...out, marketUsd: marketUsd == null ? null : round2(marketUsd), marketCad: marketCad == null ? null : round2(marketCad), raw: round2(raw), compPct,
+    ...out, anchor: pegNow ? { ...held, market: pegNow, basis: followOk ? COMP.key : "market", ratio: Math.round(held.price / pegNow * 10000) / 10000 } : out.anchor, pegNow,
+    marketUsd: marketUsd == null ? null : round2(marketUsd), marketCad: marketCad == null ? null : round2(marketCad), raw: round2(raw), compPct,
     floor: round2(floor), floorSrc, capped, target: round2(target), suggested, action, marginSuggested: margin(suggested, cost),
     anchorMovePct: ratio && anchor ? pctMove(anchor.market, followOk ? comp.price : marketCad) : null,
-    reason: action === "hold" ? "already at the suggested price" : capped ? "capped at " + cfg.maxMovePct + "% per run" : target === floor && raw < floor ? "floor" + (followOk ? " (" + COMP.name + " is lower)" : "") : ratio ? anchorNote(anchor, followOk ? comp.price : marketCad) : followOk ? "following " + compNote : comp && comp.used ? compNote : "market",
+    reason: pegNow ? "your price, pegged to the market from today (" + money2(pegNow) + ")" : action === "hold" ? "already at the suggested price" : capped ? "capped at " + cfg.maxMovePct + "% per run" : target === floor && raw < floor ? "floor" + (followOk ? " (" + COMP.name + " is lower)" : "") : ratio ? anchorNote(anchor, followOk ? comp.price : marketCad) : followOk ? "following " + compNote : comp && comp.used ? compNote : "market",
     compDown: down, held: null,
   };
   /* 401 unknown (2026-09-29): every nightly lookup had been answering HTTP 429
@@ -1395,6 +1412,11 @@ async function phaseDecide(cx, run, cfg, deadline) {
   const rows = [];
   for (const p of run.products) {
     const d = decide(p, cfg, run.fx);
+    // a hand-set price that waited for a source pegs to the first market seen: the product remembers the peg
+    if (d.pegNow > 0 && p.anchor && !(p.anchor.market > 0)) {
+      p.anchor = { ...p.anchor, market: d.pegNow, basis: d.anchor.basis, at: cx.now() };
+      try { await adminGql(cx, MF_SET, { m: [{ ownerId: p.id, namespace: "exor", key: "ap_anchor", type: "json", value: JSON.stringify(p.anchor) }] }); } catch (e) { run.errors.push("peg " + p.handle + ": " + msg(e)); }
+    }
     // Several variants and none picked: the job cannot know which one the
     // price is for, so the row asks (the form lists them). Once ap_variant
     // names one, that variant is priced like any single-variant product.
@@ -1536,14 +1558,13 @@ async function publishPrice(cx, b) {
   let anchored = null;
   if (b && (b.anchor === "1" || b.anchor === true) && row) {
     const basis = row.priceFrom === COMP.key && row.comp && row.comp.price > 0 ? row.comp.price : row.marketCad;
-    if (basis > 0) {
-      anchored = { price, market: round2(basis), basis: row.priceFrom === COMP.key ? COMP.key : "market", at: cx.now() };
-      try {
-        const r = await adminGql(cx, MF_SET, { m: [{ ownerId: pid, namespace: "exor", key: "ap_anchor", type: "json", value: JSON.stringify(anchored) }] });
-        const errs = (r.data.metafieldsSet || {}).userErrors || [];
-        if (errs.length) { anchored = null; cx.log("autoprice: anchor failed: " + errs.map((e) => e.message).join("; ")); }
-      } catch (e) { anchored = null; cx.log("autoprice: anchor failed: " + msg(e)); }
-    }
+    // no market yet (a graded card with no grade price): held at this price until a source appears
+    anchored = basis > 0 ? { price, market: round2(basis), basis: row.priceFrom === COMP.key ? COMP.key : "market", at: cx.now() } : { price, market: null, basis: null, at: cx.now() };
+    try {
+      const r = await adminGql(cx, MF_SET, { m: [{ ownerId: pid, namespace: "exor", key: "ap_anchor", type: "json", value: JSON.stringify(anchored) }] });
+      const errs = (r.data.metafieldsSet || {}).userErrors || [];
+      if (errs.length) { anchored = null; cx.log("autoprice: anchor failed: " + errs.map((e) => e.message).join("; ")); }
+    } catch (e) { anchored = null; cx.log("autoprice: anchor failed: " + msg(e)); }
   }
   const from = row && row.current != null ? row.current : null;
   await recordChange(cx, pid, { at: cx.now(), from, to: price, by: "approved", who });
@@ -1557,10 +1578,10 @@ async function publishPrice(cx, b) {
     row.edited = row.suggested != null && Math.abs(row.suggested - price) > 0.005 ? row.suggested : null;
     row.marginNow = margin(price, row.cost);
     row.action = "hold";
-    if (anchored) row.anchor = { ...anchored, ratio: Math.round(anchorRatio(anchored) * 10000) / 10000 };
+    if (anchored) row.anchor = { ...anchored, ratio: anchored.market > 0 ? Math.round(anchorRatio(anchored) * 10000) / 10000 : null };
     row.settings = { ...(row.settings || {}), anchor: anchored ? String(anchored.price) : (row.settings || {}).anchor };
     row.reason = "published by hand" + (row.edited ? " at your price (suggested " + money2(row.edited) + ")" : "") +
-      (anchored ? " · tracking the market from here (" + money2(anchored.price) + " against " + money2(anchored.market) + ")" : "");
+      (anchored ? anchored.market > 0 ? " · tracking the market from here (" + money2(anchored.price) + " against " + money2(anchored.market) + ")" : " · held at " + money2(anchored.price) + " until a source appears, then tracking from there" : "");
     row.lastChange = { at: cx.now(), from, to: price, by: "approved", who };
     await cx.storage.put("ap:report", rep);
   }
@@ -1645,8 +1666,8 @@ async function saveSettings(cx, b) {
       const rep0 = await cx.storage.get("ap:report");
       const row0 = ((rep0 && rep0.rows) || []).find((r) => r.id === pid);
       const basis = row0 && row0.priceFrom === COMP.key && row0.comp && row0.comp.price > 0 ? row0.comp.price : row0 && row0.marketCad;
-      if (!(basis > 0)) return { ok: false, error: "no market price to anchor against yet - run the pricer first" };
-      const a = { price, market: round2(basis), basis: row0.priceFrom === COMP.key ? COMP.key : "market", at: cx.now() };
+      // no market yet (a graded card with no grade price): held at this price, pegged to the first market seen (decide)
+      const a = basis > 0 ? { price, market: round2(basis), basis: row0.priceFrom === COMP.key ? COMP.key : "market", at: cx.now() } : { price, market: null, basis: null, at: cx.now() };
       sets.push({ ownerId: pid, namespace: "exor", key: "ap_anchor", type: "json", value: JSON.stringify(a) });
       saved.anchor = String(price);
     }
@@ -2112,7 +2133,7 @@ export function renderPage(s, rep, view) {
   const settingsSummary = (r) => {
     const st = r.settings || {};
     const custom = [];
-    if (r.anchor) custom.push("your price " + money(r.anchor.price) + " (×" + r.anchor.ratio + " of the market)");
+    if (r.anchor) custom.push("your price " + money(r.anchor.price) + (r.anchor.market > 0 ? " (×" + r.anchor.ratio + " of the market)" : " (held until a source appears)"));
     if (st.floor) custom.push("floor " + money(st.floor));
     if (st.markupPct != null && st.markupPct !== "" && !r.anchor) custom.push("markup " + st.markupPct + "%");
     if (st.round) custom.push("round " + (st.round === "none" ? "off" : "$" + st.round));
@@ -2170,7 +2191,9 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
   };
   // A hand-set price has to show its working: what it was pegged to, and how
   // far the source has moved since.
-  const anchorLine = (r) => r.anchor
+  const anchorLine = (r) => r.anchor && !(r.anchor.market > 0)
+    ? `<div class="anch">your ${money(r.anchor.price)} · no source yet: held, then tracking from the first market seen</div>`
+    : r.anchor
     ? `<div class="anch">your ${money(r.anchor.price)} pegged to ${money(r.anchor.market)}${r.anchorMovePct != null && Math.abs(r.anchorMovePct) >= 0.05 ? ` · source ${r.anchorMovePct > 0 ? "+" : ""}${r.anchorMovePct}% since` : " · source unchanged"}${r.raw != null ? ` → ${money(r.raw)}` : ""}</div>`
     : "";
   const floorLine = (r) => r.floor ? `<div class="muted">floor ${money(r.floor)} (${esc(r.floorSrc)})</div>` : "";
@@ -2185,7 +2208,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
   // used; otherwise the market path.
   const mktCell = (r) => r.priceFrom === COMP.key && r.comp
     ? `<b>${esc(COMP.name)} ${money(r.comp.price)}</b>${r.compPct && !r.anchor ? " +" + r.compPct + "% = " + money(r.raw) : ""}<div class="muted">followed · TCGplayer not used${(r.sources || []).length ? ": " + srcLines(r).replace(/<br>/g, ", ") + (r.marketCad != null ? " = " + money(r.marketCad) + " CAD" : "") : " (no match)"}</div>${anchorLine(r)}${floorLine(r)}`
-    : (r.sources || []).length ? srcLines(r) + pcDepth(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${anchorLine(r)}${floorLine(r)}` : '<span class="muted">no source</span>';
+    : (r.sources || []).length ? srcLines(r) + pcDepth(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${anchorLine(r)}${floorLine(r)}` : '<span class="muted">no source</span>' + anchorLine(r);
   const matchLine = (r) => [r.tcgName ? "TCGplayer: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : "", r.pcName ? "PriceCharting: " + esc(r.pcName) : ""].filter(Boolean).map((x) => `<div class="muted">${x}</div>`).join("");
   const compCell = (r) => {
     if (r.comp) return `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener"><b>${money(r.comp.price)}</b></a> <span class="sub">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</span>${r.comp.via === "runner" && r.comp.at ? `<div class="sub">checked from GitHub ${esc(whenShort(r.comp.at))}</div>` : ""}`;
@@ -2198,7 +2221,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
   // today's price and remembers the refusal.
   const lim = (r) => r.awaiting && P.publish ? overLimit(r.current, r.suggested, P) : null;
   const quickAct = (r) => {
-    if (!r.awaiting) return r.kept ? `<div class="sub">kept ${money(r.current)}${r.kept.price ? " over " + money(r.kept.price) : ""}</div>` : "";
+    if (!r.awaiting) return r.kept ? `<div class="sub">kept ${money(r.current)}${r.kept.price ? " over " + money(r.kept.price) : ""}</div>` : r.action === "skip" && P.publish && !r.anchor ? '<div class="sub">no source: set a price in the panel</div>' : "";
     if (!P.publish) return '<div class="sub">waiting for someone who may publish</div>';
     const l = lim(r);
     const keep = ctlForm("keep", hidden("id", r.id) + hidden("suggested", r.suggested), "Keep " + money(r.current), "btn ghost sm", ` title="Leave today's price; ${esc(money(r.suggested))} will not be offered again"`);
@@ -2208,8 +2231,9 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
   // In the panel: the same Publish, with the option to keep tracking the
   // source from the published price (owner, 2026-09-17).
   const trackAct = (r) => {
-    if (!r.awaiting || !P.publish || lim(r)) return "";
-    return `<form method="post" action="/autoprice/control" class="pubf track">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${keepView()}<span>Publish at</span><label class="px"><span>$</span><input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested)}"></label><label class="trk" title="Peg this price to today's market and let it move with the source from here: if the source falls 10%, this price falls 10% too."><input type="checkbox" name="anchor" value="1"${r.anchor ? " checked" : ""}> keep tracking from my price</label><button class="btn go">Publish</button></form>`;
+    if (!P.publish || lim(r) || !(r.awaiting || r.action === "skip")) return "";
+    // a skipped row (no source) still takes a price by hand; with tracking ticked it is held, then pegged to the first market seen
+    return `<form method="post" action="/autoprice/control" class="pubf track">${hidden("action", "publish")}${hidden("id", r.id)}${hidden("title", r.title)}${keepView()}<span>${r.awaiting ? "Publish at" : "No source: set a price by hand"}</span><label class="px"><span>$</span><input type="number" step="0.01" min="0.01" name="price" value="${esc(r.suggested == null ? "" : r.suggested)}"${r.awaiting ? "" : ' placeholder="your price"'}></label><label class="trk" title="Peg this price to today's market and let it move with the source from here: if the source falls 10%, this price falls 10% too."><input type="checkbox" name="anchor" value="1"${r.anchor ? " checked" : ""}> keep tracking from my price</label><button class="btn go">Publish</button></form>`;
   };
   const status = (r) => r.awaiting ? ["wait", "Waiting"] : r.action === "pending" ? ["pend", "Pricing…"] : r.writeError ? ["bad", "Write failed"] : r.action === "skip" ? ["skip", "Skipped"]
     : r.action === "review" ? ["skip", "Choose variant"] : r.kept ? ["hold", "Kept"] : r.applied ? ["ok", "Published ✓"] : r.held != null ? ["skip", "Held"]

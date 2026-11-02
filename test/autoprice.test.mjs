@@ -1274,3 +1274,42 @@ test("the eBay sold search for a graded card: name + the words that matter + the
   const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows }, { configured: true, view: "all" });
   assert.match(page, /ebay\.ca\/sch\/i\.html\?LH_Sold=1&LH_Complete=1&_nkw=Dark%20Muk%2041%201st%20Edition%20PSA%209" target="_blank" rel="noopener" title="Sold listings for: Dark Muk 41 1st Edition PSA 9">eBay sold/);
 });
+
+test("a hand-set price with no source is held as the price, and pegs to the first market seen (Delphox V PSA 7, 2026-11-02)", () => {
+  const FX2 = 1.396;
+  const g = parseGraded("Delphox V (101/100) [Lost Abyss] Japanese Graded PSA 7");
+  // no grade price and no Your price: skipped as before
+  const skip = decide({ price: 999999, cost: null, graded: g, pcMiss: "PriceCharting has no grade 7 price for X" }, DEFAULT_CONFIG, FX2);
+  assert.equal(skip.action, "skip");
+  // Your price saved while there was no source: the row suggests that price and says why
+  const held = decide({ price: 999999, cost: null, graded: g, pcMiss: "PriceCharting has no grade 7 price for X", anchor: { price: 45, market: null, basis: null, at: 1 } }, DEFAULT_CONFIG, FX2);
+  assert.equal(held.action, "lower");
+  assert.equal(held.suggested, 45);
+  assert.equal(held.pegNow, null);
+  assert.match(held.reason, /^your price \$45\.00, held until a source appears \(PriceCharting has no grade 7 price for X\)$/);
+  assert.deepEqual(held.anchor, { price: 45, market: null, basis: null, at: 1, ratio: null });
+  const same = decide({ price: 45, cost: null, graded: g, pcMiss: "none", anchor: { price: 45, market: null, basis: null, at: 1 } }, DEFAULT_CONFIG, FX2);
+  assert.equal(same.action, "hold");
+  assert.match(same.reason, /^held at your price/);
+  // the first run with a grade price: his number stays, the peg is that market, written back by the run
+  const peg = decide({ price: 45, cost: null, graded: g, pcNew: 30, pcGrade: { label: "grade 7" }, anchor: { price: 45, market: null, basis: null, at: 1 } }, DEFAULT_CONFIG, FX2);
+  assert.equal(peg.suggested, 45);
+  assert.equal(peg.action, "hold");
+  assert.equal(peg.pegNow, 41.88);
+  assert.equal(peg.anchor.market, 41.88);
+  assert.equal(peg.anchor.ratio, 1.0745);
+  assert.match(peg.reason, /^your price, pegged to the market from today \(\$41\.88\)$/);
+  // a run later: the usual tracking
+  const later = decide({ price: 45, cost: null, graded: g, pcNew: 27, pcGrade: { label: "grade 7" }, anchor: { price: 45, market: 41.88, basis: "market", at: 1 } }, DEFAULT_CONFIG, FX2);
+  assert.equal(later.pegNow, null);
+  assert.equal(later.action, "lower");
+  assert.ok(later.suggested < 45 && later.suggested > 38, "tracks down with the source: " + later.suggested);
+  // the page: a skipped row offers the hand price in its panel; a held price reads right
+  const rows = [{ id: "gid://shopify/Product/7", title: "Delphox V (101/100) [Lost Abyss] Japanese Graded PSA 7", handle: "delphox", type: "Pokemon Single Graded", game: "Pokemon Graded", stock: 1, current: 999999, suggested: null, action: "skip", awaiting: false, reason: "PriceCharting has no grade 7 price", graded: g, pcId: 5, sources: [] },
+    { id: "gid://shopify/Product/8", title: "Other (1/1) [Set] Graded PSA 7", handle: "other", type: "Pokemon Single Graded", game: "Pokemon Graded", stock: 1, current: 999999, suggested: 45, action: "lower", awaiting: true, reason: "your price $45.00, held until a source appears (none)", graded: g, anchor: { price: 45, market: null, basis: null, at: 1, ratio: null }, settings: { anchor: "45" }, sources: [] }];
+  const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows }, { configured: true, view: "all" });
+  assert.match(page, /<span>No source: set a price by hand<\/span><label class="px"><span>\$<\/span><input type="number" step="0.01" min="0.01" name="price" value="" placeholder="your price"><\/label>/);
+  assert.match(page, /no source: set a price in the panel/);
+  assert.match(page, /your \$45\.00 · no source yet: held, then tracking from the first market seen/);
+  assert.match(page, /your price \$45\.00 \(held until a source appears\)/);
+});
