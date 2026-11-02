@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-02T13:32:51Z",
+ "generated": "2026-11-02T13:36:56Z",
  "source": "the colour band at the foot of each pot in our product photos (tools/tonepro-colours.py)",
  "brands": {
   "Tone Pro": {
@@ -26,7 +26,7 @@
     ],
     "blackstonevoid5": [
      "20-125",
-     "272727",
+     "E8E8E8",
      "Blackstone Void 5"
     ],
     "bloodtoofred1": [
@@ -36,7 +36,7 @@
     ],
     "bloodtoofred2": [
      "20-152",
-     "A33848",
+     "A43848",
      "Bloodtoof Red 2"
     ],
     "bloodtoofred3": [
@@ -46,12 +46,12 @@
     ],
     "bloodtoofred4": [
      "20-154",
-     "D13648",
+     "D13649",
      "Bloodtoof Red 4"
     ],
     "bloodtoofred5": [
      "20-155",
-     "E5565D",
+     "E5575D",
      "Bloodtoof Red 5"
     ],
     "bluegorkshroom1": [
@@ -61,12 +61,12 @@
     ],
     "bluegorkshroom2": [
      "20-352",
-     "326295",
+     "326296",
      "Blue Gorkshroom 2"
     ],
     "bluegorkshroom3": [
      "20-353",
-     "326FAA",
+     "336FAB",
      "Blue Gorkshroom 3"
     ],
     "bluegorkshroom4": [
@@ -76,12 +76,12 @@
     ],
     "bluegorkshroom5": [
      "20-355",
-     "3291BF",
+     "3292C0",
      "Blue Gorkshroom 5"
     ],
     "carmineblades1": [
      "20-141",
-     "655353",
+     "665454",
      "Carmine Blades 1"
     ],
     "carmineblades2": [
@@ -91,7 +91,7 @@
     ],
     "carmineblades3": [
      "20-143",
-     "8D3E44",
+     "8D3E45",
      "Carmine Blades 3"
     ],
     "carmineblades4": [
@@ -116,12 +116,12 @@
     ],
     "carthalosskin3": [
      "",
-     "714F44",
+     "725044",
      "Carthalos Skin 3"
     ],
     "carthalosskin4": [
      "",
-     "81625F",
+     "82625F",
      "Carthalos Skin 4"
     ],
     "carthalosskin5": [
@@ -151,7 +151,7 @@
     ],
     "celestineskin5": [
      "",
-     "E4C5B1",
+     "E4C6B1",
      "Celestine Skin 5"
     ],
     "chotecorange1": [
@@ -161,22 +161,22 @@
     ],
     "chotecorange3": [
      "20-173",
-     "DE6656",
+     "DE6757",
      "Chotec Orange 3"
     ],
     "chotecorange4": [
      "20-174",
-     "E97955",
+     "E97A55",
      "Chotec Orange 4"
     ],
     "chotecorange5": [
      "20-175",
-     "ED9456",
+     "EE9456",
      "Chotec Orange 5"
     ],
     "craventhronecloak1": [
      "20-311",
-     "414E55",
+     "424F56",
      "Craventhrone Cloak 1"
     ],
     "craventhronecloak2": [
@@ -186,12 +186,12 @@
     ],
     "craventhronecloak3": [
      "20-313",
-     "4B6B77",
+     "4B6B78",
      "Craventhrone Cloak 3"
     ],
     "craventhronecloak4": [
      "20-314",
-     "698D96",
+     "698D97",
      "Craventhrone Cloak 4"
     ],
     "craventhronecloak5": [
@@ -201,12 +201,12 @@
     ],
     "dataslategrey1": [
      "20-101",
-     "575651",
+     "585752",
      "Dataslate Grey 1"
     ],
     "dataslategrey2": [
      "20-102",
-     "68635D",
+     "68645D",
      "Dataslate Grey 2"
     ],
     "dataslategrey3": [
@@ -231,17 +231,17 @@
     ],
     "enrapturessdusk2": [
      "20-382",
-     "685D6B",
+     "685D6C",
      "Enrapturess Dusk 2"
     ],
     "enrapturessdusk3": [
      "20-383",
-     "78707E",
+     "78707F",
      "Enrapturess Dusk 3"
     ],
     "enrapturessdusk4": [
      "20-384",
-     "8F858F",
+     "908690",
      "Enrapturess Dusk 4"
     ],
     "enrapturessdusk5": [
@@ -251,12 +251,12 @@
     ],
     "eyeofterror1": [
      "20-411",
-     "A43756",
+     "A43856",
      "Eye Of Terror 1"
     ],
     "eyeofterror2": [
      "20-411",
-     "A43756",
+     "A43856",
      "Eye Of Terror 2"
     ],
     "eyeofterror3": [
@@ -266,12 +266,12 @@
     ],
     "eyeofterror4": [
      "20-414",
-     "D56590",
+     "D66591",
      "Eye Of Terror 4"
     ],
     "eyeofterror5": [
      "20-415",
-     "DE81AA",
+     "DE81AB",
      "Eye Of Terror 5"
     ],
     "gnarlwood1": [
@@ -281,12 +281,12 @@
     ],
     "gnarlwood2": [
      "",
-     "77695D",
+     "78695E",
      "Gnarlwood 2"
     ],
     "gnarlwood3": [
      "",
-     "937E69",
+     "937F69",
      "Gnarlwood 3"
     ],
     "gnarlwood4": [
@@ -301,12 +301,12 @@
     ],
     "greenmorkshroom1": [
      "20-281",
-     "495958",
+     "4A5A59",
      "Green Morkshroom 1"
     ],
     "greenmorkshroom2": [
      "20-282",
-     "40706B",
+     "41716B",
      "Green Morkshroom 2"
     ],
     "greenmorkshroom3": [
@@ -316,7 +316,7 @@
     ],
     "greenmorkshroom4": [
      "20-284",
-     "369087",
+     "369187",
      "Green Morkshroom 4"
     ],
     "greenmorkshroom5": [
@@ -326,12 +326,12 @@
     ],
     "hawkshroudyellow1": [
      "20-191",
-     "EFA445",
+     "EFA546",
      "Hawkshroud Yellow 1"
     ],
     "hawkshroudyellow2": [
      "20-192",
-     "F2B132",
+     "F2B133",
      "Hawkshroud Yellow 2"
     ],
     "hawkshroudyellow3": [
@@ -341,47 +341,47 @@
     ],
     "hawkshroudyellow4": [
      "20-194",
-     "FAD731",
+     "FAD732",
      "Hawkshroud Yellow 4"
     ],
     "hawkshroudyellow5": [
      "20-195",
-     "F9E399",
+     "F9E39A",
      "Hawkshroud Yellow 5"
     ],
     "hierotekgreen1": [
      "20-271",
-     "375849",
+     "375949",
      "Hierotek Green 1"
     ],
     "hierotekgreen2": [
      "20-272",
-     "307354",
+     "317355",
      "Hierotek Green 2"
     ],
     "hierotekgreen3": [
      "20-273",
-     "318151",
+     "328151",
      "Hierotek Green 3"
     ],
     "hierotekgreen4": [
      "20-274",
-     "319768",
+     "319869",
      "Hierotek Green 4"
     ],
     "hierotekgreen5": [
      "20-275",
-     "52B98F",
+     "53BA8F",
      "Hierotek Green 5"
     ],
     "hivefleetpurple1": [
      "20-391",
-     "4F4A61",
+     "504B62",
      "Hive Fleet Purple 1"
     ],
     "hivefleetpurple2": [
      "20-392",
-     "634B71",
+     "644B72",
      "Hive Fleet Purple 2"
     ],
     "hivefleetpurple3": [
@@ -401,7 +401,7 @@
     ],
     "kasrkingreen1": [
      "20-261",
-     "3D4949",
+     "3E4A4A",
      "Kasrkin Green 1"
     ],
     "kasrkingreen2": [
@@ -411,7 +411,7 @@
     ],
     "kasrkingreen3": [
      "20-263",
-     "6B8B61",
+     "6B8C61",
      "Kasrkin Green 3"
     ],
     "kasrkingreen4": [
@@ -431,7 +431,7 @@
     ],
     "khemrisands2": [
      "",
-     "A37F3B",
+     "A47F3C",
      "Khemri Sands 2"
     ],
     "khemrisands3": [
@@ -441,12 +441,12 @@
     ],
     "khemrisands4": [
      "",
-     "D29D31",
+     "D29D32",
      "Khemri Sands 4"
     ],
     "khemrisands5": [
      "",
-     "DDAE31",
+     "DDAE32",
      "Khemri Sands 5"
     ],
     "kruleboyzgreen1": [
@@ -456,12 +456,12 @@
     ],
     "kruleboyzgreen2": [
      "20-222",
-     "879861",
+     "879961",
      "Kruleboyz Green 2"
     ],
     "kruleboyzgreen3": [
      "20-223",
-     "9B9C63",
+     "9B9C64",
      "Kruleboyz Green 3"
     ],
     "kruleboyzgreen4": [
@@ -471,12 +471,12 @@
     ],
     "kruleboyzgreen5": [
      "20-225",
-     "C3C188",
+     "C4C288",
      "Kruleboyz Green 5"
     ],
     "lustriagreen1": [
      "20-251",
-     "3C6943",
+     "3D6944",
      "Lustria Green 1"
     ],
     "lustriagreen2": [
@@ -486,12 +486,12 @@
     ],
     "lustriagreen3": [
      "20-253",
-     "3D8E51",
+     "3E8F51",
      "Lustria Green 3"
     ],
     "lustriagreen4": [
      "20-254",
-     "66B258",
+     "66B359",
      "Lustria Green 4"
     ],
     "lustriagreen5": [
@@ -501,22 +501,22 @@
     ],
     "magnusthered1": [
      "20-401",
-     "624E54",
+     "624F55",
      "Magnus The Red 1"
     ],
     "magnusthered2": [
      "20-402",
-     "6E4661",
+     "6F4762",
      "Magnus The Red 2"
     ],
     "magnusthered3": [
      "20-403",
-     "8F4061",
+     "904161",
      "Magnus The Red 3"
     ],
     "magnusthered4": [
      "20-404",
-     "AB4C76",
+     "AC4C76",
      "Magnus The Red 4"
     ],
     "magnusthered5": [
@@ -526,22 +526,22 @@
     ],
     "megabossyellow1": [
      "20-201",
-     "F3BC31",
+     "F3BC32",
      "Megaboss Yellow 1"
     ],
     "megabossyellow2": [
      "20-202",
-     "F6D634",
+     "F6D635",
      "Megaboss Yellow 2"
     ],
     "megabossyellow3": [
      "20-203",
-     "FAE466",
+     "FAE467",
      "Megaboss Yellow 3"
     ],
     "megabossyellow4": [
      "20-204",
-     "F7E97D",
+     "F7E97E",
      "Megaboss Yellow 4"
     ],
     "megabossyellow5": [
@@ -551,27 +551,27 @@
     ],
     "necrolithbone1": [
      "",
-     "A49381",
+     "A49382",
      "Necrolith Bone 1"
     ],
     "necrolithbone2": [
      "",
-     "C2AA89",
+     "C2AA8A",
      "Necrolith Bone 2"
     ],
     "necrolithbone3": [
      "",
-     "C7B69C",
+     "C8B69C",
      "Necrolith Bone 3"
     ],
     "necrolithbone4": [
      "",
-     "C7B69C",
+     "C8B69C",
      "Necrolith Bone 4"
     ],
     "necrolithbone5": [
      "",
-     "CEC9B7",
+     "CFCAB7",
      "Necrolith Bone 5"
     ],
     "plaguetoadvenom1": [
@@ -581,7 +581,7 @@
     ],
     "plaguetoadvenom2": [
      "20-212",
-     "7CA94F",
+     "7DA94F",
      "Plague Toad Venom 2"
     ],
     "plaguetoadvenom3": [
@@ -591,12 +591,12 @@
     ],
     "plaguetoadvenom4": [
      "20-214",
-     "B5CD39",
+     "B5CD3A",
      "Plague Toad Venom 4"
     ],
     "plaguetoadvenom5": [
      "20-215",
-     "D8D931",
+     "D8D932",
      "Plague Toad Venom 5"
     ],
     "scinariblue1": [
@@ -606,7 +606,7 @@
     ],
     "scinariblue2": [
      "20-342",
-     "3072A4",
+     "3173A4",
      "Scinari Blue 2"
     ],
     "scinariblue3": [
@@ -616,7 +616,7 @@
     ],
     "scinariblue4": [
      "20-344",
-     "309CC5",
+     "319CC5",
      "Scinari Blue 4"
     ],
     "scinariblue5": [
@@ -636,37 +636,37 @@
     ],
     "seraphonblue3": [
      "20-303",
-     "31818D",
+     "32818E",
      "Seraphon Blue 3"
     ],
     "seraphonblue4": [
      "20-304",
-     "319CA3",
+     "319CA4",
      "Seraphon Blue 4"
     ],
     "seraphonblue5": [
      "20-305",
-     "31BDC1",
+     "32BDC1",
      "Seraphon Blue 5"
     ],
     "shalaxiviolet1": [
      "20-371",
-     "483860",
+     "483960",
      "Shalaxi Violet 1"
     ],
     "shalaxiviolet2": [
      "20-372",
-     "555483",
+     "555583",
      "Shalaxi Violet 2"
     ],
     "shalaxiviolet3": [
      "20-373",
-     "5D69A5",
+     "5E69A5",
      "Shalaxi Violet 3"
     ],
     "shalaxiviolet4": [
      "20-374",
-     "858AC1",
+     "858BC1",
      "Shalaxi Violet 4"
     ],
     "shalaxiviolet5": [
@@ -676,7 +676,7 @@
     ],
     "stormwolfblue1": [
      "20-331",
-     "536374",
+     "546474",
      "Stormwolf Blue 1"
     ],
     "stormwolfblue2": [
@@ -686,7 +686,7 @@
     ],
     "stormwolfblue3": [
      "20-333",
-     "798696",
+     "798697",
      "Stormwolf Blue 3"
     ],
     "stormwolfblue4": [
@@ -706,12 +706,12 @@
     ],
     "taunarochre2": [
      "20-182",
-     "D58A65",
+     "D68A66",
      "Ta'Unar Ochre 2"
     ],
     "taunarochre3": [
      "20-183",
-     "E49A67",
+     "E49A68",
      "Ta'Unar Ochre 3"
     ],
     "taunarochre4": [
@@ -726,17 +726,17 @@
     ],
     "ultramarblue1": [
      "20-361",
-     "384865",
+     "394865",
      "Ultramar Blue 1"
     ],
     "ultramarblue2": [
      "20-362",
-     "47567E",
+     "47577F",
      "Ultramar Blue 2"
     ],
     "ultramarblue3": [
      "20-363",
-     "466C99",
+     "476D9A",
      "Ultramar Blue 3"
     ],
     "ultramarblue4": [
@@ -746,7 +746,7 @@
     ],
     "ultramarblue5": [
      "20-365",
-     "93B1D7",
+     "93B2D8",
      "Ultramar Blue 5"
     ]
    }
