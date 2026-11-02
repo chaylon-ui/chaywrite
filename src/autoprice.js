@@ -185,7 +185,7 @@ export function parseGraded(title) {
    The words are taken from
    the title OUTSIDE the name, so a name like Gold Star Rayquaza is not
    doubled. A product that is not a graded card searches its full title. */
-export const EBAY_KEEP = [/\bprize pack(?:\s+series\s+\w+)?/i, /\b1st edition\b/i, /\bfirst edition\b/i, /\bshadowless\b/i, /\bunlimited\b/i, /\bpromo\b/i, /\bpre-?release\b/i, /\bstaff\b/i,
+export const EBAY_KEEP = [/\bprize pack(?:\s+series\s+\w+)?/i, /\b1st edition\b/i, /\bfirst edition\b/i, /\bshadowless\b/i, /\bunlimited\b/i, /\bblack star promos?\b/i, /\bpromos?\b/i, /\bpre-?release\b/i, /\bstaff\b/i,
   /\bnon[- ]?holo(?:foil)?\b/i, /\breverse holo(?:foil)?\b/i, /\bcosmos holo\b/i, /\bholo(?:foil)?\b/i, /\bnon[- ]?foil\b/i, /\b(?:etched|surge|galaxy|textured|halo|confetti|oil slick|rainbow|raised|silver|gold|ripple|dragon scale|fracture|double rainbow)\s+foil\b/i, /\bfoil\b/i,
   /\b(?:japanese|korean|chinese|german|french|italian|spanish|portuguese|thai|indonesian|russian|dutch)\b/i, /\bborderless\b/i, /\bextended art\b/i, /\bshowcase\b/i, /\bfull art\b/i, /\balt(?:ernate)? art\b/i, /\bsecret rare\b/i, /\bgold star\b/i, /\bshining\b/i, /\bcrystal\b/i, /\bstamped\b/i, /\bw stamp\b/i, /\berror\b/i, /\bmisprint\b/i, /\bserialized\b/i, /\bsigned\b/i, /\bautograph(?:ed)?\b/i];
 export function ebayQuery(r) {

@@ -1266,6 +1266,8 @@ test("the eBay sold search for a graded card: name + the words that matter + the
   assert.equal(g("Blastoise (2/102) [Base Set Unlimited] Non-Holo Graded PSA 8"), "Blastoise Non-Holo 2 Unlimited PSA 8");
   assert.equal(g("Copy of Umbreon VMAX (215/203) [Evolving Skies] Graded PSA 10"), "Umbreon VMAX 215 PSA 10");
   assert.equal(g("Ultra Ball (126/092) [Japanese Scarlet & Violet: Raging Surf] Graded PSA 10"), "Ultra Ball 126 Japanese PSA 10", "the collector number rides along (owner 2026-11-02), never the /092");
+  assert.equal(g("Umbreon & Darkrai GX (SM241) [SM Black Star Promos] Graded PSA 10"), "Umbreon & Darkrai GX SM241 Black Star Promos PSA 10", "Black Star Promos stays whole (owner 2026-11-02)");
+  assert.equal(g("Mew (025) [Pokemon GO Promo] Graded PSA 10"), "Mew 25 Promo PSA 10");
   assert.equal(ebayQuery({ title: "Pokemon 151 Booster Bundle", graded: null }), "Pokemon 151 Booster Bundle", "sealed: the full title");
   // the link on the row carries it
   const rows = [{ id: "gid://shopify/Product/9", title: "Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9", handle: "dark-muk", type: "Pokemon Single Graded", game: "Pokemon Graded", stock: 1, current: 50, suggested: 64.95, action: "raise", awaiting: true, graded: parseGraded("Dark Muk (41/82) [Team Rocket 1st Edition] Graded PSA 9"), pcId: 123, sources: ["x"] }];
