@@ -36,10 +36,15 @@ def sample(img):
     w, h = im.size
     px = im.load()
     c0, c1 = int(w * 0.45), int(w * 0.55)
+    # the background is whatever the top rows are (white, give or take); the pot's bottom is
+    # the last row where most of the central columns differ from it - a near-white band
+    # (Blackstone Void 5 reads 232,232,232) still counts, a fixed "darker than 228" did not
+    top = [px[x, y] for y in range(0, max(1, int(h * 0.02))) for x in range(c0, c1)]
+    bg = tuple(int(statistics.median([p[i] for p in top])) for i in range(3))
     bottom = None
     for y in range(h - 1, int(h * 0.3), -1):
-        dark = sum(1 for x in range(c0, c1) if min(px[x, y]) < 228)
-        if dark > (c1 - c0) // 2:
+        off = sum(1 for x in range(c0, c1) if max(abs(px[x, y][i] - bg[i]) for i in range(3)) > 10)
+        if off > (c1 - c0) // 2:
             bottom = y
             break
     if bottom is None:
@@ -95,6 +100,18 @@ def main():
         out[key(name)] = [code, hexv, name]
         print("  ", name.ljust(26), code.ljust(7), hexv, rgb)
     print("coloured", len(out), "| missing", len(missing))
+    # a group's tones should get lighter from 1 to 5: say so when one does not
+    def lum(hx):
+        return 0.2126 * int(hx[0:2], 16) + 0.7152 * int(hx[2:4], 16) + 0.0722 * int(hx[4:6], 16)
+    groups = {}
+    for k, v in out.items():
+        m = re.match(r"^(.*)\s(\d)$", v[2])
+        if m:
+            groups.setdefault(m.group(1), {})[int(m.group(2))] = lum(v[1])
+    for g, tones in sorted(groups.items()):
+        order = [tones[t] for t in sorted(tones)]
+        if any(b < a - 4 for a, b in zip(order, order[1:])):
+            print("  ? not lighter 1..5:", g, [round(x) for x in order])
     data = {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "source": "the colour band at the foot of each pot in our product photos (tools/tonepro-colours.py)",
             "brands": {"Tone Pro": {"Tone Pro": out}}, "missing": missing}
