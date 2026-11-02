@@ -318,6 +318,16 @@ html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.
 .bl__pay input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
 .bl__pay label:has(input:checked) { background: var(--bl-surface); color: var(--bl-accent); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12); }
 .bl__pay label:has(input:focus-visible) { outline: 2px solid var(--bl-accent); outline-offset: 1px; }
+.bl__del { margin: 0 0 10px; padding: 10px 10px 8px; border-radius: 12px; background: var(--bl-surface-2); font-size: 14px; color: var(--bl-ink); }
+.bl__del-h { display: block; margin: 0 2px 6px; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; color: var(--bl-muted, #6b7780); }
+.bl__del-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.bl__del-opts label { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; height: 36px; border-radius: 9px; font-weight: 600; cursor: pointer; }
+.bl__del-opts input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.bl__del-opts label:has(input:checked) { background: var(--bl-surface); color: var(--bl-accent); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12); }
+.bl__del-opts label:has(input:focus-visible) { outline: 2px solid var(--bl-accent); outline-offset: 1px; }
+.bl__del-note { margin: 8px 2px 0; font-size: 12.5px; line-height: 1.45; color: var(--bl-muted, #6b7780); }
+.bl__del-hint { color: var(--bl-accent); font-weight: 600; }
+.bl__done-del { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--bl-surface-2); font-size: 14px; line-height: 1.45; }
 .bl__totals { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding: 12px 0; border-top: 1px solid var(--bl-line); border-bottom: 1px solid var(--bl-line); }
 .bl__totals span { display: flex; flex-direction: column; gap: 2px; }
 /* The store-credit total by position, not :last-child - the store-credit

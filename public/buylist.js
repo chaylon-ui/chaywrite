@@ -101,6 +101,11 @@
         '<h2 class="bl__h2"><span class="bl__tray" aria-hidden="true"></span>Your buylist <span id="bl-count" class="bl__muted"></span><small>The cards you are sending to Exor Games</small></h2>' +
         '<div id="bl-lines"><p class="bl__muted">Loading your saved list…</p></div>' +
         '<div class="bl__pay"><label><input type="radio" name="bl-pay" value="Cash" checked> Cash</label><label><input type="radio" name="bl-pay" value="Store Credit"> Store credit</label></div>' +
+        // how the cards reach us (owner 2026-11-02): a required choice; shipping shows the address and promises the tracking link
+        '<div class="bl__del" role="group" aria-labelledby="bl-del-h"><span id="bl-del-h" class="bl__del-h">How are the cards getting to us?</span>' +
+          '<div class="bl__del-opts"><label><input type="radio" name="bl-del" value="in-store"> Bringing them in</label><label><input type="radio" name="bl-del" value="ship"> Shipping them to us</label></div>' +
+          '<p id="bl-delhint" class="bl__del-note bl__del-hint" hidden>Choose one to submit your list.</p>' +
+          '<p id="bl-delnote" class="bl__del-note" hidden>Pack them well and mail to <b>Exor Games, ATTN: Gage Office, 51 Allen Street, Charlottetown, PE C1A 2V6, Canada</b>. Tracking and insurance are recommended; your confirmation email will have a link to add the tracking number.</p></div>' +
         '<div class="bl__totals"><span>Cash <b id="bl-tcash">$0.00</b></span><span>Store credit <b id="bl-tcredit">$0.00</b></span></div>' +
         '<div class="bl__actions"><button id="bl-clear" type="button" class="bl__btn" disabled>Clear list</button><button id="bl-submit" type="button" class="bl__btn bl__btn--primary" disabled>Submit buylist</button></div>' +
         '<p id="bl-msg" class="bl__msg bl__muted"></p>' +
@@ -678,8 +683,9 @@
     $("#bl-tcash").textContent = money(tcash);
     $("#bl-tcredit").textContent = money(tcredit);
     $("#bl-sheetsum").textContent = n ? n + (n === 1 ? " card" : " cards") + " · " + money(tcash) + " cash · " + money(tcredit) + " credit" : "Empty — add cards from the results";
-    $("#bl-submit").disabled = !cart.length;
-    $("#bl-sheetsubmit").disabled = !cart.length;
+    $("#bl-submit").disabled = !cart.length || !delChosen();
+    $("#bl-sheetsubmit").disabled = !cart.length || !delChosen();
+    var dh = $("#bl-delhint"); if (dh) dh.hidden = !(cart.length && !delChosen());
     $("#bl-clear").disabled = !cart.length;
   }
 
@@ -819,6 +825,13 @@
   // browser that suppresses those dialogs would have sent nothing - or, on
   // some phones, shown a box nobody reads.
   function payChosen() { return (root.querySelector('input[name="bl-pay"]:checked') || {}).value || "Cash"; }
+  function delChosen() { return (root.querySelector('input[name="bl-del"]:checked') || {}).value || ""; }
+  root.addEventListener("change", function (e) {
+    if (!e.target || e.target.name !== "bl-del") return;
+    var note = $("#bl-delnote"); if (note) note.hidden = e.target.value !== "ship";
+    $("#bl-submit").disabled = !cart.length; $("#bl-sheetsubmit").disabled = !cart.length;
+    var dh = $("#bl-delhint"); if (dh) dh.hidden = true;
+  });
   function askToConfirm(onYes) {
     var d = $("#bl-confirm");
     if (!d || typeof d.showModal !== "function") {
@@ -922,7 +935,7 @@
     $("#bl-submit").disabled = true;
     setMsg("Submitting…");
     flushSave().then(function () {
-      return api("/submit", { paymentType: pay, cards: cart });
+      return api("/submit", { paymentType: pay, cards: cart, delivery: delChosen() });
     }).then(function (j) {
       if (!j.accepted) {
         setMsg("BinderPOS did not accept the submission: " + ((j.reply && j.reply.message) || ("HTTP " + j.upstream)));
@@ -974,6 +987,8 @@
     d.innerHTML = '<div class="bl__done-head"><span class="bl__done-kicker">Buylist received</span><h3 id="bl-done-title">' + (j.number ? "Buylist Number " + esc(j.number) : "Thank you") + "</h3>" +
       (t.units != null ? '<p class="bl__done-sum">' + esc(t.units) + " card" + (t.units === 1 ? "" : "s") + " · " + esc(j.paymentType || "") + " · estimated " + money(credit ? t.credit : t.cash) + "</p>" : "") + "</div>" +
       '<div class="bl__guide-body">' + (ins.nextStep ? '<p class="bl__done-next">' + esc(ins.nextStep) + "</p>" : "") +
+      (j.delivery === "ship" ? '<div class="bl__done-del"><b>You are shipping the cards.</b> When you have a tracking number, add it ' + (j.trackUrl ? 'at <a href="' + esc(j.trackUrl) + '" target="_blank" rel="noopener">this link</a> (it is in your email too)' : "through the link in your confirmation email") + " so we can watch for the parcel.</div>"
+        : j.delivery === "in-store" ? '<div class="bl__done-del"><b>You are bringing the cards in.</b> Come by whenever you are ready; we check them against this list.</div>' : "") +
       (notes && notes.length ? '<p class="bl__done-notes">' + notes.map(esc).join(" ") + "</p>" : "") +
       sections +
       (j.email && j.email.status && j.email.status !== "sent" ? "" : '<p class="bl__guide-note bl__muted">A copy of these instructions has been emailed to the address on your account.</p>') +

@@ -789,6 +789,8 @@ export async function cartDetail(env, id, day) {
 /* ------------------------------------------------------------- routes */
 
 const NO_STORE = { "content-type": "application/json", "cache-control": "no-store" };
+// Buylists being shipped (src/ship.js, owner 2026-11-02): the side record per list, joined onto the live rows.
+import { shipAll, shipGet, shipSet, shipAsk, shipView, DELIVERIES, STATES } from "./ship.js";
 
 export async function servePortal(request, env, url, staffOk) {
   const k = url.searchParams.get("k") || "";
@@ -802,6 +804,30 @@ export async function servePortal(request, env, url, staffOk) {
       if (configured) { try { await idToken(env); signedIn = true; } catch (e) { error = String((e && e.message) || e).slice(0, 200); } }
       return Response.json({ ok: true, configured, signedIn, tokenExpires: session ? new Date(session.exp).toISOString() : null, error }, { headers: NO_STORE });
     }
+    if (url.pathname === "/portal/buylists.json" && url.searchParams.get("status") === "shipping") {
+      // the Shipping tab: every list the customer said they would ship, from the side records alone
+      // (no BinderPOS read): not yet received, plus the ones received in the last 7 days
+      const sh = await shipAll(env);
+      const now = Date.now();
+      const rows = (sh.records || []).filter((r) => r.delivery === "ship" && (r.state !== "received" || now - (r.receivedAt || 0) < 7 * 86400e3))
+        .map((r) => ({ id: String(r.number), submitted: new Date(r.ts).toISOString(), customer: { name: r.customerName || "", email: r.customerEmail || "" }, paymentType: r.paymentType || "", totals: r.totals || null, portalUrl: portalUrl("pending", r.number), ship: shipView(r) }));
+      return Response.json({ ok: true, status: "shipping", take: rows.length, skip: 0, since: null, card: null, rows, more: false }, { headers: NO_STORE });
+    }
+    if (url.pathname === "/portal/ship.json" && request.method === "POST") {
+      // staff actions on a shipped list: ask for tracking (the email), mark received / shipped / awaiting, a number by hand, a corrected choice
+      let b = {}; try { b = await request.json(); } catch {}
+      const number = String(b.number || "").replace(/[^A-Za-z0-9-]/g, "").slice(0, 40), action = String(b.action || "");
+      const who = (staffOk.last && staffOk.last.who) || "staff";
+      if (!number) return Response.json({ error: "number required" }, { status: 400, headers: NO_STORE });
+      let out;
+      if (action === "ask") out = await shipAsk(env, number, who);
+      else if (STATES.includes(action)) out = await shipSet(env, number, { state: action, by: who });
+      else if (action === "tracking") out = await shipSet(env, number, { tracking: String(b.tracking || ""), carrier: String(b.carrier || ""), by: who });
+      else if (action === "delivery" && DELIVERIES.includes(b.delivery)) out = await shipSet(env, number, { delivery: b.delivery, by: who });
+      else return Response.json({ error: "unknown action" }, { status: 400, headers: NO_STORE });
+      if (!out || !out.ok) return Response.json({ ok: false, error: (out && out.error) || "failed", ship: out && out.record ? shipView(out.record) : null }, { status: out && out.error === "no such list" ? 404 : 200, headers: NO_STORE });
+      return Response.json({ ok: true, ship: shipView(out.record), status: out.status || null }, { headers: NO_STORE });
+    }
     if (url.pathname === "/portal/buylists.json") {
       const days = url.searchParams.get("days");
       let since = url.searchParams.get("since") || null;
@@ -814,12 +840,16 @@ export async function servePortal(request, env, url, staffOk) {
         since,
         card: url.searchParams.get("card") || "",
       });
+      // the delivery choice and the parcel's state beside each live row (src/ship.js)
+      try { const sh = await shipAll(env); const by = new Map((sh.records || []).map((r) => [String(r.number), r])); for (const r of out.rows || []) r.ship = shipView(by.get(String(r.id)) || null); } catch {}
       return Response.json(out, { headers: NO_STORE });
     }
     if (url.pathname === "/portal/buylist.json") {
       const id = (url.searchParams.get("id") || "").replace(/\D/g, "").slice(0, 16);
       if (!id) return Response.json({ error: "id required" }, { status: 400, headers: NO_STORE });
-      return Response.json(await buylistDetail(env, id), { headers: NO_STORE });
+      const d = await buylistDetail(env, id);
+      try { const g = await shipGet(env, id); d.ship = shipView(g.ok ? g.record : null); } catch { d.ship = null; }
+      return Response.json(d, { headers: NO_STORE });
     }
     if (url.pathname === "/portal/carts.json") {
       return Response.json(await listCarts(env, {

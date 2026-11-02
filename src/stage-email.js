@@ -101,6 +101,7 @@ ${mallowHtml()}
 <tr><td style="padding:26px 28px 8px">
   <p style="margin:0 0 14px;font-size:16px">${first ? "Hi " + esc(first) + "," : "Hello,"}</p>
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${PAPER};border-radius:10px"><tr><td style="padding:14px 16px;line-height:1.55"><strong>What's the next step?</strong> ${esc(NEXT_STEP.replace(/^What.s the next step\?\s*/, ""))}</td></tr></table>
+${deliveryHtml(rec)}
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:18px 0 6px"><tr>
     <td style="padding:0 8px 0 0"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Cards</div><div style="font-size:20px;font-weight:700">${t.units}</div></td>
     <td style="padding:0 8px"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Paid as</div><div style="font-size:20px;font-weight:700">${esc(rec.paymentType)}</div></td>
@@ -121,7 +122,7 @@ ${mallowHtml()}
 
   const text = [
     `${BRAND} - we have your buylist`, `Buylist Number: ${ref}`, "",
-    first ? `Hi ${first},` : "Hello,", "", mallowText(), "", NEXT_STEP, "",
+    first ? `Hi ${first},` : "Hello,", "", mallowText(), "", NEXT_STEP, "", ...deliveryText(rec),
     `Cards: ${t.units} · Paid as: ${rec.paymentType} · Estimated total: ${money(total)}`, "",
     ...cards.map((c) => `${qty(c)} x ${c.cardName} [${c.setName}] ${c.conditionName || c.condition}${c.type && c.type !== "Normal" ? " " + c.type : ""} @ ${money(each(c))} = ${money(qty(c) * (Number(each(c)) || 0))}`),
     `Estimated ${credit ? "store credit" : "cash"} total: ${money(total)}`, "",
@@ -130,6 +131,67 @@ ${mallowHtml()}
     `Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · ${REPLY_TO}`,
   ].join("\n");
 
+  return { subject, html, text };
+}
+
+/* The delivery choice the customer made at submission (src/ship.js, owner
+   2026-11-02): said back to them, and for a shipped list the link where the
+   tracking number goes. */
+const BTN = (href, label) => `<a href="${esc(href)}" style="display:inline-block;background:${RED};color:#ffffff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:8px">${esc(label)}</a>`;
+function deliveryHtml(rec) {
+  if (rec.delivery === "ship") return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:14px 0 0;background:#fff7e6;border:1px solid #f3dca3;border-radius:10px"><tr><td style="padding:14px 16px;line-height:1.55"><strong>You told us you are shipping the cards.</strong> When you have a tracking number, add it here so we can watch for the parcel${rec.trackUrl ? `:<br><div style="margin:10px 0 2px">${BTN(rec.trackUrl, "Add the tracking number")}</div><span style="font-size:12px;color:${MUTED}">Or open ${esc(rec.trackUrl)}</span>` : "."}</td></tr></table>`;
+  if (rec.delivery === "in-store") return `<p style="margin:14px 0 0;line-height:1.55"><strong>You told us you are bringing the cards in.</strong> Come by whenever you are ready; we check them against this list while you wait or shortly after.</p>`;
+  return "";
+}
+function deliveryText(rec) {
+  if (rec.delivery === "ship") return ["You told us you are shipping the cards. When you have a tracking number, add it here: " + (rec.trackUrl || "(link to follow)"), ""];
+  if (rec.delivery === "in-store") return ["You told us you are bringing the cards in. Come by whenever you are ready.", ""];
+  return [];
+}
+
+/* The tracking emails (src/ship.js): "ask" from the staff button, "chase" from
+   the worker three days after a shipped list arrived with no tracking (once,
+   never twice). Both carry the link and the owner's Mallow Games banner
+   (owner, 2026-11-02: "add a small graphic to the reminder email with an ad
+   for mallow games"). The customer who never adds tracking is fine - the
+   email says so. */
+export function buildTrackingEmail(rec, kind, link) {
+  const ref = rec.number || "";
+  const first = String(rec.customerName || "").trim().split(/\s+/)[0] || "";
+  const chase = kind === "chase";
+  const units = rec.totals && rec.totals.units != null ? rec.totals.units : null;
+  const subject = chase ? `Buylist ${ref} - a tracking number when you have one (${BRAND})` : `Buylist ${ref} - could you add your tracking number? (${BRAND})`;
+  const lead = chase
+    ? `A few days ago you sent us buylist <strong>${esc(ref)}</strong>${units != null ? ` (${units} card${units === 1 ? "" : "s"})` : ""} and said you would ship the cards. We have not seen a tracking number yet. When the parcel is on its way, add the number here and we will watch for it:`
+    : `You sent us buylist <strong>${esc(ref)}</strong>${units != null ? ` (${units} card${units === 1 ? "" : "s"})` : ""} and said you would ship the cards. Could you add the tracking number here when you have it? It lets us watch for the parcel and check your cards the day they land:`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:${PAPER};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${INK};font-size:15px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:${RED};padding:22px 28px;color:#ffffff">
+  <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">9Pocket by <img src="${LOGO}" alt="Exor Games" width="44" height="32" style="vertical-align:middle;height:32px;width:auto;margin-left:2px"></div>
+  <div style="font-size:24px;font-weight:700;line-height:1.2;margin-top:4px">${chase ? "Shipping your cards?" : "Your tracking number"}</div>
+  <div style="font-size:15px;margin-top:6px;opacity:.95">Buylist Number <strong style="font-size:17px">${esc(ref)}</strong></div>
+</td></tr>
+<tr><td style="padding:26px 28px 8px">
+  <p style="margin:0 0 14px;font-size:16px">${first ? "Hi " + esc(first) + "," : "Hello,"}</p>
+  <p style="margin:0 0 16px;line-height:1.55">${lead}</p>
+  <div style="margin:0 0 10px">${BTN(link, "Add the tracking number")}</div>
+  <p style="margin:0 0 18px;font-size:12px;color:${MUTED};line-height:1.5">Or open ${esc(link)}</p>
+  <p style="margin:0 0 6px;line-height:1.55;color:${MUTED}">${chase ? "Not shipping after all, or bringing the cards in instead? Then there is nothing to do; this is the only reminder we send." : "Bringing the cards in instead? Then there is nothing to do."} Tracking and insurance are recommended for anything valuable.</p>
+</td></tr>
+${mallowHtml()}
+<tr><td style="background:${PAPER};padding:16px 28px;font-size:12px;color:${MUTED};line-height:1.6;margin-top:18px">Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · <a href="mailto:${REPLY_TO}" style="color:${MUTED}">${REPLY_TO}</a></td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [
+    `${BRAND} - buylist ${ref}`, "",
+    first ? `Hi ${first},` : "Hello,", "",
+    lead.replace(/<[^>]+>/g, ""), "",
+    `Add the tracking number: ${link}`, "",
+    chase ? "Not shipping after all, or bringing the cards in instead? Then there is nothing to do; this is the only reminder we send." : "Bringing the cards in instead? Then there is nothing to do.", "",
+    mallowText(), "",
+    `Exor Games · 51 Allen Street, Charlottetown, PE C1A 2V6 · ${REPLY_TO}`,
+  ].join("\n");
   return { subject, html, text };
 }
 

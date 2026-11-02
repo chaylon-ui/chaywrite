@@ -63,6 +63,7 @@
 import { repriceCards, submitToBinderPos, cleanCards, conditionsFor } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, buildDecisionEmail, buildCodeEmail, buildStaffBuylistEmail, sendEmail, emailConfigured } from "./stage-email.js";
+import { TRACK_PATH, DELIVERIES, STATES, CARRIER_KEYS, CHASE_AFTER_MS, CHASE_WINDOW_MS, deliveryOf, cleanTracking, carrierGuess, randomToken, shipPut, trackUrl, serveTrack } from "./ship.js";
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
 import { serveRequestsStaff } from "./requests.js";
@@ -171,7 +172,8 @@ export function shapeRecord(b, now) {
     : { changed: [], capped: [], dropped: [] };
   const customerName = String((b && b.customerName) || "").trim().slice(0, 120);
   const customerEmail = String((b && b.customerEmail) || "").trim().slice(0, 160);
-  return { id, number: "", ts, customer, customerName, customerEmail, paymentType, cards, totals: totalsOf(cards), repriced, status: "staged", note: "", events: [{ ts, action: "submitted" }], bp: null, email: null };
+  const delivery = deliveryOf(b && b.delivery);   // bringing them in or shipping them (src/ship.js); older scripts send none
+  return { id, number: "", ts, customer, customerName, customerEmail, paymentType, cards, totals: totalsOf(cards), repriced, status: "staged", note: "", events: [{ ts, action: "submitted" + (delivery ? " · " + delivery : "") }], bp: null, email: null, delivery };
 }
 const strs = (v) => (Array.isArray(v) ? v.slice(0, 100).map((s) => String(s).slice(0, 200)) : []);
 
@@ -179,7 +181,7 @@ const strs = (v) => (Array.isArray(v) ? v.slice(0, 100).map((s) => String(s).sli
 // totals, never the staff note, the customer's Shopify fields or the reply.
 export function mineView(rec) {
   return {
-    id: rec.id, number: rec.number || "", ts: rec.ts, status: rec.status, paymentType: rec.paymentType, totals: rec.totals,
+    id: rec.id, number: rec.number || "", ts: rec.ts, status: rec.status, paymentType: rec.paymentType, totals: rec.totals, delivery: rec.delivery || null,
     cards: (rec.cards || []).map((c) => ({ cardName: c.cardName, setName: c.setName, conditionName: c.conditionName, type: c.type, quantity: c.quantity, cash: c.cashBuyPrice, credit: c.storeCreditBuyPrice })),
     reference: rec.bp && rec.bp.number ? rec.bp.number : null,
     decidedAt: (rec.events || []).filter((e) => e.action === "approved" || e.action === "rejected").map((e) => e.ts).pop() || null,
@@ -736,6 +738,8 @@ export async function stageDoFetch(cx, request, url) {
     const access = gone.length;
     const m = await cx.storage.list({ prefix: "st:" });
     for (const [k, v] of m) if (!v || (v.ts || 0) < now - (v.status === "staged" ? RETENTION.stagedDays : RETENTION.buylistDays) * 86400e3) gone.push(k);
+    const sh = await cx.storage.list({ prefix: "sh:" });   // shipping side records (src/ship.js) go with the decided lists
+    for (const [k, v] of sh) if (!v || (v.ts || 0) < now - RETENTION.buylistDays * 86400e3) gone.push(k);
     for (let i = 0; i < gone.length; i += 128) await cx.storage.delete(gone.slice(i, i + 128));
     const next = { at: now, counts: { access, buylists: gone.length - access }, others: null };
     await cx.storage.put("ret:last", next);
@@ -747,6 +751,84 @@ export async function stageDoFetch(cx, request, url) {
     last.others = b.others || null;
     await cx.storage.put("ret:last", last);
     return doJson({ ok: true, last });
+  }
+  // ---- shipping side records (src/ship.js): sh:<number> ----
+  if (p === "/_stage/ship/put" && post) {
+    const b = await bodyOf(request);
+    const number = String(b.number || "").trim().slice(0, 40), delivery = deliveryOf(b.delivery);
+    if (!number || !delivery) return doJson({ ok: false, error: "number and delivery required" }, 400);
+    const now = cx.now();
+    const old = await cx.storage.get("sh:" + number);
+    const t = b.totals && typeof b.totals === "object" ? { cash: Number(b.totals.cash) || 0, credit: Number(b.totals.credit) || 0, units: Number(b.totals.units) || 0, lines: Number(b.totals.lines) || 0 } : null;
+    const rec = old ? { ...old, delivery } : { number, ts: now, customer: digits(b.customer), customerName: String(b.customerName || "").trim().slice(0, 120), customerEmail: String(b.customerEmail || "").trim().slice(0, 160), paymentType: String(b.paymentType || "").slice(0, 20), totals: t,
+      delivery, token: randomToken(), state: "awaiting", carrier: "", tracking: "", trackedAt: null, trackedBy: "", receivedAt: null, receivedBy: "", askedAt: null, chasedAt: null, lastAsk: null, events: [] };
+    rec.events = (rec.events || []).concat([{ ts: now, action: (old ? "delivery changed to " : "submitted · ") + delivery }]).slice(-30);
+    await cx.storage.put("sh:" + number, rec);
+    return doJson({ ok: true, token: rec.token, record: rec });
+  }
+  if (p === "/_stage/ship/get") {
+    const rec = await cx.storage.get("sh:" + String(url.searchParams.get("number") || "").slice(0, 40));
+    return rec ? doJson({ ok: true, record: rec }) : doJson({ ok: false, error: "no such list" }, 404);
+  }
+  if (p === "/_stage/ship/all") {
+    const m = await cx.storage.list({ prefix: "sh:" });
+    return doJson({ ok: true, records: [...m.values()].filter(Boolean).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 500) });
+  }
+  if (p === "/_stage/ship/track" && post) {
+    // the customer, by the link's token: the number and the carrier; a list already received stays received
+    const b = await bodyOf(request);
+    const rec = await cx.storage.get("sh:" + String(b.number || "").slice(0, 40));
+    if (!rec || !b.token || String(b.token) !== rec.token) return doJson({ ok: false, error: "no such link" }, 404);
+    const tracking = cleanTracking(b.tracking);
+    if (!tracking) return doJson({ ok: false, error: "That does not look like a tracking number (6 to 40 letters and digits)." }, 400);
+    const carrier = CARRIER_KEYS.includes(b.carrier) ? b.carrier : carrierGuess(tracking) || "other";
+    Object.assign(rec, { tracking, carrier, trackedAt: cx.now(), trackedBy: "customer", state: rec.state === "received" ? "received" : "shipped" });
+    rec.events = (rec.events || []).concat([{ ts: cx.now(), action: "tracking " + carrier + " " + tracking, by: "customer" }]).slice(-30);
+    await cx.storage.put("sh:" + rec.number, rec);
+    return doJson({ ok: true, record: rec });
+  }
+  if (p === "/_stage/ship/set" && post) {
+    // staff: the parcel's state, a number the customer gave by phone, a corrected delivery choice
+    const b = await bodyOf(request);
+    const rec = await cx.storage.get("sh:" + String(b.number || "").slice(0, 40));
+    if (!rec) return doJson({ ok: false, error: "no such list" }, 404);
+    const now = cx.now(), by = String(b.by || "").slice(0, 160), ev = [];
+    if ("tracking" in b) {
+      const t = cleanTracking(b.tracking);
+      if (b.tracking && !t) return doJson({ ok: false, error: "That does not look like a tracking number (6 to 40 letters and digits)." }, 400);
+      rec.tracking = t; rec.carrier = t ? (CARRIER_KEYS.includes(b.carrier) ? b.carrier : carrierGuess(t) || "other") : ""; rec.trackedAt = t ? now : null; rec.trackedBy = t ? by : "";
+      if (t && rec.state === "awaiting") rec.state = "shipped";
+      if (!t && rec.state === "shipped") rec.state = "awaiting";
+      ev.push(t ? "tracking " + rec.carrier + " " + t : "tracking cleared");
+    }
+    if (b.state && STATES.includes(b.state)) {
+      rec.state = b.state;
+      if (b.state === "received") { rec.receivedAt = now; rec.receivedBy = by; } else { rec.receivedAt = null; rec.receivedBy = ""; }
+      ev.push("marked " + b.state);
+    }
+    if (b.delivery && DELIVERIES.includes(b.delivery) && b.delivery !== rec.delivery) { rec.delivery = b.delivery; ev.push("delivery changed to " + b.delivery); }
+    rec.events = (rec.events || []).concat(ev.map((action) => ({ ts: now, action, by }))).slice(-30);
+    await cx.storage.put("sh:" + rec.number, rec);
+    return doJson({ ok: true, record: rec });
+  }
+  if (p === "/_stage/ship/asked" && post) {
+    const b = await bodyOf(request);
+    const rec = await cx.storage.get("sh:" + String(b.number || "").slice(0, 40));
+    if (!rec) return doJson({ ok: false, error: "no such list" }, 404);
+    const kind = b.kind === "chase" ? "chase" : "ask", now = cx.now();
+    rec[kind === "chase" ? "chasedAt" : "askedAt"] = now;
+    rec.lastAsk = { kind, at: now, status: String((b.email && b.email.status) || ""), error: String((b.email && b.email.error) || "").slice(0, 160), to: String((b.email && b.email.to) || "").slice(0, 160) };
+    rec.events = (rec.events || []).concat([{ ts: now, action: (kind === "chase" ? "reminder" : "asked for tracking") + (rec.lastAsk.status === "sent" ? " · sent" : " · " + rec.lastAsk.status), by: String(b.by || "").slice(0, 160) }]).slice(-30);
+    await cx.storage.put("sh:" + rec.number, rec);
+    return doJson({ ok: true, record: rec });
+  }
+  if (p === "/_stage/ship/due" && post) {
+    // the chase: shipped lists with no tracking, three days on, not chased, young enough to matter
+    const b = await bodyOf(request);
+    const now = Number(b.now) || cx.now();
+    const m = await cx.storage.list({ prefix: "sh:" });
+    const out = [...m.values()].filter((r) => r && r.delivery === "ship" && r.state === "awaiting" && !r.tracking && !r.chasedAt && r.customerEmail && now - (r.ts || 0) >= CHASE_AFTER_MS && now - (r.ts || 0) < CHASE_WINDOW_MS);
+    return doJson({ ok: true, records: out.slice(0, 50) });
   }
   if (p === "/_stage/health") {
     const all = await listAll(cx);
@@ -811,16 +893,19 @@ async function doCall(env, origin, path, body) {
 // Called by buylist.js in place of the BinderPOS call. Returns the record
 // id and number; the customer email and the staff push are best-effort and
 // never fail the submission.
-export async function stageSubmit(env, url, { customer, paymentType, cards, repriced }) {
+export async function stageSubmit(env, url, { customer, paymentType, cards, repriced, delivery }) {
   const who = await lookupCustomer(env, customer);
-  const j = await doCall(env, url.origin, "/_stage/put", { customer, customerName: who.name, customerEmail: who.email, paymentType, cards, repriced });
+  const j = await doCall(env, url.origin, "/_stage/put", { customer, customerName: who.name, customerEmail: who.email, paymentType, cards, repriced, delivery });
   if (!j.ok) throw new Error(j.error || "could not stage the list");
+  // the shipping side record (src/ship.js), keyed by the 9P number here; the link rides in the email and the reply
+  let track = null;
+  if (deliveryOf(delivery)) { try { const s = await shipPut(env, { number: j.number, customer, customerName: who.name, customerEmail: who.email, paymentType, totals: j.totals, delivery }); if (s.ok) track = trackUrl(url.origin, j.number, s.token); } catch {} }
   let rec = null, customerMail = null;
-  try { rec = (await doCall(env, url.origin, "/_stage/get?id=" + encodeURIComponent(j.id))).record; customerMail = await emailCustomer(env, url, rec, ""); } catch {}
+  try { rec = (await doCall(env, url.origin, "/_stage/get?id=" + encodeURIComponent(j.id))).record; if (rec) rec.trackUrl = track; customerMail = await emailCustomer(env, url, rec, ""); } catch {}
   try { await notifyStaff(env, url, { id: j.id, number: j.number, customer, customerName: who.name, paymentType, totals: j.totals }); } catch {}
   // The staff copy (owner, 2026-10-22), one email per address.
   try { if (rec) await emailStaffBuylist(env, url, { ...rec, customerPhone: who.phone || "" }, { staged: true, customerMail: customerMail ? { ...customerMail, to: rec.customerEmail } : null, link: url.origin + BASE + "/b/" + encodeURIComponent(j.id) }); } catch {}
-  return { id: j.id, number: j.number, totals: j.totals };
+  return { id: j.id, number: j.number, totals: j.totals, delivery: deliveryOf(delivery), trackUrl: track };
 }
 
 // The shopper's own records, for the sell page.
@@ -1003,6 +1088,8 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     if (/json/i.test(ct)) { form = await bodyOf(request); }
     else { try { const fd = await request.formData(); form = {}; for (const [a, b] of fd) form[a] = b; } catch { form = {}; } }
   }
+  // The customer's tracking page (src/ship.js): the link in their email is the only key, no sign-in.
+  if (p === TRACK_PATH) return serveTrack(request, env, url, { form, notifyTo: await buylistNotifyList(env, origin).catch(() => []) });
   const k = String((form && form.k) || url.searchParams.get("k") || "");
   // the staff key while it is on, or the automation key (src/staff-access.js); "pinOk" for short
   const pinOk = k || request.headers.has("authorization") ? await staffOk(env, origin, k) : false;

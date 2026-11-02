@@ -41,6 +41,7 @@
 import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
 import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf, emailStaffBuylist } from "./stage.js";
+import { deliveryOf, shipPut, trackUrl } from "./ship.js";   // bringing in or shipping (owner 2026-11-02)
 import { instructionsPayload, buildEmail, sendEmail } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
 import { wantedCards, refreshWanted, internalCandidates } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
 
@@ -483,6 +484,8 @@ async function route(mode, action, request, env, url, cors) {
     try { payload = await request.json(); } catch { return json({ error: "body must be JSON" }, 400, cors); }
     const paymentType = payload && PAYMENT_TYPES.includes(payload.paymentType) ? payload.paymentType : null;
     if (!paymentType) return json({ error: "paymentType must be one of " + PAYMENT_TYPES.join(", ") }, 400, cors);
+    // bringing them in or shipping them (src/ship.js; owner 2026-11-02): the page insists on a choice, an older cached script sends none
+    const delivery = deliveryOf(payload && payload.delivery);
     // Their app submits its own mirror of the list; ours sends the cart it
     // shows, falling back to the draft BinderPOS holds.
     let cards = cleanCards(payload.cards);
@@ -512,12 +515,12 @@ async function route(mode, action, request, env, url, cors) {
     // restores the direct path.
     if (stagingOn(env)) {
       let staged;
-      try { staged = await stageSubmit(env, url, { customer, paymentType, cards, repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }); }
+      try { staged = await stageSubmit(env, url, { customer, paymentType, cards, delivery, repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }); }
       catch (e) { return json({ error: "We could not record your buylist (" + String((e && e.message) || e).slice(0, 120) + "). Nothing was sent; please try again in a minute.", accepted: false }, 502, cors); }
       // clearBuylist() in their app: the draft is saved back empty, so the
       // shopper starts the next list fresh. The staged copy is ours.
       const c = await passthrough(SAVE_URL(customer), { method: "POST", body: "[]" }).catch(() => ({ status: null }));
-      return json({ accepted: true, staged: true, id: staged.id, paymentType, submitted: cards.length, totals: staged.totals, cleared: c.status,
+      return json({ accepted: true, staged: true, id: staged.id, paymentType, delivery: staged.delivery || null, trackUrl: staged.trackUrl || null, submitted: cards.length, totals: staged.totals, cleared: c.status,
         confirmation: "Thank you - your buylist has been received and is waiting for a staff member to check it. You will see it marked approved here once it has been sent through, and it is paid out when we complete it.",
         number: staged.number, instructions: instructionsPayload(),
         repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
@@ -526,19 +529,21 @@ async function route(mode, action, request, env, url, cors) {
     // Owner, 2026-09-22 (staging off): the customer still gets our email
     // with the list and the instructions, and the sell page still shows the
     // instructions popup, under BinderPOS's own reference number.
-    let email = null, number = "";
+    let email = null, number = "", track = null;
     if (r.accepted) {
       number = r.reply && r.reply.data != null ? String(r.reply.data) : "";
       try {
         const who = await lookupCustomer(env, customer);
-        const rec = { id: "bp-" + (number || Date.now()), number, ts: Date.now(), customer, customerName: who.name, customerEmail: who.email, paymentType, cards, totals: totalsOf(cards), repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } };
+        const rec = { id: "bp-" + (number || Date.now()), number, ts: Date.now(), customer, customerName: who.name, customerEmail: who.email, paymentType, cards, totals: totalsOf(cards), repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped }, delivery, trackUrl: null };
+        // the shipping side record on 9Pocket (src/ship.js), keyed by BinderPOS's number: the only thing that changes about a direct submission
+        if (delivery && number) { try { const s = await shipPut(env, { number, customer, customerName: who.name, customerEmail: who.email, paymentType, totals: rec.totals, delivery }); if (s.ok) track = rec.trackUrl = trackUrl(url.origin, number, s.token); } catch {} }
         const out = await sendEmail(env, who.email, buildEmail(rec));
         email = { status: out.status, error: out.error, to: who.email ? who.email.replace(/^(.).*(@.*)$/, "$1***$2") : "" };
         // The staff copy (owner, 2026-10-22): the same list with the customer's details, one email per address.
         try { await emailStaffBuylist(env, url, { ...rec, customerPhone: who.phone || "" }, { customerMail: { ok: out.ok, to: who.email, error: out.error }, link: url.origin + "/portal/buylists" }); } catch {}
       } catch (e) { email = { status: "failed", error: String((e && e.message) || e).slice(0, 160) }; }
     }
-    return json({ upstream: r.upstream, paymentType, submitted: cards.length, accepted: r.accepted, cleared: r.cleared, confirmation: r.confirmation, reply: r.reply,
+    return json({ upstream: r.upstream, paymentType, delivery, trackUrl: track, submitted: cards.length, accepted: r.accepted, cleared: r.cleared, confirmation: r.confirmation, reply: r.reply,
       number, instructions: r.accepted ? instructionsPayload() : undefined, email,
       repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
   }
