@@ -267,6 +267,33 @@ export function pcPickGraded(g, products) {
   return best ? best.p : null;
 }
 
+/* What the PSA certificate says about a slab, laid over what the title said
+   (owner 2026-11-02: "can the graded card use the psa api and stuff to make
+   things more accurate finding the right card on price charting? sort of link
+   the two systems?"): PSA's Subject is the card name, CardNumber the collector
+   number, Variety the printing (1st Edition, Holo, Reverse Foil...), Brand the
+   set with its language. The title keeps the grader and grade; a certificate
+   grade that disagrees with the title is flagged on the row. The lookup itself
+   is src/graded.js certLookup (the intake screen's), one call per certificate
+   ever: the answer is kept in the room (psa:<cert>). */
+export function psaCertOf(grader, v, mf) {
+  if (grader !== "PSA") return null;
+  for (const raw of [mf && mf.cert_number, v && v.barcode, v && String(v.sku || "").replace(/^PSA-/i, "")]) {
+    const n = String(raw || "").replace(/\D/g, "");
+    if (/^\d{6,12}$/.test(n)) return n;
+  }
+  return null;
+}
+export function psaRefine(g, c) {
+  if (!g || !c || !c.ok) return { g, note: null, mismatch: null };
+  const set = [c.set, c.variety].filter(Boolean).join(" ").trim();
+  const out = { ...g, name: c.name || g.name, number: c.number ? String(c.number).replace(/^0+(?=\d)/, "") : g.number, set: set || g.set, japanese: !!(g.japanese || c.japanese), psa: true };
+  const cg = c.grade ? Number(c.grade) : null;
+  const mismatch = cg && g.grade && cg !== g.grade ? "PSA certificate " + c.cert + " says grade " + cg + ", the title says " + g.grade : null;
+  const note = "PSA " + c.cert + ": " + [c.name, c.number ? "#" + c.number : "", c.variety, c.set, c.year].filter(Boolean).join(" \u00b7 ") + (c.gradeText ? " \u00b7 " + c.gradeText : "") + (c.population != null ? " \u00b7 pop " + c.population + (c.higher != null ? ", " + c.higher + " higher" : "") : "");
+  return { g: out, note, mismatch };
+}
+
 // What PriceCharting offered for a graded card, with the price for the grade
 // we actually want, so the report can show the shortlist the match came from.
 // The chosen one is marked; the rest are one click away from replacing it.
@@ -1065,6 +1092,7 @@ export function readProduct(node) {
   const mf = {};
   for (const e of (node.mf && node.mf.edges) || []) mf[e.node.key] = e.node.value;
   const picked = variantOf(vs, mf.ap_variant);
+  const graded = isGradedType(node.productType) ? parseGraded(node.title) : null;
   /* A graded slab made by duplicating the raw card keeps the raw card's
      condition variants (Near Mint ... Damaged Holofoil, 2026-10-28: Perrin
      PSA 10 and six more). One slab has no condition ladder, so there is
@@ -1090,7 +1118,7 @@ export function readProduct(node) {
     tcgId: num(mf.ap_tcg_id), pcId: num(mf.ap_pc_id), tcgIdMeta: num(mf.ap_tcg_id),
     compMode: /^(cap|off|skip|follow)$/.test(String(mf.ap_comp || "")) ? String(mf.ap_comp) : null,
     anchor: readAnchor(mf.ap_anchor),
-    graded: isGradedType(node.productType) ? parseGraded(node.title) : null,
+    graded, psaCert: psaCertOf(graded && graded.grader, v, mf),
     images: readImages(node),
   };
 }
@@ -1215,8 +1243,22 @@ async function phasePrices(cx, run, deadline) {
         let j = null;
         if (p.graded && !p.pcId) {
           // Graded: search by card name + number, pick, then fetch the columns.
-          const g = p.graded;
+          let g = p.graded;
           if (!g.name) { p.pcMiss = "could not read the card name from the title"; continue; }
+          // a PSA slab with its certificate: PSA's own record of the card refines the search (one lookup per certificate, kept in the room)
+          if (g.grader === "PSA" && p.psaCert) {
+            try {
+              let c = await cx.storage.get("psa:" + p.psaCert);
+              if (!c) {
+                const { certLookup } = await import("./graded.js");
+                c = await certLookup(cx, "PSA", p.psaCert);
+                if (c && c.ok) await cx.storage.put("psa:" + p.psaCert, c);
+              }
+              if (c && c.ok) { const r = psaRefine(g, c); g = r.g; p.psa = { cert: p.psaCert, note: r.note, mismatch: r.mismatch }; }
+              else if (c && c.limited) p.psaNote = "PSA's daily lookup allowance is used up: matched from the title";
+              else if (c && c.error) p.psaNote = "PSA: " + c.error;
+            } catch (e) { p.psaNote = "PSA lookup failed: " + msg(e); }
+          }
           const s = await call(PC_SEARCH + "?q=" + encodeURIComponent([g.name, g.number].filter(Boolean).join(" ")));
           await cx.sleep(PC_GAP_MS);
           const hit = s && s.status === "success" ? pcPickGraded(g, s.products) : null;
@@ -1417,6 +1459,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
       p.anchor = { ...p.anchor, market: d.pegNow, basis: d.anchor.basis, at: cx.now() };
       try { await adminGql(cx, MF_SET, { m: [{ ownerId: p.id, namespace: "exor", key: "ap_anchor", type: "json", value: JSON.stringify(p.anchor) }] }); } catch (e) { run.errors.push("peg " + p.handle + ": " + msg(e)); }
     }
+    if (p.psa && p.psa.mismatch) d.alert = d.alert ? d.alert + " \u00b7 " + p.psa.mismatch : p.psa.mismatch;
     // Several variants and none picked: the job cannot know which one the
     // price is for, so the row asks (the form lists them). Once ap_variant
     // names one, that variant is priced like any single-variant product.
@@ -1425,7 +1468,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId, images: p.images || [],
       variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null, variantIds: p.variantIds || null,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
-      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null,
+      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null, psa: p.psa || null, psaNote: p.psaNote || null,
       settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId, variant: p.variantMeta || "", anchor: p.anchor ? String(p.anchor.price) : "" }, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
   }
@@ -2209,7 +2252,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
   const mktCell = (r) => r.priceFrom === COMP.key && r.comp
     ? `<b>${esc(COMP.name)} ${money(r.comp.price)}</b>${r.compPct && !r.anchor ? " +" + r.compPct + "% = " + money(r.raw) : ""}<div class="muted">followed · TCGplayer not used${(r.sources || []).length ? ": " + srcLines(r).replace(/<br>/g, ", ") + (r.marketCad != null ? " = " + money(r.marketCad) + " CAD" : "") : " (no match)"}</div>${anchorLine(r)}${floorLine(r)}`
     : (r.sources || []).length ? srcLines(r) + pcDepth(r) + `<div class="muted">${r.marketCad != null ? "= " + money(r.marketCad) + " CAD" : ""}${r.markupPct && r.raw != null ? " · +" + r.markupPct + "% = " + money(r.raw) : ""}</div>${anchorLine(r)}${floorLine(r)}` : '<span class="muted">no source</span>' + anchorLine(r);
-  const matchLine = (r) => [r.tcgName ? "TCGplayer: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : "", r.pcName ? "PriceCharting: " + esc(r.pcName) : ""].filter(Boolean).map((x) => `<div class="muted">${x}</div>`).join("");
+  const matchLine = (r) => [r.tcgName ? "TCGplayer: " + esc(r.tcgName) + (r.match && r.match !== "upc" && r.match !== "metafield" ? " (by " + esc(r.match.split(" (")[0]) + ")" : "") : "", r.pcName ? "PriceCharting: " + esc(r.pcName) : "", r.psa && r.psa.note ? esc(r.psa.note) : "", r.psaNote ? esc(r.psaNote) : ""].filter(Boolean).map((x) => `<div class="muted">${x}</div>`).join("");
   const compCell = (r) => {
     if (r.comp) return `<a href="${esc(COMP.base + "/products/" + (r.comp.handle || ""))}" target="_blank" rel="noopener"><b>${money(r.comp.price)}</b></a> <span class="sub">${r.comp.available ? "in stock" : "out of stock"}${r.comp.used ? " · used" : ""}</span>${r.comp.via === "runner" && r.comp.at ? `<div class="sub">checked from GitHub ${esc(whenShort(r.comp.at))}</div>` : ""}`;
     const couldNot = r.compDown || (/^could not check: /.test(r.compMiss || "") ? r.compMiss.replace(/^could not check: /, "") : "");

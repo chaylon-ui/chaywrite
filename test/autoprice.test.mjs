@@ -1313,3 +1313,36 @@ test("a hand-set price with no source is held as the price, and pegs to the firs
   assert.match(page, /your \$45\.00 · no source yet: held, then tracking from the first market seen/);
   assert.match(page, /your price \$45\.00 \(held until a source appears\)/);
 });
+
+import { psaCertOf, psaRefine } from "../src/autoprice.js";
+test("a PSA slab's certificate refines the PriceCharting search: PSA's name, number, printing and set, and a grade that disagrees is flagged", () => {
+  assert.equal(psaCertOf("PSA", { barcode: "25577619", sku: "PSA-25577619" }, {}), "25577619");
+  assert.equal(psaCertOf("PSA", { barcode: "", sku: "PSA-25577619" }, {}), "25577619", "the SKU when the barcode is blank");
+  assert.equal(psaCertOf("PSA", { barcode: "25577619" }, { cert_number: "99887766" }), "99887766", "exor.cert_number first");
+  assert.equal(psaCertOf("CGC", { barcode: "25577619" }, {}), null, "PSA only");
+  assert.equal(psaCertOf("PSA", { barcode: "abc" }, {}), null);
+  const g = parseGraded("Delphox V (101/100) [Lost Abyss] Japanese Graded PSA 7");
+  const c = { ok: true, cert: "25577619", name: "Delphox V", number: "101", variety: "", set: "Sword & Shield Lost Abyss", japanese: true, grade: "7", gradeText: "NM-MT 7", year: "2022", population: 12, higher: 30 };
+  const r = psaRefine(g, c);
+  assert.equal(r.g.set, "Sword & Shield Lost Abyss");
+  assert.equal(r.g.japanese, true);
+  assert.equal(r.g.number, "101");
+  assert.equal(r.g.grader, "PSA");
+  assert.equal(r.g.grade, 7);
+  assert.equal(r.mismatch, null);
+  assert.equal(r.note, "PSA 25577619: Delphox V · #101 · Sword & Shield Lost Abyss · 2022 · NM-MT 7 · pop 12, 30 higher");
+  // the refined card still picks the right PriceCharting row, and PSA's printing word must agree with their bracket
+  const products = [{ id: 1, "product-name": "Delphox V #101", "console-name": "Pokemon Japanese Lost Abyss" }, { id: 2, "product-name": "Delphox V #101", "console-name": "Pokemon Lost Origin" }];
+  assert.equal(pcPickGraded(r.g, products).id, 1);
+  const holo = psaRefine(parseGraded("Dark Muk (41/82) [Team Rocket] Graded PSA 9"), { ok: true, cert: "1", name: "Dark Muk", number: "41", variety: "1st Edition", set: "Team Rocket", japanese: false, grade: "9", gradeText: "MINT 9" });
+  assert.equal(holo.g.set, "Team Rocket 1st Edition");
+  assert.equal(pcPickGraded(holo.g, [{ id: 3, "product-name": "Dark Muk [1st Edition] #41", "console-name": "Pokemon Team Rocket" }, { id: 4, "product-name": "Dark Muk #41", "console-name": "Pokemon Team Rocket" }]).id, 3, "PSA's 1st Edition picks the 1st Edition row");
+  // a grade that disagrees
+  const bad = psaRefine(g, { ...c, grade: "8", gradeText: "NM-MT 8" });
+  assert.equal(bad.mismatch, "PSA certificate 25577619 says grade 8, the title says 7");
+  assert.deepEqual(psaRefine(g, { ok: false, error: "x" }).g, g, "a failed lookup changes nothing");
+  // the panel shows the certificate's word
+  const rows = [{ id: "gid://shopify/Product/7", title: "Delphox V (101/100) [Lost Abyss] Japanese Graded PSA 7", handle: "delphox", type: "Pokemon Single Graded", game: "Pokemon Graded", stock: 1, current: 45, suggested: 45, action: "hold", awaiting: false, reason: "x", graded: g, pcId: 5, pcName: "Pokemon Japanese Lost Abyss / Delphox V #101 · grade 7", sources: ["PriceCharting grade 7 $30.00 US"], psa: { cert: "25577619", note: r.note, mismatch: null } }];
+  const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows }, { configured: true, view: "all" });
+  assert.match(page, /<div class="muted">PSA 25577619: Delphox V · #101 · Sword &amp; Shield Lost Abyss · 2022 · NM-MT 7 · pop 12, 30 higher<\/div>/);
+});
