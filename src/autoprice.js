@@ -1249,11 +1249,11 @@ async function phasePrices(cx, run, deadline) {
           if (g.grader === "PSA" && p.psaCert) {
             try {
               let c = await cx.storage.get("psa:" + p.psaCert);
-              if (c && !c.ok && cx.now() - (c.at || 0) > 7 * 86400e3) c = null;   // a "no record" answer is asked again after a week (a barcode that is not a certificate)
+              if (c && !c.ok && cx.now() - (c.at || 0) > 7 * 86400e3) c = null;   // a "no record" answer (a barcode that is no certificate) is asked again after a week
               if (!c) {
                 const { certLookup } = await import("./graded.js");
                 c = await certLookup(cx, "PSA", p.psaCert);
-                if (c && (c.ok || (c.error && !c.limited))) await cx.storage.put("psa:" + p.psaCert, { ...c, at: cx.now() });
+                if (c && (c.ok || c.none)) await cx.storage.put("psa:" + p.psaCert, { ...c, at: cx.now() });   // a token, allowance or network failure is asked again next run
               }
               if (c && c.ok) { const r = psaRefine(g, c); g = r.g; p.psa = { cert: p.psaCert, note: r.note, mismatch: r.mismatch }; }
               else if (c && c.limited) p.psaNote = "PSA's daily lookup allowance is used up: matched from the title";

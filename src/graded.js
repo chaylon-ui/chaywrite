@@ -340,7 +340,7 @@ export async function certLookup(cx, grader, cert) {
   if (!r.ok) return { ok: false, error: "PSA HTTP " + r.status };
   const j = await r.json().catch(() => null);
   const c = j && j.PSACert;
-  if (!c || !c.CertNumber) return { ok: false, error: (j && j.ServerMessage) || "PSA has no record of that certificate." };
+  if (!c || !c.CertNumber) return { ok: false, none: true, error: (j && j.ServerMessage) || "PSA has no record of that certificate." };   // none: PSA answered and has nothing (a wrong number), unlike a token or network failure
   const out = { ok: true, ...psaToForm(c) };
   if (cache) { const put = cache.put(key, Response.json(out, { headers: { "cache-control": "public, max-age=604800" } })).catch(() => {}); if (cx.ctx && cx.ctx.waitUntil) cx.ctx.waitUntil(put); else await put; }
   return out;
