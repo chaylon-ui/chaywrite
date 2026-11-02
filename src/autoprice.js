@@ -178,9 +178,11 @@ export function parseGraded(title) {
    marked-up titles): the card name and the grade, plus only the words that
    change what the card is - 1st Edition, Shadowless, Unlimited, Prize Pack
    with its series, promo, holo / reverse holo / non-holo, the language, an
-   MTG foil treatment and the like - never the collector number, the set
-   brackets or the word Graded. "Dark Muk (41/82) [Team Rocket 1st Edition]
-   Graded PSA 9" -> "Dark Muk 1st Edition PSA 9". The words are taken from
+   MTG foil treatment and the like - plus the collector number on its own
+   (owner: "the ultra ball japanese psa 10 should put 126 in it"), never the
+   "/165" after it, the set brackets or the word Graded. "Dark Muk (41/82)
+   [Team Rocket 1st Edition] Graded PSA 9" -> "Dark Muk 41 1st Edition PSA 9".
+   The words are taken from
    the title OUTSIDE the name, so a name like Gold Star Rayquaza is not
    doubled. A product that is not a graded card searches its full title. */
 export const EBAY_KEEP = [/\bprize pack(?:\s+series\s+\w+)?/i, /\b1st edition\b/i, /\bfirst edition\b/i, /\bshadowless\b/i, /\bunlimited\b/i, /\bpromo\b/i, /\bpre-?release\b/i, /\bstaff\b/i,
@@ -205,7 +207,7 @@ export function ebayQuery(r) {
   const seen = new Set(), words = [], name = " " + g.name.toLowerCase().replace(/\s+/g, " ") + " ";
   for (const f of found) { const k = f.w.toLowerCase(); if (!seen.has(k) && !name.includes(" " + k + " ")) { seen.add(k); words.push(f.w); } }   // a word the name itself carries is not repeated
   const grade = g.grader && g.grade ? g.grader + " " + g.grade : g.grade ? "grade " + g.grade : "";
-  return [g.name, ...words, grade].filter(Boolean).join(" ");
+  return [g.name, g.number, ...words, grade].filter(Boolean).join(" ");
 }
 // The PriceCharting column for a grade (and what to call it on the page).
 export function gradeField(grader, grade) {
