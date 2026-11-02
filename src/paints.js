@@ -1,12 +1,16 @@
 /* Paint colour picker data (owner, 2026-09-25: "Vallejo colour picker this is good" ->
    "can color picker help with the army painter, warhammer paints, etc" -> "Sure").
 
-   GET /paints.json - every paint we sell from Vallejo, Citadel and The Army Painter,
-   matched to a colour chart and grouped one swatch per colour:
+   GET /paints.json - every paint we sell from Vallejo, Citadel, The Army Painter and
+   Warhammer Tone Pro, matched to a colour chart and grouped one swatch per colour:
      { generated, brands: [...], swatches: [{ b: brand, n: name, h: "#RRGGBB" | null,
+         g: colour group, o: tone 1-5 (Tone Pro only),
          items: [{ r: range, c: code, t: title, u: handle, i: image, p: price, a: in stock,
                    v: variant id, s: "17 ml" }] }] }
-   The chart is data/paint-colours.json on chaywrite main (tools/paint-colours.py).
+   The chart is data/paint-colours.json on chaywrite main (tools/paint-colours.py), plus
+   data/tonepro-colours.json (tools/tonepro-colours.py reads each Tone Pro pot photo's
+   colour band; owner 2026-11-02: "we recently got warhammer tone pro paints ... can we
+   integrate that into the color picker").
    Products come from the brands' collections through the Admin API; only products on the
    online store are listed. Built on a miss and held at the edge for 15 minutes. Paints the
    chart does not know keep a swatch (h null - the page shows the bottle photo); sets,
@@ -15,7 +19,8 @@
 import { repoFetch } from "./repo-data.js";
 
 export const PAINT_COLOURS_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/paint-colours.json";
-const CACHE_KEY = "https://cache.internal/paints.json?v=3";
+export const TONEPRO_COLOURS_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/tonepro-colours.json";
+const CACHE_KEY = "https://cache.internal/paints.json?v=4";
 
 export const PAINT_BRANDS = [
   // GW's 2026 "Warhammer Colour" pots (same paints, new label) and a few unprefixed
@@ -24,6 +29,9 @@ export const PAINT_BRANDS = [
     search: "status:active AND vendor:'Games Workshop' AND (product_type:Paint OR title:WARHAMMER\\ COLOUR*)" },
   { brand: "The Army Painter", collection: "all-the-army-painter" },
   { brand: "Vallejo", collection: "all-vallejo" },
+  // Warhammer Tone Pro (2026-11): 30 colour groups x 5 numbered tones (1 darkest ... 5
+  // lightest) in 12 ml pots, only in the Games Workshop collection, so found by title
+  { brand: "Tone Pro", search: "status:active AND vendor:'Games Workshop' AND title:WARHAMMER\\ TONE\\ PRO*" },
 ];
 
 const NODE = "handle title status onlineStoreUrl featuredImage{url} variants(first:10){nodes{legacyResourceId price availableForSale}}";
@@ -57,6 +65,7 @@ export function parseTitle(brand, title) {
     return null;
   }
   if (brand === "Citadel") {
+    if (/\btone\s+pro\b|\bpro\s+tone\b/i.test(t)) return null;   // a Tone Pro pot (its own brand below) or a Pro Tone brush
     const m = /^\s*(?:citadel\s*(?:colou?r)?\s*[:\-]?\s*)?(base|layer|shade|contrast|dry|technical|air|spray|glaze)\s*(?:paint)?\s*[:\-]\s*(.+)$/i.exec(t)
       // "WARHAMMER COLOUR LAYER EVIL SUNZ SCARLET 12ML" - the 2026 label, colon optional
       || /^\s*warhammer\s+colou?r\s*[:\-]?\s*(base|layer|shade|contrast|dry|technical|air|spray|glaze)\b\s*[:\-]?\s*(.+)$/i.exec(t);
@@ -69,6 +78,14 @@ export function parseTitle(brand, title) {
     }
     // "LAYER: LAYER:SKULLCRUSHER BRASS" repeats the range
     return { range: titleCase(m[1]), name: stripSize(m[2].replace(new RegExp("^\\s*" + m[1] + "\\s*:\\s*", "i"), "")) };
+  }
+  if (brand === "Tone Pro") {
+    // "WARHAMMER TONE PRO BLOODTOOF RED 3 12ML" -> group Bloodtoof Red, tone 3; the
+    // mediums ("... BLENDING MEDIUM 18ML") and the Pro Tone brushes have no tone number
+    const m = /^\s*warhammer\s+tone\s+pro\s*[:\-]?\s*(.+?)\s+([1-5])\s*(?:\(?\d+\s*ML\)?)?\s*$/i.exec(t);
+    if (!m || /medium|brush/i.test(m[1])) return null;
+    const group = m[1].replace(/\s+/g, " ").trim().toLowerCase().replace(/(^|\s)([a-z])/g, (x, a, c) => a + c.toUpperCase()), tone = Number(m[2]);   // Ta'unar, not Ta'Unar
+    return { range: "Tone " + tone, name: group + " " + tone, group, tone };
   }
   if (brand === "The Army Painter") {
     const u = t.toUpperCase();
@@ -135,7 +152,7 @@ export function buildSwatches(chart, byBrand) {
       const name = col ? col.name : titleCase(parsed.name);
       const gk = brand + "|" + (col ? key(name) : "p:" + p.handle);
       let g = groups.get(gk);
-      if (!g) { g = { b: brand, n: name, h: col ? "#" + col.hex : null, items: [] }; groups.set(gk, g); }
+      if (!g) { g = { b: brand, n: name, h: col ? "#" + col.hex : null, items: [] }; if (parsed.tone) { g.g = parsed.group; g.o = parsed.tone; } groups.set(gk, g); }
       g.items.push({
         r: parsed.range, c: col ? col.code : "", t: p.title, u: p.handle,
         i: p.featuredImage ? p.featuredImage.url : null, p: v.price,
@@ -186,9 +203,11 @@ async function buildPaints(gql, env) {
   const cr = await repoFetch(env, PAINT_COLOURS_URL, { headers: { accept: "application/json" } }, { ttl: 600 });
   if (!cr.ok) throw new Error("paint colours HTTP " + cr.status);
   const chart = (await cr.json()).brands;
+  // the Tone Pro colours are a second file; without it the pots keep their photo swatch
+  try { const tr = await repoFetch(env, TONEPRO_COLOURS_URL, { headers: { accept: "application/json" } }, { ttl: 600 }); if (tr.ok) Object.assign(chart, (await tr.json()).brands || {}); } catch {}
   const byBrand = [];
   for (const b of PAINT_BRANDS) {
-    const products = await fetchCollection(gql, b.collection);
+    const products = b.collection ? await fetchCollection(gql, b.collection) : [];
     if (b.search) {
       const seen = new Set(products.map((p) => p.handle));
       for (const p of await fetchSearch(gql, b.search)) if (p && !seen.has(p.handle)) { seen.add(p.handle); products.push(p); }

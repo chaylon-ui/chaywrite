@@ -47,6 +47,19 @@ eq('warhammer colour without range is loose', [parseTitle('Citadel', 'WARHAMMER 
 const res2 = buildSwatches(chart, [{ brand: 'Citadel', products: [P('WARHAMMER COLOUR ABADDON BLACK 12ML', 'wc-ab'), P('WARHAMMER COLOUR KABALITE GREEN 12ML', 'wc-kg'), P('WARHAMMER COLOUR PAINTING HANDLE', 'wc-h'), P('WARHAMMER COLOUR TOOL SET', 'wc-t')] }]);
 eq('loose labels take the range the chart gives (Base before Air); unknown loose names are left out',
   res2.swatches.map((s) => s.n + ':' + s.items.map((i) => i.r).join()), ['Abaddon Black:Base', 'Kabalite Green:Layer']);
+// Warhammer Tone Pro (owner 2026-11-02): 30 groups x 5 numbered tones, read from the title; a
+// second chart file gives the colours; the Citadel search sees the same pots and leaves them
+eq('tone pro title', parseTitle('Tone Pro', 'WARHAMMER TONE PRO BLOODTOOF RED 3 12ML'), { range: 'Tone 3', name: 'Bloodtoof Red 3', group: 'Bloodtoof Red', tone: 3 });
+eq('tone pro apostrophe group', parseTitle('Tone Pro', "WARHAMMER TONE PRO TA'UNAR OCHRE 5 12ML"), { range: 'Tone 5', name: "Ta'unar Ochre 5", group: "Ta'unar Ochre", tone: 5 });
+eq('tone pro mediums and brushes are not pots', [parseTitle('Tone Pro', 'WARHAMMER TONE PRO BLENDING MEDIUM 18ML'), parseTitle('Tone Pro', 'WARHAMMER PRO TONE DRYBRUSH M'), parseTitle('Tone Pro', 'WARHAMMER TONE PRO BLENDING MEDIUM 2 18ML')], [null, null, null]);
+eq('citadel leaves tone pro alone', [parseTitle('Citadel', 'WARHAMMER TONE PRO BLOODTOOF RED 3 12ML'), parseTitle('Citadel', 'WARHAMMER PRO TONE DRYBRUSH M')], [null, null]);
+const tpChart = { ...chart, 'Tone Pro': { 'Tone Pro': { bloodtoofred3: ['20-153', 'BB4255', 'Bloodtoof Red 3'], bloodtoofred1: ['20-151', '7D544C', 'Bloodtoof Red 1'] } } };
+const res3 = buildSwatches(tpChart, [{ brand: 'Tone Pro', products: [P('WARHAMMER TONE PRO BLOODTOOF RED 3 12ML', 'tp-br3'), P('WARHAMMER TONE PRO BLOODTOOF RED 1 12ML', 'tp-br1', false), P('WARHAMMER TONE PRO BLOODTOOF RED 5 12ML', 'tp-br5'), P('WARHAMMER TONE PRO BLENDING MEDIUM 18ML', 'tp-bm'), P('WARHAMMER PRO TONE DRYBRUSH M', 'tp-db')] },
+  { brand: 'Citadel', products: [P('WARHAMMER TONE PRO BLOODTOOF RED 3 12ML', 'tp-br3')] }]);
+eq('tone pro swatches carry group and tone; a pot the chart lacks keeps its photo; mediums and brushes are left out',
+  res3.swatches.map((s) => [s.b, s.n, s.h, s.g, s.o, s.items[0].r, s.items[0].c, s.items[0].a]),
+  [['Tone Pro', 'Bloodtoof Red 3', '#BB4255', 'Bloodtoof Red', 3, 'Tone 3', '20-153', true], ['Tone Pro', 'Bloodtoof Red 1', '#7D544C', 'Bloodtoof Red', 1, 'Tone 1', '20-151', false], ['Tone Pro', 'Bloodtoof Red 5', null, 'Bloodtoof Red', 5, 'Tone 5', '', true]]);
+eq('tone pro counts', [res3.counts['Tone Pro'], res3.counts.Citadel.skipped], [{ products: 5, matched: 2, photo: 1, skipped: 2 }, 1]);
 // the real chart: a few of our real titles resolve
 // (PAINT_CHART=path/to/data/paint-colours.json from chaywrite main; skipped when unset)
 const real = process.env.PAINT_CHART ? JSON.parse(readFileSync(process.env.PAINT_CHART, 'utf8')).brands : null;
