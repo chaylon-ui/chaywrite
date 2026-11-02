@@ -61,7 +61,8 @@ jobs:
           const rows = rep.rows || [];
           console.log('report rows', rows.length, 'at', rep.at ? new Date(rep.at).toISOString() : null, 'games', JSON.stringify([...new Set(rows.map((x) => x.game))]));
           const pid = process.env.PID && 'gid://shopify/Product/' + process.env.PID;
-          if (pid) { const row = rows.find((x) => x.id === pid); console.log('ROW', row ? JSON.stringify(row).slice(0, 3000) : 'not in the report'); }
+          const maskRow = (row) => row && row.lastChange && row.lastChange.who ? { ...row, lastChange: { ...row.lastChange, who: mask(row.lastChange.who) } } : row;
+          if (pid) { const row = maskRow(rows.find((x) => x.id === pid)); console.log('ROW', row ? JSON.stringify(row).slice(0, 3000) : 'not in the report'); }
           if (pid && process.env.RESAVE) {
             let fields = {}; try { fields = JSON.parse(process.env.RESAVE); } catch { console.log('resave is not JSON'); }
             const t0 = Date.now();
@@ -73,7 +74,7 @@ jobs:
               const row = (rp.rows || []).find((x) => x.id === pid);
               const st = await (await fetch(W + '/autoprice/status', { headers: H })).json();
               console.log('  +' + Math.round((Date.now() - t0) / 1000) + 's run', st.run && st.run.phase, 'ticks', st.run && st.run.ticks, '| row', row ? row.action + ' ' + (row.suggested == null ? '-' : row.suggested) + ' ' + (row.reason || '') : 'missing');
-              if (row && row.action !== 'pending') break;
+              if (row && row.action !== 'pending') { console.log('  after:', JSON.stringify({ pcId: row.pcId, pcName: row.pcName, psa: row.psa || null, psaNote: row.psaNote || null, alert: row.alert || null, reason: row.reason, suggested: row.suggested })); break; }
             }
           }
           const n = parseInt(process.env.ROWS, 10) || 0;
