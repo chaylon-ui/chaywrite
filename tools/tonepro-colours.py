@@ -71,7 +71,7 @@ def main():
         it = g["items"][0]
         img = it.get("i")
         code = ""
-        m = re.search(r"-(\d{2}-\d{3})\.(?:jpe?g|png|webp)", img or "", re.I)
+        m = re.search(r"-(\d{2}-\d{3})(?=[._-])", img or "")   # "...-12ml-20-153.jpg" or "...-20-153_abc.jpg"
         if m:
             code = m.group(1)
         rgb = None
