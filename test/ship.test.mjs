@@ -82,6 +82,7 @@ test("the side record: put, the customer's tracking by token, the staff state, o
   assert.equal(rec.tracking, "1234567890123456");
   assert.equal(rec.carrier, "canada-post");
   assert.equal(rec.trackedBy, "customer");
+  assert.equal(rec.delivery, "ship", "the list was in-store at the time; a tracking number makes it a shipped one");
   // a bad number on the page is refused with the form kept
   const post2 = new URL("https://w" + TRACK_PATH);
   r = await serveTrack(new Request(post2, { method: "POST" }), env, post2, { form: { n: "88123", t: put.token, tracking: "12", carrier: "" } });
@@ -139,11 +140,13 @@ test("the emails: the confirmation says the choice back and carries the link; th
   assert.match(m.html, /You told us you are shipping the cards\./);
   assert.match(m.html, /href="https:\/\/w\/buylist\/track\?n=9P-1042&amp;t=abc"[^>]*>Add the tracking number</);
   assert.match(m.text, /shipping the cards\. When you have a tracking number, add it here: https:\/\/w\/buylist\/track\?n=9P-1042&t=abc/);
-  const m2 = buildEmail({ ...rec, delivery: "in-store", trackUrl: null });
+  const m2 = buildEmail({ ...rec, delivery: "in-store" });
   assert.match(m2.html, /You told us you are bringing the cards in\./);
-  assert.doesNotMatch(m2.html, /tracking number/);
-  const m3 = buildEmail({ ...rec, delivery: null, trackUrl: null });
+  assert.match(m2.html, /Decide to ship instead\? <a href="https:\/\/w\/buylist\/track\?n=9P-1042&amp;t=abc"/, "the link is there for a change of mind");
+  assert.doesNotMatch(buildEmail({ ...rec, delivery: "in-store", trackUrl: null }).html, /tracking number/);
+  const m3 = buildEmail({ ...rec, delivery: null });
   assert.doesNotMatch(m3.html, /You told us/);
+  assert.match(m3.html, /Shipping the cards\? <a href=/, "an older script sent no choice: the link still rides");
   const ask = buildTrackingEmail({ number: "88123", customerName: "Pat Example", totals: { units: 7 } }, "ask", "https://w/buylist/track?n=88123&t=tok");
   assert.match(ask.subject, /^Buylist 88123 - could you add your tracking number\?/);
   assert.match(ask.html, /Hi Pat,/);

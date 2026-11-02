@@ -784,6 +784,7 @@ export async function stageDoFetch(cx, request, url) {
     const carrier = CARRIER_KEYS.includes(b.carrier) ? b.carrier : carrierGuess(tracking) || "other";
     Object.assign(rec, { tracking, carrier, trackedAt: cx.now(), trackedBy: "customer", state: rec.state === "received" ? "received" : "shipped" });
     rec.events = (rec.events || []).concat([{ ts: cx.now(), action: "tracking " + carrier + " " + tracking, by: "customer" }]).slice(-30);
+    if (rec.delivery !== "ship") { rec.delivery = "ship"; rec.events.push({ ts: cx.now(), action: "delivery changed to ship (a tracking number was added)", by: "customer" }); }   // they decided to ship after all
     await cx.storage.put("sh:" + rec.number, rec);
     return doJson({ ok: true, record: rec });
   }

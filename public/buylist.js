@@ -105,7 +105,7 @@
         '<div class="bl__del" role="group" aria-labelledby="bl-del-h"><span id="bl-del-h" class="bl__del-h">How are the cards getting to us?</span>' +
           '<div class="bl__del-opts"><label><input type="radio" name="bl-del" value="in-store"> Bringing them in</label><label><input type="radio" name="bl-del" value="ship"> Shipping them to us</label></div>' +
           '<p id="bl-delhint" class="bl__del-note bl__del-hint" hidden>Choose one to submit your list.</p>' +
-          '<p id="bl-delnote" class="bl__del-note" hidden>Pack them well and mail to <b>Exor Games, ATTN: Gage Office, 51 Allen Street, Charlottetown, PE C1A 2V6, Canada</b>. Tracking and insurance are recommended; your confirmation email will have a link to add the tracking number.</p></div>' +
+          '<p id="bl-delnote" class="bl__del-note" hidden>Pack them well and mail to <b>Exor Games, ATTN: Gage Office, 51 Allen Street, Charlottetown, PE C1A 2V6, Canada</b>. Tracking and insurance are recommended; your confirmation email will have a link to add the tracking number once you have it.</p></div>' +
         '<div class="bl__totals"><span>Cash <b id="bl-tcash">$0.00</b></span><span>Store credit <b id="bl-tcredit">$0.00</b></span></div>' +
         '<div class="bl__actions"><button id="bl-clear" type="button" class="bl__btn" disabled>Clear list</button><button id="bl-submit" type="button" class="bl__btn bl__btn--primary" disabled>Submit buylist</button></div>' +
         '<p id="bl-msg" class="bl__msg bl__muted"></p>' +
@@ -988,7 +988,7 @@
       (t.units != null ? '<p class="bl__done-sum">' + esc(t.units) + " card" + (t.units === 1 ? "" : "s") + " · " + esc(j.paymentType || "") + " · estimated " + money(credit ? t.credit : t.cash) + "</p>" : "") + "</div>" +
       '<div class="bl__guide-body">' + (ins.nextStep ? '<p class="bl__done-next">' + esc(ins.nextStep) + "</p>" : "") +
       (j.delivery === "ship" ? '<div class="bl__done-del"><b>You are shipping the cards.</b> When you have a tracking number, add it ' + (j.trackUrl ? 'at <a href="' + esc(j.trackUrl) + '" target="_blank" rel="noopener">this link</a> (it is in your email too)' : "through the link in your confirmation email") + " so we can watch for the parcel.</div>"
-        : j.delivery === "in-store" ? '<div class="bl__done-del"><b>You are bringing the cards in.</b> Come by whenever you are ready; we check them against this list.</div>' : "") +
+        : j.delivery === "in-store" ? '<div class="bl__done-del"><b>You are bringing the cards in.</b> Come by whenever you are ready; we check them against this list.' + (j.trackUrl ? ' Decide to ship instead? Your confirmation email has a link to add the tracking number.' : "") + "</div>" : "") +
       (notes && notes.length ? '<p class="bl__done-notes">' + notes.map(esc).join(" ") + "</p>" : "") +
       sections +
       (j.email && j.email.status && j.email.status !== "sent" ? "" : '<p class="bl__guide-note bl__muted">A copy of these instructions has been emailed to the address on your account.</p>') +
