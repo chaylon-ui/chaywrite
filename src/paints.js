@@ -20,7 +20,7 @@ import { repoFetch } from "./repo-data.js";
 
 export const PAINT_COLOURS_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/paint-colours.json";
 export const TONEPRO_COLOURS_URL = "https://raw.githubusercontent.com/chaylon-ui/chaywrite/main/data/tonepro-colours.json";
-const CACHE_KEY = "https://cache.internal/paints.json?v=4";
+const CACHE_KEY = "https://cache.internal/paints.json?v=5";
 
 export const PAINT_BRANDS = [
   // GW's 2026 "Warhammer Colour" pots (same paints, new label) and a few unprefixed
