@@ -98,6 +98,12 @@ test("the side record: put, the customer's tracking by token, the staff state, o
   assert.match(v.trackingUrl, /canadapost/);
   assert.equal(v.stateLabel, "received");
   assert.deepEqual(set.record.events.map((e) => e.action), ["submitted · ship", "delivery changed to in-store", "delivery changed to ship", "tracking canada-post 1234567890123456", "marked received"]);
+  // a record staff make for an older list keeps the list's own time and says who set it
+  const made = await (await env.ROOM.get().fetch(new Request("https://w/_stage/ship/put", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ number: "77001", delivery: "ship", customerName: "Old List", customerEmail: "", paymentType: "Cash", ts: T0 - 5 * DAY, by: "ada@x.test" }) }))).json();   // no address: never chased
+  assert.equal(made.record.ts, T0 - 5 * DAY);
+  assert.equal(made.record.events[0].action, "set by staff · ship");
+  assert.equal(made.record.events[0].by, "ada@x.test");
+  assert.equal(shipView(made.record).deliveryLabel, "Shipping");
   // the chase: a shipped list with no tracking, three days on, once; a received or tracked one never
   const put2 = await (await env.ROOM.get().fetch(new Request("https://w/_stage/ship/put", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ number: "88200", customer: "1", customerName: "Sam", customerEmail: "sam@example.test", paymentType: "Store Credit", totals: { cash: 1, credit: 2, units: 1, lines: 1 }, delivery: "ship" }) }))).json();
   assert.equal(put2.ok, true);
@@ -141,7 +147,7 @@ test("the emails: the confirmation says the choice back and carries the link; th
   assert.match(m.html, /href="https:\/\/w\/buylist\/track\?n=9P-1042&amp;t=abc"[^>]*>Add the tracking number</);
   assert.match(m.text, /shipping the cards\. When you have a tracking number, add it here: https:\/\/w\/buylist\/track\?n=9P-1042&t=abc/);
   const m2 = buildEmail({ ...rec, delivery: "in-store" });
-  assert.match(m2.html, /You told us you are bringing the cards in\./);
+  assert.match(m2.html, /You told us you are dropping the cards off\./);
   assert.match(m2.html, /Decide to ship instead\? <a href="https:\/\/w\/buylist\/track\?n=9P-1042&amp;t=abc"/, "the link is there for a change of mind");
   assert.doesNotMatch(buildEmail({ ...rec, delivery: "in-store", trackUrl: null }).html, /tracking number/);
   const m3 = buildEmail({ ...rec, delivery: null });

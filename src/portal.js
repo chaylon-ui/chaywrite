@@ -790,7 +790,7 @@ export async function cartDetail(env, id, day) {
 
 const NO_STORE = { "content-type": "application/json", "cache-control": "no-store" };
 // Buylists being shipped (src/ship.js, owner 2026-11-02): the side record per list, joined onto the live rows.
-import { shipAll, shipGet, shipSet, shipAsk, shipView, DELIVERIES, STATES } from "./ship.js";
+import { shipAll, shipGet, shipSet, shipAsk, shipPut, shipView, DELIVERIES, STATES } from "./ship.js";
 
 export async function servePortal(request, env, url, staffOk) {
   const k = url.searchParams.get("k") || "";
@@ -823,7 +823,15 @@ export async function servePortal(request, env, url, staffOk) {
       if (action === "ask") out = await shipAsk(env, number, who);
       else if (STATES.includes(action)) out = await shipSet(env, number, { state: action, by: who });
       else if (action === "tracking") out = await shipSet(env, number, { tracking: String(b.tracking || ""), carrier: String(b.carrier || ""), by: who });
-      else if (action === "delivery" && DELIVERIES.includes(b.delivery)) out = await shipSet(env, number, { delivery: b.delivery, by: who });
+      else if (action === "delivery" && DELIVERIES.includes(b.delivery)) {
+        out = await shipSet(env, number, { delivery: b.delivery, by: who });
+        // no record yet (a list from before the choice existed): make one from the row the page sent
+        if (!out.ok && out.error === "no such list") {
+          const row = b.row && typeof b.row === "object" ? b.row : {};
+          const put = await shipPut(env, { number, delivery: b.delivery, customer: String(row.customer || ""), customerName: String(row.customerName || ""), customerEmail: String(row.customerEmail || ""), paymentType: String(row.paymentType || ""), totals: row.totals && typeof row.totals === "object" ? row.totals : null, ts: row.submitted ? Date.parse(row.submitted) || null : null, by: who });
+          out = put.ok ? { ok: true, record: put.record } : put;
+        }
+      }
       else return Response.json({ error: "unknown action" }, { status: 400, headers: NO_STORE });
       if (!out || !out.ok) return Response.json({ ok: false, error: (out && out.error) || "failed", ship: out && out.record ? shipView(out.record) : null }, { status: out && out.error === "no such list" ? 404 : 200, headers: NO_STORE });
       return Response.json({ ok: true, ship: shipView(out.record), status: out.status || null }, { headers: NO_STORE });

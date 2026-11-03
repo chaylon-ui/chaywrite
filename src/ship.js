@@ -28,7 +28,7 @@ export const DELIVERIES = ["in-store", "ship"];
 export const STATES = ["awaiting", "shipped", "received"];
 export const CARRIERS = [["canada-post", "Canada Post"], ["ups", "UPS"], ["fedex", "FedEx"], ["purolator", "Purolator"], ["dhl", "DHL"], ["other", "Other"]];
 export const CARRIER_KEYS = CARRIERS.map((c) => c[0]);
-export const DELIVERY_LABEL = { "in-store": "Bringing them in", ship: "Shipping them to us" };
+export const DELIVERY_LABEL = { "in-store": "Drop off", ship: "Shipping" };   // the staff words (owner 2026-11-03: "shipping" for mailed, "drop off" for brought in)
 export const STATE_LABEL = { awaiting: "awaiting tracking", shipped: "shipped", received: "received" };
 
 export const deliveryOf = (v) => (DELIVERIES.includes(v) ? v : null);

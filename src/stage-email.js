@@ -140,12 +140,12 @@ ${deliveryHtml(rec)}
 const BTN = (href, label) => `<a href="${esc(href)}" style="display:inline-block;background:${RED};color:#ffffff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:8px">${esc(label)}</a>`;
 function deliveryHtml(rec) {
   if (rec.delivery === "ship") return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:14px 0 0;background:#fff7e6;border:1px solid #f3dca3;border-radius:10px"><tr><td style="padding:14px 16px;line-height:1.55"><strong>You told us you are shipping the cards.</strong> When you have a tracking number, add it here so we can watch for the parcel${rec.trackUrl ? `:<br><div style="margin:10px 0 2px">${BTN(rec.trackUrl, "Add the tracking number")}</div><span style="font-size:12px;color:${MUTED}">Or open ${esc(rec.trackUrl)}</span>` : "."}</td></tr></table>`;
-  if (rec.delivery === "in-store") return `<p style="margin:14px 0 0;line-height:1.55"><strong>You told us you are bringing the cards in.</strong> Come by whenever you are ready; we check them against this list while you wait or shortly after.${rec.trackUrl ? ` Decide to ship instead? <a href="${esc(rec.trackUrl)}" style="color:${RED};font-weight:600;text-decoration:underline">Add the tracking number here</a> when you have it.` : ""}</p>`;
+  if (rec.delivery === "in-store") return `<p style="margin:14px 0 0;line-height:1.55"><strong>You told us you are dropping the cards off.</strong> Come by whenever you are ready; we check them against this list while you wait or shortly after.${rec.trackUrl ? ` Decide to ship instead? <a href="${esc(rec.trackUrl)}" style="color:${RED};font-weight:600;text-decoration:underline">Add the tracking number here</a> when you have it.` : ""}</p>`;
   return rec.trackUrl ? `<p style="margin:14px 0 0;line-height:1.55">Shipping the cards? <a href="${esc(rec.trackUrl)}" style="color:${RED};font-weight:600;text-decoration:underline">Add the tracking number here</a> when you have it, so we can watch for the parcel.</p>` : "";
 }
 function deliveryText(rec) {
   if (rec.delivery === "ship") return ["You told us you are shipping the cards. When you have a tracking number, add it here: " + (rec.trackUrl || "(link to follow)"), ""];
-  if (rec.delivery === "in-store") return ["You told us you are bringing the cards in. Come by whenever you are ready." + (rec.trackUrl ? " Decide to ship instead? Add the tracking number here when you have it: " + rec.trackUrl : ""), ""];
+  if (rec.delivery === "in-store") return ["You told us you are dropping the cards off. Come by whenever you are ready." + (rec.trackUrl ? " Decide to ship instead? Add the tracking number here when you have it: " + rec.trackUrl : ""), ""];
   return rec.trackUrl ? ["Shipping the cards? Add the tracking number here when you have it: " + rec.trackUrl, ""] : [];
 }
 

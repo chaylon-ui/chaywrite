@@ -760,9 +760,10 @@ export async function stageDoFetch(cx, request, url) {
     const now = cx.now();
     const old = await cx.storage.get("sh:" + number);
     const t = b.totals && typeof b.totals === "object" ? { cash: Number(b.totals.cash) || 0, credit: Number(b.totals.credit) || 0, units: Number(b.totals.units) || 0, lines: Number(b.totals.lines) || 0 } : null;
-    const rec = old ? { ...old, delivery } : { number, ts: now, customer: digits(b.customer), customerName: String(b.customerName || "").trim().slice(0, 120), customerEmail: String(b.customerEmail || "").trim().slice(0, 160), paymentType: String(b.paymentType || "").slice(0, 20), totals: t,
+    const ts = Number(b.ts) > 0 && Number(b.ts) < now ? Number(b.ts) : now;   // a record staff make for an older list keeps the list's own time
+    const rec = old ? { ...old, delivery } : { number, ts, customer: digits(b.customer), customerName: String(b.customerName || "").trim().slice(0, 120), customerEmail: String(b.customerEmail || "").trim().slice(0, 160), paymentType: String(b.paymentType || "").slice(0, 20), totals: t,
       delivery, token: randomToken(), state: "awaiting", carrier: "", tracking: "", trackedAt: null, trackedBy: "", receivedAt: null, receivedBy: "", askedAt: null, chasedAt: null, lastAsk: null, events: [] };
-    rec.events = (rec.events || []).concat([{ ts: now, action: (old ? "delivery changed to " : "submitted · ") + delivery }]).slice(-30);
+    rec.events = (rec.events || []).concat([{ ts: now, action: (old ? "delivery changed to " : b.by ? "set by staff · " : "submitted · ") + delivery, by: String(b.by || "").slice(0, 160) }]).slice(-30);
     await cx.storage.put("sh:" + number, rec);
     return doJson({ ok: true, token: rec.token, record: rec });
   }

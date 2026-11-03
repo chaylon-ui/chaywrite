@@ -50,6 +50,7 @@
   .shipstate b { font-weight: 700; } .shipstate.ship-awaiting b { color: #ffc38a; } .shipstate.ship-shipped b { color: #9fdcec; } .shipstate.ship-received b { color: #b8f0c8; }
   .shipcell small { display: block; margin-top: 3px; }
   .shipacts { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-right: 6px; vertical-align: middle; }
+  .setdel { display: inline-flex; gap: 3px; margin-left: 4px; vertical-align: middle; } .btn-dim.xs { padding: 2px 7px; font-size: 11px; }
   .shipbox { margin: 0 0 14px; }
   p.ok { color: #b8f0c8; }
   .badge.approved, .badge.buy { background: rgba(52,178,194,.18); color: #8fdbe6; }
@@ -157,10 +158,11 @@
   function isCredit(t) { return /credit/i.test(t || ''); }
   function payBadge(t) { return '<span class="badge ' + (isCredit(t) ? 'credit' : 'cash') + '">' + esc(t || '—') + '</span>'; }
   // Buylists being shipped (owner 2026-11-02): the customer's choice at submission and the parcel's state, from 9Pocket's side record.
-  function shipBadge(sh) {
-    if (!sh) return '';
-    if (sh.delivery !== 'ship') return ' <span class="badge instore" title="The customer said they would bring the cards in">In store</span>';
-    return ' <span class="badge ship ship-' + esc(sh.state) + '" title="' + esc(sh.tracking ? sh.carrierName + ' ' + sh.tracking : 'shipping, no tracking yet') + '">Ship · ' + esc(sh.stateLabel) + '</span>';
+  function shipBadge(sh, r) {
+    // no record: the list came in before the choice existed (or from a cached page) - staff can set it here
+    if (!sh) return r ? ' <span class="setdel noprint"><button class="btn-dim xs" data-ship="delivery" data-delivery="in-store" data-id="' + esc(r.id) + '" title="The customer will bring the cards in">Drop off?</button><button class="btn-dim xs" data-ship="delivery" data-delivery="ship" data-id="' + esc(r.id) + '" title="The customer will mail the cards">Shipping?</button></span>' : '';
+    if (sh.delivery !== 'ship') return ' <span class="badge instore" title="The customer said they would drop the cards off">Drop off</span>';
+    return ' <span class="badge ship ship-' + esc(sh.state) + '" title="' + esc(sh.tracking ? sh.carrierName + ' ' + sh.tracking : 'shipping, no tracking yet') + '">Shipping · ' + esc(sh.stateLabel) + '</span>';
   }
   function shipCell(sh) {
     if (!sh) return '<span class="muted">—</span>';
@@ -181,6 +183,7 @@
     else out += b('awaiting', 'Undo received');
     out += b('tracking', sh.tracking ? 'Change number' : 'Add number', '', 'A tracking number the customer gave you');
     if (sh.state !== 'received' && sh.customerEmail) out += b('ask', 'Ask for tracking', '', 'Email the customer the link to add their tracking number');
+    out += '<button class="btn-dim" data-ship="delivery" data-delivery="in-store" data-id="' + esc(id) + '" title="They are dropping it off after all">Drop off instead</button> ';
     return out;
   }
   function stageBadge(s) { return '<span class="badge ' + esc(s) + '">' + esc(cap(s || '')) + '</span>'; }
@@ -384,7 +387,7 @@
           '<td class="nw"><div>' + esc(when(d)) + '</div><small class="muted">' + esc(ago(d)) + '</small></td>' +
           '<td><span class="who">' + esc(r.customer.name || '(no name)') + '<small>' + esc(r.customer.email) + '</small></span>' +
           (r.hits && r.hits.length ? '<div class="hits">' + r.hits.map(function (h) { return '<span class="hit">' + esc(h.qty != null && h.qty > 1 ? h.qty + '× ' : '') + esc(h.name) + (h.set ? ' <small class="muted">' + esc(h.set) + '</small>' : '') + (h.cash != null || h.credit != null ? ' <small class="muted">' + (h.cash != null ? money(h.cash) + ' cash' : '') + (h.cash != null && h.credit != null ? ' / ' : '') + (h.credit != null ? money(h.credit) + ' credit' : '') + '</small>' : '') + '</span>'; }).join('') + '</div>' : '') + '</td>' +
-          '<td>' + payBadge(r.paymentType) + shipBadge(r.ship) + '</td>' +
+          '<td>' + payBadge(r.paymentType) + shipBadge(r.ship, r) + '</td>' +
           '<td class="num muted">' + esc(r.id) + '</td>' +
           '<td class="nw noprint"><a href="#/b/' + esc(r.id) + '" class="btn btn-dim">View</a> ' +
           '<a href="' + esc(r.portalUrl) + '" target="_blank" rel="noopener" class="btn btn-link">BinderPOS ↗</a></td></tr>';
@@ -432,8 +435,15 @@
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 403) throw new Error('pin'); if (!r.ok && !j.ship) throw new Error((j && j.error) || ('HTTP ' + r.status)); return j; }); });
   }
   function redraw() { if (/^#\/b\//.test(location.hash) && S.detail) renderDetail(); else renderList(); }
-  function shipAction(act, id) {
+  function shipAction(act, id, delivery) {
     var body = { number: id, action: act };
+    if (act === 'delivery') {
+      body.delivery = delivery;
+      // a list with no record yet: the row's customer rides along so the record can be made from it
+      var src = null; S.rows.forEach(function (r) { if (String(r.id) === String(id)) src = r; });
+      if (!src && S.detail && String(S.detail.id) === String(id)) src = S.detail;
+      if (src) body.row = { customerName: (src.customer || {}).name || '', customerEmail: (src.customer || {}).email || '', customer: (src.customer || {}).shopifyId || '', paymentType: src.paymentType || '', submitted: src.submitted || null, totals: src.totals ? { cash: src.totals.cash != null ? src.totals.cash : src.totals.quotedCash, credit: src.totals.credit != null ? src.totals.credit : src.totals.quotedCredit, units: src.totals.units != null ? src.totals.units : src.totals.cards, lines: src.totals.lines } : null };
+    }
     if (act === 'ask' && !confirm('Email the customer a link to add their tracking number?')) return;
     if (act === 'tracking') {
       var cur = null; S.rows.forEach(function (r) { if (String(r.id) === String(id) && r.ship) cur = r.ship; });
@@ -454,7 +464,7 @@
   }
   page.addEventListener('click', function (e) {
     var sb = e.target.closest && e.target.closest('[data-ship]');
-    if (sb) { shipAction(sb.getAttribute('data-ship'), sb.getAttribute('data-id')); return; }
+    if (sb) { shipAction(sb.getAttribute('data-ship'), sb.getAttribute('data-id'), sb.getAttribute('data-delivery')); return; }
     var tab = e.target.closest && e.target.closest('[data-tab]');
     if (tab) { S.status = tab.getAttribute('data-tab'); saveView(); S.loaded = false; loadList(false); return; }
     if (e.target.closest && e.target.closest('a, button, input, select')) return;
@@ -538,9 +548,13 @@
         esc(d.totals.livePriced) + ' of ' + esc(d.totals.lines) + ' lines priced · cash ' + money(d.totals.liveCash) + ' / credit ' + money(d.totals.liveCredit)) + '</div></div></div>';
     if (d.ship) {
       var sh = d.ship;
-      html += '<div class="notes shipbox"><div><strong>' + (sh.delivery === 'ship' ? 'Shipping it to us' : 'Bringing it in') + '</strong>' + (sh.delivery === 'ship' ? ' · ' + shipCell(sh) : ' <span class="muted">(the customer\'s choice at submission)</span>') + '</div>' +
-        (sh.delivery === 'ship' ? '<div class="shipacts noprint" style="margin-top:8px">' + shipActions(sh, d.id) + '</div>' : '') +
+      html += '<div class="notes shipbox"><div><strong>' + (sh.delivery === 'ship' ? 'Shipping' : 'Drop off') + '</strong>' + (sh.delivery === 'ship' ? ' · ' + shipCell(sh) : ' <span class="muted">(the customer\'s choice at submission)</span>') + '</div>' +
+        '<div class="shipacts noprint" style="margin-top:8px">' + (sh.delivery === 'ship' ? shipActions(sh, d.id) : '<button class="btn-dim" data-ship="delivery" data-delivery="ship" data-id="' + esc(d.id) + '" title="They are mailing it after all">Shipping instead</button>') + '</div>' +
         (sh.events && sh.events.length ? '<details class="noprint"><summary class="muted">History</summary>' + sh.events.map(function (e) { return '<div class="muted"><small>' + esc(when(e.ts)) + ' · ' + esc(e.action) + (e.by ? ' · ' + esc(e.by === 'customer' ? 'the customer' : staffName(e.by)) : '') + '</small></div>'; }).join('') + '</details>' : '') + '</div>';
+    }
+    if (!d.ship) {
+      html += '<div class="notes shipbox"><div><strong>Drop off or shipping?</strong> <span class="muted">The customer was not asked (the list came in before the choice existed, or from a cached page).</span></div>' +
+        '<div class="shipacts noprint" style="margin-top:8px"><button class="btn-dim" data-ship="delivery" data-delivery="in-store" data-id="' + esc(d.id) + '">Drop off</button> <button class="btn-dim" data-ship="delivery" data-delivery="ship" data-id="' + esc(d.id) + '">Shipping</button></div></div>';
     }
     if (d.declinedReason || d.approvedNotes || c.notes) {
       html += '<div class="notes">' +
