@@ -53,6 +53,7 @@ jobs:
           const r = await fetch(u, { method });
           const text = await r.text();
           console.log(method, p, '->', r.status, 'in', Date.now() - t0, 'ms,', text.length, 'chars');
+          console.log('headers', JSON.stringify(Object.fromEntries([...r.headers].filter(([k]) => /^(cache-control|etag|age|cf-cache-status|content-type|last-modified|expires|vary|content-length)$/.test(k)))));
           let d = null; try { d = JSON.parse(text); } catch {}
           let out = d;
           if (d && process.env.PICK) { try { out = new Function('d', 'return (' + process.env.PICK + ')')(d); } catch (e) { console.log('pick failed:', e.message); } }
