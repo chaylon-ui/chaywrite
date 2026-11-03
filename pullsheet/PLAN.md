@@ -31,13 +31,13 @@ plumbing with a live queue fed by Shopify, and let Shopify hold the "done" state
 
 ## Phases (each ships alone, each can be rolled back)
 
-1. **Source control + deploy** (this directory). Rotate the three exposed
-   secrets. Then fix the known defects listed in README.md.
-2. **Webhook intake + queue screen** beside the existing sheets. Userscript
-   keeps working while staff try the queue.
-3. **Durable Object state + WebSockets.** Pick/pack UI ports mostly as-is.
-4. **Fulfill on pack, hold on quarantine, drop the tags.**
-5. **Scan, offline queue, print agent, Access login.**
+1. Source control + deploy, defect fixes. (done 2026-09-22)
+2. Queue screen, server-side sheets. (done; rebuilt as live read 2026-11-03)
+3. Fulfil on pack, hold on quarantine, PIN at the bench, print view,
+   userscript retired. (done 2026-11-03; needs the fulfillment orders scope
+   on the app to leave tag-only mode)
+4. Durable Object state + WebSockets (live sync without polling).
+5. Scan, offline queue, print agent, Access login.
 
 ## Owner decisions (2026-09-22)
 
@@ -52,7 +52,16 @@ plumbing with a live queue fed by Shopify, and let Shopify hold the "done" state
 - **Manual waves only.** Orders land in a live queue; a lead ticks the ones to
   pull and makes a sheet. No scheduled or size-triggered sheets.
 
-## Phase 2 scope (next)
+## Done on 2026-11-03 (owner: "build it all")
+
+- Queue reads Shopify live (cached a minute, hooks and Refresh drop the cache).
+- Pack marks pickup orders Ready for pickup, fulfils shipped orders with
+  tracking when switched on, holds on quarantine; falls back to tags without
+  the fulfillment orders scope.
+- PIN at the bench names the packer; four-eye uses it.
+- Print view served by the worker; short sheet numbers; userscript retired.
+
+## Phase 2 scope (as first planned)
 
 1. Webhook intake: the worker registers ORDERS_PAID / ORDERS_UPDATED /
    ORDERS_CANCELLED webhooks on itself (same self-registration pattern as

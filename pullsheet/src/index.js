@@ -13,6 +13,8 @@
  */
 
 import * as Q from './queue.js';
+import * as F from './fulfil.js';
+import { sheetHtml } from './print.js';
 
 const STAFF = ['Gage', 'Sydney', 'Beth', 'Sinnis', 'Dresmond', 'Josh', 'Jeff', 'Brandon', 'Sebastian', 'Chaylon', 'Catlin'];
 const ADMIN_NAMES = ['Chaylon', 'Catlin'];
@@ -30,39 +32,35 @@ export default {
     const { pathname } = url;
     try {
       // ── Shopify order webhooks (paid / updated / cancelled / fulfilled) ──
-      // The body is a hint: after the signature check the order is re-read
-      // with the worker's own token and its queue record kept or dropped.
+      // Nothing is mirrored: a signed event just drops the queue cache, so the
+      // next read of the queue asks Shopify again.
       if (pathname === '/hook/order' && req.method === 'POST') {
         const raw = await req.text();
         const ok = await Q.verifyHmac(raw, req.headers.get('X-Shopify-Hmac-SHA256') || '', env.SHOPIFY_CLIENT_SECRET);
         if (!ok) return json({ error: 'bad signature' }, 401);
-        let b = {}; try { b = JSON.parse(raw); } catch (_) {}
-        const num = Q.orderNum(b.admin_graphql_api_id || b.id);
-        if (num) ctx.waitUntil(Q.refreshOrder(env, shopQuery, Q.orderGid(num)).catch(() => {}));
+        ctx.waitUntil(Q.invalidateQueue(env));
         return json({ ok: true });
       }
       // ── per-user login (username + 4-digit PIN) ──
       if (pathname === '/auth' && req.method === 'POST') {
         const b = await req.json().catch(() => ({}));
         const name = String(b.name || '').trim();
-        const pin = String(b.pin || '');
-        const ip = req.headers.get('CF-Connecting-IP') || '';
-        const lockKey = 'sys:authfail:' + name.toLowerCase() + '|' + ip;
-        let fails = 0;
-        try { fails = parseInt((await env.JOBS.get(lockKey)) || '0', 10) || 0; } catch (_) {}
-        if (fails >= AUTH_MAX_FAILS) return json({ error: 'Too many wrong PINs. Try again in 15 minutes.' }, 429);
-        const users = await getUsers(env);
-        const rec = users[name];
-        if (rec && rec.h === (await pinHash(pin, env))) {
-          try { if (fails) await env.JOBS.delete(lockKey); } catch (_) {}
-          const sess = await makeSession(env, name);
-          return new Response(JSON.stringify({ ok: true, name, admin: isAdmin(name) }), { headers: {
-            'Content-Type': 'application/json',
-            'Set-Cookie': 'xgps=' + encodeURIComponent(sess) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + (30 * 24 * 3600),
-          } });
-        }
-        try { await env.JOBS.put(lockKey, String(fails + 1), { expirationTtl: AUTH_LOCK_SECS }); } catch (_) {}
-        return json({ error: 'Wrong name or PIN' }, 401);
+        const c = await checkPin(env, req, name, String(b.pin || ''));
+        if (!c.ok) return json({ error: c.error }, c.status);
+        const sess = await makeSession(env, name);
+        return new Response(JSON.stringify({ ok: true, name, admin: isAdmin(name) }), { headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': 'xgps=' + encodeURIComponent(sess) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + (30 * 24 * 3600),
+        } });
+      }
+      // ── printable sheet (signed-in staff), any sheet, any time ──
+      if (pathname.startsWith('/print/') && req.method === 'GET') {
+        const me = await sessionUser(getCookie(req, 'xgps'), env);
+        if (!me) return serveLogin(env);
+        const jid = pathname.slice(7).replace(/[^0-9A-Za-z]/g, '');
+        const job = jid ? await env.JOBS.get('job:' + jid, 'json') : null;
+        if (!job) return new Response('No such pull sheet', { status: 404 });
+        return new Response(sheetHtml(job), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
       }
       if (pathname === '/logout' && req.method === 'POST') {
         return new Response(JSON.stringify({ ok: true }), { headers: {
@@ -96,10 +94,10 @@ export default {
       return json({ error: String(e && e.message || e) }, 500);
     }
   },
-  // Cron (wrangler.toml [triggers]): keep the queue in step with Shopify even
-  // if a webhook is missed. Webhooks stay the fast path.
+  // Cron (wrangler.toml [triggers]): keep the queue cache warm so the screen
+  // opens instantly and a missed webhook costs at most ten minutes.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(Q.syncQueue(env, shopQuery).catch(() => {}));
+    ctx.waitUntil(Q.loadQueue(env, shopQuery, { fresh: true }).catch(() => {}));
   },
 };
 
@@ -148,6 +146,35 @@ async function sessionUser(val, env) {
   if (expect !== p[4]) return null;
   return decodeURIComponent(p[3]);
 }
+// PIN check with the per-name + IP lockout; used by sign-in and by the pack-time PIN.
+async function checkPin(env, req, name, pin) {
+  const ip = req.headers.get('CF-Connecting-IP') || '';
+  const lockKey = 'sys:authfail:' + name.toLowerCase() + '|' + ip;
+  let fails = 0;
+  try { fails = parseInt((await env.JOBS.get(lockKey)) || '0', 10) || 0; } catch (_) {}
+  if (fails >= AUTH_MAX_FAILS) return { ok: false, status: 429, error: 'Too many wrong PINs. Try again in 15 minutes.' };
+  const users = await getUsers(env);
+  const rec = users[name];
+  if (rec && rec.h === (await pinHash(pin, env))) { try { if (fails) await env.JOBS.delete(lockKey); } catch (_) {} return { ok: true }; }
+  try { await env.JOBS.put(lockKey, String(fails + 1), { expirationTtl: AUTH_LOCK_SECS }); } catch (_) {}
+  return { ok: false, status: 401, error: 'Wrong name or PIN' };
+}
+// A PIN typed at the bench: a short-lived signed token naming who is packing, so
+// a shared tablet's session does not decide who gets the credit (or the blame).
+const VERIFY_SECS = 10 * 60;
+async function makeVerify(env, name) {
+  const exp = Date.now() + VERIFY_SECS * 1000;
+  const sig = await hmacHex('verify|' + exp + '|' + encodeURIComponent(name), env.SESSION_SECRET || env.API_TOKEN || 'x');
+  return { name, exp, sig };
+}
+async function readVerify(env, v) {
+  if (!v || !v.name || !v.exp || !v.sig) return '';
+  if (+v.exp < Date.now()) return '';
+  const expect = await hmacHex('verify|' + v.exp + '|' + encodeURIComponent(v.name), env.SESSION_SECRET || env.API_TOKEN || 'x');
+  return expect === v.sig ? String(v.name) : '';
+}
+const SETTINGS_DEFAULT = { fulfilShipped: false, notifyCustomer: true, askTracking: true };
+async function getSettings(env) { try { return { ...SETTINGS_DEFAULT, ...((await env.JOBS.get('sys:settings', 'json')) || {}) }; } catch (_) { return { ...SETTINGS_DEFAULT }; } }
 function getCookie(req, name) {
   const c = req.headers.get('Cookie') || '';
   const m = c.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
@@ -256,64 +283,55 @@ async function api(req, env, pathname, me, ctxWait) {
     return json({ people, recent: recent.slice(0, 50) });
   }
 
-  // ── the live order queue (phase 2) ──
+  // ── pack-time PIN: who is packing, regardless of whose session the tablet holds ──
+  if (parts[1] === 'verify-pin' && req.method === 'POST') {
+    const b = await req.json().catch(() => ({}));
+    const name = String(b.name || '').trim();
+    const c = await checkPin(env, req, name, String(b.pin || ''));
+    if (!c.ok) return json({ error: c.error }, c.status);
+    return json({ ok: true, verify: await makeVerify(env, name), admin: isAdmin(name) });
+  }
+  // ── settings (admins write) ──
+  if (parts[1] === 'settings') {
+    if (req.method === 'GET') return json(await getSettings(env));
+    if (!isAdmin(me)) return json({ error: 'Admins only' }, 403);
+    const b = await req.json().catch(() => ({}));
+    const next = await getSettings(env);
+    for (const k of ['fulfilShipped', 'notifyCustomer', 'askTracking']) if (typeof b[k] === 'boolean') next[k] = b[k];
+    await env.JOBS.put('sys:settings', JSON.stringify(next));
+    return json(next);
+  }
+
+  // ── the order queue: read live from Shopify, cached for a minute ──
   if (parts[1] === 'queue') {
     if (!parts[2] && req.method === 'GET') {
-      const origin = new URL(req.url).origin;
-      let rows = await Q.listQueue(env);
-      let sync = null; try { sync = await env.JOBS.get('sys:queueSync', 'json'); } catch (_) {}
-      const syncAge = sync && sync.at ? Date.now() - Date.parse(sync.at) : Infinity;
-      if (!rows.length && syncAge > 10 * 60e3) {
-        // nothing queued and no recent sync: fetch the first page now so the screen is not empty,
-        // and let the rest of the walk + stale sweep run after the response
-        sync = await Q.syncQueue(env, shopQuery, { inline: true });
-        rows = await Q.listQueue(env, sync.records);
-        if (typeof ctxWait === 'function') ctxWait(Q.syncQueue(env, shopQuery).catch(() => {}));
-      }
+      const url = new URL(req.url);
+      const origin = url.origin;
+      const q = await Q.loadQueue(env, shopQuery, { fresh: url.searchParams.get('fresh') === '1' });
+      const rows = Q.queueRows(q.records || [], await Q.activeSheets(env));
       const hooksAt = await env.JOBS.get('sys:hooksAt');
       // keep the Shopify hooks pointed here (at most every 12h, off the request path)
       if (!hooksAt || Date.now() - Date.parse(hooksAt) > 43200e3) {
         await env.JOBS.put('sys:hooksAt', new Date().toISOString());
         if (typeof ctxWait === 'function') ctxWait(ensureHooks(env, origin).catch(() => {}));
       }
-      return json({ rows, hooksAt: hooksAt || '', syncAt: (sync && sync.at) || '', syncErrors: [...new Set((sync && sync.errors) || [])], syncDays: Q.SYNC_DAYS });
-    }
-    if (parts[2] === 'backfill' && req.method === 'POST') {
-      if (!isAdmin(me)) return json({ error: 'Admins only' }, 403);
-      const b = await req.json().catch(() => ({}));
-      const since = String(b.since || '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return json({ error: 'since must be YYYY-MM-DD' }, 400);
-      const r = await Q.backfill(env, shopQuery, { since, excludePos: b.excludePos !== false, cursor: b.cursor || null });
-      if (!r.seen && r.errors && r.errors.length) return json({ ...r, error: 'Shopify: ' + r.errors.join(' | ') }, 502);
-      return json(r);
+      return json({ rows, at: q.at || '', errors: q.errors || [], partial: !!q.partial, days: Q.QUEUE_DAYS, cached: !!q.cached });
     }
     if (parts[2] && /^\d+$/.test(parts[2]) && req.method === 'GET') {
-      const rec = await Q.getRecord(env, parts[2]);
+      const rec = await Q.recordFor(env, shopQuery, parts[2]);
       if (!rec) return json({ error: 'not in the queue' }, 404);
-      const sheet = ((await Q.listQueue(env)).find((r) => r.num === parts[2]) || {}).sheet || '';
+      const sheet = (await Q.activeSheets(env))[String(rec.name)] || '';
       return json({ ...rec, sheet });
-    }
-    if (parts[2] === 'sync' && req.method === 'POST') {
-      // Sync now: walk the window and re-read every queued order (up to 80), so a
-      // change on the Shopify side shows within one press instead of one sweep.
-      const r = await Q.syncQueue(env, shopQuery, { inline: false, force: true });
-      return json(r.records ? { ...r, records: undefined } : r);
-    }
-    if (parts[2] === 'refresh' && req.method === 'POST') {
-      const b = await req.json().catch(() => ({}));
-      const num = Q.orderNum(b.num || b.gid);
-      if (!num) return json({ error: 'missing order' }, 400);
-      return json(await Q.refreshOrder(env, shopQuery, Q.orderGid(num)));
     }
     if (parts[2] === 'sheet' && req.method === 'POST') {
       const b = await req.json().catch(() => ({}));
       const nums = [...new Set((Array.isArray(b.nums) ? b.nums : []).map((x) => Q.orderNum(x)).filter(Boolean))].slice(0, 100);
       if (!nums.length) return json({ error: 'pick at least one order' }, 400);
-      const records = (await Promise.all(nums.map((n) => Q.getRecord(env, n)))).filter(Boolean);
-      if (!records.length) return json({ error: 'those orders are no longer in the queue' }, 409);
+      const records = (await Promise.all(nums.map((n) => Q.recordFor(env, shopQuery, n)))).filter(Boolean);
+      if (!records.length) return json({ error: 'those orders are no longer waiting' }, 409);
       // never double-book an order that already sits on an active sheet
-      const active = new Set((await Q.listQueue(env)).filter((r) => r.sheet).map((r) => r.num));
-      const fresh = records.filter((r) => !active.has(r.num));
+      const active = await Q.activeSheets(env);
+      const fresh = records.filter((r) => !active[String(r.name)]);
       if (!fresh.length) return json({ error: 'every selected order is already on an active sheet' }, 409);
       const built = await Q.buildJob(env, fresh);
       const jobId = await newId(env);
@@ -325,8 +343,8 @@ async function api(req, env, pathname, me, ctxWait) {
       for (const o of fresh) {
         try { const res = await tagOrder(env, o.gid, [PULL_TAG], true); const ue = ((res && res.data && res.data.tagsAdd) || {}).userErrors || []; if (ue.length) warnings.push(o.name + ': ' + ue.map((e) => e.message).join(', ')); }
         catch (e) { warnings.push(o.name + ': tag failed'); }
-        o.tags = [...new Set([...(o.tags || []), PULL_TAG])]; await Q.putRecord(env, o);
       }
+      await Q.invalidateQueue(env);
       return json({ id: jobId, orders: fresh.length, skipped: records.length - fresh.length, enrichPending: built.enrichPending, warnings });
     }
     return json({ error: 'unknown queue op' }, 404);
@@ -527,7 +545,8 @@ async function api(req, env, pathname, me, ctxWait) {
       const og = (job.orders || []).find((o) => o.name === order);
       if (!og) return json({ error: 'unknown order' }, 404);
       const os = orderState(job, order);
-      const verifier = me || body.employee || '';
+      // Who is packing: the PIN typed at the bench (verify token) beats the tablet's session
+      const verifier = (await readVerify(env, body.verify)) || me || body.employee || '';
       if (packed) {
         const rem = orderRemaining(job, order);
         if (rem > 0) return json({ error: rem + ' item(s) not found or refunded', remaining: rem }, 409);
@@ -536,29 +555,34 @@ async function api(req, env, pathname, me, ctxWait) {
         if (os.startedBy) pickers.add(os.startedBy);
         for (const cid of Object.keys(os.picks || {})) { const b = os.picks[cid] && os.picks[cid].by; if (b) pickers.add(b); }
         if (verifier && pickers.has(verifier)) {
-          if (!isAdmin(me)) return json({ error: 'Four-eye check: you picked this order, so a different staff member must verify and pack it.', fourEye: true, picker: verifier }, 409);
+          if (!isAdmin(verifier)) return json({ error: 'Four-eye check: ' + verifier + ' picked this order, so a different staff member must verify and pack it.', fourEye: true, picker: verifier }, 409);
           if (!body.override) return json({ error: 'You picked this order. Four-eye policy normally needs a different verifier.', fourEye: true, canOverride: true }, 409);
           os.verifyOverride = { by: verifier, at: new Date().toISOString() };
         }
       }
       let tagWarning = '';
+      let shop = { action: packed ? 'tagged' : 'untagged', note: '' };
       if (packed) {
-        // Finalizing tags THIS order PACKED + PRINTED (only this order, never the whole sheet)
         if (og.gid) {
+          // Shopify first: ready for pickup / fulfil (scope permitting), then the PACKED + PRINTED tags on THIS order
+          shop = await packInShopify(env, job, og, os, body);
           const res = await tagOrder(env, og.gid, [PACK_TAG, PRINT_TAG], true);
           const ue = ((res && res.data && res.data.tagsAdd) || {}).userErrors || [];
           if (ue.length) tagWarning = og.name + ': ' + ue.map((e) => e.message).join(', ');
+          await Q.invalidateQueue(env);
         }
       } else if (og.gid) {
-        // Un-finalizing just removes PACKED from this order (PRINTED stays)
+        // Un-finalizing just removes PACKED from this order (PRINTED stays). A fulfilment or
+        // ready-for-pickup already sent to Shopify is not undone from here.
         await tagOrder(env, og.gid, PACK_TAG, false);
+        await Q.invalidateQueue(env);
       }
       os.status = packed ? 'packed' : 'open';
-      if (packed) { os.packedAt = new Date().toISOString(); os.packedBy = verifier; }
-      else { os.packedAt = ''; os.packedBy = ''; }
+      if (packed) { os.packedAt = new Date().toISOString(); os.packedBy = verifier; os.shop = shop; }
+      else { os.packedAt = ''; os.packedBy = ''; os.shop = null; }
       stampOrder(os, verifier);
       await put(env, id, job);
-      return json(tagWarning ? { ok: true, warning: tagWarning } : { ok: true });
+      return json({ ok: true, shop, verifier, ...(tagWarning ? { warning: tagWarning } : {}) });
     }
 
     // POST /api/jobs/:id/ofill  → mark every non-refunded card in an order as found
@@ -662,11 +686,27 @@ async function api(req, env, pathname, me, ctxWait) {
         if (ue.length) failures.push(name + ': ' + ue.map((e) => e.message).join(', '));
       }
       if (failures.length) return json({ error: failures.join(' | ') }, 502);
+      // Shopify hold / release on the touched orders, so the admin shows "On hold".
+      // Needs the fulfillment orders scope; without it this is silent and the tag stands alone.
+      const holds = [];
+      const cardName = ((cards.find((c) => c.cid === cid) || {}).card) || '';
+      for (const name of touched) {
+        const gid = gidByName[name];
+        if (!gid) continue;
+        const fo = await F.fetchFulfillmentOrders(env, shopQuery, gid);
+        if (fo.error) { if (!fo.scope) holds.push(name + ': ' + fo.error); continue; }
+        const want = stillQ.has(name);
+        for (const f of F.openFos(fo.fos)) {
+          if (want === f.held) continue;
+          const r = await F.setHold(env, shopQuery, f.id, want, 'Pull sheet quarantine' + (want && cardName ? ': ' + cardName : ''));
+          if (!r.ok) holds.push(name + ': ' + r.errors.join(' | '));
+        }
+      }
 
       if (who) { job.state.lastSavedBy = who; if (!job.state.workedBy.includes(who)) job.state.workedBy.push(who); }
       job.state.lastSavedAt = new Date().toISOString();
       await put(env, id, job);
-      return json({ ok: true });
+      return json({ ok: true, holds });
     }
 
     // POST /api/jobs/:id/archive  → archive/restore, optionally strip tags from orders
@@ -865,6 +905,35 @@ async function tagOrder(env, gid, tags, add) {
   return r.json();
 }
 
+// Packing drives Shopify: pickup orders are marked ready for pickup; shipped
+// orders are fulfilled when Staff & settings says so, with the tracking number
+// typed at the bench and without refunded or quarantined cards. Without the
+// fulfillment orders scope the order is only tagged, and the note says why.
+async function packInShopify(env, job, og, os, body) {
+  const settings = await getSettings(env);
+  const fo = await F.fetchFulfillmentOrders(env, shopQuery, og.gid);
+  if (fo.error) return { action: 'tagged', note: fo.scope ? 'Tagged PACKED only: the app cannot see fulfillment orders yet (add the merchant-managed fulfillment orders scope to mark ready / fulfil from here).' : 'Tagged PACKED only: ' + fo.error };
+  const open = F.openFos(fo.fos);
+  if (!open.length) return { action: 'none', note: 'Nothing left to fulfil in Shopify for this order.' };
+  if (og.local || open.every((f) => f.methodType === 'PICK_UP')) {
+    const r = await F.markReadyForPickup(env, shopQuery, open.map((f) => f.id));
+    return r.ok ? { action: 'ready_for_pickup', note: 'Marked ready for pickup in Shopify; the customer has been told.' }
+                : { action: 'tagged', note: 'Tagged PACKED only: ready for pickup failed (' + r.errors.join(' | ') + ').' };
+  }
+  if (!settings.fulfilShipped) return { action: 'tagged', note: 'Tagged PACKED. Fulfilling shipped orders from here is off (Staff & settings).' };
+  const skuByCid = {}; for (const c of allCards(job)) skuByCid[c.cid] = c.sku || '';
+  const exclude = {};
+  for (const x of cardsForOrder(job, og.name)) {
+    if (os.refunded[x.cid] || (job.state.quarantined || {})[x.cid]) { const sku = skuByCid[x.cid]; if (sku) exclude[sku] = (exclude[sku] || 0) + x.need; }
+  }
+  const byFo = F.planShipment(fo.fos, exclude);
+  if (!byFo.length) return { action: 'none', note: 'Nothing to fulfil once refunded and quarantined cards are left out.' };
+  const tracking = body && body.tracking && body.tracking.number ? { number: String(body.tracking.number).trim(), company: body.tracking.company || '' } : null;
+  const r = await F.createFulfillment(env, shopQuery, { byFo, tracking, notify: settings.notifyCustomer !== false });
+  return r.ok ? { action: 'fulfilled', tracking: tracking ? tracking.number : '', note: 'Fulfilled in Shopify' + (tracking ? ' with tracking ' + tracking.number : '') + (settings.notifyCustomer !== false ? '; the customer has been told.' : '.') }
+              : { action: 'tagged', note: 'Tagged PACKED only: fulfil failed (' + r.errors.join(' | ') + ').' };
+}
+
 // Keep Shopify's order webhooks pointed at this worker (same idea as
 // exor-binder's INVENTORY_LEVELS_UPDATE self-registration in chaywrite/src/room.js).
 async function listHooks(env, origin) {
@@ -886,16 +955,17 @@ async function ensureHooks(env, origin) {
 }
 
 /* ───────────────────────── utils ───────────────────────── */
-// Sequential serial: 12-digit zero-padded, increments by 1 per sheet.
-// Counter lives in KV (sys:seq); existence check guards against any race.
+// Sequential sheet number, no padding (sheet #43 is sayable across a shop floor;
+// the older 12-digit ids keep working). Counter lives in KV (sys:seq); the
+// existence check guards against a race.
 async function newId(env) {
   let n = parseInt((await env.JOBS.get('sys:seq')) || '0', 10) || 0;
   for (let tries = 0; tries < 50; tries++) {
     n++;
-    const id = String(n).padStart(12, '0');
+    const id = String(n);
     if (!(await env.JOBS.get('job:' + id))) { await env.JOBS.put('sys:seq', String(n)); return id; }
   }
-  return String(Date.now()).slice(-12);
+  return String(Date.now()).slice(-9);
 }
 function json(obj, status = 200, extra) {
   if (extra) obj = { ...obj, ...extra };
@@ -1191,6 +1261,8 @@ let currentOrder = null;     // when viewing a single order within a job
 let pendingFlash = null;     // card-name to scroll-to/flash after navigating to an order
 let addrCache = {};          // jobId|orderName -> address (prefetched for instant label flash)
 let footBtn = null;
+let SETTINGS = { fulfilShipped:false, notifyCustomer:true, askTracking:true };
+fetch('/api/settings',{headers:H}).then(r=>r.json()).then(j=>{ if(j&&typeof j==='object'&&!j.error) SETTINGS=Object.assign(SETTINGS,j); }).catch(()=>{});
 
 const $ = (s, r=document) => r.querySelector(s);
 const el = (h) => { const t=document.createElement('template'); t.innerHTML=h.trim(); return t.content.firstChild; };
@@ -1355,27 +1427,23 @@ async function showJob(id){
 /* ─────────────────── Order queue (phase 2) ─────────────────── */
 let qSel=new Set(), pendingEnrich=null;
 function ago(iso){ const t=Date.parse(iso||''); if(isNaN(t)) return ''; const m=Math.round((Date.now()-t)/60000); if(m<60) return m+' min'; const h=Math.round(m/60); if(h<48) return h+' h'; return Math.round(h/24)+' d'; }
-async function showQueue(quiet){
+async function showQueue(quiet, fresh){
   document.querySelectorAll('.foot').forEach(f=>f.remove()); footBtn=null;
   $('#crumb').textContent=''; current=null; currentOrder=null;
-  const v=$('#view'); if(!quiet) v.innerHTML='<div class="empty">Loading…</div>';
-  let rows=[], qj={}; try{ const r=await fetch('/api/queue',{headers:H}); qj=await r.json(); rows=qj.rows||[]; }catch(e){ v.innerHTML='<div class="empty">Could not load the queue.</div>'; return; }
+  const v=$('#view'); if(!quiet) v.innerHTML='<div class="empty">Asking Shopify…</div>';
+  let rows=[], qj={}; try{ const r=await fetch('/api/queue'+(fresh?'?fresh=1':''),{headers:H}); qj=await r.json(); rows=qj.rows||[]; }catch(e){ v.innerHTML='<div class="empty">Could not load the queue.</div>'; return; }
   const y=window.scrollY; v.innerHTML='';
   v.appendChild(el('<h1 class="jtitle">Order queue <span class="code">'+rows.length+' waiting</span></h1>'));
-  const syncTxt = qj.syncAt ? ('Synced with Shopify '+ago(qj.syncAt)+' ago · unfulfilled online orders from the last '+(qj.syncDays||14)+' days, plus new ones as they are paid') : 'Syncing with Shopify…';
-  v.appendChild(el('<div style="font-size:12px;color:var(--mut);margin:-6px 0 10px 2px">'+esc(syncTxt)+((qj.syncErrors&&qj.syncErrors.length)?' · <span style="color:var(--accent)">'+esc(qj.syncErrors.join(' | '))+'</span>':'')+(IS_ADMIN?' <button id="syncNow" style="font-size:11px;padding:3px 8px;margin-left:6px">Sync now</button>':'')+'</div>'));
-  const sn=$('#syncNow'); if(sn) sn.onclick=async()=>{ sn.disabled=true; sn.textContent='Syncing…'; try{ await fetch('/api/queue/sync',{method:'POST',headers:H}); }catch(e){} showQueue(true); };
-  if(!rows.length && !qj.syncAt) setTimeout(()=>{ if(location.hash.replace(/^#\\/?/,'')==='queue') showQueue(true); }, 6000);
+  const live = el('<div style="font-size:12px;color:var(--mut);margin:-6px 0 10px 2px">Live from Shopify'+(qj.at?' · read '+esc(ago(qj.at))+' ago':'')+' · paid online orders from the last '+(qj.days||14)+' days with something left to pull'+(qj.partial?' · <b>more than shown, oldest first</b>':'')+((qj.errors&&qj.errors.length)?' · <span style="color:var(--accent)">'+esc(qj.errors.join(' | '))+'</span>':'')+' <button id="qRefresh" style="font-size:11px;padding:3px 8px;margin-left:6px">Refresh</button></div>');
+  v.appendChild(live);
+  $('#qRefresh',live).onclick=()=>{ $('#qRefresh',live).disabled=true; showQueue(true, true); };
   if(IS_ADMIN){
-    const d=new Date(Date.now()-14*86400000).toISOString().slice(0,10);
-    const bf=el('<div class="ordbox"><div style="font-weight:700;margin-bottom:6px">Import unfulfilled orders</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label style="font-size:13px">Placed since <input type="date" id="bfSince" value="'+d+'" style="padding:7px;border:1px solid var(--line);border-radius:8px;font:inherit"></label><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="bfNoPos" checked> Skip POS orders</label><button id="bfGo" class="primary">Import</button><span id="bfMsg" style="font-size:12px;color:var(--mut)"></span></div><div style="font-size:11px;color:var(--mut);margin-top:6px">New orders arrive on their own through the Shopify hooks; this catches up on older ones.</div></div>');
-    $('#bfGo',bf).onclick=()=>runBackfill(bf); v.appendChild(bf);
-    const hs=el('<div style="font-size:12px;color:var(--mut);margin:-6px 0 12px 2px" id="hookStatus">Checking Shopify hooks…</div>'); v.appendChild(hs);
+    const hs=el('<div style="font-size:12px;color:var(--mut);margin:-4px 0 12px 2px" id="hookStatus">Checking Shopify hooks…</div>'); v.appendChild(hs);
     fetch('/api/hooks',{headers:H}).then(r=>r.json()).then(hj=>{
       const reg=(hj.registered||[]).length, miss=(hj.missing||[]);
       hs.innerHTML = miss.length
         ? '<span style="color:var(--accent);font-weight:700">Shopify hooks: '+reg+'/4 registered</span> · missing '+esc(miss.join(', '))+(hj.errors&&hj.errors.length?' · '+esc(hj.errors.join(' | ')):'')+' <button id="hookFix" style="font-size:11px;padding:3px 8px;margin-left:6px">Register now</button>'
-        : 'Shopify hooks: 4/4 registered at '+esc(hj.callback||'');
+        : 'Shopify hooks: 4/4 registered (new orders refresh the queue on their own)';
       const fx=$('#hookFix',hs); if(fx) fx.onclick=async()=>{ fx.disabled=true; fx.textContent='Registering…'; try{ const r=await fetch('/api/hooks',{method:'POST',headers:H}); const j=await r.json(); hs.textContent='Registered '+(j.created||[]).length+', still missing '+(j.missing||[]).filter(t=>!(j.created||[]).includes(t)).length+((j.failed||[]).length?' · '+(j.failed||[]).join(' | '):''); }catch(e){ hs.textContent='Could not register hooks.'; } };
     }).catch(()=>{ hs.textContent='Could not check Shopify hooks.'; });
   }
@@ -1385,7 +1453,7 @@ async function showQueue(quiet){
   const paint=()=>{
     const q=($('#qsearch').value||'').trim().toLowerCase(); list.innerHTML='';
     const shown=rows.filter(r=>!q||[r.name,r.customer,r.city].join(' ').toLowerCase().includes(q));
-    if(!shown.length) list.appendChild(el('<div class="empty">'+(q?'Nothing matches that filter.':'Nothing waiting. Paid online orders show up here within a minute'+(IS_ADMIN?', or use Import above for older ones.':'.'))+'</div>'));
+    if(!shown.length) list.appendChild(el('<div class="empty">'+(q?'Nothing matches that filter.':'Nothing waiting. Paid online orders show up here as soon as they come in.')+'</div>'));
     shown.forEach(r=>{
       const blocked=!!r.sheet, on=qSel.has(r.num);
       const row=el('<label class="card" style="cursor:pointer;align-items:center'+(blocked?';opacity:.55':'')+'"><input type="checkbox" '+(on?'checked':'')+(blocked?' disabled':'')+' style="width:22px;height:22px"><div class="cbody"><div><button class="qnum" type="button" style="font-weight:800;color:var(--accent);border:1px solid #f0cfc7;background:#fff6f0;border-radius:14px;padding:3px 12px;font-size:14px">'+esc(r.name)+'</button><span class="cn">'+esc(r.customer||'')+'</span><span class="stat">'+(blocked?'<span class="sshort">on sheet #'+esc(r.sheet)+'</span>':(r.pulled?'<span class="sneed">pulled before</span>':''))+'</span></div><div class="sub">'+esc(ago(r.createdAt))+' ago · '+(r.itemQty||0)+' item'+(r.itemQty===1?'':'s')+' · '+(r.local?'<b style="color:var(--accent)">PICKUP</b>':'ship')+(r.source&&r.source!=='web'?' · '+esc(r.source):'')+'</div></div></label>');
@@ -1425,15 +1493,6 @@ async function previewQueueOrder(r, onSelect){
   m.querySelectorAll('.th').forEach(t=>{ if(t.src) t.onclick=(e)=>{ e.stopPropagation(); openImg(t.src); }; });
 }
 function refreshQueueFoot(){ if(!footBtn) return; const n=qSel.size; footBtn.textContent='Make pull sheet'+(n?' ('+n+')':''); footBtn.disabled=!n; footBtn.style.opacity=n?'1':'.5'; const h=$('#qhint'); if(h) h.textContent=n?n+' order'+(n>1?'s':'')+' selected':'Tick the orders to pull'; }
-async function runBackfill(box){
-  const since=$('#bfSince',box).value, excludePos=$('#bfNoPos',box).checked, btn=$('#bfGo',box), msg=$('#bfMsg',box);
-  btn.disabled=true; let cursor=null, kept=0, seen=0, pages=0;
-  try{
-    do{ msg.textContent='Importing… '+seen+' checked, '+kept+' queued'; const r=await fetch('/api/queue/backfill',{method:'POST',headers:H,body:JSON.stringify({since,excludePos,cursor})}); const j=await r.json(); if(j.error){ msg.textContent=j.error; break; } kept+=j.kept||0; seen+=j.seen||0; cursor=j.cursor||null; pages++; }while(cursor && pages<40);
-    msg.textContent='Done: '+kept+' queued of '+seen+' checked'+(cursor?' (more remain, run again)':'');
-  }catch(e){ msg.textContent='Import failed.'; }
-  btn.disabled=false; showQueue(true);
-}
 async function makeSheet(){
   const nums=[...qSel]; if(!nums.length||!footBtn) return;
   footBtn.disabled=true; footBtn.textContent='Building…';
@@ -1546,10 +1605,9 @@ function renderOrder(){
   footBtn.onclick=()=>{
     if(os.status==='packed'){ oPack(name, false); return; }
     if(orderRemainingLocal(name)>0) return;
-    if(!IS_ADMIN && orderPickers(os).includes(who)){ alert('Four-eye check: you picked this order. A different person must sign in to verify and pack it.'); return; }
     const qc=orderQuarantinedCards(name);
     if(qc.length){ quarantinePackWarning(name, qc); return; }
-    oPack(name, true);
+    packWithPin(name);
   };
   foot.appendChild(br); foot.appendChild(footBtn); document.body.appendChild(foot);
   const foots=document.querySelectorAll('.foot'); if(foots.length>1) foots[0].remove();
@@ -1558,10 +1616,8 @@ function renderOrder(){
 }
 
 function refreshOrderFoot(){ if(!footBtn||!currentOrder) return; const os=ostate(currentOrder); const hint=document.getElementById('fhint');
-  if(os.status==='packed'){ footBtn.textContent='Unpack'; footBtn.disabled=false; footBtn.className=''; footBtn.style.opacity='1'; if(hint) hint.textContent='Packed ✓ by '+esc(os.packedBy||os.lastSavedBy||'—'); return; }
+  if(os.status==='packed'){ footBtn.textContent='Unpack'; footBtn.disabled=false; footBtn.className=''; footBtn.style.opacity='1'; if(hint) hint.textContent='Packed ✓ by '+(os.packedBy||os.lastSavedBy||'—')+(os.shop&&os.shop.note?' · '+os.shop.note:''); return; }
   const rem=orderRemainingLocal(currentOrder);
-  const sameEye = !!who && orderPickers(os).includes(who);
-  if(rem<=0 && sameEye && !IS_ADMIN){ footBtn.textContent='Finalize · PACKED'; footBtn.disabled=true; footBtn.className=''; footBtn.style.opacity='.5'; if(hint) hint.innerHTML='4-eye: you picked this order — needs a different person to verify'; return; }
   footBtn.textContent='Finalize · PACKED'; footBtn.disabled=rem>0; footBtn.className=rem>0?'':'primary'; footBtn.style.opacity=rem>0?'.5':'1';
   const qn = orderQuarantinedCards(currentOrder).length;
   if(hint) hint.textContent= rem>0?(rem+' item'+(rem>1?'s':'')+' left'):(qn?('ready · '+qn+' in quarantine'):'ready to verify & pack'); }
@@ -1671,28 +1727,68 @@ function quarantinePackWarning(name, qc){
     +'</div></div></div>');
   m.onclick=(e)=>{ if(e.target===m) m.remove(); };
   $('#qcancel',m).onclick=()=>m.remove();
-  $('#qgo',m).onclick=()=>{ m.remove(); oPack(name,true); };
+  $('#qgo',m).onclick=()=>{ m.remove(); packWithPin(name); };
   $('#qref',m).onclick=()=>{ m.remove();
     const os=ostate(name);
     qc.forEach(c=>{ if(!os.refunded[c.cid]){ os.refunded[c.cid]=true; oPatch({order:name,op:'refund',cid:c.cid,value:true}); } });
     refreshOrdersBox();
-    oPack(name,true);
+    packWithPin(name);
   };
   document.body.appendChild(m);
 }
-async function oPack(name, packed, override){
+// Pack-time PIN: whoever packs types their own PIN, so a shared tablet's session
+// does not decide who verified the order. Optional tracking number for shipped
+// orders when fulfilment from here is on.
+async function packWithPin(name){
+  const oinfo=(current.orders||[]).find(o=>o.name===name)||{name};
+  const askTrack = !oinfo.local && SETTINGS.fulfilShipped && SETTINGS.askTracking;
+  let names=STAFF.slice(); try{ const r=await fetch('/api/users',{headers:H}); const j=await r.json(); if(j.users&&j.users.length) names=j.users.map(u=>u.name); }catch(e){}
+  const m=el('<div class="modal"><div class="sheetcard" style="width:min(420px,94vw)">'
+    +'<h2 style="margin:0 0 4px">Who is packing '+esc(name)+'?</h2>'
+    +'<div style="font-size:12px;color:var(--mut);margin-bottom:10px">Pick your name and enter your PIN. This is who signs off the order.</div>'
+    +'<div class="staffgrid" id="vGrid"></div>'
+    +'<div id="vStep2" style="display:none;margin-top:12px"><div style="font-size:13px;margin-bottom:6px">PIN for <b id="vWho"></b></div>'
+    +'<input id="vPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" style="width:100%;font:inherit;text-align:center;letter-spacing:.4em;font-weight:700;padding:12px;border:1px solid var(--line);border-radius:10px">'
+    +(askTrack?'<input id="vTrack" placeholder="Tracking number (optional)" style="width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;margin-top:8px">':'')
+    +'<div id="vErr" style="color:var(--accent);font-size:12px;font-weight:700;min-height:16px;margin-top:6px"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="vBack">Back</button><button id="vGo" class="primary">Verify &amp; pack</button></div></div>'
+    +'<div style="text-align:right;margin-top:10px"><button id="vCancel" style="background:none;border:0;color:var(--mut)">Cancel</button></div>'
+    +'</div></div>');
+  let pick='';
+  const grid=$('#vGrid',m);
+  names.forEach(n=>{ const b=el('<button>'+esc(n)+'</button>'); b.onclick=()=>{ pick=n; $('#vWho',m).textContent=n; grid.style.display='none'; $('#vStep2',m).style.display=''; $('#vPin',m).value=''; $('#vErr',m).textContent=''; setTimeout(()=>$('#vPin',m).focus(),30); }; grid.appendChild(b); });
+  $('#vBack',m).onclick=()=>{ grid.style.display=''; $('#vStep2',m).style.display='none'; };
+  $('#vCancel',m).onclick=()=>m.remove(); m.onclick=(e)=>{ if(e.target===m) m.remove(); };
+  const go=async()=>{
+    const pin=$('#vPin',m).value, err=$('#vErr',m), btn=$('#vGo',m); err.textContent=''; btn.disabled=true; btn.textContent='Checking…';
+    try{
+      const r=await fetch('/api/verify-pin',{method:'POST',headers:H,body:JSON.stringify({name:pick,pin})}); const j=await r.json();
+      if(!r.ok||!j.verify){ err.textContent=j.error||'Incorrect PIN.'; btn.disabled=false; btn.textContent='Verify & pack'; $('#vPin',m).value=''; $('#vPin',m).focus(); return; }
+      const tr=askTrack?($('#vTrack',m).value||'').trim():'';
+      m.remove();
+      oPack(name, true, false, { verify:j.verify, tracking: tr?{number:tr}:null });
+    }catch(e){ err.textContent='Something went wrong.'; btn.disabled=false; btn.textContent='Verify & pack'; }
+  };
+  $('#vGo',m).onclick=go; $('#vPin',m).addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  document.body.appendChild(m);
+}
+function toast(text, ms){ const t=el('<button class="synchip">'+esc(text)+'</button>'); t.onclick=()=>t.remove(); document.body.appendChild(t); setTimeout(()=>{ try{t.remove();}catch(e){} }, ms||6000); }
+async function oPack(name, packed, override, extra){
   flushSaves();
   updateSaved('saving…');
-  const id=current.id;
+  const id=current.id; extra=extra||{};
   const j = await queueSend(async ()=>{
-    try{ const r=await fetch('/api/jobs/'+id+'/pack',{method:'POST',headers:H,body:JSON.stringify({order:name,packed,employee:who,override:!!override})}); return await r.json(); }
+    try{ const r=await fetch('/api/jobs/'+id+'/pack',{method:'POST',headers:H,body:JSON.stringify({order:name,packed,employee:who,override:!!override,verify:extra.verify||null,tracking:extra.tracking||null})}); return await r.json(); }
     catch(e){ return {error:'Failed: '+(e.message||e)}; }
   });
   if(j.error){
-    if(j.fourEye && j.canOverride){ confirmModal('You picked this order. Four-eye policy normally needs a <b>different</b> person to verify and pack it.<div style="color:var(--mut);font-size:13px;margin-top:6px">Override as manager and pack anyway? The override is recorded.</div>','Override &amp; pack',()=>oPack(name,packed,true)); return; }
+    if(j.fourEye && j.canOverride){ confirmModal('You picked this order. Four-eye policy normally needs a <b>different</b> person to verify and pack it.<div style="color:var(--mut);font-size:13px;margin-top:6px">Override as manager and pack anyway? The override is recorded.</div>','Override &amp; pack',()=>oPack(name,packed,true,extra)); return; }
     alert(j.error); return;
   }
-  ostate(name).status=packed?'packed':'open'; renderOrder();
+  const os=ostate(name); os.status=packed?'packed':'open'; if(packed){ os.packedBy=j.verifier||os.packedBy; os.shop=j.shop||null; } else os.shop=null;
+  if(j.shop&&j.shop.note) toast(j.shop.note);
+  if(j.warning) toast(j.warning);
+  renderOrder();
 }
 
 function orderPreview(name){
@@ -1785,6 +1881,13 @@ function openAdmin(){
     +'</div>'
     +'<div style="font-size:11px;color:var(--mut);margin-bottom:14px">New staff default to PIN 1234 if left blank. PINs are 4 digits.</div>'
     +'<div id="adMsg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>'
+    +'<div style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px">'
+      +'<div style="font-weight:700;margin-bottom:6px">Shopify when an order is packed</div>'
+      +'<label style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:14px"><input type="checkbox" id="stFulfil"> Fulfil shipped orders in Shopify</label>'
+      +'<label style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:14px"><input type="checkbox" id="stTrack"> Ask for a tracking number at pack time</label>'
+      +'<label style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:14px"><input type="checkbox" id="stNotify"> Email the customer the shipping confirmation</label>'
+      +'<div style="font-size:11px;color:var(--mut);margin-top:6px">Pickup orders are always marked Ready for pickup. Leave fulfilment off if you buy shipping labels in Shopify, which fulfils the order itself. Needs the merchant-managed fulfillment orders scope on the app.</div>'
+    +'</div>'
     +'<div style="border-top:1px solid var(--line);padding-top:14px">'
       +'<div style="font-weight:700;margin-bottom:4px">Log everyone out</div>'
       +'<div style="font-size:12px;color:var(--mut);margin-bottom:10px">Immediately signs out every device, including yours. Everyone signs in again with their PIN.</div>'
@@ -1825,6 +1928,8 @@ function openAdmin(){
   $('#adRotate',m).onclick=()=>{ if(!confirm('Sign out every device now? You will be signed out too.')) return;
     fetch('/admin/rotate',{method:'POST',headers:H}).then(r=>{ if(r.ok) location.replace('/'); else setMsg('Failed.',1); }).catch(()=>setMsg('Something went wrong.',1)); };
 
+  const stMap={stFulfil:'fulfilShipped',stTrack:'askTracking',stNotify:'notifyCustomer'};
+  Object.keys(stMap).forEach(idk=>{ const c=$('#'+idk,m); c.checked=!!SETTINGS[stMap[idk]]; c.onchange=async()=>{ const body={}; body[stMap[idk]]=c.checked; try{ const r=await fetch('/api/settings',{method:'POST',headers:H,body:JSON.stringify(body)}); const j=await r.json(); if(r.ok) SETTINGS=Object.assign(SETTINGS,j); else setMsg(j.error||'Could not save.',1); }catch(e){ setMsg('Could not save.',1); } }; });
   document.body.appendChild(m); loadUsers();
 }
 
@@ -1988,6 +2093,8 @@ function render(){
   const foot = el('<div class="foot"><span class="saved" id="saved"></span><span class="sp"></span><span class="fhint" id="fhint"></span></div>');
   const arch = el('<button class="archbtn">'+(s.archived===true?'Restore':'Archive')+'</button>');
   arch.onclick=()=>{ s.archived===true ? doArchive(false,false) : archiveModal(); };
+  const prt = el('<button title="Printable sheet, page per game">🖨 Print</button>');
+  prt.onclick=()=>{ window.open('/print/'+encodeURIComponent(j.id),'_blank'); };
   const breathe = el('<button class="breathe" title="Save and step away">Breathe</button>');
   breathe.onclick=()=>{ breathe.textContent='Saved ✓'; flushSaves(); setTimeout(()=>{ location.hash='#/'; }, 250); };
   footBtn = el('<button>Mark complete</button>');
@@ -1996,7 +2103,7 @@ function render(){
     const next = s.status==='complete'?'open':'complete';
     sendPatch({op:'status', value:next}).then(j=>{ if(j&&j.error){ alert(j.error); return; } s.status=next; render(); });
   };
-  foot.appendChild(breathe); foot.appendChild(arch); foot.appendChild(footBtn); document.body.appendChild(foot);
+  foot.appendChild(breathe); foot.appendChild(prt); foot.appendChild(arch); foot.appendChild(footBtn); document.body.appendChild(foot);
   // remove old footer if re-render
   const foots=document.querySelectorAll('.foot'); if(foots.length>1) foots[0].remove();
   refreshFoot();

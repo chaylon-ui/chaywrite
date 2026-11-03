@@ -1,19 +1,22 @@
 /**
- * Pull sheet v2, phase 2: the live order queue.
+ * Pull sheet v2: the order queue, read live from Shopify.
  *
- * Shopify order webhooks (paid / updated / cancelled / fulfilled) hit
- * POST /hook/order. The payload is only a hint: after checking its HMAC the
- * worker re-reads the order with its own token and keeps a compact record
- * under `queue:<order number>` while the order still has unfulfilled lines.
- * A dated backfill fills the queue for orders placed before the hooks
- * existed. "Make pull sheet" builds the same job the userscript builds,
- * server-side, from those records; rarity / mana / set-name enrichment is
- * cached in KV and topped up by POST /api/jobs/:id/enrich in small batches.
+ * The queue is one Shopify search (unfulfilled, paid, online, last QUEUE_DAYS
+ * days) cached for CACHE_MS in KV. Nothing is mirrored: a webhook or "Refresh"
+ * drops the cache and the next read asks Shopify again. A pull sheet is a
+ * snapshot taken at build time, which is what a sheet is meant to be.
+ *
+ * Also here: the userscript's SKU parse and game -> set -> collector grouping
+ * ported server-side, and the rarity / mana / set-name enrichment cached in
+ * KV under enr:* and topped up by POST /api/jobs/:id/enrich in small passes.
  */
 
 export const HOOK_TOPICS = ['ORDERS_PAID', 'ORDERS_UPDATED', 'ORDERS_CANCELLED', 'ORDERS_FULFILLED'];
 export const SKIP_SOURCES = ['pos'];          // sourceName values that never go on a pull sheet
-const QUEUE_PREFIX = 'queue:';
+export const QUEUE_DAYS = 14;                 // how far back the queue looks
+export const CACHE_MS = 60e3;                 // how long one Shopify read is reused
+const MAX_PAGES = 8;                          // 25 orders a page: 200 orders in view at most
+const CACHE_KEY = 'sys:queueCache';
 const PULL_TAG = 'PULLSHEET';
 const ENRICH_BUDGET = 12;                     // external lookups per /enrich call (free-plan subrequest cap is 50)
 
@@ -22,8 +25,8 @@ export async function verifyHmac(rawBody, header, secret) {
   if (!secret || !header) return false;
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody)));
-  let b64 = '';
-  { let s = ''; for (const b of sig) s += String.fromCharCode(b); b64 = btoa(s); }
+  let s = ''; for (const b of sig) s += String.fromCharCode(b);
+  const b64 = btoa(s);
   if (b64.length !== header.length) return false;
   let diff = 0;
   for (let i = 0; i < b64.length; i++) diff |= b64.charCodeAt(i) ^ header.charCodeAt(i);
@@ -41,8 +44,8 @@ const LI_FIELDS = `name sku quantity unfulfilledQuantity variantTitle variant { 
   discountedUnitPriceSet { shopMoney { amount currencyCode } }
   image { url(transform: { maxWidth: 96, maxHeight: 134 }) }
   product { productType }`;
-// No customer{} here: the app has no read_customers scope and Shopify errors
-// on the field (seen 2026-09-22). Names come from the addresses instead.
+// customer{} needs read_customers (the app lacked it on 2026-09-22): names come
+// from the addresses instead.
 const ORDER_FIELDS_BASE = `id name createdAt cancelledAt displayFulfillmentStatus tags sourceName
   currentTotalPriceSet { shopMoney { amount currencyCode } }
   shippingLine { title }
@@ -50,8 +53,8 @@ const ORDER_FIELDS_BASE = `id name createdAt cancelledAt displayFulfillmentStatu
   billingAddress { name }
   lineItems(first: 250) { pageInfo { hasNextPage endCursor } edges { node { ${LI_FIELDS} } } }`;
 // "Ready for pickup" is a fulfillment in READY_FOR_PICKUP display state: those
-// orders are already pulled and must not be queued (owner, 2026-09-22). If the
-// app's scope rejects the fulfillments field, the query is retried without it.
+// orders are already pulled and must not be queued. If the app's scope rejects
+// the fulfillments field, the query is retried without it.
 const FULFILLMENT_FIELDS = `fulfillments(first: 10) { status displayStatus }`;
 let withFulfillments = true;
 const orderFields = () => ORDER_FIELDS_BASE + (withFulfillments ? '\n  ' + FULFILLMENT_FIELDS : '');
@@ -62,8 +65,9 @@ export function readyForPickup(o) {
 
 // shopQuery(env, query, variables) -> raw GraphQL JSON ({data, errors}); provided by index.js
 export async function fetchOrder(env, shopQuery, gid) {
-  let r = await shopQuery(env, `query($id:ID!){ order(id:$id){ ${orderFields()} } }`, { id: gid });
-  if (!(r && r.data && r.data.order) && fulfillmentsRejected(r)) { withFulfillments = false; r = await shopQuery(env, `query($id:ID!){ order(id:$id){ ${orderFields()} } }`, { id: gid }); }
+  const q = () => `query($id:ID!){ order(id:$id){ ${orderFields()} } }`;
+  let r = await shopQuery(env, q(), { id: gid });
+  if (!(r && r.data && r.data.order) && fulfillmentsRejected(r)) { withFulfillments = false; r = await shopQuery(env, q(), { id: gid }); }
   const o = r && r.data && r.data.order;
   if (!o) return null;
   let pi = o.lineItems && o.lineItems.pageInfo, guard = 0;
@@ -77,7 +81,7 @@ export async function fetchOrder(env, shopQuery, gid) {
   return o;
 }
 
-// Orders placed since a date that still have something to ship. Cursor-paged.
+// One page of orders placed since `since` that still have something to ship.
 export async function searchUnfulfilled(env, shopQuery, { since, excludePos = true, cursor = null }) {
   const parts = ['fulfillment_status:unfulfilled', 'financial_status:paid'];
   if (since) parts.push('created_at:>=' + since);
@@ -92,12 +96,12 @@ export async function searchUnfulfilled(env, shopQuery, { since, excludePos = tr
   return { orders, cursor: conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null, errors };
 }
 
-/* ───────────────────── queue records ───────────────────── */
+/* ───────────────────── order records ───────────────────── */
 function priceOf(li) { const m = li.discountedUnitPriceSet && li.discountedUnitPriceSet.shopMoney; return (m && m.amount) || ''; }
 function currencyOf(li) { const m = li.discountedUnitPriceSet && li.discountedUnitPriceSet.shopMoney; return (m && m.currencyCode) || ''; }
 const lineQty = (li) => (li.unfulfilledQuantity != null ? +li.unfulfilledQuantity : +li.quantity) || 0;
 
-// A Shopify order -> the compact record the queue keeps, or null if it does not belong.
+// A Shopify order -> the compact record the queue shows and sheets are built from, or null if it does not belong.
 export function toRecord(o) {
   if (!o || !o.id) return null;
   if (o.cancelledAt) return null;
@@ -119,10 +123,6 @@ export function toRecord(o) {
   if (!lines.length) return null;
   const ship = (o.shippingLine && o.shippingLine.title) || '';
   const money = o.currentTotalPriceSet && o.currentTotalPriceSet.shopMoney;
-  // fulfillmentOrders (assigned location) is deliberately not requested: it needs a
-  // fulfillment-orders scope the app may lack, and a scope error there blanks the
-  // whole query. One store ships everything (owner, 2026-09-22), so it is not needed.
-  const fo = null;
   return {
     num: orderNum(o.id), gid: o.id, name: o.name, createdAt: o.createdAt || '',
     customer: (o.shippingAddress && o.shippingAddress.name) || (o.billingAddress && o.billingAddress.name) || (o.customer && o.customer.displayName) || '',
@@ -130,98 +130,64 @@ export function toRecord(o) {
     shipping: ship, local: /pickup|in[\s-]?store/i.test(ship),
     city: [o.shippingAddress && o.shippingAddress.city, o.shippingAddress && o.shippingAddress.provinceCode].filter(Boolean).join(' '),
     source: o.sourceName || '', tags: o.tags || [],
-    location: fo ? (fo.assignedLocation.name || '') : '',
+    pulled: (o.tags || []).some((t) => String(t).toLowerCase() === PULL_TAG.toLowerCase()),
     itemQty: lines.reduce((s, l) => s + l.qty, 0),
-    lines, updatedAt: new Date().toISOString(),
+    lines,
   };
 }
 
-export async function putRecord(env, rec) {
-  await env.JOBS.put(QUEUE_PREFIX + rec.num, JSON.stringify(rec), {
-    metadata: { name: rec.name, createdAt: rec.createdAt, customer: String(rec.customer || '').slice(0, 40), itemQty: rec.itemQty, local: rec.local, pulled: (rec.tags || []).some((t) => String(t).toLowerCase() === PULL_TAG.toLowerCase()), source: rec.source, updatedAt: rec.updatedAt },
-  });
-}
-export const dropRecord = (env, num) => env.JOBS.delete(QUEUE_PREFIX + num);
-export const getRecord = (env, num) => env.JOBS.get(QUEUE_PREFIX + num, 'json');
+/* ───────────────────── the live queue (cached search) ───────────────────── */
+export const sinceDate = (now = Date.now()) => new Date(now - QUEUE_DAYS * 86400e3).toISOString().slice(0, 10);
 
-// Webhook / backfill entry point: re-read one order and keep or drop its record.
-export async function refreshOrder(env, shopQuery, gid) {
-  const o = await fetchOrder(env, shopQuery, gid);
-  const num = orderNum(gid);
-  if (!o) return { num, kept: false, reason: 'not found' };
-  const rec = toRecord(o);
-  if (!rec) { await dropRecord(env, num); return { num, kept: false, reason: 'nothing to ship' }; }
-  await putRecord(env, rec);
-  return { num, kept: true, name: rec.name };
-}
-
-export async function backfill(env, shopQuery, opts) {
-  const { orders, cursor, errors } = await searchUnfulfilled(env, shopQuery, opts);
-  let kept = 0, skipped = 0; const records = [];
-  for (const o of orders) {
-    // the search already returned the full order; walk extra line-item pages only when needed
-    const full = (o.lineItems && o.lineItems.pageInfo && o.lineItems.pageInfo.hasNextPage) ? await fetchOrder(env, shopQuery, o.id) : o;
-    const rec = toRecord(full);
-    if (rec) { await putRecord(env, rec); kept++; records.push(rec); } else skipped++;
+// Everything the queue screen needs: records in view, when Shopify was last asked, any errors.
+export async function loadQueue(env, shopQuery, { fresh = false, now = Date.now() } = {}) {
+  if (!fresh) {
+    let c = null; try { c = await env.JOBS.get(CACHE_KEY, 'json'); } catch (_) {}
+    if (c && c.at && now - Date.parse(c.at) < CACHE_MS && Array.isArray(c.records)) return { ...c, cached: true };
   }
-  return { kept, skipped, seen: orders.length, cursor, errors: errors || [], records };
+  const since = sinceDate(now);
+  const records = []; const errors = []; let cursor = null, pages = 0, seen = 0;
+  do {
+    const r = await searchUnfulfilled(env, shopQuery, { since, excludePos: true, cursor });
+    for (const m of r.errors || []) if (!errors.includes(m)) errors.push(m);
+    seen += r.orders.length;
+    for (const o of r.orders) {
+      const full = (o.lineItems && o.lineItems.pageInfo && o.lineItems.pageInfo.hasNextPage) ? await fetchOrder(env, shopQuery, o.id) : o;
+      const rec = toRecord(full);
+      if (rec) records.push(rec);
+    }
+    cursor = r.cursor; pages++;
+    if (!r.orders.length && r.errors.length) break;
+  } while (cursor && pages < MAX_PAGES);
+  records.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  const out = { records, at: new Date(now).toISOString(), since, seen, errors, partial: !!cursor };
+  try { await env.JOBS.put(CACHE_KEY, JSON.stringify(out), { expirationTtl: 3600 }); } catch (_) {}
+  return { ...out, cached: false };
 }
+export const invalidateQueue = (env) => env.JOBS.delete(CACHE_KEY).catch(() => {});
 
-// Self-filling queue: called by the cron trigger and by the first read of an
-// empty queue. Walks unfulfilled online orders from the last SYNC_DAYS in
-// pages (continuing a stored cursor across runs), then re-reads the stalest
-// records so orders fulfilled while a webhook was missed still drop out.
-export const SYNC_DAYS = 14;
-export async function syncQueue(env, shopQuery, { maxPages = 6, refreshStale = 20, inline = false, force = false } = {}) {
-  const now = Date.now();
-  let st = {}; try { st = (await env.JOBS.get('sys:queueSync', 'json')) || {}; } catch (_) {}
-  if (st.running && now - Date.parse(st.running) < 120e3 && !inline) return { skipped: 'running' };
-  const since = new Date(now - SYNC_DAYS * 86400e3).toISOString().slice(0, 10);
-  let cursor = (st.since === since && st.cursor) ? st.cursor : null;
-  await env.JOBS.put('sys:queueSync', JSON.stringify({ ...st, running: new Date(now).toISOString() }));
-  let kept = 0, seen = 0, pages = 0, errors = []; const records = [];
-  try {
-    do {
-      const r = await backfill(env, shopQuery, { since, excludePos: true, cursor });
-      kept += r.kept; seen += r.seen; cursor = r.cursor; pages++;
-      records.push(...(r.records || []));
-      for (const m of r.errors || []) if (!errors.includes(m)) errors.push(m);
-      if (!r.seen && r.errors && r.errors.length) break;   // a page with no data at all: stop, report
-    } while (cursor && pages < (inline ? 1 : maxPages));
-  } catch (e) { errors.push(String(e && e.message || e)); }
-  let refreshed = 0, dropped = 0;
-  if (!cursor && !inline) {
-    // sweep: stalest records first, only those not touched for 2h (force = every record, e.g. Sync now)
-    const list = await env.JOBS.list({ prefix: QUEUE_PREFIX });
-    const stale = list.keys.map((k) => ({ num: k.name.slice(QUEUE_PREFIX.length), at: Date.parse((k.metadata || {}).updatedAt || '') || 0 }))
-      .filter((x) => force || now - x.at > 2 * 3600e3).sort((a, b) => a.at - b.at).slice(0, force ? 80 : refreshStale);
-    for (const x of stale) { try { const r = await refreshOrder(env, shopQuery, orderGid(x.num)); refreshed++; if (!r.kept) dropped++; } catch (_) {} }
-  }
-  const rec = { since, cursor: cursor || '', at: new Date().toISOString(), kept, seen, refreshed, dropped, errors, running: '' };
-  await env.JOBS.put('sys:queueSync', JSON.stringify(rec));
-  return { ...rec, records };
-}
-
-// The queue as the screen shows it: metadata only (one list op), plus which
-// orders already sit on an ACTIVE sheet (from job metadata, no body reads).
-export async function listQueue(env, extra) {
-  const [q, jobs] = await Promise.all([env.JOBS.list({ prefix: QUEUE_PREFIX }), env.JOBS.list({ prefix: 'job:' })]);
-  const seen = new Set(q.keys.map((k) => k.name));
-  for (const rec of extra || []) {
-    const name = QUEUE_PREFIX + rec.num;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    q.keys.push({ name, metadata: { name: rec.name, createdAt: rec.createdAt, customer: String(rec.customer || '').slice(0, 40), itemQty: rec.itemQty, local: rec.local, pulled: (rec.tags || []).some((t) => String(t).toLowerCase() === PULL_TAG.toLowerCase()), source: rec.source, updatedAt: rec.updatedAt } });
-  }
+// Which orders already sit on an ACTIVE sheet (job metadata only, no body reads).
+export async function activeSheets(env) {
+  const jobs = await env.JOBS.list({ prefix: 'job:' });
   const onSheet = {};
   for (const k of jobs.keys) {
     const m = k.metadata || {};
     if (m.archived) continue;
     for (const n of m.orderNames || []) onSheet[String(n)] = k.name.slice(4);
   }
-  const rows = q.keys.map((k) => { const m = k.metadata || {}; return { num: k.name.slice(QUEUE_PREFIX.length), ...m, sheet: onSheet[String(m.name)] || '' }; });
-  rows.sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-  return rows;
+  return onSheet;
+}
+export function queueRows(records, onSheet) {
+  return records.map((r) => ({ num: r.num, name: r.name, createdAt: r.createdAt, customer: r.customer, city: r.city, itemQty: r.itemQty, local: r.local, pulled: r.pulled, source: r.source, sheet: onSheet[String(r.name)] || '' }));
+}
+
+// One order's record: from the cache when it is there, else read live.
+export async function recordFor(env, shopQuery, num) {
+  let c = null; try { c = await env.JOBS.get(CACHE_KEY, 'json'); } catch (_) {}
+  const hit = c && Array.isArray(c.records) ? c.records.find((r) => r.num === String(num)) : null;
+  if (hit) return hit;
+  const o = await fetchOrder(env, shopQuery, orderGid(num));
+  return o ? toRecord(o) : null;
 }
 
 /* ───────────────────── sheet building (port of the userscript) ───────────────────── */
@@ -243,7 +209,7 @@ function collKey(c) { const m = /(\d+)/.exec(c || ''); return [m ? parseInt(m[1]
 const YGO_ORDER = ['Normal Monster', 'Effect Monster', 'Ritual Monster', 'Fusion Monster', 'Synchro Monster', 'Xyz Monster', 'Pendulum Monster', 'Link Monster', 'Spell', 'Trap', 'Token', 'Skill'];
 const ygoTypeRank = (label) => { const i = YGO_ORDER.indexOf(label); return i < 0 ? 98 : i; };
 
-// Flat card rows from queue records. Each row keeps the raw bits regroup() needs
+// Flat card rows from order records. Each row keeps the raw bits regroup() needs
 // (pt, setLabel, setCode) so enrichment can re-sort the sheet later.
 export function flatten(records) {
   const singles = new Map(), sealed = new Map();
@@ -340,7 +306,7 @@ export async function readEnrichment(env, keys) {
   return out;
 }
 
-// Build a job (without id/state) from queue records, using whatever enrichment is cached.
+// Build a job (without id/state) from order records, using whatever enrichment is cached.
 export async function buildJob(env, records) {
   const rows = flatten(records);
   const enr = await readEnrichment(env, enrichKeys(rows));
@@ -373,7 +339,7 @@ export async function enrichPass(env, rows, budget = ENRICH_BUDGET) {
   const missing = keys.filter((k) => !have[k]);
   let spent = 0;
   const puts = [];
-  const save = (k, v) => { have[k] = v; puts.push(env.JOBS.put('enr:' + k, JSON.stringify(v), { expirationTtl: 60 * 86400 * (k === 'ygo:sets' ? 0.5 : 6) })); };
+  const save = (k, v) => { have[k] = v; puts.push(env.JOBS.put('enr:' + k, JSON.stringify(v), { expirationTtl: k === 'ygo:sets' ? 30 * 86400 : 360 * 86400 })); };
 
   if (missing.includes('ygo:sets') && spent < budget) {
     spent++;
@@ -385,7 +351,7 @@ export async function enrichPass(env, rows, budget = ENRICH_BUDGET) {
   for (let i = 0; i < mtg.length && spent < budget; i += 75) {
     spent++;
     const chunk = mtg.slice(i, i + 75);
-    const idents = chunk.map((k) => { const code = k.slice(4); const p = parseSku(code + '-EN-NF-1'); return { set: String(p.setCode).toLowerCase(), collector_number: String(p.collector) }; });
+    const idents = chunk.map((k) => { const p = parseSku(k.slice(4) + '-EN-NF-1'); return { set: String(p.setCode).toLowerCase(), collector_number: String(p.collector) }; });
     const r = await getJson('https://api.scryfall.com/cards/collection', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'ExorPullSheet/2.0' }, body: JSON.stringify({ identifiers: idents }) });
     const found = {};
     for (const c of (r.json && r.json.data) || []) found[String(c.set || '').toLowerCase() + '|' + String(c.collector_number || '').toLowerCase()] = { rarity: MTG_RARITY(c.rarity), mana: c.mana_cost || '' };
@@ -404,7 +370,7 @@ export async function enrichPass(env, rows, budget = ENRICH_BUDGET) {
     if (id) { const c = await getJson('https://db.ygoprodeck.com/api/v7/cardinfo.php?id=' + encodeURIComponent(id)); const card = c.json && c.json.data && c.json.data[0]; frame = card ? YGO_FRAME(card.frameType) : ''; }
     save(k, { rarity, frame });
   }
-  // Pokémon: name + number (+ printed total) lookup per code
+  // Pokémon: name + number lookup per code
   for (const k of missing.filter((x) => x.startsWith('pok:'))) {
     if (spent >= budget) break;
     spent++;

@@ -67,42 +67,56 @@ Verified with a local harness (mock KV + mocked Shopify) before pushing.
   lines use `unfulfilledQuantity` instead of `quantity`, so edited or partly
   fulfilled orders are not re-pulled; the dead `TAG_AFTER_PRINT` setting is gone.
 
-## Phase 2 (on this branch): the live order queue
+## Phase 2 and 3 (on this branch): live queue, Shopify on pack, print, PIN at the bench
 
-- `POST /hook/order` receives Shopify ORDERS_PAID / UPDATED / CANCELLED /
-  FULFILLED webhooks. The signature is checked with the app's client secret,
-  then the order is re-read with the worker's own token; a compact record is
-  kept under `queue:<order number>` while anything is left to ship (cancelled,
-  fulfilled and POS orders drop out). The worker registers the four hooks on
-  itself the first time the queue is read, and re-checks every 12 hours
-  (Staff & settings shows nothing yet; `GET /api/hooks` as admin lists them).
-- **Queue** button in the top bar: the waiting orders, oldest first, with age,
-  items, pickup/ship, "pulled before" and "on sheet #" flags. Tick orders,
-  **Make pull sheet** builds the job server-side from unfulfilled quantities
-  (`src/queue.js` is the userscript's grouping ported: game -> set ->
-  collector, Yu-Gi-Oh by frame type, Pokémon alphabetical) and tags the
-  orders PULLSHEET. Orders already on an active sheet cannot be picked twice.
-- The queue fills itself: a cron every 10 minutes (and the first read of an
-  empty queue) syncs unfulfilled online orders from the last 14 days in and
-  sweeps stale records so orders fulfilled during a missed webhook drop out.
-  The screen shows when it last synced; admins get a **Sync now** button.
-- Admins also get **Import unfulfilled orders** (placed since a date, POS skipped
-  by default) to catch up on orders placed before the hooks existed.
-- Rarity, mana and Yu-Gi-Oh set/frame lookups are cached in KV (`enr:*`).
-  After a sheet is built the app calls `POST /api/jobs/:id/enrich` in small
-  passes until nothing is missing; sheets built from the userscript are not
-  touched by it.
-- The userscript keeps working unchanged alongside the queue.
+**The queue reads Shopify live.** `GET /api/queue` runs one order search
+(paid, unfulfilled, online, last 14 days, oldest first) and caches it for a
+minute in KV. Nothing is mirrored: a signed order webhook or the Refresh
+button drops the cache and the next read asks Shopify again; a 10-minute
+cron keeps the cache warm. Cancelled, fulfilled, POS and "Ready for pickup"
+orders never appear. Tap an order number for a preview; tick orders and
+**Make pull sheet** builds the sheet server-side (same game -> set ->
+collector grouping as the userscript), tags them PULLSHEET and refuses
+orders already on an active sheet. Rarity and set names are cached in KV
+under `enr:*` and topped up by `POST /api/jobs/:id/enrich`.
 
-Verified by `scratchpad/phase2.mjs`-style harness (30 checks) before pushing.
+**Packing drives Shopify** (`src/fulfil.js`). Pickup orders are marked
+Ready for pickup (Shopify emails the customer). Shipped orders are
+fulfilled with the tracking number typed at the bench when the admin
+setting "Fulfil shipped orders in Shopify" is on, leaving out refunded and
+quarantined cards; it is off by default because buying a label in Shopify
+fulfils the order itself. Quarantining a card puts a hold on the orders
+that carry it and clearing it releases the hold. All of this needs the
+merchant-managed fulfillment orders scope on the app; until it is added
+every action falls back to the PACKED / PRINTED / quarantine1 tags and the
+note on the tablet says why. PACKED and PRINTED are still written either
+way.
+
+**Whoever packs types their PIN.** Finalize asks "Who is packing?" and a
+PIN (`POST /api/verify-pin`, same lockout as sign-in); that name, not the
+tablet's session, is the verifier for the four-eye rule and the stats.
+
+**Print** on any sheet opens `GET /print/:id`, the printable page the
+userscript used to build, page per game, from the stored sheet.
+
+**Sheet numbers are short** (#43), old 12-digit sheets keep working.
+
+**The userscript is retired**: chayesl branch
+`claude/pullsheet-userscript-retire` replaces it with a credential-free
+v1.0.0 stub that only points at the app; merge it and pull on the droplet
+so installed copies auto-update, then rotate the three keys the old file
+carried.
+
+Harnesses: `cd pullsheet/test && node phase1.mjs && node phase2.mjs && node phase3.mjs`.
 
 ## Still open (later phases)
 
 - Every patch is a whole-job read-modify-write in KV (no compare-and-set), so
-  two tablets on one sheet can overwrite each other. Phase 3 (Durable Object).
+  two tablets on one sheet can overwrite each other. Durable Object later.
 - `/api/stats` still reads every job body (admin-only, rare).
 - PINs default to 1234 for seeded staff; set real PINs in Staff & settings.
-- The userscript still embeds the three secrets until phase 2 retires it.
+- Cloudflare Access in front of the app, and the print agent for the
+  network label printer (make/model still needed).
 
 ## Where this is going (phases 2-5)
 

@@ -36,7 +36,7 @@ const payload = { orders: [{ name: '#1', gid: 'gid://shopify/Order/1' }, { name:
   games: [{ game: 'Pokemon', sets: [{ setName: 'S', cards: [{ card: 'A', qty: 3, orders: [{ name: '#1', qty: 2 }, { name: '#2', qty: 1 }] }, { card: 'B', qty: 1, orders: [{ name: '#2', qty: 1 }] }] }] }], sealed: [] };
 const H = { Authorization: 'Bearer tok' };
 const { id } = (await j(await call('/api/jobs', 'POST', payload, H))).body;
-ok(/^\d{12}$/.test(id), 'job created ' + id);
+ok(/^\d{1,6}$/.test(id), 'job created with a short number: ' + id);
 
 // --- per-order picking lifts the sheet-level count ---
 await call('/api/jobs/' + id + '/opatch', 'POST', { order: '#1', op: 'found', cid: 'c0', value: 2 }, { Cookie: gage });
