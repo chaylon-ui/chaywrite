@@ -141,6 +141,16 @@ header .walk button{margin-right:4px}
 .lift .panel{flex-shrink:0;background:#0f0b0c;border-top:1px solid rgba(255,255,255,.1);padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}
 .lift h2{font-family:Cinzel,serif;font-size:20px;line-height:1.15;margin-bottom:4px}
 .lift .set{color:var(--muted);font-size:13px;margin-bottom:10px}
+/* every copy in stock, read live when the card comes into the hand (owner, 2026-11-04); the one in the hand is lit */
+.lift .copies{margin:0 0 12px}
+.lift .copies h3{font-family:Caveat,cursive;font-size:18px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.lift .cps{display:flex;flex-wrap:wrap;gap:6px}
+.lift .cp{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.25);background:#1a1411;color:var(--ink);border-radius:8px;padding:6px 9px;font-size:13px;cursor:pointer}
+.lift .cp b{font-weight:700}
+.lift .cp i{font-style:normal;color:#4b7dd6;font-family:Caveat,cursive;font-size:15px;font-weight:700}
+.lift .cp small{color:var(--muted)}
+.lift .cp.on{border-color:var(--ember);box-shadow:0 0 0 2px rgba(217,130,43,.45);background:#241a10}
+.lift .copies .one{font-size:13px;color:var(--muted)}
 .lift .acts{display:flex;gap:10px;flex-wrap:wrap}
 .lift .acts a,.lift .acts button{display:inline-block;padding:11px 16px;border-radius:999px;font-weight:700;font-size:14px;text-decoration:none;border:1px solid rgba(255,255,255,.25);background:#1a1411;color:var(--ink)}
 .lift .acts .buy{background:var(--ember);border-color:var(--ember);color:#1a0f05}
@@ -191,7 +201,8 @@ header .walk button{margin-right:4px}
 .wall.on{display:block}
 .wall .bxs{display:flex;gap:10px;overflow-x:auto;padding:6px 6px 0;scrollbar-width:none}
 /* centred when they fit, scrollable from the first box when they do not (a centred overflow hides its left end) */
-.wall .bx:first-child{margin-left:auto}.wall .bx:last-child{margin-right:auto}
+.wall .bxs > :first-child{margin-left:auto}.wall .bxs > :last-child{margin-right:auto}
+.wall .sign{flex:0 0 auto;align-self:center;background:var(--tape);color:#1d1a18;font-family:"Permanent Marker",cursive;font-size:14px;line-height:1.15;padding:7px 12px;transform:rotate(-2deg);box-shadow:0 2px 3px rgba(0,0,0,.45);clip-path:polygon(2% 0,98% 5%,100% 100%,1% 95%);text-align:center;margin-right:6px;white-space:nowrap}
 .wall .bxs::-webkit-scrollbar{display:none}
 .wall .bx{flex:0 0 auto;position:relative;width:92px;height:62px;border:0;border-radius:3px 3px 2px 2px;background:linear-gradient(#f7f5ef,#e9e5da);box-shadow:0 10px 14px rgba(0,0,0,.55),inset 0 -2px 0 rgba(0,0,0,.08),inset 0 1px 0 #fff;cursor:pointer;padding:0;color:#2a2320;transform:perspective(500px) rotateX(4deg);transition:transform .25s,box-shadow .25s}
 .wall .bx:hover,.wall .bx:focus-visible{transform:perspective(500px) rotateX(2deg) translateY(-3px);box-shadow:0 14px 18px rgba(0,0,0,.6),inset 0 -2px 0 rgba(0,0,0,.08),inset 0 1px 0 #fff;outline:0}
@@ -206,8 +217,9 @@ header .walk button{margin-right:4px}
 .bhead{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap}
 .bhead .back{background:#1a1411;border:1px solid rgba(255,255,255,.25);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:700}
 .bhead .btitle{font-family:"Permanent Marker",cursive;font-size:16px;color:var(--ink);flex:1;min-width:120px}
-.bhead .bjump{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.bhead select{max-width:46vw;background:#1a1411;color:var(--ink);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 8px;font-size:13px}
+/* the set jump stands out (owner, 2026-11-04): an ember pill with a marker label */
+.bhead .bjump{display:flex;align-items:center;gap:8px;background:rgba(217,130,43,.14);border:2px solid var(--ember);border-radius:999px;padding:4px 6px 4px 14px;font-family:"Permanent Marker",cursive;font-size:14px;color:var(--ember);box-shadow:0 0 14px rgba(217,130,43,.35)}
+.bhead select{max-width:52vw;background:#1a1411;color:var(--ink);border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:7px 10px;font-size:14px;font-weight:600}
 .lanes{flex:1;min-height:0;display:flex;gap:0;margin:0 10px 10px;padding:8px;border-radius:6px;background:linear-gradient(#f3f0e8,#e4dfd2);box-shadow:inset 0 0 0 10px #f8f6f1,inset 0 0 0 11px #cfc8b8,0 20px 40px rgba(0,0,0,.6)}
 .brow{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;background:linear-gradient(#b89468,#a57f55);box-shadow:inset 0 0 18px rgba(0,0,0,.35);border-left:4px solid #fbfaf6;border-right:4px solid #e9e4d8;padding:10px 3px 40px;position:relative}
 .brow:first-child{border-left-width:0}.brow:last-child{border-right-width:0}
@@ -229,7 +241,7 @@ header .walk button{margin-right:4px}
 .ptxt strong{font-family:Cinzel,serif;font-size:15px;line-height:1.2}
 .ptxt span{color:var(--muted);font-size:12px}
 .ptxt em{color:var(--ember);font-family:Caveat,cursive;font-size:17px;font-style:normal;margin-top:6px}
-@media (max-width:720px){.wall .bx{width:78px;height:54px}.wall .bx .lbl{font-size:10px}.wall .bx .rng{font-size:13px}.wall .wnote{font-size:13px}.bhead .btitle{font-size:14px;order:3;flex-basis:100%}.lanes{margin:0 6px 6px;padding:6px}.strip{font-size:9.5px;padding:0 3px}.divider{font-size:10px}.peek{flex-direction:column;gap:8px}.ptxt{text-align:center;align-items:center}}
+@media (max-width:720px){.wall .sign{font-size:12px;padding:6px 9px}.bhead .bjump{order:2;flex:1;min-width:0;justify-content:space-between}.bhead select{max-width:none;flex:1;min-width:0}.wall .bx{width:78px;height:54px}.wall .bx .lbl{font-size:10px}.wall .bx .rng{font-size:13px}.wall .wnote{font-size:13px}.bhead .btitle{font-size:14px;order:3;flex-basis:100%}.lanes{margin:0 6px 6px;padding:6px}.strip{font-size:9.5px;padding:0 3px}.divider{font-size:10px}.peek{flex-direction:column;gap:8px}.ptxt{text-align:center;align-items:center}}
 @media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big,.card.foil .tl:before,.mini.foil .tl:before,.lift .pull .chev{animation:none}.lift .stage,.lift .panel{transition:none!important}}
 </style></head>
 <body>
@@ -242,7 +254,7 @@ header .walk button{margin-right:4px}
   <div class="state" id="state">Viewing the case…</div>
 </div></div>
 <div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
-<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
+<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="copies" id="liftCopies"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
 <div class="boxv" id="boxv"><div class="bhead"><button type="button" class="back" id="bback">‹ Back to the case</button><div class="btitle" id="btitle"></div><label class="bjump">Jump to a set <select id="bsets"></select></label></div><div class="lanes" id="lanes"></div><div class="peek" id="peek"><div class="pcard" id="pcard"><img id="pimg" alt=""><div class="pno" id="pno"></div><div class="psticker"><span class="pink" id="pprice"></span></div></div><div class="ptxt"><strong id="pname"></strong><span id="pset"></span><em>tap the card to pick it up</em></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
@@ -531,6 +543,7 @@ header .walk button{margin-right:4px}
     var cd = cond(c); $('#liftCond').classList.toggle('off', !cd); $('#liftCondInk').textContent = cd;
     $('#liftActs').innerHTML = (ON_STORE && c.variantId ? '<button type="button" class="buy" data-buy="' + esc(c.variantId) + '">Add to cart</button>' : '') + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
     $('#liftArt').classList.toggle('foil', !!c.foil);
+    loadCopies(c);
     // similar effects first (in the case now; EDHREC's functional matches mapped onto stock arrive a moment later), then the rest of "more like this"
     var seq = ++liftSeq, al = alikeLocal(c), seen = {};
     al.forEach(function (m) { seen[m.o.name.toLowerCase()] = 1; });
@@ -552,6 +565,36 @@ header .walk button{margin-right:4px}
     orientBase = null; tiltTo(0, 0, 30, 25);
     sheet(false); $('#lift').classList.add('on'); hint.classList.add('gone'); fitLift();
   }
+  // Every copy in stock (condition, foil, price, how many), read live from the
+  // shop when the card comes into the hand; a tap puts that copy in the hand.
+  var copiesSeq = 0;
+  function handleOf(c) { var m = /\/products\/([a-z0-9-]+)/i.exec(String(c.url || '')); return m ? m[1] : ''; }
+  function loadCopies(c) {
+    var box = $('#liftCopies'); box.innerHTML = ''; var h = handleOf(c); if (!h) return;
+    var seq = ++copiesSeq;
+    fetch(W + '/showcase/card.json?handle=' + encodeURIComponent(h), { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (seq !== copiesSeq || !d || !d.ok || !d.copies) return;
+        c.copies = d.copies;
+        if (d.copies.length <= 1) { box.innerHTML = d.copies.length ? '<div class="one">The only copy in stock: ' + esc(copyLabel(d.copies[0])) + '</div>' : ''; return; }
+        box.innerHTML = '<h3>In stock · ' + d.copies.length + ' kinds</h3><div class="cps">' + d.copies.map(function (k, i) {
+          return '<button type="button" class="cp' + (String(k.variantId) === String(c.variantId) ? ' on' : '') + '" data-copy="' + i + '"><b>' + esc(cond({ condition: k.condition }) || k.condition) + '</b>' + (k.foil ? '<i>' + (c.game === 'pokemon' ? 'Holo' : 'foil') + '</i>' : '') + '<span>' + money(k.price) + '</span>' + (k.qty ? '<small>×' + k.qty + '</small>' : '') + '</button>';
+        }).join('') + '</div>';
+      }).catch(function () {});
+  }
+  function copyLabel(k) { return [k.condition, k.foil ? 'foil' : '', money(k.price), k.qty ? '×' + k.qty : ''].filter(Boolean).join(' · '); }
+  function pickCopy(i) {
+    var c = lifted, k = c && c.copies && c.copies[i]; if (!k) return;
+    c.variantId = k.variantId; c.price = k.price; c.condition = k.condition; c.foil = !!k.foil;
+    $('#liftPrice').textContent = gunPrice(c.price);
+    var cd = cond(c); $('#liftCond').classList.toggle('off', !cd); $('#liftCondInk').textContent = cd;
+    $('#liftFoil').classList.toggle('off', !c.foil); $('#liftArt').classList.toggle('foil', !!c.foil);
+    $('#liftSet').textContent = [c.set, condText(c)].filter(Boolean).join(' · ');
+    var b = $('#liftActs .buy'); if (b) b.setAttribute('data-buy', c.variantId);
+    document.querySelectorAll('#liftCopies .cp').forEach(function (el, j) { el.classList.toggle('on', j === i); });
+  }
+  $('#liftCopies').addEventListener('click', function (e) { var b = e.target.closest('.cp'); if (b) { e.stopPropagation(); pickCopy(Number(b.getAttribute('data-copy'))); } });
   // The sleeve takes all the stage allows: full width on a phone, full height on a desktop.
   function fitLift() {
     if (!lifted) return;
@@ -654,9 +697,9 @@ header .walk button{margin-right:4px}
       .then(function (d) {
         if (!d || !d.ok || d.game !== state.game || !d.boxes || !d.boxes.length) return;
         boxes.game = d.game; boxes.list = d;
-        wall.innerHTML = '<div class="bxs">' + d.boxes.map(function (b) {
+        wall.innerHTML = '<div class="bxs"><div class="sign">Browse our cards<br>by set &rarr;</div>' + d.boxes.map(function (b) {
           return '<button type="button" class="bx" data-n="' + b.n + '" aria-label="' + esc(d.label + ' box ' + b.n + ', ' + b.label) + '"><span class="lid"></span><span class="face"><span class="lbl">' + esc(d.label) + '</span><span class="rng">' + esc(b.label) + '</span></span></button>';
-        }).join('') + '</div><div class="plank"></div><div class="wnote">the boxes behind the counter · every ' + esc(d.label) + ' single we have, ' + Number(d.count).toLocaleString('en-CA') + ' of them · tap a box</div>';
+        }).join('') + '</div><div class="plank"></div><div class="wnote">every ' + esc(d.label) + ' single we have, ' + Number(d.count).toLocaleString('en-CA') + ' of them, in the boxes behind the counter · tap a box, pick a set, thumb through</div>';
         wall.className = 'wall on';
       }).catch(function () {});
   }

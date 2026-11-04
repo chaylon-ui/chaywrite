@@ -259,6 +259,38 @@ export async function kickBuild(env, ctx, game) {
 
 const NO_STORE = { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" };
 const CACHED = (s) => ({ "content-type": "application/json", "cache-control": "public, max-age=" + s, "access-control-allow-origin": "*" });
+/* A card picked up from a box (or the case): every copy in stock, read live
+   from Shopify when the card comes into the hand (owner, 2026-11-04: "show
+   the other conditions once you pick the card up, as well as if there is
+   foil"). Live, so a rebuild is never needed for a condition to appear. */
+export const CARD_Q = `query($h:String!){productByHandle(handle:$h){title handle variants(first:30){nodes{id title price inventoryQuantity availableForSale}}}}`;
+const COND_ORDER = ["near mint", "lightly played", "moderately played", "heavily played", "damaged"];
+const condRank = (t) => { const x = String(t || "").toLowerCase(); const i = COND_ORDER.findIndex((c) => x.indexOf(c) === 0); return i < 0 ? 9 : i; };
+export function copiesOf(product) {
+  const vs = (((product && product.variants) || {}).nodes || []).filter((v) => v && Number(v.price) > 0 && (Number(v.inventoryQuantity) > 0 || v.availableForSale === true));
+  const out = vs.map((v) => ({ variantId: String(v.id || "").replace(/\D/g, ""), condition: condOf(v.title), foil: isFoil(v), price: Number(v.price).toFixed(2), qty: Math.max(0, Number(v.inventoryQuantity) || 0) || null }));
+  out.sort((a, b) => (a.foil - b.foil) || (condRank(a.condition) - condRank(b.condition)) || (Number(b.price) - Number(a.price)));
+  return out;
+}
+export async function serveCard(request, env, ctx, url) {
+  const handle = String(url.searchParams.get("handle") || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 200);
+  if (!handle) return new Response(JSON.stringify({ ok: false, error: "handle required" }), { status: 400, headers: NO_STORE });
+  if (!env || !env.SHOPIFY_ADMIN_TOKEN) return new Response(JSON.stringify({ ok: false, error: "not configured" }), { status: 503, headers: NO_STORE });
+  const cache = caches.default;
+  const key = new Request(new URL("/showcase/card.json?handle=" + handle, url).toString());
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  let out;
+  try {
+    const r = await adminGql({ env, fetch: (u, o) => fetch(u, o) }, CARD_Q, { h: handle });
+    const p = r.data && r.data.productByHandle;
+    out = p ? { ok: true, handle, title: p.title, copies: copiesOf(p) } : { ok: false, handle, error: "no such card" };
+  } catch (e) { out = { ok: false, handle, error: String((e && e.message) || e).slice(0, 160) }; }
+  const res = new Response(JSON.stringify(out), { headers: out.ok ? CACHED(120) : NO_STORE });
+  if (out.ok && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
+
 
 export async function serveBoxes(request, env, ctx, url, gate) {
   const game = String(url.searchParams.get("game") || "mtg").toLowerCase();

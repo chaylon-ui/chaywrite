@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, arrange, queryFor, condOf, BOX_CAP, boxesRoom, walk, PAGE } from "../src/boxes.js";
+import { rowOf, arrange, queryFor, condOf, BOX_CAP, boxesRoom, walk, PAGE, copiesOf } from "../src/boxes.js";
 
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), featuredImage: img ? { url: img } : null, variants: { nodes: variants } });
 const v = (id, title, price, qty, avail) => ({ id: "gid://shopify/ProductVariant/" + id, title, price: String(price), inventoryQuantity: qty, availableForSale: avail == null ? qty > 0 : avail });
@@ -88,4 +88,12 @@ test("walk: pages until the cursor ends, parks each page in the room, finalizes 
   assert.equal(room.pages["pokemon:4"], undefined);
   assert.deepEqual([room.state.game, room.state.stopAt, room.state.lockUntil, room.state.page], ["pokemon", 9, 0, 3]);
   assert.ok(PAGE <= 100);
+});
+
+test("copiesOf: every copy in stock at a price, non-foil first by condition, then foil", () => {
+  const vv = (id, title, price, qty) => ({ id: "gid://shopify/ProductVariant/" + id, title, price: String(price), inventoryQuantity: qty, availableForSale: qty > 0 });
+  const out = copiesOf({ variants: { nodes: [vv(5, "Heavily Played Foil", 4, 1), vv(1, "Near Mint", 3.5, 0), vv(2, "Lightly Played", 3.1, 2), vv(3, "Near Mint Foil", 9, 1), vv(4, "Moderately Played", 2.8, 5), vv(6, "Damaged", 0, 3)] } });
+  assert.deepEqual(out.map((k) => [k.variantId, k.condition, k.foil, k.price, k.qty]), [["2", "Lightly Played", false, "3.10", 2], ["4", "Moderately Played", false, "2.80", 5], ["3", "Near Mint", true, "9.00", 1], ["5", "Heavily Played", true, "4.00", 1]]);
+  assert.deepEqual(copiesOf({ variants: { nodes: [] } }), []);
+  assert.deepEqual(copiesOf(null), []);
 });
