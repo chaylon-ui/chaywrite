@@ -78,5 +78,6 @@ test("walk: pages until the cursor ends, parks each page in the room, finalizes 
   assert.deepEqual(room.pages["mtg:2"].map((r) => r.set), ["Alpha", "Alpha"]);
   assert.equal(state.done.mtg.count, 3);
   assert.ok(calls.includes("/_stage/bx/finalize") && room.state.game === "pokemon");
+  assert.equal(room.state.lockUntil, 0);
   assert.ok(PAGE <= 100);
 });

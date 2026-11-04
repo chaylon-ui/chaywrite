@@ -166,10 +166,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 // Walk up to `pages` pages of the build's current game; finalize when the game ends; move on.
+export const LOCK_MS = 12 * 60e3;
 export async function walk(env, state, pages, fetcher) {
   // the global fetch needs its own `this` (a bare reference throws "Illegal invocation" on Workers)
   const cx = { env, fetch: fetcher || ((u, o) => fetch(u, o)) };
   let did = 0;
+  // one walker at a time: a kick and a cron tick must never page the same cursor
+  state.lockUntil = Date.now() + LOCK_MS;
+  await call(env, "/_stage/bx/state/put", { state });
+  try {
   while (state.game && did < pages) {
     const r = await adminGql(cx, PRODUCTS_Q, { q: queryFor(state.game), after: state.cursor || null });
     const pr = r.data && r.data.products;
@@ -199,6 +204,10 @@ export async function walk(env, state, pages, fetcher) {
     }
     await call(env, "/_stage/bx/state/put", { state });
   }
+  } finally {
+    state.lockUntil = 0;
+    await call(env, "/_stage/bx/state/put", { state });
+  }
   return { did, game: state.game, page: state.page };
 }
 
@@ -214,6 +223,7 @@ export async function boxesTick(env, now) {
     await call(env, "/_stage/bx/state/put", { state });
   }
   if (!state.game) return { idle: true };
+  if (state.lockUntil && state.lockUntil > t) return { idle: true, locked: true };
   try {
     const w = await walk(env, state, PAGES_PER_TICK);
     return { game: state.game, pages: w.did, page: state.page, rows: state.rows };
@@ -227,14 +237,18 @@ export async function boxesTick(env, now) {
 // Staff: start a build of one game now and walk it in the background.
 export async function kickBuild(env, ctx, game) {
   const j = await call(env, "/_stage/bx/state");
-  const state = Object.assign({}, (j && j.state) || {}, { day: dayKey(Date.now()), startedAt: Date.now(), queue: [game], game, cursor: null, page: 0, rows: 0, error: "" });
+  const prev = (j && j.state) || {};
+  if (prev.lockUntil && prev.lockUntil > Date.now()) return { ok: false, busy: true, game: prev.game, page: prev.page, until: prev.lockUntil };
+  // a kick continues the game already underway; otherwise it starts that game over
+  const same = prev.game === game && prev.cursor;
+  const state = same ? Object.assign({}, prev, { error: "" }) : Object.assign({}, prev, { day: dayKey(Date.now()), startedAt: Date.now(), queue: [game], game, cursor: null, page: 0, rows: 0, error: "" });
   await call(env, "/_stage/bx/state/put", { state });
   const run = (async () => {
     try { await walk(env, state, PAGES_PER_KICK); }
     catch (e) { state.error = String((e && e.message) || e).slice(0, 200); state.errorAt = Date.now(); await call(env, "/_stage/bx/state/put", { state }); }
   })();
   if (ctx && ctx.waitUntil) ctx.waitUntil(run); else await run;
-  return { ok: true, started: game };
+  return { ok: true, started: game, continued: !!same, page: state.page };
 }
 
 const NO_STORE = { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" };
