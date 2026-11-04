@@ -164,7 +164,7 @@ header .walk button{margin-right:4px}
    away again. Desktop keeps the side panel. */
 .lift .pull{display:none}
 @media (max-width:720px){
-.lift{--handle:54px}
+.lift{--handle:60px}
 .lift .in{position:relative}
 .lift .stage{padding:10px 12px calc(12px + var(--handle) + env(safe-area-inset-bottom,0px));transform-origin:50% 0;transition:transform .4s cubic-bezier(.2,.8,.2,1)}
 .lift.open .stage{transform:translateY(-3%) scale(.62)}
@@ -173,6 +173,10 @@ header .walk button{margin-right:4px}
 .lift .panel.drag{transition:none}
 .lift .pull{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;width:100%;height:calc(var(--handle) + env(safe-area-inset-bottom,0px));padding:0 0 env(safe-area-inset-bottom,0px);margin:0;border:0;background:#0f0b0c;color:var(--ink);cursor:pointer;touch-action:none;position:sticky;top:0;z-index:2;-webkit-tap-highlight-color:transparent}
 .lift .pull .bar{width:46px;height:4px;border-radius:2px;background:rgba(255,255,255,.55)}
+.lift .pull .row{display:flex;align-items:center;gap:14px}
+/* a strip of masking tape beside the arrow, "more info" in marker (owner, 2026-11-04) */
+.lift .pull .note{padding:3px 13px 5px;background:var(--tape);color:#1d1a18;font-family:"Permanent Marker",cursive;font-size:15px;letter-spacing:.03em;line-height:1.1;transform:rotate(-2.5deg);box-shadow:0 2px 3px rgba(0,0,0,.45);opacity:.94;clip-path:polygon(2% 0,98% 6%,100% 100%,1% 94%);white-space:nowrap}
+.lift.open .pull .note{display:none}
 .lift .pull .chev{width:13px;height:13px;border-left:3px solid var(--ember);border-top:3px solid var(--ember);transform:rotate(45deg);animation:beckon 1.8s ease-in-out infinite;transition:transform .3s}
 .lift.open .pull .chev{transform:rotate(225deg);animation:none}
 .lift.open .pull .bar{background:rgba(255,255,255,.35)}
@@ -190,7 +194,7 @@ header .walk button{margin-right:4px}
   <div class="state" id="state">Viewing the case…</div>
 </div></div>
 <div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
-<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="chev"></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
+<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
 (function () {
