@@ -189,7 +189,9 @@ header .walk button{margin-right:4px}
    cards alphabetical, a tap stands a card up, another picks it up. */
 .wall{flex-shrink:0;position:relative;padding:4px 14px 0;display:none}
 .wall.on{display:block}
-.wall .bxs{display:flex;gap:10px;overflow-x:auto;padding:6px 6px 0;scrollbar-width:none;justify-content:center}
+.wall .bxs{display:flex;gap:10px;overflow-x:auto;padding:6px 6px 0;scrollbar-width:none}
+/* centred when they fit, scrollable from the first box when they do not (a centred overflow hides its left end) */
+.wall .bx:first-child{margin-left:auto}.wall .bx:last-child{margin-right:auto}
 .wall .bxs::-webkit-scrollbar{display:none}
 .wall .bx{flex:0 0 auto;position:relative;width:92px;height:62px;border:0;border-radius:3px 3px 2px 2px;background:linear-gradient(#f7f5ef,#e9e5da);box-shadow:0 10px 14px rgba(0,0,0,.55),inset 0 -2px 0 rgba(0,0,0,.08),inset 0 1px 0 #fff;cursor:pointer;padding:0;color:#2a2320;transform:perspective(500px) rotateX(4deg);transition:transform .25s,box-shadow .25s}
 .wall .bx:hover,.wall .bx:focus-visible{transform:perspective(500px) rotateX(2deg) translateY(-3px);box-shadow:0 14px 18px rgba(0,0,0,.6),inset 0 -2px 0 rgba(0,0,0,.08),inset 0 1px 0 #fff;outline:0}
