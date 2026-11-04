@@ -1541,7 +1541,7 @@ async function adminControl(env, origin, f, admin) {
     return r.ok ? { ok: true, message: list.length ? "The staff copy of each buylist goes to " + list.length + " address" + (list.length === 1 ? "" : "es") + " now, each sent on its own." : "The staff copy is off: nobody gets it until you save an address." } : { ok: false, error: r.error || "failed" };
   }
   if (action === "notify-test") {
-    const sample = { id: "sample", number: "9P-0000", customer: "", customerName: "Sample Customer", customerEmail: "sample@example.test", customerPhone: "(902) 555-0100", paymentType: "Store Credit",
+    const sample = { id: "sample", number: "9P-0000", customer: "", customerName: "Sample Customer", customerEmail: "sample@example.test", customerPhone: "(902) 555-0100", paymentType: "Store Credit", delivery: "ship",
       cards: [{ cardName: "Lightning Bolt", setName: "Magic 2011", conditionName: "Near Mint", type: "Normal", quantity: "3", cashBuyPrice: 1.5, storeCreditBuyPrice: 1.95 }, { cardName: "Sol Ring", setName: "Commander Legends", conditionName: "Lightly Played", type: "Foil", quantity: "1", cashBuyPrice: 2, storeCreditBuyPrice: 2.6 }],
       totals: { cash: 6.5, credit: 8.45, units: 4, lines: 2 }, repriced: { changed: ["Sol Ring · Lightly Played · Foil ($2.50 credit is now $2.60)"], capped: [], dropped: [] } };
     const sent = await sendEmail(env, admin.email, buildStaffBuylistEmail(sample, { customerMail: { ok: true, to: "sample@example.test" }, link: origin + "/portal/buylists" }), { replyTo: null });

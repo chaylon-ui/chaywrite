@@ -24,6 +24,15 @@ test("the staff copy of a buylist: who, how to reach them, every card with both 
   for (const s of ["Ada &lt;Lovelace&gt;", "mailto:ada@example.test", "(902) 555-0100", "customers/3957471740057", "9P-1042", "Lightning Bolt", "Magic 2011", "Near Mint", "3 ×", "$1.50", "$1.95", "$5.85", "Sol Ring &lt;img src=x onerror=1&gt;", "$2.60", "Store credit total", "$8.45", "price updated: Sol Ring", "dropped: Black Lotus", "went to ada@example.test", 'href="https://w/portal/buylists"', "Open the BinderPOS buylists on 9Pocket", "nobody sees the others"]) assert.ok(m.html.includes(s), "html has " + s);
   assert.ok(!m.html.includes("<img src=x"));
   for (const s of ["Customer: Ada <Lovelace> <ada@example.test> · (902) 555-0100", "Paid as: Store Credit · 4 cards · store credit total $8.45", "3 x Lightning Bolt [Magic 2011] Near Mint - cash $1.50 / credit $1.95", "1 x Sol Ring <img src=x onerror=1> [Commander Legends] Lightly Played Foil - cash $2.00 / credit $2.60", "dropped: Black Lotus", "Open: https://w/portal/buylists"]) assert.ok(m.text.includes(s), "text has " + s);
+  // mail-in or drop-off (owner 2026-11-04): a line in the details and the header strip; "Not chosen" when the list carries no choice
+  assert.ok(m.html.includes("<strong>Not chosen</strong>") && m.html.includes("set Drop off or Shipping on the list in 9Pocket") && !m.html.includes("store credit · Not chosen"));
+  assert.ok(m.text.includes("Delivery: Not chosen (the customer did not say; set Drop off or Shipping on the list in 9Pocket)"));
+  const ship = buildStaffBuylistEmail({ ...rec, delivery: "ship" }, { customerMail: { ok: true, to: "ada@example.test" }, link: "https://w/portal/buylists" });
+  assert.ok(ship.html.includes("<strong>Mail-in</strong>") && ship.html.includes("the customer is shipping the cards to us") && ship.html.includes("store credit · Mail-in</div>"));
+  assert.ok(ship.text.includes("Delivery: Mail-in (the customer is shipping the cards to us)"));
+  const drop = buildStaffBuylistEmail({ ...rec, delivery: "in-store" }, { customerMail: { ok: true, to: "ada@example.test" }, link: "https://w/portal/buylists" });
+  assert.ok(drop.html.includes("<strong>Drop off</strong>") && drop.html.includes("bringing the cards into the store") && drop.html.includes("store credit · Drop off</div>"));
+  assert.ok(drop.text.includes("Delivery: Drop off (the customer is bringing the cards into the store)"));
   // cash list, waiting for approval, the customer's email failed, no phone, no email
   const cash = buildStaffBuylistEmail({ ...rec, paymentType: "Cash", customerEmail: "", customerPhone: "", repriced: null }, { staged: true, customerMail: { ok: false, error: "no email address for this customer" }, link: "https://w/9pocket/b/x1" });
   assert.equal(cash.subject, "New buylist 9P-1042: Ada <Lovelace> - 4 cards, $6.50 cash (waiting for approval)");

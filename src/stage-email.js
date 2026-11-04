@@ -201,6 +201,13 @@ ${mallowHtml()}
    with both payouts, the total, the reference and where to open it. The
    caller sends it ONCE PER ADDRESS (owner: "I don't want any of us to see
    the other addresses ... no carbon copy"); Reply-To is the customer. */
+// Owner, 2026-11-04: the staff copy says whether the list is a mail-in or a
+// drop-off (the choice the customer made on the sell page; src/ship.js).
+function staffDelivery(rec) {
+  if (rec.delivery === "ship") return { known: true, label: "Mail-in", note: "the customer is shipping the cards to us" };
+  if (rec.delivery === "in-store") return { known: true, label: "Drop off", note: "the customer is bringing the cards into the store" };
+  return { known: false, label: "Not chosen", note: "the customer did not say; set Drop off or Shipping on the list in 9Pocket" };
+}
 export function buildStaffBuylistEmail(rec, o) {
   const op = o || {};
   const ref = rec.number || rec.id;
@@ -211,6 +218,7 @@ export function buildStaffBuylistEmail(rec, o) {
   const name = String(rec.customerName || "").trim() || "a customer";
   const cid = String(rec.customer || "").replace(/\D/g, "");
   const subject = `New buylist ${ref}: ${name} - ${t.units} card${t.units === 1 ? "" : "s"}, ${money(total)} ${credit ? "store credit" : "cash"}${op.staged ? " (waiting for approval)" : ""}`;
+  const dl = staffDelivery(rec);
   const cm = op.customerMail;
   const customerNote = !cm ? "" : cm.ok ? `The customer's confirmation (the same list, with the drop-off instructions) went to ${esc(cm.to || rec.customerEmail || "them")}.` : `<strong>The customer's confirmation was NOT sent</strong>${cm.error ? " (" + esc(cm.error) + ")" : ""}${rec.customerEmail ? "" : " - no email address on the Shopify customer"}.`;
   const rp = rec.repriced || {};
@@ -230,7 +238,7 @@ export function buildStaffBuylistEmail(rec, o) {
 <tr><td style="background:${RED};padding:20px 28px;color:#ffffff">
   <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">${BRAND} · staff copy</div>
   <div style="font-size:24px;font-weight:700;line-height:1.2;margin-top:4px">New buylist ${esc(ref)}${op.staged ? " - waiting for approval" : ""}</div>
-  <div style="font-size:15px;margin-top:6px;opacity:.95">${esc(name)} · ${t.units} card${t.units === 1 ? "" : "s"} · <strong>${money(total)}</strong> ${credit ? "store credit" : "cash"}</div>
+  <div style="font-size:15px;margin-top:6px;opacity:.95">${esc(name)} · ${t.units} card${t.units === 1 ? "" : "s"} · <strong>${money(total)}</strong> ${credit ? "store credit" : "cash"}${dl.known ? " · " + dl.label : ""}</div>
 </td></tr>
 <tr><td style="padding:22px 28px 6px">
   <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:15px">
@@ -238,6 +246,7 @@ export function buildStaffBuylistEmail(rec, o) {
   ${line("Email", rec.customerEmail ? `<a href="mailto:${esc(rec.customerEmail)}" style="color:${RED}">${esc(rec.customerEmail)}</a>` : `<span style="color:${MUTED}">none on the customer record</span>`)}
   ${line("Phone", rec.customerPhone ? esc(rec.customerPhone) : "")}
   ${line("Paid as", esc(rec.paymentType))}
+  ${line("Delivery", `<strong>${dl.label}</strong> <span style="color:${MUTED}">· ${dl.note}</span>`)}
   ${line("Reference", `<strong>${esc(ref)}</strong>`)}
   </table>
   ${op.link ? `<p style="margin:14px 0 0"><a href="${esc(op.link)}" style="display:inline-block;background:${RED};color:#fff;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px">${esc(op.linkLabel || (op.staged ? "Review it on 9Pocket" : "Open the BinderPOS buylists on 9Pocket"))}</a></p>` : ""}
@@ -257,6 +266,7 @@ export function buildStaffBuylistEmail(rec, o) {
     `New buylist ${ref}${op.staged ? " - waiting for approval" : ""}`, "",
     `Customer: ${name}${rec.customerEmail ? " <" + rec.customerEmail + ">" : " (no email on the customer record)"}${rec.customerPhone ? " · " + rec.customerPhone : ""}`,
     `Paid as: ${rec.paymentType} · ${t.units} card${t.units === 1 ? "" : "s"} · ${credit ? "store credit" : "cash"} total ${money(total)}`,
+    `Delivery: ${dl.label} (${dl.note})`,
     op.link ? `Open: ${op.link}` : "", "",
     ...cards.map((c) => `${qty(c)} x ${c.cardName} [${c.setName}] ${c.conditionName || c.condition}${c.type && c.type !== "Normal" ? " " + c.type : ""} - cash ${money(c.cashBuyPrice)} / credit ${money(c.storeCreditBuyPrice)}`),
     ...(notes.length ? ["", "Changed on the way in:", ...notes] : []),
