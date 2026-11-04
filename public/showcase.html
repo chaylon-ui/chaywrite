@@ -156,8 +156,30 @@ header .walk button{margin-right:4px}
 .lift .mini .tl img{width:100%;height:100%;object-fit:cover;display:block}
 .lift .mini .stkp{left:100%;top:0}
 @media (min-width:721px){.lift .in{flex-direction:row}.lift .panel{width:360px;border-top:0;border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;justify-content:center;padding:24px}.lift h2{font-size:24px}.lift .set{font-size:14px}}
-@media (max-width:720px){:root{--cw:138px}.hnote{display:none}.hlogo{height:24px}.tabs button{padding:6px 9px;font-size:12px}.tabs button.ic{padding:3px 7px}.tabs button.ic img{height:27px;max-width:90px}.map .n{display:none}.lift .panel{max-height:62vh;max-height:62dvh}}
-@media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big,.card.foil .tl:before,.mini.foil .tl:before{animation:none}}
+@media (max-width:720px){:root{--cw:138px}.hnote{display:none}.hlogo{height:24px}.tabs button{padding:6px 9px;font-size:12px}.tabs button.ic{padding:3px 7px}.tabs button.ic img{height:27px;max-width:90px}.map .n{display:none}}
+/* In the hand on a phone (owner, 2026-11-04): the card fills the screen like a
+   card held in the hand; the details wait in a sheet at the bottom, just a
+   line and an arrow showing, and a tap or a pull on the handle brings the
+   rest up (the card steps back to make room). A pull or swipe down tucks it
+   away again. Desktop keeps the side panel. */
+.lift .pull{display:none}
+@media (max-width:720px){
+.lift{--handle:54px}
+.lift .in{position:relative}
+.lift .stage{padding:10px 12px calc(12px + var(--handle) + env(safe-area-inset-bottom,0px));transform-origin:50% 0;transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.lift.open .stage{transform:translateY(-3%) scale(.62)}
+.lift .panel{position:absolute;left:0;right:0;bottom:0;max-height:78vh;max-height:78dvh;padding-top:0;border-top:0;border-radius:18px 18px 0 0;box-shadow:0 -14px 44px rgba(0,0,0,.65);overflow-y:hidden;transform:translateY(calc(100% - var(--handle) - env(safe-area-inset-bottom,0px)));transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.lift.open .panel{transform:none;overflow-y:auto}
+.lift .panel.drag{transition:none}
+.lift .pull{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;width:100%;height:calc(var(--handle) + env(safe-area-inset-bottom,0px));padding:0 0 env(safe-area-inset-bottom,0px);margin:0;border:0;background:#0f0b0c;color:var(--ink);cursor:pointer;touch-action:none;position:sticky;top:0;z-index:2;-webkit-tap-highlight-color:transparent}
+.lift .pull .bar{width:46px;height:4px;border-radius:2px;background:rgba(255,255,255,.55)}
+.lift .pull .chev{width:13px;height:13px;border-left:3px solid var(--ember);border-top:3px solid var(--ember);transform:rotate(45deg);animation:beckon 1.8s ease-in-out infinite;transition:transform .3s}
+.lift.open .pull .chev{transform:rotate(225deg);animation:none}
+.lift.open .pull .bar{background:rgba(255,255,255,.35)}
+@keyframes beckon{0%,100%{translate:0 2px}50%{translate:0 -2px}}
+.lift .x{font-size:38px;right:10px;top:4px;padding:6px 10px}
+}
+@media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big,.card.foil .tl:before,.mini.foil .tl:before,.lift .pull .chev{animation:none}.lift .stage,.lift .panel{transition:none!important}}
 </style></head>
 <body>
 <header><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><img class="hlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><span class="hnote">ask us to pull any card out for a closer look</span><div class="tabs" id="tabs"></div></header>
@@ -168,7 +190,7 @@ header .walk button{margin-right:4px}
   <div class="state" id="state">Viewing the case…</div>
 </div></div>
 <div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
-<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel"><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
+<div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="chev"></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
 (function () {
@@ -475,17 +497,35 @@ header .walk button{margin-right:4px}
         }).catch(function () {});
     }
     orientBase = null; tiltTo(0, 0, 30, 25);
-    $('#lift').classList.add('on'); hint.classList.add('gone'); fitLift();
+    sheet(false); $('#lift').classList.add('on'); hint.classList.add('gone'); fitLift();
   }
   // The sleeve takes all the stage allows: full width on a phone, full height on a desktop.
   function fitLift() {
     if (!lifted) return;
     var st = $('#stage'), big = $('#big');
-    var w = Math.max(140, Math.min(st.clientWidth - 32, (st.clientHeight - 26) * 63 / 88));
+    var cs = getComputedStyle(st), padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0), padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    var w = Math.max(140, Math.min(st.clientWidth - padX, (st.clientHeight - padY) * 63 / 88));
     big.style.width = w + 'px'; big.style.setProperty('--bw', w + 'px');
   }
   window.addEventListener('resize', fitLift);
-  function putBack() { $('#lift').classList.remove('on'); lifted = null; tiltTo(0, 0); orientBase = null; }
+  function putBack() { $('#lift').classList.remove('on'); sheet(false); lifted = null; tiltTo(0, 0); orientBase = null; }
+  // The details sheet on a phone (owner, 2026-11-04): a tap on the handle
+  // toggles it, a pull follows the finger and snaps, a swipe down on the open
+  // sheet (from its top) tucks it away. On a desktop the panel is always there.
+  var panelEl = $('#panel'), pull = $('#pull'), sheetOpen = false, dragY = null, dragMoved = 0;
+  function sheet(on) { sheetOpen = !!on; $('#lift').classList.toggle('open', sheetOpen); panelEl.classList.remove('drag'); panelEl.style.transform = ''; if (!sheetOpen) panelEl.scrollTop = 0; }
+  pull.addEventListener('pointerdown', function (e) { dragY = e.clientY; dragMoved = 0; try { pull.setPointerCapture(e.pointerId); } catch (x) {} panelEl.classList.add('drag'); });
+  pull.addEventListener('pointermove', function (e) {
+    if (dragY == null) return; var dy = e.clientY - dragY; dragMoved = dy;
+    var hidden = Math.max(0, panelEl.offsetHeight - pull.offsetHeight), base = sheetOpen ? 0 : hidden;
+    panelEl.style.transform = 'translateY(' + Math.max(0, Math.min(hidden, base + dy)) + 'px)';
+  });
+  function endPull() { if (dragY == null) return; var dy = dragMoved; dragY = null; if (Math.abs(dy) < 8) sheet(!sheetOpen); else sheet(dy < -40 ? true : dy > 40 ? false : sheetOpen); }
+  pull.addEventListener('pointerup', endPull); pull.addEventListener('pointercancel', endPull);
+  pull.addEventListener('click', function (e) { e.stopPropagation(); });
+  var bodyY = null, bodyX = null;
+  panelEl.addEventListener('touchstart', function (e) { var t = e.touches[0]; bodyY = sheetOpen && panelEl.scrollTop <= 0 && !e.target.closest('.minis,#pull') ? t.clientY : null; bodyX = t.clientX; }, { passive: true });
+  panelEl.addEventListener('touchmove', function (e) { if (bodyY == null) return; var t = e.touches[0]; if (Math.abs(t.clientX - bodyX) > 40) { bodyY = null; return; } if (t.clientY - bodyY > 70) { bodyY = null; sheet(false); } }, { passive: true });
   // a tap on a mini swaps it into the hand; a tap on the held card, the stage or the backdrop puts it back (owner: "if you click the expanded card it goes away")
   $('#lift').addEventListener('click', function (e) {
     var m = e.target.closest('.mini');
