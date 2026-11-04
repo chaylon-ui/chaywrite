@@ -183,10 +183,56 @@ header .walk button{margin-right:4px}
 @keyframes beckon{0%,100%{translate:0 2px}50%{translate:0 -2px}}
 .lift .x{font-size:38px;right:10px;top:4px;padding:6px 10px}
 }
+/* The boxes behind the counter (owner, 2026-11-04): white four-row boxes on a
+   plank above the case, marker labels on their ends; tap one and the lid comes
+   off to a top-down view of four rows of card tops with set dividers, the
+   cards alphabetical, a tap stands a card up, another picks it up. */
+.wall{flex-shrink:0;position:relative;padding:4px 14px 0;display:none}
+.wall.on{display:block}
+.wall .bxs{display:flex;gap:10px;overflow-x:auto;padding:6px 6px 0;scrollbar-width:none;justify-content:center}
+.wall .bxs::-webkit-scrollbar{display:none}
+.wall .bx{flex:0 0 auto;position:relative;width:92px;height:62px;border:0;border-radius:3px 3px 2px 2px;background:linear-gradient(#f7f5ef,#e9e5da);box-shadow:0 10px 14px rgba(0,0,0,.55),inset 0 -2px 0 rgba(0,0,0,.08),inset 0 1px 0 #fff;cursor:pointer;padding:0;color:#2a2320;transform:perspective(500px) rotateX(4deg);transition:transform .25s,box-shadow .25s}
+.wall .bx:hover,.wall .bx:focus-visible{transform:perspective(500px) rotateX(2deg) translateY(-3px);box-shadow:0 14px 18px rgba(0,0,0,.6),inset 0 -2px 0 rgba(0,0,0,.08),inset 0 1px 0 #fff;outline:0}
+.wall .bx .lid{position:absolute;left:0;right:0;top:0;height:13px;background:linear-gradient(#fdfcf9,#f1eee6);border-bottom:1px solid #cfc8b8;border-radius:3px 3px 0 0}
+.wall .bx .face{position:absolute;left:5px;right:5px;top:17px;bottom:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-family:"Permanent Marker",cursive;line-height:1.05}
+.wall .bx .lbl{font-size:12px;letter-spacing:.03em;text-transform:uppercase}
+.wall .bx .rng{font-size:15px;color:#1b1b1b}
+.wall .plank{height:9px;margin:0 2px;border-radius:2px;background:linear-gradient(#7a4a22,#4a2c15 60%,#2a170a);box-shadow:0 6px 10px rgba(0,0,0,.6)}
+.wall .wnote{text-align:center;font-family:Caveat,cursive;font-size:15px;color:var(--muted);margin-top:4px}
+.boxv{position:fixed;inset:0;z-index:15;display:none;flex-direction:column;background:radial-gradient(ellipse at 50% 0%,#231b14,#0b0908 70%)}
+.boxv.on{display:flex}
+.bhead{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap}
+.bhead .back{background:#1a1411;border:1px solid rgba(255,255,255,.25);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:700}
+.bhead .btitle{font-family:"Permanent Marker",cursive;font-size:16px;color:var(--ink);flex:1;min-width:120px}
+.bhead .bjump{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.bhead select{max-width:46vw;background:#1a1411;color:var(--ink);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 8px;font-size:13px}
+.lanes{flex:1;min-height:0;display:flex;gap:0;margin:0 10px 10px;padding:8px;border-radius:6px;background:linear-gradient(#f3f0e8,#e4dfd2);box-shadow:inset 0 0 0 10px #f8f6f1,inset 0 0 0 11px #cfc8b8,0 20px 40px rgba(0,0,0,.6)}
+.brow{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;background:linear-gradient(#b89468,#a57f55);box-shadow:inset 0 0 18px rgba(0,0,0,.35);border-left:4px solid #fbfaf6;border-right:4px solid #e9e4d8;padding:10px 3px 40px;position:relative}
+.brow:first-child{border-left-width:0}.brow:last-child{border-right-width:0}
+.strip{position:relative;height:21px;margin:0 0 2px;border-radius:2px 2px 0 0;background:#fbfaf7 var(--bg,none) center top/cover no-repeat;border-top:1px solid rgba(255,255,255,.9);box-shadow:0 1px 0 rgba(0,0,0,.25),inset 0 -6px 8px -6px rgba(0,0,0,.35);overflow:hidden;cursor:pointer;font-size:10.5px;line-height:21px;color:#2a2320;padding:0 5px;white-space:nowrap;text-overflow:ellipsis;font-family:Cinzel,serif;letter-spacing:.01em}
+.strip.img{color:#fff;text-shadow:0 1px 2px #000,0 0 6px rgba(0,0,0,.8)}
+.strip.img:after{content:"";position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.05),rgba(0,0,0,.38));pointer-events:none}
+.strip.foil{border-top-color:#ffe9a6;box-shadow:0 1px 0 rgba(0,0,0,.25),inset 0 0 0 1px rgba(214,163,54,.55)}
+.strip.up{transform:translateY(-6px) scale(1.04);z-index:2;box-shadow:0 8px 12px rgba(0,0,0,.5)}
+.divider{position:relative;height:26px;margin:6px 0 4px;background:var(--tape);border-radius:2px 8px 2px 2px;box-shadow:0 2px 3px rgba(0,0,0,.4);font-family:"Permanent Marker",cursive;font-size:11px;line-height:26px;color:#2a2320;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;clip-path:polygon(0 0,86% 0,100% 30%,100% 100%,0 100%)}
+.bstate{width:100%;text-align:center;font-family:Caveat,cursive;font-size:26px;color:#4a3a2e;padding:40px 10px}
+.peek{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:17;display:none;align-items:center;gap:14px;background:rgba(10,8,9,.9);padding:14px;border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.8);max-width:calc(100vw - 24px)}
+.peek.on{display:flex}
+.pcard{position:relative;width:min(44vw,210px);aspect-ratio:63/88;border-radius:7px;background:#111;overflow:hidden;box-shadow:0 0 0 1.5px rgba(255,255,255,.3),0 18px 30px rgba(0,0,0,.7);cursor:pointer;animation:hover 5.5s ease-in-out infinite}
+.pcard img{width:100%;height:100%;object-fit:cover;display:block}
+.pcard .pno{display:none;position:absolute;inset:0;align-items:center;justify-content:center;padding:10%;text-align:center;font-family:"Permanent Marker",cursive;font-size:15px;color:#d9d2c4;background:linear-gradient(160deg,#2b2630,#171419 60%,#0e0c10)}
+.pcard.none .pno{display:flex}.pcard.none img{display:none}
+.pcard .psticker{right:5%;top:40.5%}
+.ptxt{display:flex;flex-direction:column;gap:4px;max-width:200px;color:var(--ink)}
+.ptxt strong{font-family:Cinzel,serif;font-size:15px;line-height:1.2}
+.ptxt span{color:var(--muted);font-size:12px}
+.ptxt em{color:var(--ember);font-family:Caveat,cursive;font-size:17px;font-style:normal;margin-top:6px}
+@media (max-width:720px){.wall .bx{width:78px;height:54px}.wall .bx .lbl{font-size:10px}.wall .bx .rng{font-size:13px}.wall .wnote{font-size:13px}.bhead .btitle{font-size:14px;order:3;flex-basis:100%}.lanes{margin:0 6px 6px;padding:6px}.strip{font-size:9.5px;padding:0 3px}.divider{font-size:10px}.peek{flex-direction:column;gap:8px}.ptxt{text-align:center;align-items:center}}
 @media (prefers-reduced-motion:reduce){.track,.case,.shelf,.lift .hold{transition:none!important}.lift .in,.lift .big,.card.foil .tl:before,.mini.foil .tl:before,.lift .pull .chev{animation:none}.lift .stage,.lift .panel{transition:none!important}}
 </style></head>
 <body>
 <header><div class="walk"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><button type="button" data-walk="1" aria-label="Walk right">▶</button></div><img class="hlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><span class="hnote">ask us to pull any card out for a closer look</span><div class="tabs" id="tabs"></div></header>
+<div class="wall" id="wall"></div>
 <div class="room"><div class="case" id="case">
   <div class="track" id="track"></div>
   <div class="glass" id="glass"></div><div class="smudge"></div><div class="vig"></div>
@@ -195,6 +241,7 @@ header .walk button{margin-right:4px}
 </div></div>
 <div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
 <div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
+<div class="boxv" id="boxv"><div class="bhead"><button type="button" class="back" id="bback">‹ Back to the case</button><div class="btitle" id="btitle"></div><label class="bjump">Jump to a set <select id="bsets"></select></label></div><div class="lanes" id="lanes"></div><div class="peek" id="peek"><div class="pcard" id="pcard"><img id="pimg" alt=""><div class="pno" id="pno"></div><div class="psticker"><span class="pink" id="pprice"></span></div></div><div class="ptxt"><strong id="pname"></strong><span id="pset"></span><em>tap the card to pick it up</em></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
 (function () {
@@ -591,10 +638,104 @@ header .walk button{margin-right:4px}
         if (!d || !d.ok) { stateEl.textContent = 'This case is locked right now - the shop feed did not answer. Try again in a minute.'; if (d && d.cases) { state.cases = d.cases; state.game = d.game; tabs(); } return; }
         state.cases = d.cases; state.icons = d.icons || []; state.game = d.game; state.shelves = d.shelves; state.shelf = 0; state.x = 0; state.vx = 0; state.idf = null; state.ext = [];
         try { history.replaceState(null, '', location.pathname + '?game=' + encodeURIComponent(d.game)); } catch (x) {}
-        tabs(); stateEl.style.display = 'none'; render();
+        tabs(); stateEl.style.display = 'none'; render(); loadBoxes();
       })
       .catch(function () { state.busy = false; stateEl.textContent = 'Could not reach the shop. Try again in a minute.'; });
   }
+  /* ---- the boxes behind the counter (owner, 2026-11-04) ---- */
+  var boxes = { game: '', list: null, cards: [], open: null, peek: -1 };
+  var wall = $('#wall'), boxv = $('#boxv'), lanesEl = $('#lanes'), peekEl = $('#peek');
+  function loadBoxes() {
+    var game = state.game; wall.className = 'wall'; wall.innerHTML = ''; boxes.list = null;
+    fetch(W + '/showcase/boxes.json?game=' + encodeURIComponent(game), { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.ok || d.game !== state.game || !d.boxes || !d.boxes.length) return;
+        boxes.game = d.game; boxes.list = d;
+        wall.innerHTML = '<div class="bxs">' + d.boxes.map(function (b) {
+          return '<button type="button" class="bx" data-n="' + b.n + '" aria-label="' + esc(d.label + ' box ' + b.n + ', ' + b.label) + '"><span class="lid"></span><span class="face"><span class="lbl">' + esc(d.label) + '</span><span class="rng">' + esc(b.label) + '</span></span></button>';
+        }).join('') + '</div><div class="plank"></div><div class="wnote">the boxes behind the counter · every ' + esc(d.label) + ' single we have, ' + Number(d.count).toLocaleString('en-CA') + ' of them · tap a box</div>';
+        wall.className = 'wall on';
+      }).catch(function () {});
+  }
+  wall.addEventListener('click', function (e) { var b = e.target.closest('.bx'); if (b) openBox(Number(b.getAttribute('data-n'))); });
+  function expand(r, setName) {
+    return { name: r[0], set: setName, price: r[2], image: r[3] ? (r[3].charAt(0) === '/' ? 'https://cdn.shopify.com' + r[3] : r[3]) : null, url: 'https://exorgames.com/products/' + r[1], variantId: r[4] || null, condition: r[5] || '', foil: !!r[6], copies: r[7] || 0, game: boxes.game, color: null, type: '', text: '' };
+  }
+  function openBox(n) {
+    var d = boxes.list; if (!d) return;
+    var b = null; d.boxes.forEach(function (x) { if (x.n === n) b = x; }); if (!b) return;
+    boxes.open = b; boxes.cards = []; hidePeek();
+    $('#btitle').textContent = d.label + ' · box ' + b.n + ' · ' + b.label + ' · ' + Number(b.count).toLocaleString('en-CA') + ' cards';
+    $('#bsets').innerHTML = ''; lanesEl.innerHTML = '<div class="bstate">Lifting the lid…</div>';
+    boxv.classList.add('on');
+    fetch(W + '/showcase/box.json?game=' + encodeURIComponent(d.game) + '&n=' + n, { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (!j || !j.ok || boxes.open !== b) { if (boxes.open === b) lanesEl.innerHTML = '<div class="bstate">This box is in the back room right now - try again in a minute.</div>'; return; } buildLanes(j); })
+      .catch(function () { if (boxes.open === b) lanesEl.innerHTML = '<div class="bstate">Could not reach the shop. Try again in a minute.</div>'; });
+  }
+  function closeBox() { boxv.classList.remove('on'); boxes.open = null; hidePeek(); lanesEl.innerHTML = ''; }
+  $('#bback').addEventListener('click', closeBox);
+  // Four rows of card tops: the box's cards in set order, alphabetical inside
+  // a set, a tabbed divider where each set starts; the rows split evenly.
+  function buildLanes(j) {
+    var cards = [], starts = [];
+    j.sets.forEach(function (s, si) { starts.push({ i: cards.length, name: s.name, si: si }); s.rows.forEach(function (r) { cards.push(expand(r, s.name)); }); });
+    boxes.cards = cards;
+    var per = Math.max(1, Math.ceil(cards.length / 4)), html = ['', '', '', ''], startAt = {};
+    starts.forEach(function (s) { startAt[s.i] = s; });
+    cards.forEach(function (c, i) {
+      var L = Math.min(3, Math.floor(i / per)), st = startAt[i];
+      if (st) html[L] += '<div class="divider" data-set="' + st.si + '" title="' + esc(st.name) + '">' + esc(st.name) + '</div>';
+      html[L] += '<div class="strip' + (c.foil ? ' foil' : '') + '" data-i="' + i + '" title="' + esc(c.name + ' · ' + c.set + ' · ' + money(c.price)) + '">' + esc(c.name) + '</div>';
+    });
+    lanesEl.innerHTML = html.map(function (h) { return '<div class="brow">' + h + '</div>'; }).join('');
+    $('#bsets').innerHTML = '<option value="">' + (j.sets.length + ' sets') + '</option>' + j.sets.map(function (s, si) { return '<option value="' + si + '">' + esc(s.name) + ' (' + s.rows.length + ')</option>'; }).join('');
+    lazyTops();
+  }
+  // The card tops: a thin crop of each card's own image, loaded as the rows
+  // scroll past (only when a row is wide enough to read one).
+  var topsObs = null;
+  function lazyTops() {
+    if (topsObs) topsObs.disconnect();
+    var lane = lanesEl.querySelector('.brow'); if (!lane || lane.clientWidth < 150 || !('IntersectionObserver' in window)) return;
+    topsObs = new IntersectionObserver(function (es) {
+      es.forEach(function (en) {
+        if (!en.isIntersecting) return; var el = en.target; topsObs.unobserve(el);
+        var c = boxes.cards[Number(el.getAttribute('data-i'))]; if (!c || !c.image) return;
+        var u = img(c.image, 300) + (/cdn\.shopify\.com/.test(c.image) ? '&height=70&crop=top' : '');
+        var im = new Image(); im.onload = function () { el.style.setProperty('--bg', 'url("' + u + '")'); el.classList.add('img'); }; im.src = u;
+      });
+    }, { root: null, rootMargin: '200px 0px' });
+    lanesEl.querySelectorAll('.strip').forEach(function (el) { topsObs.observe(el); });
+  }
+  $('#bsets').addEventListener('change', function () {
+    var v = this.value; if (v === '') return;
+    var dv = lanesEl.querySelector('.divider[data-set="' + v + '"]'); if (dv) dv.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+  });
+  // A tap on a card top stands the card up (the peek); a tap on the standing card picks it up.
+  function showPeek(i) {
+    var c = boxes.cards[i]; if (!c) return;
+    lanesEl.querySelectorAll('.strip.up').forEach(function (el) { el.classList.remove('up'); });
+    var el = lanesEl.querySelector('.strip[data-i="' + i + '"]'); if (el) el.classList.add('up');
+    boxes.peek = i;
+    $('#pcard').classList.toggle('none', !hasPhoto(c)); $('#pimg').src = hasPhoto(c) ? img(c.image, 500) : ''; $('#pimg').alt = c.name; $('#pno').textContent = c.name;
+    $('#pprice').textContent = gunPrice(c.price); $('#pname').textContent = c.name; $('#pset').textContent = [c.set, condText(c), c.foil ? (c.game === 'pokemon' ? 'Holo' : 'Foil') : ''].filter(Boolean).join(' · ');
+    peekEl.classList.add('on');
+  }
+  function hidePeek() { peekEl.classList.remove('on'); boxes.peek = -1; lanesEl.querySelectorAll('.strip.up').forEach(function (el) { el.classList.remove('up'); }); }
+  lanesEl.addEventListener('click', function (e) {
+    var st = e.target.closest('.strip');
+    if (!st) { hidePeek(); return; }
+    var i = Number(st.getAttribute('data-i'));
+    if (boxes.peek === i) { var c = boxes.cards[i]; hidePeek(); askOrientation(); lift(c); return; }
+    showPeek(i);
+  });
+  $('#pcard').addEventListener('click', function () { var c = boxes.cards[boxes.peek]; if (!c) return; hidePeek(); askOrientation(); lift(c); });
+  peekEl.addEventListener('click', function (e) { if (e.target === peekEl) hidePeek(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && boxv.classList.contains('on') && !$('#lift').classList.contains('on')) { if (boxes.peek >= 0) hidePeek(); else closeBox(); } });
+  window.addEventListener('resize', function () { if (boxv.classList.contains('on') && boxes.cards.length) lazyTops(); });
+
   window.addEventListener('resize', function () { if (state.shelves.length) { var p = state.maxX ? state.x / state.maxX : 0; render(); state.x = p * state.maxX; place(); } });
   load(new URLSearchParams(location.search).get('game') || '');
   window.xgShowcase = { state: state, load: load, goShelf: goShelf };

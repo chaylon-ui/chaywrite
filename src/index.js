@@ -7,6 +7,7 @@ import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO 
 import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql, PRICE_DO } from "./price-history.js";
 import { serveShowcase, serveShowcaseIcon, serveShowcaseAlike } from "./showcase.js";
+import { serveBoxes, boxesTick } from "./boxes.js";
 import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
@@ -108,6 +109,9 @@ export default {
     // Buylists being shipped (src/ship.js): one reminder three days after a shipped list with no tracking. Quiet when none is due.
     try { const s = await shipChase(env, Date.now()); if (s && s.due) console.log("ship-chase: " + JSON.stringify(s)); }
     catch (e) { console.log("ship-chase: failed: " + ((e && e.message) || e)); }
+    // The Showcase's boxes (src/boxes.js): a few pages of the nightly singles walk per tick.
+    try { const b = await boxesTick(env, Date.now()); if (b && !b.skipped && !b.idle) console.log("boxes: " + JSON.stringify(b)); }
+    catch (e) { console.log("boxes: failed: " + ((e && e.message) || e)); }
     // Sales impact (src/impact.js): new orders attributed to the tools that filled the cart, a few pages every 10 min.
     try { const i = await impactTick(env); if (i && !i.skipped) console.log("impact: " + JSON.stringify(i)); }
     catch (e) { console.log("impact: failed: " + ((e && e.message) || e)); }
@@ -390,6 +394,7 @@ async function route(request, env, ctx) {
     if (url.pathname === "/showcase" || url.pathname === "/showcase/") return serveAsset(env, "/showcase.html", request);
     if (url.pathname === "/showcase.json") return serveShowcase(request, env, ctx);
     if (url.pathname === "/showcase/alike.json") return serveShowcaseAlike(request, env, ctx);
+    if (url.pathname === "/showcase/boxes.json" || url.pathname === "/showcase/box.json") return serveBoxes(request, env, ctx, url, gate("admin"));
     { const im = /^\/showcase\/icon\/([a-z0-9]+)\.png$/.exec(url.pathname); if (im) return serveShowcaseIcon(request, env, ctx, im[1]); }
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === TRACK_PATH || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"), { ctx });
