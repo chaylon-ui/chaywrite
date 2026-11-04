@@ -176,12 +176,13 @@ export async function walk(env, state, pages, fetcher) {
   await call(env, "/_stage/bx/state/put", { state });
   try {
   while (state.game && did < pages) {
-    // a staff stop (or a newer build) since this walk began ends it before the next page
-    const cur = await call(env, "/_stage/bx/state");
-    if (cur && cur.state && ((cur.state.stopAt || 0) > (state.startedAt || 0) || (cur.state.startedAt || 0) > (state.startedAt || 0))) { state = cur.state; break; }
     const r = await adminGql(cx, PRODUCTS_Q, { q: queryFor(state.game), after: state.cursor || null });
     const pr = r.data && r.data.products;
     if (!pr || !Array.isArray(pr.nodes)) throw new Error("products shape");
+    // a staff stop (or a newer build) since this walk began ends it here, before this page
+    // is written: the stored state stays theirs, not this walk's snapshot
+    const cur = await call(env, "/_stage/bx/state");
+    if (cur && cur.state && ((cur.state.stopAt || 0) > (state.startedAt || 0) || (cur.state.startedAt || 0) > (state.startedAt || 0))) { state = cur.state; break; }
     const rows = [];
     for (const p of pr.nodes) {
       const row = rowOf(p);

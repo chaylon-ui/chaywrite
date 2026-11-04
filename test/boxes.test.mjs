@@ -80,11 +80,12 @@ test("walk: pages until the cursor ends, parks each page in the room, finalizes 
   assert.equal(state.done.mtg.count, 3);
   assert.ok(calls.includes("/_stage/bx/finalize") && room.state.game === "pokemon");
   assert.equal(room.state.lockUntil, 0);
-  // a stop written while a walk runs ends it before the next page and is not undone by the walk's finally
-  room.state = { startedAt: 7, game: "pokemon", queue: ["pokemon"], cursor: "c9", page: 3, stopAt: 9 };
-  const st2 = { startedAt: 7, game: "pokemon", queue: ["pokemon"], cursor: "c9", page: 3 };
-  const w2 = await walk(env, st2, 10, fetcher);
+  // a stop that lands while a page is being fetched ends the walk before that page is written, and the walk's finally leaves the stop in place
+  const st2 = { startedAt: 7, game: "pokemon", queue: ["pokemon"], cursor: "c9", page: 3, done: {} };
+  const stopper = async (url, o) => { room.state = Object.assign({}, room.state, { stopAt: 9 }); return new Response(JSON.stringify({ data: { products: { pageInfo: { hasNextPage: true, endCursor: "c10" }, nodes: [product("Pika [Base]", [v(9, "Near Mint", 2, 1)])] } } }), { status: 200 }); };
+  const w2 = await walk(env, st2, 10, stopper);
   assert.equal(w2.did, 0);
-  assert.deepEqual([room.state.game, room.state.stopAt, room.state.lockUntil], ["pokemon", 9, 0]);
+  assert.equal(room.pages["pokemon:4"], undefined);
+  assert.deepEqual([room.state.game, room.state.stopAt, room.state.lockUntil, room.state.page], ["pokemon", 9, 0, 3]);
   assert.ok(PAGE <= 100);
 });
