@@ -66,12 +66,13 @@ test("walk: pages until the cursor ends, parks each page in the room, finalizes 
     if (u.pathname === "/_stage/bx/page/put") { room.pages[b.game + ":" + b.n] = b.rows; return Response.json({ ok: true }); }
     if (u.pathname === "/_stage/bx/finalize") return Response.json({ ok: true, count: 3, sets: 2, boxes: 1 });
     if (u.pathname === "/_stage/bx/state/put") { room.state = b.state; return Response.json({ ok: true }); }
+    if (u.pathname === "/_stage/bx/state") return Response.json({ ok: true, state: room.state });
     return Response.json({ ok: false }); } }) } };
   let n = 0;
   const fetcher = async (url, o) => { n++; const vars = JSON.parse(o.body).variables; assert.ok(/MTG Single/.test(vars.q));
     const nodes = n === 1 ? [product("Bolt [MH3]", [v(1, "Near Mint", 3, 1)]), product("Dud [MH3]", [v(2, "Near Mint", 3, 0)])] : [product("Ant [Alpha]", [v(3, "Near Mint", 1, 1)]), product("Bear [Alpha]", [v(4, "Near Mint", 1, 1)])];
     return new Response(JSON.stringify({ data: { products: { pageInfo: { hasNextPage: n === 1, endCursor: n === 1 ? "c1" : null }, nodes } }, extensions: { cost: { actualQueryCost: 10, throttleStatus: { currentlyAvailable: 1000, restoreRate: 50 } } } }), { status: 200 }); };
-  const state = { queue: ["mtg", "pokemon"], game: "mtg", cursor: null, page: 0, rows: 0, done: {} };
+  const state = { startedAt: 5, queue: ["mtg", "pokemon"], game: "mtg", cursor: null, page: 0, rows: 0, done: {} };
   const w = await walk(env, state, 10, fetcher);
   assert.deepEqual([w.did, state.game, state.page, state.cursor], [2, "pokemon", 0, null]);
   assert.deepEqual(room.pages["mtg:1"].map((r) => r.row[0]), ["Bolt"]);
@@ -79,5 +80,11 @@ test("walk: pages until the cursor ends, parks each page in the room, finalizes 
   assert.equal(state.done.mtg.count, 3);
   assert.ok(calls.includes("/_stage/bx/finalize") && room.state.game === "pokemon");
   assert.equal(room.state.lockUntil, 0);
+  // a stop written while a walk runs ends it before the next page and is not undone by the walk's finally
+  room.state = { startedAt: 7, game: "pokemon", queue: ["pokemon"], cursor: "c9", page: 3, stopAt: 9 };
+  const st2 = { startedAt: 7, game: "pokemon", queue: ["pokemon"], cursor: "c9", page: 3 };
+  const w2 = await walk(env, st2, 10, fetcher);
+  assert.equal(w2.did, 0);
+  assert.deepEqual([room.state.game, room.state.stopAt, room.state.lockUntil], ["pokemon", 9, 0]);
   assert.ok(PAGE <= 100);
 });

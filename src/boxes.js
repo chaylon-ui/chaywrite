@@ -29,7 +29,7 @@ import { adminGql, throttleWait } from "./price-history.js";
 
 export const BOX_CAP = 3200;             // cards per box, like the real ones
 export const PAGE = 80;                  // products per Shopify page (cost ~650 of the 1,000-point bucket)
-export const PAGES_PER_TICK = 4;         // per five-minute cron tick
+export const PAGES_PER_TICK = 16;        // per five-minute cron tick (~13 s a page: under four minutes)
 export const PAGES_PER_KICK = 30;        // per staff "build now" request
 export const PART = 400;                 // rows per stored part
 export const BUILD_HOUR_UTC = 10;        // after the stock check's 09:00Z run
@@ -176,6 +176,9 @@ export async function walk(env, state, pages, fetcher) {
   await call(env, "/_stage/bx/state/put", { state });
   try {
   while (state.game && did < pages) {
+    // a staff stop (or a newer build) since this walk began ends it before the next page
+    const cur = await call(env, "/_stage/bx/state");
+    if (cur && cur.state && ((cur.state.stopAt || 0) > (state.startedAt || 0) || (cur.state.startedAt || 0) > (state.startedAt || 0))) { state = cur.state; break; }
     const r = await adminGql(cx, PRODUCTS_Q, { q: queryFor(state.game), after: state.cursor || null });
     const pr = r.data && r.data.products;
     if (!pr || !Array.isArray(pr.nodes)) throw new Error("products shape");
@@ -205,8 +208,10 @@ export async function walk(env, state, pages, fetcher) {
     await call(env, "/_stage/bx/state/put", { state });
   }
   } finally {
-    state.lockUntil = 0;
-    await call(env, "/_stage/bx/state/put", { state });
+    const cur = await call(env, "/_stage/bx/state");
+    const live = cur && cur.state && (cur.state.startedAt || 0) === (state.startedAt || 0) && !cur.state.stopAt ? state : (cur && cur.state) || state;
+    live.lockUntil = 0;
+    await call(env, "/_stage/bx/state/put", { state: live });
   }
   return { did, game: state.game, page: state.page };
 }
@@ -219,7 +224,7 @@ export async function boxesTick(env, now) {
   let state = (j && j.state) || null;
   const today = dayKey(t), hour = new Date(t).getUTCHours();
   if (!state || (!state.game && state.day !== today && hour >= BUILD_HOUR_UTC)) {
-    state = { day: today, startedAt: t, queue: GAME_ORDER.slice(), game: GAME_ORDER[0], cursor: null, page: 0, rows: 0, done: (state && state.done) || {} };
+    state = { day: today, startedAt: t, queue: GAME_ORDER.slice(), game: GAME_ORDER[0], cursor: null, page: 0, rows: 0, done: (state && state.done) || {}, stopAt: 0 };
     await call(env, "/_stage/bx/state/put", { state });
   }
   if (!state.game) return { idle: true };
@@ -241,7 +246,7 @@ export async function kickBuild(env, ctx, game) {
   if (prev.lockUntil && prev.lockUntil > Date.now()) return { ok: false, busy: true, game: prev.game, page: prev.page, until: prev.lockUntil };
   // a kick continues the game already underway; otherwise it starts that game over
   const same = prev.game === game && prev.cursor;
-  const state = same ? Object.assign({}, prev, { error: "" }) : Object.assign({}, prev, { day: dayKey(Date.now()), startedAt: Date.now(), queue: [game], game, cursor: null, page: 0, rows: 0, error: "" });
+  const state = same ? Object.assign({}, prev, { error: "", stopAt: 0 }) : Object.assign({}, prev, { day: dayKey(Date.now()), startedAt: Date.now(), queue: [game], game, cursor: null, page: 0, rows: 0, error: "", stopAt: 0 });
   await call(env, "/_stage/bx/state/put", { state });
   const run = (async () => {
     try { await walk(env, state, PAGES_PER_KICK); }
@@ -261,6 +266,14 @@ export async function serveBoxes(request, env, ctx, url, gate) {
     if (!(await gate(env, url.origin, url.searchParams.get("k")))) return new Response(JSON.stringify({ ok: false, error: "staff key required" }), { status: 403, headers: NO_STORE });
     const k = await kickBuild(env, ctx, game);
     return new Response(JSON.stringify(k), { headers: NO_STORE });
+  }
+  if (url.pathname === "/showcase/boxes.json" && url.searchParams.get("stop") === "1") {
+    if (!(await gate(env, url.origin, url.searchParams.get("k")))) return new Response(JSON.stringify({ ok: false, error: "staff key required" }), { status: 403, headers: NO_STORE });
+    const j = await call(env, "/_stage/bx/state");
+    const prev = (j && j.state) || {};
+    const state = Object.assign({}, prev, { game: null, queue: [], cursor: null, page: 0, rows: 0, lockUntil: 0, stopAt: Date.now() });
+    await call(env, "/_stage/bx/state/put", { state });
+    return new Response(JSON.stringify({ ok: true, stopped: prev.game || null, page: prev.page || 0 }), { headers: NO_STORE });
   }
   if (url.pathname === "/showcase/boxes.json" && url.searchParams.get("state") === "1") {
     if (!(await gate(env, url.origin, url.searchParams.get("k")))) return new Response(JSON.stringify({ ok: false, error: "staff key required" }), { status: 403, headers: NO_STORE });
