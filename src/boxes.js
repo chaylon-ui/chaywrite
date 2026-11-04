@@ -167,7 +167,8 @@ const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 // Walk up to `pages` pages of the build's current game; finalize when the game ends; move on.
 export async function walk(env, state, pages, fetcher) {
-  const cx = { env, fetch: fetcher || fetch };
+  // the global fetch needs its own `this` (a bare reference throws "Illegal invocation" on Workers)
+  const cx = { env, fetch: fetcher || ((u, o) => fetch(u, o)) };
   let did = 0;
   while (state.game && did < pages) {
     const r = await adminGql(cx, PRODUCTS_Q, { q: queryFor(state.game), after: state.cursor || null });
