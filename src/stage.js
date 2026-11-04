@@ -60,7 +60,6 @@
    Approved and rejected records are pruned after KEEP_MS by the alarm;
    staged ones are never pruned - a forgotten list should stay visible. */
 
-import { boxesRoom } from "./boxes.js";   // the four-row boxes behind the Showcase (2026-11-04)
 import { repriceCards, submitToBinderPos, cleanCards, conditionsFor } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
 import { buildEmail, buildDecisionEmail, buildCodeEmail, buildStaffBuylistEmail, sendEmail, emailConfigured } from "./stage-email.js";
@@ -321,7 +320,6 @@ export async function stageDoFetch(cx, request, url) {
   await armAlarm(cx);
   const p = url.pathname;
   const post = request.method === "POST";
-  if (p.startsWith("/_stage/bx/")) { const r = await boxesRoom(cx, p, post ? await bodyOf(request) : null, url); return doJson(r, r && r.status && !r.ok ? r.status : 200); }
   if (p === "/_stage/put" && post) {
     const rec = shapeRecord(await bodyOf(request), cx.now());
     if (!rec) return doJson({ ok: false, error: "customer, paymentType and cards[] required" }, 400);

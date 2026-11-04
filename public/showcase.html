@@ -230,6 +230,13 @@ header .walk button{margin-right:4px}
 .strip.up{transform:translateY(-6px) scale(1.04);z-index:2;box-shadow:0 8px 12px rgba(0,0,0,.5)}
 .divider{position:relative;height:26px;margin:6px 0 4px;background:var(--tape);border-radius:2px 8px 2px 2px;box-shadow:0 2px 3px rgba(0,0,0,.4);font-family:"Permanent Marker",cursive;font-size:11px;line-height:26px;color:#2a2320;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;clip-path:polygon(0 0,86% 0,100% 30%,100% 100%,0 100%)}
 .bstate{width:100%;text-align:center;font-family:Caveat,cursive;font-size:26px;color:#4a3a2e;padding:40px 10px}
+.divider.pick{cursor:pointer;height:30px;line-height:30px;font-size:12px;margin:5px 0}
+.divider.pick:hover,.divider.pick:focus-visible{background:#fff3cf;outline:0}
+.bhead .sets{display:none}.boxv.inset .bhead .sets{display:inline-block}
+.bnav{display:none;gap:6px;width:100%;justify-content:space-between}
+.boxv.inset .bnav{display:flex}
+.bnav button{background:none;border:1px dashed rgba(255,255,255,.3);color:var(--muted);border-radius:999px;padding:5px 12px;font-size:12px;font-family:"Permanent Marker",cursive}
+.bnav button:disabled{opacity:.3}
 .peek{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:17;display:none;align-items:center;gap:14px;background:rgba(10,8,9,.9);padding:14px;border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.8);max-width:calc(100vw - 24px)}
 .peek.on{display:flex}
 .pcard{position:relative;width:min(44vw,210px);aspect-ratio:63/88;border-radius:7px;background:#111;overflow:hidden;box-shadow:0 0 0 1.5px rgba(255,255,255,.3),0 18px 30px rgba(0,0,0,.7);cursor:pointer;animation:hover 5.5s ease-in-out infinite}
@@ -255,7 +262,7 @@ header .walk button{margin-right:4px}
 </div></div>
 <div class="map"><div class="shelves" id="mapShelves"></div><div class="bar"><i id="pos" style="--pos:0%"></i></div><div class="ctl"><button type="button" data-shelf="-1" aria-label="Shelf above">▲</button><button type="button" data-shelf="1" aria-label="Shelf below">▼</button></div><span class="n" id="count"></span></div>
 <div class="lift" id="lift"><button type="button" class="x" aria-label="Put it back">×</button><div class="in"><div class="stage" id="stage"><div class="hold" id="hold"><div class="big" id="big"><div class="art" id="liftArt"><img id="liftImg" alt=""><div class="noimg" id="liftNo"></div></div><div class="csticker off" id="liftCond"><span class="cink" id="liftCondInk"></span></div><div class="fsticker off" id="liftFoil"><span class="fink" id="liftFoilInk"></span></div><div class="psticker"><span class="pink" id="liftPrice"></span></div></div></div></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="copies" id="liftCopies"></div><div class="acts" id="liftActs"></div><div class="more" id="liftAlike"></div><div class="more" id="liftMore"></div></div></div></div>
-<div class="boxv" id="boxv"><div class="bhead"><button type="button" class="back" id="bback">‹ Back to the case</button><div class="btitle" id="btitle"></div><label class="bjump">Jump to a set <select id="bsets"></select></label></div><div class="lanes" id="lanes"></div><div class="peek" id="peek"><div class="pcard" id="pcard"><img id="pimg" alt=""><div class="pno" id="pno"></div><div class="psticker"><span class="pink" id="pprice"></span></div></div><div class="ptxt"><strong id="pname"></strong><span id="pset"></span><em>tap the card to pick it up</em></div></div></div>
+<div class="boxv" id="boxv"><div class="bhead"><button type="button" class="back" id="bback">‹ Back to the case</button><button type="button" class="back sets" id="bsetsBtn">‹ Sets</button><div class="btitle" id="btitle"></div><label class="bjump">Jump to a set <select id="bsets"></select></label><div class="bnav" id="bnav"><button type="button" id="bprev">‹ previous set</button><button type="button" id="bnext">next set ›</button></div></div><div class="lanes" id="lanes"></div><div class="peek" id="peek"><div class="pcard" id="pcard"><img id="pimg" alt=""><div class="pno" id="pno"></div><div class="psticker"><span class="pink" id="pprice"></span></div></div><div class="ptxt"><strong id="pname"></strong><span id="pset"></span><em>tap the card to pick it up</em></div></div></div>
 <svg class="inkdefs" width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ink" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 <script>
 (function () {
@@ -687,8 +694,10 @@ header .walk button{margin-right:4px}
       })
       .catch(function () { state.busy = false; stateEl.textContent = 'Could not reach the shop. Try again in a minute.'; });
   }
-  /* ---- the boxes behind the counter (owner, 2026-11-04) ---- */
-  var boxes = { game: '', list: null, cards: [], open: null, peek: -1 };
+  /* ---- the boxes behind the counter (owner, 2026-11-04) ----
+     Like search results: the set list is BinderPOS's own, a set's cards are
+     read from the shop's feed when the set is opened. Nothing is copied. */
+  var boxes = { game: '', list: null, cards: [], open: null, set: '', setIdx: -1, peek: -1, seq: 0 };
   var wall = $('#wall'), boxv = $('#boxv'), lanesEl = $('#lanes'), peekEl = $('#peek');
   function loadBoxes() {
     var game = state.game; wall.className = 'wall'; wall.innerHTML = ''; boxes.list = null;
@@ -699,43 +708,62 @@ header .walk button{margin-right:4px}
         boxes.game = d.game; boxes.list = d;
         wall.innerHTML = '<div class="bxs"><div class="sign">Browse our cards<br>by set &rarr;</div>' + d.boxes.map(function (b) {
           return '<button type="button" class="bx" data-n="' + b.n + '" aria-label="' + esc(d.label + ' box ' + b.n + ', ' + b.label) + '"><span class="lid"></span><span class="face"><span class="lbl">' + esc(d.label) + '</span><span class="rng">' + esc(b.label) + '</span></span></button>';
-        }).join('') + '</div><div class="plank"></div><div class="wnote">every ' + esc(d.label) + ' single we have, ' + Number(d.count).toLocaleString('en-CA') + ' of them, in the boxes behind the counter · tap a box, pick a set, thumb through</div>';
+        }).join('') + '</div><div class="plank"></div><div class="wnote">every ' + esc(d.label) + ' set we carry, ' + Number(d.count).toLocaleString('en-CA') + ' of them, in the boxes behind the counter · tap a box, pick a set, thumb through</div>';
         wall.className = 'wall on';
       }).catch(function () {});
   }
   wall.addEventListener('click', function (e) { var b = e.target.closest('.bx'); if (b) openBox(Number(b.getAttribute('data-n'))); });
   function expand(r, setName) {
-    return { name: r[0], set: setName, price: r[2], image: r[3] ? (r[3].charAt(0) === '/' ? 'https://cdn.shopify.com' + r[3] : r[3]) : null, url: 'https://exorgames.com/products/' + r[1], variantId: r[4] || null, condition: r[5] || '', foil: !!r[6], copies: r[7] || 0, game: boxes.game, color: null, type: '', text: '' };
+    return { name: r[0], set: setName, price: r[2], image: r[3] || null, url: 'https://exorgames.com/products/' + r[1], variantId: r[4] || null, condition: r[5] || '', foil: !!r[6], copies: r[7] || 0, game: boxes.game, color: null, type: '', text: '' };
   }
+  // A box opens on its dividers: one tab per set, spread over the four rows.
   function openBox(n) {
     var d = boxes.list; if (!d) return;
     var b = null; d.boxes.forEach(function (x) { if (x.n === n) b = x; }); if (!b) return;
-    boxes.open = b; boxes.cards = []; hidePeek();
-    $('#btitle').textContent = d.label + ' · box ' + b.n + ' · ' + b.label + ' · ' + Number(b.count).toLocaleString('en-CA') + ' cards';
-    $('#bsets').innerHTML = ''; lanesEl.innerHTML = '<div class="bstate">Lifting the lid…</div>';
-    boxv.classList.add('on');
-    fetch(W + '/showcase/box.json?game=' + encodeURIComponent(d.game) + '&n=' + n, { headers: { accept: 'application/json' } })
-      .then(function (r) { return r.json(); })
-      .then(function (j) { if (!j || !j.ok || boxes.open !== b) { if (boxes.open === b) lanesEl.innerHTML = '<div class="bstate">This box is in the back room right now - try again in a minute.</div>'; return; } buildLanes(j); })
-      .catch(function () { if (boxes.open === b) lanesEl.innerHTML = '<div class="bstate">Could not reach the shop. Try again in a minute.</div>'; });
+    boxes.open = b; boxes.set = ''; boxes.setIdx = -1; boxes.cards = []; hidePeek();
+    $('#bsets').innerHTML = '<option value="">' + b.sets.length + ' sets</option>' + b.sets.map(function (nm, i) { return '<option value="' + i + '">' + esc(nm) + '</option>'; }).join('');
+    boxv.classList.add('on'); showDividers();
   }
-  function closeBox() { boxv.classList.remove('on'); boxes.open = null; hidePeek(); lanesEl.innerHTML = ''; }
+  function showDividers() {
+    var b = boxes.open; if (!b) return;
+    boxes.set = ''; boxes.setIdx = -1; boxes.cards = []; hidePeek(); boxv.classList.remove('inset'); $('#bsets').value = '';
+    $('#btitle').textContent = boxes.list.label + ' · box ' + b.n + ' · ' + b.label + ' · ' + b.sets.length + ' sets';
+    var per = Math.max(1, Math.ceil(b.sets.length / 4)), html = ['', '', '', ''];
+    b.sets.forEach(function (nm, i) { html[Math.min(3, Math.floor(i / per))] += '<div class="divider pick" data-set="' + i + '" title="' + esc(nm) + '">' + esc(nm) + '</div>'; });
+    lanesEl.innerHTML = html.map(function (h) { return '<div class="brow">' + h + '</div>'; }).join('');
+  }
+  // A set opens into the four rows: its cards, alphabetical, read from the shop's feed now.
+  function openSet(i) {
+    var b = boxes.open; if (!b || !b.sets[i]) return;
+    var nm = b.sets[i], seq = ++boxes.seq;
+    boxes.set = nm; boxes.setIdx = i; boxes.cards = []; hidePeek(); boxv.classList.add('inset'); $('#bsets').value = String(i);
+    $('#btitle').textContent = boxes.list.label + ' · ' + nm; $('#bprev').disabled = i <= 0; $('#bnext').disabled = i >= b.sets.length - 1;
+    lanesEl.innerHTML = '<div class="bstate">Lifting out ' + esc(nm) + '…</div>';
+    fetch(W + '/showcase/set.json?game=' + encodeURIComponent(boxes.game) + '&set=' + encodeURIComponent(nm), { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (seq !== boxes.seq) return;
+        if (!j || !j.ok) { lanesEl.innerHTML = '<div class="bstate">The shop feed did not answer for ' + esc(nm) + ' - try again in a minute.</div>'; return; }
+        buildLanes(nm, j.rows || []);
+      })
+      .catch(function () { if (seq === boxes.seq) lanesEl.innerHTML = '<div class="bstate">Could not reach the shop. Try again in a minute.</div>'; });
+  }
+  function closeBox() { boxv.classList.remove('on'); boxv.classList.remove('inset'); boxes.open = null; boxes.set = ''; boxes.cards = []; hidePeek(); lanesEl.innerHTML = ''; }
   $('#bback').addEventListener('click', closeBox);
-  // Four rows of card tops: the box's cards in set order, alphabetical inside
-  // a set, a tabbed divider where each set starts; the rows split evenly.
-  function buildLanes(j) {
-    var cards = [], starts = [];
-    j.sets.forEach(function (s, si) { starts.push({ i: cards.length, name: s.name, si: si }); s.rows.forEach(function (r) { cards.push(expand(r, s.name)); }); });
+  $('#bsetsBtn').addEventListener('click', showDividers);
+  $('#bprev').addEventListener('click', function () { if (boxes.setIdx > 0) openSet(boxes.setIdx - 1); });
+  $('#bnext').addEventListener('click', function () { if (boxes.open && boxes.setIdx < boxes.open.sets.length - 1) openSet(boxes.setIdx + 1); });
+  // Four rows of card tops, the set's divider at the top of the first row.
+  function buildLanes(setName, rows) {
+    var cards = rows.map(function (r) { return expand(r, setName); });
     boxes.cards = cards;
-    var per = Math.max(1, Math.ceil(cards.length / 4)), html = ['', '', '', ''], startAt = {};
-    starts.forEach(function (s) { startAt[s.i] = s; });
+    $('#btitle').textContent = boxes.list.label + ' · ' + setName + ' · ' + cards.length + ' card' + (cards.length === 1 ? '' : 's') + ' in stock';
+    if (!cards.length) { lanesEl.innerHTML = '<div class="bstate">Nothing from ' + esc(setName) + ' in stock right now.</div>'; return; }
+    var per = Math.max(1, Math.ceil(cards.length / 4)), html = ['<div class="divider" title="' + esc(setName) + '">' + esc(setName) + '</div>', '', '', ''];
     cards.forEach(function (c, i) {
-      var L = Math.min(3, Math.floor(i / per)), st = startAt[i];
-      if (st) html[L] += '<div class="divider" data-set="' + st.si + '" title="' + esc(st.name) + '">' + esc(st.name) + '</div>';
-      html[L] += '<div class="strip' + (c.foil ? ' foil' : '') + '" data-i="' + i + '" title="' + esc(c.name + ' · ' + c.set + ' · ' + money(c.price)) + '">' + esc(c.name) + '</div>';
+      html[Math.min(3, Math.floor(i / per))] += '<div class="strip' + (c.foil ? ' foil' : '') + '" data-i="' + i + '" title="' + esc(c.name + ' · ' + c.set + ' · ' + money(c.price)) + '">' + esc(c.name) + '</div>';
     });
     lanesEl.innerHTML = html.map(function (h) { return '<div class="brow">' + h + '</div>'; }).join('');
-    $('#bsets').innerHTML = '<option value="">' + (j.sets.length + ' sets') + '</option>' + j.sets.map(function (s, si) { return '<option value="' + si + '">' + esc(s.name) + ' (' + s.rows.length + ')</option>'; }).join('');
     lazyTops();
   }
   // The card tops: a thin crop of each card's own image, loaded as the rows
@@ -754,10 +782,7 @@ header .walk button{margin-right:4px}
     }, { root: null, rootMargin: '200px 0px' });
     lanesEl.querySelectorAll('.strip').forEach(function (el) { topsObs.observe(el); });
   }
-  $('#bsets').addEventListener('change', function () {
-    var v = this.value; if (v === '') return;
-    var dv = lanesEl.querySelector('.divider[data-set="' + v + '"]'); if (dv) dv.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
-  });
+  $('#bsets').addEventListener('change', function () { if (this.value !== '') openSet(Number(this.value)); });
   // A tap on a card top stands the card up (the peek); a tap on the standing card picks it up.
   function showPeek(i) {
     var c = boxes.cards[i]; if (!c) return;
@@ -770,6 +795,8 @@ header .walk button{margin-right:4px}
   }
   function hidePeek() { peekEl.classList.remove('on'); boxes.peek = -1; lanesEl.querySelectorAll('.strip.up').forEach(function (el) { el.classList.remove('up'); }); }
   lanesEl.addEventListener('click', function (e) {
+    var dv = e.target.closest('.divider.pick');
+    if (dv) { openSet(Number(dv.getAttribute('data-set'))); return; }
     var st = e.target.closest('.strip');
     if (!st) { hidePeek(); return; }
     var i = Number(st.getAttribute('data-i'));
@@ -778,7 +805,7 @@ header .walk button{margin-right:4px}
   });
   $('#pcard').addEventListener('click', function () { var c = boxes.cards[boxes.peek]; if (!c) return; hidePeek(); askOrientation(); lift(c); });
   peekEl.addEventListener('click', function (e) { if (e.target === peekEl) hidePeek(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && boxv.classList.contains('on') && !$('#lift').classList.contains('on')) { if (boxes.peek >= 0) hidePeek(); else closeBox(); } });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && boxv.classList.contains('on') && !$('#lift').classList.contains('on')) { if (boxes.peek >= 0) hidePeek(); else if (boxes.set) showDividers(); else closeBox(); } });
   window.addEventListener('resize', function () { if (boxv.classList.contains('on') && boxes.cards.length) lazyTops(); });
 
   window.addEventListener('resize', function () { if (state.shelves.length) { var p = state.maxX ? state.x / state.maxX : 0; render(); state.x = p * state.maxX; place(); } });
