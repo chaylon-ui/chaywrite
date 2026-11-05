@@ -23,6 +23,14 @@ on:
         description: "Also GET this worker path with the session (e.g. /autoprice/pcimg?id=964156) and print status, location and the first 300 chars"
         required: false
         default: ""
+      find:
+        description: "Print the report rows whose title matches this regex: id, title, graded, cert, psa (no customer data in rows)"
+        required: false
+        default: ""
+      post:
+        description: "POST this JSON body to /autoprice/control with the session (e.g. {\"action\":\"cert\",\"id\":\"gid://shopify/Product/123\"}) and print the answer"
+        required: false
+        default: ""
 jobs:
   peek:
     runs-on: ubuntu-latest
@@ -36,6 +44,8 @@ jobs:
           ROWS: ${{ inputs.rows }}
           RESAVE: ${{ inputs.resave }}
           GET: ${{ inputs.get }}
+          FIND: ${{ inputs.find }}
+          POST: ${{ inputs.post }}
         run: |
           if [ -z "$U" ] || [ -z "$P" ]; then echo "AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets not set"; exit 1; fi
           cat > /tmp/peek.mjs <<'JS'
@@ -63,6 +73,8 @@ jobs:
           const pid = process.env.PID && 'gid://shopify/Product/' + process.env.PID;
           const maskRow = (row) => row && row.lastChange && row.lastChange.who ? { ...row, lastChange: { ...row.lastChange, who: mask(row.lastChange.who) } } : row;
           if (pid) { const row = maskRow(rows.find((x) => x.id === pid)); console.log('ROW', row ? JSON.stringify(row).slice(0, 3000) : 'not in the report'); }
+          if (process.env.FIND) { let re = null; try { re = new RegExp(process.env.FIND, 'i'); } catch { console.log('find is not a regex'); } if (re) for (const x of rows.filter((x) => re.test(x.title || '')).slice(0, 12)) console.log('FOUND', JSON.stringify({ id: String(x.id).replace(/\D/g, ''), title: x.title, action: x.action, graded: x.graded, cert: x.cert || null, psa: x.psa || null, psaNote: x.psaNote || null }).slice(0, 900)); }
+          if (process.env.POST) { let bodyJ = null; try { bodyJ = JSON.parse(process.env.POST); } catch { console.log('post is not JSON'); } if (bodyJ) { const t0 = Date.now(); const c = await fetch(W + '/autoprice/control', { method: 'POST', headers: { ...H, 'content-type': 'application/json' }, body: JSON.stringify(bodyJ) }); console.log('POST', bodyJ.action, '->', c.status, 'in', Date.now() - t0, 'ms |', (await c.text()).replace(/\s+/g, ' ').slice(0, 2500)); } }
           if (pid && process.env.RESAVE) {
             let fields = {}; try { fields = JSON.parse(process.env.RESAVE); } catch { console.log('resave is not JSON'); }
             const t0 = Date.now();
