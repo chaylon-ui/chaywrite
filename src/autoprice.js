@@ -276,13 +276,47 @@ export function pcPickGraded(g, products) {
    grade that disagrees with the title is flagged on the row. The lookup itself
    is src/graded.js certLookup (the intake screen's), one call per certificate
    ever: the answer is kept in the room (psa:<cert>). */
-export function psaCertOf(grader, v, mf) {
-  if (grader !== "PSA") return null;
-  for (const raw of [mf && mf.cert_number, v && v.barcode, v && String(v.sku || "").replace(/^PSA-/i, "")]) {
+/* The certificate on a graded listing, for any grader (owner 2026-11-05: the
+   graded tool's cert lookup and detection in the auto-pricer): the listing's
+   certificate field first, then the barcode, then a SKU like PSA-25577619.
+   Only PSA has a lookup we can use (src/graded.js certLookup); the others
+   show the number and a link to the grader's page. */
+export const CERT_SOURCES = { cert_number: "the listing's certificate field", barcode: "the barcode", sku: "the SKU" };
+const CERT_PAGES = { PSA: (n) => "https://www.psacard.com/cert/" + n, CGC: (n) => "https://www.cgccards.com/certlookup/" + n + "/" };
+export const certUrl = (c) => (c && CERT_PAGES[c.grader] ? CERT_PAGES[c.grader](c.number) : null);
+export function certOf(grader, v, mf) {
+  const g = String(grader || "").toUpperCase();
+  if (!g) return null;
+  const tries = [["cert_number", mf && mf.cert_number], ["barcode", v && v.barcode], ["sku", v && String(v.sku || "").replace(new RegExp("^" + g + "[-\\s]*", "i"), "")]];
+  for (const [source, raw] of tries) {
     const n = String(raw || "").replace(/\D/g, "");
-    if (/^\d{6,12}$/.test(n)) return n;
+    if (/^\d{6,12}$/.test(n)) return { grader: g, number: n, source, url: CERT_PAGES[g] ? CERT_PAGES[g](n) : null };
   }
   return null;
+}
+export function psaCertOf(grader, v, mf) {
+  const c = grader === "PSA" ? certOf(grader, v, mf) : null;
+  return c ? c.number : null;
+}
+// PSA's record of a certificate, one lookup per certificate ever (kept in the
+// room as psa:<cert>); a "no record" answer is asked again after a week, a
+// token, allowance or network failure next time. force = ask PSA now.
+async function psaRecord(cx, cert, force) {
+  let c = force ? null : await cx.storage.get("psa:" + cert);
+  if (c && !c.ok && cx.now() - (c.at || 0) > 7 * 86400e3) c = null;
+  if (!c) {
+    const { certLookup } = await import("./graded.js");
+    c = { ...(await certLookup(cx, "PSA", cert)), at: cx.now() };
+    if (c.ok || c.none) await cx.storage.put("psa:" + cert, c);
+  }
+  return c;
+}
+// What the row shows of PSA's answer, with the parsed title's grade checked against it.
+export function psaView(cert, c, g) {
+  const base = { cert: cert.number, source: cert.source, url: certUrl(cert), at: (c && c.at) || null };
+  if (!c || !c.ok) return { ...base, ok: false, error: (c && c.error) || "PSA did not answer", none: !!(c && c.none), limited: !!(c && c.limited) };
+  const r = psaRefine(g || {}, c);
+  return { ...base, ok: true, grade: c.grade || "", gradeText: c.gradeText || "", name: c.name || "", number: c.number || "", set: c.set || "", variety: c.variety || "", year: c.year || "", game: c.game || "", japanese: !!c.japanese, population: c.population == null ? null : c.population, higher: c.higher == null ? null : c.higher, note: r.note, mismatch: r.mismatch };
 }
 export function psaRefine(g, c) {
   if (!g || !c || !c.ok) return { g, note: null, mismatch: null };
@@ -1118,7 +1152,7 @@ export function readProduct(node) {
     tcgId: num(mf.ap_tcg_id), pcId: num(mf.ap_pc_id), tcgIdMeta: num(mf.ap_tcg_id),
     compMode: /^(cap|off|skip|follow)$/.test(String(mf.ap_comp || "")) ? String(mf.ap_comp) : null,
     anchor: readAnchor(mf.ap_anchor),
-    graded, psaCert: psaCertOf(graded && graded.grader, v, mf),
+    graded, psaCert: psaCertOf(graded && graded.grader, v, mf), cert: certOf(graded && graded.grader, v, mf),
     images: readImages(node),
   };
 }
@@ -1241,25 +1275,19 @@ async function phasePrices(cx, run, deadline) {
       if (!p) continue;
       try {
         let j = null;
+        // a PSA slab with its certificate: PSA's own record (one lookup per certificate, kept in the room) is shown on the row and refines the search
+        if (p.graded && p.cert && p.cert.grader === "PSA") {
+          try {
+            const c = await psaRecord(cx, p.cert.number, false);
+            p.psa = psaView(p.cert, c, p.graded);
+            if (!p.psa.ok) p.psaNote = p.psa.limited ? "PSA's daily lookup allowance is used up: matched from the title" : "PSA: " + p.psa.error;
+          } catch (e) { p.psaNote = "PSA lookup failed: " + msg(e); }
+        }
         if (p.graded && !p.pcId) {
           // Graded: search by card name + number, pick, then fetch the columns.
           let g = p.graded;
           if (!g.name) { p.pcMiss = "could not read the card name from the title"; continue; }
-          // a PSA slab with its certificate: PSA's own record of the card refines the search (one lookup per certificate, kept in the room)
-          if (g.grader === "PSA" && p.psaCert) {
-            try {
-              let c = await cx.storage.get("psa:" + p.psaCert);
-              if (c && !c.ok && cx.now() - (c.at || 0) > 7 * 86400e3) c = null;   // a "no record" answer (a barcode that is no certificate) is asked again after a week
-              if (!c) {
-                const { certLookup } = await import("./graded.js");
-                c = await certLookup(cx, "PSA", p.psaCert);
-                if (c && (c.ok || c.none)) await cx.storage.put("psa:" + p.psaCert, { ...c, at: cx.now() });   // a token, allowance or network failure is asked again next run
-              }
-              if (c && c.ok) { const r = psaRefine(g, c); g = r.g; p.psa = { cert: p.psaCert, note: r.note, mismatch: r.mismatch }; }
-              else if (c && c.limited) p.psaNote = "PSA's daily lookup allowance is used up: matched from the title";
-              else if (c && c.error) p.psaNote = "PSA: " + c.error;
-            } catch (e) { p.psaNote = "PSA lookup failed: " + msg(e); }
-          }
+          if (p.psa && p.psa.ok) g = psaRefine(g, p.psa).g;
           const s = await call(PC_SEARCH + "?q=" + encodeURIComponent([g.name, g.number].filter(Boolean).join(" ")));
           await cx.sleep(PC_GAP_MS);
           const hit = s && s.status === "success" ? pcPickGraded(g, s.products) : null;
@@ -1469,7 +1497,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId, images: p.images || [],
       variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null, variantIds: p.variantIds || null,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
-      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null, psa: p.psa || null, psaNote: p.psaNote || null,
+      pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null, psa: p.psa || null, psaNote: p.psaNote || null, cert: p.cert || null,
       settings: { floor: p.floor, markupPct: p.markupPct, round: p.round === "auto" ? "" : p.round, comp: p.compMode || "", tcgId: p.tcgIdMeta, pcId: p.pcId, variant: p.variantMeta || "", anchor: p.anchor ? String(p.anchor.price) : "" }, ...d });
     if (d.action === "skip") run.skipped++; else run.priced++;
   }
@@ -1577,6 +1605,71 @@ export function overLimit(current, price, limits) {
 }
 const limitText = (l) => `that is a ${Math.abs(l.pct)}% ${l.kind}; your account may ${l.kind} a price by at most ${l.limit}% (an admin can change that on 9Pocket › Admin)`;
 
+/* Certificate actions (owner 2026-11-05). "cert": save a typed certificate on
+   the listing (exor.cert_number) and/or ask PSA now; the row's certificate
+   block is answered as HTML so the page can swap it in place. "cert-read":
+   read the slab's label from the listing's first photo with the graded
+   tool's label reader (Claude vision), and hand back what it read so the
+   number can be checked and saved. */
+async function certAction(cx, b) {
+  const pid = String((b && b.id) || "");
+  if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
+  const rep = (await cx.storage.get("ap:report")) || { rows: [] };
+  const row = (rep.rows || []).find((r) => r.id === pid);
+  if (!row) return { ok: false, error: "that product is not in the last report" };
+  if (!row.graded) return { ok: false, error: "not a graded listing" };
+  const rawTyped = b && b.cert != null ? String(b.cert).trim() : "";
+  const typed = rawTyped.replace(/\D/g, "");
+  if (rawTyped && !/^\d{6,12}$/.test(typed)) return { ok: false, error: "a certificate number is 6 to 12 digits" };
+  if (typed) {
+    try {
+      const r = await adminGql(cx, MF_SET, { m: [{ ownerId: pid, namespace: "exor", key: "cert_number", type: "single_line_text_field", value: typed }] });
+      const errs = (r.data.metafieldsSet || {}).userErrors || [];
+      if (errs.length) return { ok: false, error: errs.map((x) => x.message).join("; ") };
+    } catch (e) { return { ok: false, error: "could not save the certificate: " + msg(e) }; }
+    row.cert = { grader: row.graded.grader, number: typed, source: "cert_number" };
+  }
+  if (!row.cert) return { ok: false, error: "no certificate on this listing: type it in" };
+  row.cert.url = certUrl(row.cert);
+  row.psa = null; row.psaNote = null;
+  let flash = row.cert.grader + " " + row.cert.number + (typed ? " saved on the listing" : "");
+  if (row.cert.grader === "PSA") {
+    try {
+      const c = await psaRecord(cx, row.cert.number, true);
+      row.psa = psaView(row.cert, c, row.graded);
+      if (!row.psa.ok) row.psaNote = "PSA: " + row.psa.error;
+    } catch (e) { row.psaNote = "PSA lookup failed: " + msg(e); }
+    flash = row.psa && row.psa.ok ? "PSA " + row.cert.number + ": " + [row.psa.name, row.psa.gradeText].filter(Boolean).join(" \u00b7 ") + (row.psa.mismatch ? " \u2014 " + row.psa.mismatch : "") : (row.psaNote || flash);
+    // the grade alert follows the certificate
+    const keep = String(row.alert || "").split(" \u00b7 ").filter((x) => x && !/^PSA certificate/.test(x));
+    if (row.psa && row.psa.mismatch) keep.push(row.psa.mismatch);
+    row.alert = keep.length ? keep.join(" \u00b7 ") : null;
+  } else flash += " (no lookup for " + row.cert.grader + " yet)";
+  await cx.storage.put("ap:report", rep);
+  return { ok: true, flash, cert: row.cert, psa: row.psa, psaNote: row.psaNote || null, alert: row.alert || null, html: certSection(row, { psaOn: true }) };
+}
+async function certRead(cx, b) {
+  const pid = String((b && b.id) || "");
+  if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
+  const rep = (await cx.storage.get("ap:report")) || { rows: [] };
+  const row = (rep.rows || []).find((r) => r.id === pid);
+  if (!row) return { ok: false, error: "that product is not in the last report" };
+  const im = (row.images || [])[0];
+  if (!im || !im.u) return { ok: false, error: "no photo on the listing to read" };
+  const u = /^https?:/.test(im.u) ? im.u : CDN_PREFIX + im.u;
+  let blob;
+  try {
+    const r = await cx.fetch(u + (u.includes("?") ? "&" : "?") + "width=1600", { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error("photo HTTP " + r.status);
+    blob = await r.blob();
+  } catch (e) { return { ok: false, error: "could not fetch the photo: " + msg(e) }; }
+  const { readLabel } = await import("./graded.js");
+  const f = await readLabel(cx, blob);
+  if (!f || !f.ok) return { ok: false, error: (f && f.error) || "could not read the label" };
+  const read = { grader: f.grader || "", grade: f.grade || "", cert: String(f.cert || "").replace(/\D/g, ""), name: f.name || "", number: f.number || "", set: f.set || "", confidence: f.confidence == null ? null : f.confidence };
+  const flash = "Read from the photo: " + [read.grader && read.grade ? read.grader + " " + read.grade : read.grader, read.cert ? "cert " + read.cert : "no certificate seen", read.name, read.number ? "#" + read.number : "", read.set].filter(Boolean).join(" \u00b7 ");
+  return { ok: true, read, flash };
+}
 async function publishPrice(cx, b) {
   const pid = String((b && b.id) || "");
   if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
@@ -1784,7 +1877,7 @@ export async function statusOf(cx) {
 
 // Who did what on the page, newest first, for the Activity table: the
 // owner can see which account published or changed what (2026-09-21).
-const AUDITED = { publish: 1, keep: 1, "publish-all": 1, mode: 1, config: 1, run: 1, settings: 1, add: 1, remove: 1 };
+const AUDITED = { publish: 1, keep: 1, "publish-all": 1, mode: 1, config: 1, run: 1, settings: 1, add: 1, remove: 1, cert: 1, "cert-read": 1 };
 async function audit(cx, b, res) {
   const action = String((b && b.action) || "");
   if (!AUDITED[action] || !res || !res.ok) return;
@@ -1798,6 +1891,8 @@ async function audit(cx, b, res) {
   if (action === "settings") e.detail = "per-product settings";
   if (action === "add") e.detail = "added to the list";
   if (action === "remove") e.detail = "removed from the list";
+  if (action === "cert") e.detail = "certificate " + ((res.cert && res.cert.grader + " " + res.cert.number) || "") + (res.psa ? (res.psa.ok ? " looked up" : ": " + res.psa.error) : "");
+  if (action === "cert-read") e.detail = "label read from the photo" + (res.read && res.read.cert ? ": cert " + res.read.cert : "");
   const list = (await cx.storage.get("ap:audit")) || [];
   list.unshift(e);
   await cx.storage.put("ap:audit", list.slice(0, 80));
@@ -1827,6 +1922,8 @@ async function controlAction(cx, b) {
   if (action === "run") return kickRun(cx, { apply: cfg.mode === "apply" && b.apply === "1" });
   if (action === "publish") return publishPrice(cx, b);
   if (action === "keep") return keepPrice(cx, b);
+  if (action === "cert") return certAction(cx, b);
+  if (action === "cert-read") return certRead(cx, b);
   if (action === "publish-all") {
     // Every staged row the page is showing (one game's tab, or all of them),
     // at the suggested price, newest report first. Capped per press so the
@@ -2044,6 +2141,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
     if (body.action === "ntfy-test") { try { const j = JSON.parse(text); const via = [j.ntfyOk ? "ntfy" : "", j.emailed ? "emailed to " + (j.to || []).join(", ") : ""].filter(Boolean).join("; "); flash = j.ok ? "Test digest sent (" + via + "): " + (j.digest && j.digest.title) + (j.emailError ? " · email failed: " + j.emailError : "") : j.relay ? "Direct push refused (" + (j.error || "") + ")" + (j.emailError ? " and the email failed (" + j.emailError + ")" : "") + ". Queued for the relay: it goes out from GitHub on the nightly relay run, or now if you run the ntfy-relay workflow." : "Test digest failed: " + (j.error || j.emailError || "unknown"); } catch { flash = "Test digest: no answer"; } }
     if (body.action === "publish") { try { const j = JSON.parse(text); flash = j.ok ? "Live: " + String(body.title || "that product").slice(0, 60) + " is now $" + Number(j.price).toFixed(2) + (j.anchored ? " and will track the market from there" : "") : "Not published: " + (j.error || "unknown"); } catch { flash = "Publish: no answer"; } }
     if (body.action === "keep") { try { const j = JSON.parse(text); flash = j.ok ? "Kept today's price; that suggestion will not be offered again." : "Keep failed: " + (j.error || "unknown"); } catch { flash = "Keep: no answer"; } }
+    if (body.action === "cert" || body.action === "cert-read") { try { const j = JSON.parse(text); flash = j.ok ? j.flash : "Certificate: " + (j.error || "failed"); } catch { flash = "Certificate: no answer"; } }
     if (body.action === "publish-all") { try { const j = JSON.parse(text); flash = j.ok ? j.published + " price" + (j.published === 1 ? "" : "s") + " published" + (j.failed ? ", " + j.failed + " failed (" + j.errors.join("; ").slice(0, 120) + ")" : "") + (j.overLimit ? ", " + j.overLimit + " left waiting: over your limit" : "") + (j.left ? ", " + j.left + " still waiting - press again" : "") : "Publish all failed: " + (j.error || "unknown"); } catch { flash = "Publish all: no answer"; } }
     const qs = [...qsBase, flash ? "flash=" + encodeURIComponent(flash) : ""].filter(Boolean).join("&");
     // json=1: the page posted the form itself (fetch) to update the row in
@@ -2060,7 +2158,8 @@ export async function serveAutoprice(request, env, url, staffOk) {
   const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
-  return html(renderPage(status, report, { q, game, view: pageView, everything, found, user: access.name, perms: access, configured, flash }));
+  const { psaConfigured, visionConfigured } = await import("./graded.js");
+  return html(renderPage(status, report, { q, game, view: pageView, everything, found, user: access.name, perms: access, configured, flash, psaOn: psaConfigured(env), vision: visionConfigured(env) }));
 }
 
 // Which permission each control action needs (src/stage-auth.js AP_PERMS).
@@ -2110,6 +2209,30 @@ function photoStrip(r) {
   return `<section class="full pics"><h4>Photos <span class="sub">click to zoom</span></h4><div class="strip">${ims.map((im, i) => `<a class="thumb lg" href="${esc(imageUrl(im))}" data-zoom="${esc(imageUrl(im, 1600))}" data-ttl="${esc(r.title)}" title="Zoom in"><img src="${esc(imageUrl(im, 320))}" alt="${esc(im.a || r.title + " photo " + (i + 1))}" loading="lazy"></a>`).join("")}</div></section>`;
 }
 
+// The certificate block of a graded row: the number and where it came from,
+// what PSA says of it, the grade check, and the ways to add or re-ask one.
+const agoText = (ms) => { if (!ms) return ""; const m = Math.round((Date.now() - ms) / 60000); return m < 2 ? "just now" : m < 60 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
+export function certSection(r, o) {
+  const opt = o || {}, g = r.graded || {}, c = r.cert, p = r.psa;
+  const hid = (n, v) => `<input type="hidden" name="${n}" value="${esc(v)}">`;
+  const form = (action, inner, label) => `<form method="post" action="/autoprice/control" class="inl certf">${hid("action", action)}${hid("id", r.id)}${hid("title", r.title)}${opt.keep || ""}${inner}<button type="submit">${label}</button></form>`;
+  let body = "";
+  if (c) {
+    body += `<div class="certline"><b>${esc(c.grader)} ${esc(c.number)}</b> <span class="sub">from ${esc(CERT_SOURCES[c.source] || c.source || "the listing")}</span>${c.url ? ` · <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.grader)}'s page ↗</a>` : ""}</div>`;
+    if (c.grader === "PSA") {
+      if (p && p.ok) {
+        body += `<div class="certsays">PSA says: <b>${esc(p.name)}</b>${p.number ? " · #" + esc(p.number) : ""}${p.variety ? " · " + esc(p.variety) : ""}${p.set ? " · " + esc(p.set) : ""}${p.year ? " · " + esc(p.year) : ""}${p.gradeText ? " · <b>" + esc(p.gradeText) + "</b>" : ""}${p.population != null ? " · pop " + esc(p.population) + (p.higher != null ? " (" + esc(p.higher) + " higher)" : "") : ""}</div>`;
+        body += p.mismatch ? `<div class="warn-t">${esc(p.mismatch)}</div>` : `<div class="sub ok-t">the grade matches the listing${g.grade ? " (PSA " + esc(g.grade) + ")" : ""}</div>`;
+        body += `<div class="sub">looked up ${esc(agoText(p.at))}</div>`;
+      } else if (p && !p.ok) body += `<div class="warn-t">${esc(p.error)}</div><div class="sub">${p.none ? "the number on the listing is not a PSA certificate: check it and type the right one below" : p.limited ? "try again tomorrow" : "tried " + esc(agoText(p.at))}</div>`;
+      else body += `<div class="sub">${opt.psaOn === false ? "PSA lookups are not switched on (no PSA token on the worker)." : "not looked up yet"}</div>`;
+      body += form("cert", "", p ? "Look up again" : "Look up now");
+    } else body += `<div class="sub">${esc(c.grader)} has no certificate lookup we can use yet; the number stays on the listing.</div>`;
+  } else body += `<div class="sub">No certificate on this listing (looked in the certificate field, the barcode and the SKU).</div>`;
+  body += form("cert", `<input name="cert" inputmode="numeric" placeholder="${c ? "another number" : "certificate number"}" size="14" required>`, c ? "Replace &amp; look up" : g.grader === "PSA" ? "Save &amp; look up" : "Save on the listing");
+  if ((r.images || []).length && opt.vision !== false) body += form("cert-read", "", "Read the label from the photo");
+  return body;
+}
 export function renderPage(s, rep, view) {
   const cfg = s.config || DEFAULT_CONFIG;
   const v = view || {};
@@ -2319,7 +2442,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
 ${photoStrip(r)}<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}${r.reason && r.reason !== "market" || r.writeError ? `<div class="muted rsn">${r.reason && r.reason !== "market" ? esc(r.reason) : ""}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>` : ""}${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}</section>
 <section><h4>Today</h4><div class="p-now"><b>${money(r.current)}</b> <span class="sub">cost ${r.cost != null ? money(r.cost) : "—"}</span></div>${marginLine(r.marginNow, r.current, r.cost)}<h4>${esc(COMP.name)}</h4>${compCell(r)}<h4>Last change</h4>${change(r.lastChange)}<h4>Check by hand</h4>${reviewLinks(r)}</section>
 <section class="setsec"><h4>Settings <span class="sub">${esc(custom.length ? custom.join(" · ") : "page defaults")}</span></h4>${P.settings ? settingsForm(r) : '<div class="sub">your account cannot change them</div>'}</section>
-${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
+${r.graded ? `<section class="full certsec"><h4>Certificate</h4>${certSection(r, { keep: keepView(), psaOn: v.psaOn !== false, vision: v.vision !== false })}</section>` : ""}${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
 </div></details>`;
     return `<article class="item s-${sk}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}" data-q="${esc(String(r.title + " " + r.game).toLowerCase())}">
 <div class="line"><div class="c-prod${(r.images || []).length ? " has-pic" : ""}">${photoThumb(r)}<div class="c-txt"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div></div>
@@ -2384,6 +2507,7 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .bar .filt{margin-left:auto;width:220px}.pubbar{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:10px 14px;border-radius:10px;background:var(--wait-bg);color:var(--wait);font-size:13px}.pubbar b{font-weight:700}.pubbar form{margin-left:auto}
 .grp{margin:18px 2px 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.grp span{font-weight:500}
 .list{display:flex;flex-direction:column;gap:6px}.item{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}.item.alerted{border-left:3px solid var(--warn)}.item.awaiting{border-left:3px solid var(--wait)}.item.alerted.awaiting{border-left-color:var(--warn)}
+.certsec .certline{margin-bottom:4px}.certsec .certsays{line-height:1.45;margin-bottom:4px}.certsec .ok-t{color:#2e8b57}.certsec form.certf{margin:6px 8px 0 0}.certsec input[name=cert]{width:11em;margin-right:6px}
 .line,.lhead{display:grid;grid-template-columns:minmax(0,1fr) 150px 170px 150px 230px;gap:14px;align-items:center;padding:10px 44px 10px 14px}.lhead{padding-top:0;padding-bottom:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.lhead span:nth-child(2),.lhead span:nth-child(3){text-align:right}.mg{white-space:nowrap}.two{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.c-prod .ttl{font-weight:600;color:var(--ink);text-decoration:none}.c-prod .ttl:hover{color:var(--acc);text-decoration:underline}.meta{font-size:12px;color:var(--mut);margin-top:2px}.warn{color:var(--warn);font-size:12px;font-weight:600;margin-top:3px}.warn-t{color:var(--warn);font-weight:600}
 .c-prod.has-pic{display:flex;gap:10px;align-items:flex-start;min-width:0}.c-prod .c-txt{min-width:0;flex:1}.thumb{display:block;flex:none;width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--soft);border:1px solid var(--line);cursor:zoom-in}.thumb img{width:100%;height:100%;object-fit:cover;display:block}.thumb.lg{width:120px;height:160px}.strip{display:flex;gap:8px;flex-wrap:wrap}
 .zoom{position:fixed;inset:0;z-index:100;background:rgba(8,10,12,.92);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:zoom-in}.zoom[hidden]{display:none}.zoom img{max-width:94vw;max-height:88vh;object-fit:contain;transition:transform .12s;transform-origin:center;user-select:none}.zoom.in{cursor:zoom-out}.zoom.in img{transform:scale(2.5)}.zoom .cap{position:absolute;left:0;right:0;bottom:12px;text-align:center;color:#e6e9ec;font-size:13px;pointer-events:none}.zoom .x{position:absolute;top:10px;right:14px;color:#fff;font:700 26px/1 inherit;background:none;border:0;cursor:pointer}
@@ -2428,7 +2552,7 @@ document.addEventListener("keydown",function(e){if(e.key==="/"&&f&&document.acti
 // a click on the empty part of a row opens its panel
 document.addEventListener("click",function(e){var line=e.target.closest(".line");if(!line||e.target.closest("a,button,input,select,label,form,summary"))return;var d=line.parentNode.querySelector(".more");if(d)d.open=!d.open});
 // a form posted from a row folds its panel (owner 2026-11-02: "when I make a change in this drop down, it collapses the drop down on submit/publish")
-document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.closest||!/^post$/i.test(f.getAttribute("method")||"get"))return;var art=f.closest("article.item");if(!art)return;var d=art.querySelector("details.more");if(d)d.open=false});
+document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.closest||!/^post$/i.test(f.getAttribute("method")||"get"))return;if(f.classList.contains("certf"))return;var art=f.closest("article.item");if(!art)return;var d=art.querySelector("details.more");if(d)d.open=false});
 // PriceCharting candidates (owner 2026-11-02): a click on a card shows their photo beside ours, each labelled
 (function(){var v=document.getElementById("cmpv");if(!v)return;var panes=v.querySelectorAll(".pane");
 function fill(p,src,ttl,none){var t=p.querySelector(".ttl"),a=p.querySelector(".pic");t.textContent=ttl||"";a.removeAttribute("data-zoom");if(!src){a.innerHTML='<div class="none">'+none+'</div>';return}a.innerHTML='<div class="none">loading\u2026</div>';var im=new Image();im.alt=ttl||"";im.onload=function(){a.innerHTML="";a.appendChild(im);a.setAttribute("data-zoom",src);a.setAttribute("data-ttl",ttl||"")};im.onerror=function(){a.innerHTML='<div class="none">'+none+'</div>'};im.src=src}
@@ -2449,12 +2573,14 @@ document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!v.hidden&&
 (function(){var money=function(n){return "$"+(Math.round(Number(n)*100)/100).toFixed(2)};var toastEl=null,toastT=null;
 function toast(msg,bad){if(!toastEl){toastEl=document.createElement("p");toastEl.className="flash aptoast";document.body.appendChild(toastEl)}toastEl.textContent=msg;toastEl.classList.toggle("bad",!!bad);toastEl.classList.add("on");clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove("on")},bad?7000:4000)}
 function actionOf(f){var i=f.querySelector("input[name=action]");return i?i.value:""}
-document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.getAttribute||f.getAttribute("action")!=="/autoprice/control")return;var act=actionOf(f);if(act!=="publish"&&act!=="keep")return;if(!window.fetch||!window.FormData)return;
+document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.getAttribute||f.getAttribute("action")!=="/autoprice/control")return;var act=actionOf(f);if(act!=="publish"&&act!=="keep"&&act!=="cert"&&act!=="cert-read")return;if(!window.fetch||!window.FormData)return;
 e.preventDefault();var art=f.closest("article.item"),btn=f.querySelector("button");if(btn)btn.disabled=true;if(art)art.classList.add("busy");
 var fd=new FormData(f);fd.set("json","1");
 fetch(f.getAttribute("action"),{method:"POST",body:fd,credentials:"same-origin"}).then(function(r){return r.json()}).then(function(j){
 if(!j||!j.ok){if(btn)btn.disabled=false;if(art)art.classList.remove("busy");toast((j&&(j.flash||j.error))||"That did not go through.",true);return}
-toast(j.flash||"Done.");if(!art)return;art.classList.remove("busy","awaiting");art.className=art.className.split(" ").filter(function(c){return c&&c.indexOf("s-")!==0}).join(" ")+(act==="publish"?" s-ok":" s-hold");
+toast(j.flash||"Done.");if(!art)return;
+if(act==="cert"||act==="cert-read"){art.classList.remove("busy");if(btn)btn.disabled=false;var sec=art.querySelector("section.certsec");if(act==="cert"&&sec&&j.html){sec.innerHTML="<h4>Certificate</h4>"+j.html}else if(act==="cert-read"&&sec&&j.read){var inp=sec.querySelector("input[name=cert]");if(inp&&j.read.cert)inp.value=j.read.cert;var note=sec.querySelector(".readnote")||document.createElement("div");note.className="sub readnote";note.textContent=j.flash||"";sec.appendChild(note)}return}
+art.classList.remove("busy","awaiting");art.className=art.className.split(" ").filter(function(c){return c&&c.indexOf("s-")!==0}).join(" ")+(act==="publish"?" s-ok":" s-hold");
 var price=act==="publish"?Number(j.price||fd.get("price")):null;
 if(act==="publish"&&price>0){var now=art.querySelector(".c-now b");if(now)now.textContent=money(price);var mg=art.querySelector(".c-now .mg"),cm=mg&&/cost \\$([0-9.]+)/.exec(mg.getAttribute("title")||"");if(cm){var cost=Number(cm[1]),pr=price-cost,pc=Math.round(pr/price*1000)/10;mg.textContent="margin "+money(pr)+" \u00b7 "+pc+"%";mg.classList.toggle("neg",pr<0);mg.setAttribute("title","price "+money(price)+" \u2212 cost "+money(cost)+": "+money(pr)+" profit, "+pc+"% of the price")}var pn=art.querySelector(".p-now b");if(pn)pn.textContent=money(price);var sug=art.querySelector(".c-sug");if(sug)sug.innerHTML='<span class="sub">up to date</span>'}
 var st=art.querySelector(".c-st");if(st)st.innerHTML=act==="publish"?'<span class="badge b-ok">Published \u2713</span><div class="sub two">just now'+(j.anchored?" \u00b7 tracking the market from here":"")+"</div>":'<span class="badge b-hold">Kept</span><div class="sub two">the price stays today; that suggestion is not offered again</div>';

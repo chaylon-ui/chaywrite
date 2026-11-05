@@ -1346,3 +1346,29 @@ test("a PSA slab's certificate refines the PriceCharting search: PSA's name, num
   const page = renderPage({ mode: "stage", config: DEFAULT_CONFIG }, { rows }, { configured: true, view: "all" });
   assert.match(page, /<div class="muted">PSA 25577619: Delphox V · #101 · Sword &amp; Shield Lost Abyss · 2022 · NM-MT 7 · pop 12, 30 higher<\/div>/);
 });
+
+import { certOf, psaView, certSection } from "../src/autoprice.js";
+test("the certificate on a graded listing, any grader: the certificate field, then the barcode, then a prefixed SKU; PSA's record is shown with the grade checked (2026-11-05)", () => {
+  assert.deepEqual(certOf("PSA", { barcode: "25577619", sku: "PSA-25577619" }, {}), { grader: "PSA", number: "25577619", source: "barcode", url: "https://www.psacard.com/cert/25577619" });
+  assert.deepEqual(certOf("CGC", { barcode: "", sku: "CGC-4123456" }, {}).source, "sku");
+  assert.equal(certOf("CGC", { barcode: "", sku: "CGC-4123456" }, {}).url, "https://www.cgccards.com/certlookup/4123456/");
+  assert.equal(certOf("BGS", { barcode: "", sku: "BGS 0012345678" }, {}).url, null);
+  assert.equal(certOf("PSA", { barcode: "16183705", sku: "DOM-1-EN-NF-1" }, { cert_number: "99887766" }).number, "99887766");
+  assert.equal(certOf("PSA", { barcode: "", sku: "DOM-1-EN-NF-1" }, {}), null, "a card SKU is not a certificate");
+  assert.equal(certOf("", { barcode: "25577619" }, {}), null);
+  const cert = { grader: "PSA", number: "25577619", source: "barcode" };
+  const v = psaView(cert, { ok: true, cert: "25577619", grade: "10", gradeText: "GEM MT 10", name: "Charizard", number: "4", set: "Base Set", variety: "Holo", year: "1999", game: "pokemon", population: 1234, higher: 0, at: 5 }, { name: "Charizard", grade: 9, grader: "PSA" });
+  assert.equal(v.ok, true); assert.equal(v.url, "https://www.psacard.com/cert/25577619"); assert.equal(v.population, 1234);
+  assert.match(v.mismatch, /PSA certificate 25577619 says grade 10, the title says 9/);
+  assert.match(v.note, /^PSA 25577619: Charizard · #4 · Holo · Base Set · 1999 · GEM MT 10/);
+  const bad = psaView(cert, { ok: false, error: "PSA refused the token (expired or wrong)", at: 7 }, {});
+  assert.deepEqual([bad.ok, bad.error, bad.at], [false, "PSA refused the token (expired or wrong)", 7]);
+  // the block: what PSA says, the mismatch, the grader page, the forms; and the no-certificate case
+  const row = { id: "gid://shopify/Product/1", title: "Charizard PSA 9", graded: { grader: "PSA", grade: 9 }, cert: { ...cert, url: v.url }, psa: v, images: [{ u: "x.jpg" }] };
+  const html = certSection(row, { psaOn: true });
+  for (const s of ["PSA 25577619", "from the barcode", "psacard.com/cert/25577619", "PSA says: <b>Charizard</b>", "#4", "Holo", "Base Set", "GEM MT 10", "pop 1234", "says grade 10, the title says 9", "Look up again", "Replace &amp; look up", "Read the label from the photo", 'name="action" value="cert"', 'name="action" value="cert-read"']) assert.ok(html.includes(s), s);
+  const none = certSection({ id: "gid://shopify/Product/2", title: "Pikachu CGC 9.5", graded: { grader: "CGC", grade: 9.5 }, cert: null, psa: null, images: [] }, {});
+  assert.ok(none.includes("No certificate on this listing") && none.includes("Save on the listing") && !none.includes("Read the label"));
+  const off = certSection({ id: "gid://shopify/Product/3", title: "x PSA 10", graded: { grader: "PSA", grade: 10 }, cert: { ...cert, url: v.url }, psa: null, images: [] }, { psaOn: false });
+  assert.ok(off.includes("not switched on") && off.includes("Look up now"));
+});
