@@ -339,21 +339,30 @@ const CSS = `.fl-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:cente
 .fl-item{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;border-top:1px solid #e3e7ea;padding:10px 0}.fl-item img{width:72px;height:72px;object-fit:contain;background:#f4f6f7;border-radius:8px}
 .fl-item .nm{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:6px}.fl-item .nm input.name{font-weight:700;width:180px}.fl-item .nm input.img{flex:1 1 260px;min-width:160px;font-size:12px}
 .fl-row{display:grid;grid-template-columns:128px repeat(8,minmax(60px,1fr));gap:4px;align-items:center;font-size:12.5px;margin:2px 0}.fl-row>b{font-weight:600}.fl-row input{width:100%;padding:4px 5px;font-size:13px}
+.fl-f{display:block;min-width:0}.fl-f span{display:none}
 .fl-cols{display:grid;grid-template-columns:128px repeat(8,minmax(60px,1fr));gap:4px;font-size:11px;color:#5b6770;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px}.fl-cols span:first-child{text-transform:none;letter-spacing:0}
 .fl-row.off input{opacity:.55}.fl-item.retired{opacity:.5}.fl-sw{display:inline-flex;gap:6px;align-items:center}.fl-add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
 .fl-top{position:sticky;top:0;background:#fff;padding:8px 0;z-index:2;border-bottom:1px solid #e3e7ea;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-@media(max-width:900px){.fl-row,.fl-cols{grid-template-columns:100px repeat(4,1fr)}.fl-cols span:nth-child(n+6),.fl-row>*:nth-child(n+6){grid-column:auto}}`;
+@media(max-width:900px){.fl-cols{display:none}.fl-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 6px;margin:8px 0;padding:8px;background:#f7f9fa;border-radius:10px}.fl-row.off{background:#fafafa}
+.fl-row .fl-cn{grid-column:1/-1;font-size:14px}.fl-row .fl-cn small{font-size:12px;font-weight:400}
+.fl-f span{display:flex;align-items:flex-end;min-height:2.3em;font-size:10.5px;line-height:1.1;color:#5b6770;text-transform:uppercase;letter-spacing:.03em;margin:0 0 3px}
+.fl-row input{font-size:16px;padding:8px 6px;border-radius:8px}
+.fl-item{grid-template-columns:56px minmax(0,1fr);gap:8px}.fl-item img{width:56px;height:56px}
+.fl-item .nm input.name{width:100%;font-size:16px}.fl-item .nm input.img{font-size:12px}
+.fl-meta{grid-template-columns:1fr}.fl-head form,.fl-head a.btn{font-size:13px}}
+@media(max-width:380px){.fl-row{grid-template-columns:repeat(2,minmax(0,1fr))}}`;
 
 export function renderLists(o) {
   if (o.denied) return shell("Fixed-price lists", `<h1>Fixed-price lists</h1><div class="err">Your account cannot edit the fixed-price lists. Ask an admin for the "lists" permission.</div>`, o, true);
   const lists = o.lists || [];
   const hasSeed = lists.some((l) => l.id === SEED.id);
-  const inp = (k, key, v, step, title) => `<input type="number" min="0" step="${step}" data-k="${k}" data-f="${key}" value="${v == null ? "" : esc(v)}" title="${esc(title)}">`;
+  const LABEL = { cash: "Cash", credit: "Credit", sell: "Sell", fullUpTo: "First", afterCash: "Then cash", afterCredit: "Then credit", max: "Max", bought: "Bought" };
+  const inp = (k, key, v, step, title) => `<label class="fl-f"><span>${LABEL[key]}</span><input type="number" min="0" step="${step}" inputmode="decimal" data-k="${k}" data-f="${key}" value="${v == null ? "" : esc(v)}" title="${esc(title)}"></label>`;
   const item = (l, it) => `<div class="fl-item${it.retired ? " retired" : ""}" data-item="${esc(it.key)}">
 <div>${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : `<div style="width:72px;height:72px;background:#f4f6f7;border-radius:8px"></div>`}</div>
 <div><div class="nm"><input class="text name" data-f="name" value="${esc(it.name)}" placeholder="name"><input class="text img" data-f="image" value="${esc(it.image || "")}" placeholder="image URL (https://cdn.shopify.com/...)"><label class="chk"><input type="checkbox" data-f="retired" ${it.retired ? "checked" : ""}> retired (hidden)</label></div>
 ${(l.conditions || CONDITIONS).map((c) => { const of = it.offers[c.key] || blankOffer(); const rem = remaining(of);
-    return `<div class="fl-row${buying(of) ? "" : " off"}" data-cond="${esc(c.key)}"><b>${esc(c.label)}<br><small class="muted">${buying(of) ? (rem == null ? "no limit" : rem + " more") : "not buying"}</small></b>
+    return `<div class="fl-row${buying(of) ? "" : " off"}" data-cond="${esc(c.key)}"><b class="fl-cn">${esc(c.label)}<br><small class="muted">${buying(of) ? (rem == null ? "no limit" : rem + " more") : "not buying"}</small></b>
 ${inp(c.key, "cash", of.cash, "0.01", "cash we pay")}${inp(c.key, "credit", of.credit, "0.01", "store credit we pay")}${inp(c.key, "sell", of.sell, "0.01", "what we sell it for (shown)")}
 ${inp(c.key, "fullUpTo", of.fullUpTo, "1", "how many at that price (counted across every list)")}${inp(c.key, "afterCash", of.afterCash, "0.01", "cash past that count")}${inp(c.key, "afterCredit", of.afterCredit, "0.01", "credit past that count")}
 ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${inp(c.key, "bought", of.bought, "1", "reserved so far by submitted lists; lower it if a list never arrived")}</div>`; }).join("")}
