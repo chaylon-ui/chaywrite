@@ -1117,10 +1117,14 @@
   function renderFixed() {
     var box = $("#bl-fixed");
     if (!fl) { box.innerHTML = ""; return; }
-    var head = fl.info ? '<img class="bl__fbanner bl__finfo" src="' + esc(sized(fl.info, 1200)) + '" alt="' + esc(fl.title) + '" width="2172" height="724">' : fl.banner ? '<img class="bl__fbanner" src="' + esc(sized(fl.banner, 1000)) + '" alt="" width="1774" height="887">' : '';
-    box.innerHTML = '<div class="bl__fhead">' + head + '<button type="button" class="bl__btn bl__btn--sm" id="bl-fixed-back">\u2039 Back to the card buylist</button><h3 class="bl__ftitle">' + esc(fl.title) + '</h3>' +
-      (fl.preview ? '<span class="bl__fprev" title="Staff preview: this list is switched off, nobody else sees it">preview \u00b7 off</span>' : '') +
-      (fl.blurb ? '<p class="bl__muted">' + esc(fl.blurb) + '</p>' : '') + '</div>' +
+    // The tiles above are the way around (owner, 2026-11-06: a game tile
+    // goes back to the cards, this tile "should just change the arrow part
+    // to the toy buylist items"): no Back button, and the explainer image
+    // says what the list is, so the title only shows when there is none.
+    var head = fl.info ? '<img class="bl__fbanner bl__finfo" src="' + esc(sized(fl.info, 1200)) + '" alt="' + esc(fl.title) + '" width="2172" height="724">' : fl.banner ? '<img class="bl__fbanner" src="' + esc(sized(fl.banner, 1000)) + '" alt="' + esc(fl.title) + '" width="1774" height="887">' : '';
+    box.innerHTML = '<div class="bl__fhead">' + head + (head ? '' : '<h3 class="bl__ftitle">' + esc(fl.title) + '</h3>') +
+      (fl.blurb ? '<p class="bl__muted">' + esc(fl.blurb) + '</p>' : '') +
+      (fl.preview ? '<span class="bl__fprev" title="Staff preview: this list is switched off, nobody else sees it">preview \u00b7 off \u00b7 only you see this</span>' : '') + '</div>' +
       '<div class="bl__fgrid">' + fl.items.map(function (it) {
         return '<article class="bl__toy"><div class="bl__toyhead">' + (it.image ? '<img class="bl__toyimg" src="' + esc(it.image) + '" alt="" loading="lazy">' : '') + '<h4>' + esc(it.name) + '</h4></div><div class="bl__toyrows">' +
           fl.conditions.map(function (c) {
@@ -1165,7 +1169,7 @@
     if (!inp || mode !== "fixed") return;
     fset(inp.getAttribute("data-item"), inp.getAttribute("data-cond"), parseInt(inp.value, 10) || 0);
   }
-  $("#bl-fixed").addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#bl-fixed-back")) { closeFixed(); return; } fixedClick(e); });
+  $("#bl-fixed").addEventListener("click", fixedClick);
   $("#bl-fixed").addEventListener("change", fixedChange);
   $("#bl-lines").addEventListener("click", fixedClick);
   $("#bl-lines").addEventListener("change", fixedChange);
@@ -1247,6 +1251,7 @@
     // The click itself is taken by guardTiles() at the top; this adds the
     // game pick once the game list is known.
     window.__xgTilePick = function (a) {
+      if (mode === "fixed") closeFixed();        // a game tile means the card buylist (owner, 2026-11-06)
       var keys = tileKeys(a);
       var id = keys ? gameFor(keys) : null;
       if (id && id !== game) { $("#bl-game").value = id; $("#bl-game").dispatchEvent(new Event("change")); }
