@@ -79,6 +79,7 @@
   // Shopify's CDN resizes on request: a 1.3 MB logo comes down at the width it is shown.
   function sized(u, w) { return /^https:\/\/cdn\.shopify\.com\//.test(u) ? u + (u.indexOf("?") >= 0 ? "&" : "?") + "width=" + w : u; }
   var FL_OPEN = null;                          // set below once signed in: function (id)
+  var FL_LISTS = [], FL_SYNC = null;           // the lists that are on; the game select's rebuild, once signed in
   (function tilesOfLists() {
     // A tile in the row of game tiles (owner, 2026-11-06: "like Pokemon,
     // mtg, Star Wars etc ... populate there with the toys like cards do"),
@@ -88,6 +89,8 @@
     if (!grid) return;
     fetch(W0 + API0 + "/fixedlists" + (PV ? "?pv=" + encodeURIComponent(PV) : ""), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (j) {
       var lists = j && Array.isArray(j.lists) ? j.lists : [];
+      FL_LISTS = lists;
+      if (typeof FL_SYNC === "function") FL_SYNC();
       lists.forEach(function (l) {
         var pic = l.tile || l.banner || (l.images || [])[0] || "";
         var a = document.createElement("a");
@@ -105,7 +108,8 @@
       if (!a) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       landOn(root);
-      if (typeof FL_OPEN === "function") FL_OPEN(a.getAttribute("data-xgfl"));
+      if (typeof window.__xgTilePick === "function") window.__xgTilePick(a);
+      else if (typeof FL_OPEN === "function") FL_OPEN(a.getAttribute("data-xgfl"));
     }, true);
   })();
   if (!CUSTOMER) return;                       // logged out: the page shows its own prompt
@@ -214,11 +218,19 @@
       games = games.filter(function (g) { return !/riftbound/i.test(g.id + " " + g.name); });
       games.push({ id: RIFT.id, name: RIFT.name });
       if (!games.some(function (g) { return g.id === game; })) game = games[0].id;
-      $("#bl-game").innerHTML = games.map(function (g) {
-        return '<option value="' + esc(g.id) + '"' + (g.id === game ? " selected" : "") + ">" + esc(g.name) + "</option>";
-      }).join("");
+      syncGameOptions();
     });
   }
+  // The games, then every fixed-price list that is on, as one more "game"
+  // each (owner, 2026-11-06: "It should just act like a card set").
+  function syncGameOptions() {
+    var cur = mode === "fixed" && fl ? "fl:" + fl.id : game;
+    var all = games.concat(FL_LISTS.map(function (l) { return { id: "fl:" + l.id, name: l.title }; }));
+    $("#bl-game").innerHTML = all.map(function (g) {
+      return '<option value="' + esc(g.id) + '"' + (g.id === cur ? " selected" : "") + ">" + esc(g.name) + "</option>";
+    }).join("");
+  }
+  FL_SYNC = syncGameOptions;
   function loadSets() {
     sets = []; iconBySet = {};
     $("#bl-sets").innerHTML = "";
@@ -263,8 +275,12 @@
 
   /* ---- search ---- */
   $("#bl-form").addEventListener("submit", function (e) { e.preventDefault(); search(false); });
+  $("#bl-q").addEventListener("input", function () { if (mode === "fixed") renderFixed(); });
   $("#bl-more").addEventListener("click", function () { search(true); });
   $("#bl-game").addEventListener("change", function () {
+    var picked = $("#bl-game").value;
+    if (picked.indexOf("fl:") === 0) { openFixed(picked.slice(3), false); return; }
+    if (mode === "fixed") setMode("cards");
     if ($("#bl-game").value === RIFT.id) {
       var trigger = document.getElementById("riftTrigger");
       if (trigger) trigger.click(); else window.open(RIFT.url, "_blank", "noopener");
@@ -287,6 +303,7 @@
   });
 
   function search(more) {
+    if (mode === "fixed") { renderFixed(); return; }
     var q = $("#bl-q").value.trim();
     var typed = $("#bl-set").value.trim();
     var res = resolveSet(typed);
@@ -1117,6 +1134,9 @@
   function renderFixed() {
     var box = $("#bl-fixed");
     if (!fl) { box.innerHTML = ""; return; }
+    var q = $("#bl-q").value.trim().toLowerCase();
+    var items = q ? fl.items.filter(function (it) { return it.name.toLowerCase().indexOf(q) >= 0; }) : fl.items;
+    setStatus(items.length ? items.length + (items.length === 1 ? " toy" : " toys") + (q ? " named like \u201c" + q + "\u201d" : "") + " \u00b7 set how many you have of each" : "No toy named like \u201c" + q + "\u201d on this list.");
     // The tiles above are the way around (owner, 2026-11-06: a game tile
     // goes back to the cards, this tile "should just change the arrow part
     // to the toy buylist items"): no Back button, and the explainer image
@@ -1125,7 +1145,7 @@
     box.innerHTML = '<div class="bl__fhead">' + head + (head ? '' : '<h3 class="bl__ftitle">' + esc(fl.title) + '</h3>') +
       (fl.blurb ? '<p class="bl__muted">' + esc(fl.blurb) + '</p>' : '') +
       (fl.preview ? '<span class="bl__fprev" title="Staff preview: this list is switched off, nobody else sees it">preview \u00b7 off \u00b7 only you see this</span>' : '') + '</div>' +
-      '<div class="bl__fgrid">' + fl.items.map(function (it) {
+      '<div class="bl__fgrid">' + items.map(function (it) {
         return '<article class="bl__toy"><div class="bl__toyhead">' + (it.image ? '<img class="bl__toyimg" src="' + esc(it.image) + '" alt="" loading="lazy">' : '') + '<h4>' + esc(it.name) + '</h4></div><div class="bl__toyrows">' +
           fl.conditions.map(function (c) {
             var o = it.offers[c.key] || {};
@@ -1174,23 +1194,27 @@
   $("#bl-lines").addEventListener("click", fixedClick);
   $("#bl-lines").addEventListener("change", fixedChange);
   function setMode(m) {
+    var was = mode;
     mode = m;
     var on = m === "fixed", more = $("#bl-more");
-    if (on) { moreWas = more.hidden; more.hidden = true; } else more.hidden = moreWas;
-    ["#bl-form", "#bl-status", "#bl-hits"].forEach(function (sel) { var el = $(sel); if (el) el.hidden = on; });
+    if (on && was !== "fixed") { moreWas = more.hidden; more.hidden = true; } else if (!on) more.hidden = moreWas;
+    $("#bl-hits").hidden = on;
+    var sw = root.querySelector(".bl__setwrap"); if (sw) sw.hidden = on;
+    $("#bl-q").placeholder = on ? "Toy name" : "Card name";
     $("#bl-fixed").hidden = !on;
     root.classList.toggle("bl--fixed", on);
+    if (!on) setStatus("");
     renderCart();
   }
   function openFixed(id, quiet) {
     api("/fixed?id=" + encodeURIComponent(id) + (PV ? "&pv=" + encodeURIComponent(PV) : "")).then(function (j) {
       fl = j.list; fl.preview = !!j.preview;
-      if (!quiet) fcart = fload(id);
-      setMode("fixed"); renderFixed();
-      if (!quiet) { setMsg(""); landOn(root); }
+      if (!quiet) { fcart = fload(id); $("#bl-q").value = ""; }
+      setMode("fixed"); syncGameOptions(); renderFixed();
+      if (!quiet) setMsg("");
     }).catch(function () { setMsg("This list is not open right now."); });
   }
-  function closeFixed() { setMode("cards"); setMsg(""); }
+  function closeFixed() { setMode("cards"); syncGameOptions(); setMsg(""); }
   FL_OPEN = function (id) { openFixed(id, false); };
   function doSubmitFixed(pay) {
     var lines = flines().map(function (l) { return { item: l.item, cond: l.cond, qty: l.qty }; });
@@ -1229,6 +1253,8 @@
     return raw.toLowerCase().replace(/[^a-z]/g, "");
   }
   function tileKeys(a) {
+    var flid = a.getAttribute("data-xgfl");
+    if (flid) return ["fl:" + flid];
     var words = tileWords(a);
     var hit = TILE_TEXT.filter(function (p) { return words.indexOf(p[0]) >= 0; })[0];
     if (hit) return hit[1];
@@ -1240,6 +1266,7 @@
   function gameFor(keys) {
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
+      if (k.indexOf("fl:") === 0) return FL_LISTS.some(function (l) { return "fl:" + l.id === k; }) ? k : null;
       var byId = games.filter(function (g) { return g.id === k; })[0];
       if (byId) return byId.id;
       var byName = games.filter(function (g) { return (g.id + " " + g.name).toLowerCase().replace(/[^a-z]/g, "").indexOf(k) >= 0; })[0];
@@ -1251,10 +1278,11 @@
     // The click itself is taken by guardTiles() at the top; this adds the
     // game pick once the game list is known.
     window.__xgTilePick = function (a) {
-      if (mode === "fixed") closeFixed();        // a game tile means the card buylist (owner, 2026-11-06)
       var keys = tileKeys(a);
       var id = keys ? gameFor(keys) : null;
-      if (id && id !== game) { $("#bl-game").value = id; $("#bl-game").dispatchEvent(new Event("change")); }
+      var isList = !!id && id.indexOf("fl:") === 0;
+      if (mode === "fixed" && id && !isList) closeFixed();   // a game tile means the card buylist (owner, 2026-11-06)
+      if (id && (isList || id !== game)) { $("#bl-game").value = id; $("#bl-game").dispatchEvent(new Event("change")); }
       setTimeout(function () { var q = $("#bl-q"); if (q) { try { q.focus({ preventScroll: true }); } catch (err) { q.focus(); } } }, 350);
     };
   }
