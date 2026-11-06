@@ -1142,7 +1142,9 @@
     // to the toy buylist items"): no Back button, and the explainer image
     // says what the list is, so the title only shows when there is none.
     var head = fl.info ? '<img class="bl__fbanner bl__finfo" src="' + esc(sized(fl.info, 1200)) + '" alt="' + esc(fl.title) + '" width="2172" height="724">' : fl.banner ? '<img class="bl__fbanner" src="' + esc(sized(fl.banner, 1000)) + '" alt="' + esc(fl.title) + '" width="1774" height="887">' : '';
-    box.innerHTML = '<div class="bl__fhead">' + head + (head ? '' : '<h3 class="bl__ftitle">' + esc(fl.title) + '</h3>') +
+    // The title, then the explainer centred under it (owner, 2026-11-06:
+    // "put that enticement graphic under here centered"), then the blurb.
+    box.innerHTML = '<div class="bl__fhead"><h3 class="bl__ftitle">' + esc(fl.title) + '</h3>' + head +
       (fl.blurb ? '<p class="bl__muted">' + esc(fl.blurb) + '</p>' : '') +
       (fl.preview ? '<span class="bl__fprev" title="Staff preview: this list is switched off, nobody else sees it">preview \u00b7 off \u00b7 only you see this</span>' : '') + '</div>' +
       '<div class="bl__fgrid">' + items.map(function (it) {
