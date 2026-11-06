@@ -1117,7 +1117,8 @@
   function renderFixed() {
     var box = $("#bl-fixed");
     if (!fl) { box.innerHTML = ""; return; }
-    box.innerHTML = '<div class="bl__fhead">' + (fl.banner ? '<img class="bl__fbanner" src="' + esc(sized(fl.banner, 1000)) + '" alt="" width="1774" height="887">' : '') + '<button type="button" class="bl__btn bl__btn--sm" id="bl-fixed-back">\u2039 Back to the card buylist</button><h3 class="bl__ftitle">' + esc(fl.title) + '</h3>' +
+    var head = fl.info ? '<img class="bl__fbanner bl__finfo" src="' + esc(sized(fl.info, 1200)) + '" alt="' + esc(fl.title) + '" width="2172" height="724">' : fl.banner ? '<img class="bl__fbanner" src="' + esc(sized(fl.banner, 1000)) + '" alt="" width="1774" height="887">' : '';
+    box.innerHTML = '<div class="bl__fhead">' + head + '<button type="button" class="bl__btn bl__btn--sm" id="bl-fixed-back">\u2039 Back to the card buylist</button><h3 class="bl__ftitle">' + esc(fl.title) + '</h3>' +
       (fl.preview ? '<span class="bl__fprev" title="Staff preview: this list is switched off, nobody else sees it">preview \u00b7 off</span>' : '') +
       (fl.blurb ? '<p class="bl__muted">' + esc(fl.blurb) + '</p>' : '') + '</div>' +
       '<div class="bl__fgrid">' + fl.items.map(function (it) {

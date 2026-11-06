@@ -489,6 +489,7 @@ html[data-xg-theme="dark"] .bl__mine-row--staged .bl__mine-status { color: #f6c4
 .bl__fhead h3 { margin: 0; font-size: 20px; line-height: 1.2; color: var(--bl-ink); }
 .bl__fhead p { flex: 1 1 100%; margin: 0; }
 .bl__fbanner { flex: 1 1 100%; display: block; width: 100%; max-width: 560px; height: auto; margin: 0 0 6px; border-radius: 14px; }
+.bl__fbanner.bl__finfo { max-width: 100%; border-radius: 12px; box-shadow: var(--bl-shadow); }
 .bl .bl__btn--sm { height: 34px; padding: 0 12px; font-size: 13px; }
 .bl__fprev { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--bl-accent-soft); color: var(--bl-accent); font-size: 12px; font-weight: 700; }
 .bl__fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }

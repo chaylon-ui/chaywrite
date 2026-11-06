@@ -213,7 +213,8 @@ test("the editor: the seed button, the switch, the preview link, the rows; the l
   assert.ok(page.includes("OFF - nobody sees it") && page.includes('value="on"') && page.includes(">Switch on<"));
   assert.ok(page.includes("xgfl=" + SEED.id + "&amp;pv=" + l.pv + "#buylist"));
   assert.ok(page.includes('data-item="pikachu"') && page.includes('data-f="bought" value="4"') && page.includes("46 more"));
-  assert.ok(page.includes('data-f="banner"') && page.includes('data-f="tile"') && page.includes('data-act="logo"') && page.includes("CCA7E631-6CC7-4FBA-8180-A17D8787E71A.png") && page.includes("mcd-pokemon-2026-tile.png"));
+  assert.ok(page.includes('data-f="banner"') && page.includes('data-f="tile"') && page.includes('data-f="info"') && page.includes('data-act="logo"') && page.includes("CCA7E631-6CC7-4FBA-8180-A17D8787E71A.png") && page.includes("mcd-pokemon-2026-tile.png") && page.includes("5334CF63-54F4-4215-BAA0-B438FD35901A.png"));
+  assert.equal(publicView(cleanList({ id: "t", title: "T", info: "https://cdn.shopify.com/i.png", items: [] }, null, 1, "")).info, "https://cdn.shopify.com/i.png");
   assert.equal(summaryView(cleanList({ id: "t", title: "T", tile: "https://cdn.shopify.com/t.png", items: [] }, null, 1, "")).tile, "https://cdn.shopify.com/t.png");
   assert.equal((page.match(/data-act="copyall" title=/g) || []).length, 15);   // one "use these prices for every toy" per toy (the script names it once more)
   assert.ok(page.includes('href="/9pocket/lists/control"') === false && page.includes('action="/9pocket/lists/control"'));
