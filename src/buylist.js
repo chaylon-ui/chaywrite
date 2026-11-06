@@ -41,6 +41,8 @@
 import { HOLD_DO } from "./hold.js";
 import { portalConfigured, portalPost } from "./portal.js";
 import { stagingOn, stageSubmit, stageMine, lookupCustomer, totalsOf, emailStaffBuylist } from "./stage.js";
+import { slug as listSlug, summaryView, publicView, visible, cleanLines } from "./fixed-lists.js";
+import { stageCall } from "./stage.js";
 import { deliveryOf, shipPut, trackUrl } from "./ship.js";   // bringing in or shipping (owner 2026-11-02)
 import { instructionsPayload, buildEmail, sendEmail } from "./stage-email.js";   // staged approval (src/stage.js); the imports are circular on purpose and only used inside functions
 import { wantedCards, refreshWanted, internalCandidates } from "./wanted.js";                                  // the sell page's first view: cards we need most (owner, 2026-09-22)
@@ -451,6 +453,21 @@ async function route(mode, action, request, env, url, cors) {
     return json({ upstream: r.status, q, game, set, offset, count: hits.length, more: hits.length >= PAGE, hits }, 200, cors);
   }
 
+  // Fixed-price lists (src/fixed-lists.js). Nothing here names a list that is
+  // off: the strip gets an empty array and a direct ask gets the same "not
+  // found" an unknown action gets, unless the request carries the list's
+  // preview key (the editor's "Preview as a shopper" link).
+  const pv = String(url.searchParams.get("pv") || "").slice(0, 40);
+  if (action === "fixedlists") {
+    const j = await stageCall(env, url.origin, "/_stage/fl/list");
+    return json({ lists: (j.lists || []).filter((l) => visible(l, pv)).map(summaryView) }, 200, { ...cors, "cache-control": "no-store" });
+  }
+  if (action === "fixed") {
+    const j = await stageCall(env, url.origin, "/_stage/fl/get?id=" + encodeURIComponent(listSlug(url.searchParams.get("id"))));
+    if (!j.ok || !visible(j.list, pv)) return json({ error: "not found" }, 404, cors);
+    return json({ list: publicView(j.list), preview: !j.list.on }, 200, { ...cors, "cache-control": "no-store" });
+  }
+
   const customer = customerOf(mode, url);
   if (!customer) return json({ error: "customer id required" }, 400, cors);
 
@@ -546,6 +563,32 @@ async function route(mode, action, request, env, url, cors) {
     return json({ upstream: r.upstream, paymentType, delivery, trackUrl: track, submitted: cards.length, accepted: r.accepted, cleared: r.cleared, confirmation: r.confirmation, reply: r.reply,
       number, instructions: r.accepted ? instructionsPayload() : undefined, email,
       repriced: { changed: repriced.changed, capped: repriced.capped, dropped: repriced.dropped } }, 200, cors);
+  }
+
+  // A fixed-price list's submission: the room quotes and reserves the units
+  // under its input gate, then the list is staged like any other (customer
+  // email, staff email, the worksheet). Refused while the list is off.
+  if (action === "fixedsubmit" && request.method === "POST") {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ error: "body must be JSON" }, 400, cors); }
+    const paymentType = payload && PAYMENT_TYPES.includes(payload.paymentType) ? payload.paymentType : null;
+    if (!paymentType) return json({ error: "paymentType must be one of " + PAYMENT_TYPES.join(", ") }, 400, cors);
+    const delivery = deliveryOf(payload && payload.delivery);
+    const id = listSlug(payload && payload.list);
+    const lines = cleanLines(payload && payload.lines);
+    if (!id || !lines.length) return json({ error: "the list is empty" }, 400, cors);
+    const r = await stageCall(env, url.origin, "/_stage/fl/reserve", { id, lines });
+    if (!r.ok) return json({ error: r.error || "could not reserve", accepted: false, repriced: { changed: [], capped: r.notes || [], dropped: [] } }, r.status === 404 ? 404 : r.status || 409, cors);
+    let staged;
+    try { staged = await stageSubmit(env, url, { customer, paymentType, cards: r.cards, delivery, repriced: { changed: [], capped: r.notes, dropped: [] }, fixed: { list: r.id, title: r.title } }); }
+    catch (e) {
+      try { await stageCall(env, url.origin, "/_stage/fl/release", { cards: r.cards }); } catch {}
+      return json({ error: "We could not record your list (" + String((e && e.message) || e).slice(0, 120) + "). Nothing was sent; please try again in a minute.", accepted: false }, 502, cors);
+    }
+    return json({ accepted: true, staged: true, fixed: r.id, id: staged.id, paymentType, delivery: staged.delivery || null, trackUrl: staged.trackUrl || null, submitted: r.cards.length, units: r.units, totals: staged.totals,
+      confirmation: "Thank you - your list has been received. Bring the items in or send them along, and we pay it out once we have checked them.",
+      number: staged.number, instructions: instructionsPayload(), noun: "item",
+      repriced: { changed: [], capped: r.notes, dropped: [] } }, 200, cors);
   }
 
   return json({ error: "not found" }, 404, cors);

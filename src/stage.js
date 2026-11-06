@@ -83,6 +83,7 @@ async function askDo(env, path, body) {
   catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 160) }; }
 }
 import { renderGraded, renderGradedDenied } from "./graded-ui.js";
+import { fixedDo, releaseFixed, serveListsStaff } from "./fixed-lists.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
   CODE_TTL_MS, CODE_TRIES, CODE_SENDS, CODE_RESEND_MS, CODE_STARTS, DEVICE_DAYS, DEVICE_KEEP, CHALLENGE_COOKIE } from "./stage-auth.js";
@@ -173,7 +174,9 @@ export function shapeRecord(b, now) {
   const customerName = String((b && b.customerName) || "").trim().slice(0, 120);
   const customerEmail = String((b && b.customerEmail) || "").trim().slice(0, 160);
   const delivery = deliveryOf(b && b.delivery);   // bringing them in or shipping them (src/ship.js); older scripts send none
-  return { id, number: "", ts, customer, customerName, customerEmail, paymentType, cards, totals: totalsOf(cards), repriced, status: "staged", note: "", events: [{ ts, action: "submitted" + (delivery ? " · " + delivery : "") }], bp: null, email: null, delivery };
+  // A fixed-price list (src/fixed-lists.js): approval sends nothing to BinderPOS, rejection gives the units back.
+  const fixed = b && b.fixed && typeof b.fixed === "object" && b.fixed.list ? { list: String(b.fixed.list).slice(0, 40), title: String(b.fixed.title || "").slice(0, 80) } : null;
+  return { id, number: "", ts, customer, customerName, customerEmail, paymentType, cards, totals: totalsOf(cards), repriced, status: "staged", note: "", events: [{ ts, action: "submitted" + (delivery ? " · " + delivery : "") }], bp: null, email: null, fixed, delivery };
 }
 const strs = (v) => (Array.isArray(v) ? v.slice(0, 100).map((s) => String(s).slice(0, 200)) : []);
 
@@ -320,6 +323,8 @@ export async function stageDoFetch(cx, request, url) {
   await armAlarm(cx);
   const p = url.pathname;
   const post = request.method === "POST";
+  // Fixed-price lists (src/fixed-lists.js) share this room's storage: fl:<id>.
+  if (p.startsWith("/_stage/fl/")) return fixedDo(cx, request, url);
   if (p === "/_stage/put" && post) {
     const rec = shapeRecord(await bodyOf(request), cx.now());
     if (!rec) return doJson({ ok: false, error: "customer, paymentType and cards[] required" }, 400);
@@ -365,6 +370,8 @@ export async function stageDoFetch(cx, request, url) {
     if (b.repricedAtApproval && typeof b.repricedAtApproval === "object") rec.repricedAtApproval = { changed: strs(b.repricedAtApproval.changed), capped: strs(b.repricedAtApproval.capped), dropped: strs(b.repricedAtApproval.dropped), kept: strs(b.repricedAtApproval.kept) };
     if (Array.isArray(b.cards) && b.cards.length) { rec.cards = b.cards; rec.totals = totalsOf(b.cards); }
     rec.events = (rec.events || []).concat([{ ts: cx.now(), action: status === "staged" ? "edited" : status, by: by(b) }]).slice(-30);
+    // a rejected fixed-price list gives its reserved units back (src/fixed-lists.js)
+    if (status === "rejected" && rec.fixed && !rec.released) { try { rec.released = await releaseFixed(cx, rec.cards); } catch {} }
     await cx.storage.put(key, rec);
     return doJson({ ok: true, record: rec });
   }
@@ -886,6 +893,7 @@ export async function stageDoAlarm(cx) {
 /* ---------------- the worker side ---------------- */
 
 const stub = (env) => env.ROOM.get(env.ROOM.idFromName(STAGE_DO));
+export async function stageCall(env, origin, path, body) { return doCall(env, origin, path, body); }
 async function doCall(env, origin, path, body) {
   const r = await stub(env).fetch(new Request(origin + path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : undefined));
   let j; try { j = await r.json(); } catch { j = { ok: false, error: "bad reply" }; }
@@ -895,9 +903,9 @@ async function doCall(env, origin, path, body) {
 // Called by buylist.js in place of the BinderPOS call. Returns the record
 // id and number; the customer email and the staff push are best-effort and
 // never fail the submission.
-export async function stageSubmit(env, url, { customer, paymentType, cards, repriced, delivery }) {
+export async function stageSubmit(env, url, { customer, paymentType, cards, repriced, delivery, fixed }) {
   const who = await lookupCustomer(env, customer);
-  const j = await doCall(env, url.origin, "/_stage/put", { customer, customerName: who.name, customerEmail: who.email, paymentType, cards, repriced, delivery });
+  const j = await doCall(env, url.origin, "/_stage/put", { customer, customerName: who.name, customerEmail: who.email, paymentType, cards, repriced, delivery, fixed: fixed || null });
   if (!j.ok) throw new Error(j.error || "could not stage the list");
   // the shipping side record (src/ship.js), keyed by the 9P number here; the link rides in the email and the reply
   let track = null;
@@ -1163,6 +1171,10 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   if (seen) { seen.user = user; seen.pinOk = pinOk; }
   const opts = { user, on: stagingOn(env), emailOn: emailConfigured(env), err: url.searchParams.get("err") || "", msg: url.searchParams.get("msg") || "" };
   const toLogin = () => redirect(BASE + "/login" + q({ next: p + (url.search && request.method === "GET" ? url.search : "") }));
+  // Fixed-price lists (src/fixed-lists.js): the editor, its control, on/off.
+  if (p === BASE + "/lists" || p === BASE + "/lists.json" || p.startsWith(BASE + "/lists/")) {
+    return serveListsStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, call: (path, body) => doCall(env, origin, path, body) });
+  }
   // Item requests (src/requests.js): the list, one request, its control.
   if (p === BASE + "/requests" || p === BASE + "/requests.json" || p.startsWith(BASE + "/requests/")) {
     return serveRequestsStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts });
@@ -1484,6 +1496,14 @@ async function control(env, url, f, user) {
     if (!g.ok) return { ok: false, error: g.error };
     const rec = g.record;
     if (rec.status !== "staged") return { ok: false, error: "already " + rec.status };
+    // A fixed-price list (src/fixed-lists.js): nothing to send to BinderPOS;
+    // approving records the decision and the counter pays it out.
+    if (rec.fixed) {
+      const j = await doCall(env, url.origin, "/_stage/mark", { id, status: "approved", note: String(f.note || rec.note || ""), by: who });
+      if (!j.ok) return { ok: false, error: j.error };
+      const m = notify ? await emailDecision(env, url, j.record, "approved", who) : { ok: true };
+      return { ok: true, id, status: "approved", fixed: true, message: "Approved. A fixed-price list (" + rec.fixed.title + ") sends nothing to BinderPOS: check the items and pay it out at the counter." + mailNote(m) };
+    }
     // Today's BinderPOS prices and limits, the same step submit takes; a
     // staff-typed price on the worksheet wins over the day's.
     let repriced;

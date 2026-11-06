@@ -67,6 +67,34 @@
       if (typeof window.__xgTilePick === "function") window.__xgTilePick(a);
     }, true);
   })();
+  /* ---- fixed-price lists (owner, 2026-11-05/06): a toy promotion the store
+     prices itself. The worker names a list only while it is ON (or to the
+     editor's preview link), so an off list leaves no trace here: no strip,
+     no pane, and its api answers "not found". The strip sits under the game
+     tiles for everyone; the pane itself needs the sign-in like the rest. ---- */
+  var W0 = (root.getAttribute("data-worker") || "").replace(/\/+$/, ""), API0 = root.getAttribute("data-api") || "/buylist/api";
+  var PV = "", WANT_FL = "";
+  try { var u0 = new URL(location.href); PV = u0.searchParams.get("pv") || ""; WANT_FL = u0.searchParams.get("xgfl") || ""; } catch (e0) {}
+  function esc0(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]; }); }
+  var FL_OPEN = null;                          // set below once signed in: function (id)
+  (function stripOfLists() {
+    var grid = document.querySelector(".xgbl-games");
+    if (!grid) return;
+    fetch(W0 + API0 + "/fixedlists" + (PV ? "?pv=" + encodeURIComponent(PV) : ""), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (j) {
+      var lists = j && Array.isArray(j.lists) ? j.lists : [];
+      var after = grid;
+      lists.forEach(function (l) {
+        var a = document.createElement("a");
+        a.className = "xgbl-fl"; a.href = "#buylist"; a.setAttribute("data-xgfl", l.id);
+        a.innerHTML = '<span class="xgbl-fl__pics">' + (l.images || []).slice(0, 3).map(function (u) { return '<img src="' + esc0(u) + '" alt="" loading="lazy">'; }).join("") + '</span>' +
+          '<span class="xgbl-fl__text"><b class="xgbl-fl__tag">Also buying</b> <span class="xgbl-fl__title">' + esc0(l.title) + '</span>' + (l.blurb ? '<small>' + esc0(l.blurb) + '</small>' : '') + '</span>' +
+          '<span class="xgbl-fl__go">Sell yours \u2192</span>';
+        a.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); landOn(root); if (typeof FL_OPEN === "function") FL_OPEN(l.id); });
+        after.parentNode.insertBefore(a, after.nextSibling); after = a;
+      });
+      if (WANT_FL && typeof FL_OPEN === "function" && lists.some(function (l) { return l.id === WANT_FL; })) FL_OPEN(WANT_FL);
+    }).catch(function () {});
+  })();
   if (!CUSTOMER) return;                       // logged out: the page shows its own prompt
   root.setAttribute("data-mounted", "1");
   var W = (root.getAttribute("data-worker") || "").replace(/\/+$/, "");
@@ -87,6 +115,7 @@
         '<p id="bl-status" class="bl__status bl__muted"></p>' +
         '<div id="bl-hits"></div>' +
         '<button id="bl-more" type="button" class="bl__btn bl__more" hidden>Show more</button>' +
+        '<div id="bl-fixed" class="bl__fixed" hidden></div>' +
       '</div>' +
       '<aside class="bl__cart">' +
         // Phones: the panel is a bottom sheet and this bar is all that shows
@@ -119,6 +148,8 @@
 
   var $ = function (s) { return root.querySelector(s); };
   var cart = [];            // the draft list, mirrored to BinderPOS after every change (their app does the same)
+  var mode = "cards";       // "fixed" while a fixed-price list is open: the panel shows that list's lines instead
+  var fl = null, fcart = {}, moreWas = true;   // the open fixed-price list, its quantities (item|cond -> n)
   var maxByKey = {};        // how many the store buys, per offer, from the search hit (this session only)
   var games = [], sets = [], iconBySet = {};
   // The Riftbound buylist lives in SortSwift. #riftTrigger is the page's own
@@ -643,9 +674,12 @@
     line.classList.add("bl__line--new");
     setTimeout(function () { line.classList.remove("bl__line--new"); }, 1600);
   }
-  function totalQty() { return cart.reduce(function (s, c) { return s + qty(c); }, 0); }
+  function totalQty() { return mode === "fixed" ? fUnits() : cart.reduce(function (s, c) { return s + qty(c); }, 0); }
+  function haveLines() { return mode === "fixed" ? fUnits() > 0 : cart.length > 0; }
+  function noun(n) { return (mode === "fixed" ? " item" : " card") + (n === 1 ? "" : "s"); }
 
   function renderCart() {
+    if (mode === "fixed") { renderFixedCart(); return; }
     var box = $("#bl-lines");
     if (!cart.length) {
       box.innerHTML = '<p class="bl__muted">Nothing yet. Search for a card and press Add.</p>';
@@ -702,7 +736,7 @@
   $("#bl-sheetview").addEventListener("click", function (e) { e.stopPropagation(); toggleSheet(); });
   $("#bl-sheetsubmit").addEventListener("click", function (e) {
     e.stopPropagation();
-    if (!cart.length) return;
+    if (!haveLines()) return;
     toggleSheet(true);                          // the payment choice and the lines are in view behind the confirm
     $("#bl-submit").click();
   });
@@ -809,6 +843,7 @@
   }
 
   $("#bl-clear").addEventListener("click", function () {
+    if (mode === "fixed") { if (!fUnits() || !confirm("Clear your list?")) return; fcart = {}; fsave(); renderFixed(); renderCart(); setMsg("List cleared."); return; }
     if (!cart.length || !confirm("Clear your buylist?")) return;
     cart = [];
     renderCart();
@@ -829,14 +864,14 @@
   root.addEventListener("change", function (e) {
     if (!e.target || e.target.name !== "bl-del") return;
     var note = $("#bl-delnote"); if (note) note.hidden = e.target.value !== "ship";
-    $("#bl-submit").disabled = !cart.length; $("#bl-sheetsubmit").disabled = !cart.length;
+    $("#bl-submit").disabled = !haveLines(); $("#bl-sheetsubmit").disabled = !haveLines();
     var dh = $("#bl-delhint"); if (dh) dh.hidden = true;
   });
   function askToConfirm(onYes) {
     var d = $("#bl-confirm");
     if (!d || typeof d.showModal !== "function") {
       var p = payChosen(), n = totalQty();
-      if (confirm("Submit " + n + " card" + (n === 1 ? "" : "s") + " for " + p.toLowerCase() + "? This sends your buylist to the store.")) onYes(p);
+      if (confirm("Submit " + n + noun(n) + " for " + p.toLowerCase() + "? This sends your buylist to the store.")) onYes(p);
       return;
     }
     function draw() {
@@ -849,7 +884,7 @@
       var more = t.credit - t.cash;
       var gain = more > 0.005 ? money(more) : "";
       d.innerHTML = '<div class="bl__done-head bl__confirm-head' + (credit ? " bl__confirm-head--credit" : "") + '"><span class="bl__done-kicker">One last check</span><h3 id="bl-confirm-title">Submit for <b>' + (credit ? "store credit" : "cash") + "</b>?</h3>" +
-        '<p class="bl__done-sum">' + esc(n) + " card" + (n === 1 ? "" : "s") + " · estimated <b>" + money(credit ? t.credit : t.cash) + "</b> in " + (credit ? "Exor Games store credit" : "cash") + "</p></div>" +
+        '<p class="bl__done-sum">' + esc(n) + noun(n) + " · estimated <b>" + money(credit ? t.credit : t.cash) + "</b> in " + (credit ? "Exor Games store credit" : "cash") + "</p></div>" +
         '<div class="bl__guide-body">' +
         (credit
           ? '<p class="bl__confirm-note">You are asking to be paid in <b>store credit</b>, added to your Exor Games account once we have checked your cards.' + (gain ? ' Good call: ' + money(t.credit) + ' in store credit instead of ' + money(t.cash) + ' cash is <b class="bl__confirm-gain">' + gain + " more</b>." : "") + "</p>"
@@ -878,13 +913,14 @@
     var yes = d.querySelector('[data-act="yes"]'); if (yes) { try { yes.focus({ preventScroll: true }); } catch (err) { yes.focus(); } }
   }
   function totalsOfCart() {
+    if (mode === "fixed") return fTotals();
     var cash = 0, credit = 0;
     cart.forEach(function (c) { var q = qty(c); cash += q * (Number(c.cashBuyPrice) || 0); credit += q * (Number(c.storeCreditBuyPrice) || 0); });
     return { cash: cash, credit: credit };
   }
   $("#bl-submit").addEventListener("click", function () {
-    if (!cart.length) return;
-    askToConfirm(doSubmit);
+    if (!haveLines()) return;
+    askToConfirm(mode === "fixed" ? doSubmitFixed : doSubmit);
   });
   // Store credit picked in the panel (owner, 2026-09-22: "make it seem super
   // charged because of it with a temporary pop"): the toggle and the credit
@@ -985,7 +1021,7 @@
     }).join("");
     var t = j.totals || {}, credit = j.paymentType === "Store Credit";
     d.innerHTML = '<div class="bl__done-head"><span class="bl__done-kicker">Buylist received</span><h3 id="bl-done-title">' + (j.number ? "Buylist Number " + esc(j.number) : "Thank you") + "</h3>" +
-      (t.units != null ? '<p class="bl__done-sum">' + esc(t.units) + " card" + (t.units === 1 ? "" : "s") + " · " + esc(j.paymentType || "") + " · estimated " + money(credit ? t.credit : t.cash) + "</p>" : "") + "</div>" +
+      (t.units != null ? '<p class="bl__done-sum">' + esc(t.units) + " " + esc(j.noun || "card") + (t.units === 1 ? "" : "s") + " · " + esc(j.paymentType || "") + " · estimated " + money(credit ? t.credit : t.cash) + "</p>" : "") + "</div>" +
       '<div class="bl__guide-body">' + (ins.nextStep ? '<p class="bl__done-next">' + esc(ins.nextStep) + "</p>" : "") +
       (j.delivery === "ship" ? '<div class="bl__done-del"><b>You are shipping the cards.</b> When you have a tracking number, add it ' + (j.trackUrl ? 'at <a href="' + esc(j.trackUrl) + '" target="_blank" rel="noopener">this link</a> (it is in your email too)' : "through the link in your confirmation email") + " so we can watch for the parcel.</div>"
         : j.delivery === "in-store" ? '<div class="bl__done-del"><b>You are dropping the cards off.</b> Come by whenever you are ready; we check them against this list.' + (j.trackUrl ? ' Decide to ship instead? Your confirmation email has a link to add the tracking number.' : "") + "</div>" : "") +
@@ -1003,6 +1039,161 @@
     var d = $("#bl-done");
     if (e.target.closest("[data-close-done]") || e.target === d) { if (typeof d.close === "function") d.close(); else d.removeAttribute("open"); }
   });
+
+  /* ---- a fixed-price list, open in the main column (owner, 2026-11-05/06).
+     One card per item with its photo, a row per condition: the price pair,
+     what is left and the lower pair past "first N", and a counter. The
+     panel on the right shows the lines with their tier breakdown and the
+     same cash / credit and drop-off / shipping choices; Submit posts to
+     /list-submit, which reserves the units and stages the list. The card
+     cart is untouched meanwhile and comes back with "Back". ---- */
+  function fkey(item, cond) { return item + "|" + cond; }
+  // Mirrors the worker's quote(): tiers at the counts as they stand.
+  function fquote(o, n) {
+    var want = Math.max(0, n | 0), rem = o.remaining, take = rem == null ? want : Math.min(want, rem), tiers = [];
+    if (take > 0) {
+      var left = o.fullLeft, atFull = left == null ? take : Math.min(take, left);
+      if (atFull > 0) tiers.push({ qty: atFull, cash: o.cash, credit: o.credit, after: false });
+      var rest = take - atFull;
+      if (rest > 0) tiers.push({ qty: rest, cash: o.afterCash || 0, credit: o.afterCredit || 0, after: true });
+    }
+    var cash = 0, credit = 0;
+    tiers.forEach(function (t) { cash += t.qty * t.cash; credit += t.qty * t.credit; });
+    return { want: want, take: take, refused: want - take, tiers: tiers, cash: cash, credit: credit };
+  }
+  function fmax(o) { return o.remaining == null ? 999 : o.remaining; }
+  function flines() {
+    var out = [];
+    if (!fl) return out;
+    fl.items.forEach(function (it) {
+      fl.conditions.forEach(function (c) {
+        var n = fcart[fkey(it.key, c.key)] | 0, o = it.offers[c.key];
+        if (n > 0 && o && o.buying && fmax(o) > 0) out.push({ item: it.key, cond: c.key, qty: n, name: it.name, image: it.image, condLabel: c.label, offer: o, q: fquote(o, n) });
+      });
+    });
+    return out;
+  }
+  function fUnits() { return flines().reduce(function (s, l) { return s + l.q.take; }, 0); }
+  function fTotals() { var cash = 0, credit = 0; flines().forEach(function (l) { cash += l.q.cash; credit += l.q.credit; }); return { cash: cash, credit: credit }; }
+  function fsave() { try { localStorage.setItem("xg-fl:" + CUSTOMER + ":" + (fl ? fl.id : ""), JSON.stringify(fcart)); } catch (e) {} }
+  function fload(id) { try { var v = JSON.parse(localStorage.getItem("xg-fl:" + CUSTOMER + ":" + id) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } }
+  function foffer(item, cond) { var it = fl && fl.items.filter(function (i) { return i.key === item; })[0]; return it && it.offers[cond]; }
+  function fset(item, cond, n) {
+    var o = foffer(item, cond); if (!o) return;
+    n = Math.max(0, Math.min(n | 0, fmax(o)));
+    if (n) fcart[fkey(item, cond)] = n; else delete fcart[fkey(item, cond)];
+    fsave(); renderFixed(); renderCart();
+  }
+  function fnote(o) {
+    var bits = [], tier = o.fullUpTo != null && o.afterCash != null;
+    if (tier) bits.push(o.fullLeft > 0 ? "first " + o.fullLeft + " at this price, then " + money(o.afterCash) + " / " + money(o.afterCredit) : "the first " + o.fullUpTo + " are gone: this is the price now");
+    if (o.remaining != null && o.remaining > 0) bits.push("we take " + o.remaining + " more");
+    if (o.sell != null) bits.push("we sell it for " + money(o.sell));
+    return bits.join(" \u00b7 ");
+  }
+  function fprice(o) {
+    var tier = o.fullUpTo != null && o.afterCash != null && !(o.fullLeft > 0);
+    return money(tier ? o.afterCash : o.cash) + " cash \u00b7 " + money(tier ? o.afterCredit : o.credit) + " credit";
+  }
+  function stepper(item, cond, o) {
+    var n = fcart[fkey(item, cond)] | 0;
+    return '<div class="bl__qtywrap"><button type="button" class="bl__btn bl__fdec" data-item="' + esc(item) + '" data-cond="' + esc(cond) + '" aria-label="Fewer">&minus;</button>' +
+      '<input class="bl__qty bl__fqty" data-item="' + esc(item) + '" data-cond="' + esc(cond) + '" type="number" min="0" max="' + fmax(o) + '" value="' + n + '" aria-label="How many">' +
+      '<button type="button" class="bl__btn bl__finc" data-item="' + esc(item) + '" data-cond="' + esc(cond) + '" aria-label="More">+</button></div>';
+  }
+  function renderFixed() {
+    var box = $("#bl-fixed");
+    if (!fl) { box.innerHTML = ""; return; }
+    box.innerHTML = '<div class="bl__fhead"><button type="button" class="bl__btn bl__btn--sm" id="bl-fixed-back">\u2039 Back to the card buylist</button><h3 class="bl__ftitle">' + esc(fl.title) + '</h3>' +
+      (fl.preview ? '<span class="bl__fprev" title="Staff preview: this list is switched off, nobody else sees it">preview \u00b7 off</span>' : '') +
+      (fl.blurb ? '<p class="bl__muted">' + esc(fl.blurb) + '</p>' : '') + '</div>' +
+      '<div class="bl__fgrid">' + fl.items.map(function (it) {
+        return '<article class="bl__toy"><div class="bl__toyhead">' + (it.image ? '<img class="bl__toyimg" src="' + esc(it.image) + '" alt="" loading="lazy">' : '') + '<h4>' + esc(it.name) + '</h4></div><div class="bl__toyrows">' +
+          fl.conditions.map(function (c) {
+            var o = it.offers[c.key] || {};
+            var open = o.buying && fmax(o) > 0;
+            return '<div class="bl__frow' + (open ? '' : ' bl__frow--off') + '" data-item="' + esc(it.key) + '" data-cond="' + esc(c.key) + '"><span class="bl__fcond">' + esc(c.label) + '</span>' +
+              '<span class="bl__fprice' + (open ? '' : ' bl__fno') + '">' + (open ? esc(fprice(o)) : (o.buying ? "At our limit for now" : "Not buying right now")) + '</span>' +
+              (open && fnote(o) ? '<small class="bl__fnote">' + esc(fnote(o)) + '</small>' : '') +
+              (open ? stepper(it.key, c.key, o) : '') + '</div>';
+          }).join("") + '</div></article>';
+      }).join("") + '</div>';
+  }
+  function renderFixedCart() {
+    var box = $("#bl-lines"), ls = flines();
+    if (!ls.length) box.innerHTML = '<p class="bl__muted">Nothing yet. Count what you have of each item above.</p>';
+    else box.innerHTML = ls.map(function (l) {
+      var tiers = l.q.tiers.map(function (t) { return t.qty + " \u00d7 " + money(t.cash) + " cash / " + money(t.credit) + " credit" + (t.after ? " after the first " + l.offer.fullUpTo : ""); }).join(" + ");
+      return '<div class="bl__line bl__line--in bl__fline" data-fk="' + esc(fkey(l.item, l.cond)) + '"><span class="bl__cond">' + esc(l.name) + ' \u00b7 ' + esc(l.condLabel) +
+        '<small>' + esc(tiers) + (l.q.refused ? " \u00b7 we can take " + l.q.take + ", not " + l.q.want : "") + '</small></span>' + stepper(l.item, l.cond, l.offer) +
+        '<button type="button" class="bl__remove bl__fremove" data-item="' + esc(l.item) + '" data-cond="' + esc(l.cond) + '" aria-label="Remove">\u00d7</button></div>';
+    }).join("");
+    var n = fUnits(), t = fTotals();
+    $("#bl-count").textContent = n ? n + noun(n) : "";
+    $("#bl-tcash").textContent = money(t.cash);
+    $("#bl-tcredit").textContent = money(t.credit);
+    $("#bl-sheetsum").textContent = n ? n + noun(n) + " \u00b7 " + money(t.cash) + " cash \u00b7 " + money(t.credit) + " credit" : "Empty \u2014 count your items above";
+    $("#bl-submit").disabled = !n || !delChosen();
+    $("#bl-sheetsubmit").disabled = !n || !delChosen();
+    var dh = $("#bl-delhint"); if (dh) dh.hidden = !(n && !delChosen());
+    $("#bl-clear").disabled = !n;
+  }
+  function fixedClick(e) {
+    var b = e.target.closest ? e.target.closest("button[data-item]") : null;
+    if (!b || mode !== "fixed") return;
+    var item = b.getAttribute("data-item"), cond = b.getAttribute("data-cond"), n = fcart[fkey(item, cond)] | 0;
+    if (b.classList.contains("bl__finc")) fset(item, cond, n + 1);
+    else if (b.classList.contains("bl__fdec")) fset(item, cond, n - 1);
+    else if (b.classList.contains("bl__fremove")) fset(item, cond, 0);
+  }
+  function fixedChange(e) {
+    var inp = e.target.closest ? e.target.closest("input.bl__fqty") : null;
+    if (!inp || mode !== "fixed") return;
+    fset(inp.getAttribute("data-item"), inp.getAttribute("data-cond"), parseInt(inp.value, 10) || 0);
+  }
+  $("#bl-fixed").addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#bl-fixed-back")) { closeFixed(); return; } fixedClick(e); });
+  $("#bl-fixed").addEventListener("change", fixedChange);
+  $("#bl-lines").addEventListener("click", fixedClick);
+  $("#bl-lines").addEventListener("change", fixedChange);
+  function setMode(m) {
+    mode = m;
+    var on = m === "fixed", more = $("#bl-more");
+    if (on) { moreWas = more.hidden; more.hidden = true; } else more.hidden = moreWas;
+    ["#bl-form", "#bl-status", "#bl-hits"].forEach(function (sel) { var el = $(sel); if (el) el.hidden = on; });
+    $("#bl-fixed").hidden = !on;
+    root.classList.toggle("bl--fixed", on);
+    renderCart();
+  }
+  function openFixed(id, quiet) {
+    api("/fixed?id=" + encodeURIComponent(id) + (PV ? "&pv=" + encodeURIComponent(PV) : "")).then(function (j) {
+      fl = j.list; fl.preview = !!j.preview;
+      if (!quiet) fcart = fload(id);
+      setMode("fixed"); renderFixed();
+      if (!quiet) { setMsg(""); landOn(root); }
+    }).catch(function () { setMsg("This list is not open right now."); });
+  }
+  function closeFixed() { setMode("cards"); setMsg(""); }
+  FL_OPEN = function (id) { openFixed(id, false); };
+  function doSubmitFixed(pay) {
+    var lines = flines().map(function (l) { return { item: l.item, cond: l.cond, qty: l.qty }; });
+    if (!lines.length || !fl) return;
+    $("#bl-submit").disabled = true;
+    setMsg("Submitting\u2026");
+    api("/fixedsubmit", { list: fl.id, paymentType: pay, delivery: delChosen(), lines: lines }).then(function (j) {
+      if (!j.accepted) { setMsg(j.error || "The list was not accepted."); $("#bl-submit").disabled = false; return; }
+      fcart = {}; fsave();
+      var rp = j.repriced || {}, notes = [];
+      if (rp.capped && rp.capped.length) notes.push("Quantities were capped at what we can take: " + rp.capped.join("; ") + ".");
+      setMsg((j.confirmation || "Thank you, your list was submitted.") + (notes.length ? " " + notes.join(" ") : ""));
+      toast("List submitted");
+      loadMine();
+      if (j.instructions) showDone(j, notes);
+      openFixed(fl.id, true);                      // what is left, after this list took its units
+    }).catch(function (err) {
+      setMsg("Submit failed: " + err.message);
+      $("#bl-submit").disabled = false;
+    });
+  }
 
   /* ---- the sell page's game tiles link to #buylist; one that names a game picks it ---- */
   // image file name fragment -> BinderPOS game ids to try, then words to look for

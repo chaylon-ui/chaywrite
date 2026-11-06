@@ -1,0 +1,390 @@
+/* Fixed-price buylists (owner, 2026-11-05/06: "a new buylist for the new
+   McDonald's Pokemon toys ... images of each, a buy cash and credit price
+   (I can enter) and a selling price as well as loose, CIB, and new",
+   "a maximum ability so we could limit how many we buy as well as after a
+   certain qty we keep buying but pay less", "ability to turn on and off
+   which cleanly removes from buylist as this may be a temporary promotion",
+   "Build it in a way nobody sees it until it's on").
+
+   A list the store writes itself, apart from BinderPOS's card buylist: a
+   handful of items with a photo each, three conditions per item (loose /
+   complete in box / new), and for every item x condition the cash and
+   credit we pay, what we sell it for, how many we take at that price
+   ("first N"), the lower pair we pay past that, the most we buy in all, and
+   the running count of what has been reserved. Lists live in the stage
+   room's storage (keys fl:<id>), so a submitted list becomes an ordinary
+   9Pocket record (staff email, customer email, the worksheet) with its
+   lines marked fixed: approving one sends nothing to BinderPOS.
+
+   OFF is the default and means invisible: the sell page's strip does not
+   appear, /buylist/api/list answers "not found" exactly like an unknown
+   action, and a submit is refused. The editor (/9pocket/lists) carries a
+   preview key so staff can look at the shopper's view while it is off. */
+
+import { BASE, shell, esc, when } from "./stage-ui.js";
+import { can } from "./stage-auth.js";
+
+export const FL = "fl:";
+export const MAX_ITEMS = 200;
+export const MAX_LINES = 100;
+export const CONDITIONS = [
+  { key: "loose", label: "Loose" },
+  { key: "cib", label: "Complete in box" },
+  { key: "new", label: "New (sealed)" },
+];
+
+const num = (v) => { if (v === "" || v == null) return null; const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; };
+const int = (v) => { if (v === "" || v == null) return null; const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? Math.min(n, 1e6) : null; };
+const str = (v, n) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, n);
+export const slug = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+const cleanUrl = (u) => { const s = str(u, 500); return /^https:\/\/[^\s"'<>]+$/.test(s) ? s : ""; };
+const money = (n) => "$" + (Number(n) || 0).toFixed(2);
+const doJson = (body, status) => new Response(JSON.stringify(body), { status: status || 200, headers: { "content-type": "application/json" } });
+async function bodyOf(request) { try { return (await request.json()) || {}; } catch { return {}; } }
+const token = () => { const a = new Uint8Array(12); crypto.getRandomValues(a); return [...a].map((b) => b.toString(16).padStart(2, "0")).join(""); };
+
+/* ---------------- offers: prices, tiers, caps ---------------- */
+
+export function blankOffer() { return { cash: null, credit: null, sell: null, fullUpTo: null, afterCash: null, afterCredit: null, max: null, bought: 0 }; }
+export function cleanOffer(o, prev) {
+  const s = o && typeof o === "object" ? o : {};
+  const bought = s.bought === "" || s.bought == null ? (prev ? prev.bought : 0) : int(s.bought);
+  return { cash: num(s.cash), credit: num(s.credit), sell: num(s.sell), fullUpTo: int(s.fullUpTo), afterCash: num(s.afterCash), afterCredit: num(s.afterCredit), max: int(s.max), bought: Math.max(0, bought || 0) };
+}
+// Buying at all: a cash or a credit price above zero.
+export function buying(o) { return !!(o && ((o.cash || 0) > 0 || (o.credit || 0) > 0)); }
+// A lower price past "first N": only when N is set and a lower pair exists.
+export function hasAfter(o) { return !!(o && o.fullUpTo != null && ((o.afterCash || 0) > 0 || (o.afterCredit || 0) > 0)); }
+// How many more units the store takes of this offer; null = no limit.
+export function remaining(o) {
+  if (!buying(o)) return 0;
+  let cap = o.max;
+  if (o.fullUpTo != null && !hasAfter(o)) cap = cap == null ? o.fullUpTo : Math.min(cap, o.fullUpTo);
+  return cap == null ? null : Math.max(0, cap - (o.bought || 0));
+}
+export function fullLeft(o) { return o.fullUpTo == null ? null : Math.max(0, o.fullUpTo - (o.bought || 0)); }
+// Price `qty` units against the counts as they stand: the tiers (full
+// price, then the lower one), what is taken and what is refused.
+export function quote(o, qty) {
+  const want = Math.max(0, int(qty) || 0);
+  const rem = remaining(o);
+  const take = rem == null ? want : Math.min(want, rem);
+  const tiers = [];
+  if (take > 0) {
+    const fl = fullLeft(o);
+    const atFull = fl == null ? take : Math.min(take, fl);
+    if (atFull > 0) tiers.push({ qty: atFull, cash: o.cash || 0, credit: o.credit || 0, after: false });
+    const rest = take - atFull;
+    if (rest > 0) tiers.push({ qty: rest, cash: o.afterCash || 0, credit: o.afterCredit || 0, after: true });
+  }
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return { want, take, refused: want - take, tiers, cash: r2(tiers.reduce((s, t) => s + t.qty * t.cash, 0)), credit: r2(tiers.reduce((s, t) => s + t.qty * t.credit, 0)) };
+}
+
+/* ---------------- a list ---------------- */
+
+export function cleanList(b, prev, now, by) {
+  const id = slug(b && b.id) || (prev && prev.id);
+  if (!id) return null;
+  const conds = CONDITIONS;
+  const items = [], seen = new Set();
+  for (const it of (Array.isArray(b && b.items) ? b.items : []).slice(0, MAX_ITEMS)) {
+    if (!it || typeof it !== "object") continue;
+    const key = slug(it.key || it.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const prevIt = prev ? (prev.items || []).find((x) => x.key === key) : null;
+    const offers = {};
+    for (const c of conds) offers[c.key] = cleanOffer(it.offers && it.offers[c.key], prevIt && prevIt.offers ? prevIt.offers[c.key] : null);
+    items.push({ key, name: str(it.name, 80) || key, image: cleanUrl(it.image), retired: it.retired === true || it.retired === "on" || it.retired === "1", offers });
+  }
+  return {
+    id, title: str(b && b.title, 80) || (prev && prev.title) || id, blurb: str(b && b.blurb, 300),
+    on: prev ? !!prev.on : false, pv: (prev && prev.pv) || token(), conditions: conds, items,
+    created: (prev && prev.created) || now, updatedAt: now, updatedBy: str(by, 160),
+  };
+}
+
+// What the sell page's strip shows: the lists that are on (or previewed).
+export function summaryView(l) {
+  const live = (l.items || []).filter((i) => !i.retired);
+  return { id: l.id, title: l.title, blurb: l.blurb || "", images: live.map((i) => i.image).filter(Boolean).slice(0, 4), count: live.length,
+    buying: live.filter((i) => CONDITIONS.some((c) => buying(i.offers[c.key]))).length };
+}
+// What the shopper sees of a list: never the running counts themselves,
+// only what is left and the tiers; never the preview key.
+export function publicView(l) {
+  return {
+    id: l.id, title: l.title, blurb: l.blurb || "", conditions: l.conditions || CONDITIONS,
+    items: (l.items || []).filter((i) => !i.retired).map((i) => ({
+      key: i.key, name: i.name, image: i.image,
+      offers: Object.fromEntries((l.conditions || CONDITIONS).map((c) => {
+        const o = i.offers[c.key] || blankOffer();
+        return [c.key, { buying: buying(o), cash: o.cash || 0, credit: o.credit || 0, sell: o.sell, remaining: remaining(o), fullLeft: fullLeft(o), fullUpTo: o.fullUpTo, afterCash: hasAfter(o) ? o.afterCash || 0 : null, afterCredit: hasAfter(o) ? o.afterCredit || 0 : null }];
+      })),
+    })),
+  };
+}
+export const visible = (l, pv) => !!l && (!!l.on || (!!pv && !!l.pv && pv === l.pv));
+
+export function cleanLines(v) {
+  if (!Array.isArray(v)) return [];
+  const out = [], seen = new Set();
+  for (const x of v.slice(0, MAX_LINES)) {
+    if (!x || typeof x !== "object") continue;
+    const item = slug(x.item), cond = slug(x.cond), qty = Math.min(999, int(x.qty) || 0);
+    if (!item || !cond || !qty || seen.has(item + "|" + cond)) continue;
+    seen.add(item + "|" + cond);
+    out.push({ item, cond, qty });
+  }
+  return out;
+}
+
+// The stage record's lines for a reserved quote: one per tier, marked
+// fixed so approval skips BinderPOS and a rejection gives the units back.
+export function cardsOf(list, lines) {
+  const cards = [], notes = [];
+  const condLabel = (k) => ((list.conditions || CONDITIONS).find((c) => c.key === k) || {}).label || k;
+  for (const ln of lines) {
+    const item = (list.items || []).find((i) => i.key === ln.item && !i.retired);
+    const o = item && item.offers[ln.cond];
+    if (!item || !o) { notes.push(ln.item + " · " + ln.cond + ": not on this list"); continue; }
+    const q = quote(o, ln.qty);
+    if (q.refused) notes.push(item.name + " · " + condLabel(ln.cond) + ": " + (q.take ? "we can take " + q.take + " more, not " + q.want : buying(o) ? "we are at our limit" : "we are not buying that one right now"));
+    for (const t of q.tiers) {
+      cards.push({ cardId: FL + list.id + ":" + item.key + ":" + ln.cond + (t.after ? ":after" : ""), cardName: item.name, setName: list.title, game: "fixed", type: "Normal",
+        condition: ln.cond, conditionName: condLabel(ln.cond) + (t.after ? " · after the first " + o.fullUpTo : ""), quantity: String(t.qty),
+        cashBuyPrice: t.cash, storeCreditBuyPrice: t.credit, imageUrl: item.image || "", fixed: { list: list.id, item: item.key, cond: ln.cond, after: !!t.after } });
+    }
+  }
+  return { cards, notes };
+}
+
+/* ---------------- the stage room's handlers (/_stage/fl/*) ---------------- */
+
+async function allLists(cx) {
+  const m = await cx.storage.list({ prefix: FL });
+  const out = [];
+  for (const v of m.values()) if (v && v.id) out.push(v);
+  out.sort((a, b) => (a.created || 0) - (b.created || 0));
+  return out;
+}
+// A rejected list gives its units back (called by the mark handler).
+export async function releaseFixed(cx, cards) {
+  const byList = {};
+  for (const c of Array.isArray(cards) ? cards : []) {
+    const f = c && c.fixed;
+    if (!f || !f.list) continue;
+    (byList[f.list] = byList[f.list] || []).push({ item: f.item, cond: f.cond, qty: Math.max(0, parseInt(c.quantity, 10) || 0) });
+  }
+  let released = 0;
+  for (const [id, lines] of Object.entries(byList)) {
+    const l = await cx.storage.get(FL + id);
+    if (!l) continue;
+    for (const ln of lines) {
+      const it = (l.items || []).find((i) => i.key === ln.item);
+      const o = it && it.offers[ln.cond];
+      if (!o) continue;
+      const give = Math.min(o.bought || 0, ln.qty);
+      o.bought = (o.bought || 0) - give; released += give;
+    }
+    await cx.storage.put(FL + id, l);
+  }
+  return released;
+}
+
+export async function fixedDo(cx, request, url) {
+  const p = url.pathname, post = request.method === "POST";
+  const now = cx.now();
+  if (p === "/_stage/fl/list") return doJson({ ok: true, lists: await allLists(cx) });
+  if (p === "/_stage/fl/get") {
+    const l = await cx.storage.get(FL + slug(url.searchParams.get("id")));
+    return l ? doJson({ ok: true, list: l }) : doJson({ ok: false, error: "no such list" }, 404);
+  }
+  if (p === "/_stage/fl/create" && post) {
+    const b = await bodyOf(request);
+    const id = slug(b.id);
+    if (!id) return doJson({ ok: false, error: "the list needs an id (letters and digits)" }, 400);
+    if (await cx.storage.get(FL + id)) return doJson({ ok: false, error: "a list with that id exists" }, 409);
+    const l = cleanList({ ...b, id }, null, now, b.by);
+    await cx.storage.put(FL + id, l);
+    return doJson({ ok: true, list: l });
+  }
+  if (p === "/_stage/fl/save" && post) {
+    const b = await bodyOf(request);
+    const prev = await cx.storage.get(FL + slug(b.id || (b.list && b.list.id)));
+    if (!prev) return doJson({ ok: false, error: "no such list" }, 404);
+    const l = cleanList({ ...(b.list || {}), id: prev.id }, prev, now, b.by);
+    await cx.storage.put(FL + prev.id, l);
+    return doJson({ ok: true, list: l });
+  }
+  if (p === "/_stage/fl/set" && post) {
+    const b = await bodyOf(request);
+    const l = await cx.storage.get(FL + slug(b.id));
+    if (!l) return doJson({ ok: false, error: "no such list" }, 404);
+    if (b.delete === true) {
+      if (l.on) return doJson({ ok: false, error: "switch the list off first" }, 409);
+      await cx.storage.delete(FL + l.id);
+      return doJson({ ok: true, deleted: l.id });
+    }
+    if (typeof b.on === "boolean") { l.on = b.on; l.updatedAt = now; l.updatedBy = str(b.by, 160); l.switchedAt = now; }
+    if (b.newPreview === true) l.pv = token();
+    await cx.storage.put(FL + l.id, l);
+    return doJson({ ok: true, list: l });
+  }
+  // Quote and reserve in one step: the counts move here, under the room's
+  // input gate, so two shoppers cannot both take the last units.
+  if (p === "/_stage/fl/reserve" && post) {
+    const b = await bodyOf(request);
+    const l = await cx.storage.get(FL + slug(b.id));
+    if (!l || !l.on) return doJson({ ok: false, error: "This list is not open right now.", status: 404 }, 404);
+    const lines = cleanLines(b.lines);
+    if (!lines.length) return doJson({ ok: false, error: "the list is empty", status: 400 }, 400);
+    const { cards, notes } = cardsOf(l, lines);
+    if (!cards.length) return doJson({ ok: false, error: "None of these can be taken right now: " + notes.join("; "), notes, status: 409 }, 409);
+    for (const c of cards) {
+      const it = l.items.find((i) => i.key === c.fixed.item);
+      const o = it.offers[c.fixed.cond];
+      o.bought = (o.bought || 0) + (parseInt(c.quantity, 10) || 0);
+    }
+    l.reservedAt = now;
+    await cx.storage.put(FL + l.id, l);
+    const units = cards.reduce((s, c) => s + (parseInt(c.quantity, 10) || 0), 0);
+    return doJson({ ok: true, id: l.id, title: l.title, cards, notes, units });
+  }
+  if (p === "/_stage/fl/release" && post) {
+    const b = await bodyOf(request);
+    return doJson({ ok: true, released: await releaseFixed(cx, b.cards) });
+  }
+  return doJson({ ok: false, error: "not found" }, 404);
+}
+
+/* ---------------- the first list ---------------- */
+
+const CDN = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/mcd-pokemon-2026-";
+const MCD = [["pikachu", "Pikachu", "1793967307"], ["eevee", "Eevee", "1793967307"], ["umbreon", "Umbreon", "1793967307"], ["charmander", "Charmander", "1793967307"], ["squirtle", "Squirtle", "1793967308"],
+  ["bulbasaur", "Bulbasaur", "1793967308"], ["piplup", "Piplup", "1793967307"], ["rowlet", "Rowlet", "1793967308"], ["torchic", "Torchic", "1793967307"], ["sobble", "Sobble", "1793967307"],
+  ["sprigatito", "Sprigatito", "1793967308"], ["munchlax", "Munchlax", "1793967307"], ["minccino", "Minccino", "1793967308"], ["espurr", "Espurr", "1793967307"], ["weedle", "Weedle", "1793967307"]];
+export const SEED = {
+  id: "mcd-pokemon-2026", title: "McDonald's Pokémon toys",
+  blurb: "The 2026 Happy Meal figures. Count what you have of each, loose, complete in its box, or still sealed, and choose cash or store credit.",
+  items: MCD.map(([key, name, v]) => ({ key, name, image: CDN + key + ".png?v=" + v, offers: {} })),
+};
+
+/* ---------------- the staff editor (/9pocket/lists) ---------------- */
+
+export const SELL_PAGE = "https://exorgames.com/pages/selling-to-exor-games-buylist";
+
+export async function serveListsStaff(request, env, url, user, form, helpers) {
+  const { html, redirect, q, toLogin, opts, call } = helpers;
+  const p = url.pathname;
+  const noStore = { "cache-control": "no-store" };
+  const R = BASE + "/lists";
+  const allowed = can(user, "lists");
+  if (p === R + ".json") {
+    if (!user) return Response.json({ error: "sign in required" }, { status: 403, headers: noStore });
+    if (!allowed) return Response.json({ error: "no lists permission" }, { status: 403, headers: noStore });
+    return Response.json(await call("/_stage/fl/list"), { headers: noStore });
+  }
+  if (!user) return toLogin();
+  if (!allowed) return html(renderLists({ ...opts, denied: true, lists: [] }), 403);
+  if (p === R + "/control" && request.method === "POST") {
+    const f = form || {};
+    const action = String(f.action || "");
+    const id = slug(f.id);
+    const by = user.email;
+    let result;
+    if (action === "seed") {
+      const r = await call("/_stage/fl/create", { ...SEED, by });
+      result = r.ok ? { ok: true, message: "The McDonald's Pokémon list is here with its 15 toys and every price blank. Fill the prices in and save; switch it on when it is ready." } : r;
+    } else if (action === "create") {
+      const r = await call("/_stage/fl/create", { id: slug(f.id || f.title), title: f.title, blurb: f.blurb, items: [], by });
+      result = r.ok ? { ok: true, message: "List \"" + r.list.title + "\" created (off). Add its items, then save." } : r;
+    } else if (action === "save") {
+      let list = f.list;
+      if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = null; } }
+      if (!list || typeof list !== "object") result = { ok: false, error: "nothing to save" };
+      else { const r = await call("/_stage/fl/save", { id, list, by }); result = r.ok ? { ok: true, message: "Saved " + r.list.items.length + " item" + (r.list.items.length === 1 ? "" : "s") + " on \"" + r.list.title + "\"." } : r; }
+    } else if (action === "on" || action === "off") {
+      const r = await call("/_stage/fl/set", { id, on: action === "on", by });
+      result = r.ok ? { ok: true, message: action === "on" ? "\"" + r.list.title + "\" is ON: the strip is on the sell page now." : "\"" + r.list.title + "\" is OFF: gone from the sell page; prices and counts are kept." } : r;
+    } else if (action === "preview-key") {
+      const r = await call("/_stage/fl/set", { id, newPreview: true, by });
+      result = r.ok ? { ok: true, message: "New preview link made; the old one no longer works." } : r;
+    } else if (action === "delete") {
+      if (user.role !== "admin") result = { ok: false, error: "Only an admin can delete a list." };
+      else { const r = await call("/_stage/fl/set", { id, delete: true, by }); result = r.ok ? { ok: true, message: "List deleted." } : r; }
+    } else result = { ok: false, error: "unknown action" };
+    if (f.__form) return redirect(R + q(result.ok ? { msg: result.message } : { err: result.error || "failed" }));
+    return Response.json(result, { status: result.ok ? 200 : (result.status || 400), headers: noStore });
+  }
+  const j = await call("/_stage/fl/list");
+  return html(renderLists({ ...opts, lists: j.ok ? j.lists : [], origin: url.origin }));
+}
+
+const CSS = `.fl-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}.fl-head h3{margin:0}
+.fl-meta{display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:8px 0}.fl-meta label{display:block;font-size:12px;color:#5b6770}.fl-meta input,.fl-meta textarea{width:100%}
+.fl-item{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;border-top:1px solid #e3e7ea;padding:10px 0}.fl-item img{width:72px;height:72px;object-fit:contain;background:#f4f6f7;border-radius:8px}
+.fl-item .nm{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:6px}.fl-item .nm input.name{font-weight:700;width:180px}.fl-item .nm input.img{flex:1 1 260px;min-width:160px;font-size:12px}
+.fl-row{display:grid;grid-template-columns:128px repeat(8,minmax(60px,1fr));gap:4px;align-items:center;font-size:12.5px;margin:2px 0}.fl-row>b{font-weight:600}.fl-row input{width:100%;padding:4px 5px;font-size:13px}
+.fl-cols{display:grid;grid-template-columns:128px repeat(8,minmax(60px,1fr));gap:4px;font-size:11px;color:#5b6770;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px}.fl-cols span:first-child{text-transform:none;letter-spacing:0}
+.fl-row.off input{opacity:.55}.fl-item.retired{opacity:.5}.fl-sw{display:inline-flex;gap:6px;align-items:center}.fl-add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.fl-top{position:sticky;top:0;background:#fff;padding:8px 0;z-index:2;border-bottom:1px solid #e3e7ea;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media(max-width:900px){.fl-row,.fl-cols{grid-template-columns:100px repeat(4,1fr)}.fl-cols span:nth-child(n+6),.fl-row>*:nth-child(n+6){grid-column:auto}}`;
+
+export function renderLists(o) {
+  if (o.denied) return shell("Fixed-price lists", `<h1>Fixed-price lists</h1><div class="err">Your account cannot edit the fixed-price lists. Ask an admin for the "lists" permission.</div>`, o, true);
+  const lists = o.lists || [];
+  const hasSeed = lists.some((l) => l.id === SEED.id);
+  const inp = (k, key, v, step, title) => `<input type="number" min="0" step="${step}" data-k="${k}" data-f="${key}" value="${v == null ? "" : esc(v)}" title="${esc(title)}">`;
+  const item = (l, it) => `<div class="fl-item${it.retired ? " retired" : ""}" data-item="${esc(it.key)}">
+<div>${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : `<div style="width:72px;height:72px;background:#f4f6f7;border-radius:8px"></div>`}</div>
+<div><div class="nm"><input class="text name" data-f="name" value="${esc(it.name)}" placeholder="name"><input class="text img" data-f="image" value="${esc(it.image || "")}" placeholder="image URL (https://cdn.shopify.com/...)"><label class="chk"><input type="checkbox" data-f="retired" ${it.retired ? "checked" : ""}> retired (hidden)</label></div>
+${(l.conditions || CONDITIONS).map((c) => { const of = it.offers[c.key] || blankOffer(); const rem = remaining(of);
+    return `<div class="fl-row${buying(of) ? "" : " off"}" data-cond="${esc(c.key)}"><b>${esc(c.label)}<br><small class="muted">${buying(of) ? (rem == null ? "no limit" : rem + " more") : "not buying"}</small></b>
+${inp(c.key, "cash", of.cash, "0.01", "cash we pay")}${inp(c.key, "credit", of.credit, "0.01", "store credit we pay")}${inp(c.key, "sell", of.sell, "0.01", "what we sell it for (shown)")}
+${inp(c.key, "fullUpTo", of.fullUpTo, "1", "how many at that price (counted across every list)")}${inp(c.key, "afterCash", of.afterCash, "0.01", "cash past that count")}${inp(c.key, "afterCredit", of.afterCredit, "0.01", "credit past that count")}
+${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${inp(c.key, "bought", of.bought, "1", "reserved so far by submitted lists; lower it if a list never arrived")}</div>`; }).join("")}
+</div></div>`;
+  const card = (l) => {
+    const live = (l.items || []).filter((i) => !i.retired).length;
+    const preview = SELL_PAGE + "?xgfl=" + encodeURIComponent(l.id) + "&pv=" + encodeURIComponent(l.pv || "") + "#buylist";
+    const hid = `<input type="hidden" name="__form" value="1"><input type="hidden" name="id" value="${esc(l.id)}">`;
+    return `<div class="card fl-list" data-id="${esc(l.id)}">
+<div class="fl-head"><h3>${esc(l.title)}</h3><span class="tag ${l.on ? "tag-approved" : "tag-off"}">${l.on ? "ON - on the sell page" : "OFF - nobody sees it"}</span><span class="muted">${live} item${live === 1 ? "" : "s"}${l.updatedAt ? " · saved " + esc(when(l.updatedAt)) + (l.updatedBy ? " by " + esc(l.updatedBy) : "") : ""}</span>
+<span class="sp"></span>
+<form method="post" action="${BASE}/lists/control" onsubmit="return confirm('${l.on ? "Switch this list OFF? It disappears from the sell page at once; prices and counts are kept." : "Switch this list ON? The strip appears on the sell page for everyone at once."}')">${hid}<input type="hidden" name="action" value="${l.on ? "off" : "on"}"><button type="submit" class="${l.on ? "" : "ok"}">${l.on ? "Switch off" : "Switch on"}</button></form>
+<a class="btn" href="${esc(preview)}" target="_blank" rel="noopener" title="Opens the sell page with this list showing for you only, even while it is off">Preview as a shopper ↗</a>
+${l.on ? "" : `<form method="post" action="${BASE}/lists/control" onsubmit="return confirm('Delete this list and its prices? This cannot be undone.')">${hid}<input type="hidden" name="action" value="delete"><button type="submit">Delete</button></form>`}</div>
+<div class="fl-meta"><label>Title<input class="text" data-f="title" value="${esc(l.title)}"></label><label>Blurb on the sell page<input class="text" data-f="blurb" value="${esc(l.blurb || "")}" placeholder="one or two sentences"></label></div>
+<p class="muted" style="margin:4px 0 0">Per item and condition: what you pay in <b>cash</b> and <b>credit</b>, what you <b>sell</b> it for (shown to the seller), <b>first</b> = how many you take at that price before the lower <b>then</b> pair applies, <b>max</b> = the most you buy in all, <b>bought</b> = reserved by submitted lists so far. Blank cash and credit = not buying that one. Counts run across every customer; a rejected list gives its units back.</p>
+<div class="fl-cols"><span>Condition</span><span>Cash</span><span>Credit</span><span>Sell</span><span>First</span><span>Then cash</span><span>Then credit</span><span>Max</span><span>Bought</span></div>
+<div class="fl-items">${(l.items || []).map((it) => item(l, it)).join("") || `<p class="muted">No items yet.</p>`}</div>
+<div class="fl-add"><input class="text" data-add="name" placeholder="new item: name"><input class="text" data-add="image" placeholder="image URL" style="flex:1 1 260px"><button type="button" class="sm" data-act="add">Add item</button></div>
+<div class="act"><button type="button" class="save" data-act="save">Save changes</button><span class="muted" data-msg></span></div>
+</div>`;
+  };
+  const body = `<h1>Fixed-price lists</h1>
+<p class="muted">Buylists the store prices itself, apart from the card buylist: a toy promotion, sealed product, anything with a photo and a price per condition. A list that is <b>on</b> shows as a strip on the <a href="${SELL_PAGE}" target="_blank" rel="noopener">sell page</a>; <b>off</b> is invisible (the page, the strip and submissions all go away; what you typed stays for next time). A sent list lands on 9Pocket like any other, with its lines marked fixed; approving one sends nothing to BinderPOS.</p>
+${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
+${lists.map(card).join("")}
+<div class="card"><h3>New list</h3>
+${hasSeed ? "" : `<form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="seed"><button type="submit" class="ok">Create the McDonald's Pokémon list (15 toys, prices blank, off)</button></form>`}
+<form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="create"><input class="text" name="title" placeholder="title, e.g. Pokémon plush" required><input class="text" name="id" placeholder="id (letters, digits, dashes)" pattern="[a-z0-9-]+"><button type="submit">Create (empty, off)</button></form></div>
+<script>
+(function(){var CTL=${JSON.stringify(BASE + "/lists/control")};
+function collect(card){var list={title:card.querySelector('[data-f="title"]').value,blurb:card.querySelector('[data-f="blurb"]').value,items:[]};
+card.querySelectorAll('.fl-item').forEach(function(el){var it={key:el.getAttribute('data-item'),name:el.querySelector('[data-f="name"]').value,image:el.querySelector('[data-f="image"]').value,retired:el.querySelector('[data-f="retired"]').checked,offers:{}};
+el.querySelectorAll('.fl-row').forEach(function(r){var o={};r.querySelectorAll('input[data-k]').forEach(function(i){o[i.getAttribute('data-f')]=i.value;});it.offers[r.getAttribute('data-cond')]=o;});list.items.push(it);});return list;}
+function post(body,cb){fetch(CTL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}).then(cb,function(e){cb({ok:false,error:String(e)});});}
+document.querySelectorAll('.fl-list').forEach(function(card){var id=card.getAttribute('data-id'),msg=card.querySelector('[data-msg]');
+card.querySelector('[data-act="save"]').addEventListener('click',function(){var b=this;b.disabled=true;msg.textContent='Saving…';post({action:'save',id:id,list:collect(card)},function(j){b.disabled=false;if(!j.ok){msg.textContent=j.error||'failed';return;}location.href=location.pathname+'?msg='+encodeURIComponent(j.message);});});
+card.querySelector('[data-act="add"]').addEventListener('click',function(){var n=card.querySelector('[data-add="name"]'),im=card.querySelector('[data-add="image"]');if(!n.value.trim()){n.focus();return;}
+var list=collect(card);list.items.push({key:'',name:n.value.trim(),image:im.value.trim(),retired:false,offers:{}});msg.textContent='Adding…';post({action:'save',id:id,list:list},function(j){if(!j.ok){msg.textContent=j.error||'failed';return;}location.href=location.pathname+'?msg='+encodeURIComponent('Added '+n.value.trim()+'.');});});
+card.addEventListener('input',function(){card.classList.add('is-dirty');msg.textContent='unsaved changes';});});
+window.addEventListener('beforeunload',function(e){if(document.querySelector('.fl-list.is-dirty')&&!document.body.getAttribute('data-leaving')){e.preventDefault();e.returnValue='';}});
+document.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(){document.body.setAttribute('data-leaving','1');});});
+})();
+</script>`;
+  return shell("Fixed-price lists", `<style>${CSS}</style>` + body, o, true);
+}

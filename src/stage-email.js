@@ -103,7 +103,7 @@ ${mallowHtml()}
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${PAPER};border-radius:10px"><tr><td style="padding:14px 16px;line-height:1.55"><strong>What's the next step?</strong> ${esc(NEXT_STEP.replace(/^What.s the next step\?\s*/, ""))}</td></tr></table>
 ${deliveryHtml(rec)}
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:18px 0 6px"><tr>
-    <td style="padding:0 8px 0 0"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Cards</div><div style="font-size:20px;font-weight:700">${t.units}</div></td>
+    <td style="padding:0 8px 0 0"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">${rec.fixed ? "Items" : "Cards"}</div><div style="font-size:20px;font-weight:700">${t.units}</div></td>
     <td style="padding:0 8px"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Paid as</div><div style="font-size:20px;font-weight:700">${esc(rec.paymentType)}</div></td>
     <td style="padding:0 0 0 8px;text-align:right"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Estimated total</div><div style="font-size:20px;font-weight:700;color:${RED}">${money(total)}</div></td>
   </tr></table>
@@ -123,7 +123,7 @@ ${deliveryHtml(rec)}
   const text = [
     `${BRAND} - we have your buylist`, `Buylist Number: ${ref}`, "",
     first ? `Hi ${first},` : "Hello,", "", mallowText(), "", NEXT_STEP, "", ...deliveryText(rec),
-    `Cards: ${t.units} · Paid as: ${rec.paymentType} · Estimated total: ${money(total)}`, "",
+    `${rec.fixed ? "Items" : "Cards"}: ${t.units} · Paid as: ${rec.paymentType} · Estimated total: ${money(total)}`, "",
     ...cards.map((c) => `${qty(c)} x ${c.cardName} [${c.setName}] ${c.conditionName || c.condition}${c.type && c.type !== "Normal" ? " " + c.type : ""} @ ${money(each(c))} = ${money(qty(c) * (Number(each(c)) || 0))}`),
     `Estimated ${credit ? "store credit" : "cash"} total: ${money(total)}`, "",
     `Prices are today's buylist estimate; nothing is paid until we have verified your cards. Status: ${STATUS_PAGE}`, "",
@@ -217,7 +217,8 @@ export function buildStaffBuylistEmail(rec, o) {
   const total = credit ? t.credit : t.cash;
   const name = String(rec.customerName || "").trim() || "a customer";
   const cid = String(rec.customer || "").replace(/\D/g, "");
-  const subject = `New buylist ${ref}: ${name} - ${t.units} card${t.units === 1 ? "" : "s"}, ${money(total)} ${credit ? "store credit" : "cash"}${op.staged ? " (waiting for approval)" : ""}`;
+  const noun = rec.fixed ? "item" : "card";
+  const subject = `New ${rec.fixed ? rec.fixed.title + " list" : "buylist"} ${ref}: ${name} - ${t.units} ${noun}${t.units === 1 ? "" : "s"}, ${money(total)} ${credit ? "store credit" : "cash"}${op.staged ? " (waiting for approval)" : ""}`;
   const dl = staffDelivery(rec);
   const cm = op.customerMail;
   const customerNote = !cm ? "" : cm.ok ? `The customer's confirmation (the same list, with the drop-off instructions) went to ${esc(cm.to || rec.customerEmail || "them")}.` : `<strong>The customer's confirmation was NOT sent</strong>${cm.error ? " (" + esc(cm.error) + ")" : ""}${rec.customerEmail ? "" : " - no email address on the Shopify customer"}.`;
@@ -238,7 +239,7 @@ export function buildStaffBuylistEmail(rec, o) {
 <tr><td style="background:${RED};padding:20px 28px;color:#ffffff">
   <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">${BRAND} · staff copy</div>
   <div style="font-size:24px;font-weight:700;line-height:1.2;margin-top:4px">New buylist ${esc(ref)}${op.staged ? " - waiting for approval" : ""}</div>
-  <div style="font-size:15px;margin-top:6px;opacity:.95">${esc(name)} · ${t.units} card${t.units === 1 ? "" : "s"} · <strong>${money(total)}</strong> ${credit ? "store credit" : "cash"}${dl.known ? " · " + dl.label : ""}</div>
+  <div style="font-size:15px;margin-top:6px;opacity:.95">${esc(name)} · ${t.units} ${noun}${t.units === 1 ? "" : "s"} · <strong>${money(total)}</strong> ${credit ? "store credit" : "cash"}${dl.known ? " · " + dl.label : ""}${rec.fixed ? " · fixed-price list" : ""}</div>
 </td></tr>
 <tr><td style="padding:22px 28px 6px">
   <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:15px">
@@ -265,7 +266,7 @@ export function buildStaffBuylistEmail(rec, o) {
   const text = [
     `New buylist ${ref}${op.staged ? " - waiting for approval" : ""}`, "",
     `Customer: ${name}${rec.customerEmail ? " <" + rec.customerEmail + ">" : " (no email on the customer record)"}${rec.customerPhone ? " · " + rec.customerPhone : ""}`,
-    `Paid as: ${rec.paymentType} · ${t.units} card${t.units === 1 ? "" : "s"} · ${credit ? "store credit" : "cash"} total ${money(total)}`,
+    `Paid as: ${rec.paymentType} · ${t.units} ${noun}${t.units === 1 ? "" : "s"} · ${credit ? "store credit" : "cash"} total ${money(total)}${rec.fixed ? " · fixed-price list: " + rec.fixed.title + " (nothing goes to BinderPOS; pay at the counter)" : ""}`,
     `Delivery: ${dl.label} (${dl.note})`,
     op.link ? `Open: ${op.link}` : "", "",
     ...cards.map((c) => `${qty(c)} x ${c.cardName} [${c.setName}] ${c.conditionName || c.condition}${c.type && c.type !== "Normal" ? " " + c.type : ""} - cash ${money(c.cashBuyPrice)} / credit ${money(c.storeCreditBuyPrice)}`),
@@ -309,7 +310,7 @@ export function buildDecisionEmail(rec, kind) {
   <p style="margin:0 0 14px;font-size:16px">${first ? "Hi " + esc(first) + "," : "Hello,"}</p>
   <p style="margin:0 0 14px;line-height:1.55">${lead}</p>
   ${approved ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:6px 0"><tr>
-    <td style="padding:0 8px 0 0"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Cards</div><div style="font-size:20px;font-weight:700">${t.units}</div></td>
+    <td style="padding:0 8px 0 0"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">${rec.fixed ? "Items" : "Cards"}</div><div style="font-size:20px;font-weight:700">${t.units}</div></td>
     <td style="padding:0 8px"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Paid as</div><div style="font-size:20px;font-weight:700">${esc(rec.paymentType)}</div></td>
     <td style="padding:0 0 0 8px;text-align:right"><div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:.06em">Total</div><div style="font-size:20px;font-weight:700;color:${RED}">${money(total)}</div></td>
   </tr></table>` : ""}
