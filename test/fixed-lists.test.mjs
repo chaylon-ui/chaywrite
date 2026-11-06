@@ -233,3 +233,33 @@ test("the editor: the seed button, the switch, the preview link, the rows; the l
   const del = await serveListsStaff(new Request(url("/9pocket/lists/control"), { method: "POST" }), {}, url("/9pocket/lists/control"), LISTER, { action: "delete", id: SEED.id }, { ...helpers, opts: { ...helpers.opts, user: LISTER } });
   assert.equal((await del.json()).ok, false);   // staff cannot delete, and it is on anyway
 });
+
+test("a list with the owner's own title: empty from the form, then the 15 toys added to it; or made with them from the start", async () => {
+  const now = { t: T0 };
+  const c = cx(now);
+  const H = { html: (s, st) => new Response(s, { status: st || 200 }), redirect: (to) => new Response(null, { status: 303, headers: { location: to } }), q: (o) => "?" + new URLSearchParams(Object.entries(o).filter(([, b]) => b)).toString(), toLogin: () => new Response(null, { status: 303 }), opts: { on: true, emailOn: true, user: ADMIN }, call: (path, body) => call(c, path, body).then((r) => r.body) };
+  const url = (p) => new URL("https://w.example" + p);
+  const ctl = (f) => serveListsStaff(new Request(url("/9pocket/lists/control"), { method: "POST" }), {}, url("/9pocket/lists/control"), ADMIN, f, H);
+  // the owner's form, untouched (no withToys): an empty list under their title
+  const made = await ctl({ action: "create", title: "2026 McDonalds Pokémon Toys", id: "", __form: "1" });
+  assert.equal(made.status, 303); assert.ok(decodeURIComponent(made.headers.get("location")).replace(/\+/g, " ").includes("created (off). Add its items"));
+  let l = (await call(c, "/_stage/fl/get?id=2026-mcdonalds-pokemon-toys")).body.list;
+  assert.equal(l.title, "2026 McDonalds Pokémon Toys"); assert.equal(l.items.length, 0); assert.equal(l.on, false);
+  // the editor offers the toys on that list
+  const page = renderLists({ user: ADMIN, lists: [l] });
+  assert.ok(page.includes('value="addseed"') && page.includes("Add the 15 McDonald's toys"));
+  const added = await ctl({ action: "addseed", id: l.id });
+  assert.ok((await added.json()).message.startsWith("Added the 15 McDonald's toys to \"2026 McDonalds Pokémon Toys\""));
+  l = (await call(c, "/_stage/fl/get?id=2026-mcdonalds-pokemon-toys")).body.list;
+  assert.equal(l.items.length, 15); assert.equal(l.items[0].key, "pikachu"); assert.ok(l.items[0].image.startsWith("https://cdn.shopify.com/"));
+  assert.deepEqual(l.items[0].offers.loose, { cash: null, credit: null, sell: null, fullUpTo: null, afterCash: null, afterCredit: null, max: null, bought: 0 });
+  assert.ok(!renderLists({ user: ADMIN, lists: [l] }).includes('value="addseed"'));
+  // a second press changes nothing; a list with some of them gets the rest
+  assert.ok((await (await ctl({ action: "addseed", id: l.id })).json()).message.includes("already has all 15"));
+  await call(c, "/_stage/fl/save", { id: l.id, list: { ...l, items: l.items.slice(0, 3) } });
+  assert.ok(renderLists({ user: ADMIN, lists: [(await call(c, "/_stage/fl/get?id=" + l.id)).body.list] }).includes("(12 missing)"));
+  assert.ok((await (await ctl({ action: "addseed", id: l.id })).json()).message.startsWith("Added the 12"));
+  // the form with the box ticked starts with the toys
+  await ctl({ action: "create", title: "Toys two", withToys: "1" });
+  assert.equal((await call(c, "/_stage/fl/get?id=toys-two")).body.list.items.length, 15);
+});

@@ -298,8 +298,20 @@ export async function serveListsStaff(request, env, url, user, form, helpers) {
       const r = await call("/_stage/fl/create", { ...SEED, by });
       result = r.ok ? { ok: true, message: "The McDonald's Pokémon list is here with its 15 toys and every price blank. Fill the prices in and save; switch it on when it is ready." } : r;
     } else if (action === "create") {
-      const r = await call("/_stage/fl/create", { id: slug(f.id || f.title), title: f.title, blurb: f.blurb, items: [], by });
-      result = r.ok ? { ok: true, message: "List \"" + r.list.title + "\" created (off). Add its items, then save." } : r;
+      const r = await call("/_stage/fl/create", { id: slug(f.id || f.title), title: f.title, blurb: f.blurb, items: f.withToys ? SEED.items : [], by });
+      result = r.ok ? { ok: true, message: "List \"" + r.list.title + "\" created (off)" + (f.withToys ? " with the 15 McDonald's toys." : ". Add its items, then save.") } : r;
+    } else if (action === "addseed") {
+      // Owner, 2026-11-06: made a list of their own ("2026 McDonalds Pokémon
+      // Toys") with the empty form and found no toys in it. Any list can take
+      // the 15 toys; ones already there are left as they are.
+      const g = await call("/_stage/fl/get?id=" + encodeURIComponent(id));
+      if (!g.ok) result = g;
+      else {
+        const have = new Set((g.list.items || []).map((i) => i.key));
+        const add = SEED.items.filter((i) => !have.has(i.key));
+        const r = add.length ? await call("/_stage/fl/save", { id, list: { ...g.list, items: (g.list.items || []).concat(add) }, by }) : { ok: true, list: g.list };
+        result = r.ok ? { ok: true, message: add.length ? "Added the " + add.length + " McDonald's toy" + (add.length === 1 ? "" : "s") + " to \"" + r.list.title + "\" with their pictures; the prices are blank until you fill them in." : "\"" + g.list.title + "\" already has all 15 toys." } : r;
+      }
     } else if (action === "save") {
       let list = f.list;
       if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = null; } }
@@ -348,6 +360,7 @@ ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${in
 </div></div>`;
   const card = (l) => {
     const live = (l.items || []).filter((i) => !i.retired).length;
+    const missing = SEED.items.filter((s) => !(l.items || []).some((i) => i.key === s.key)).length;
     const preview = SELL_PAGE + "?xgfl=" + encodeURIComponent(l.id) + "&pv=" + encodeURIComponent(l.pv || "") + "#buylist";
     const hid = `<input type="hidden" name="__form" value="1"><input type="hidden" name="id" value="${esc(l.id)}">`;
     return `<div class="card fl-list" data-id="${esc(l.id)}">
@@ -355,6 +368,7 @@ ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${in
 <span class="sp"></span>
 <form method="post" action="${BASE}/lists/control" onsubmit="return confirm('${l.on ? "Switch this list OFF? It disappears from the sell page at once; prices and counts are kept." : "Switch this list ON? The strip appears on the sell page for everyone at once."}')">${hid}<input type="hidden" name="action" value="${l.on ? "off" : "on"}"><button type="submit" class="${l.on ? "" : "ok"}">${l.on ? "Switch off" : "Switch on"}</button></form>
 <a class="btn" href="${esc(preview)}" target="_blank" rel="noopener" title="Opens the sell page with this list showing for you only, even while it is off">Preview as a shopper ↗</a>
+${missing ? `<form method="post" action="${BASE}/lists/control">${hid}<input type="hidden" name="action" value="addseed"><button type="submit" class="ok" title="The 15 Happy Meal figures with their pictures, prices blank">Add the ${missing === 15 ? "15 " : ""}McDonald's toys${missing === 15 ? "" : " (" + missing + " missing)"}</button></form>` : ""}
 ${l.on ? "" : `<form method="post" action="${BASE}/lists/control" onsubmit="return confirm('Delete this list and its prices? This cannot be undone.')">${hid}<input type="hidden" name="action" value="delete"><button type="submit">Delete</button></form>`}</div>
 <div class="fl-meta"><label>Title<input class="text" data-f="title" value="${esc(l.title)}"></label><label>Blurb on the sell page<input class="text" data-f="blurb" value="${esc(l.blurb || "")}" placeholder="one or two sentences"></label></div>
 <p class="muted" style="margin:4px 0 0">Per item and condition: what you pay in <b>cash</b> and <b>credit</b>, what you <b>sell</b> it for (shown to the seller), <b>first</b> = how many you take at that price before the lower <b>then</b> pair applies, <b>max</b> = the most you buy in all, <b>bought</b> = reserved by submitted lists so far. Blank cash and credit = not buying that one. Counts run across every customer; a rejected list gives its units back.</p>
@@ -369,8 +383,9 @@ ${l.on ? "" : `<form method="post" action="${BASE}/lists/control" onsubmit="retu
 ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okmsg">${esc(o.msg)}</div>` : ""}
 ${lists.map(card).join("")}
 <div class="card"><h3>New list</h3>
-${hasSeed ? "" : `<form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="seed"><button type="submit" class="ok">Create the McDonald's Pokémon list (15 toys, prices blank, off)</button></form>`}
-<form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="create"><input class="text" name="title" placeholder="title, e.g. Pokémon plush" required><input class="text" name="id" placeholder="id (letters, digits, dashes)" pattern="[a-z0-9-]+"><button type="submit">Create (empty, off)</button></form></div>
+${hasSeed ? "" : `<form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="seed"><button type="submit" class="ok">Create the McDonald's Pokémon list (15 toys with pictures, prices blank, off)</button></form>`}
+<p class="muted" style="margin:8px 0 4px">Or a list with your own title. Tick the box to start it with the 15 McDonald's toys; untick it for an empty list you fill in yourself.</p>
+<form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="create"><input class="text" name="title" placeholder="title, e.g. 2026 McDonald's Pokémon Toys" required><label class="chk"><input type="checkbox" name="withToys" value="1" checked> with the 15 McDonald's toys</label><button type="submit">Create (off)</button></form></div>
 <script>
 (function(){var CTL=${JSON.stringify(BASE + "/lists/control")};
 function collect(card){var list={title:card.querySelector('[data-f="title"]').value,blurb:card.querySelector('[data-f="blurb"]').value,items:[]};
