@@ -209,6 +209,7 @@ test("the editor: the seed button, the switch, the preview link, the rows; the l
   assert.ok(page.includes("OFF - nobody sees it") && page.includes('value="on"') && page.includes(">Switch on<"));
   assert.ok(page.includes("xgfl=" + SEED.id + "&amp;pv=" + l.pv + "#buylist"));
   assert.ok(page.includes('data-item="pikachu"') && page.includes('data-f="bought" value="4"') && page.includes("46 more"));
+  assert.equal((page.match(/data-act="copyall" title=/g) || []).length, 15);   // one "use these prices for every toy" per toy (the script names it once more)
   assert.ok(page.includes('href="/9pocket/lists/control"') === false && page.includes('action="/9pocket/lists/control"'));
   const on = renderLists({ user: ADMIN, lists: [{ ...l, on: true }], origin: "https://w.example" });
   assert.ok(on.includes("ON - on the sell page") && on.includes(">Switch off<") && !on.includes('value="delete"'));
