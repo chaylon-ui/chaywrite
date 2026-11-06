@@ -1,8 +1,8 @@
 {
- "builtAt": "2026-11-05T01:26:39Z",
+ "builtAt": "2026-11-06T01:30:22Z",
  "categories": {
   "3": {
-   "groups": 220,
+   "groups": 221,
    "rows": 5094,
    "priced": 3393,
    "withUpc": 944
@@ -10,13 +10,13 @@
   "1": {
    "groups": 457,
    "rows": 4010,
-   "priced": 2950,
+   "priced": 2948,
    "withUpc": 1061
   },
   "2": {
    "groups": 659,
    "rows": 1535,
-   "priced": 1006,
+   "priced": 1002,
    "withUpc": 432
   },
   "71": {
@@ -28,17 +28,17 @@
   "68": {
    "groups": 87,
    "rows": 1538,
-   "priced": 1300,
+   "priced": 1298,
    "withUpc": 0
   },
   "79": {
    "groups": 34,
    "rows": 231,
-   "priced": 226,
+   "priced": 225,
    "withUpc": 0
   },
   "62": {
-   "groups": 110,
+   "groups": 111,
    "rows": 324,
    "priced": 265,
    "withUpc": 0
@@ -52,19 +52,19 @@
   "80": {
    "groups": 54,
    "rows": 751,
-   "priced": 668,
+   "priced": 670,
    "withUpc": 0
   },
   "27": {
    "groups": 107,
    "rows": 2054,
-   "priced": 1559,
+   "priced": 1561,
    "withUpc": 0
   },
   "24": {
    "groups": 39,
    "rows": 210,
-   "priced": 163,
+   "priced": 162,
    "withUpc": 0
   },
   "74": {
@@ -76,7 +76,7 @@
   "86": {
    "groups": 28,
    "rows": 389,
-   "priced": 349,
+   "priced": 351,
    "withUpc": 0
   },
   "81": {
@@ -94,13 +94,13 @@
   "72": {
    "groups": 20,
    "rows": 540,
-   "priced": 168,
+   "priced": 171,
    "withUpc": 0
   },
   "66": {
    "groups": 42,
    "rows": 295,
-   "priced": 137,
+   "priced": 138,
    "withUpc": 0
   },
   "84": {
@@ -110,8 +110,8 @@
    "withUpc": 0
   },
   "94": {
-   "groups": 3,
-   "rows": 25,
+   "groups": 4,
+   "rows": 29,
    "priced": 0,
    "withUpc": 0
   },
@@ -130,13 +130,13 @@
   "20": {
    "groups": 179,
    "rows": 1226,
-   "priced": 740,
+   "priced": 743,
    "withUpc": 581
   },
   "16": {
    "groups": 273,
    "rows": 1171,
-   "priced": 730,
+   "priced": 729,
    "withUpc": 256
   },
   "77": {
@@ -148,7 +148,7 @@
   "73": {
    "groups": 54,
    "rows": 160,
-   "priced": 103,
+   "priced": 102,
    "withUpc": 0
   },
   "87": {
