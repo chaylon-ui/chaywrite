@@ -73,10 +73,14 @@ test("the shopper's view carries what is left and the tiers, never the counts or
   assert.deepEqual(o.loose, { buying: true, cash: 3, credit: 4, sell: 8, remaining: 42, fullLeft: 2, fullUpTo: 10, afterCash: 1.5, afterCredit: 2 });
   assert.deepEqual(o.cib, { buying: true, cash: 2, credit: 2, sell: null, remaining: null, fullLeft: null, fullUpTo: null, afterCash: null, afterCredit: null });
   assert.equal(o.new, undefined);   // no sealed state (owner, 2026-11-06)
+  // the banner rides along; junk is dropped
+  const b = cleanList({ id: "t", title: "T", banner: "https://cdn.shopify.com/s/files/1/x/logo.png?v=1", items: [] }, null, 1, "");
+  assert.equal(publicView(b).banner, "https://cdn.shopify.com/s/files/1/x/logo.png?v=1"); assert.equal(summaryView(b).banner, publicView(b).banner);
+  assert.equal(cleanList({ id: "t", title: "T", banner: "javascript:x", items: [] }, null, 1, "").banner, "");
   assert.equal(publicView({ ...l, conditions: [{ key: "cib", label: "Complete in box" }] }).conditions[1].label, "Complete in box with cards");
   assert.ok(!JSON.stringify(v).includes("bought") && !JSON.stringify(v).includes(l.pv));
   const s = summaryView(l);
-  assert.deepEqual(s, { id: "t", title: "T", blurb: "", images: ["https://x/a.png"], count: 1, buying: 1 });
+  assert.deepEqual(s, { id: "t", title: "T", blurb: "", banner: "", images: ["https://x/a.png"], count: 1, buying: 1 });
   assert.equal(visible(l, ""), false);
   assert.equal(visible(l, l.pv), true);
   assert.equal(visible({ ...l, on: true }, ""), true);
@@ -209,6 +213,7 @@ test("the editor: the seed button, the switch, the preview link, the rows; the l
   assert.ok(page.includes("OFF - nobody sees it") && page.includes('value="on"') && page.includes(">Switch on<"));
   assert.ok(page.includes("xgfl=" + SEED.id + "&amp;pv=" + l.pv + "#buylist"));
   assert.ok(page.includes('data-item="pikachu"') && page.includes('data-f="bought" value="4"') && page.includes("46 more"));
+  assert.ok(page.includes('data-f="banner"') && page.includes('data-act="logo"') && page.includes("CCA7E631-6CC7-4FBA-8180-A17D8787E71A.png"));
   assert.equal((page.match(/data-act="copyall" title=/g) || []).length, 15);   // one "use these prices for every toy" per toy (the script names it once more)
   assert.ok(page.includes('href="/9pocket/lists/control"') === false && page.includes('action="/9pocket/lists/control"'));
   const on = renderLists({ user: ADMIN, lists: [{ ...l, on: true }], origin: "https://w.example" });

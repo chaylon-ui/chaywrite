@@ -76,6 +76,8 @@
   var PV = "", WANT_FL = "";
   try { var u0 = new URL(location.href); PV = u0.searchParams.get("pv") || ""; WANT_FL = u0.searchParams.get("xgfl") || ""; } catch (e0) {}
   function esc0(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]; }); }
+  // Shopify's CDN resizes on request: a 1.3 MB logo comes down at the width it is shown.
+  function sized(u, w) { return /^https:\/\/cdn\.shopify\.com\//.test(u) ? u + (u.indexOf("?") >= 0 ? "&" : "?") + "width=" + w : u; }
   var FL_OPEN = null;                          // set below once signed in: function (id)
   (function stripOfLists() {
     var grid = document.querySelector(".xgbl-games");
@@ -86,7 +88,7 @@
       lists.forEach(function (l) {
         var a = document.createElement("a");
         a.className = "xgbl-fl"; a.href = "#buylist"; a.setAttribute("data-xgfl", l.id);
-        a.innerHTML = '<span class="xgbl-fl__pics">' + (l.images || []).slice(0, 3).map(function (u) { return '<img src="' + esc0(u) + '" alt="" loading="lazy">'; }).join("") + '</span>' +
+        a.innerHTML = (l.banner ? '<span class="xgbl-fl__pics xgbl-fl__pics--banner"><img src="' + esc0(sized(l.banner, 480)) + '" alt="" loading="lazy"></span>' : '<span class="xgbl-fl__pics">' + (l.images || []).slice(0, 3).map(function (u) { return '<img src="' + esc0(u) + '" alt="" loading="lazy">'; }).join("") + '</span>') +
           '<span class="xgbl-fl__text"><b class="xgbl-fl__tag">Also buying</b> <span class="xgbl-fl__title">' + esc0(l.title) + '</span>' + (l.blurb ? '<small>' + esc0(l.blurb) + '</small>' : '') + '</span>' +
           '<span class="xgbl-fl__go">Sell yours \u2192</span>';
         a.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); landOn(root); if (typeof FL_OPEN === "function") FL_OPEN(l.id); });
@@ -1104,7 +1106,7 @@
   function renderFixed() {
     var box = $("#bl-fixed");
     if (!fl) { box.innerHTML = ""; return; }
-    box.innerHTML = '<div class="bl__fhead"><button type="button" class="bl__btn bl__btn--sm" id="bl-fixed-back">\u2039 Back to the card buylist</button><h3 class="bl__ftitle">' + esc(fl.title) + '</h3>' +
+    box.innerHTML = '<div class="bl__fhead">' + (fl.banner ? '<img class="bl__fbanner" src="' + esc(sized(fl.banner, 1000)) + '" alt="" width="1774" height="887">' : '') + '<button type="button" class="bl__btn bl__btn--sm" id="bl-fixed-back">\u2039 Back to the card buylist</button><h3 class="bl__ftitle">' + esc(fl.title) + '</h3>' +
       (fl.preview ? '<span class="bl__fprev" title="Staff preview: this list is switched off, nobody else sees it">preview \u00b7 off</span>' : '') +
       (fl.blurb ? '<p class="bl__muted">' + esc(fl.blurb) + '</p>' : '') + '</div>' +
       '<div class="bl__fgrid">' + fl.items.map(function (it) {

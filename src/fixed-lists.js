@@ -100,6 +100,7 @@ export function cleanList(b, prev, now, by) {
   }
   return {
     id, title: str(b && b.title, 80) || (prev && prev.title) || id, blurb: str(b && b.blurb, 300),
+    banner: cleanUrl(b && b.banner),   // owner, 2026-11-06: the McDonald's x Pokémon logo at the top of the list and on the strip
     on: prev ? !!prev.on : false, pv: (prev && prev.pv) || token(), conditions: conds, items,
     created: (prev && prev.created) || now, updatedAt: now, updatedBy: str(by, 160),
   };
@@ -108,14 +109,14 @@ export function cleanList(b, prev, now, by) {
 // What the sell page's strip shows: the lists that are on (or previewed).
 export function summaryView(l) {
   const live = (l.items || []).filter((i) => !i.retired);
-  return { id: l.id, title: l.title, blurb: l.blurb || "", images: live.map((i) => i.image).filter(Boolean).slice(0, 4), count: live.length,
+  return { id: l.id, title: l.title, blurb: l.blurb || "", banner: l.banner || "", images: live.map((i) => i.image).filter(Boolean).slice(0, 4), count: live.length,
     buying: live.filter((i) => CONDITIONS.some((c) => buying(i.offers[c.key]))).length };
 }
 // What the shopper sees of a list: never the running counts themselves,
 // only what is left and the tiers; never the preview key.
 export function publicView(l) {
   return {
-    id: l.id, title: l.title, blurb: l.blurb || "", conditions: CONDITIONS,
+    id: l.id, title: l.title, blurb: l.blurb || "", banner: l.banner || "", conditions: CONDITIONS,
     items: (l.items || []).filter((i) => !i.retired).map((i) => ({
       key: i.key, name: i.name, image: i.image,
       offers: Object.fromEntries(CONDITIONS.map((c) => {
@@ -267,13 +268,15 @@ const MCD = [["pikachu", "Pikachu", "1793967307"], ["eevee", "Eevee", "179396730
   ["sprigatito", "Sprigatito", "1793967308"], ["munchlax", "Munchlax", "1793967307"], ["minccino", "Minccino", "1793967308"], ["espurr", "Espurr", "1793967307"], ["weedle", "Weedle", "1793967307"]];
 export const SEED = {
   id: "mcd-pokemon-2026", title: "McDonald's Pokémon toys",
-  blurb: "The 2026 Happy Meal figures. Count what you have of each, loose, complete in its box, or still sealed, and choose cash or store credit.",
+  blurb: "The 2026 Happy Meal figures. Count what you have of each, loose or complete in its box with the cards, and choose cash or store credit.",
   items: MCD.map(([key, name, v]) => ({ key, name, image: CDN + key + ".png?v=" + v, offers: {} })),
 };
 
 /* ---------------- the staff editor (/9pocket/lists) ---------------- */
 
 export const SELL_PAGE = "https://exorgames.com/pages/selling-to-exor-games-buylist";
+// The owner's McDonald's x Pokémon 30th Anniversary Collab logo, uploaded to Shopify Files 2026-11-06 (1774x887).
+export const MCD_LOGO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/CCA7E631-6CC7-4FBA-8180-A17D8787E71A.png?v=1793976459";
 
 export async function serveListsStaff(request, env, url, user, form, helpers) {
   const { html, redirect, q, toLogin, opts, call } = helpers;
@@ -336,6 +339,7 @@ export async function serveListsStaff(request, env, url, user, form, helpers) {
 
 const CSS = `.fl-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}.fl-head h3{margin:0}
 .fl-meta{display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:8px 0}.fl-meta label{display:block;font-size:12px;color:#5b6770}.fl-meta input,.fl-meta textarea{width:100%}
+.fl-banner{grid-column:1/-1}.fl-bannerrow{display:flex;gap:6px;align-items:center}.fl-bannerrow input{flex:1 1 auto}.fl-bannerpv{display:block;max-width:360px;width:100%;height:auto;margin-top:6px;border-radius:8px;border:1px solid #e3e7ea}
 .fl-item{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;border-top:1px solid #e3e7ea;padding:10px 0}.fl-item img{width:72px;height:72px;object-fit:contain;background:#f4f6f7;border-radius:8px}
 .fl-item .nm{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:6px}.fl-item .nm input.name{font-weight:700;width:180px}.fl-item .nm input.img{flex:1 1 260px;min-width:160px;font-size:12px}
 .fl-row{display:grid;grid-template-columns:128px repeat(8,minmax(60px,1fr));gap:4px;align-items:center;font-size:12.5px;margin:2px 0}.fl-row>b{font-weight:600}.fl-row input{width:100%;padding:4px 5px;font-size:13px}
@@ -379,7 +383,8 @@ ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${in
 <a class="btn" href="${esc(preview)}" target="_blank" rel="noopener" title="Opens the sell page with this list showing for you only, even while it is off">Preview as a shopper ↗</a>
 ${missing ? `<form method="post" action="${BASE}/lists/control">${hid}<input type="hidden" name="action" value="addseed"><button type="submit" class="ok" title="The 15 Happy Meal figures with their pictures, prices blank">Add the ${missing === 15 ? "15 " : ""}McDonald's toys${missing === 15 ? "" : " (" + missing + " missing)"}</button></form>` : ""}
 ${l.on ? "" : `<form method="post" action="${BASE}/lists/control" onsubmit="return confirm('Delete this list and its prices? This cannot be undone.')">${hid}<input type="hidden" name="action" value="delete"><button type="submit">Delete</button></form>`}</div>
-<div class="fl-meta"><label>Title<input class="text" data-f="title" value="${esc(l.title)}"></label><label>Blurb on the sell page<input class="text" data-f="blurb" value="${esc(l.blurb || "")}" placeholder="one or two sentences"></label></div>
+<div class="fl-meta"><label>Title<input class="text" data-f="title" value="${esc(l.title)}"></label><label>Blurb on the sell page<input class="text" data-f="blurb" value="${esc(l.blurb || "")}" placeholder="one or two sentences"></label>
+<label class="fl-banner">Banner image (a Shopify Files URL; shown at the top of the list and on the strip)<span class="fl-bannerrow"><input class="text" data-f="banner" value="${esc(l.banner || "")}" placeholder="https://cdn.shopify.com/..."><button type="button" class="sm" data-act="logo" title="Fills the box with the McDonald's x Pokémon 30th Anniversary Collab logo from your Files">Use the McDonald's × Pokémon logo</button></span>${l.banner ? `<img class="fl-bannerpv" src="${esc(l.banner)}" alt="">` : ""}</label></div>
 <p class="muted" style="margin:4px 0 0">Per item and condition: <b>cash</b> and <b>credit</b> = what you pay; <b>sell</b> = your selling price, shown to the seller; <b>first</b> = how many you take at that cash/credit price; <b>then cash</b> / <b>then credit</b> = the lower pair you pay for every one after that (leave both blank to stop buying once "first" is reached); <b>max</b> = the most you buy in all, blank = no cap; <b>bought</b> = reserved by submitted lists so far. Example: cash 3, credit 4, first 10, then cash 1.50, then credit 2, max 50 = the first 10 at $3/$4, the next 40 at $1.50/$2, nothing past 50. Blank cash and credit = not buying that one. Counts run across every customer; a rejected list gives its units back.</p>
 <div class="fl-cols"><span>Condition</span><span>Cash</span><span>Credit</span><span>Sell</span><span>First</span><span>Then cash</span><span>Then credit</span><span>Max</span><span>Bought</span></div>
 <div class="fl-items">${(l.items || []).map((it) => item(l, it)).join("") || `<p class="muted">No items yet.</p>`}</div>
@@ -397,7 +402,7 @@ ${hasSeed ? "" : `<form method="post" action="${BASE}/lists/control" class="act"
 <form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="create"><input class="text" name="title" placeholder="title, e.g. 2026 McDonald's Pokémon Toys" required><label class="chk"><input type="checkbox" name="withToys" value="1" checked> with the 15 McDonald's toys</label><button type="submit">Create (off)</button></form></div>
 <script>
 (function(){var CTL=${JSON.stringify(BASE + "/lists/control")};
-function collect(card){var list={title:card.querySelector('[data-f="title"]').value,blurb:card.querySelector('[data-f="blurb"]').value,items:[]};
+function collect(card){var list={title:card.querySelector('[data-f="title"]').value,blurb:card.querySelector('[data-f="blurb"]').value,banner:card.querySelector('[data-f="banner"]').value,items:[]};
 card.querySelectorAll('.fl-item').forEach(function(el){var it={key:el.getAttribute('data-item'),name:el.querySelector('[data-f="name"]').value,image:el.querySelector('[data-f="image"]').value,retired:el.querySelector('[data-f="retired"]').checked,offers:{}};
 el.querySelectorAll('.fl-row').forEach(function(r){var o={};r.querySelectorAll('input[data-k]').forEach(function(i){o[i.getAttribute('data-f')]=i.value;});it.offers[r.getAttribute('data-cond')]=o;});list.items.push(it);});return list;}
 function post(body,cb){fetch(CTL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}).then(cb,function(e){cb({ok:false,error:String(e)});});}
@@ -406,6 +411,7 @@ card.querySelector('[data-act="save"]').addEventListener('click',function(){var 
 card.querySelector('[data-act="add"]').addEventListener('click',function(){var n=card.querySelector('[data-add="name"]'),im=card.querySelector('[data-add="image"]');if(!n.value.trim()){n.focus();return;}
 var list=collect(card);list.items.push({key:'',name:n.value.trim(),image:im.value.trim(),retired:false,offers:{}});msg.textContent='Adding…';post({action:'save',id:id,list:list},function(j){if(!j.ok){msg.textContent=j.error||'failed';return;}location.href=location.pathname+'?msg='+encodeURIComponent('Added '+n.value.trim()+'.');});});
 card.addEventListener('input',function(){card.classList.add('is-dirty');msg.textContent='unsaved changes';});
+var lg=card.querySelector('[data-act="logo"]');if(lg)lg.addEventListener('click',function(){card.querySelector('[data-f="banner"]').value=${JSON.stringify(MCD_LOGO)};card.classList.add('is-dirty');msg.textContent='Logo chosen - press Save changes.';});
 card.querySelectorAll('[data-act="copyall"]').forEach(function(b){b.addEventListener('click',function(){var src=b.closest('.fl-item'),items=card.querySelectorAll('.fl-item'),n=0;if(items.length<2)return;
 if(!confirm('Give every toy on this list the same prices and limits as '+(src.querySelector('[data-f="name"]').value||'this one')+'? Bought stays as it is. You still press Save changes after.'))return;
 items.forEach(function(el){if(el===src)return;n++;el.querySelectorAll('.fl-row').forEach(function(r){var from=src.querySelector('.fl-row[data-cond="'+r.getAttribute('data-cond')+'"]');if(!from)return;r.querySelectorAll('input[data-k]').forEach(function(i){var f=i.getAttribute('data-f');if(f==='bought')return;var s=from.querySelector('input[data-k][data-f="'+f+'"]');if(s)i.value=s.value;});});});
