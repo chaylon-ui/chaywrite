@@ -83,7 +83,7 @@ async function askDo(env, path, body) {
   catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 160) }; }
 }
 import { renderGraded, renderGradedDenied } from "./graded-ui.js";
-import { fixedDo, releaseFixed, serveListsStaff } from "./fixed-lists.js";
+import { fixedDo, releaseFixed, serveListsStaff, stockFixed, stockText, gqlCx } from "./fixed-lists.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
   CODE_TTL_MS, CODE_TRIES, CODE_SENDS, CODE_RESEND_MS, CODE_STARTS, DEVICE_DAYS, DEVICE_KEEP, CHALLENGE_COOKIE } from "./stage-auth.js";
@@ -1173,7 +1173,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   const toLogin = () => redirect(BASE + "/login" + q({ next: p + (url.search && request.method === "GET" ? url.search : "") }));
   // Fixed-price lists (src/fixed-lists.js): the editor, its control, on/off.
   if (p === BASE + "/lists" || p === BASE + "/lists.json" || p.startsWith(BASE + "/lists/")) {
-    return serveListsStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, call: (path, body) => doCall(env, origin, path, body) });
+    return serveListsStaff(request, env, url, user, form, { html, redirect, q, toLogin, opts, call: (path, body) => doCall(env, origin, path, body), fetchFn: sopts && sopts.fetchFn });
   }
   // Item requests (src/requests.js): the list, one request, its control.
   if (p === BASE + "/requests" || p === BASE + "/requests.json" || p.startsWith(BASE + "/requests/")) {
@@ -1199,7 +1199,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
   }
   if (p === BASE + "/control" && request.method === "POST") {
     if (!user) return Response.json({ ok: false, error: "sign in required" }, { status: 403, headers: noStore });
-    const result = await control(env, url, form || {}, user);
+    const result = await control(env, url, form || {}, user, sopts && sopts.fetchFn);
     if (form && form.__form) {
       const back = form.id ? BASE + "/b/" + encodeURIComponent(String(form.id)) : BASE;
       return redirect(back + q(result.ok ? { msg: result.message } : { err: result.error || "failed" }));
@@ -1421,7 +1421,7 @@ export async function regradeLine(env, url, rec, f, who) {
   return { ok: true, id: rec.id, totals: j.record.totals, take, message: (j.merged ? "Moved " : "Regraded ") + take + " × " + lineLabel(src) + " to " + v.name + " at " + money(buy) + " / " + money(credit) + (j.merged ? " (joined the existing line)" : "") + "." };
 }
 
-async function control(env, url, f, user) {
+async function control(env, url, f, user, fetchFn) {
   const id = String(f.id || "").slice(0, 40);
   const action = String(f.action || "");
   const who = user.email;
@@ -1501,8 +1501,19 @@ async function control(env, url, f, user) {
     if (rec.fixed) {
       const j = await doCall(env, url.origin, "/_stage/mark", { id, status: "approved", note: String(f.note || rec.note || ""), by: who });
       if (!j.ok) return { ok: false, error: j.error };
+      // Owner, 2026-11-06 ("Approve add automatically"): the approved quantities go
+      // into the list's Shopify products and those products go live.
+      let stocked = null;
+      try {
+        const g = await doCall(env, url.origin, "/_stage/fl/get?id=" + encodeURIComponent(rec.fixed.list));
+        if (g.ok) {
+          stocked = await stockFixed(gqlCx(env, fetchFn), g.list, j.record);
+          if (stocked.activated && stocked.activated.length) await doCall(env, url.origin, "/_stage/fl/save", { id: g.list.id, list: g.list, by: who });
+          await doCall(env, url.origin, "/_stage/fl/stocked", { id, stocked, by: who });
+        } else stocked = { errors: ["the list " + rec.fixed.list + " is gone"], lines: [], missing: [] };
+      } catch (e) { stocked = { errors: [String((e && e.message) || e).slice(0, 160)], lines: [], missing: [] }; }
       const m = notify ? await emailDecision(env, url, j.record, "approved", who) : { ok: true };
-      return { ok: true, id, status: "approved", fixed: true, message: "Approved. A fixed-price list (" + rec.fixed.title + ") sends nothing to BinderPOS: check the items and pay it out at the counter." + mailNote(m) };
+      return { ok: true, id, status: "approved", fixed: true, stocked, message: "Approved. A fixed-price list (" + rec.fixed.title + ") sends nothing to BinderPOS: pay it out at the counter. " + stockText(stocked) + mailNote(m) };
     }
     // Today's BinderPOS prices and limits, the same step submit takes; a
     // staff-typed price on the worksheet wins over the day's.

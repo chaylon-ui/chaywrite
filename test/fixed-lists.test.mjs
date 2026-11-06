@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { quote, remaining, cleanList, cleanLines, cardsOf, publicView, summaryView, visible, fixedDo, releaseFixed, renderLists, serveListsStaff, SEED, slug } from "../src/fixed-lists.js";
+import { quote, remaining, cleanList, cleanLines, cardsOf, publicView, summaryView, visible, fixedDo, releaseFixed, renderLists, serveListsStaff, SEED, slug, productInputOf, shopifyOf, priceChanges, stockChanges, stockFixed, productsOnShopify, stockText, skuOf, LOCATION } from "../src/fixed-lists.js";
 import { stageDoFetch, shapeRecord, STAGE_DO } from "../src/stage.js";
 import { renderSheet, renderList } from "../src/stage-ui.js";
 import { buildEmail, buildStaffBuylistEmail } from "../src/stage-email.js";
@@ -271,4 +271,136 @@ test("a list with the owner's own title: empty from the form, then the 15 toys a
   // the form with the box ticked starts with the toys
   await ctl({ action: "create", title: "Toys two", withToys: "1" });
   assert.equal((await call(c, "/_stage/fl/get?id=toys-two")).body.list.items.length, 15);
+});
+
+
+/* ---- Shopify: the products behind a list, prices on save, stock on approve ---- */
+// A fake Admin API: answers by the mutation's name, records every call.
+function fakeShopify(answers) {
+  const calls = [];
+  const fetchFn = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const name = (body.query.match(/\{\s*(\w+)\(/) || [])[1];
+    calls.push({ name, variables: body.variables });
+    const a = answers[name];
+    const data = typeof a === "function" ? a(body.variables, calls.length) : a;
+    return { ok: true, text: async () => JSON.stringify({ data }), status: 200, headers: new Map() };
+  };
+  return { calls, cx: { env: { SHOPIFY_ADMIN_TOKEN: "t" }, fetch: fetchFn } };
+}
+const productAnswer = (v, n) => ({ productSet: { product: { id: "gid://shopify/Product/" + n, handle: "h" + n, status: "DRAFT",
+  variants: { nodes: v.input.variants.map((x, i) => ({ id: "gid://shopify/ProductVariant/" + n + i, sku: x.sku, inventoryItem: { id: "gid://shopify/InventoryItem/" + n + i }, selectedOptions: [{ name: "Condition", value: x.optionValues[0].name }] })) } }, userErrors: [] } });
+
+test("a product per item: draft, one variant per condition at the sell price or the placeholder, tracked at 51 Allen Street, the picture", () => {
+  const l = cleanList({ id: "mcd", title: "2026 McDonalds Pokémon Toys", blurb: "b", items: [{ key: "pikachu", name: "Pikachu", image: "https://cdn.shopify.com/p.png", offers: { loose: { cash: 2, credit: 3, sell: 5 }, cib: { cash: 2.5, credit: 3.5 } } }] }, null, 1, "");
+  const inp = productInputOf(l, l.items[0]);
+  assert.equal(inp.title, "Pikachu [2026 McDonalds Pokémon Toys]"); assert.equal(inp.status, "DRAFT");
+  assert.deepEqual(inp.tags, ["fixed-list", "fl:mcd", "2026 McDonalds Pokémon Toys"]);
+  assert.deepEqual(inp.productOptions, [{ name: "Condition", values: [{ name: "Loose" }, { name: "Complete in box with cards" }] }]);
+  assert.equal(inp.variants.length, 2);
+  assert.equal(inp.variants[0].price, "5.00"); assert.equal(inp.variants[1].price, "999999.00");
+  assert.equal(inp.variants[0].sku, "MCD-PIKACHU-LOOSE"); assert.equal(skuOf(l, l.items[0], "cib"), "MCD-PIKACHU-CIB");
+  assert.deepEqual(inp.variants[0].inventoryQuantities, [{ locationId: LOCATION, name: "available", quantity: 0 }]);
+  assert.equal(inp.files[0].originalSource, "https://cdn.shopify.com/p.png");
+  const sh = shopifyOf({ id: "gid://shopify/Product/9", handle: "h", status: "DRAFT", variants: { nodes: [{ id: "gid://shopify/ProductVariant/91", inventoryItem: { id: "gid://shopify/InventoryItem/91" }, selectedOptions: [{ name: "Condition", value: "Complete in box with cards" }] }, { id: "gid://shopify/ProductVariant/90", inventoryItem: { id: "gid://shopify/InventoryItem/90" }, selectedOptions: [{ name: "Condition", value: "Loose" }] }] } });
+  assert.deepEqual(sh, { product: "gid://shopify/Product/9", handle: "h", status: "DRAFT", variants: { cib: { id: "gid://shopify/ProductVariant/91", inventoryItem: "gid://shopify/InventoryItem/91" }, loose: { id: "gid://shopify/ProductVariant/90", inventoryItem: "gid://shopify/InventoryItem/90" } } });
+  // the saved copy keeps it, and a later save without it keeps the stored one
+  const kept = cleanList({ id: "mcd", title: "T", items: [{ key: "pikachu", name: "Pikachu", shopify: sh }] }, null, 2, "");
+  assert.deepEqual(kept.items[0].shopify, sh);
+  assert.deepEqual(cleanList({ id: "mcd", title: "T", items: [{ key: "pikachu", name: "Pikachu" }] }, kept, 3, "").items[0].shopify, sh);
+  assert.equal(cleanList({ id: "mcd", title: "T", items: [{ key: "pikachu", name: "Pikachu", shopify: { product: "junk" } }] }, null, 3, "").items[0].shopify, null);
+});
+
+test("making the products: one productSet + publish per item lacking one; the ids land on the list", async () => {
+  const l = cleanList({ id: "mcd", title: "Toys", items: [{ key: "pikachu", name: "Pikachu", offers: { loose: { cash: 1, credit: 1, sell: 5 } } }, { key: "eevee", name: "Eevee", retired: true }, { key: "weedle", name: "Weedle", shopify: { product: "gid://shopify/Product/5", variants: {} } }] }, null, 1, "");
+  const f = fakeShopify({ productSet: productAnswer, publishablePublish: { publishablePublish: { userErrors: [] } } });
+  const r = await productsOnShopify(f.cx, l);
+  assert.deepEqual(r.made, ["Pikachu"]); assert.deepEqual(r.errors, []);
+  assert.deepEqual(f.calls.map((c) => c.name), ["productSet", "publishablePublish"]);
+  assert.equal(f.calls[0].variables.input.title, "Pikachu [Toys]");
+  assert.equal(l.items[0].shopify.product, "gid://shopify/Product/1"); assert.equal(l.items[0].shopify.variants.loose.inventoryItem, "gid://shopify/InventoryItem/10");
+  // no token: nothing made
+  const r2 = await productsOnShopify({ env: {}, fetch: () => { throw new Error("no"); } }, l);
+  assert.deepEqual(r2.errors, ["the worker has no Shopify token"]);
+  // a userError is reported, the others still made
+  const l3 = cleanList({ id: "mcd", title: "Toys", items: [{ key: "a", name: "A" }, { key: "b", name: "B" }] }, null, 1, "");
+  const f3 = fakeShopify({ productSet: (v, n) => n === 1 ? { productSet: { product: null, userErrors: [{ field: ["input", "title"], message: "is bad" }] } } : productAnswer(v, n), publishablePublish: { publishablePublish: { userErrors: [] } } });
+  const r3 = await productsOnShopify(f3.cx, l3);
+  assert.deepEqual(r3.made, ["B"]); assert.deepEqual(r3.errors, ["A: input.title: is bad"]);
+});
+
+test("prices: only sell prices that changed on items with a product are pushed", () => {
+  const sh = { product: "gid://shopify/Product/1", handle: "", status: "DRAFT", variants: { loose: { id: "gid://shopify/ProductVariant/10", inventoryItem: "" }, cib: { id: "gid://shopify/ProductVariant/11", inventoryItem: "" } } };
+  const prev = cleanList({ id: "mcd", title: "T", items: [{ key: "p", name: "P", shopify: sh, offers: { loose: { sell: 5 }, cib: { sell: 7 } } }] }, null, 1, "");
+  const next = cleanList({ id: "mcd", title: "T", items: [{ key: "p", name: "P", offers: { loose: { sell: 6 }, cib: { sell: 7 } } }, { key: "q", name: "Q", offers: { loose: { sell: 9 } } }] }, prev, 2, "");
+  assert.deepEqual(priceChanges(prev, next), [{ productId: "gid://shopify/Product/1", variants: [{ id: "gid://shopify/ProductVariant/10", price: "6.00" }], name: "P" }]);
+  assert.deepEqual(priceChanges(prev, prev), []);
+  assert.deepEqual(priceChanges(null, next)[0].variants.length, 2);   // first sync: every set price
+});
+
+test("approve: the record's quantities become one inventory adjustment, draft products go live, missing ones are named", async () => {
+  const sh = (n) => ({ product: "gid://shopify/Product/" + n, handle: "", status: "DRAFT", variants: { loose: { id: "gid://shopify/ProductVariant/" + n + "0", inventoryItem: "gid://shopify/InventoryItem/" + n + "0" }, cib: { id: "gid://shopify/ProductVariant/" + n + "1", inventoryItem: "gid://shopify/InventoryItem/" + n + "1" } } });
+  const l = cleanList({ id: "mcd", title: "Toys", items: [{ key: "pikachu", name: "Pikachu", shopify: sh(1) }, { key: "eevee", name: "Eevee" }] }, null, 1, "");
+  const rec = { cards: [
+    { cardId: "fl:mcd:pikachu:loose", quantity: "10", fixed: { list: "mcd", item: "pikachu", cond: "loose", after: false } },
+    { cardId: "fl:mcd:pikachu:loose:after", quantity: "2", fixed: { list: "mcd", item: "pikachu", cond: "loose", after: true } },
+    { cardId: "fl:mcd:pikachu:cib", quantity: "1", fixed: { list: "mcd", item: "pikachu", cond: "cib", after: false } },
+    { cardId: "fl:mcd:eevee:loose", quantity: "3", fixed: { list: "mcd", item: "eevee", cond: "loose", after: false } },
+    { cardId: "fl:other:x:loose", quantity: "9", fixed: { list: "other", item: "x", cond: "loose", after: false } },
+  ] };
+  const plan = stockChanges(l, rec);
+  assert.deepEqual(plan.changes, [{ delta: 12, inventoryItemId: "gid://shopify/InventoryItem/10", locationId: LOCATION }, { delta: 1, inventoryItemId: "gid://shopify/InventoryItem/11", locationId: LOCATION }]);
+  assert.deepEqual(plan.missing, ["Eevee (Loose) ×3"]); assert.deepEqual(plan.products, ["gid://shopify/Product/1"]);
+  const f = fakeShopify({ inventoryAdjustQuantities: { inventoryAdjustQuantities: { userErrors: [] } }, productUpdate: { productUpdate: { product: { id: "gid://shopify/Product/1", status: "ACTIVE" }, userErrors: [] } } });
+  const st = await stockFixed(f.cx, l, rec);
+  assert.equal(st.added, true); assert.deepEqual(st.activated, ["Pikachu"]); assert.deepEqual(st.errors, []);
+  assert.deepEqual(f.calls.map((c) => c.name), ["inventoryAdjustQuantities", "productUpdate"]);
+  assert.deepEqual(f.calls[0].variables.input, { reason: "received", name: "available", changes: plan.changes });
+  assert.deepEqual(f.calls[1].variables.input, { id: "gid://shopify/Product/1", status: "ACTIVE" });
+  assert.equal(l.items[0].shopify.status, "ACTIVE");
+  assert.equal(stockText(st), "Added to stock on Shopify: +12 Pikachu (Loose), +1 Pikachu (Complete in box with cards). Now live: Pikachu. No product on Shopify yet for Eevee (Loose) ×3 - make them under Fixed-price lists and add the stock by hand.");
+  // already live: no status call; a refused adjustment is reported and nothing goes live
+  const f2 = fakeShopify({ inventoryAdjustQuantities: { inventoryAdjustQuantities: { userErrors: [] } } });
+  await stockFixed(f2.cx, l, rec);
+  assert.deepEqual(f2.calls.map((c) => c.name), ["inventoryAdjustQuantities"]);
+  const f3 = fakeShopify({ inventoryAdjustQuantities: { inventoryAdjustQuantities: { userErrors: [{ field: ["input"], message: "nope" }] } } });
+  const st3 = await stockFixed(f3.cx, l, rec);
+  assert.equal(st3.added, undefined); assert.deepEqual(st3.errors, ["stock: input: nope"]);
+  // nothing with a product: no call at all
+  const st4 = await stockFixed(f3.cx, l, { cards: [rec.cards[3]] });
+  assert.deepEqual(st4.missing, ["Eevee (Loose) ×3"]); assert.equal(f3.calls.length, 1);
+});
+
+test("the room, the editor and the worksheet: products action, price sync on save, the stock note on the record", async () => {
+  const now = { t: T0 };
+  const c = cx(now);
+  const f = fakeShopify({ productSet: productAnswer, publishablePublish: { publishablePublish: { userErrors: [] } }, productVariantsBulkUpdate: { productVariantsBulkUpdate: { userErrors: [] } } });
+  const H = { html: (s, st) => new Response(s, { status: st || 200 }), redirect: (to) => new Response(null, { status: 303, headers: { location: to } }), q: (o) => "?" + new URLSearchParams(Object.entries(o).filter(([, b]) => b)).toString(), toLogin: () => new Response(null, { status: 303 }), opts: { on: true, emailOn: true, user: ADMIN }, call: (path, body) => call(c, path, body).then((r) => r.body), fetchFn: f.cx.fetch };
+  const env = { SHOPIFY_ADMIN_TOKEN: "t" };
+  const url = (p) => new URL("https://w.example" + p);
+  const ctl = (fm) => serveListsStaff(new Request(url("/9pocket/lists/control"), { method: "POST" }), env, url("/9pocket/lists/control"), ADMIN, fm, H);
+  await ctl({ action: "create", title: "Toys", id: "toys", withToys: "1" });
+  const made = await (await ctl({ action: "products", id: "toys" })).json();
+  assert.equal(made.ok, true); assert.ok(made.message.startsWith("Made 15 products on Shopify (draft, 0 in stock, at the sell prices)"));
+  assert.equal(f.calls.filter((x) => x.name === "productSet").length, 15);
+  let l = (await call(c, "/_stage/fl/get?id=toys")).body.list;
+  assert.equal(l.items.filter((i) => i.shopify && i.shopify.product).length, 15);
+  const page = renderLists({ user: ADMIN, lists: [l] });
+  assert.ok(page.includes("15 of 15 items have one (0 live)") && !page.includes('value="products"') && page.includes("draft on Shopify ↗"));
+  // a second press: nothing to make
+  assert.ok((await (await ctl({ action: "products", id: "toys" })).json()).message.includes("Every item already has its product"));
+  // saving a sell price pushes it
+  l.items[0].offers.loose.sell = 5;
+  const saved = await (await ctl({ action: "save", id: "toys", list: l })).json();
+  assert.ok(saved.message.includes("Sell prices updated on Shopify for Pikachu"), saved.message);
+  const pc = f.calls.filter((x) => x.name === "productVariantsBulkUpdate");
+  assert.equal(pc.length, 1); assert.deepEqual(pc[0].variables.variants, [{ id: l.items[0].shopify.variants.loose.id, price: "5.00" }]);
+  // the stock note on a record
+  const put = await call(c, "/_stage/put", { customer: "3957471740057", paymentType: "Cash", cards: [{ cardId: "fl:toys:pikachu:loose", cardName: "Pikachu", quantity: "2", cashBuyPrice: 1, storeCreditBuyPrice: 1, fixed: { list: "toys", item: "pikachu", cond: "loose", after: false } }], fixed: { list: "toys", title: "Toys" } });
+  const st = { at: T0, added: true, lines: [{ name: "Pikachu", label: "Loose", qty: 2 }], activated: ["Pikachu"], missing: [], errors: [] };
+  const marked = await call(c, "/_stage/fl/stocked", { id: put.body.id, stocked: st, by: "me" });
+  assert.equal(marked.body.record.stocked.added, true);
+  assert.equal(marked.body.record.events.pop().action, "stocked on Shopify");
+  const sheet = renderSheet({ ...marked.body.record, number: "9P-1" }, { user: ADMIN, on: true, emailOn: true });
+  assert.ok(sheet.includes("<b>Shopify stock:</b> added +2 Pikachu (Loose) · now live: Pikachu"));
 });

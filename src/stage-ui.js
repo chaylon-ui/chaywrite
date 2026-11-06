@@ -34,6 +34,8 @@ const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 export const when = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", hour12: false, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const qty = (c) => Math.max(0, parseInt(c && c.quantity, 10) || 0);
 const STATUS_LABEL = { staged: "Waiting", approved: "Approved", rejected: "Rejected" };
+// A fixed-price list's stock outcome (src/fixed-lists.js stockFixed), one line.
+const stockLine = (st) => [st.added ? "added " + (st.lines || []).map((l) => "+" + l.qty + " " + l.name + " (" + l.label + ")").join(", ") : "nothing added", (st.activated || []).length ? "now live: " + st.activated.join(", ") : "", (st.missing || []).length ? "no product yet for " + st.missing.join(", ") : "", (st.errors || []).length ? "Shopify said: " + st.errors.join("; ") : ""].filter(Boolean).join(" · ");
 const jsStr = (s) => String(s == null ? "" : s).replace(/['\\]/g, "");   // for text inside a confirm('...')
 
 // A card's picture: the imageUrl BinderPOS's search put on the card object
@@ -197,6 +199,7 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 <div><span>Store credit total</span><b id="t-credit">${money(r.totals.credit)}</b></div>
 </div></div>
 ${notes(r.repriced, "At submit")}${notes(r.repricedAtApproval, "At approval")}
+${r.stocked ? `<div class="${r.stocked.errors && r.stocked.errors.length ? "err" : "okmsg"}"><b>Shopify stock:</b> ${esc(stockLine(r.stocked))} <span class="muted">(${esc(when(r.stocked.at))})</span></div>` : ""}
 ${r.bpSync ? `<div class="${r.bpSync.ok && (r.bpSync.verified !== false) ? "okmsg" : "err"}"><b>BinderPOS prices:</b> ${esc(r.bpSync.message || r.bpSync.error || "")} <span class="muted">(${esc(when(r.bpSync.at))}${r.bpSync.by ? " · " + esc(r.bpSync.by) : ""})</span></div>` : ""}
 <div class="card" id="sheet"><h3>Cards <span class="dirty">· unsaved changes</span></h3>
 ${canEdit || canPrices ? `<p class="muted" style="margin:0 0 8px">${canEdit ? "Change a quantity" + (canPrices ? " or a price" : "") : "Change a price"} and <b>Save changes</b>.${canEdit ? " A quantity of 0 removes the line." : ""}${canPrices ? " A price you type is kept at approval (BinderPOS's price of the day is used for the rest); a red field is a staff price." : ""} This list is paid as <b>${credit ? "Store Credit" : "Cash"}</b>: the <b>${credit ? "Credit" : "Cash"}</b> column is what BinderPOS shows as its Buy Price and pays${canPrices ? ", so it is the only one you can change here; the <b>" + (credit ? "Cash" : "Credit") + "</b> column is locked (it goes along but is not paid). Change <b>Paid as</b> above first if the customer wants the other." : "; the other column goes along but is not paid."}</p>` : (waiting ? `<p class="muted" style="margin:0 0 8px">Your account can view this buylist; changing it needs a permission an admin can give you.</p>` : "")}

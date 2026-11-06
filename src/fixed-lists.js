@@ -23,6 +23,7 @@
 
 import { BASE, shell, esc, when } from "./stage-ui.js";
 import { can } from "./stage-auth.js";
+import { adminGql } from "./price-history.js";
 
 export const FL = "fl:";
 export const MAX_ITEMS = 200;
@@ -83,6 +84,15 @@ export function quote(o, qty) {
 
 /* ---------------- a list ---------------- */
 
+// The Shopify product an item was given (productsOnShopify below): the
+// product, and per condition the variant and its inventory item.
+function cleanShopify(v) {
+  if (!v || typeof v !== "object" || !/^gid:\/\/shopify\/Product\/\d+$/.test(String(v.product || ""))) return null;
+  const variants = {};
+  for (const [k, x] of Object.entries(v.variants || {})) if (x && /^gid:\/\/shopify\/ProductVariant\/\d+$/.test(String(x.id || ""))) variants[slug(k)] = { id: x.id, inventoryItem: /^gid:\/\/shopify\/InventoryItem\/\d+$/.test(String(x.inventoryItem || "")) ? x.inventoryItem : "" };
+  return { product: v.product, handle: str(v.handle, 200), status: String(v.status || "").toUpperCase() === "ACTIVE" ? "ACTIVE" : "DRAFT", variants };
+}
+
 export function cleanList(b, prev, now, by) {
   const id = slug(b && b.id) || (prev && prev.id);
   if (!id) return null;
@@ -96,7 +106,8 @@ export function cleanList(b, prev, now, by) {
     const prevIt = prev ? (prev.items || []).find((x) => x.key === key) : null;
     const offers = {};
     for (const c of conds) offers[c.key] = cleanOffer(it.offers && it.offers[c.key], prevIt && prevIt.offers ? prevIt.offers[c.key] : null);
-    items.push({ key, name: str(it.name, 80) || key, image: cleanUrl(it.image), retired: it.retired === true || it.retired === "on" || it.retired === "1", offers });
+    items.push({ key, name: str(it.name, 80) || key, image: cleanUrl(it.image), retired: it.retired === true || it.retired === "on" || it.retired === "1", offers,
+      shopify: cleanShopify(it.shopify) || (prevIt && prevIt.shopify) || null });
   }
   return {
     id, title: str(b && b.title, 80) || (prev && prev.title) || id, blurb: str(b && b.blurb, 300),
@@ -255,11 +266,168 @@ export async function fixedDo(cx, request, url) {
     const units = cards.reduce((s, c) => s + (parseInt(c.quantity, 10) || 0), 0);
     return doJson({ ok: true, id: l.id, title: l.title, cards, notes, units });
   }
+  if (p === "/_stage/fl/stocked" && post) {
+    const b = await bodyOf(request);
+    const key = "st:" + String(b.id || "").slice(0, 40);
+    const rec = await cx.storage.get(key);
+    if (!rec) return doJson({ ok: false, error: "no such record" }, 404);
+    rec.stocked = b.stocked && typeof b.stocked === "object" ? b.stocked : null;
+    rec.events = (rec.events || []).concat([{ ts: now, action: "stocked on Shopify", by: str(b.by, 160) }]).slice(-30);
+    await cx.storage.put(key, rec);
+    return doJson({ ok: true, record: rec });
+  }
   if (p === "/_stage/fl/release" && post) {
     const b = await bodyOf(request);
     return doJson({ ok: true, released: await releaseFixed(cx, b.cards) });
   }
   return doJson({ ok: false, error: "not found" }, 404);
+}
+
+/* ---------------- Shopify: the products behind a list ----------------
+   Owner, 2026-11-06: "Do they go live on shopify" / "Approve add
+   automatically". One product per item (title "Pikachu [<list title>]",
+   draft, an option Condition with one variant per condition at the sell
+   price or the store's placeholder, tracked, 0 at 51 Allen Street, the
+   item's picture), made by a button on the editor and published to the
+   Online Store; saving the list pushes changed sell prices to the variants;
+   approving a list adds its quantities to stock and makes the products
+   active. Nothing reaches BinderPOS. */
+export const LOCATION = "gid://shopify/Location/53483602073";                       // 51 Allen Street (src/graded.js)
+export const ONLINE_STORE_PUBLICATION = "gid://shopify/Publication/63498813593";   // "Online Store" (src/graded.js)
+export const PLACEHOLDER_PRICE = "999999.00";
+export const ADMIN_URL = "https://admin.shopify.com/store/most-wanted-ca";
+const SET_M = `mutation($input: ProductSetInput!) { productSet(input: $input, synchronous: true) { product { id handle status variants(first: 10) { nodes { id sku inventoryItem { id } selectedOptions { name value } } } } userErrors { field message code } } }`;
+const PUB_M = `mutation($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { field message } } }`;
+const PRICE_M = `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) { productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { field message } } }`;
+const ADJ_M = `mutation($input: InventoryAdjustQuantitiesInput!) { inventoryAdjustQuantities(input: $input) { userErrors { field message } } }`;
+const STATUS_M = `mutation($input: ProductInput!) { productUpdate(input: $input) { product { id status } userErrors { field message } } }`;
+const errsOf = (o) => ((o && o.userErrors) || []).map((e) => (e.field ? [].concat(e.field).join(".") + ": " : "") + e.message).join("; ");
+const money2 = (n) => (Number(n) || 0).toFixed(2);
+export const skuOf = (list, item, cond) => (list.id + "-" + item.key + "-" + cond).toUpperCase();
+
+export function productInputOf(list, item) {
+  const conds = CONDITIONS;
+  return {
+    title: item.name + " [" + list.title + "]",
+    productType: "Toys", vendor: "Exor Games", status: "DRAFT",
+    tags: ["fixed-list", "fl:" + list.id, list.title],
+    descriptionHtml: "<p>" + esc(item.name) + " from " + esc(list.title) + "." + (list.blurb ? " " + esc(list.blurb) : "") + "</p>",
+    productOptions: [{ name: "Condition", values: conds.map((c) => ({ name: c.label })) }],
+    variants: conds.map((c) => {
+      const o = item.offers[c.key] || {};
+      return { optionValues: [{ optionName: "Condition", name: c.label }], price: o.sell ? money2(o.sell) : PLACEHOLDER_PRICE, sku: skuOf(list, item, c.key),
+        inventoryItem: { tracked: true }, inventoryQuantities: [{ locationId: LOCATION, name: "available", quantity: 0 }] };
+    }),
+    files: item.image ? [{ originalSource: item.image, contentType: "IMAGE", alt: item.name, filename: item.key + ".png" }] : [],
+  };
+}
+// The variants productSet made, keyed by condition.
+export function shopifyOf(product) {
+  const variants = {};
+  for (const v of ((product.variants || {}).nodes) || []) {
+    const label = ((v.selectedOptions || []).find((o) => o.name === "Condition") || {}).value;
+    const c = CONDITIONS.find((x) => x.label === label);
+    if (c) variants[c.key] = { id: v.id, inventoryItem: (v.inventoryItem && v.inventoryItem.id) || "" };
+  }
+  return { product: product.id, handle: product.handle || "", status: product.status || "DRAFT", variants };
+}
+export function gqlCx(env, fetchFn) { return { env, fetch: fetchFn || ((u, i) => fetch(u, i)) }; }
+
+// Make the products the list's live items lack. Returns what was made and what failed.
+export async function productsOnShopify(cx, list) {
+  const made = [], errors = [];
+  if (!cx.env || !cx.env.SHOPIFY_ADMIN_TOKEN) return { made, errors: ["the worker has no Shopify token"], list };
+  for (const item of (list.items || []).filter((i) => !i.retired && !(i.shopify && i.shopify.product))) {
+    try {
+      const r = await adminGql(cx, SET_M, { input: productInputOf(list, item) });
+      const ps = (r.data && r.data.productSet) || {};
+      const e = errsOf(ps) || (r.errors ? r.errors.map((x) => x.message).join("; ") : "");
+      if (!ps.product || e) { errors.push(item.name + ": " + (e || "no product came back")); continue; }
+      item.shopify = shopifyOf(ps.product);
+      try { const pr = await adminGql(cx, PUB_M, { id: ps.product.id, input: [{ publicationId: ONLINE_STORE_PUBLICATION }] }); const pe = errsOf(pr.data && pr.data.publishablePublish); if (pe) errors.push(item.name + ": made, but not published: " + pe); } catch (x) { errors.push(item.name + ": made, but not published: " + String((x && x.message) || x).slice(0, 120)); }
+      made.push(item.name);
+    } catch (x) { errors.push(item.name + ": " + String((x && x.message) || x).slice(0, 160)); }
+  }
+  return { made, errors, list };
+}
+// Sell prices that changed between two saved copies, pushed to the variants.
+export function priceChanges(prev, next) {
+  const out = [];
+  for (const item of next.items || []) {
+    if (!item.shopify || !item.shopify.product) continue;
+    const before = prev ? (prev.items || []).find((i) => i.key === item.key) : null;
+    const variants = [];
+    for (const c of CONDITIONS) {
+      const v = item.shopify.variants[c.key];
+      const sell = item.offers[c.key] && item.offers[c.key].sell;
+      const was = before && before.offers[c.key] ? before.offers[c.key].sell : undefined;
+      if (v && sell && sell !== was) variants.push({ id: v.id, price: money2(sell) });
+    }
+    if (variants.length) out.push({ productId: item.shopify.product, variants, name: item.name });
+  }
+  return out;
+}
+export async function syncPrices(cx, prev, next) {
+  const changes = priceChanges(prev, next), done = [], errors = [];
+  if (changes.length && !(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) return { done, errors: ["no Shopify token"] };
+  for (const ch of changes) {
+    try { const r = await adminGql(cx, PRICE_M, { productId: ch.productId, variants: ch.variants }); const e = errsOf(r.data && r.data.productVariantsBulkUpdate); if (e) errors.push(ch.name + ": " + e); else done.push(ch.name); }
+    catch (x) { errors.push(ch.name + ": " + String((x && x.message) || x).slice(0, 120)); }
+  }
+  return { done, errors };
+}
+// What an approved record adds to stock: one change per variant, and the items with no product yet.
+export function stockChanges(list, rec) {
+  const byKey = {}, missing = [];
+  for (const c of rec.cards || []) {
+    const f = c.fixed; if (!f || f.list !== list.id) continue;
+    const q = Math.max(0, parseInt(c.quantity, 10) || 0); if (!q) continue;
+    const k = f.item + "|" + f.cond;
+    byKey[k] = (byKey[k] || 0) + q;
+  }
+  const changes = [], lines = [], products = new Set();
+  for (const [k, qty] of Object.entries(byKey)) {
+    const [itemKey, cond] = k.split("|");
+    const item = (list.items || []).find((i) => i.key === itemKey);
+    const v = item && item.shopify && item.shopify.variants[cond];
+    const label = ((CONDITIONS.find((c) => c.key === cond) || {}).label) || cond;
+    if (!item || !v || !v.inventoryItem) { missing.push((item ? item.name : itemKey) + " (" + label + ") ×" + qty); continue; }
+    changes.push({ delta: qty, inventoryItemId: v.inventoryItem, locationId: LOCATION });
+    lines.push({ item: item.key, name: item.name, cond, label, qty, variant: v.id });
+    products.add(item.shopify.product);
+  }
+  return { changes, lines, missing, products: [...products] };
+}
+export async function stockFixed(cx, list, rec) {
+  const plan = stockChanges(list, rec);
+  const out = { at: Date.now(), lines: plan.lines, missing: plan.missing, errors: [], activated: [] };
+  if (!plan.changes.length) return out;
+  if (!(cx.env && cx.env.SHOPIFY_ADMIN_TOKEN)) { out.errors.push("no Shopify token"); return out; }
+  try {
+    const r = await adminGql(cx, ADJ_M, { input: { reason: "received", name: "available", changes: plan.changes } });
+    const e = errsOf(r.data && r.data.inventoryAdjustQuantities) || (r.errors ? r.errors.map((x) => x.message).join("; ") : "");
+    if (e) { out.errors.push("stock: " + e); return out; }
+  } catch (x) { out.errors.push("stock: " + String((x && x.message) || x).slice(0, 160)); return out; }
+  out.added = true;
+  for (const pid of plan.products) {
+    const item = (list.items || []).find((i) => i.shopify && i.shopify.product === pid);
+    if (!item || item.shopify.status === "ACTIVE") continue;
+    try {
+      const r = await adminGql(cx, STATUS_M, { input: { id: pid, status: "ACTIVE" } });
+      const e = errsOf(r.data && r.data.productUpdate);
+      if (e) out.errors.push(item.name + ": not made live: " + e); else { item.shopify.status = "ACTIVE"; out.activated.push(item.name); }
+    } catch (x) { out.errors.push(item.name + ": not made live: " + String((x && x.message) || x).slice(0, 120)); }
+  }
+  return out;
+}
+export function stockText(st) {
+  if (!st) return "";
+  const bits = [];
+  if (st.added) bits.push("Added to stock on Shopify: " + st.lines.map((l) => "+" + l.qty + " " + l.name + " (" + l.label + ")").join(", ") + ".");
+  if (st.activated && st.activated.length) bits.push("Now live: " + st.activated.join(", ") + ".");
+  if (st.missing && st.missing.length) bits.push("No product on Shopify yet for " + st.missing.join(", ") + " - make them under Fixed-price lists and add the stock by hand.");
+  if (st.errors && st.errors.length) bits.push("Shopify said: " + st.errors.join("; "));
+  return bits.join(" ");
 }
 
 /* ---------------- the first list ---------------- */
@@ -286,6 +454,7 @@ export const MCD_INFO = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/
 
 export async function serveListsStaff(request, env, url, user, form, helpers) {
   const { html, redirect, q, toLogin, opts, call } = helpers;
+  const gql = gqlCx(env, helpers.fetchFn);
   const p = url.pathname;
   const noStore = { "cache-control": "no-store" };
   const R = BASE + "/lists";
@@ -325,7 +494,23 @@ export async function serveListsStaff(request, env, url, user, form, helpers) {
       let list = f.list;
       if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = null; } }
       if (!list || typeof list !== "object") result = { ok: false, error: "nothing to save" };
-      else { const r = await call("/_stage/fl/save", { id, list, by }); result = r.ok ? { ok: true, message: "Saved " + r.list.items.length + " item" + (r.list.items.length === 1 ? "" : "s") + " on \"" + r.list.title + "\"." } : r; }
+      else {
+        const before = await call("/_stage/fl/get?id=" + encodeURIComponent(id));
+        const r = await call("/_stage/fl/save", { id, list, by });
+        if (!r.ok) result = r;
+        else {
+          const sp = await syncPrices(gql, before.ok ? before.list : null, r.list);
+          result = { ok: true, message: "Saved " + r.list.items.length + " item" + (r.list.items.length === 1 ? "" : "s") + " on \"" + r.list.title + "\"." + (sp.done.length ? " Sell prices updated on Shopify for " + sp.done.join(", ") + "." : "") + (sp.errors.length ? " Shopify price update failed: " + sp.errors.join("; ") : "") };
+        }
+      }
+    } else if (action === "products") {
+      const g = await call("/_stage/fl/get?id=" + encodeURIComponent(id));
+      if (!g.ok) result = g;
+      else {
+        const r = await productsOnShopify(gql, g.list);
+        if (r.made.length) await call("/_stage/fl/save", { id, list: r.list, by });
+        result = { ok: !r.errors.length || r.made.length > 0, message: (r.made.length ? "Made " + r.made.length + " product" + (r.made.length === 1 ? "" : "s") + " on Shopify (draft, 0 in stock, at the sell prices): " + r.made.join(", ") + "." : "Every item already has its product.") + (r.errors.length ? " Problems: " + r.errors.join("; ") : ""), error: r.errors.length && !r.made.length ? r.errors.join("; ") : undefined };
+      }
     } else if (action === "on" || action === "off") {
       const r = await call("/_stage/fl/set", { id, on: action === "on", by });
       result = r.ok ? { ok: true, message: action === "on" ? "\"" + r.list.title + "\" is ON: the strip is on the sell page now." : "\"" + r.list.title + "\" is OFF: gone from the sell page; prices and counts are kept." } : r;
@@ -352,6 +537,7 @@ const CSS = `.fl-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:cente
 .fl-f{display:block;min-width:0}.fl-f span{display:none}
 .fl-cols{display:grid;grid-template-columns:128px repeat(8,minmax(60px,1fr));gap:4px;font-size:11px;color:#5b6770;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px}.fl-cols span:first-child{text-transform:none;letter-spacing:0}
 .fl-row.off input{opacity:.55}.fl-item.retired{opacity:.5}.fl-sw{display:inline-flex;gap:6px;align-items:center}.fl-add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.fl-shop{margin:10px 0 0;padding:8px 10px;background:#f4f6f7;border-radius:8px;font-size:13px}
 .fl-top{position:sticky;top:0;background:#fff;padding:8px 0;z-index:2;border-bottom:1px solid #e3e7ea;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 @media(max-width:900px){.fl-cols{display:none}.fl-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 6px;margin:8px 0;padding:8px;background:#f7f9fa;border-radius:10px}.fl-row.off{background:#fafafa}
 .fl-row .fl-cn{grid-column:1/-1;font-size:14px}.fl-row .fl-cn small{font-size:12px;font-weight:400}
@@ -370,7 +556,7 @@ export function renderLists(o) {
   const inp = (k, key, v, step, title) => `<label class="fl-f"><span>${LABEL[key]}</span><input type="number" min="0" step="${step}" inputmode="decimal" data-k="${k}" data-f="${key}" value="${v == null ? "" : esc(v)}" title="${esc(title)}"></label>`;
   const item = (l, it) => `<div class="fl-item${it.retired ? " retired" : ""}" data-item="${esc(it.key)}">
 <div>${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : `<div style="width:72px;height:72px;background:#f4f6f7;border-radius:8px"></div>`}</div>
-<div><div class="nm"><input class="text name" data-f="name" value="${esc(it.name)}" placeholder="name"><input class="text img" data-f="image" value="${esc(it.image || "")}" placeholder="image URL (https://cdn.shopify.com/...)"><label class="chk"><input type="checkbox" data-f="retired" ${it.retired ? "checked" : ""}> retired (hidden)</label><button type="button" class="sm" data-act="copyall" title="Every toy on this list gets the same cash, credit, sell, first, then and max as this one; bought stays as it is. Then press Save changes.">Use these prices for every toy</button></div>
+<div><div class="nm"><input class="text name" data-f="name" value="${esc(it.name)}" placeholder="name"><input class="text img" data-f="image" value="${esc(it.image || "")}" placeholder="image URL (https://cdn.shopify.com/...)"><label class="chk"><input type="checkbox" data-f="retired" ${it.retired ? "checked" : ""}> retired (hidden)</label>${it.shopify && it.shopify.product ? `<a class="muted" href="${ADMIN_URL}/products/${esc(it.shopify.product.replace(/\D/g, ""))}" target="_blank" rel="noopener" title="This item's product on Shopify">${it.shopify.status === "ACTIVE" ? "live" : "draft"} on Shopify ↗</a>` : ""}<button type="button" class="sm" data-act="copyall" title="Every toy on this list gets the same cash, credit, sell, first, then and max as this one; bought stays as it is. Then press Save changes.">Use these prices for every toy</button></div>
 ${CONDITIONS.map((c) => { const of = it.offers[c.key] || blankOffer(); const rem = remaining(of);
     return `<div class="fl-row${buying(of) ? "" : " off"}" data-cond="${esc(c.key)}"><b class="fl-cn">${esc(c.label)}<br><small class="muted">${buying(of) ? (rem == null ? "no limit" : rem + " more") : "not buying"}</small></b>
 ${inp(c.key, "cash", of.cash, "0.01", "cash we pay")}${inp(c.key, "credit", of.credit, "0.01", "store credit we pay")}${inp(c.key, "sell", of.sell, "0.01", "what we sell it for (shown)")}
@@ -379,6 +565,8 @@ ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${in
 </div></div>`;
   const card = (l) => {
     const live = (l.items || []).filter((i) => !i.retired).length;
+    const withProducts = (l.items || []).filter((i) => !i.retired && i.shopify && i.shopify.product).length;
+    const activeCount = (l.items || []).filter((i) => !i.retired && i.shopify && i.shopify.status === "ACTIVE").length;
     const missing = SEED.items.filter((s) => !(l.items || []).some((i) => i.key === s.key)).length;
     const preview = SELL_PAGE + "?xgfl=" + encodeURIComponent(l.id) + "&pv=" + encodeURIComponent(l.pv || "") + "#buylist";
     const hid = `<input type="hidden" name="__form" value="1"><input type="hidden" name="id" value="${esc(l.id)}">`;
@@ -397,6 +585,8 @@ ${l.on ? "" : `<form method="post" action="${BASE}/lists/control" onsubmit="retu
 <div class="fl-cols"><span>Condition</span><span>Cash</span><span>Credit</span><span>Sell</span><span>First</span><span>Then cash</span><span>Then credit</span><span>Max</span><span>Bought</span></div>
 <div class="fl-items">${(l.items || []).map((it) => item(l, it)).join("") || `<p class="muted">No items yet.</p>`}</div>
 <div class="fl-add"><input class="text" data-add="name" placeholder="new item: name"><input class="text" data-add="image" placeholder="image URL" style="flex:1 1 260px"><button type="button" class="sm" data-act="add">Add item</button></div>
+<div class="fl-shop"><b>Products on Shopify:</b> ${withProducts} of ${live} item${live === 1 ? "" : "s"} ${withProducts === 1 ? "has" : "have"} one${withProducts ? " (" + activeCount + " live)" : ""}. <span class="muted">Approving a sent list adds its quantities to stock and makes the products live; saving here keeps the sell prices in step.</span>
+${withProducts < live ? `<form method="post" action="${BASE}/lists/control" style="display:inline" onsubmit="return confirm('Make ${live - withProducts} product${live - withProducts === 1 ? "" : "s"} on Shopify now? Draft, 0 in stock, at the sell prices (or the store placeholder where blank), with the pictures.')">${hid}<input type="hidden" name="action" value="products"><button type="submit" class="sm">Make the ${live - withProducts === live ? "" : "missing "}product${live - withProducts === 1 ? "" : "s"} on Shopify</button></form>` : ""}</div>
 <div class="act"><button type="button" class="save" data-act="save">Save changes</button><span class="muted" data-msg></span></div>
 </div>`;
   };
