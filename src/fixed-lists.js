@@ -29,7 +29,7 @@ export const MAX_ITEMS = 200;
 export const MAX_LINES = 100;
 export const CONDITIONS = [
   { key: "loose", label: "Loose" },
-  { key: "cib", label: "Complete in box" },
+  { key: "cib", label: "Complete in box with cards" },   // owner, 2026-11-06: "Make it say complete in box with cards"
   { key: "new", label: "New (sealed)" },
 ];
 
@@ -115,10 +115,10 @@ export function summaryView(l) {
 // only what is left and the tiers; never the preview key.
 export function publicView(l) {
   return {
-    id: l.id, title: l.title, blurb: l.blurb || "", conditions: l.conditions || CONDITIONS,
+    id: l.id, title: l.title, blurb: l.blurb || "", conditions: CONDITIONS,
     items: (l.items || []).filter((i) => !i.retired).map((i) => ({
       key: i.key, name: i.name, image: i.image,
-      offers: Object.fromEntries((l.conditions || CONDITIONS).map((c) => {
+      offers: Object.fromEntries(CONDITIONS.map((c) => {
         const o = i.offers[c.key] || blankOffer();
         return [c.key, { buying: buying(o), cash: o.cash || 0, credit: o.credit || 0, sell: o.sell, remaining: remaining(o), fullLeft: fullLeft(o), fullUpTo: o.fullUpTo, afterCash: hasAfter(o) ? o.afterCash || 0 : null, afterCredit: hasAfter(o) ? o.afterCredit || 0 : null }];
       })),
@@ -144,7 +144,7 @@ export function cleanLines(v) {
 // fixed so approval skips BinderPOS and a rejection gives the units back.
 export function cardsOf(list, lines) {
   const cards = [], notes = [];
-  const condLabel = (k) => ((list.conditions || CONDITIONS).find((c) => c.key === k) || {}).label || k;
+  const condLabel = (k) => (CONDITIONS.find((c) => c.key === k) || {}).label || k;
   for (const ln of lines) {
     const item = (list.items || []).find((i) => i.key === ln.item && !i.retired);
     const o = item && item.offers[ln.cond];
@@ -361,7 +361,7 @@ export function renderLists(o) {
   const item = (l, it) => `<div class="fl-item${it.retired ? " retired" : ""}" data-item="${esc(it.key)}">
 <div>${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : `<div style="width:72px;height:72px;background:#f4f6f7;border-radius:8px"></div>`}</div>
 <div><div class="nm"><input class="text name" data-f="name" value="${esc(it.name)}" placeholder="name"><input class="text img" data-f="image" value="${esc(it.image || "")}" placeholder="image URL (https://cdn.shopify.com/...)"><label class="chk"><input type="checkbox" data-f="retired" ${it.retired ? "checked" : ""}> retired (hidden)</label></div>
-${(l.conditions || CONDITIONS).map((c) => { const of = it.offers[c.key] || blankOffer(); const rem = remaining(of);
+${CONDITIONS.map((c) => { const of = it.offers[c.key] || blankOffer(); const rem = remaining(of);
     return `<div class="fl-row${buying(of) ? "" : " off"}" data-cond="${esc(c.key)}"><b class="fl-cn">${esc(c.label)}<br><small class="muted">${buying(of) ? (rem == null ? "no limit" : rem + " more") : "not buying"}</small></b>
 ${inp(c.key, "cash", of.cash, "0.01", "cash we pay")}${inp(c.key, "credit", of.credit, "0.01", "store credit we pay")}${inp(c.key, "sell", of.sell, "0.01", "what we sell it for (shown)")}
 ${inp(c.key, "fullUpTo", of.fullUpTo, "1", "how many at that price (counted across every list)")}${inp(c.key, "afterCash", of.afterCash, "0.01", "cash past that count")}${inp(c.key, "afterCredit", of.afterCredit, "0.01", "credit past that count")}
@@ -380,7 +380,7 @@ ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${in
 ${missing ? `<form method="post" action="${BASE}/lists/control">${hid}<input type="hidden" name="action" value="addseed"><button type="submit" class="ok" title="The 15 Happy Meal figures with their pictures, prices blank">Add the ${missing === 15 ? "15 " : ""}McDonald's toys${missing === 15 ? "" : " (" + missing + " missing)"}</button></form>` : ""}
 ${l.on ? "" : `<form method="post" action="${BASE}/lists/control" onsubmit="return confirm('Delete this list and its prices? This cannot be undone.')">${hid}<input type="hidden" name="action" value="delete"><button type="submit">Delete</button></form>`}</div>
 <div class="fl-meta"><label>Title<input class="text" data-f="title" value="${esc(l.title)}"></label><label>Blurb on the sell page<input class="text" data-f="blurb" value="${esc(l.blurb || "")}" placeholder="one or two sentences"></label></div>
-<p class="muted" style="margin:4px 0 0">Per item and condition: what you pay in <b>cash</b> and <b>credit</b>, what you <b>sell</b> it for (shown to the seller), <b>first</b> = how many you take at that price before the lower <b>then</b> pair applies, <b>max</b> = the most you buy in all, <b>bought</b> = reserved by submitted lists so far. Blank cash and credit = not buying that one. Counts run across every customer; a rejected list gives its units back.</p>
+<p class="muted" style="margin:4px 0 0">Per item and condition: <b>cash</b> and <b>credit</b> = what you pay; <b>sell</b> = your selling price, shown to the seller; <b>first</b> = how many you take at that cash/credit price; <b>then cash</b> / <b>then credit</b> = the lower pair you pay for every one after that (leave both blank to stop buying once "first" is reached); <b>max</b> = the most you buy in all, blank = no cap; <b>bought</b> = reserved by submitted lists so far. Example: cash 3, credit 4, first 10, then cash 1.50, then credit 2, max 50 = the first 10 at $3/$4, the next 40 at $1.50/$2, nothing past 50. Blank cash and credit = not buying that one. Counts run across every customer; a rejected list gives its units back.</p>
 <div class="fl-cols"><span>Condition</span><span>Cash</span><span>Credit</span><span>Sell</span><span>First</span><span>Then cash</span><span>Then credit</span><span>Max</span><span>Bought</span></div>
 <div class="fl-items">${(l.items || []).map((it) => item(l, it)).join("") || `<p class="muted">No items yet.</p>`}</div>
 <div class="fl-add"><input class="text" data-add="name" placeholder="new item: name"><input class="text" data-add="image" placeholder="image URL" style="flex:1 1 260px"><button type="button" class="sm" data-act="add">Add item</button></div>

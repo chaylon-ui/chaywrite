@@ -73,6 +73,7 @@ test("the shopper's view carries what is left and the tiers, never the counts or
   assert.deepEqual(o.loose, { buying: true, cash: 3, credit: 4, sell: 8, remaining: 42, fullLeft: 2, fullUpTo: 10, afterCash: 1.5, afterCredit: 2 });
   assert.deepEqual(o.cib, { buying: true, cash: 2, credit: 2, sell: null, remaining: null, fullLeft: null, fullUpTo: null, afterCash: null, afterCredit: null });
   assert.equal(o.new.buying, false);
+  assert.equal(publicView({ ...l, conditions: [{ key: "cib", label: "Complete in box" }] }).conditions[1].label, "Complete in box with cards");
   assert.ok(!JSON.stringify(v).includes("bought") && !JSON.stringify(v).includes(l.pv));
   const s = summaryView(l);
   assert.deepEqual(s, { id: "t", title: "T", blurb: "", images: ["https://x/a.png"], count: 1, buying: 1 });
@@ -90,7 +91,7 @@ test("cardsOf: one stage line per tier, marked fixed, with the refusals noted", 
   assert.equal(cards[1].cardId, "fl:mcd:pikachu:loose:after"); assert.equal(cards[1].quantity, "2"); assert.equal(cards[1].cashBuyPrice, 1.5); assert.equal(cards[1].conditionName, "Loose · after the first 10");
   assert.equal(cards[2].cardId, "fl:mcd:pikachu:new"); assert.equal(cards[2].quantity, "2"); assert.deepEqual(cards[2].fixed, { list: "mcd", item: "pikachu", cond: "new", after: false });
   assert.equal(cards[0].setName, "McDonald's toys"); assert.equal(cards[0].imageUrl, "https://x/p.png");
-  assert.deepEqual(notes, ["Pikachu · New (sealed): we can take 2 more, not 3", "Pikachu · Complete in box: we are not buying that one right now", "nobody · loose: not on this list"]);
+  assert.deepEqual(notes, ["Pikachu · New (sealed): we can take 2 more, not 3", "Pikachu · Complete in box with cards: we are not buying that one right now", "nobody · loose: not on this list"]);
   assert.deepEqual(cleanLines([{ item: "a", cond: "loose", qty: 0 }, { item: "a", cond: "loose", qty: 2 }, { item: "a", cond: "loose", qty: 3 }, "x"]), [{ item: "a", cond: "loose", qty: 2 }]);
 });
 
