@@ -79,23 +79,34 @@
   // Shopify's CDN resizes on request: a 1.3 MB logo comes down at the width it is shown.
   function sized(u, w) { return /^https:\/\/cdn\.shopify\.com\//.test(u) ? u + (u.indexOf("?") >= 0 ? "&" : "?") + "width=" + w : u; }
   var FL_OPEN = null;                          // set below once signed in: function (id)
-  (function stripOfLists() {
+  (function tilesOfLists() {
+    // A tile in the row of game tiles (owner, 2026-11-06: "like Pokemon,
+    // mtg, Star Wars etc ... populate there with the toys like cards do"),
+    // one per list that is on. The row gets one more column per tile on a
+    // desk and four per row on a phone (buylist.css).
     var grid = document.querySelector(".xgbl-games");
     if (!grid) return;
     fetch(W0 + API0 + "/fixedlists" + (PV ? "?pv=" + encodeURIComponent(PV) : ""), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (j) {
       var lists = j && Array.isArray(j.lists) ? j.lists : [];
-      var after = grid;
       lists.forEach(function (l) {
+        var pic = l.tile || l.banner || (l.images || [])[0] || "";
         var a = document.createElement("a");
-        a.className = "xgbl-fl"; a.href = "#buylist"; a.setAttribute("data-xgfl", l.id);
-        a.innerHTML = (l.banner ? '<span class="xgbl-fl__pics xgbl-fl__pics--banner"><img src="' + esc0(sized(l.banner, 480)) + '" alt="" loading="lazy"></span>' : '<span class="xgbl-fl__pics">' + (l.images || []).slice(0, 3).map(function (u) { return '<img src="' + esc0(u) + '" alt="" loading="lazy">'; }).join("") + '</span>') +
-          '<span class="xgbl-fl__text"><b class="xgbl-fl__tag">Also buying</b> <span class="xgbl-fl__title">' + esc0(l.title) + '</span>' + (l.blurb ? '<small>' + esc0(l.blurb) + '</small>' : '') + '</span>' +
-          '<span class="xgbl-fl__go">Sell yours \u2192</span>';
-        a.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); landOn(root); if (typeof FL_OPEN === "function") FL_OPEN(l.id); });
-        after.parentNode.insertBefore(a, after.nextSibling); after = a;
+        a.className = "xgbl-game xgbl-game--fl"; a.href = "#buylist"; a.setAttribute("data-xgfl", l.id); a.title = "Sell your " + l.title;
+        a.innerHTML = pic ? '<img src="' + esc0(sized(pic, 400)) + '" alt="' + esc0(l.title) + '" loading="lazy">' : '<span class="xgbl-game__text">' + esc0(l.title) + '</span>';
+        grid.appendChild(a);
       });
+      if (lists.length) { grid.classList.add("xgbl-games--fl"); grid.style.setProperty("--xgbl-n", String(grid.children.length)); }
       if (WANT_FL && typeof FL_OPEN === "function" && lists.some(function (l) { return l.id === WANT_FL; })) FL_OPEN(WANT_FL);
     }).catch(function () {});
+    // Taken in the capture phase like the game tiles' own guard, so nothing
+    // else on the page (BinderPOS's overlay script) answers the click.
+    document.addEventListener("click", function (e) {
+      var a = e.target && e.target.closest ? e.target.closest(".xgbl-game--fl") : null;
+      if (!a) return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      landOn(root);
+      if (typeof FL_OPEN === "function") FL_OPEN(a.getAttribute("data-xgfl"));
+    }, true);
   })();
   if (!CUSTOMER) return;                       // logged out: the page shows its own prompt
   root.setAttribute("data-mounted", "1");

@@ -80,7 +80,7 @@ test("the shopper's view carries what is left and the tiers, never the counts or
   assert.equal(publicView({ ...l, conditions: [{ key: "cib", label: "Complete in box" }] }).conditions[1].label, "Complete in box with cards");
   assert.ok(!JSON.stringify(v).includes("bought") && !JSON.stringify(v).includes(l.pv));
   const s = summaryView(l);
-  assert.deepEqual(s, { id: "t", title: "T", blurb: "", banner: "", images: ["https://x/a.png"], count: 1, buying: 1 });
+  assert.deepEqual(s, { id: "t", title: "T", blurb: "", banner: "", tile: "", images: ["https://x/a.png"], count: 1, buying: 1 });
   assert.equal(visible(l, ""), false);
   assert.equal(visible(l, l.pv), true);
   assert.equal(visible({ ...l, on: true }, ""), true);
@@ -213,7 +213,8 @@ test("the editor: the seed button, the switch, the preview link, the rows; the l
   assert.ok(page.includes("OFF - nobody sees it") && page.includes('value="on"') && page.includes(">Switch on<"));
   assert.ok(page.includes("xgfl=" + SEED.id + "&amp;pv=" + l.pv + "#buylist"));
   assert.ok(page.includes('data-item="pikachu"') && page.includes('data-f="bought" value="4"') && page.includes("46 more"));
-  assert.ok(page.includes('data-f="banner"') && page.includes('data-act="logo"') && page.includes("CCA7E631-6CC7-4FBA-8180-A17D8787E71A.png"));
+  assert.ok(page.includes('data-f="banner"') && page.includes('data-f="tile"') && page.includes('data-act="logo"') && page.includes("CCA7E631-6CC7-4FBA-8180-A17D8787E71A.png") && page.includes("mcd-pokemon-2026-tile.png"));
+  assert.equal(summaryView(cleanList({ id: "t", title: "T", tile: "https://cdn.shopify.com/t.png", items: [] }, null, 1, "")).tile, "https://cdn.shopify.com/t.png");
   assert.equal((page.match(/data-act="copyall" title=/g) || []).length, 15);   // one "use these prices for every toy" per toy (the script names it once more)
   assert.ok(page.includes('href="/9pocket/lists/control"') === false && page.includes('action="/9pocket/lists/control"'));
   const on = renderLists({ user: ADMIN, lists: [{ ...l, on: true }], origin: "https://w.example" });

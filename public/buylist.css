@@ -477,23 +477,12 @@ html[data-xg-theme="dark"] .bl__mine-row--staged .bl__mine-status { color: #f6c4
 .bl__totals[data-pay="credit"] > span:nth-child(1) b,
 .bl__totals[data-pay="cash"] > span:nth-child(2) b { font-weight: 600; }
 
-/* ---- fixed-price lists (owner, 2026-11-05/06): the strip under the game
+/* ---- fixed-price lists (owner, 2026-11-05/06): a tile in the row of game
    tiles (page body, outside .xg-buylist) and the pane in the main column. ---- */
-.xgbl-fl { display: flex; align-items: center; gap: 14px; max-width: 860px; margin: 0 auto 22px; padding: 10px 16px; border: 1px solid #f1d2cf !important; border-left: 4px solid #d62c28 !important; border-radius: 12px; background: #fff6f5; color: #2b1f1e; text-decoration: none !important; transition: transform .15s ease, box-shadow .15s ease; box-sizing: border-box; }
-.xgbl-fl:hover, .xgbl-fl:focus-visible { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(214, 44, 40, .18); }
-.xgbl-fl__pics { display: flex; flex: 0 0 auto; }
-.xgbl-fl__pics img { width: 56px; height: 56px; object-fit: contain; margin: 0 -14px 0 0 !important; padding: 0; border: 0 !important; box-shadow: none !important; float: none; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .2)); }
-.xgbl-fl__pics img:last-child { margin-right: 0 !important; }
-.xgbl-fl__pics--banner img { width: auto; height: 62px; max-width: 150px; object-fit: contain; margin: 0 !important; filter: none; border-radius: 8px; }
-.xgbl-fl__text { flex: 1 1 auto; min-width: 0; line-height: 1.3; font-size: 14.5px; }
-.xgbl-fl__tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #d62c28; color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-right: 6px; vertical-align: 1px; }
-.xgbl-fl__title { font-weight: 800; }
-.xgbl-fl__text small { display: block; color: #6b5c5a; font-size: 12.5px; margin-top: 2px; }
-.xgbl-fl__go { flex: 0 0 auto; color: #d62c28; font-weight: 800; white-space: nowrap; }
-html[data-xg-theme="dark"] .xgbl-fl { background: rgba(214, 44, 40, .10); border-color: rgba(214, 44, 40, .32) !important; border-left-color: #e2423d !important; color: #e8dedd; }
-html[data-xg-theme="dark"] .xgbl-fl__text small { color: #b9a9a7; }
-html[data-xg-theme="dark"] .xgbl-fl__go { color: #ff6a5e; }
-@media (max-width: 600px) { .xgbl-fl { gap: 10px; padding: 8px 12px; margin-bottom: 16px; } .xgbl-fl__pics img { width: 44px; height: 44px; } .xgbl-fl__pics--banner img { width: auto; height: 48px; max-width: 110px; } .xgbl-fl__text small { display: none; } .xgbl-fl__go { font-size: 13px; } }
+.xgbl-games.xgbl-games--fl { grid-template-columns: repeat(var(--xgbl-n, 8), 1fr) !important; }
+@media (max-width: 600px) { .xgbl-games.xgbl-games--fl { grid-template-columns: repeat(4, 1fr) !important; } }
+.xgbl-game--fl img { background: #ffe25a; }
+.xgbl-game--fl .xgbl-game__text { display: flex; align-items: center; justify-content: center; text-align: center; aspect-ratio: 1 / 1; border-radius: 12px; background: #ffe25a; color: #2b1f1e; font-weight: 800; font-size: 13px; padding: 6px; }
 
 .bl__fixed { min-width: 0; }
 .bl__fhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
