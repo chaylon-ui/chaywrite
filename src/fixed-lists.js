@@ -30,7 +30,7 @@ export const MAX_LINES = 100;
 export const CONDITIONS = [
   { key: "loose", label: "Loose" },
   { key: "cib", label: "Complete in box with cards" },   // owner, 2026-11-06: "Make it say complete in box with cards"
-  { key: "new", label: "New (sealed)" },
+  // "New (sealed)" went 2026-11-06 (owner: "Remove new sealed as there is no seal"): a boxed toy is the top state.
 ];
 
 const num = (v) => { if (v === "" || v == null) return null; const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; };
