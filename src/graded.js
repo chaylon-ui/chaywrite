@@ -336,7 +336,11 @@ export async function certLookup(cx, grader, cert) {
   try { r = await cx.fetch(PSA_API + n, { headers: { authorization: "bearer " + cx.env.PSA_API_TOKEN, accept: "application/json", "user-agent": "ExorGraded/1.0 (+workers.dev)" }, signal: AbortSignal.timeout(12000) }); }
   catch (e) { return { ok: false, error: "PSA did not answer: " + String((e && e.message) || e).slice(0, 120) }; }
   if (r.status === 429) return { ok: false, limited: true, error: "PSA's daily lookup allowance is used up; type the card in (it resets tomorrow)." };
-  if (r.status === 401 || r.status === 403) return { ok: false, error: "PSA refused the token (expired or wrong): make a new access token at psacard.com/publicapi and update the PSA_API_TOKEN secret." };
+  if (r.status === 401 || r.status === 403) {
+    // Owner, 2026-11-08: "Can you tell why the api failed from psa?" - say which refusal and what PSA said.
+    let said = ""; try { const t = await r.text(); const j = JSON.parse(t); said = String((j && (j.ServerMessage || j.Message || j.message)) || "").slice(0, 160); if (!said && t) said = t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160); } catch {}
+    return { ok: false, status: r.status, said, error: "PSA refused the token (HTTP " + r.status + (r.status === 401 ? ", not accepted: expired, revoked or mistyped" : ", not allowed for this call") + (said ? "; PSA said: " + said : "") + "): make a new access token at psacard.com/publicapi and update the PSA_API_TOKEN secret." };
+  }
   if (!r.ok) return { ok: false, error: "PSA HTTP " + r.status };
   const j = await r.json().catch(() => null);
   const c = j && j.PSACert;
