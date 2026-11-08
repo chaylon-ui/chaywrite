@@ -339,6 +339,8 @@ export async function certLookup(cx, grader, cert) {
   if (r.status === 401 || r.status === 403) {
     // Owner, 2026-11-08: "Can you tell why the api failed from psa?" - say which refusal and what PSA said.
     let said = ""; try { const t = await r.text(); const j = JSON.parse(t); said = String((j && (j.ServerMessage || j.Message || j.message)) || "").slice(0, 160); if (!said && t) said = t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160); } catch {}
+    // 2026-11-08, live: 403 "Access to this API is limited to approved customers." - the token is fine, the account is not approved.
+    if (r.status === 403 && /approved customers/i.test(said)) return { ok: false, status: 403, said, unapproved: true, error: "PSA has not approved this account for its API (HTTP 403: \"" + said + "\"). A new token will not help: request API access at psacard.com/publicapi; lookups work as soon as PSA approves." };
     return { ok: false, status: r.status, said, error: "PSA refused the token (HTTP " + r.status + (r.status === 401 ? ", not accepted: expired, revoked or mistyped" : ", not allowed for this call") + (said ? "; PSA said: " + said : "") + "): make a new access token at psacard.com/publicapi and update the PSA_API_TOKEN secret." };
   }
   if (!r.ok) return { ok: false, error: "PSA HTTP " + r.status };
