@@ -1137,8 +1137,10 @@ export function readProduct(node) {
      variant gets the price, so the shop shows it whichever one is open.
      A graded product whose variants are real choices (PSA 9 / PSA 10) is
      not a ladder and still asks. */
-  const ladder = !picked && isGradedType(node.productType) && vs.length > 1 && vs.every((x) => CONDITION_RE.test(String(x.title || "")));
-  const stocked = ladder ? vs.find((x) => Number(x.inventoryQuantity) > 0) || vs.find((x) => Number(x.price) > 0 && Number(x.price) <= 500000) || vs[0] : null;
+  // Owner, 2026-11-09: "It doesn't make sense to be conditioning a graded card" - a ladder is a
+  // ladder even when a rung was once picked; the page shows no condition choice for it.
+  const ladder = isGradedType(node.productType) && vs.length > 1 && vs.every((x) => CONDITION_RE.test(String(x.title || "")));
+  const stocked = ladder ? picked || vs.find((x) => Number(x.inventoryQuantity) > 0) || vs.find((x) => Number(x.price) > 0 && Number(x.price) <= 500000) || vs[0] : null;
   const v = picked || stocked || vs[0] || {};
   const num = (s) => { const n = Number(s); return Number.isFinite(n) ? n : null; };
   const cost = v.inventoryItem && v.inventoryItem.unitCost ? num(v.inventoryItem.unitCost.amount) : null;
@@ -2360,7 +2362,7 @@ export function renderPage(s, rep, view) {
     if (st.round) custom.push("round " + (st.round === "none" ? "off" : "$" + st.round));
     if (st.comp) custom.push("401 " + ({ cap: "hold", off: "show only", skip: "skip", follow: "follow" }[st.comp] || st.comp));
     // the TCGplayer id is stored by every run, so it is not a "custom" setting here
-    if (r.variantChosen && r.variantTitle) custom.push("variant " + r.variantTitle);
+    if (r.variantChosen && r.variantTitle && !r.variantIds) custom.push("variant " + r.variantTitle);
     return custom;
   };
   const settingsForm = (r) => {
@@ -2370,8 +2372,9 @@ export function renderPage(s, rep, view) {
     // Which variant the price is for. Only shown when there is a choice to
     // make; "not chosen" keeps the row in review rather than pricing a
     // variant nobody picked.
-    const variantField = vlist.length > 1
-      ? `<label class="wide" title="${r.variantIds ? "A graded slab has no condition ladder: these are the raw card's variants, so the price is written to all of them unless you pick one." : "This product has " + vlist.length + " variants. The auto price is written to the one you pick here."}"><span>Price which variant</span>${sel("variant", st.variant, [["", r.variantIds ? "all " + vlist.length + " — one graded slab, every variant gets the price" : "not chosen — leave in review"], ...vlist.map((x) => [x.id, (x.title || "variant") + (x.price != null ? " · " + money(x.price) : "") + " · stock " + x.stock])])}</label>`
+    // A graded slab's condition rungs are not a choice (owner, 2026-11-09): nothing to pick, the price goes to every rung.
+    const variantField = vlist.length > 1 && !r.variantIds
+      ? `<label class="wide" title="This product has ${vlist.length} variants. The auto price is written to the one you pick here."><span>Price which variant</span>${sel("variant", st.variant, [["", "not chosen — leave in review"], ...vlist.map((x) => [x.id, (x.title || "variant") + (x.price != null ? " · " + money(x.price) : "") + " · stock " + x.stock])])}</label>`
       : "";
     return `<form method="post" action="/autoprice/control" class="setf">${hidden("action", "settings")}${hidden("id", r.id)}${keepView()}
 ${variantField}
@@ -2487,7 +2490,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
     const meta = [
       !v.game && games.length > 1 ? esc(r.game) : "",
       "stock " + esc(r.stock == null ? "?" : r.stock),
-      r.variantChosen && r.variantTitle ? "variant " + esc(r.variantTitle) : r.variants > 1 ? esc(r.variants) + " variants" : "",
+      r.variantIds ? "" : r.variantChosen && r.variantTitle ? "variant " + esc(r.variantTitle) : r.variants > 1 ? esc(r.variants) + " variants" : "",
       r.comp && !r.graded ? esc(COMP.name) + " " + money(r.comp.price) + (r.comp.available ? "" : " (out)") : r.compDown ? '<span class="warn-t">401 not checked</span>' : "",
       custom.length ? `<span title="${esc(custom.join(" · "))}">⚙ ${esc(custom[0])}${custom.length > 1 ? " +" + (custom.length - 1) : ""}</span>` : "",
     ].filter(Boolean).join(" · ");

@@ -658,11 +658,11 @@ test("a graded product with the raw card's condition ladder is one slab: no choi
   // no stock anywhere: the first priced variant, else the first
   const none = readProduct(slab({}, ladder.map((x) => ({ ...x, inventoryQuantity: 0 }))));
   assert.equal(none.variantId, "gid://shopify/ProductVariant/100");
-  // the owner's own pick still wins and prices that one only
+  // a rung picked by hand stands for the row, but a slab is still one slab: every rung gets the price (owner, 2026-11-09)
   const one = readProduct(slab({ ap_variant: "103" }));
   assert.equal(one.variantId, "gid://shopify/ProductVariant/103");
-  assert.equal(one.variantIds, null);
-  assert.deepEqual(priceTargets(one, 10), [{ id: "gid://shopify/ProductVariant/103", price: "10.00" }]);
+  assert.deepEqual(one.variantIds, [100, 101, 102, 103, 104].map((n) => "gid://shopify/ProductVariant/" + n));
+  assert.deepEqual(priceTargets(one, 10).map((x) => x.price), ["10.00", "10.00", "10.00", "10.00", "10.00"]);
   // a raw single with the same ladder still asks (it is five real conditions)
   const raw = readProduct({ ...slab({}), productType: "Pokemon Single" });
   assert.equal(raw.variantChosen, false);
@@ -1439,4 +1439,23 @@ test("the list sorts: A-Z, price both ways, newest added, price last changed - w
   assert.ok(!render("").includes("price changed Nov") && !render("").includes("added Nov"));
   // the tabs carry it
   assert.ok(/href="\/autoprice\?[^"]*sort=changed[^"]*game=Pokemon/.test(page));
+});
+
+
+test("a graded slab's condition rungs are never a choice: the stocked rung (or a picked one) stands, the page shows no variant picker or chip", () => {
+  const rung = (id, title, price, qty) => ({ node: { id: "gid://shopify/ProductVariant/" + id, title, price: String(price), inventoryQuantity: qty, inventoryItem: { unitCost: null } } });
+  const node = { id: "gid://shopify/Product/77", title: "Charizard (4/102) [Base Set Unlimited] Graded PSA 8", handle: "c", productType: "Pokemon Single Graded", tags: [], createdAt: "2026-11-01T12:00:00Z", media: { edges: [] },
+    variants: { edges: [rung(1, "Near Mint Holofoil", 5699.95, 1), rung(2, "Lightly Played Holofoil", 999999, 0), rung(3, "Moderately Played Holofoil", 999999, 0), rung(4, "Heavily Played Holofoil", 999999, 0), rung(5, "Damaged Holofoil", 999999, 0)] }, mf: { edges: [] } };
+  const p = readProduct(node);
+  assert.equal(p.variantChosen, true); assert.equal(p.variantId, "gid://shopify/ProductVariant/1"); assert.equal(p.variantIds.length, 5);
+  // a rung picked by hand earlier is still a ladder (the price still reaches every rung, no choice shown)
+  const picked = readProduct({ ...node, mf: { edges: [{ node: { key: "ap_variant", value: "gid://shopify/ProductVariant/2" } }] } });
+  assert.equal(picked.variantId, "gid://shopify/ProductVariant/2"); assert.equal(picked.variantIds.length, 5); assert.equal(picked.variantChosen, true);
+  const row = { id: p.id, title: p.title, type: p.type, stock: 1, current: 5699.95, action: "hold", reason: "", sources: [], images: [], graded: p.graded, variants: 5, variantChosen: true, variantTitle: "Near Mint Holofoil", variantList: p.variantList, variantIds: p.variantIds, settings: { variant: "gid://shopify/ProductVariant/1" } };
+  const page = renderPage({ mode: "shadow", config: DEFAULT_CONFIG }, { rows: [row] }, { configured: true, view: "all" });
+  assert.ok(!page.includes("Price which variant") && !page.includes("variant Near Mint") && !page.includes("5 variants"));
+  // a raw card with two real variants still asks
+  const raw = { ...row, id: "gid://shopify/Product/78", type: "Pokemon Single", graded: null, variantIds: null, variantChosen: false, variantTitle: "", variants: 2, variantList: [{ id: "a", title: "Near Mint", price: 1, stock: 1 }, { id: "b", title: "Near Mint Holofoil", price: 2, stock: 1 }], settings: { variant: "" } };
+  const page2 = renderPage({ mode: "shadow", config: DEFAULT_CONFIG }, { rows: [raw] }, { configured: true, view: "all" });
+  assert.ok(page2.includes("Price which variant") && page2.includes("2 variants"));
 });
