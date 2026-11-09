@@ -123,7 +123,7 @@ function tape(g, w, h, text, font, rot) {  // a strip of masking tape with marke
 const fonts = Promise.race([Promise.all(['700 20px "Cutive Mono"', '20px "Permanent Marker"', '700 20px Caveat', '20px "Special Elite"'].map((f) => document.fonts.load(f))), new Promise((r) => setTimeout(r, 2500))]).catch(() => {});
 
 /* ---------- card images: straight from the shop's CDN, through the worker when a host refuses ---------- */
-const badHost = new Set(['images.binderpos.com']);   // sends no CORS header (live probe 42694107805, 2026-11-09), so its pictures go through the worker from the start
+const badHost = new Set(['images.binderpos.com', 'images.ygoprodeck.com']);   // sends no CORS header (live probe 42694107805, 2026-11-09), so its pictures go through the worker from the start
 function loadImg(url) {
   return new Promise((res, rej) => {
     let host = ''; try { host = new URL(url, location.href).host; } catch (x) {}

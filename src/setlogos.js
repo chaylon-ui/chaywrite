@@ -3,7 +3,7 @@
    /showcase/setlogos.json?game= answers { ok, game, logos: { <set name,
    normalised>: <image url> } } from a public source per game, cached a day:
      mtg      Scryfall's set list (the set symbol, an SVG)
-     pokemon  the Pokémon TCG API's set list (the set logo, a PNG)
+     pokemon  the Pokémon TCG API's set list, from its data file on GitHub (the set logo, a PNG)
      yugioh   YGOPRODeck's set list (the set's pack picture)
    Other games have no such source and answer an empty list. The page looks
    a BinderPOS set name up with setLogoKeys() (the same rule lives in
@@ -29,13 +29,14 @@ export function logosOf(game, body) {
   const out = {};
   const put = (name, url) => { const k = normSet(name), u = https(url); if (k && u && !out[k]) out[k] = u; };
   if (game === "mtg") for (const s of (body && body.data) || []) put(s && s.name, s && s.icon_svg_uri);
-  else if (game === "pokemon") for (const s of (body && body.data) || []) put(s && s.name, s && s.images && s.images.logo);
+  else if (game === "pokemon") for (const s of (Array.isArray(body) ? body : body && body.data) || []) put(s && s.name, s && s.images && s.images.logo);
   else if (game === "yugioh") for (const s of Array.isArray(body) ? body : []) put(s && s.set_name, s && s.set_image);
   return out;
 }
 export const LOGO_SOURCES = {
   mtg: "https://api.scryfall.com/sets",
-  pokemon: "https://api.pokemontcg.io/v2/sets?pageSize=250&select=name,images",
+  // the Pokémon TCG API's own data file on GitHub: the API itself answers 429 to a worker without a key (live probe 42704135732)
+  pokemon: "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json",
   yugioh: "https://db.ygoprodeck.com/api/v7/cardsets.php",
 };
 const CORS = { "access-control-allow-origin": "*", "content-type": "application/json" };

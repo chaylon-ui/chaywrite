@@ -17,6 +17,7 @@ test("setLogoKeys: the name, then without BinderPOS's tokens/promos words, then 
 test("logosOf: each source's shape; only https pictures; the first of a repeated name wins", () => {
   assert.deepEqual(logosOf("mtg", { data: [{ name: "Dominaria", icon_svg_uri: "https://svgs.scryfall.io/sets/dom.svg?1" }, { name: "Dominaria", icon_svg_uri: "https://svgs.scryfall.io/sets/x.svg" }, { name: "No Icon" }, { name: "Bad", icon_svg_uri: "javascript:alert(1)" }] }), { dominaria: "https://svgs.scryfall.io/sets/dom.svg?1" });
   assert.deepEqual(logosOf("pokemon", { data: [{ name: "Journey Together", images: { symbol: "https://images.pokemontcg.io/sv9/symbol.png", logo: "https://images.pokemontcg.io/sv9/logo.png" } }, { name: "Nothing" }] }), { "journey together": "https://images.pokemontcg.io/sv9/logo.png" });
+  assert.deepEqual(logosOf("pokemon", [{ name: "Base", images: { logo: "https://images.pokemontcg.io/base1/logo.png" } }]), { base: "https://images.pokemontcg.io/base1/logo.png" });   // the data file is a plain list
   assert.deepEqual(logosOf("yugioh", [{ set_name: "Duel Power", set_code: "DUPO", set_image: "https://images.ygoprodeck.com/images/sets/DUPO.jpg" }, { set_name: "Plain" }]), { "duel power": "https://images.ygoprodeck.com/images/sets/DUPO.jpg" });
   assert.deepEqual(logosOf("mtg", null), {}); assert.deepEqual(logosOf("yugioh", { data: [] }), {}); assert.deepEqual(logosOf("chess", { data: [{ name: "x", icon_svg_uri: "https://a/b" }] }), {});
 });
