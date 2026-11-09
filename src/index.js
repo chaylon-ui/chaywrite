@@ -19,7 +19,8 @@ import { GS_PAGE, GS_QUERY, parseGsPage } from "./gamesys.js";
 import { serveEnrich, ENRICH_DO } from "./enrich.js";
 import { serveBuylist, refreshWantedCards } from "./buylist.js";
 import { HOLD_DO, serveHoldPage, serveHoldControl } from "./hold.js";
-import { serveStage, servePair, STAGE_DO } from "./stage.js";
+import { serveStage, servePair, STAGE_DO, currentUser } from "./stage.js";
+import { topBar, BAR_CSS } from "./stage-ui.js";
 import { serveRequests, REQUESTS_DO } from "./requests.js";
 import { stockCheckTick, STOCK_DO } from "./stock-check.js";
 import { serveWin, WIN_DO } from "./win.js";
@@ -403,7 +404,12 @@ async function route(request, env, ctx) {
     // staff PIN. The page is a static shell; every read goes through
     // src/portal.js, which signs in to the portal with the staff login.
     if (url.pathname === "/portal/buylists") {
-      return serveAsset(env, "/buylists.html", request);
+      // With the 9Pocket bar on top (owner, 2026-11-09: the header went missing on this screen).
+      const res = await serveAsset(env, "/buylists.html", request);
+      if (res.status !== 200) return res;
+      let user = null; try { user = await currentUser(request, env, url.origin); } catch {}
+      const page = (await res.text()).replace("</head>", "<style>" + BAR_CSS + "</style></head>").replace("<body>", "<body>" + topBar({ user }, { cls: "ninebar", back: true, here: "portal" }));
+      return new Response(page, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
     }
     if (url.pathname.startsWith("/portal/") && url.pathname.endsWith(".json")) {
       const pg = gate("portal");

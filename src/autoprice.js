@@ -60,6 +60,7 @@
 import { adminGql, throttleWait } from "./price-history.js";
 import { currentUser, stageCfg } from "./stage.js";
 import { apPerms } from "./stage-auth.js";
+import { topBar, BAR_CSS } from "./stage-ui.js";
 import { sendEmail, buildNoticeEmail, emailConfigured } from "./stage-email.js";
 import { repoFetch } from "./repo-data.js";
 import { KEEP_SCROLL_JS } from "./keep-scroll.js";
@@ -2197,7 +2198,9 @@ export async function serveAutoprice(request, env, url, staffOk) {
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
   const { psaConfigured, visionConfigured } = await import("./graded.js");
-  return html(renderPage(status, report, { q, game, view: pageView, sort, everything, found, user: access.name, perms: access, configured, flash, psaOn: psaConfigured(env), vision: visionConfigured(env) }));
+  // The 9Pocket bar on top (owner, 2026-11-09): the signed-in 9Pocket account's links, or an admin's when the auto-pricer's own login was used.
+  const pocket = account || (access.admin ? { name: access.name || "staff", role: "admin", perms: {}, synthetic: true } : null);
+  return html(renderPage(status, report, { q, game, view: pageView, sort, everything, found, user: access.name, perms: access, configured, flash, psaOn: psaConfigured(env), vision: visionConfigured(env), pocket }));
 }
 
 // Which permission each control action needs (src/stage-auth.js AP_PERMS).
@@ -2578,7 +2581,7 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .hist{margin-top:26px}.hist>details{margin:8px 0;background:var(--card);border:1px solid var(--line);border-radius:12px}.hist>details>summary{cursor:pointer;padding:10px 14px;font-weight:600}.hist table{width:100%;border-collapse:collapse;font-size:12.5px}.hist th{text-align:left;padding:6px 14px;color:var(--mut);font-weight:600;border-top:1px solid var(--line)}.hist td{padding:6px 14px;border-top:1px solid var(--line);vertical-align:top}.hist .scroll{overflow-x:auto}.foot{margin-top:14px;font-size:12px;color:var(--mut)}
 @media (max-width:1000px){.lhead{display:none}.line{grid-template-columns:minmax(0,1fr) 110px 140px;row-gap:8px}.c-prod{grid-column:1/-1}.c-now{text-align:left}.c-sug{text-align:left}.c-act{grid-column:1/-1;justify-content:flex-start}.c-now::before,.c-sug::before,.c-st::before{content:attr(data-l);display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.c-act:empty,.c-st:empty{display:none}.panel{grid-template-columns:1fr 1fr}.panel .setsec{grid-column:1/-1}}
 @media (max-width:640px){.wrap{padding:12px 12px 32px}.top h1{font-size:18px}.who{text-align:left}.tools .runl{margin-left:0;width:100%}.drop{position:static}.drop>.dd{left:12px!important;right:12px!important;width:auto}.bar .filt{margin-left:0;width:100%}.tabs{flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:2px;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tab{flex:none}.line{grid-template-columns:1fr 1fr;padding:12px 42px 12px 12px}.c-st{grid-column:1/-1}.panel{grid-template-columns:1fr}.pubf{flex:1}.pubf .px{flex:1}.px input{width:100%;font-size:16px}.c-act .inl{flex:0}.pubbar{flex-wrap:wrap}.pubbar form{margin-left:0;width:100%}.pubbar .btn{width:100%;justify-content:center}}
-</style></head><body><div class="wrap">
+${BAR_CSS}</style></head><body>${topBar({ user: v.pocket || null }, { cls: "ninebar", back: true, here: "autoprice" })}<div class="wrap">
 <header class="top"><h1>Auto-pricing${everything ? " · everything" : ""} <span class="mode m-${esc(s.mode)}" title="${esc(modeTip)}">${esc(modeName)}</span>${v.configured ? "" : '<span class="mode m-apply">login not set up: add the AUTOPRICE_USER / AUTOPRICE_PASSWORD secrets</span>'}</h1>
 <div class="who">${v.perms && !P.legacy ? `Signed in as <b>${esc(P.name || P.email || "")}</b>${P.admin ? ' · admin: everything · <a href="/9pocket/admin">accounts and permissions</a>' : " · may " + [P.publish ? "publish" : "", P.settings ? "change product settings" : "", P.config ? "change page rules" : ""].filter(Boolean).join(", ").replace(/^$/, "view only") + (limitNote ? " · " + limitNote : "")} · <a href="/9pocket">9Pocket</a> · <form method="post" action="/9pocket/logout"><button>sign out</button></form>` : `<a href="/autoprice/logout">sign out${v.user && v.user !== "pin" ? " (" + esc(v.user) + ")" : ""}</a>`}</div></header>
 <div class="tools">${P.config ? ctlForm("run", s.mode === "apply" ? hidden("apply", "1") : "", "↻ Run now", "btn", ` title="${s.mode === "apply" ? "Prices are written by this run" : s.mode === "stage" ? "Changes are queued here for you to publish" : "Shadow: report only"}"`) : ""}${addPanel}${pageSettings}${everything ? `<a class="btn" href="${esc(qsAt("/autoprice", { game: v.game || "" }))}" title="Back to the page that opens on what needs you">← What needs you <span class="n">${todo.length}</span></a>` : `<a class="btn ghost" href="${esc(qsAt("/autoprice/all", { game: v.game || "" }))}" title="Every product on the pricer, the quiet ones included">Everything <span class="n">${all.length}</span></a>`}<details class="drop right"><summary class="btn ghost">How it works</summary><div class="dd">${help}</div></details>

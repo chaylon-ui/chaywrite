@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { totalsOf, shapeRecord, mineView, applyEdit, lockUnpaidPrice, stagingOn, safeImage, mergeApproval, numberOf, shapeAdded, mergeAdded, editNeeds } from "../src/stage.js";
 import { buildEmail, buildDecisionEmail, instructionsPayload, sendEmail } from "../src/stage-email.js";
-import { renderList, renderSheet, renderLoginForm, renderSetup, renderAdmin, renderDenied, renderHeld } from "../src/stage-ui.js";
+import { renderList, renderSheet, renderLoginForm, renderSetup, renderAdmin, renderDenied, renderHeld, topBar, BAR_CSS } from "../src/stage-ui.js";
 
 const ADMIN = { email: "chaylon@exorgames.com", name: "Chaylon", role: "admin", perms: {} };
 const VIEWER = { email: "v@exorgames.com", name: "Viewer", role: "staff", perms: {} };
@@ -284,4 +284,20 @@ test("the Held stock page: the switch is an admin's, releasing needs the permiss
   assert.ok(!v.includes("Switch ON") && !v.includes('value="release"') && !v.includes('href="/9pocket/held"') && v.includes("Held stock"));
   const r = renderHeld(d, { ...o, user: { ...VIEWER, perms: { release: true } } });
   assert.ok(!r.includes("Switch ON") && r.includes('value="release"') && r.includes('href="/9pocket/held"'));
+});
+
+
+test("the 9Pocket bar is one piece: the shell's, and a styled copy for the auto-pricer and the BinderPOS page", () => {
+  const b = topBar({ user: ADMIN }, { cls: "ninebar", back: true, here: "autoprice" });
+  assert.ok(b.startsWith('<div class="ninebar">') && b.includes("← Back to 9Pocket"));
+  assert.ok(b.includes('<a href="/autoprice" aria-current="page">Auto-pricing</a>') && b.includes('href="/9pocket/admin"') && b.includes("Sign out"));
+  assert.ok(b.includes('<a href="/portal/buylists">BinderPOS\'s list</a>'));
+  const none = topBar({ user: null }, { cls: "ninebar", back: true, here: "portal" });
+  assert.ok(!none.includes("Sign out") && !none.includes("Admin") && none.includes('<a href="/portal/buylists" aria-current="page">'));
+  const synth = topBar({ user: { name: "C", role: "admin", perms: {}, synthetic: true } });
+  assert.ok(synth.startsWith('<div class="bar">') && synth.includes("Admin") && !synth.includes("Sign out"));
+  assert.ok(BAR_CSS.includes(".ninebar{") && !BAR_CSS.includes(".bar{"));
+  // the shell still carries it
+  const page = renderList({ records: [], counts: {} }, { user: PRICER, on: true, emailOn: true });
+  assert.ok(page.includes('<div class="bar">') && page.includes("Sign out") && page.includes("BinderPOS's list"));
 });
