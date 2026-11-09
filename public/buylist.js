@@ -1114,13 +1114,6 @@
     if (n) fcart[fkey(item, cond)] = n; else delete fcart[fkey(item, cond)];
     fsave(); renderFixed(); renderCart();
   }
-  function fnote(o) {
-    var bits = [], tier = o.fullUpTo != null && o.afterCash != null;
-    if (tier) bits.push(o.fullLeft > 0 ? "first " + o.fullLeft + " at this price, then " + money(o.afterCash) + " / " + money(o.afterCredit) : "the first " + o.fullUpTo + " are gone: this is the price now");
-    if (o.remaining != null && o.remaining > 0) bits.push("we take " + o.remaining + " more");
-    if (o.sell != null) bits.push("we sell it for " + money(o.sell));
-    return bits.join(" \u00b7 ");
-  }
   function fprice(o) {
     var tier = o.fullUpTo != null && o.afterCash != null && !(o.fullLeft > 0);
     return money(tier ? o.afterCash : o.cash) + " cash \u00b7 " + money(tier ? o.afterCredit : o.credit) + " credit";
@@ -1154,7 +1147,6 @@
             var open = o.buying && fmax(o) > 0;
             return '<div class="bl__frow' + (open ? '' : ' bl__frow--off') + '" data-item="' + esc(it.key) + '" data-cond="' + esc(c.key) + '"><span class="bl__fcond">' + esc(c.label) + '</span>' +
               '<span class="bl__fprice' + (open ? '' : ' bl__fno') + '">' + (open ? esc(fprice(o)) : (o.buying ? "At our limit for now" : "Not buying right now")) + '</span>' +
-              (open && fnote(o) ? '<small class="bl__fnote">' + esc(fnote(o)) + '</small>' : '') +
               (open ? stepper(it.key, c.key, o) : '') + '</div>';
           }).join("") + '</div></article>';
       }).join("") + '</div>';

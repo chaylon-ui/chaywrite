@@ -65,13 +65,13 @@ test("cleanList: slugs, numbers, retired flags; bought is kept from the stored c
   assert.equal(slug("McDonald's Pokémon 2026"), "mcdonald-s-pokemon-2026");
 });
 
-test("the shopper's view carries what is left and the tiers, never the counts or the preview key", () => {
+test("the shopper's view carries what is left and the tiers, never the counts, the sell price or the preview key (owner, 2026-11-09)", () => {
   const l = cleanList({ id: "t", title: "T", items: [{ key: "a", name: "A", image: "https://x/a.png", offers: { loose: { ...OFFER, bought: 8 }, cib: { cash: 2, credit: 2 }, new: {} } }, { key: "b", name: "B", retired: true }] }, null, 1, "");
   const v = publicView(l);
   assert.equal(v.items.length, 1);
   const o = v.items[0].offers;
-  assert.deepEqual(o.loose, { buying: true, cash: 3, credit: 4, sell: 8, remaining: 42, fullLeft: 2, fullUpTo: 10, afterCash: 1.5, afterCredit: 2 });
-  assert.deepEqual(o.cib, { buying: true, cash: 2, credit: 2, sell: null, remaining: null, fullLeft: null, fullUpTo: null, afterCash: null, afterCredit: null });
+  assert.deepEqual(o.loose, { buying: true, cash: 3, credit: 4, remaining: 42, fullLeft: 2, fullUpTo: 10, afterCash: 1.5, afterCredit: 2 });
+  assert.deepEqual(o.cib, { buying: true, cash: 2, credit: 2, remaining: null, fullLeft: null, fullUpTo: null, afterCash: null, afterCredit: null });
   assert.equal(o.new, undefined);   // no sealed state (owner, 2026-11-06)
   // the banner rides along; junk is dropped
   const b = cleanList({ id: "t", title: "T", banner: "https://cdn.shopify.com/s/files/1/x/logo.png?v=1", items: [] }, null, 1, "");

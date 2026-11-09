@@ -134,7 +134,7 @@ export function publicView(l) {
       key: i.key, name: i.name, image: i.image,
       offers: Object.fromEntries(CONDITIONS.map((c) => {
         const o = i.offers[c.key] || blankOffer();
-        return [c.key, { buying: buying(o), cash: o.cash || 0, credit: o.credit || 0, sell: o.sell, remaining: remaining(o), fullLeft: fullLeft(o), fullUpTo: o.fullUpTo, afterCash: hasAfter(o) ? o.afterCash || 0 : null, afterCredit: hasAfter(o) ? o.afterCredit || 0 : null }];
+        return [c.key, { buying: buying(o), cash: o.cash || 0, credit: o.credit || 0, remaining: remaining(o), fullLeft: fullLeft(o), fullUpTo: o.fullUpTo, afterCash: hasAfter(o) ? o.afterCash || 0 : null, afterCredit: hasAfter(o) ? o.afterCredit || 0 : null }];
       })),
     })),
   };
@@ -559,7 +559,7 @@ export function renderLists(o) {
 <div><div class="nm"><input class="text name" data-f="name" value="${esc(it.name)}" placeholder="name"><input class="text img" data-f="image" value="${esc(it.image || "")}" placeholder="image URL (https://cdn.shopify.com/...)"><label class="chk"><input type="checkbox" data-f="retired" ${it.retired ? "checked" : ""}> retired (hidden)</label>${it.shopify && it.shopify.product ? `<a class="muted" href="${ADMIN_URL}/products/${esc(it.shopify.product.replace(/\D/g, ""))}" target="_blank" rel="noopener" title="This item's product on Shopify">${it.shopify.status === "ACTIVE" ? "live" : "draft"} on Shopify ↗</a>` : ""}<button type="button" class="sm" data-act="copyall" title="Every toy on this list gets the same cash, credit, sell, first, then and max as this one; bought stays as it is. Then press Save changes.">Use these prices for every toy</button></div>
 ${CONDITIONS.map((c) => { const of = it.offers[c.key] || blankOffer(); const rem = remaining(of);
     return `<div class="fl-row${buying(of) ? "" : " off"}" data-cond="${esc(c.key)}"><b class="fl-cn">${esc(c.label)}<br><small class="muted">${buying(of) ? (rem == null ? "no limit" : rem + " more") : "not buying"}</small></b>
-${inp(c.key, "cash", of.cash, "0.01", "cash we pay")}${inp(c.key, "credit", of.credit, "0.01", "store credit we pay")}${inp(c.key, "sell", of.sell, "0.01", "what we sell it for (shown)")}
+${inp(c.key, "cash", of.cash, "0.01", "cash we pay")}${inp(c.key, "credit", of.credit, "0.01", "store credit we pay")}${inp(c.key, "sell", of.sell, "0.01", "what we sell it for (the Shopify price; shoppers do not see it)")}
 ${inp(c.key, "fullUpTo", of.fullUpTo, "1", "how many at that price (counted across every list)")}${inp(c.key, "afterCash", of.afterCash, "0.01", "cash past that count")}${inp(c.key, "afterCredit", of.afterCredit, "0.01", "credit past that count")}
 ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${inp(c.key, "bought", of.bought, "1", "reserved so far by submitted lists; lower it if a list never arrived")}</div>`; }).join("")}
 </div></div>`;
