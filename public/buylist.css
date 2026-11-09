@@ -382,6 +382,13 @@ html[data-xg-theme="dark"] .bl__orow--band > .bl__band, .xg-buylist--standalone.
   .bl .bl__cart:not(.bl__cart--open) > :not(.bl__sheetbar) { display: none; }
   .bl .bl__cart .bl__h2 { display: none; }
   .bl .bl__sheetbar { display: flex; }
+  /* The open sheet scrolls as one panel (owner, 2026-11-09: the inner card
+     list was squeezed to one card at a time by the payment, delivery and
+     recent-lists blocks under it). The list grows with its cards and the bar
+     with Close and Submit stays pinned at the top while the rest scrolls. */
+  .bl .bl__cart.bl__cart--open { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .bl .bl__cart > #bl-lines { flex: 0 0 auto; max-height: none; overflow: visible; overscroll-behavior: auto; }
+  .bl .bl__cart--open .bl__sheetbar { position: sticky; top: 0; z-index: 2; margin: 0 -16px; padding: 8px 16px; background: linear-gradient(0deg, var(--bl-accent-soft), var(--bl-accent-soft)), var(--bl-surface); box-shadow: 0 8px 14px -10px rgba(0, 0, 0, 0.28); }
   .js-drawer-open .bl .bl__cart { display: none; }
   .xg-buylist .bl__toast { bottom: calc(var(--bl-sheet-off, var(--xg-tick-h, 0px)) + 74px); }
   .bl__line { padding-left: 0; }
