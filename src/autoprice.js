@@ -1611,6 +1611,39 @@ const limitText = (l) => `that is a ${Math.abs(l.pct)}% ${l.kind}; your account 
    read the slab's label from the listing's first photo with the graded
    tool's label reader (Claude vision), and hand back what it read so the
    number can be checked and saved. */
+/* Owner, 2026-11-09: "9Pocket auto priced should allow me to search for more
+   cards on price charting as when it returns results the card I want
+   sometimes isn't in it ... for example the swsh066 I have has the set logo
+   stamp". The picker shows what the run's one search returned; this asks
+   PriceCharting again with the staff member's own words and answers the same
+   list, every card with its "use this". One API call, nothing stored. */
+export async function pcSearchAction(cx, b) {
+  const pid = String((b && b.id) || "");
+  if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
+  const q = String((b && b.q) || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (q.length < 2) return { ok: false, error: "type a few letters of the card's name first" };
+  const token = cx.env && cx.env.PRICECHARTING_TOKEN;
+  if (!token) return { ok: false, error: "no PRICECHARTING_TOKEN secret on the worker" };
+  const rep = (await cx.storage.get("ap:report")) || { rows: [] };
+  const row = (rep.rows || []).find((r) => r.id === pid);
+  if (!row) return { ok: false, error: "that product is not in the last report" };
+  let s;
+  try {
+    const r = await cx.fetch(PC_SEARCH + "?q=" + encodeURIComponent(q) + "&t=" + encodeURIComponent(token), { signal: AbortSignal.timeout(15000) });
+    s = await r.json();
+  } catch (e) { return { ok: false, error: "PriceCharting did not answer: " + msg(e) }; }
+  if (!s || s.status !== "success") return { ok: false, error: "PriceCharting said: " + ((s && (s["error-message"] || s.status)) || "no answer") };
+  const cands = pcCandidates(row.graded || null, s.products, row.pcId ? { id: row.pcId } : null, 25);
+  const html = (cands.length ? `<p class="sub">${cands.length} card${cands.length === 1 ? "" : "s"} for “${esc(q)}”${row.graded && row.pcGrade ? " · " + esc(row.pcGrade.label) + " column" : ""}</p><ul>${cands.map((x) => pcLine(x, row, { keep: b.keep || "", settings: true })).join("")}</ul>` : `<p class="sub">PriceCharting has nothing for “${esc(q)}”. Try fewer words, or the card number alone.</p>`);
+  return { ok: true, q, count: cands.length, html, flash: cands.length ? cands.length + " card" + (cands.length === 1 ? "" : "s") + " from PriceCharting for “" + q + "”" : "Nothing on PriceCharting for “" + q + "”" };
+}
+// One PriceCharting candidate on a row: their page (a click shows their photo beside ours), the price for the row's grade, sales, and "use this".
+export function pcLine(x, r, o) {
+  const opt = o || {};
+  const hid = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
+  return `<li class="${x.chosen ? "on" : ""}"><a class="cmp" href="https://www.pricecharting.com/game/${x.id}" target="_blank" rel="noopener" data-pc="${x.id}" data-pcn="${esc(x.console + " · " + x.name)}" title="Their photo beside ours"><span class="cn">${esc(x.console)}</span> ${esc(x.name)}</a> <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="sub">' + esc(x.volume) + " sales</span>" : ""}${x.chosen ? '<span class="badge b-hold">using</span>' : opt.settings ? `<form method="post" action="/autoprice/control" class="inl">${hid("action", "settings")}${hid("id", r.id)}${hid("pcId", x.id)}${opt.keep || ""}<button class="btn sm">use this</button></form>` : ""}</li>`;
+}
+
 async function certAction(cx, b) {
   const pid = String((b && b.id) || "");
   if (!/^gid:\/\/shopify\/Product\/\d+$/.test(pid)) return { ok: false, error: "bad product id" };
@@ -1924,6 +1957,7 @@ async function controlAction(cx, b) {
   if (action === "keep") return keepPrice(cx, b);
   if (action === "cert") return certAction(cx, b);
   if (action === "cert-read") return certRead(cx, b);
+  if (action === "pc-search") return pcSearchAction(cx, b);
   if (action === "publish-all") {
     // Every staged row the page is showing (one game's tab, or all of them),
     // at the suggested price, newest report first. Capped per press so the
@@ -2163,7 +2197,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
 }
 
 // Which permission each control action needs (src/stage-auth.js AP_PERMS).
-const CONTROL_NEEDS = { publish: "publish", keep: "publish", "publish-all": "publish", settings: "settings", add: "settings", remove: "settings", mode: "config", config: "config", run: "config", "ntfy-test": "config" };
+const CONTROL_NEEDS = { publish: "publish", keep: "publish", "publish-all": "publish", settings: "settings", add: "settings", remove: "settings", "pc-search": "settings", mode: "config", config: "config", run: "config", "ntfy-test": "config" };
 const NEED_LABEL = { publish: "publish staged prices", settings: "per-product settings, add and remove", config: "page rules, mode and run now" };
 
 function renderLogin(o) {
@@ -2351,10 +2385,14 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
   // match is wrong (the Charizard VMAX Prize Pack, 2026-09-16).
   const pcPicker = (r) => {
     const c = r.pcCandidates || [];
-    if (!c.length) return "";
+    const canSearch = P.settings && v.pricecharting !== false && !!r.graded;
+    if (!c.length && !canSearch) return "";
     const im = (r.images || [])[0], ours = im ? imageUrl(im, 1600) : "";
-    const line = (x) => `<li class="${x.chosen ? "on" : ""}"><a class="cmp" href="https://www.pricecharting.com/game/${x.id}" target="_blank" rel="noopener" data-pc="${x.id}" data-pcn="${esc(x.console + " · " + x.name)}" title="Their photo beside ours"><span class="cn">${esc(x.console)}</span> ${esc(x.name)}</a> <b>${x.price != null ? money(x.price) + " US" : "no " + esc(x.gradeLabel || "grade") + " price"}</b>${x.volume ? ' <span class="sub">' + esc(x.volume) + " sales</span>" : ""}${x.chosen ? '<span class="badge b-hold">using</span>' : P.settings ? `<form method="post" action="/autoprice/control" class="inl">${hidden("action", "settings")}${hidden("id", r.id)}${hidden("pcId", x.id)}${keepView()}<button class="btn sm">use this</button></form>` : ""}</li>`;
-    return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"} data-ours="${esc(ours)}" data-ttl="${esc(r.title)}"><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""} <span class="sub">· click a card to see its photo beside ours</span></summary><ul>${c.map(line).join("")}</ul></details>`;
+    const line = (x) => pcLine(x, r, { keep: keepView(), settings: P.settings });
+    // Owner, 2026-11-09: the card wanted is sometimes not among the run's results - ask PriceCharting again in your own words.
+    const guess = r.graded ? [r.graded.name, r.graded.number].filter(Boolean).join(" ") : "";
+    const searchBox = canSearch ? `<form method="post" action="/autoprice/control" class="inl pcsf">${hidden("action", "pc-search")}${hidden("id", r.id)}${keepView()}<input type="search" name="q" value="${esc(guess)}" placeholder="search PriceCharting, e.g. charizard set logo stamp" aria-label="Search PriceCharting"><button class="btn sm">Search</button><span class="sub">not here? search PriceCharting in your own words</span></form><div class="pcsres"></div>` : "";
+    return `<details class="cands"${c.some((x) => x.chosen) ? "" : " open"} data-ours="${esc(ours)}" data-ttl="${esc(r.title)}"><summary>PriceCharting found ${c.length} card${c.length === 1 ? "" : "s"}${r.pcGrade ? " · pricing the " + esc(r.pcGrade.label) + " column" : ""} <span class="sub">· click a card to see its photo beside ours</span></summary>${c.length ? `<ul>${c.map(line).join("")}</ul>` : ""}${searchBox}</details>`;
   };
   // A hand-set price has to show its working: what it was pegged to, and how
   // far the source has moved since.
@@ -2516,6 +2554,7 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .c-act{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}.pubf{display:inline-flex;align-items:center;gap:6px}.px{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--card);padding-left:8px;color:var(--mut)}.px input{border:0;width:86px;padding:6px 8px 6px 3px;font-weight:700;font-variant-numeric:tabular-nums;background:transparent}.px:focus-within{outline:2px solid var(--acc)}
 .more>summary{position:absolute;top:10px;right:8px;width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;list-style:none;color:var(--mut)}.more>summary::-webkit-details-marker{display:none}.more>summary:hover{background:var(--soft)}.chev{transition:transform .15s}.more[open]>summary .chev{transform:rotate(180deg)}
 .panel{display:grid;grid-template-columns:1.2fr 1fr 1.4fr;gap:14px 22px;padding:12px 14px 14px;border-top:1px solid var(--line);background:var(--soft);border-radius:0 0 12px 12px;font-size:13px}.panel h4{margin:10px 0 3px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.panel h4:first-child{margin-top:0}.panel h4 .sub{text-transform:none;letter-spacing:0;font-weight:500}.panel .full{grid-column:1/-1}.panel .end{display:flex;justify-content:flex-end}.rsn{margin-top:6px}.anch{margin-top:3px;color:var(--wait);font-size:12px;font-weight:600}.links{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px}.pubf.track{flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}.trk{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mut)}
+.cands form.pcsf{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 0}.cands form.pcsf input[name=q]{flex:1 1 220px;min-width:0;font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}.cands .pcsres ul{margin-top:2px}.cands .pcsres .sub{margin:6px 0 0}
 .cands>summary{cursor:pointer;font-size:12.5px;color:var(--mut)}.cands ul{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cands li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line)}.cands li.on{font-weight:600}.cands .cn{color:var(--mut)}.cands a.cmp{color:inherit;text-decoration:none;cursor:zoom-in;border-bottom:1px dotted var(--mut)}.cands a.cmp:hover{border-bottom-style:solid}
 .cmpv{position:fixed;inset:0;z-index:90;background:rgba(8,10,12,.94);display:flex;gap:14px;padding:46px 14px 40px;align-items:stretch;justify-content:center}.cmpv[hidden]{display:none}.cmpv .pane{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;align-items:center;gap:6px}.cmpv .lab{font-size:12px;font-weight:700;letter-spacing:.1em;color:#fff;background:#2f6f3e;padding:4px 10px;border-radius:999px}.cmpv .pane.src .lab{background:#4a5b8a}.cmpv .ttl{color:#e6e9ec;font-size:13px;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cmpv .pic{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center;cursor:zoom-in}.cmpv .pic img{max-width:100%;max-height:100%;object-fit:contain;display:block}.cmpv .none{color:#9fb0bb;font-size:13px;text-align:center;padding:24px 10px}.cmpv .none a{color:#cfd8dd}.cmpv .cap{position:absolute;left:0;right:0;bottom:12px;text-align:center;color:#9fb0bb;font-size:12.5px;pointer-events:none}.cmpv .x{position:absolute;top:10px;right:14px;color:#fff;font:700 26px/1 inherit;background:none;border:0;cursor:pointer}
 .empty{padding:28px;text-align:center;color:var(--mut);background:var(--card);border:1px dashed var(--line);border-radius:12px}
@@ -2552,7 +2591,7 @@ document.addEventListener("keydown",function(e){if(e.key==="/"&&f&&document.acti
 // a click on the empty part of a row opens its panel
 document.addEventListener("click",function(e){var line=e.target.closest(".line");if(!line||e.target.closest("a,button,input,select,label,form,summary"))return;var d=line.parentNode.querySelector(".more");if(d)d.open=!d.open});
 // a form posted from a row folds its panel (owner 2026-11-02: "when I make a change in this drop down, it collapses the drop down on submit/publish")
-document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.closest||!/^post$/i.test(f.getAttribute("method")||"get"))return;if(f.classList.contains("certf"))return;var art=f.closest("article.item");if(!art)return;var d=art.querySelector("details.more");if(d)d.open=false});
+document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.closest||!/^post$/i.test(f.getAttribute("method")||"get"))return;if(f.classList.contains("certf")||f.classList.contains("pcsf"))return;var art=f.closest("article.item");if(!art)return;var d=art.querySelector("details.more");if(d)d.open=false});
 // PriceCharting candidates (owner 2026-11-02): a click on a card shows their photo beside ours, each labelled
 (function(){var v=document.getElementById("cmpv");if(!v)return;var panes=v.querySelectorAll(".pane");
 function fill(p,src,ttl,none){var t=p.querySelector(".ttl"),a=p.querySelector(".pic");t.textContent=ttl||"";a.removeAttribute("data-zoom");if(!src){a.innerHTML='<div class="none">'+none+'</div>';return}a.innerHTML='<div class="none">loading\u2026</div>';var im=new Image();im.alt=ttl||"";im.onload=function(){a.innerHTML="";a.appendChild(im);a.setAttribute("data-zoom",src);a.setAttribute("data-ttl",ttl||"")};im.onerror=function(){a.innerHTML='<div class="none">'+none+'</div>'};im.src=src}
@@ -2573,12 +2612,13 @@ document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!v.hidden&&
 (function(){var money=function(n){return "$"+(Math.round(Number(n)*100)/100).toFixed(2)};var toastEl=null,toastT=null;
 function toast(msg,bad){if(!toastEl){toastEl=document.createElement("p");toastEl.className="flash aptoast";document.body.appendChild(toastEl)}toastEl.textContent=msg;toastEl.classList.toggle("bad",!!bad);toastEl.classList.add("on");clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove("on")},bad?7000:4000)}
 function actionOf(f){var i=f.querySelector("input[name=action]");return i?i.value:""}
-document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.getAttribute||f.getAttribute("action")!=="/autoprice/control")return;var act=actionOf(f);if(act!=="publish"&&act!=="keep"&&act!=="cert"&&act!=="cert-read")return;if(!window.fetch||!window.FormData)return;
+document.addEventListener("submit",function(e){var f=e.target;if(!f||!f.getAttribute||f.getAttribute("action")!=="/autoprice/control")return;var act=actionOf(f);if(act!=="publish"&&act!=="keep"&&act!=="cert"&&act!=="cert-read"&&act!=="pc-search")return;if(!window.fetch||!window.FormData)return;
 e.preventDefault();var art=f.closest("article.item"),btn=f.querySelector("button");if(btn)btn.disabled=true;if(art)art.classList.add("busy");
 var fd=new FormData(f);fd.set("json","1");
 fetch(f.getAttribute("action"),{method:"POST",body:fd,credentials:"same-origin"}).then(function(r){return r.json()}).then(function(j){
 if(!j||!j.ok){if(btn)btn.disabled=false;if(art)art.classList.remove("busy");toast((j&&(j.flash||j.error))||"That did not go through.",true);return}
 toast(j.flash||"Done.");if(!art)return;
+if(act==="pc-search"){art.classList.remove("busy");if(btn)btn.disabled=false;var res=f.parentNode.querySelector(".pcsres");if(res&&j.html)res.innerHTML=j.html;return}
 if(act==="cert"||act==="cert-read"){art.classList.remove("busy");if(btn)btn.disabled=false;var sec=art.querySelector("section.certsec");if(act==="cert"&&sec&&j.html){sec.innerHTML="<h4>Certificate</h4>"+j.html}else if(act==="cert-read"&&sec&&j.read){var inp=sec.querySelector("input[name=cert]");if(inp&&j.read.cert)inp.value=j.read.cert;var note=sec.querySelector(".readnote")||document.createElement("div");note.className="sub readnote";note.textContent=j.flash||"";sec.appendChild(note)}return}
 art.classList.remove("busy","awaiting");art.className=art.className.split(" ").filter(function(c){return c&&c.indexOf("s-")!==0}).join(" ")+(act==="publish"?" s-ok":" s-hold");
 var price=act==="publish"?Number(j.price||fd.get("price")):null;

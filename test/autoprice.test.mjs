@@ -1,3 +1,4 @@
+import { pcSearchAction, pcLine } from "../src/autoprice.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { niceUp, autoStep, decide, margin, categoryOf, normUpc, readProduct, nextRunAt, DEFAULT_CONFIG, overLimit, renderPage } from "../src/autoprice.js";
@@ -1371,4 +1372,35 @@ test("the certificate on a graded listing, any grader: the certificate field, th
   assert.ok(none.includes("No certificate on this listing") && none.includes("Save on the listing") && !none.includes("Read the label"));
   const off = certSection({ id: "gid://shopify/Product/3", title: "x PSA 10", graded: { grader: "PSA", grade: 10 }, cert: { ...cert, url: v.url }, psa: null, images: [] }, { psaOn: false });
   assert.ok(off.includes("not switched on") && off.includes("Look up now"));
+});
+
+
+test("pc-search: PriceCharting asked in the staff member's words, answered as the picker's list with use-this buttons", async () => {
+  const row = { id: "gid://shopify/Product/1", title: "Charizard (SWSH066) [SWSH Promo] Graded BGS 9", graded: { grader: "BGS", grade: "9", name: "Charizard", number: "SWSH066" }, pcGrade: { label: "BGS 9" }, pcId: 5 };
+  const storage = { get: async (k) => (k === "ap:report" ? { rows: [row] } : null) };
+  const calls = [];
+  const cx = { env: { PRICECHARTING_TOKEN: "tok" }, storage, fetch: async (u) => { calls.push(u); return { json: async () => ({ status: "success", products: [
+    { id: 5, "product-name": "Charizard #SWSH066", "console-name": "Pokemon Promo", "graded-price": 8800, "sales-volume": 246 },
+    { id: 7, "product-name": "Charizard [Set Logo Stamp] #SWSH066", "console-name": "Pokemon Promo", "graded-price": 12000, "sales-volume": 12 },
+    { id: 9, "product-name": "Charizard [Staff] #SWSH066", "console-name": "Pokemon Promo", "sales-volume": 54 } ] }) }; } };
+  const r = await pcSearchAction(cx, { id: row.id, q: "  charizard set logo  stamp ", keep: '<input type="hidden" name="game" value="pokemon">' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.q, "charizard set logo stamp"); assert.equal(r.count, 3);
+  assert.ok(calls[0].startsWith("https://www.pricecharting.com/api/products?q=charizard%20set%20logo%20stamp&t=tok"));
+  assert.ok(r.html.includes("3 cards for “charizard set logo stamp” · BGS 9 column"));
+  assert.ok(r.html.includes('data-pc="7"') && r.html.includes("Charizard [Set Logo Stamp] #SWSH066") && r.html.includes("$120.00 US"));
+  assert.ok(r.html.includes('<input type="hidden" name="pcId" value="7">') && r.html.includes('name="game" value="pokemon"'));
+  assert.ok(r.html.includes('<li class="on">') && r.html.includes("using"));   // the pinned one is marked, no use-this on it
+  assert.ok(r.html.includes("no grade 9 price"));
+  assert.ok(r.flash.startsWith("3 cards from PriceCharting"));
+  // refusals
+  assert.equal((await pcSearchAction(cx, { id: row.id, q: "c" })).ok, false);
+  assert.equal((await pcSearchAction(cx, { id: "gid://shopify/Product/2", q: "charizard" })).error, "that product is not in the last report");
+  assert.equal((await pcSearchAction({ ...cx, env: {} }, { id: row.id, q: "charizard" })).error, "no PRICECHARTING_TOKEN secret on the worker");
+  const none = await pcSearchAction({ ...cx, fetch: async () => ({ json: async () => ({ status: "success", products: [] }) }) }, { id: row.id, q: "zzz" });
+  assert.equal(none.ok, true); assert.equal(none.count, 0); assert.ok(none.html.includes("PriceCharting has nothing for “zzz”"));
+  const down = await pcSearchAction({ ...cx, fetch: async () => { throw new Error("timeout"); } }, { id: row.id, q: "charizard" });
+  assert.equal(down.ok, false); assert.ok(down.error.startsWith("PriceCharting did not answer"));
+  // the shared line without the settings permission shows no button
+  assert.ok(!pcLine({ id: 7, name: "X", console: "Y", price: 1, volume: 0, chosen: false }, row, { settings: false }).includes("use this"));
 });
