@@ -6,7 +6,7 @@ import { serveEvents } from "./events.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql, PRICE_DO } from "./price-history.js";
-import { serveShowcase, serveShowcaseIcon, serveShowcaseAlike } from "./showcase.js";
+import { serveShowcase, serveShowcaseIcon, serveShowcaseAlike, serveShowcaseImg } from "./showcase.js";
 import { serveBoxes, serveCard } from "./boxes.js";
 import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
@@ -390,6 +390,10 @@ async function route(request, env, ctx) {
     if (url.pathname === "/ask" || url.pathname === "/ask.json" || url.pathname.startsWith("/ask/")) return serveAsk(request, env, url, ctx);
     // The Showcase (src/showcase.js, public/showcase.html): browse singles like the store's glass cases.
     if (url.pathname === "/showcase" || url.pathname === "/showcase/") return serveAsset(env, "/showcase.html", request);
+    // The Shop (public/showcase3d.html + showcase3d.js): the Showcase as a 3D room, same feeds. /showcase/img hands
+    // it card pictures with CORS headers when an image host sends none (WebGL refuses a picture without them).
+    if (url.pathname === "/showcase/3d" || url.pathname === "/showcase/3d/") return serveAsset(env, "/showcase3d.html", request);
+    if (url.pathname === "/showcase/img") return serveShowcaseImg(request, env, ctx);
     if (url.pathname === "/showcase.json") return serveShowcase(request, env, ctx);
     if (url.pathname === "/showcase/alike.json") return serveShowcaseAlike(request, env, ctx);
     if (url.pathname === "/showcase/boxes.json" || url.pathname === "/showcase/set.json") return serveBoxes(request, env, ctx, url);

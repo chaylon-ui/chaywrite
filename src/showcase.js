@@ -71,6 +71,26 @@ export function shelvesFor(picks, cards, extras) {
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS", vary: "origin" };
 
+// Card pictures for the 3D shop (owner, 2026-11-09; public/showcase3d.js): WebGL
+// only draws a picture served with CORS headers. The page asks the image host
+// first and comes here when that fails: GET /showcase/img?u=<https url on the
+// shop's CDN or BinderPOS's image host>. Nothing else is fetched, redirects are
+// not followed, and only an image comes back.
+const IMG_HOSTS = new Set(["cdn.shopify.com", "images.binderpos.com"]);
+export function imgTarget(u) {
+  try { const x = new URL(String(u || "")); return x.protocol === "https:" && IMG_HOSTS.has(x.hostname) && !x.username && !x.password && !x.port ? x.toString() : null; } catch { return null; }
+}
+export async function serveShowcaseImg(request, env, ctx, opts) {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  const target = imgTarget(new URL(request.url).searchParams.get("u"));
+  if (!target) return new Response("not an image we serve", { status: 400, headers: CORS });
+  let r;
+  try { r = await ((opts && opts.fetchFn) || fetch)(target, { headers: { accept: "image/*" }, redirect: "manual", cf: { cacheTtl: 86400, cacheEverything: true } }); } catch { r = null; }
+  const type = (r && r.headers.get("content-type")) || "";
+  if (!r || r.status !== 200 || !/^image\//i.test(type)) return new Response("no image", { status: 502, headers: CORS });
+  return new Response(r.body, { headers: { ...CORS, "content-type": type, "cache-control": "public, max-age=86400" } });
+}
+
 // The kiosk's game logos: the admin uploads one per game (a small data-URL
 // PNG, stored as gicon:<game> in the DEFAULT room's settings). The page draws
 // them on the game tabs (owner, 2026-10-30: "use the game logos for the

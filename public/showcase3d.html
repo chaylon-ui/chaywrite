@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>The Shop — Exor Games</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Permanent+Marker&family=Special+Elite&family=Cutive+Mono&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ---------------- The Shop (owner, 2026-11-09) ----------------
+   The Showcase as a room: a 1990s card shop drawn in 3D (public/showcase3d.js,
+   three.js). Walk to the glass case, the boxes on the back wall, the bargain
+   bin and the till; pick a card up and turn it over. The flat Showcase
+   (/showcase) stays as it is and is where a browser without WebGL lands. */
+:root{--ink:#f1eadb;--muted:#a79c8c;--ember:#d9822b;--tape:#e8dcb8;--label:#fbf7ec;--panel:#0f0b0c}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#0a0809;color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-text-size-adjust:100%;touch-action:none;overscroll-behavior:none}
+button{font:inherit;cursor:pointer;touch-action:manipulation;color:inherit}
+a{color:inherit}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+.top{position:fixed;left:0;right:0;top:0;z-index:5;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:calc(8px + env(safe-area-inset-top)) 12px 18px;background:linear-gradient(#0a0809e6,#0a080900);pointer-events:none}
+.top>*{pointer-events:auto}
+.top .hlogo{height:34px;filter:drop-shadow(0 2px 3px #000)}
+.top .flat{font-size:12px;color:var(--muted);margin-left:2px}
+.tabs{display:flex;gap:6px;margin-left:auto;overflow-x:auto;scrollbar-width:none;max-width:100%}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:0 0 auto;border:1px solid #ffffff2a;background:#17110fd9;border-radius:999px;padding:6px 12px;font-size:13px;white-space:nowrap}
+.tabs button.on{background:var(--ember);border-color:var(--ember);color:#1a0f06;font-weight:600}
+.tabs button.ic{padding:4px 10px}.tabs button.ic img{height:22px;display:block}.tabs button.ic span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.bot{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:22px 10px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(#0a080900,#0a0809f2 45%);display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.bot>*{pointer-events:auto}
+.ctx{display:none;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
+.ctx button{border:1px solid #ffffff2a;background:#17110fd9;border-radius:8px;padding:6px 10px;font-size:13px}
+.ctx button.on{border-color:var(--ember);color:var(--ember)}
+.ctx button:disabled{opacity:.35}
+.ctx .ttl{font-family:"Special Elite",monospace;font-size:13px;color:var(--tape);padding:0 4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
+.nav{display:flex;gap:6px;justify-content:center}
+.nav button{border:0;background:var(--tape);color:#2a1c0e;font-family:"Permanent Marker",cursive;font-size:14px;padding:6px 12px 5px;transform:rotate(-1deg);box-shadow:0 2px 5px #0009;clip-path:polygon(2% 0,98% 3%,100% 100%,0 96%)}
+.nav button:nth-child(even){transform:rotate(1.2deg)}
+.nav button.on{background:var(--ember);color:#1a0f06}
+.nav button i{font-style:normal;font-family:Inter,sans-serif;font-size:11px;font-weight:600;background:#2a1c0e;color:var(--tape);border-radius:999px;padding:1px 6px;margin-left:5px}
+.hint{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%) rotate(-1.2deg);z-index:4;background:var(--tape);color:#2a1c0e;font-family:"Permanent Marker",cursive;font-size:14px;padding:6px 14px;max-width:92vw;text-align:center;box-shadow:0 3px 8px #000a;pointer-events:none;transition:opacity .4s}
+.hint.gone{opacity:0}
+.state{position:fixed;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;font-family:"Special Elite",monospace;color:var(--tape);background:#0a0809;transition:opacity .5s}
+.state.off{opacity:0;pointer-events:none}
+.cap{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(118px + env(safe-area-inset-bottom));z-index:4;text-align:center;display:none;max-width:94vw;pointer-events:none;text-shadow:0 1px 3px #000,0 0 8px #000}
+body[data-mode=crate]:not([data-hand]) .cap{display:block}
+.cap{background:#0a0809c9;border-radius:10px;padding:6px 14px 4px}
+.cap strong{display:block;font-size:16px}.cap span{display:block;font-size:12.5px;color:var(--tape)}.cap em{display:block;font-family:"Caveat",cursive;font-size:19px;color:var(--ember);font-style:normal}
+/* the card in the hand: the 3D card fills the stage; this is the details panel */
+.x{position:fixed;right:10px;top:calc(10px + env(safe-area-inset-top));z-index:9;width:40px;height:40px;border-radius:50%;border:1px solid #ffffff40;background:#000a;font-size:22px;line-height:1;display:none}
+body[data-hand] .x{display:block}
+body[data-hand] .top,body[data-hand] .bot,body[data-hand] .hint{display:none}
+.panel{position:fixed;z-index:8;background:var(--panel);border-top:1px solid #ffffff22;display:none;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;padding:0 16px calc(16px + env(safe-area-inset-bottom))}
+body[data-hand] .panel{display:block}
+.panel h2{font-size:19px;line-height:1.2;margin-top:4px}
+.panel .set{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.panel .acts{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.panel .acts button,.panel .acts a{border:1px solid #ffffff33;border-radius:8px;padding:10px 14px;font-size:14px;text-decoration:none;background:none}
+.panel .acts .buy{background:var(--ember);border-color:var(--ember);color:#1a0f06;font-weight:600}
+.panel h3{font-family:"Special Elite",monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--tape);margin:14px 0 8px}
+.cps{display:flex;gap:6px;flex-wrap:wrap}
+.cp{border:1px solid #ffffff2a;background:none;border-radius:8px;padding:6px 9px;font-size:13px;display:flex;gap:6px;align-items:baseline}
+.cp.on{border-color:var(--ember)}.cp i{font-family:"Caveat",cursive;font-style:normal;color:#7fb2ff;font-size:16px}.cp small{color:var(--muted)}
+.one{font-size:13px;color:var(--muted)}
+.minis{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;touch-action:pan-x}
+.mini{flex:0 0 auto;width:86px;border:0;background:none;text-align:left;font-size:11px;color:var(--muted)}
+.mini img,.mini .noimg{width:86px;height:120px;object-fit:cover;border-radius:5px;display:block;background:#241a1c;margin-bottom:4px}
+.mini .noimg{display:flex;align-items:center;justify-content:center;text-align:center;padding:6px;font-family:"Permanent Marker",cursive;color:var(--tape)}
+.mini b{display:block;color:var(--ink);font-family:"Cutive Mono",monospace;font-size:12px}
+.pull{display:none}
+@media (min-width:721px){
+  .panel{right:0;top:0;bottom:0;width:360px;border-top:0;border-left:1px solid #ffffff22;padding-top:64px}
+}
+@media (max-width:720px){
+  .panel{left:0;right:0;bottom:0;max-height:78dvh;transform:translateY(calc(100% - 60px - env(safe-area-inset-bottom)));transition:transform .28s ease;border-radius:14px 14px 0 0}
+  .panel.open{transform:none}
+  .pull{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;height:60px;border:0;background:none;padding-top:8px;position:sticky;top:0;background:var(--panel);z-index:1}
+  .pull .bar{width:46px;height:4px;border-radius:2px;background:#ffffff55}
+  .pull .row{display:flex;align-items:center;gap:10px}
+  .pull .chev{width:11px;height:11px;border-left:2.5px solid var(--ember);border-top:2.5px solid var(--ember);transform:rotate(45deg);margin-top:5px}
+  .panel.open .pull .chev{transform:rotate(225deg);margin-top:-3px}
+  .pull .note{background:var(--tape);color:#2a1c0e;font-family:"Permanent Marker",cursive;font-size:15px;padding:3px 12px;transform:rotate(-2.5deg);box-shadow:0 2px 4px #0008}
+  .panel.open .pull .note{display:none}
+  .top .hlogo{height:28px}.top .flat{display:none}
+  .nav{gap:4px}.nav button{font-size:12.5px;padding:5px 7px 4px;white-space:nowrap}
+  .cap{bottom:calc(142px + env(safe-area-inset-bottom));width:92vw}.cap strong{font-size:15px}
+}
+/* sheets: the set list of a box, the pile by the till */
+.sheet{position:fixed;inset:0;z-index:10;background:#0a0809f0;display:none;flex-direction:column;padding:calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom))}
+.sheet.on{display:flex}
+.sheet .sh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.sheet .sh button{border:1px solid #ffffff33;background:none;border-radius:8px;padding:7px 12px;font-size:14px}
+.sheet .sh .ttl{font-family:"Special Elite",monospace;color:var(--tape);font-size:14px}
+.sheet input{flex:1 1 180px;min-width:0;background:var(--label);color:#2a1c0e;border:0;border-radius:6px;padding:10px 12px;font:600 16px Inter,sans-serif}
+.sheet .list{flex:1;overflow-y:auto;touch-action:pan-y;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;align-content:start;padding:4px 2px 20px}
+.divider{background:var(--label);color:#2a1c0e;border:0;text-align:left;font-family:"Permanent Marker",cursive;font-size:15px;padding:10px 12px 8px;border-radius:8px 8px 2px 2px;box-shadow:0 2px 4px #0008;border-top:5px solid #c9b98f}
+.divider:nth-child(3n){border-top-color:#9fb6c9}.divider:nth-child(3n+1){border-top-color:#d9a08b}
+.trow{display:flex;align-items:center;gap:10px;background:#17110f;border:1px solid #ffffff1c;border-radius:8px;padding:8px 10px;font-size:14px}
+.trow b{font-family:"Cutive Mono",monospace;margin-left:auto;white-space:nowrap}.trow small{color:var(--muted);display:block}
+.trow button{border:0;background:none;color:var(--muted);font-size:18px;padding:0 4px}
+.sheet .foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px solid #ffffff22;font-size:14px}
+.sheet .foot a{background:var(--ember);color:#1a0f06;font-weight:600;border-radius:8px;padding:10px 14px;text-decoration:none}
+/* the pile by the till is a sheet at the bottom, so the till stays in view */
+#tillv{inset:auto 0 0 0;max-height:52dvh;background:#0f0b0cf5;border-top:1px solid #ffffff22;border-radius:14px 14px 0 0;padding-top:12px}
+@media (min-width:721px){#tillv{left:auto;width:420px;top:0;max-height:none;border-radius:0;border-top:0;border-left:1px solid #ffffff22}}
+.sheet .empty{color:var(--muted);font-family:"Special Elite",monospace;padding:20px 4px}
+</style></head>
+<body data-mode="door">
+<canvas id="gl" tabindex="0" aria-label="A 1990s card shop. Use the buttons below to move between the glass case, the boxes, the bargain bin and the till."></canvas>
+<div class="top"><img class="hlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><a class="flat" id="flat" href="/showcase">flat view</a><div class="tabs" id="tabs"></div></div>
+<div class="hint gone" id="hint"></div>
+<div class="cap" id="cap"><strong id="capName"></strong><span id="capSet"></span><em id="capTip">tap the card to pick it up</em></div>
+<div class="bot">
+  <div class="ctx" id="ctxCase"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><span id="shelves" style="display:contents"></span><button type="button" data-walk="1" aria-label="Walk right">▶</button></div>
+  <div class="ctx" id="ctxBoxes"><span class="ttl" id="boxNote">tap a box to see its sets</span></div>
+  <div class="ctx" id="ctxCrate"><button type="button" id="crBack">‹ Sets</button><button type="button" id="crPrevSet">‹ set</button><span class="ttl" id="crTitle"></span><button type="button" id="crNextSet">set ›</button><button type="button" id="crLaneL" aria-label="Row to the left">◀ row</button><button type="button" id="crLaneR" aria-label="Row to the right">row ▶</button></div>
+  <div class="nav" id="nav"><button type="button" data-go="door">Door</button><button type="button" data-go="case">Glass case</button><button type="button" data-go="boxes">Boxes</button><button type="button" data-go="bin">Bargain bin</button><button type="button" data-go="till">Till<i id="pileN" hidden>0</i></button></div>
+</div>
+<button type="button" class="x" id="x" aria-label="Put it back">×</button>
+<div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div id="liftCopies"></div><div class="acts" id="liftActs"></div><div id="liftAlike"></div><div id="liftMore"></div></div>
+<div class="sheet" id="setsv"><div class="sh"><button type="button" id="setsBack">‹ Back to the boxes</button><span class="ttl" id="setsTitle"></span><input id="setsFind" type="search" placeholder="Jump to a set…" autocomplete="off"></div><div class="list" id="setsList"></div></div>
+<div class="sheet" id="tillv"><div class="sh"><button type="button" id="tillBack">‹ Back to the shop</button><span class="ttl">By the till</span></div><div class="list" id="tillList" style="grid-template-columns:1fr"></div><div class="foot" id="tillFoot"></div></div>
+<div class="state" id="state">Unlocking the shop…</div>
+<script>
+// A browser that cannot draw the room goes to the flat Showcase.
+(function () {
+  var ok = false;
+  try { var c = document.createElement('canvas'); ok = !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch (x) {}
+  window.xgFlat = function () { location.replace('/showcase' + location.search); };
+  if (!ok) window.xgFlat();
+})();
+</script>
+<script type="module" src="/showcase3d.js"></script>
+</body></html>

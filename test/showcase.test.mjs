@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shelvesFor, serveShowcase, serveShowcaseIcon, serveShowcaseAlike, iconKeys, CASES, SHELF_MAX, SHOWCASE_COLLECTION } from "../src/showcase.js";
+import { shelvesFor, serveShowcase, serveShowcaseIcon, serveShowcaseAlike, iconKeys, imgTarget, serveShowcaseImg, CASES, SHELF_MAX, SHOWCASE_COLLECTION } from "../src/showcase.js";
 import { oracleOf } from "../src/cards.js";
 
 // a 1x1 PNG, the shape the kiosk admin stores (data URL, base64)
@@ -100,4 +100,24 @@ test("serveShowcaseAlike: EDHREC's names mapped onto stock for a Magic card; oth
   j = await (await serveShowcaseAlike(new Request("https://w.example/showcase/alike.json?game=mtg&name=Mox%20Amber"), {}, {}, { similarFn: async () => { throw new Error("edhrec down"); }, stockFn })).json();
   assert.equal(j.ok, true); assert.deepEqual(j.cards, []);
   assert.equal((await serveShowcaseAlike(new Request("https://w.example/showcase/alike.json", { method: "OPTIONS" }), {}, {}, {})).status, 204);
+});
+
+/* The Shop's card pictures (owner, 2026-11-09): WebGL needs CORS headers, so
+   the worker hands on pictures from the two image hosts and nothing else. */
+test("serveShowcaseImg: only https pictures from the shop's CDN and BinderPOS's image host, with CORS headers; no redirects, no other content", async () => {
+  assert.equal(imgTarget("https://cdn.shopify.com/s/files/1/a.png?width=300"), "https://cdn.shopify.com/s/files/1/a.png?width=300");
+  assert.equal(imgTarget("https://images.binderpos.com/x.jpg"), "https://images.binderpos.com/x.jpg");
+  for (const bad of ["", null, "http://cdn.shopify.com/a.png", "https://cdn.shopify.com.evil.example/a.png", "https://evil.example/?u=cdn.shopify.com", "https://user@cdn.shopify.com/a.png", "https://cdn.shopify.com:8443/a.png", "file:///etc/passwd", "//cdn.shopify.com/a.png"]) assert.equal(imgTarget(bad), null, String(bad));
+  const calls = [];
+  const fetchFn = (res) => async (u, o) => { calls.push([u, o.redirect]); return res; };
+  const go = (q, res) => serveShowcaseImg(new Request("https://w.example/showcase/img" + q), {}, {}, { fetchFn: fetchFn(res) });
+  let r = await go("?u=" + encodeURIComponent("https://cdn.shopify.com/a.png?width=300"), new Response("PNG", { headers: { "content-type": "image/png" } }));
+  assert.equal(r.status, 200); assert.equal(r.headers.get("content-type"), "image/png"); assert.equal(r.headers.get("access-control-allow-origin"), "*"); assert.equal(await r.text(), "PNG");
+  assert.deepEqual(calls, [["https://cdn.shopify.com/a.png?width=300", "manual"]]);
+  r = await go("?u=" + encodeURIComponent("https://evil.example/a.png"), new Response("x")); assert.equal(r.status, 400); assert.equal(calls.length, 1);   // never fetched
+  r = await go("", new Response("x")); assert.equal(r.status, 400);
+  r = await go("?u=" + encodeURIComponent("https://cdn.shopify.com/a.html"), new Response("<html>", { headers: { "content-type": "text/html" } })); assert.equal(r.status, 502);
+  r = await go("?u=" + encodeURIComponent("https://cdn.shopify.com/moved.png"), new Response(null, { status: 302, headers: { location: "https://evil.example/" } })); assert.equal(r.status, 502);
+  r = await serveShowcaseImg(new Request("https://w.example/showcase/img?u=" + encodeURIComponent("https://cdn.shopify.com/a.png")), {}, {}, { fetchFn: async () => { throw new Error("down"); } }); assert.equal(r.status, 502);
+  assert.equal((await serveShowcaseImg(new Request("https://w.example/showcase/img", { method: "OPTIONS" }), {}, {}, {})).status, 204);
 });
