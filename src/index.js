@@ -8,6 +8,7 @@ import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql, PRICE_DO } from "./price-history.js";
 import { serveShowcase, serveShowcaseIcon, serveShowcaseAlike, serveShowcaseImg } from "./showcase.js";
 import { serveBoxes, serveCard, serveSealed } from "./boxes.js";
+import { serveSetLogos } from "./setlogos.js";
 import { servePlamodTargets } from "./plamod.js";
 import { serveW40kTargets } from "./w40k.js";
 import { serveBtTargets } from "./bt.js";
@@ -399,6 +400,7 @@ async function route(request, env, ctx) {
     if (url.pathname === "/showcase/boxes.json" || url.pathname === "/showcase/set.json") return serveBoxes(request, env, ctx, url);
     if (url.pathname === "/showcase/card.json") return serveCard(request, env, ctx, url);
     if (url.pathname === "/showcase/sealed.json") return serveSealed(request, env, ctx, url);
+    if (url.pathname === "/showcase/setlogos.json") return serveSetLogos(request, env, ctx, url);
     { const im = /^\/showcase\/icon\/([a-z0-9]+)\.png$/.exec(url.pathname); if (im) return serveShowcaseIcon(request, env, ctx, im[1]); }
     if (url.pathname === "/9pocket" || url.pathname === "/9pocket.json" || url.pathname.startsWith("/9pocket/") || url.pathname === TRACK_PATH || url.pathname === "/buylist/staged" || url.pathname === "/buylist/staged.json" || url.pathname.startsWith("/buylist/staged/")) {
       return serveStage(request, env, url, gate("admin"), { ctx });

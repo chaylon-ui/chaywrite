@@ -39,6 +39,7 @@ a{color:inherit}
 .ctx button{border:1px solid #ffffff2a;background:#17110fd9;border-radius:8px;padding:6px 10px;font-size:13px}
 .ctx button.on{border-color:var(--ember);color:var(--ember)}
 .ctx button:disabled{opacity:.35}
+.ctx .ttl img{height:20px;max-width:60px;object-fit:contain;vertical-align:-5px;margin-right:7px;background:#fbf7ec;border-radius:4px;padding:2px 4px}
 .ctx .ttl{font-family:"Special Elite",monospace;font-size:13px;color:var(--tape);padding:0 4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
 .nav{display:flex;gap:6px;justify-content:center}
@@ -103,6 +104,7 @@ body[data-hand] .panel{display:block}
 .sheet input{flex:1 1 180px;min-width:0;background:var(--label);color:#2a1c0e;border:0;border-radius:6px;padding:10px 12px;font:600 16px Inter,sans-serif}
 .sheet .list{flex:1;overflow-y:auto;touch-action:pan-y;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;align-content:start;padding:4px 2px 20px}
 .divider{background:var(--label);color:#2a1c0e;border:0;text-align:left;font-family:"Permanent Marker",cursive;font-size:15px;padding:10px 12px 8px;border-radius:8px 8px 2px 2px;box-shadow:0 2px 4px #0008;border-top:5px solid #c9b98f}
+.divider{display:flex;align-items:center;gap:9px}.divider img{height:24px;width:auto;max-width:70px;object-fit:contain;flex:0 0 auto}.divider span{min-width:0}
 .divider:nth-child(3n){border-top-color:#9fb6c9}.divider:nth-child(3n+1){border-top-color:#d9a08b}
 .trow{display:flex;align-items:center;gap:10px;background:#17110f;border:1px solid #ffffff1c;border-radius:8px;padding:8px 10px;font-size:14px}
 .trow b{font-family:"Cutive Mono",monospace;margin-left:auto;white-space:nowrap}.trow small{color:var(--muted);display:block}

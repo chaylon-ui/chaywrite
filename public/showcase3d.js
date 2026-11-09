@@ -429,10 +429,50 @@ function goShelf(i) {
 
 /* ---------- the boxes on the back wall: every set, by box ---------- */
 const boxes = { list: null, open: null, setIdx: -1, seq: 0 };
-let wallG = null, boxMeshes = [], wallHit = null, wallW = 0;
+let wallG = null, boxMeshes = [], wallHit = null, wallW = 0, wallFaces = [], wallGen = 0;
+// The end of a white box: the game and box number typed small, the range of sets in marker, and (owner,
+// 2026-11-09: "Set logos on the set boxes too") the logos of a few of the sets inside.
+function drawBoxFace(g, w, h, d, b, rot, ims) {
+  g.fillStyle = '#f4f1e8'; g.fillRect(0, 0, w, h); noise(g, w, h, 500, ['#e2ded2', '#d8d4c6'], .6); g.fillStyle = '#cfcabb'; g.fillRect(0, 0, w, 10);
+  rr(g, w / 2 - 44, 20, 88, 26, 13); g.fillStyle = '#2b2620'; g.fill();
+  g.fillStyle = '#6a6458'; g.font = '24px "Special Elite", monospace'; g.textAlign = 'left'; g.fillText(d.label + ' · box ' + b.n, 16, 44);
+  const n = ims.length, cell = 50, gap = 8, strip = n ? n * cell + (n - 1) * gap : 0, tx = n ? (w - strip - 24) / 2 : w / 2;
+  g.fillStyle = '#16120d'; g.font = (n ? 50 : 58) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; g.save(); g.translate(tx, 104); g.rotate(rot); g.fillText(b.label, 0, 0); g.restore();
+  ims.forEach((im, k) => { const iw = im.width || 1, ih = im.height || 1, s = Math.min(cell / iw, cell / ih), x = w - 16 - strip + k * (cell + gap), y = 60; g.drawImage(im, x + (cell - iw * s) / 2, y + (cell - ih * s) / 2, iw * s, ih * s); });
+}
+/* ---------- set logos (worker: /showcase/setlogos.json, src/setlogos.js; the look-up rule is the same there) ---------- */
+const logos = { map: {}, game: '' };
+const normSet = (s) => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+const SET_EXTRA = /\s+(tokens?|prerelease promos|promos?|extras|art series|minigames|front cards|substitute cards|commander tokens|jumpstart front cards|base set)$/;
+function setLogo(name) {
+  if (logos.game !== S.game) return null;
+  const n = normSet(name), keys = [n, n.replace(SET_EXTRA, '')], colon = String(name || '').indexOf(':');
+  if (colon > 0 && colon < 12) { const r = normSet(String(name).slice(colon + 1)); keys.push(r, r.replace(SET_EXTRA, '')); }
+  for (const k of keys) if (k && logos.map[k]) return logos.map[k];
+  return null;
+}
+function loadLogos() {
+  const game = S.game; logos.map = {}; logos.game = '';
+  fetch(W + '/showcase/setlogos.json?game=' + encodeURIComponent(game), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (!d || !d.logos || game !== S.game) return; logos.map = d.logos; logos.game = game; decorateWall();
+    if ($('#setsv').classList.contains('on')) listSets($('#setsFind').value);
+  }).catch(() => {});
+}
+// Up to four logos per box, spread over the sets it holds; drawn when the pictures are in.
+function decorateWall() {
+  if (logos.game !== S.game) return; const gen = wallGen;
+  wallFaces.forEach((f) => {
+    const have = f.b.sets.map(setLogo).filter(Boolean), uniq = have.filter((u, i) => have.indexOf(u) === i), pickN = Math.min(4, uniq.length); if (!pickN) return;
+    const urls = Array.from({ length: pickN }, (_, k) => uniq[Math.floor(k * uniq.length / pickN)]);
+    Promise.all(urls.map((u) => loadImg(u).catch(() => null))).then((ims) => {
+      ims = ims.filter(Boolean); if (gen !== wallGen || !ims.length) return;
+      drawBoxFace(f.tex.image.getContext('2d'), 512, 128, f.d, f.b, f.rot, ims); f.tex.needsUpdate = true; kick();
+    });
+  });
+}
 const WX = -.4, WZ = -3.2;
 function buildWall(d) {
-  kill(wallG); wallG = new THREE.Group(); scene.add(wallG); boxMeshes = [];
+  kill(wallG); wallG = new THREE.Group(); scene.add(wallG); boxMeshes = []; wallFaces = []; wallGen++;
   if (wallHit) { hot.splice(hot.indexOf(wallHit), 1); kill(wallHit); wallHit = null; }
   wallW = 0; S.wallRows = 0;
   if (!d) { placeSealed(); return; }
@@ -443,7 +483,7 @@ function buildWall(d) {
   bx(.03, rows * py + .1, .44, darkWoodM, WX - wallW / 2 - .06, y0 + rows * py / 2 - .03, WZ, wallG); bx(.03, rows * py + .1, .44, darkWoodM, WX + wallW / 2 + .06, y0 + rows * py / 2 - .03, WZ, wallG);
   d.boxes.forEach((b, i) => {
     const col = Math.floor(i / rows), row = rows - 1 - (i % rows), q = seed('box' + d.game + b.n);
-    const face = lam({ map: ctex(512, 128, (g, w, h) => { g.fillStyle = '#f4f1e8'; g.fillRect(0, 0, w, h); noise(g, w, h, 500, ['#e2ded2', '#d8d4c6'], .6); g.fillStyle = '#cfcabb'; g.fillRect(0, 0, w, 10); rr(g, w / 2 - 44, 20, 88, 26, 13); g.fillStyle = '#2b2620'; g.fill(); g.fillStyle = '#6a6458'; g.font = '24px "Special Elite", monospace'; g.textAlign = 'left'; g.fillText(d.label + ' · box ' + b.n, 16, 44); g.fillStyle = '#16120d'; g.font = '58px "Permanent Marker", cursive'; g.textAlign = 'center'; g.save(); g.translate(w / 2, 104); g.rotate((q() - .5) * .05); g.fillText(b.label, 0, 0); g.restore(); }) });
+    const rot = (q() - .5) * .05, tex = ctex(512, 128, (g, w, h) => drawBoxFace(g, w, h, d, b, rot, [])), face = lam({ map: tex }); wallFaces.push({ b, tex, rot, d });
     const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, .38), [card, card, card, card, face, card]);
     m.position.set(WX - wallW / 2 + px / 2 + col * px + (q() - .5) * .012, y0 + row * py + bh / 2, WZ + (q() - .5) * .02); m.rotation.y = (q() - .5) * .05; m.userData.n = b.n; wallG.add(m); boxMeshes.push(m);
   });
@@ -451,7 +491,7 @@ function buildWall(d) {
   const sg = pl(.34, .2, new THREE.MeshBasicMaterial({ map: ctex(340, 200, (g, w, h) => { g.fillStyle = '#fbf7ec'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.font = '40px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('Browse our', w / 2, 62); g.fillText('cards by set', w / 2, 112); g.fillStyle = '#16120d'; g.font = '700 30px Caveat, cursive'; g.fillText(Number(d.count).toLocaleString('en-CA') + ' sets  →', w / 2, 164); }) }), WX - wallW / 2 - .3, y0 + rows * py / 2, WZ + .2, .12, wallG);
   sg.rotation.z = -.04;
   wallHit = hit(bx(wallW + .8, rows * py + .2, .5, hitM, WX - .15, y0 + rows * py / 2, WZ), 'boxes');
-  S.wallRows = rows * py; placeSealed();
+  S.wallRows = rows * py; placeSealed(); decorateWall();
 }
 function boxesView() {
   // wide enough for the whole wall where the screen allows it; a phone sees two boxes across and pans
@@ -505,7 +545,7 @@ function openBox(n) {
   const d = boxes.list, b = d && d.boxes.find((x) => x.n === n); if (!b) return;
   boxes.open = b; $('#setsTitle').textContent = d.label + ' · box ' + b.n + ' · ' + b.label + ' · ' + b.sets.length + ' sets'; $('#setsFind').value = ''; listSets(''); $('#setsv').classList.add('on');
 }
-function listSets(f) { const b = boxes.open; if (!b) return; const k = f.trim().toLowerCase(); $('#setsList').innerHTML = b.sets.map((nm, i) => (k && nm.toLowerCase().indexOf(k) < 0 ? '' : '<button type="button" class="divider" data-set="' + i + '">' + esc(nm) + '</button>')).join('') || '<div class="empty">No set in this box matches.</div>'; }
+function listSets(f) { const b = boxes.open; if (!b) return; const k = f.trim().toLowerCase(); $('#setsList').innerHTML = b.sets.map((nm, i) => (k && nm.toLowerCase().indexOf(k) < 0 ? '' : '<button type="button" class="divider" data-set="' + i + '">' + (setLogo(nm) ? '<img src="' + esc(setLogo(nm)) + '" alt="" loading="lazy" draggable="false">' : '') + '<span>' + esc(nm) + '</span></button>')).join('') || '<div class="empty">No set in this box matches.</div>'; }
 function expand(r, setName) { return { name: r[0], set: setName, price: r[2], image: r[3] || null, url: 'https://exorgames.com/products/' + r[1], variantId: r[4] || null, condition: r[5] || '', foil: !!r[6], copies: r[7] || 0, game: S.game, color: null, type: '', text: '' }; }
 function openSet(i) {
   const b = boxes.open; if (!b || !b.sets[i]) return; const nm = b.sets[i], seq = ++boxes.seq; boxes.setIdx = i;
@@ -517,7 +557,7 @@ function openSet(i) {
     if (!cards.length) { $('#setsTitle').textContent = 'Nothing from ' + nm + ' in stock right now - pick another set.'; return; }
     // four rows when the set fills them, fewer for a small set
     const nl = clamp(Math.ceil(cards.length / 8), 1, 4), per = Math.max(1, Math.ceil(cards.length / nl)), lanes = []; for (let l = 0; l < nl; l++) { const s = cards.slice(l * per, (l + 1) * per); if (s.length) lanes.push(s); }
-    kill(setCrate && setCrate.g); setCrate = makeCrate({ kind: 'set', lanes, at: new V3(X1 - .3, TOP + .004, -.9), title: boxes.list.label + ' · ' + nm + ' · ' + cards.length + ' in stock' });
+    kill(setCrate && setCrate.g); setCrate = makeCrate({ kind: 'set', name: nm, lanes, at: new V3(X1 - .3, TOP + .004, -.9), title: boxes.list.label + ' · ' + nm + ' · ' + cards.length + ' in stock' });
     $('#setsv').classList.remove('on'); enterCrate(setCrate, true);
   }).catch(() => { if (seq === boxes.seq) $('#setsTitle').textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
@@ -539,8 +579,16 @@ function makeCrate(o) {
   const col = new THREE.Color(); let k = 0;
   o.lanes.forEach((ln) => ln.forEach((c) => { const q = seed(keyOf(c) + 'slab')(); col.setRGB(.82 + q * .14, .8 + q * .13, .74 + q * .12); inst.setColorAt(k++, col); }));
   const faces = []; for (let j = 0; j < 6; j++) { const f = new THREE.Mesh(geoB, new THREE.MeshBasicMaterial({ map: phTex, color: cardTint })); f.visible = false; f.userData = { card: true, idx: -1 }; g.add(f); faces.push(f); }
+  if (o.kind === 'set' && o.name) {
+    const draw = (im) => (gg, ww, hh) => { gg.fillStyle = '#fbf7ec'; gg.fillRect(0, 0, ww, hh); gg.fillStyle = '#c9b98f'; gg.fillRect(0, 0, ww, 12); gg.fillStyle = '#16120d'; gg.textAlign = 'center';
+      if (im) { const iw = im.width || 1, ih = im.height || 1, sc = Math.min((ww - 60) / iw, 84 / ih); gg.drawImage(im, (ww - iw * sc) / 2, 24 + (84 - ih * sc) / 2, iw * sc, ih * sc); }
+      gg.font = (im ? 26 : 34) + 'px "Permanent Marker", cursive'; wrapText(gg, o.name, ww / 2, im ? 138 : 80, ww - 30, im ? 28 : 38, 2); };
+    const t = ctex(320, 180, draw(null)), sgn = pl(Math.min(w, .16), Math.min(w, .16) * 180 / 320, new THREE.MeshBasicMaterial({ map: t, side: THREE.DoubleSide }), 0, h + .05, -Lz / 2 - .003, 0, g);
+    sgn.rotation.z = -.02; const lu = setLogo(o.name);
+    if (lu) loadImg(lu).then((im) => { if (!sgn.parent) return; draw(im)(t.image.getContext('2d'), 320, 180); t.needsUpdate = true; kick(); }).catch(() => {});
+  }
   if (o.kind === 'bin') { const s = pl(.13, .075, new THREE.MeshBasicMaterial({ map: ctex(260, 150, (gg, ww, hh) => { gg.fillStyle = '#f7e98e'; gg.fillRect(0, 0, ww, hh); gg.fillStyle = '#c0392b'; gg.font = '40px "Permanent Marker", cursive'; gg.textAlign = 'center'; gg.fillText('BARGAIN BIN', ww / 2, 62); gg.fillStyle = '#16120d'; gg.font = '700 34px Caveat, cursive'; gg.fillText(o.note || '', ww / 2, 112); }), side: THREE.DoubleSide }), 0, .13, -Lz / 2 - .003, 0, g); s.rotation.z = .04; bx(.006, .1, .004, lam({ color: 0x6b4020 }), 0, .08, -Lz / 2 - .006, g); }
-  const c = { kind: o.kind, title: o.title, lanes: o.lanes, ps: o.lanes.map(() => 0), lane: 0, v: 0, sp, Lz, n, g, inst, faces, at: o.at };
+  const c = { kind: o.kind, name: o.name || '', title: o.title, lanes: o.lanes, ps: o.lanes.map(() => 0), lane: 0, v: 0, sp, Lz, n, g, inst, faces, at: o.at };
   updateCrate(c); return c;
 }
 const laneX = (c, l) => (l - (c.n - 1) / 2) * (c.n * LW) / c.n;
@@ -768,7 +816,8 @@ function ui() {
   $('#shelves').innerHTML = S.shelves.map((s, i) => '<button type="button" data-shelf="' + i + '"' + (i === S.shelf ? ' class="on"' : '') + '>' + String.fromCharCode(65 + i) + ' · ' + esc(s.label) + '</button>').join('');
   if (S.mode === 'crate' && cr) {
     const set = cr.kind === 'set', b = boxes.open;
-    $('#crTitle').textContent = cr.title; $('#crBack').textContent = set ? '‹ Sets' : '‹ Back';
+    const lu = set && cr.name ? setLogo(cr.name) : null;
+    $('#crTitle').innerHTML = (lu ? '<img src="' + esc(lu) + '" alt="" draggable="false">' : '') + esc(cr.title); $('#crBack').textContent = set ? '‹ Sets' : '‹ Back';
     $('#crPrevSet').hidden = $('#crNextSet').hidden = !set; if (set && b) { $('#crPrevSet').disabled = boxes.setIdx <= 0; $('#crNextSet').disabled = boxes.setIdx >= b.sets.length - 1; }
     $('#crLaneL').hidden = $('#crLaneR').hidden = cr.n < 2; $('#crLaneL').disabled = cr.lane <= 0; $('#crLaneR').disabled = cr.lane >= cr.n - 1;
   }
@@ -930,7 +979,7 @@ function load(game) {
     if (S.hand) putBack();
     S.cases = d.cases || []; S.icons = d.icons || []; S.game = d.game; S.shelves = d.shelves || []; S.shelf = 0; S.walk = 0; S.vx = 0; S.idf = null; S.ext = []; boxes.open = null; cr = null; kill(setCrate && setCrate.g); setCrate = null;
     try { history.replaceState(null, '', location.pathname + '?game=' + encodeURIComponent(d.game)); } catch (x) {}
-    tabs(); buildCase(); buildBin(); loadBoxes(); loadSealed(); st.classList.add('off');
+    tabs(); buildCase(); buildBin(); loadBoxes(); loadSealed(); loadLogos(); st.classList.add('off');
     go(S.mode === 'case' ? 'case' : 'door');
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
