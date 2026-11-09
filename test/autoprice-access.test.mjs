@@ -53,7 +53,7 @@ async function hit(w, path, o) {
   if (o && o.json !== undefined) { init.method = "POST"; init.headers["content-type"] = "application/json"; init.body = JSON.stringify(o.json); }
   const url = new URL("https://w.example" + path);
   const r = await serveAutoprice(new Request(url, init), w.env, url, staffOk);
-  return { status: r.status, location: r.headers.get("location"), text: await r.text() };
+  return { status: r.status, location: r.headers.get("location"), headers: Object.fromEntries(r.headers), text: await r.text() };
 }
 
 test("the auto-pricer opens for 9Pocket accounts by their permissions: admin everything, staff inside their limits, a buylist-only account not at all", async () => {
@@ -169,6 +169,31 @@ test("the 401 runner's door opens only with the relay bearer, lists what to sear
   assert.equal((await w.rooms[AUTOPRICE_DO].storage.get("ap:cf:gid://shopify/Product/1")).results[0].price, "95.00");
   // a session cookie is not the runner's key
   assert.equal((await call("POST", "", { op: "put", rows: [] })).status, 401);
+});
+
+test("GET /autoprice/img?u= proxies a store CDN photo to a signed-in account, refuses strangers and other hosts, and the router knows the path", async () => {
+  const w = world();
+  await seed(w);
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  const cdn = "https://cdn.shopify.com/s/files/1/0467/3083/8169/files/slab-back.jpg?v=1&width=1600";
+  globalThis.fetch = async (u) => { seen.push(String(u)); if (String(u) === cdn) return new Response("JPEGBYTES", { status: 200, headers: { "content-type": "image/jpeg" } }); throw new Error("unexpected " + u); };
+  try {
+    const none = await hit(w, "/autoprice/img?u=" + encodeURIComponent(cdn));
+    assert.equal(none.status, 401, "no session: refused");
+    assert.deepEqual(seen, [], "and the CDN is not asked");
+    const other = await hit(w, "/autoprice/img?u=" + encodeURIComponent("https://evil.example/x.jpg"), { cookie: "np_s=" + TOKEN });
+    assert.equal(other.status, 400, "only the store's own photos");
+    assert.deepEqual(seen, []);
+    const ok = await hit(w, "/autoprice/img?u=" + encodeURIComponent(cdn), { cookie: "np_s=" + TOKEN });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers["content-type"], "image/jpeg");
+    assert.equal(ok.text, "JPEGBYTES");
+    assert.deepEqual(seen, [cdn]);
+  } finally { globalThis.fetch = realFetch; }
+  // the worker's router hands the path to the auto-pricer (2026-11-09: it was missing, so the live route 404ed)
+  const router = (await import("node:fs")).readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+  assert.match(router, /url\.pathname === "\/autoprice\/img"/);
 });
 
 test("GET /autoprice/pcimg?id=N sends a signed-in account to PriceCharting's photo of card N, and nobody else", async () => {
