@@ -812,7 +812,8 @@ export class BinderRoom {
 
   stageCx() {
     if (!this.stageMem) this.stageMem = {};
-    return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s), mem: this.stageMem };
+    // the in-store buy emails (src/buy-mail.js) read BinderPOS's submitted carts through the portal
+    return { storage: this.state.storage, env: this.env, now: () => Date.now(), log: (s) => console.log(s), mem: this.stageMem, portal: { buyCartsBetween: (a, b) => buyCartsBetween(this.env, a, b) } };
   }
 
   holdCx() {

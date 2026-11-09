@@ -399,6 +399,21 @@ ${rows ? `<table class="users"><thead><tr><th>When</th><th>Who</th><th>Screen</t
 <table class="users"><thead><tr><th>Data</th><th>Kept</th></tr></thead><tbody>${periods.map((x) => `<tr><td>${esc(x[0])}${x[2] ? `<small>${esc(x[2])}</small>` : ""}</td><td>${esc(days(x[1]))}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
+// In-store buy emails (owner, 2026-11-09): the switch and where it stands (src/buy-mail.js).
+function buyMailCard(bm) {
+  const s = bm || {};
+  const on = s.on === true;
+  const stood = [
+    s.at ? (on ? "switched on " : "switched off ") + esc(when(s.at)) + (s.by ? " by " + esc(s.by) : "") : "",
+    s.lastPoll ? "last look " + esc(when(s.lastPoll)) : "",
+    s.sent ? s.sent + " email" + (s.sent === 1 ? "" : "s") + " sent" + (s.lastSent ? ", last " + esc(when(s.lastSent)) : "") : "",
+  ].filter(Boolean).join(" · ");
+  return `<div class="card"><h3>In-store buy emails</h3>
+<p class="muted">While this is on, 9Pocket looks at BinderPOS every two minutes for till carts that bought cards and sends the addresses above the same kind of staff copy for each one: who sold to us, every card at what we paid, the cash and store credit paid out, the till and the staff member, and a button to open the cart in BinderPOS. Nothing from before the switch is sent, each cart is sent once, and online buylists are not repeated here (they are emailed when they come in).</p>
+<p><span class="sw${on ? " on" : ""}">${on ? "ON" : "OFF"}</span>${stood ? ` <span class="muted">${stood}</span>` : ""}${s.lastError ? `<br><span style="color:#b42318">Last problem: ${esc(s.lastError)}</span>` : ""}</p>
+<div class="act"><form method="post" action="${BASE}/admin/control"><input type="hidden" name="action" value="${on ? "buymail-off" : "buymail-on"}"><button class="${on ? "" : "ok"}" type="submit">${on ? "Switch off" : "Switch on"}</button></form>${on ? `<form method="post" action="${BASE}/admin/control"><input type="hidden" name="action" value="buymail-poll"><button type="submit">Look now</button></form>` : ""}<form method="post" action="${BASE}/admin/control"><input type="hidden" name="action" value="buymail-test"><button type="submit">Send me a sample</button></form><span class="muted">The sample is a made-up till cart, to your own address only.</span></div></div>`;
+}
+
 export function renderAdmin(o) {
   const users = o.users || [];
   const me = o.user;
@@ -431,6 +446,7 @@ ${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}${o.msg ? `<div class="okm
 <div class="act"><button class="ok" type="submit">Add account</button><span class="muted">Tell them their password yourself; 9Pocket does not email it.</span></div></form></div>
 ${deviceCard(o)}
 ${notifyCard(o.cfg)}
+${buyMailCard(o.buymail)}
 ${pinCard(o.cfg)}
 ${accessSection(o)}`;
   return shell("Accounts", body, o, true);

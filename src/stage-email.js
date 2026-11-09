@@ -277,6 +277,85 @@ export function buildStaffBuylistEmail(rec, o) {
   return { subject, html, text };
 }
 
+/* The staff email for an in-store buy (owner, 2026-11-09): a POS cart that
+   BinderPOS has as submitted with at least one card bought, as
+   src/portal.js trimCart shapes it (lines with paid per unit, payout by
+   tender, customer, staff, till). Same look as the staff copy of a
+   submitted buylist; src/buy-mail.js sends it to the Buylist emails list. */
+const whenAt = (iso) => { const ms = Date.parse(iso || ""); return ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", hour12: false, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""; };
+export function buildCartEmail(cart) {
+  const c = cart || {};
+  const lines = (Array.isArray(c.lines) ? c.lines : []).filter((l) => l && l.buying && l.qty > 0);
+  const units = lines.reduce((s, l) => s + (Number(l.qty) || 0), 0);
+  const paid = lines.reduce((s, l) => s + (Number(l.paid) || 0) * (Number(l.qty) || 0), 0);
+  const po = c.payout || {};
+  const parts = [];
+  if (po.cash > 0) parts.push(money(po.cash) + " cash");
+  if (po.credit > 0) parts.push(money(po.credit) + " store credit");
+  if (po.other > 0) parts.push(money(po.other) + " other");
+  const paidAs = parts.length ? parts.join(" + ") : money(paid) + " (how it was paid out is not on the cart)";
+  const cu = c.customer || null;
+  const name = cu && cu.name ? String(cu.name).trim() : "";
+  const who = name || "Walk-in (no customer on the cart)";
+  const where = [c.till ? String(c.till) : "", c.staff ? "by " + String(c.staff) : ""].filter(Boolean).join(" ");
+  const cards = `${units} card${units === 1 ? "" : "s"}`;
+  const subject = `In-store buy: ${name || "walk-in"} - ${cards}, ${parts.length ? parts.join(" + ") : money(paid)}${c.till ? " · " + c.till : ""}`;
+  const sold = c.sold && c.sold.cards > 0 ? `They also bought ${c.sold.cards} card${c.sold.cards === 1 ? "" : "s"} from us in the same cart (${money(c.sold.total)}).` : "";
+  const notes = c.notes ? String(c.notes).slice(0, 400) : "";
+  const cell = (extra) => `style="padding:7px 8px;border-bottom:1px solid ${RULE};${extra || ""}"`;
+  const rows = lines.map((l, i) => `<tr style="background:${i % 2 ? PAPER : "#ffffff"}">
+<td ${cell("text-align:right;white-space:nowrap")}>${Number(l.qty) || 0} ×</td>
+<td ${cell()}><strong>${esc(l.title)}</strong>${l.condition ? `<br><span style="color:${MUTED};font-size:12px">${esc(l.condition)}</span>` : ""}</td>
+<td ${cell("text-align:right;white-space:nowrap")}>${money(l.paid)}</td>
+<td ${cell("text-align:right;white-space:nowrap;color:" + MUTED)}>${l.sell > 0 ? money(l.sell) : "—"}</td>
+<td ${cell("text-align:right;white-space:nowrap")}><strong>${money((Number(l.qty) || 0) * (Number(l.paid) || 0))}</strong></td></tr>`).join("");
+  const line = (k, v) => v ? `<tr><td style="padding:3px 12px 3px 0;color:${MUTED};white-space:nowrap">${k}</td><td style="padding:3px 0">${v}</td></tr>` : "";
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:${PAPER};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${INK};font-size:15px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:${RED};padding:20px 28px;color:#ffffff">
+  <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">${BRAND} · staff copy</div>
+  <div style="font-size:24px;font-weight:700;line-height:1.2;margin-top:4px">In-store buy${c.id ? " · cart " + esc(c.id) : ""}</div>
+  <div style="font-size:15px;margin-top:6px;opacity:.95">${esc(who)} · ${cards} · <strong>${money(paid)}</strong> paid${where ? " · " + esc(where) : ""}</div>
+</td></tr>
+<tr><td style="padding:22px 28px 6px">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:15px">
+  ${line("Customer", `<strong>${esc(who)}</strong>`)}
+  ${line("Email", cu && cu.email ? `<a href="mailto:${esc(cu.email)}" style="color:${RED}">${esc(cu.email)}</a>` : "")}
+  ${line("Phone", cu && cu.phone ? esc(cu.phone) : "")}
+  ${line("Paid out", `<strong>${esc(paidAs)}</strong>`)}
+  ${line("Till", c.till ? esc(c.till) : "")}
+  ${line("Staff", c.staff ? esc(c.staff) : "")}
+  ${line("When", whenAt(c.submitted) ? esc(whenAt(c.submitted)) + " (Atlantic)" : "")}
+  ${line("Cart", c.id ? `<strong>#${esc(c.id)}</strong>` : "")}
+  </table>
+  ${c.portalUrl ? `<p style="margin:14px 0 0"><a href="${esc(c.portalUrl)}" style="display:inline-block;background:${RED};color:#fff;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px">Open the cart in BinderPOS</a></p>` : ""}
+</td></tr>
+<tr><td style="padding:10px 28px 0">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">
+  <thead><tr style="color:${MUTED};font-size:12px;text-transform:uppercase;letter-spacing:.06em"><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Qty</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid ${RULE}">Card</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Paid each</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Sells for</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid ${RULE}">Line</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="4" style="padding:10px 8px;text-align:right;font-weight:700">Paid for ${cards}</td><td style="padding:10px 8px;text-align:right;font-weight:700;color:${RED};white-space:nowrap">${money(paid)}</td></tr></tfoot>
+  </table>
+  ${sold || notes ? `<p style="margin:10px 0 0;font-size:13px;color:${MUTED};line-height:1.5">${[sold, notes ? "Cart notes: " + esc(notes) : ""].filter(Boolean).join("<br>")}</p>` : ""}
+</td></tr>
+<tr><td style="background:${PAPER};padding:16px 28px 18px;font-size:12px;color:${MUTED};line-height:1.6">Sent for every till cart that buys cards while "In-store buy emails" is on (9Pocket › Admin), to each address on the buylist list separately; nobody sees the others.${cu && cu.email ? " Reply goes to the customer." : ""}</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [
+    `In-store buy${c.id ? " - cart " + c.id : ""}`, "",
+    `Customer: ${who}${cu && cu.email ? " <" + cu.email + ">" : ""}${cu && cu.phone ? " · " + cu.phone : ""}`,
+    `Paid out: ${paidAs} · ${cards} · ${money(paid)} paid`,
+    [c.till ? "Till: " + c.till : "", c.staff ? "Staff: " + c.staff : "", whenAt(c.submitted) ? "When: " + whenAt(c.submitted) + " (Atlantic)" : ""].filter(Boolean).join(" · "),
+    c.portalUrl ? `Open: ${c.portalUrl}` : "", "",
+    ...lines.map((l) => `${Number(l.qty) || 0} x ${l.title}${l.condition ? " · " + l.condition : ""} - paid ${money(l.paid)} each${l.sell > 0 ? " (sells for " + money(l.sell) + ")" : ""}`),
+    ...(sold ? ["", sold] : []),
+    ...(notes ? ["", "Cart notes: " + notes] : []),
+    "", "Sent to each address on the buylist list separately while In-store buy emails is on (9Pocket > Admin).",
+  ].filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n");
+  return { subject, html, text };
+}
+
 // The email staff can choose to send when a list is approved or rejected
 // (owner, 2026-09-22: staff ENABLE the customer getting an email at this
 // stage). Same look as the confirmation; the list at the prices it was

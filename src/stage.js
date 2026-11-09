@@ -62,7 +62,7 @@
 
 import { repriceCards, submitToBinderPos, cleanCards, conditionsFor } from "./buylist.js";
 import { ntfyPublish } from "./autoprice.js";
-import { buildEmail, buildDecisionEmail, buildCodeEmail, buildStaffBuylistEmail, sendEmail, emailConfigured } from "./stage-email.js";
+import { buildEmail, buildDecisionEmail, buildCodeEmail, buildStaffBuylistEmail, buildCartEmail, sendEmail, emailConfigured } from "./stage-email.js";
 import { TRACK_PATH, DELIVERIES, STATES, CARRIER_KEYS, CHASE_AFTER_MS, CHASE_WINDOW_MS, deliveryOf, cleanTracking, carrierGuess, randomToken, shipPut, trackUrl, serveTrack } from "./ship.js";
 import { dryRunPlan, pushBuylistPrices } from "./stage-sync.js";
 import { HOLD_DO } from "./hold.js";
@@ -84,6 +84,7 @@ async function askDo(env, path, body) {
 }
 import { renderGraded, renderGradedDenied } from "./graded-ui.js";
 import { fixedDo, releaseFixed, serveListsStaff, stockFixed, stockText, gqlCx } from "./fixed-lists.js";
+import { buyMailDo, pollBuyMail, settingsOf as buyMailSettings, POLL_MS as BUYMAIL_POLL_MS, BUYLIST_NOTIFY_DEFAULT } from "./buy-mail.js";
 import { hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, clearCookie, publicUser, can, permsFrom, limitsFrom, normEmail, validEmail, SESSION_DAYS, LOCK_AFTER, LOCK_MS, COOKIE, MIN_PASSWORD,
   newCode, codeHash, cleanCode, sameHex, maskEmail, deviceTokens, deviceCookie, challengeCookie, deviceLabel, STAFF_PERMS,
   CODE_TTL_MS, CODE_TRIES, CODE_SENDS, CODE_RESEND_MS, CODE_STARTS, DEVICE_DAYS, DEVICE_KEEP, CHALLENGE_COOKIE } from "./stage-auth.js";
@@ -325,6 +326,8 @@ export async function stageDoFetch(cx, request, url) {
   const post = request.method === "POST";
   // Fixed-price lists (src/fixed-lists.js) share this room's storage: fl:<id>.
   if (p.startsWith("/_stage/fl/")) return fixedDo(cx, request, url);
+  // In-store buy emails (src/buy-mail.js): the switch, where it stands, a look now.
+  if (p === "/_stage/buymail" || p.startsWith("/_stage/buymail/")) return buyMailDo(cx, request, url);
   if (p === "/_stage/put" && post) {
     const rec = shapeRecord(await bodyOf(request), cx.now());
     if (!rec) return doJson({ ok: false, error: "customer, paymentType and cards[] required" }, 400);
@@ -877,17 +880,34 @@ async function armAlarm(cx) {
   try { if ((await cx.storage.getAlarm()) == null) await cx.storage.setAlarm(cx.now() + PRUNE_EVERY_MS); } catch {}
 }
 
+// Two clocks on the room's one alarm: the daily prune, and - while the
+// in-store buy emails are on (src/buy-mail.js) - a look at BinderPOS every
+// BUYMAIL_POLL_MS. "prune:at" remembers when the prune is next due.
 export async function stageDoAlarm(cx) {
+  const now = cx.now();
+  let pruneAt = Number(await cx.storage.get("prune:at")) || 0;
+  if (pruneAt <= now) {
+    try {
+      const cutoff = now - KEEP_MS;
+      const m = await cx.storage.list({ prefix: "st:" });
+      const gone = [];
+      for (const [k, v] of m) if (v && v.status !== "staged" && (v.ts || 0) < cutoff) gone.push(k);
+      const s = await cx.storage.list({ prefix: "s:" });
+      for (const [k, v] of s) if (!v || (v.exp || 0) < now) gone.push(k);
+      if (gone.length) await cx.storage.delete(gone);
+    } catch (e) { cx.log("stage: prune: " + ((e && e.message) || e)); }
+    pruneAt = now + PRUNE_EVERY_MS;
+    try { await cx.storage.put("prune:at", pruneAt); } catch {}
+  }
+  let next = pruneAt;
   try {
-    const cutoff = cx.now() - KEEP_MS;
-    const m = await cx.storage.list({ prefix: "st:" });
-    const gone = [];
-    for (const [k, v] of m) if (v && v.status !== "staged" && (v.ts || 0) < cutoff) gone.push(k);
-    const s = await cx.storage.list({ prefix: "s:" });
-    for (const [k, v] of s) if (!v || (v.exp || 0) < cx.now()) gone.push(k);
-    if (gone.length) await cx.storage.delete(gone);
-  } catch (e) { cx.log("stage: prune: " + ((e && e.message) || e)); }
-  try { await cx.storage.setAlarm(cx.now() + PRUNE_EVERY_MS); } catch {}
+    if ((await buyMailSettings(cx)).on) {
+      const r = await pollBuyMail(cx);
+      if (r.carts || r.errors.length) cx.log("buymail: " + JSON.stringify({ carts: r.carts, sent: r.sent, skipped: r.skipped, errors: r.errors }));   // counts and cart ids only
+      next = Math.min(next, now + BUYMAIL_POLL_MS);
+    }
+  } catch (e) { cx.log("buymail: " + ((e && e.message) || e)); next = Math.min(next, now + BUYMAIL_POLL_MS); }
+  try { await cx.storage.setAlarm(next); } catch {}
 }
 
 /* ---------------- the worker side ---------------- */
@@ -979,7 +999,7 @@ export async function stageCfg(env, origin) { return doCall(env, origin, "/_stag
 /* The staff copy of a buylist: who gets it (9Pocket > Admin > Buylist emails; the
    store's service address until an admin saves a list) and the sending - one
    email per address, each on its own, never a CC; Reply-To is the customer. */
-export const BUYLIST_NOTIFY_DEFAULT = ["customerservice@exorgames.com"];
+export { BUYLIST_NOTIFY_DEFAULT };   // lives in src/buy-mail.js now (the in-store buy emails use the same list)
 export function parseNotifyList(text) {
   const out = [];
   for (const raw of String(text == null ? "" : text).split(/[\n\r,;]+/)) { const e = normEmail(raw); if (validEmail(e) && !out.includes(e)) out.push(e); }
@@ -1232,7 +1252,7 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     const acc = await doCall(env, origin, "/_stage/access?limit=200");
     const ret = await doCall(env, origin, "/_stage/retention");
     const askCfg = await askDo(env, "/_ask/cfg");
-    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin), devices: dv.ok ? dv.devices : [], newKey, origin, access: acc.ok ? acc.rows : [], retention: ret.ok ? ret : null, ask: askCfg.ok ? askCfg : null }));
+    return html(renderAdmin({ ...opts, users: j.ok ? j.users : [], cfg: await stageCfg(env, origin), buymail: await doCall(env, origin, "/_stage/buymail"), devices: dv.ok ? dv.devices : [], newKey, origin, access: acc.ok ? acc.rows : [], retention: ret.ok ? ret : null, ask: askCfg.ok ? askCfg : null }));
   }
   // Held stock: hold on arrival, stage 2 (src/hold-live.js). The switch is
   // an admin's; releasing needs the "release" permission or an admin.
@@ -1577,6 +1597,24 @@ async function adminControl(env, origin, f, admin) {
       totals: { cash: 6.5, credit: 8.45, units: 4, lines: 2 }, repriced: { changed: ["Sol Ring · Lightly Played · Foil ($2.50 credit is now $2.60)"], capped: [], dropped: [] } };
     const sent = await sendEmail(env, admin.email, buildStaffBuylistEmail(sample, { customerMail: { ok: true, to: "sample@example.test" }, link: origin + "/portal/buylists" }), { replyTo: null });
     return sent.ok ? { ok: true, message: "A sample staff copy is on its way to " + admin.email + "." } : { ok: false, error: "Email: " + (sent.error || sent.status) };
+  }
+  // In-store buy emails (owner, 2026-11-09; src/buy-mail.js): the switch, a look now, a sample.
+  if (action === "buymail-on" || action === "buymail-off") {
+    const r = await doCall(env, origin, "/_stage/buymail/set", { on: action === "buymail-on", by: admin.email });
+    return r.ok ? { ok: true, message: action === "buymail-on" ? "In-store buy emails are on: the first look at BinderPOS is in a few seconds, then every two minutes. Only carts from now on are sent." : "In-store buy emails are off." } : { ok: false, error: r.error || "failed" };
+  }
+  if (action === "buymail-poll") {
+    const r = await doCall(env, origin, "/_stage/buymail/poll", {});
+    if (!r.ok) return { ok: false, error: r.error || "failed" };
+    if (!r.on) return { ok: false, error: "In-store buy emails are off: switch them on first." };
+    if (r.busy) return { ok: true, message: "A look is already under way." };
+    return { ok: true, message: `Looked now: ${r.carts} new buy cart${r.carts === 1 ? "" : "s"}, ${r.sent} email${r.sent === 1 ? "" : "s"} sent.${r.errors && r.errors.length ? " Problems: " + r.errors.join("; ") : ""}` };
+  }
+  if (action === "buymail-test") {
+    const sample = { id: "0000000", submitted: new Date().toISOString(), staff: admin.email, till: "Front counter", customer: { name: "Sample Customer", email: "sample@example.test", phone: "(902) 555-0100" }, payout: { cash: 12.5, credit: 0, other: 0, total: 12.5 }, sold: { lines: 0, cards: 0, total: 0 }, notes: null, portalUrl: "https://portal.binderpos.com/#/pointOfSale/carts/0000000",
+      lines: [{ title: "Lightning Bolt [Magic 2011]", condition: "Near Mint", qty: 3, buying: true, paid: 1.5, sell: 3.99 }, { title: "Sol Ring [Commander Legends]", condition: "Lightly Played Foil", qty: 1, buying: true, paid: 8, sell: 19.99 }] };
+    const sent = await sendEmail(env, admin.email, buildCartEmail(sample), { replyTo: null });
+    return sent.ok ? { ok: true, message: "A sample in-store buy email is on its way to " + admin.email + "." } : { ok: false, error: "Email: " + (sent.error || sent.status) };
   }
   if (action === "pin-off" || action === "pin-on") {
     const r = await doCall(env, origin, "/_stage/cfg/pin", { off: action === "pin-off", by: admin.email });
