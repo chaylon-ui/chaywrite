@@ -284,7 +284,11 @@ export function pcPickGraded(g, products) {
    certificate field first, then the barcode, then a SKU like PSA-25577619.
    Only PSA has a lookup we can use (src/graded.js certLookup); the others
    show the number and a link to the grader's page. */
-export const CERT_SOURCES = { cert_number: "the listing's certificate field", barcode: "the barcode", sku: "the SKU" };
+// A QR code on the slab (owner, 2026-11-09: "I should be able to scan the QR code on the image ... and at least add that to the listing"): the grader's own link.
+export const QR_HOSTS = [[/(^|\.)psacard\.com$/i, "PSA"], [/(^|\.)cgccards\.com$/i, "CGC"], [/(^|\.)beckett\.com$/i, "BGS"], [/(^|\.)gosgc\.com$/i, "SGC"], [/(^|\.)taggrading\.com$/i, "TAG"], [/(^|\.)acegrading\.com$/i, "ACE"]];
+export function qrGrader(u) { try { const h = new URL(String(u || "")).hostname; for (const [re, g] of QR_HOSTS) if (re.test(h)) return g; } catch {} return ""; }
+export const imgProxyOk = (u) => typeof u === "string" && u.startsWith(CDN_PREFIX) && u.length < 600 && !/[\s"'<>]/.test(u);
+export const CERT_SOURCES = { cert_number: "the listing's certificate field", barcode: "the barcode", sku: "the SKU", qr: "the QR code on the photo" };
 const CERT_PAGES = { PSA: (n) => "https://www.psacard.com/cert/" + n, CGC: (n) => "https://www.cgccards.com/certlookup/" + n + "/" };
 export const certUrl = (c) => (c && CERT_PAGES[c.grader] ? CERT_PAGES[c.grader](c.number) : null);
 export function certOf(grader, v, mf) {
@@ -1659,18 +1663,25 @@ async function certAction(cx, b) {
   const rawTyped = b && b.cert != null ? String(b.cert).trim() : "";
   const typed = rawTyped.replace(/\D/g, "");
   if (rawTyped && !/^\d{6,12}$/.test(typed)) return { ok: false, error: "a certificate number is 6 to 12 digits" };
+  // the QR code's link, when the page read one off the photo: a grader's own page for this slab
+  const qrUrl = String((b && b.certUrl) || "").trim().slice(0, 300);
+  const qrG = /^https:\/\/[^\s"'<>]+$/.test(qrUrl) ? qrGrader(qrUrl) : "";
+  let qrNote = "";
   if (typed) {
     try {
-      const r = await adminGql(cx, MF_SET, { m: [{ ownerId: pid, namespace: "exor", key: "cert_number", type: "single_line_text_field", value: typed }] });
+      const m = [{ ownerId: pid, namespace: "exor", key: "cert_number", type: "single_line_text_field", value: typed }];
+      if (qrG) m.push({ ownerId: pid, namespace: "exor", key: "cert_url", type: "url", value: qrUrl });
+      const r = await adminGql(cx, MF_SET, { m });
       const errs = (r.data.metafieldsSet || {}).userErrors || [];
       if (errs.length) return { ok: false, error: errs.map((x) => x.message).join("; ") };
     } catch (e) { return { ok: false, error: "could not save the certificate: " + msg(e) }; }
-    row.cert = { grader: row.graded.grader, number: typed, source: "cert_number" };
+    row.cert = { grader: row.graded.grader, number: typed, source: qrG ? "qr" : "cert_number" };
+    if (qrG && qrG !== row.graded.grader) qrNote = " \u2014 the QR code is a " + qrG + " link but the title says " + row.graded.grader + ": check the title";
   }
   if (!row.cert) return { ok: false, error: "no certificate on this listing: type it in" };
-  row.cert.url = certUrl(row.cert);
+  row.cert.url = (typed && qrG ? qrUrl : "") || certUrl(row.cert);
   row.psa = null; row.psaNote = null;
-  let flash = row.cert.grader + " " + row.cert.number + (typed ? " saved on the listing" : "");
+  let flash = row.cert.grader + " " + row.cert.number + (typed ? (qrG ? " and the QR link saved on the listing" : " saved on the listing") + qrNote : "");
   if (row.cert.grader === "PSA") {
     try {
       const c = await psaRecord(cx, row.cert.number, true);
@@ -1682,7 +1693,7 @@ async function certAction(cx, b) {
     const keep = String(row.alert || "").split(" \u00b7 ").filter((x) => x && !/^PSA certificate/.test(x));
     if (row.psa && row.psa.mismatch) keep.push(row.psa.mismatch);
     row.alert = keep.length ? keep.join(" \u00b7 ") : null;
-  } else flash += " (no lookup for " + row.cert.grader + " yet)";
+  } else flash += " (no lookup for " + row.cert.grader + " yet" + (row.cert.url ? "; the link is on the listing" : "") + ")";
   await cx.storage.put("ap:report", rep);
   return { ok: true, flash, cert: row.cert, psa: row.psa, psaNote: row.psaNote || null, alert: row.alert || null, html: certSection(row, { psaOn: true }) };
 }
@@ -2154,6 +2165,13 @@ export async function serveAutoprice(request, env, url, staffOk) {
     if (!u) return Response.json({ error: "no photo on PriceCharting" }, { status: 404, headers: { "cache-control": "no-store" } });
     return new Response("", { status: 302, headers: { location: u, "cache-control": "private, max-age=86400" } });
   }
+  // GET /autoprice/img?u=<store CDN url> -> that photo through this origin, so the page can read its QR code on a canvas (owner, 2026-11-09)
+  if (url.pathname === "/autoprice/img") {
+    const u = String(url.searchParams.get("u") || "");
+    if (!imgProxyOk(u)) return Response.json({ error: "only the store's own photos" }, { status: 400, headers: { "cache-control": "no-store" } });
+    const r = await fetch(u, { signal: AbortSignal.timeout(15000) });
+    return new Response(r.body, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "image/jpeg", "cache-control": "private, max-age=86400" } });
+  }
   let body = null, form = false;
   if (request.method === "POST") {
     const ct = request.headers.get("content-type") || "";
@@ -2272,7 +2290,9 @@ export function certSection(r, o) {
       body += form("cert", "", p ? "Look up again" : "Look up now");
     } else body += `<div class="sub">${esc(c.grader)} has no certificate lookup we can use yet; the number stays on the listing.</div>`;
   } else body += `<div class="sub">No certificate on this listing (looked in the certificate field, the barcode and the SKU).</div>`;
-  body += form("cert", `<input name="cert" inputmode="numeric" placeholder="${c ? "another number" : "certificate number"}" size="14" required>`, c ? "Replace &amp; look up" : g.grader === "PSA" ? "Save &amp; look up" : "Save on the listing");
+  body += form("cert", `<input name="cert" inputmode="numeric" placeholder="${c ? "another number" : "certificate number"}" size="14" required><input type="hidden" name="certUrl" value="">`, c ? "Replace &amp; look up" : g.grader === "PSA" ? "Save &amp; look up" : "Save on the listing");
+  // Owner, 2026-11-09: with PSA's API shut to us, the QR code on the slab still gives the number and the grader's link - read in the browser off the listing's photos.
+  if ((r.images || []).length) body += `<button type="button" class="btn qrread" title="Reads the QR code off the listing's photos (PSA prints it on the back label) and saves the number and the link">Read the QR code from the photo</button>`;
   if ((r.images || []).length && opt.vision !== false) body += form("cert-read", "", "Read the label from the photo");
   return body;
 }
@@ -2503,7 +2523,7 @@ ${s.pricecharting ? `<label><span>PriceCharting id</span><input type="text" inpu
 ${photoStrip(r)}<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}${r.reason && r.reason !== "market" || r.writeError ? `<div class="muted rsn">${r.reason && r.reason !== "market" ? esc(r.reason) : ""}${r.writeError ? " · write failed: " + esc(r.writeError) : ""}</div>` : ""}${r.alert ? `<div class="warn">⚠ ${esc(r.alert)}</div>` : ""}</section>
 <section><h4>Today</h4><div class="p-now"><b>${money(r.current)}</b> <span class="sub">cost ${r.cost != null ? money(r.cost) : "—"}</span></div>${marginLine(r.marginNow, r.current, r.cost)}<h4>${esc(COMP.name)}</h4>${compCell(r)}<h4>Last change</h4>${change(r.lastChange)}<h4>Check by hand</h4>${reviewLinks(r)}</section>
 <section class="setsec"><h4>Settings <span class="sub">${esc(custom.length ? custom.join(" · ") : "page defaults")}</span></h4>${P.settings ? settingsForm(r) : '<div class="sub">your account cannot change them</div>'}</section>
-${r.graded ? `<section class="full certsec"><h4>Certificate</h4>${certSection(r, { keep: keepView(), psaOn: v.psaOn !== false, vision: v.vision !== false })}</section>` : ""}${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
+${r.graded ? `<section class="full certsec" data-imgs="${esc(JSON.stringify((r.images || []).slice(0, 4).map((im) => "/autoprice/img?u=" + encodeURIComponent(imageUrl(im, 1600)))))}"><h4>Certificate</h4>${certSection(r, { keep: keepView(), psaOn: v.psaOn !== false, vision: v.vision !== false })}</section>` : ""}${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
 </div></details>`;
     return `<article class="item s-${sk}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}" data-q="${esc(String(r.title + " " + r.game).toLowerCase())}">
 <div class="line"><div class="c-prod${(r.images || []).length ? " has-pic" : ""}">${photoThumb(r)}<div class="c-txt"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}${dateTag(r)}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div></div>
@@ -2568,6 +2588,7 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .bar .filt{margin-left:auto;width:220px}.bar .sortsel{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;max-width:180px}.pubbar{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:10px 14px;border-radius:10px;background:var(--wait-bg);color:var(--wait);font-size:13px}.pubbar b{font-weight:700}.pubbar form{margin-left:auto}
 .grp{margin:18px 2px 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.grp span{font-weight:500}
 .list{display:flex;flex-direction:column;gap:6px}.item{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}.item.alerted{border-left:3px solid var(--warn)}.item.awaiting{border-left:3px solid var(--wait)}.item.alerted.awaiting{border-left-color:var(--warn)}
+.certsec .qrread{margin:6px 8px 0 0}.certsec .qrnote{margin-top:4px}
 .certsec .certline{margin-bottom:4px}.certsec .certsays{line-height:1.45;margin-bottom:4px}.certsec .ok-t{color:#2e8b57}.certsec form.certf{margin:6px 8px 0 0}.certsec input[name=cert]{width:11em;margin-right:6px}
 .line,.lhead{display:grid;grid-template-columns:minmax(0,1fr) 150px 170px 150px 230px;gap:14px;align-items:center;padding:10px 44px 10px 14px}.lhead{padding-top:0;padding-bottom:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.lhead span:nth-child(2),.lhead span:nth-child(3){text-align:right}.mg{white-space:nowrap}.two{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.c-prod .ttl{font-weight:600;color:var(--ink);text-decoration:none}.c-prod .ttl:hover{color:var(--acc);text-decoration:underline}.meta{font-size:12px;color:var(--mut);margin-top:2px}.warn{color:var(--warn);font-size:12px;font-weight:600;margin-top:3px}.warn-t{color:var(--warn);font-weight:600}
 .c-prod.has-pic{display:flex;gap:10px;align-items:flex-start;min-width:0}.c-prod .c-txt{min-width:0;flex:1}.thumb{display:block;flex:none;width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--soft);border:1px solid var(--line);cursor:zoom-in}.thumb img{width:100%;height:100%;object-fit:cover;display:block}.thumb.lg{width:120px;height:160px}.strip{display:flex;gap:8px;flex-wrap:wrap}
@@ -2653,5 +2674,21 @@ var tr=art.querySelector("form.pubf.track");if(tr&&tr.parentNode)tr.parentNode.r
 }).catch(function(){if(btn)btn.disabled=false;if(art)art.classList.remove("busy");try{sessionStorage.setItem("xgScroll:"+location.pathname,JSON.stringify({y:window.scrollY||0,t:Date.now()}))}catch(x){}f.submit()});
 },true);})();
 ${KEEP_SCROLL_JS}
-</script></body></html>`;
+// The QR code off the listing's photos (owner, 2026-11-09): BarcodeDetector where the browser has it, jsQR otherwise;
+// the number lands in the certificate box with the link beside it and the form posts as if typed.
+(function(){
+function note(sec,t){var n=sec.querySelector(".qrnote")||document.createElement("div");n.className="sub qrnote";n.textContent=t;sec.appendChild(n)}
+function ensureQr(){return new Promise(function(res){var t=0;(function tick(){if(window.jsQR||t>40)return res(!!window.jsQR);t++;setTimeout(tick,100)})()})}
+async function qrOf(bmp){if("BarcodeDetector" in window){try{var det=new window.BarcodeDetector({formats:["qr_code"]});var r=await det.detect(bmp);if(r&&r[0]&&r[0].rawValue)return r[0].rawValue}catch(e){}}
+if(!(await ensureQr()))return null;var c=document.createElement("canvas"),sc=Math.min(1,1600/Math.max(bmp.width,bmp.height));c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);var g=c.getContext("2d");g.drawImage(bmp,0,0,c.width,c.height);var d=g.getImageData(0,0,c.width,c.height);var q=window.jsQR(d.data,d.width,d.height,{inversionAttempts:"attemptBoth"});return q&&q.data||null}
+document.addEventListener("click",async function(e){var b=e.target.closest("button.qrread");if(!b)return;var sec=b.closest("section.certsec");var srcs=[];try{srcs=JSON.parse(sec.getAttribute("data-imgs")||"[]")}catch(x){}if(!srcs.length){note(sec,"No photo on the listing to read.");return}
+var was=b.textContent;b.disabled=true;b.textContent="Reading the photos\u2026";var text=null;
+try{for(var i=0;i<srcs.length&&!text;i++){try{var blob=await (await fetch(srcs[i])).blob();var bmp=await createImageBitmap(blob);text=await qrOf(bmp)}catch(x){}}
+if(!text){note(sec,"No QR code in the listing's "+(srcs.length===1?"photo":srcs.length+" photos")+". PSA prints it on the back label: add a photo of the back, or type the number.");return}
+var m=/(\d{6,12})/.exec(text);if(!m){note(sec,"The QR code reads \u201c"+text.slice(0,80)+"\u201d and carries no certificate number.");return}
+var inp=sec.querySelector("input[name=cert]"),cu=sec.querySelector("input[name=certUrl]");if(!inp){note(sec,"QR code: "+text.slice(0,80));return}
+inp.value=m[1];if(cu)cu.value=/^https:\/\//i.test(text)?text.slice(0,300):"";note(sec,"QR code: "+text.slice(0,80)+" \u2014 saving\u2026");
+if(inp.form.requestSubmit)inp.form.requestSubmit();else inp.form.dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}))}
+finally{b.disabled=false;b.textContent=was}},true);})();
+</script><script src="/vendor/jsQR-1.4.0.js" defer></script></body></html>`;
 }

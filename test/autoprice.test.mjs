@@ -1,4 +1,4 @@
-import { pcSearchAction, pcLine } from "../src/autoprice.js";
+import { pcSearchAction, pcLine, qrGrader, imgProxyOk, CERT_SOURCES } from "../src/autoprice.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { niceUp, autoStep, decide, margin, categoryOf, normUpc, readProduct, nextRunAt, DEFAULT_CONFIG, overLimit, renderPage } from "../src/autoprice.js";
@@ -1458,4 +1458,23 @@ test("a graded slab's condition rungs are never a choice: the stocked rung (or a
   const raw = { ...row, id: "gid://shopify/Product/78", type: "Pokemon Single", graded: null, variantIds: null, variantChosen: false, variantTitle: "", variants: 2, variantList: [{ id: "a", title: "Near Mint", price: 1, stock: 1 }, { id: "b", title: "Near Mint Holofoil", price: 2, stock: 1 }], settings: { variant: "" } };
   const page2 = renderPage({ mode: "shadow", config: DEFAULT_CONFIG }, { rows: [raw] }, { configured: true, view: "all" });
   assert.ok(page2.includes("Price which variant") && page2.includes("2 variants"));
+});
+
+
+test("the QR code's link: the grader from its host, the proxy only for the store's own photos, the block carries the reader", () => {
+  assert.equal(qrGrader("https://www.psacard.com/cert/82412345/psa"), "PSA");
+  assert.equal(qrGrader("https://www.beckett.com/grading/card-lookup?item=0020150360"), "BGS");
+  assert.equal(qrGrader("https://www.cgccards.com/certlookup/1234567/"), "CGC");
+  assert.equal(qrGrader("https://evil.example/psacard.com/cert/1"), ""); assert.equal(qrGrader("BGS 0020150360"), "");
+  assert.equal(imgProxyOk("https://cdn.shopify.com/s/files/1/0467/3083/8169/files/x.jpg?v=1&width=1600"), true);
+  assert.equal(imgProxyOk("https://cdn.shopify.com/s/files/1/0000/0000/0000/files/x.jpg"), false);
+  assert.equal(imgProxyOk("https://cdn.shopify.com/s/files/1/0467/3083/8169/files/x.jpg\"onload=1"), false);
+  assert.equal(CERT_SOURCES.qr, "the QR code on the photo");
+  const r = { id: "gid://shopify/Product/1", title: "Charizard (4/102) [Base Set] Graded PSA 8", graded: { grader: "PSA", grade: 8, name: "Charizard", number: "4" }, images: [{ u: "files/front.jpg" }, { u: "files/back.jpg" }], cert: null };
+  const sec = certSection(r, { psaOn: true });
+  assert.ok(sec.includes('class="btn qrread"') && sec.includes('<input type="hidden" name="certUrl" value="">'));
+  assert.ok(!certSection({ ...r, images: [] }, { psaOn: true }).includes("qrread"));
+  const page = renderPage({ mode: "shadow", config: DEFAULT_CONFIG }, { rows: [{ ...r, type: "Pokemon Single Graded", stock: 1, current: 10, action: "hold", reason: "", sources: [] }] }, { configured: true, view: "all" });
+  assert.ok(page.includes('data-imgs="[&quot;/autoprice/img?u=https%3A%2F%2Fcdn.shopify.com%2Fs%2Ffiles%2F1%2F0467%2F3083%2F8169%2Ffiles%2Ffront.jpg%3Fwidth%3D1600&quot;'));
+  assert.ok(page.includes('<script src="/vendor/jsQR-1.4.0.js" defer></script>') && page.includes("button.qrread"));
 });
