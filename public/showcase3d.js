@@ -274,7 +274,11 @@ function buildRoom() {
   bx(.36, .1, .38, beige, 0, .05, 0, till); bx(.34, .012, .2, dark, 0, .1, .08, till).rotation.x = .25; bx(.3, .1, .12, beige, 0, .16, -.11, till);
   pl(.2, .05, new THREE.MeshBasicMaterial({ map: ctex(200, 50, (g, w, h) => { g.fillStyle = '#0d1a0d'; g.fillRect(0, 0, w, h); g.fillStyle = '#5dff7a'; g.font = '700 34px "Cutive Mono", monospace'; g.textAlign = 'right'; g.fillText('0.00', w - 12, 38); }) }), 0, .17, -.049, 0, till);
   for (let i = 0; i < 12; i++) bx(.03, .012, .03, lam({ color: i === 11 ? 0xc0392b : 0xe9e4d4 }), -.09 + (i % 4) * .045, .112 + (2 - Math.floor(i / 4)) * .011, .04 + Math.floor(i / 4) * .042, till).rotation.x = .25;
+  // (owner, 2026-11-09: "Till should be facing away from customer"): the keys and the big display face the staff; the customer sees its back and a small total display
+  till.rotation.y = PI;
+  pl(.14, .035, new THREE.MeshBasicMaterial({ map: ctex(140, 35, (g, w, h) => { g.fillStyle = '#0d1a0d'; g.fillRect(0, 0, w, h); g.fillStyle = '#5dff7a'; g.font = '700 26px "Cutive Mono", monospace'; g.textAlign = 'right'; g.fillText('0.00', w - 8, 27); }) }), 0, .175, -.1705, PI, till);
   hit(bx(.42, .34, .44, hitM, 2.0, TOP + .15, -.93), 'till');
+  buildClerk();
   // the counter bell
   bell = new THREE.Group(); bell.position.set(1.5, TOP, -.76); scene.add(bell);
   const brass = lam({ color: 0xd0a63c, emissive: 0x3a2a08 });
@@ -292,6 +296,41 @@ function buildRoom() {
   // a wall switch by the cork board does the same
   bx(.01, .12, .08, lam({ color: 0xe9e4d4 }), 3.985, 1.3, -.2); hit(bx(.04, .2, .16, hitM, 3.97, 1.3, -.2), 'lights');
   pileG = new THREE.Group(); pileG.position.set(1.7, TOP, -1.0); scene.add(pileG);
+}
+// The person behind the till (owner, 2026-11-09: "a typical card shop employee
+// behind it with a black polo shirt with an exor logo on the shirt"): a simple
+// figure of plain shapes, glasses and a beard, the logo on the chest. A tap says hello.
+function buildClerk() {
+  const g = new THREE.Group(); g.position.set(2.12, 0, -1.62); g.rotation.y = -.12; scene.add(g);
+  const polo = lam({ color: 0x141414 }), skin = lam({ color: 0xd8a47c }), hair = lam({ color: 0x3a2618 }), jeans = lam({ color: 0x2c3a52 });
+  const cyl = (rt, rb, h, mat, x, y, z, sz) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 18), mat); m.position.set(x, y, z); if (sz) m.scale.z = sz; g.add(m); return m; };
+  const ball = (r, mat, x, y, z, sy) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), mat); m.position.set(x, y, z); if (sy) m.scale.y = sy; g.add(m); return m; };
+  cyl(.15, .13, .92, jeans, 0, .46, 0, .7);                                   // legs, mostly behind the counter
+  cyl(.2, .17, .58, polo, 0, 1.2, 0, .66);                                    // the polo
+  ball(.2, polo, 0, 1.47, 0, .32).scale.z = .66;                              // shoulders
+  [-1, 1].forEach((sd) => {
+    const a = new THREE.Group(); a.position.set(sd * .215, 1.45, 0); a.rotation.set(-.5, 0, sd * .1); g.add(a);     // arms reach forward to the counter
+    const sl = new THREE.Mesh(new THREE.CylinderGeometry(.058, .052, .24, 14), polo); sl.position.y = -.12; a.add(sl);
+    const fa = new THREE.Mesh(new THREE.CylinderGeometry(.04, .034, .34, 14), skin); fa.position.y = -.4; a.add(fa);
+    const hd = new THREE.Mesh(new THREE.SphereGeometry(.045, 14, 10), skin); hd.position.y = -.59; a.add(hd);
+  });
+  cyl(.05, .055, .09, skin, 0, 1.56, 0);                                      // neck
+  const col = new THREE.Mesh(new THREE.TorusGeometry(.066, .02, 8, 20), polo); col.rotation.x = PI / 2; col.position.set(0, 1.525, .005); g.add(col);
+  ball(.105, skin, 0, 1.69, 0, 1.14);                                         // head
+  const hr = new THREE.Mesh(new THREE.SphereGeometry(.111, 20, 12, 0, PI * 2, 0, PI * .5), hair); hr.position.set(0, 1.705, -.012); hr.scale.y = 1.1; g.add(hr);
+  const bd = new THREE.Mesh(new THREE.SphereGeometry(.094, 20, 12, 0, PI, PI * .56, PI * .44), hair); bd.position.set(0, 1.69, .016); bd.scale.y = 1.2; g.add(bd);   // a short beard
+  [-1, 1].forEach((sd) => {
+    ball(.011, lam({ color: 0x1a1a1a }), sd * .038, 1.705, .096);
+    const gl = new THREE.Mesh(new THREE.TorusGeometry(.027, .0045, 8, 20), lam({ color: 0x111111 })); gl.position.set(sd * .039, 1.705, .103); g.add(gl);
+  });
+  bx(.026, .005, .005, lam({ color: 0x111111 }), 0, 1.708, .106, g);          // the bridge of the glasses
+  const sm = new THREE.Mesh(new THREE.TorusGeometry(.03, .0045, 6, 14, PI * .7), lam({ color: 0x7a3b2a })); sm.position.set(0, 1.668, .094); sm.rotation.z = PI + PI * .15; g.add(sm);   // a smile
+  // the logo on the chest: the shop's own when the CDN lets us draw it, the name until then
+  const drawLogo = (im) => (c, w, h) => { c.clearRect(0, 0, w, h); if (im) { const s = Math.min(w / im.width, h / im.height); c.drawImage(im, (w - im.width * s) / 2, (h - im.height * s) / 2, im.width * s, im.height * s); } else { c.fillStyle = '#e23b2e'; c.font = '700 54px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EXOR', w / 2, h * .32); c.fillStyle = '#f2c230'; c.fillText('GAMES', w / 2, h * .72); } };
+  const lt = ctex(256, 160, drawLogo(null)), lg = pl(.1, .0625, new THREE.MeshBasicMaterial({ map: lt, transparent: true }), .085, 1.36, .123, .3, g);
+  lg.userData.card = false;
+  loadImg(img(LOGO, 300)).then((im) => { drawLogo(im)(lt.image.getContext('2d'), 256, 160); lt.needsUpdate = true; kick(); }).catch(() => {});
+  hit(bx(.5, .95, .3, hitM, 2.12, 1.4, -1.62), 'staff');
 }
 function lights(k) {   // 0 = the tubes, 1 = the evening, with the lamp
   hemi.intensity = lerp(2.6, .5, k); sun.intensity = lerp(1.1, .12, k); lampL.intensity = lerp(0, 2.4, k);
@@ -699,7 +738,8 @@ function showTill() {
 /* ---------- where you stand ---------- */
 // from the door: the case and the till side by side, centred
 const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lookView(new V3(x, 1.6, 3.2), new V3(x, ph ? 1.3 : 1.18, -1.2), ph ? 82 : 55); v.yaw += S.look.yaw; v.pitch += S.look.pitch; return v; };
-const tillView = () => lookView(new V3(1.86, 1.52, -.12), new V3(1.9, 1.07, -.92));
+// the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
+const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 function viewFor() { return S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
@@ -739,7 +779,9 @@ function tabs() {
 /* ---------- touch, mouse, keys ---------- */
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pick(list, x, y) { const r = canvas.getBoundingClientRect(); ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam); const h = ray.intersectObjects(list, false); return h.length ? h[0] : null; }
-function act(a) { if (a === 'bell') ding(); else if (a === 'lights') toggleLights(); else go(a); }
+const HELLO = ['Hi! Ask us to pull any card out for a closer look.', 'Looking for something? The boxes at the back have every set.', 'Got cards to sell? We buy - cash or store credit.', 'Ring the bell if you need a hand!'];
+let helloN = 0;
+function act(a) { if (a === 'bell') ding(); else if (a === 'lights') toggleLights(); else if (a === 'staff') hint(HELLO[helloN++ % HELLO.length]); else go(a); }
 function tap(x, y) {
   if (S.hand) return putBack();
   if (tw) return;
