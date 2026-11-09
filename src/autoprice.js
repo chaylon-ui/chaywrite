@@ -1064,7 +1064,7 @@ async function phaseFx(cx, run) {
   run.phase = "products";
 }
 
-const PRODUCTS_Q = `query($after: String) { products(first: 50, after: $after, query: "tag:${TAG} status:active") { edges { node { id title handle productType tags
+const PRODUCTS_Q = `query($after: String) { products(first: 50, after: $after, query: "tag:${TAG} status:active") { edges { node { id title handle productType tags createdAt
   media(first: 3) { edges { node { ... on MediaImage { image { url altText } } } } }
   variants(first: 10) { edges { node { id title price barcode sku inventoryQuantity inventoryItem { unitCost { amount } } } } }
   mf: metafields(first: 30, namespace: "exor") { edges { node { key value } } } } } pageInfo { hasNextPage endCursor } } }`;
@@ -1142,7 +1142,7 @@ export function readProduct(node) {
   const num = (s) => { const n = Number(s); return Number.isFinite(n) ? n : null; };
   const cost = v.inventoryItem && v.inventoryItem.unitCost ? num(v.inventoryItem.unitCost.amount) : null;
   return {
-    id: node.id, title: node.title, handle: node.handle, type: node.productType,
+    id: node.id, title: node.title, handle: node.handle, type: node.productType, created: node.createdAt || null,
     // A graded single is never a sealed TCGplayer product: no category, so
     // phaseIndex leaves it alone and PriceCharting alone prices it.
     category: isGradedType(node.productType) ? null : categoryOf(node.productType), variants: vs.length, variantId: v.id || null, variantTitle: v.title || "",
@@ -1496,7 +1496,7 @@ async function phaseDecide(cx, run, cfg, deadline) {
     // names one, that variant is priced like any single-variant product.
     if (p.variants > 1 && !p.variantChosen && d.action !== "skip") { d.action = "review"; d.reason = p.variants + " variants: choose which one this price is for"; }
     if (p.match && !p.tcgId && !p.graded && d.action === "skip") d.reason = p.match;   // never explain a graded skip with TCGplayer
-    rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId, images: p.images || [],
+    rows.push({ id: p.id, handle: p.handle, title: p.title, type: p.type, game: gameOf(p.type), stock: p.stock, variantId: p.variantId, images: p.images || [], created: p.created || null,
       variants: p.variants, variantChosen: !!p.variantChosen, variantTitle: p.variantTitle || "", variantList: p.variantList || null, variantIds: p.variantIds || null,
       tcgId: p.tcgId || null, tcgName: p.tcgName || null, tcgLow: p.tcgLow ?? null, tcgMid: p.tcgMid ?? null, tcgFamily: p.tcgFamily || null, graded: p.graded || null, pcGrade: p.pcGrade || null,
       pcId: p.pcId || p.pcIdFound || null, pcName: p.pcName || null, pcMiss: p.pcMiss || null, pcIdFound: p.pcIdFound || null, pcCandidates: p.pcCandidates || null, match: p.match, compMiss: p.compMiss || null, psa: p.psa || null, psaNote: p.psaNote || null, cert: p.cert || null,
@@ -2191,11 +2191,13 @@ export async function serveAutoprice(request, env, url, staffOk) {
   // /autoprice/all (owner, 2026-10-22: "a screen that does show all"): the same page, every row, no "Needs you" filter.
   const everything = url.pathname === "/autoprice/all";
   const pageView = everything ? "all" : /^(all|todo)$/.test(url.searchParams.get("view") || "") ? url.searchParams.get("view") : "";
+  // Owner, 2026-11-09: "add sort to each list ... alphabetical, price, date added, date price last updated"
+  const sort = /^(title|price|price-asc|added|changed)$/.test(url.searchParams.get("sort") || "") ? url.searchParams.get("sort") : "";
   const [st, rep, sr] = await Promise.all([stub.fetch(new Request(url.origin + "/_ap/status")), stub.fetch(new Request(url.origin + "/_ap/report")), q ? stub.fetch(new Request(url.origin + "/_ap/search?q=" + encodeURIComponent(q))) : null]);
   const status = await st.json(), report = await rep.json(), found = sr ? await sr.json() : null;
   if (url.pathname.endsWith(".json")) return Response.json({ status, report }, { headers: { "cache-control": "no-store" } });
   const { psaConfigured, visionConfigured } = await import("./graded.js");
-  return html(renderPage(status, report, { q, game, view: pageView, everything, found, user: access.name, perms: access, configured, flash, psaOn: psaConfigured(env), vision: visionConfigured(env) }));
+  return html(renderPage(status, report, { q, game, view: pageView, sort, everything, found, user: access.name, perms: access, configured, flash, psaOn: psaConfigured(env), vision: visionConfigured(env) }));
 }
 
 // Which permission each control action needs (src/stage-auth.js AP_PERMS).
@@ -2291,6 +2293,19 @@ export function renderPage(s, rep, view) {
   const rank = (r) => (r.awaiting || r.action === "pending" ? 0 : r.alert || r.action === "review" || r.writeError ? 1 : r.action === "skip" ? 2 : 3);
   const rows = inGame.filter((r) => viewMode === "all" || needsYou(r))
     .sort((a, b) => a.game.localeCompare(b.game) || rank(a) - rank(b) || String(a.title).localeCompare(String(b.title)));
+  // Owner, 2026-11-09: a chosen order within each game group; the default stays "what needs you first".
+  const byTitle = (a, b) => String(a.title).localeCompare(String(b.title));
+  const tsOf = (x) => (x ? Date.parse(x) || 0 : 0);
+  const SORTS = {
+    title: byTitle,
+    price: (a, b) => ((b.current ?? -1) - (a.current ?? -1)) || byTitle(a, b),
+    "price-asc": (a, b) => ((a.current ?? 1e12) - (b.current ?? 1e12)) || byTitle(a, b),
+    added: (a, b) => (tsOf(b.created) - tsOf(a.created)) || byTitle(a, b),
+    changed: (a, b) => (((b.lastChange && b.lastChange.at) || 0) - ((a.lastChange && a.lastChange.at) || 0)) || byTitle(a, b),
+  };
+  if (SORTS[v.sort]) rows.sort((a, b) => a.game.localeCompare(b.game) || SORTS[v.sort](a, b));
+  const dayOf = (ms) => ms ? new Date(ms).toLocaleDateString("en-US", { timeZone: "America/Halifax", year: "numeric", month: "short", day: "numeric" }) : "";
+  const dateTag = (r) => v.sort === "added" ? ` · <span class="sub">added ${esc(dayOf(tsOf(r.created)) || "—")}</span>` : v.sort === "changed" ? ` · <span class="sub">${r.lastChange && r.lastChange.at ? "price changed " + esc(dayOf(r.lastChange.at)) : "price never changed here"}</span>` : "";
   const waiting = inGame.filter((r) => r.awaiting);
   // Three different warnings, each one line with its list folded under it:
   // 401 Games could not be checked, a graded price PriceCharting cannot
@@ -2300,10 +2315,10 @@ export function renderPage(s, rep, view) {
   const thin = inGame.filter((r) => r.thin);
   const alerted = inGame.filter((r) => r.alert && !r.thin && r.held == null);
   const q = (s2) => encodeURIComponent(String(s2 || "").slice(0, 120));
-  const qsAt = (base, o) => { const p = Object.entries(o).filter(([, x]) => x).map(([k, x]) => k + "=" + encodeURIComponent(x)); return base + (p.length ? "?" + p.join("&") : ""); };
+  const qsAt = (base, o) => { const p = Object.entries({ sort: v.sort || "", ...o }).filter(([, x]) => x).map(([k, x]) => k + "=" + encodeURIComponent(x)); return base + (p.length ? "?" + p.join("&") : ""); };
   const qs = (o) => qsAt(everything ? "/autoprice/all" : "/autoprice", o);
   const hidden = (n, val) => `<input type="hidden" name="${n}" value="${esc(val)}">`;
-  const keepView = () => (v.game ? hidden("game", v.game) : "") + (v.q ? hidden("q", v.q) : "") + (v.view ? hidden("view", v.view) : "") + (everything ? hidden("back", "all") : "");
+  const keepView = () => (v.game ? hidden("game", v.game) : "") + (v.q ? hidden("q", v.q) : "") + (v.view ? hidden("view", v.view) : "") + (v.sort ? hidden("sort", v.sort) : "") + (everything ? hidden("back", "all") : "");
   const ctlForm = (action, extra, label, cls, attrs) => `<form method="post" action="/autoprice/control" class="inl"${attrs || ""}>${hidden("action", action)}${keepView()}${extra}<button class="${cls || ""}">${label}</button></form>`;
   const admin = (id) => "https://admin.shopify.com/store/most-wanted-ca/products/" + String(id || "").replace(/\D/g, "");
   const whenShort = (ms) => ms ? new Date(ms).toLocaleString("en-CA", { timeZone: "America/Halifax", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
@@ -2485,7 +2500,7 @@ ${photoStrip(r)}<section><h4>How it was priced</h4>${mktCell(r)}${matchLine(r)}$
 ${r.graded ? `<section class="full certsec"><h4>Certificate</h4>${certSection(r, { keep: keepView(), psaOn: v.psaOn !== false, vision: v.vision !== false })}</section>` : ""}${pcPicker(r) ? `<section class="full">${pcPicker(r)}</section>` : ""}${trackAct(r) ? `<section class="full">${trackAct(r)}</section>` : ""}${P.settings ? `<section class="full end">${ctlForm("remove", hidden("id", r.id), "Remove from auto-pricing", "btn ghost sm danger", ` onsubmit="return confirm('Stop auto-pricing this product? Its price stays as it is.')"`)}</section>` : ""}
 </div></details>`;
     return `<article class="item s-${sk}${r.alert ? " alerted" : ""}${r.awaiting ? " awaiting" : ""}" data-q="${esc(String(r.title + " " + r.game).toLowerCase())}">
-<div class="line"><div class="c-prod${(r.images || []).length ? " has-pic" : ""}">${photoThumb(r)}<div class="c-txt"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div></div>
+<div class="line"><div class="c-prod${(r.images || []).length ? " has-pic" : ""}">${photoThumb(r)}<div class="c-txt"><a class="ttl" href="${esc(admin(r.id))}" target="_blank" rel="noopener" title="Open in Shopify admin">${esc(r.title)}</a><div class="meta">${meta}${dateTag(r)}</div>${r.alert && r.held == null ? `<div class="warn one" title="${esc(r.alert)}">⚠ ${esc(r.alert)}</div>` : ""}</div></div>
 <div class="c-now num" data-l="Today"><b>${money(r.current)}</b>${marginLine(r.marginNow, r.current, r.cost)}</div>
 <div class="c-sug num" data-l="Suggested">${sugCell(r)}</div>
 <div class="c-st" data-l="Status">${upToDate(r) && !r.applied && !r.alert ? (viewMode === "all" && r.anchor && r.anchor.price > 0 ? `<span class="sub quiet">tracking from your ${money(r.anchor.price)}</span>` : "") : `<span class="badge b-${sk}">${esc(sl)}</span><div class="sub two" title="${esc(r.reason || "")}">${esc(why(r))}</div>`}</div>
@@ -2544,7 +2559,7 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 .banner{margin:8px 0;border:1px solid var(--warn-line);background:var(--warn-bg);color:var(--ink);border-radius:10px;padding:9px 14px;font-size:13px}.banner>summary{cursor:pointer}.banner b{color:var(--warn)}.banner ul{margin:8px 0 2px;padding-left:18px}.banner li{margin:3px 0}
 .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 8px}.segs{display:inline-flex;background:var(--soft);border-radius:9px;padding:3px}.seg{padding:6px 12px;border-radius:7px;color:var(--mut);text-decoration:none;font-weight:600;font-size:13px}.seg.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}.seg .n{font-weight:500;color:var(--mut)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}.tab{padding:5px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mut);text-decoration:none;font-size:12.5px;font-weight:600;background:var(--card)}.tab.on{background:var(--ink);color:var(--card);border-color:var(--ink)}.tab.warn:not(.on){border-color:var(--warn-line)}.tab .n{font-weight:500;opacity:.8}.tab .wt{color:var(--wait)}.tab.on .wt{color:inherit}.tab .err{color:var(--down)}.tab .al{color:var(--warn)}.tab.on .err,.tab.on .al{color:inherit}
-.bar .filt{margin-left:auto;width:220px}.pubbar{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:10px 14px;border-radius:10px;background:var(--wait-bg);color:var(--wait);font-size:13px}.pubbar b{font-weight:700}.pubbar form{margin-left:auto}
+.bar .filt{margin-left:auto;width:220px}.bar .sortsel{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;max-width:180px}.pubbar{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:10px 14px;border-radius:10px;background:var(--wait-bg);color:var(--wait);font-size:13px}.pubbar b{font-weight:700}.pubbar form{margin-left:auto}
 .grp{margin:18px 2px 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.grp span{font-weight:500}
 .list{display:flex;flex-direction:column;gap:6px}.item{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}.item.alerted{border-left:3px solid var(--warn)}.item.awaiting{border-left:3px solid var(--wait)}.item.alerted.awaiting{border-left-color:var(--warn)}
 .certsec .certline{margin-bottom:4px}.certsec .certsays{line-height:1.45;margin-bottom:4px}.certsec .ok-t{color:#2e8b57}.certsec form.certf{margin:6px 8px 0 0}.certsec input[name=cert]{width:11em;margin-right:6px}
@@ -2571,7 +2586,7 @@ ${found ? (found.ok ? `<ul class="found">${foundRows || '<li class="sub">nothing
 ${everything ? `<p class="every">Every product on the pricer${v.game ? " in " + esc(v.game) : ""}: <b>${inGame.length}</b>${v.game ? "" : " across " + games.length + " game" + (games.length === 1 ? "" : "s")}, the quiet ones included. A row that says <i>up to date</i> is priced and needs nothing; <i>tracking from your price</i> means it follows the market from a price you set.</p>` : ""}
 ${v.flash ? `<p class="flash${/may not|Not published|over your limit|failed/i.test(v.flash) ? " bad" : ""}">${esc(v.flash)}</p>` : ""}
 ${downBanner}${thinBanner}${followBanner}
-<div class="bar"><div class="segs">${everything ? `<a class="seg" href="${esc(qsAt("/autoprice", { game: v.game || "", view: "todo" }))}">Needs you <span class="n">${todo.length}</span></a><a class="seg on" href="${esc(qs({ game: v.game || "" }))}">Everything <span class="n">${inGame.length}</span></a>` : chip("todo", "Needs you", todo.length) + chip("all", "All", inGame.length)}</div><nav class="tabs">${tab(null, "All games", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</nav><input type="search" class="filt" id="filt" placeholder="Filter this list  ( / )" aria-label="Filter the list by name"></div>
+<div class="bar"><div class="segs">${everything ? `<a class="seg" href="${esc(qsAt("/autoprice", { game: v.game || "", view: "todo" }))}">Needs you <span class="n">${todo.length}</span></a><a class="seg on" href="${esc(qs({ game: v.game || "" }))}">Everything <span class="n">${inGame.length}</span></a>` : chip("todo", "Needs you", todo.length) + chip("all", "All", inGame.length)}</div><nav class="tabs">${tab(null, "All games", all)}${games.map((g) => tab(g, g, all.filter((x) => x.game === g))).join("")}</nav><select class="sortsel" id="sortsel" aria-label="Sort this list" title="Sort this list">${[["", "Needs you first"], ["title", "A → Z"], ["price", "Price: high to low"], ["price-asc", "Price: low to high"], ["added", "Newest added"], ["changed", "Price last changed"]].map(([k, l]) => `<option value="${esc(qs({ game: v.game || "", view: v.view || "", sort: k }))}"${(v.sort || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select><input type="search" class="filt" id="filt" placeholder="Filter this list  ( / )" aria-label="Filter the list by name"></div>
 ${waiting.length ? `<div class="pubbar"><span><b>⏳ ${waiting.length} price${waiting.length === 1 ? "" : "s"} waiting${P.publish ? " for you" : ""}</b> — none of them is live${P.publish ? ". Correct a box if the sources got it wrong, then Publish." : ". Your account cannot publish; someone with that permission will."}</span>${pubAll}</div>` : ""}
 <main class="list" id="list">${rows.length ? '<div class="lhead" aria-hidden="true"><span>Product</span><span>Today</span><span>Suggested</span><span>Status</span><span></span></div>' : ""}${list}</main>
 <section class="hist">${(s.audit || []).length ? `<details><summary>Activity <span class="sub">· ${(s.audit || []).length} recent</span></summary><div class="scroll"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Product</th></tr></thead><tbody>${s.audit.map((e) => `<tr><td>${esc(whenShort(e.at))}</td><td>${esc(e.who || "—")}</td><td>${e.action === "publish" ? "published " + (e.from != null ? money(e.from) + " → " : "") + money(e.to) + (e.anchored ? " (tracking from there)" : "") : esc(e.detail || e.action)}</td><td>${esc(e.title || "")}</td></tr>`).join("")}</tbody></table></div></details>` : ""}
@@ -2586,6 +2601,7 @@ function closeZoom(){z.hidden=true;z.classList.remove("in");zi.src="";document.b
 document.addEventListener("click",function(e){var a=e.target.closest("a[data-zoom]");if(!a)return;e.preventDefault();zi.src=a.getAttribute("data-zoom");zi.alt=a.getAttribute("data-ttl")||"";zc.textContent=(a.getAttribute("data-ttl")||"")+" · click to zoom, Esc to close";z.hidden=false;z.classList.remove("in");document.body.style.overflow="hidden"});
 z.addEventListener("click",function(e){if(e.target.closest(".x")){closeZoom();return}if(e.target===zi){var r=zi.getBoundingClientRect();zi.style.transformOrigin=((e.clientX-r.left)/r.width*100)+"% "+((e.clientY-r.top)/r.height*100)+"%";z.classList.toggle("in")}else closeZoom()});
 document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!z.hidden)closeZoom()});})();
+(function(){var ss=document.getElementById("sortsel");if(ss)ss.addEventListener("change",function(){location.href=this.value})})();
 (function(){var f=document.getElementById("filt"),items=[].slice.call(document.querySelectorAll(".item")),grps=[].slice.call(document.querySelectorAll(".grp"));
 function apply(){var t=(f.value||"").trim().toLowerCase();items.forEach(function(it){it.hidden=!!t&&it.getAttribute("data-q").indexOf(t)<0});grps.forEach(function(g){var n=g.nextElementSibling,any=false;while(n&&!n.classList.contains("grp")){if(n.classList.contains("item")&&!n.hidden)any=true;n=n.nextElementSibling}g.hidden=!any})}
 if(f)f.addEventListener("input",apply);

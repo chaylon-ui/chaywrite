@@ -1409,3 +1409,34 @@ test("pc-search: PriceCharting asked in the staff member's words, answered as th
   // the shared line without the settings permission shows no button
   assert.ok(!pcLine({ id: 7, name: "X", console: "Y", price: 1, volume: 0, chosen: false }, row, { settings: false }).includes("use this"));
 });
+
+
+test("the list sorts: A-Z, price both ways, newest added, price last changed - within each game, kept in the links and forms", () => {
+  const base = { type: "Pokemon Single Graded", stock: 1, action: "hold", reason: "", sources: [], images: [] };
+  const rows = [
+    { ...base, id: "gid://shopify/Product/1", title: "Mew", current: 12, created: "2026-11-01T12:00:00Z", lastChange: { at: Date.parse("2026-11-05T12:00:00Z"), from: 10, to: 12 } },
+    { ...base, id: "gid://shopify/Product/2", title: "Charizard", current: 300, created: "2026-11-08T12:00:00Z", lastChange: null },
+    { ...base, id: "gid://shopify/Product/3", title: "Eevee", current: null, created: "2026-11-03T12:00:00Z", lastChange: { at: Date.parse("2026-11-07T12:00:00Z"), from: 4, to: 5 } },
+    { ...base, id: "gid://shopify/Product/4", title: "Alakazam", type: "MTG Single Graded", current: 50, created: "2026-11-09T12:00:00Z", lastChange: null },
+  ];
+  const order = (page) => rows.map((r) => [page.indexOf(">" + r.title + "</a>"), r.title]).filter(([i]) => i >= 0).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  const render = (sort) => renderPage({ mode: "shadow", config: DEFAULT_CONFIG }, { rows }, { configured: true, view: "all", sort });
+  // the default: by game, then what needs you, then the name
+  assert.deepEqual(order(render("")), ["Alakazam", "Charizard", "Eevee", "Mew"]);
+  assert.deepEqual(order(render("title")), ["Alakazam", "Charizard", "Eevee", "Mew"]);
+  assert.deepEqual(order(render("price")), ["Alakazam", "Charizard", "Mew", "Eevee"]);          // MTG group first, then Pokemon high to low, unpriced last
+  assert.deepEqual(order(render("price-asc")), ["Alakazam", "Mew", "Charizard", "Eevee"]);
+  assert.deepEqual(order(render("added")), ["Alakazam", "Charizard", "Eevee", "Mew"]);
+  assert.deepEqual(order(render("changed")), ["Alakazam", "Eevee", "Mew", "Charizard"]);        // never changed last
+  const page = render("changed");
+  const sel = (/<select class="sortsel" id="sortsel"[\s\S]*?<\/select>/.exec(page) || [""])[0];
+  assert.equal((sel.match(/<option /g) || []).length, 6, sel.slice(0, 200));
+  assert.ok(/<option value="\/autoprice\?[^"]*sort=price[^"]*"[^>]*>Price: high to low</.test(sel), sel);
+  assert.ok(/<option value="\/autoprice\?[^"]*sort=changed[^"]*" selected>/.test(sel), sel);
+  assert.ok(page.includes('name="sort" value="changed"'));                       // forms keep it
+  assert.ok(page.includes("price changed Nov 7, 2026") && page.includes("price never changed here"));
+  assert.ok(render("added").includes("added Nov 8, 2026"));
+  assert.ok(!render("").includes("price changed Nov") && !render("").includes("added Nov"));
+  // the tabs carry it
+  assert.ok(/href="\/autoprice\?[^"]*sort=changed[^"]*game=Pokemon/.test(page));
+});
