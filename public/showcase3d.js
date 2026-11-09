@@ -137,7 +137,7 @@ function loadImg(url) {
 // three labels (price-gun sticker, Holo/foil in blue ink, condition in red).
 function sticker(g, w, text, o) {
   g.save(); g.font = o.font; const tw_ = g.measureText(text).width, bw = tw_ + w * .06, bh = w * .145;
-  g.translate(w - w * .025 - bw / 2, o.y + bh / 2); g.rotate(o.rot);
+  g.translate(Math.max(bw / 2, (o.right != null ? o.right : w - w * .025) - bw / 2), o.y + bh / 2); g.rotate(o.rot);
   g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = w * .02; g.shadowOffsetY = w * .006; g.fillStyle = '#fbf7ec'; rr(g, -bw / 2, -bh / 2, bw, bh, w * .014); g.fill();
   g.shadowColor = 'transparent'; g.fillStyle = o.ink; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 0, bh * .07); g.restore();
   return o.y + bh + w * .012;
@@ -161,13 +161,29 @@ function drawBack(g, w, h) {
   rr(g, m, m * 1.6, w - 2 * m, h - m * 2.6, w * .035); g.fillStyle = '#2b1a20'; g.fill(); noise(g, w, h, 1500, ['#3a252c', '#20131a'], .25);
   g.save(); g.translate(w / 2, h * .48); g.rotate(-.06); g.fillStyle = '#e8dcb8'; g.fillRect(-w * .36, -h * .05, w * .72, h * .1); g.fillStyle = '#2a1c0e'; g.font = Math.round(w * .085) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('EXOR GAMES', 0, 0); g.restore();
 }
-// A sealed booster box wears its product photo on a white face, with the price-gun sticker.
+// A sealed booster box is its product photo cut out of the photo's white
+// background (owner, 2026-11-09: "Booster boxes have white backgrounds"):
+// white that touches the picture's edge is cleared, white inside the box art
+// stays. The price-gun sticker goes on top.
+function cutWhite(g, w, h) {
+  let d; try { d = g.getImageData(0, 0, w, h); } catch (x) { return null; }
+  const px = d.data, seen = new Uint8Array(w * h), st = [];
+  const white = (i) => px[i * 4 + 3] < 16 || (px[i * 4] > 232 && px[i * 4 + 1] > 232 && px[i * 4 + 2] > 232);
+  const push = (i) => { if (!seen[i] && white(i)) { seen[i] = 1; st.push(i); } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); } for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (st.length) { const i = st.pop(), x = i % w; px[i * 4 + 3] = 0; if (x > 0) push(i - 1); if (x < w - 1) push(i + 1); if (i >= w) push(i - w); if (i < w * (h - 1)) push(i + w); }
+  // soften the cut: a kept pixel beside a cleared one goes half see-through
+  for (let i = 0; i < w * h; i++) { if (seen[i]) continue; const x = i % w; if ((x > 0 && seen[i - 1]) || (x < w - 1 && seen[i + 1]) || (i >= w && seen[i - w]) || (i < w * (h - 1) && seen[i + w])) px[i * 4 + 3] = Math.min(px[i * 4 + 3], 150); }
+  g.putImageData(d, 0, 0);
+  // where the box itself is, so the sticker can sit on its corner
+  let x0 = w, y0 = h, x1 = 0, y1 = 0; for (let i = 0; i < w * h; i++) { if (seen[i]) continue; const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 > x0 ? { x0, y0, x1, y1 } : null;
+}
 function drawSealed(g, w, h, c, im) {
-  g.fillStyle = '#f7f5ef'; g.fillRect(0, 0, w, h);
-  if (im) { const m = w * .04, s = Math.min((w - 2 * m) / im.width, (h - 2 * m) / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, (w - iw) / 2, (h - ih) / 2, iw, ih); }
-  else { g.fillStyle = '#2a1c0e'; g.font = Math.round(w * .09) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, w / 2, h * .4, w * .84, w * .11, 5); }
-  g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = Math.max(2, w * .012); g.strokeRect(0, 0, w, h);
-  sticker(g, w, gunPrice(c.price), { font: '700 ' + Math.round(w * .09) + 'px "Cutive Mono", monospace', ink: '#1b2a55', y: h * .03, rot: (seed(keyOf(c) + '|st')() - .5) * .14 });
+  g.clearRect(0, 0, w, h); let bb = null;
+  if (im) { const s = Math.min(w / im.width, h / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, (w - iw) / 2, (h - ih) / 2, iw, ih); bb = cutWhite(g, w, h); }
+  else { g.fillStyle = '#e6e1d2'; g.fillRect(0, 0, w, h); g.fillStyle = '#2a1c0e'; g.font = Math.round(w * .09) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, w / 2, h * .4, w * .84, w * .11, 5); }
+  sticker(g, w, gunPrice(c.price), { font: '700 ' + Math.round(w * .09) + 'px "Cutive Mono", monospace', ink: '#1b2a55', y: bb ? Math.max(h * .01, bb.y0 + (bb.y1 - bb.y0) * .08) : h * .03, right: bb ? Math.min(w - w * .01, bb.x1 + w * .02) : null, rot: (seed(keyOf(c) + '|st')() - .5) * .14 });
 }
 async function cardTex(c, w) {
   await fonts; let im = null;
@@ -210,7 +226,7 @@ const hot = [];                              // things a tap can walk to or set 
 const hit = (mesh, act) => { mesh.userData.act = act; hot.push(mesh); return mesh; };
 
 /* ---------- the room ---------- */
-let hemi, sun, lampL, tubeM, shadeM, bell, pileG, signT;
+let hemi, sun, lampL, tubeM, shadeM, bell, pileG, signT, neonL, neonHalo;
 function poster(w, h, draw) { return new THREE.MeshLambertMaterial({ map: ctex(w, h, draw) }); }
 function buildRoom() {
   hemi = new THREE.HemisphereLight(0xfff3dc, 0x4a3a2c, 2.6); scene.add(hemi);
@@ -231,9 +247,26 @@ function buildRoom() {
   pl(.42, .56, poster(300, 400, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#1d3a8a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; ['Please ask before', 'opening the case.', '', 'No drinks near', 'the cards!', '', '— thanks, mgmt'].forEach((l, i) => g.fillText(l, w / 2, 70 + i * 44)); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(w / 2, 20, 9, 0, PI * 2); g.fill(); }), 3.99, 1.7, -1.5, -PI / 2);
   pl(1.1, .75, poster(550, 375, (g, w, h) => { g.fillStyle = '#9a6b3c'; g.fillRect(0, 0, w, h); noise(g, w, h, 5000, ['#7d5329', '#b98a55', '#8a5f33'], .7); g.strokeStyle = '#4a2a12'; g.lineWidth = 16; g.strokeRect(0, 0, w, h); const r = seed('cork'); [['WANTED:', 'old collections'], ['Sleeves', '2 for $5'], ['League', 'Tuesdays 6pm'], ['Lost binder?', 'ask at the till']].forEach((n, i) => { g.save(); g.translate(90 + i * 125, 110 + (i % 2) * 130); g.rotate((r() - .5) * .2); g.fillStyle = ['#f6f1e2', '#f7e98e', '#cfe6f5', '#f6c9d0'][i]; g.fillRect(-55, -50, 110, 100); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.textAlign = 'center'; g.fillText(n[0], 0, -8); g.fillText(n[1], 0, 20); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(0, -40, 6, 0, PI * 2); g.fill(); g.restore(); }); }), 3.99, 1.65, .8, -PI / 2);
   // the shop sign over the boxes: the logo when the CDN lets us draw it, the name in marker until then
-  const drawSign = (im) => (g, w, h) => { drawWood(g, w, h, '#3d2412', 1); g.strokeStyle = '#b08a3a'; g.lineWidth = 8; g.strokeRect(8, 8, w - 16, h - 16); if (im) { const s = Math.min((w - 80) / im.width, (h - 50) / im.height); g.drawImage(im, (w - im.width * s) / 2, (h - im.height * s) / 2, im.width * s, im.height * s); } else { g.fillStyle = '#f1eadb'; g.font = '84px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('EXOR GAMES', w / 2, h / 2); } };
-  signT = ctex(768, 220, drawSign(null)); pl(2.1, .6, lam({ map: signT }), -.4, 2.42, -3.48, 0);
-  loadImg(img(LOGO, 600)).then((im) => { drawSign(im)(signT.image.getContext('2d'), 768, 220); signT.needsUpdate = true; kick(); }).catch(() => {});
+  // (owner, 2026-11-09: "make the exor logo neon lit"): a dark backing board, the logo glowing on it, a halo on the wall and a light of its own
+  const drawSign = (im) => (g, w, h) => {
+    g.fillStyle = '#0d0a0b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#2a2022'; g.lineWidth = 10; g.strokeRect(5, 5, w - 10, h - 10);
+    g.save();
+    if (im) {
+      const s = Math.min((w - 150) / im.width, (h - 90) / im.height), iw = im.width * s, ih = im.height * s, x = (w - iw) / 2, y = (h - ih) / 2;
+      [['#ff2a2a', 46], ['#ff7a2a', 26], ['#ffd76a', 12]].forEach((p) => { g.shadowColor = p[0]; g.shadowBlur = p[1]; g.drawImage(im, x, y, iw, ih); });   // the glow, wide to tight
+      g.shadowColor = 'transparent'; g.filter = 'brightness(1.25) saturate(1.2)'; g.drawImage(im, x, y, iw, ih);
+    } else {
+      g.font = '96px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      [['#ff2a2a', 46, 10], ['#ff5a3a', 22, 7]].forEach((p) => { g.shadowColor = p[0]; g.shadowBlur = p[1]; g.strokeStyle = p[0]; g.lineWidth = p[2]; g.strokeText('EXOR GAMES', w / 2, h / 2); });
+      g.shadowBlur = 6; g.strokeStyle = '#ffe9dc'; g.lineWidth = 3; g.strokeText('EXOR GAMES', w / 2, h / 2);
+    }
+    g.restore();
+  };
+  signT = ctex(900, 300, drawSign(null)); pl(2.1, .7, new THREE.MeshBasicMaterial({ map: signT }), -.4, 2.4, -3.47, 0);
+  const halo = pl(3.4, 1.5, new THREE.MeshBasicMaterial({ map: ctex(256, 128, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w / 2); gr.addColorStop(0, 'rgba(255,70,40,.55)'); gr.addColorStop(.5, 'rgba(255,60,40,.16)'); gr.addColorStop(1, 'rgba(255,60,40,0)'); g.save(); g.translate(0, h / 2); g.scale(1, h / w); g.translate(0, -h / 2); g.fillStyle = gr; g.fillRect(0, -h, w, h * 3); g.restore(); }), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), -.4, 2.4, -3.485, 0);
+  neonHalo = halo.material;
+  neonL = new THREE.PointLight(0xff4a30, 1.2, 4.5, 1.4); neonL.position.set(-.4, 2.3, -2.9); scene.add(neonL);
+  loadImg(img(LOGO, 700)).then((im) => { drawSign(im)(signT.image.getContext('2d'), 900, 300); signT.needsUpdate = true; kick(); }).catch(() => {});
   // the till counter beside the case
   bx(1.4, TOP - .03, .5, woodM, X1 + .72, (TOP - .03) / 2, -.9); bx(1.44, .03, .54, darkWoodM, X1 + .72, TOP - .015, -.9);
   const till = new THREE.Group(); till.position.set(2.0, TOP, -.93); scene.add(till);
@@ -262,6 +295,7 @@ function buildRoom() {
 }
 function lights(k) {   // 0 = the tubes, 1 = the evening, with the lamp
   hemi.intensity = lerp(2.6, .5, k); sun.intensity = lerp(1.1, .12, k); lampL.intensity = lerp(0, 2.4, k);
+  neonL.intensity = lerp(1.2, 3.2, k); neonHalo.opacity = lerp(.55, 1, k);   // the neon carries the room in the evening
   tubeM.color.setScalar(lerp(1, .12, k)); shadeM.emissive.setRGB(.05 * k, .45 * k, .16 * k);
   const v = lerp(1, .78, k); cardTint.setRGB(v, v * .96, v * .88);
   scene.traverse((o) => { if (o.userData.card && o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.isMeshBasicMaterial) m.color.copy(cardTint); }); });
@@ -397,15 +431,15 @@ function buildSealed(rows) {
   if (sealHit) { hot.splice(hot.indexOf(sealHit), 1); kill(sealHit); sealHit = null; }
   const n = sealed.rows.length; if (!n) return;
   sealG = new THREE.Group(); scene.add(sealG);
-  const nr = n <= 4 ? 1 : 2, cols = Math.ceil(n / nr), px = .29, py = .3, bh = .22, y0 = 1.12, side = lam({ color: 0xe6e1d2 });
+  const nr = n <= 4 ? 1 : 2, cols = Math.ceil(n / nr), px = .29, py = .3, bh = .22, y0 = 1.12;
   sealed.w = cols * px; sealed.h = nr * py + .12;
   for (let r = 0; r < nr; r++) bx(sealed.w + .1, .022, .3, woodM, sealed.w / 2, y0 + r * py - .011, WZ + .05, sealG);
   bx(.03, nr * py + .06, .3, darkWoodM, -.05, y0 + nr * py / 2 - .03, WZ + .05, sealG); bx(.03, nr * py + .06, .3, darkWoodM, sealed.w + .05, y0 + nr * py / 2 - .03, WZ + .05, sealG);
   sealed.rows.forEach((c, i) => {   // the newest at the top left
-    const col = i % cols, row = nr - 1 - Math.floor(i / cols), q = seed('seal' + c.name), bw = clamp(bh * (c.ar || 1), .15, .26), face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint });
-    const hgt = bw / (c.ar || 1), m = new THREE.Mesh(new THREE.BoxGeometry(bw, hgt, .08), [side, side, side, side, face, side]);
+    const col = i % cols, row = nr - 1 - Math.floor(i / cols), q = seed('seal' + c.name), bw = clamp(bh * (c.ar || 1), .15, .26), face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
+    const hgt = bw / (c.ar || 1), m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;   // a cut-out standing on the shelf, shown once its picture is in
     m.position.set(px / 2 + col * px + (q() - .5) * .02, y0 + row * py + hgt / 2, WZ + .1 + (q() - .5) * .02); m.rotation.y = (q() - .5) * .14; m.userData = { card: c }; sealG.add(m); sealMeshes.push(m);
-    cardTex(c, 256).then((t) => { if (!m.parent) { t.dispose(); return; } face.map = t; face.needsUpdate = true; kick(); });
+    cardTex(c, 256).then((t) => { if (!m.parent) { t.dispose(); return; } face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
   });
   const sg = pl(.5, .11, new THREE.MeshBasicMaterial({ map: ctex(500, 110, (g, w, h) => { g.fillStyle = '#f7e98e'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.font = '44px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('NEW! booster boxes', w / 2, h / 2 + 2); }) }), Math.max(.25, sealed.w / 2), y0 + nr * py + .05, WZ + .06, 0, sealG);
   sg.rotation.z = .02;
@@ -534,9 +568,7 @@ const foilT = keep(ctex(256, 256, (g, w, h) => { const gr = g.createLinearGradie
 const glareT = keep(ctex(256, 256, (g, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(.3, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.55)'); gr.addColorStop(.7, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, [1, 1]));
 hand.foil = new THREE.Mesh(geoC, hm({ map: foilT, opacity: .2, blending: THREE.AdditiveBlending })); hand.foil.renderOrder = 996; hand.foil.position.z = .0002; hand.g.add(hand.foil);
 hand.glare = new THREE.Mesh(geoC, hm({ map: glareT, opacity: .3, blending: THREE.AdditiveBlending })); hand.glare.renderOrder = 997; hand.glare.position.z = .0003; hand.g.add(hand.glare);
-fonts.then(() => { hand.backT = keep(ctex(360, 503, drawBack)); hand.back.material.map = hand.backT; hand.back.material.needsUpdate = true; });
-const cardBack = () => hand.backT || phTex;
-const boxBackT = keep(ctex(64, 64, (g, w, h) => { g.fillStyle = '#e6e1d2'; g.fillRect(0, 0, w, h); }));
+fonts.then(() => { hand.back.material.map = keep(ctex(360, 503, drawBack)); hand.back.material.needsUpdate = true; });
 function stage() { const w = canvas.clientWidth, h = canvas.clientHeight; return w > 720 ? { x: 0, y: 0, w: w - 360, h } : { x: 0, y: 0, w, h: h - 60 }; }
 function placeHand(now) {
   const st = stage(), W_ = canvas.clientWidth, H_ = canvas.clientHeight, d = .24, wpp = 2 * d * Math.tan(rad(cam.fov / 2)) / H_;
@@ -554,7 +586,7 @@ function lift(c, src) {
   S.hand = c; S.handSrc = src || null; if (src) src.visible = false;
   document.body.dataset.hand = '1'; hand.g.visible = true; hand.dim.visible = true; hand.rx = hand.ry = hand.tx = hand.ty = 0; hand.t0 = performance.now();
   hand.front.material.map = phTex; wear(hand.front, c, c.sealed ? 640 : 720); hand.foil.visible = !!c.foil;
-  hand.back.material.map = c.sealed ? boxBackT : cardBack(); hand.back.material.needsUpdate = true;
+  hand.back.visible = !c.sealed; hand.front.material.side = c.sealed ? THREE.DoubleSide : THREE.FrontSide; hand.glare.visible = !c.sealed; hand.front.material.needsUpdate = true;   // a cut-out box has no sleeve back and no flat glare
   fillPanel(c); sheet(false); hint(''); askOrientation(); kick();
 }
 function putBack() {
