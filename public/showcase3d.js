@@ -296,6 +296,7 @@ function buildRoom() {
   // a wall switch by the cork board does the same
   bx(.01, .12, .08, lam({ color: 0xe9e4d4 }), 3.985, 1.3, -.2); hit(bx(.04, .2, .16, hitM, 3.97, 1.3, -.2), 'lights');
   pileG = new THREE.Group(); pileG.position.set(1.7, TOP, -1.0); scene.add(pileG);
+  buildHobby();
 }
 // The person behind the till (owner, 2026-11-09: "a typical card shop employee
 // behind it with a black polo shirt with an exor logo on the shirt"): a simple
@@ -331,6 +332,63 @@ function buildClerk() {
   lg.userData.card = false;
   loadImg(img(LOGO, 300)).then((im) => { drawLogo(im)(lt.image.getContext('2d'), 256, 160); lt.needsUpdate = true; kick(); }).catch(() => {});
   hit(bx(.5, .95, .3, hitM, 2.12, 1.4, -1.62), 'staff');
+}
+/* ---------- the hobby corner (owner, 2026-11-09): "add warhammer paint rack, vallejo, and army painter ...
+   as well as a rack with boxes of Warhammer product", in the back left corner. The paint racks are scenery:
+   black wire racks with a header board and rows of little pots or dropper bottles running through the
+   colours. The fourth rack holds the newest Warhammer kits in stock (/showcase/wargames.json) as cut-outs
+   you can pick up, like the booster boxes. */
+let kitG = null, kitMeshes = [];
+function paintRack(o) {
+  const g = new THREE.Group(), black = lam({ color: 0x151515 }), dummy2 = new THREE.Object3D(), col = new THREE.Color();
+  bx(o.w, .06, .34, black, 0, .03, .17, g); bx(o.w, o.h, .02, black, 0, o.h / 2, .01, g);
+  bx(.025, o.h, .3, black, -o.w / 2 + .012, o.h / 2, .15, g); bx(.025, o.h, .3, black, o.w / 2 - .012, o.h / 2, .15, g);
+  bx(o.w, .27, .03, black, 0, o.h + .135, .03, g); pl(o.w - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(512, 220, o.sign) }), 0, o.h + .135, .047, 0, g);
+  const pot = o.kind === 'pot', n = o.rows * o.cols, y0 = .3, y1 = o.h - .13;
+  const inst = new THREE.InstancedMesh(pot ? new THREE.CylinderGeometry(.02, .02, .034, 12) : new THREE.CylinderGeometry(.0115, .0115, .05, 10), lam({ color: 0xffffff }), n); g.add(inst);
+  const caps = pot ? null : new THREE.InstancedMesh(new THREE.CylinderGeometry(.004, .008, .02, 8), lam({ color: o.cap || 0xf2f2f2 }), n); if (caps) g.add(caps);
+  const q = seed('rack' + o.kind + o.w + o.rows); let k = 0;
+  for (let r = 0; r < o.rows; r++) {
+    const y = y1 - r * (y1 - y0) / (o.rows - 1); bx(o.w - .06, .006, .1, black, 0, y - .004, .1, g).rotation.x = pot ? .5 : .12;
+    for (let c = 0; c < o.cols; c++) {
+      const x = -o.w / 2 + .06 + c * (o.w - .12) / (o.cols - 1), grey = r >= o.rows - 2;
+      col.setHSL(((r / (o.rows - 2)) * .9 + (c / o.cols) * .06) % 1, grey ? .06 : .55 + q() * .35, grey ? .2 + .6 * c / o.cols : .32 + .3 * q());
+      if (pot) { dummy2.position.set(x, y + .014, .105); dummy2.rotation.set(PI / 2 - .5, 0, 0); } else { dummy2.position.set(x, y + .026, .1); dummy2.rotation.set(-.12, 0, 0); }
+      dummy2.updateMatrix(); inst.setMatrixAt(k, dummy2.matrix); inst.setColorAt(k, col);
+      if (caps) { dummy2.position.set(x, y + .061, .096); dummy2.updateMatrix(); caps.setMatrixAt(k, dummy2.matrix); }
+      k++;
+    }
+  }
+  g.position.set(o.at[0], 0, o.at[1]); g.rotation.y = o.ry || 0; scene.add(g); return g;
+}
+function buildHobby() {
+  const head = (g, w, h, bg, lines) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.textAlign = 'center'; g.textBaseline = 'middle'; lines.forEach((l) => { g.fillStyle = l[2]; g.font = l[1]; let sc = 1; const tw_ = g.measureText(l[0]).width; if (tw_ > w * .9) sc = w * .9 / tw_; g.save(); g.translate(w / 2, l[3]); g.scale(sc, 1); g.fillText(l[0], 0, 0); g.restore(); }); };
+  const rainbow = (g, x, y, w, h) => { const gr = g.createLinearGradient(x, 0, x + w, 0); ['#e23b2e', '#f29a2e', '#f2d230', '#3fae4a', '#2f7fd0', '#7a4fc0'].forEach((c, i) => gr.addColorStop(i / 5, c)); g.fillStyle = gr; g.fillRect(x, y, w, h); };
+  // plain lettering on each header board, in the colours of the range it holds
+  paintRack({ kind: 'pot', w: .64, h: 1.62, rows: 13, cols: 11, at: [-3.45, -3.5], sign: (g, w, h) => { head(g, w, h, '#0c0c0c', [['WARHAMMER', '900 78px Inter, sans-serif', '#ffffff', 82], ['COLOUR', '700 40px Inter, sans-serif', '#ffffff', 172]]); rainbow(g, 60, 128, w - 120, 12); } });
+  paintRack({ kind: 'dropper', w: .64, h: 1.62, rows: 11, cols: 16, cap: 0xf4f4f4, at: [-2.74, -3.5], sign: (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#f08a1c'); gr.addColorStop(1, '#c8321e'); head(g, w, h, '#f08a1c', []); g.fillStyle = gr; g.fillRect(0, 0, w, h); head(g, w, h, 'rgba(0,0,0,0)', [['Vallejo', '700 96px Inter, sans-serif', '#ffffff', 88], ['MODEL COLOR · GAME COLOR', '700 30px Inter, sans-serif', '#fff3d6', 172]]); } });
+  paintRack({ kind: 'dropper', w: .64, h: 1.62, rows: 11, cols: 16, cap: 0x1a1a1a, at: [-4, -2.55], ry: PI / 2, sign: (g, w, h) => { head(g, w, h, '#6b1d22', []); g.fillStyle = '#a8a35a'; g.fillRect(w * .52, 14, w * .48 - 14, h - 28); head(g, w, h, 'rgba(0,0,0,0)', [['WARPAINTS', '900 58px Inter, sans-serif', '#ffffff', 82], ['THE ARMY PAINTER', '700 28px Inter, sans-serif', '#f3e9c8', 162]]); } });
+  // the rack of Warhammer boxes: filled when the feed answers
+  kitG = new THREE.Group(); kitG.position.set(-4, 0, -1.48); kitG.rotation.y = PI / 2; scene.add(kitG);
+  const black = lam({ color: 0x151515 }), W_ = 1.14, H_ = 1.72;
+  bx(W_, H_, .02, black, 0, H_ / 2, .01, kitG); bx(.03, H_, .34, black, -W_ / 2 + .015, H_ / 2, .17, kitG); bx(.03, H_, .34, black, W_ / 2 - .015, H_ / 2, .17, kitG);
+  [.2, .58, .96, 1.34].forEach((y) => bx(W_ - .04, .02, .32, black, 0, y - .01, .17, kitG));
+  bx(W_, .27, .03, black, 0, H_ + .135, .03, kitG);
+  pl(W_ - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(768, 180, (g, w, h) => { head(g, w, h, '#0c0c0c', [['WARHAMMER', '900 96px Inter, sans-serif', '#ffffff', 92]]); g.fillStyle = '#c0392b'; g.fillRect(40, 150, w - 80, 8); }) }), 0, H_ + .135, .047, 0, kitG);
+  hit(bx(1.7, 2.0, .5, hitM, -3.1, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, 2.2, hitM, -3.8, 1.0, -1.95), 'hobby');
+}
+function loadKits() {
+  fetch(W + '/showcase/wargames.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (!d || !d.ok || !d.rows || !kitG) return;
+    d.rows.slice(0, 12).forEach((r, i) => {   // three to a shelf, the newest at the top left
+      const c = { name: r.name, set: 'Warhammer', price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: 'warhammer', sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
+      const q = seed('kit' + c.name), bh = .29, bw = clamp(bh * c.ar, .2, .34), hgt = bw / c.ar, face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;
+      m.position.set(-.37 + (i % 3) * .37 + (q() - .5) * .02, [1.34, .96, .58, .2][Math.floor(i / 3)] + hgt / 2, .2 + (q() - .5) * .03); m.rotation.y = (q() - .5) * .16; m.userData = { card: c }; kitG.add(m); kitMeshes.push(m);
+      cardTex(c, 256).then((t) => { face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
+    });
+    lights(S.eve);
+  }).catch(() => {});
 }
 function lights(k) {   // 0 = the tubes, 1 = the evening, with the lamp
   hemi.intensity = lerp(2.6, .5, k); sun.intensity = lerp(1.1, .12, k); lampL.intensity = lerp(0, 2.4, k);
@@ -495,7 +553,8 @@ function buildWall(d) {
 }
 function boxesView() {
   // wide enough for the whole wall where the screen allows it; a phone sees two boxes across and pans
-  const L = wallW ? WX - wallW / 2 - .55 : sealX() - .15, R = sealed.rows.length ? sealX() + sealed.w + .12 : WX + wallW / 2 + .15, cx = (L + R) / 2, hh = Math.max(S.wallRows || 0, sealed.h || 0, .3);
+  const only = S.focus === 'sealed' && sealed.rows.length;   // the Booster boxes button looks at that shelf alone
+  const L = only || !wallW ? sealX() - .15 : WX - wallW / 2 - .55, R = sealed.rows.length ? sealX() + sealed.w + .12 : WX + wallW / 2 + .15, cx = (L + R) / 2, hh = only ? sealed.h : Math.max(S.wallRows || 0, sealed.h || 0, .3);
   const fitH = 2 * Math.atan((hh / 2 + .22) / 2.75) * 180 / PI, fitW = 2 * Math.atan((R - L) / 2 / 2.75 / cam.aspect) * 180 / PI;
   const fov = clamp(Math.max(fitH, Math.min(fitW, cam.aspect < 1 ? 41 : 46)), 20, 46), vw = 2 * 2.75 * hTan(fov), max = Math.max(0, (R - L - vw) / 2);
   S.maxPan = max; S.pan = clamp(S.pan, -max, max);
@@ -724,7 +783,7 @@ let liftSeq = 0, copiesSeq = 0;
 function fillPanel(c) {
   $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, condText(c), c.foil ? (c.game === 'pokemon' ? 'Holo' : 'Foil') : '', money(c.price)].filter(Boolean).join(' · ');
   acts(c); minis = [];
-  if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = ['Sealed booster box', c.qty ? c.qty + ' in stock' : '', money(c.price)].filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
+  if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = [c.set || 'Sealed', c.qty ? c.qty + ' in stock' : '', money(c.price)].filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
   loadCopies(c); const seq = ++liftSeq, al = alikeLocal(c), seen = {}; al.forEach((o) => { seen[o.name.toLowerCase()] = 1; });
   $('#liftAlike').innerHTML = strip('Similar effects', al);
   $('#liftMore').innerHTML = strip('More like this', similar(c).filter((o) => !seen[o.name.toLowerCase()]));
@@ -789,12 +848,15 @@ function showTill() {
 const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lookView(new V3(x, 1.6, 3.2), new V3(x, ph ? 1.3 : 1.18, -1.2), ph ? 82 : 55); v.yaw += S.look.yaw; v.pitch += S.look.pitch; return v; };
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
-function viewFor() { return S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+const hobbyView = () => lookView(new V3(-1.85, 1.5, cam.aspect < 1 ? .5 : .35), new V3(-3.45, 1.1, -2.7), cam.aspect < 1 ? 80 : 58);
+function viewFor() { return S.mode === 'hobby' ? hobbyView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
   leanOff();
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
-  else if (mode === 'boxes') { if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
+  else if (mode === 'hobby') { S.mode = 'hobby'; glide(hobbyView()); hint(kitMeshes.length ? 'Paints and Warhammer · tap a box to pick it up' : 'Paints and Warhammer'); }
+  else if (mode === 'sealed') { if (!sealed.rows.length) { hint('No booster boxes in stock for this game right now'); return; } S.mode = 'boxes'; S.focus = 'sealed'; S.pan = 0; glide(boxesView()); hint('The newest booster boxes in stock · tap one to pick it up'); }
+  else if (mode === 'boxes') { S.focus = ''; if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
@@ -811,7 +873,8 @@ let hintT = 0;
 function hint(t) { const el = $('#hint'); clearTimeout(hintT); if (!t) { el.classList.add('gone'); return; } el.textContent = t; el.classList.remove('gone'); hintT = setTimeout(() => el.classList.add('gone'), 6000); }
 function ui() {
   document.body.dataset.mode = S.mode;
-  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode;
+  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode;
+  $('#boxNote').textContent = st === 'sealed' ? 'tap a booster box to pick it up' : 'tap a white box for its sets · a booster box to pick it up';
   document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.getAttribute('data-go') === st));
   $('#shelves').innerHTML = S.shelves.map((s, i) => '<button type="button" data-shelf="' + i + '"' + (i === S.shelf ? ' class="on"' : '') + '>' + String.fromCharCode(65 + i) + ' · ' + esc(s.label) + '</button>').join('');
   if (S.mode === 'crate' && cr) {
@@ -822,6 +885,8 @@ function ui() {
     $('#crLaneL').hidden = $('#crLaneR').hidden = cr.n < 2; $('#crLaneL').disabled = cr.lane <= 0; $('#crLaneR').disabled = cr.lane >= cr.n - 1;
   }
 }
+const HOBBY_LINKS = [['Citadel Contrast', 'citadel-contrast-paints'], ['Citadel Layer', 'citadel-layer-paints'], ['Vallejo Game Color', 'vallejo-game-color'], ['Army Painter Warpaints', 'the-army-painter-warpaints']];
+$('#ctxHobby').innerHTML = HOBBY_LINKS.map((l) => '<a href="https://exorgames.com/collections/' + l[1] + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + esc(l[0]) + (ON_STORE ? '' : ' ↗') + '</a>').join('');
 function tabs() {
   $('#tabs').innerHTML = S.cases.map((c) => { const ic = S.icons.indexOf(c.key) > -1; return '<button type="button" data-game="' + esc(c.key) + '" class="' + (ic ? 'ic' : '') + (c.key === S.game ? ' on' : '') + '" title="' + esc(c.label) + '">' + (ic ? '<img src="' + esc(W + '/showcase/icon/' + c.key + '.png') + '" alt="" draggable="false">' : '') + '<span>' + esc(c.label) + '</span></button>'; }).join('');
   $('#flat').href = W + '/showcase?game=' + encodeURIComponent(S.game);
@@ -838,6 +903,7 @@ function tap(x, y) {
   if (tw) return;
   if (S.mode === 'case') { const h = pick(caseCards.filter((m) => m.visible), x, y); if (h) { const u = h.object.userData; if (u.si !== S.shelf) goShelf(u.si); else lift(u.card, h.object); return; } }
   else if (S.mode === 'boxes') { const h = pick(boxMeshes.concat(sealMeshes), x, y); if (h) return h.object.userData.card ? lift(h.object.userData.card, null) : openBox(h.object.userData.n); }
+  else if (S.mode === 'hobby') { const h = pick(kitMeshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
   else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; } }
   const h = pick(hot, x, y); if (h && !(S.mode === 'crate' && cr && cr.kind === h.object.userData.act)) act(h.object.userData.act);
 }
@@ -983,5 +1049,5 @@ function load(game) {
     go(S.mode === 'case' ? 'case' : 'door');
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
-fonts.then(() => { buildRoom(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
+fonts.then(() => { buildRoom(); loadKits(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
 window.xgShop = { lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };

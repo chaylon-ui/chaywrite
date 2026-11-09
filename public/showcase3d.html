@@ -37,12 +37,15 @@ a{color:inherit}
 .bot>*{pointer-events:auto}
 .ctx{display:none;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
 .ctx button{border:1px solid #ffffff2a;background:#17110fd9;border-radius:8px;padding:6px 10px;font-size:13px}
+.ctx a{border:1px solid #ffffff2a;background:#17110fd9;border-radius:8px;padding:6px 10px;font-size:13px;text-decoration:none;white-space:nowrap}
 .ctx button.on{border-color:var(--ember);color:var(--ember)}
 .ctx button:disabled{opacity:.35}
 .ctx .ttl img{height:20px;max-width:60px;object-fit:contain;vertical-align:-5px;margin-right:7px;background:#fbf7ec;border-radius:4px;padding:2px 4px}
 .ctx .ttl{font-family:"Special Elite",monospace;font-size:13px;color:var(--tape);padding:0 4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
-.nav{display:flex;gap:6px;justify-content:center}
+body[data-mode=hobby] #ctxHobby,body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
+.nav{display:flex;gap:6px;justify-content:safe center;overflow-x:auto;scrollbar-width:none;padding:5px 4px 3px}
+.nav::-webkit-scrollbar{display:none}
+.nav button{flex:0 0 auto;white-space:nowrap}
 .nav button{border:0;background:var(--tape);color:#2a1c0e;font-family:"Permanent Marker",cursive;font-size:14px;padding:6px 12px 5px;transform:rotate(-1deg);box-shadow:0 2px 5px #0009;clip-path:polygon(2% 0,98% 3%,100% 100%,0 96%)}
 .nav button:nth-child(even){transform:rotate(1.2deg)}
 .nav button.on{background:var(--ember);color:#1a0f06}
@@ -92,8 +95,8 @@ body[data-hand] .panel{display:block}
   .panel.open .pull .note{display:none}
   .top .hlogo{height:28px}.top .flat{display:none}
   .tabs button.ic{padding:3px 7px}.tabs button.ic img{height:25px;max-width:86px}
-  .nav{gap:4px}.nav button{font-size:12.5px;padding:5px 7px 4px;white-space:nowrap}
-  .cap{bottom:calc(142px + env(safe-area-inset-bottom));width:92vw}.cap strong{font-size:15px}
+  .nav{gap:5px 4px;flex-wrap:wrap;overflow:visible;justify-content:center}.nav button{font-size:12.5px;padding:5px 7px 4px;white-space:nowrap}
+  .cap{bottom:calc(176px + env(safe-area-inset-bottom));width:92vw}.cap strong{font-size:15px}
 }
 /* sheets: the set list of a box, the pile by the till */
 .sheet{position:fixed;inset:0;z-index:10;background:#0a0809f0;display:none;flex-direction:column;padding:calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom))}
@@ -117,15 +120,16 @@ body[data-hand] .panel{display:block}
 .sheet .empty{color:var(--muted);font-family:"Special Elite",monospace;padding:20px 4px}
 </style></head>
 <body data-mode="door">
-<canvas id="gl" tabindex="0" aria-label="A 1990s card shop. Use the buttons below to move between the glass case, the boxes, the bargain bin and the till."></canvas>
+<canvas id="gl" tabindex="0" aria-label="A 1990s card shop. Use the buttons below to move between the glass case, the boxes, the booster boxes, the bargain bin, the paints and the till."></canvas>
 <div class="top"><img class="hlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><a class="flat" id="flat" href="/showcase">flat view</a><div class="tabs" id="tabs"></div></div>
 <div class="hint gone" id="hint"></div>
 <div class="cap" id="cap"><strong id="capName"></strong><span id="capSet"></span><em id="capTip">tap the card to pick it up</em></div>
 <div class="bot">
   <div class="ctx" id="ctxCase"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><span id="shelves" style="display:contents"></span><button type="button" data-walk="1" aria-label="Walk right">▶</button></div>
   <div class="ctx" id="ctxBoxes"><span class="ttl" id="boxNote">tap a white box for its sets · a booster box to pick it up</span></div>
+  <div class="ctx" id="ctxHobby"></div>
   <div class="ctx" id="ctxCrate"><button type="button" id="crBack">‹ Sets</button><button type="button" id="crPrevSet">‹ set</button><span class="ttl" id="crTitle"></span><button type="button" id="crNextSet">set ›</button><button type="button" id="crLaneL" aria-label="Row to the left">◀ row</button><button type="button" id="crLaneR" aria-label="Row to the right">row ▶</button></div>
-  <div class="nav" id="nav"><button type="button" data-go="door">Door</button><button type="button" data-go="case">Glass case</button><button type="button" data-go="boxes">Boxes</button><button type="button" data-go="bin">Bargain bin</button><button type="button" data-go="till">Till<i id="pileN" hidden>0</i></button></div>
+  <div class="nav" id="nav"><button type="button" data-go="door">Door</button><button type="button" data-go="case">Glass case</button><button type="button" data-go="boxes">Boxes</button><button type="button" data-go="sealed">Booster boxes</button><button type="button" data-go="bin">Bargain bin</button><button type="button" data-go="hobby">Paints</button><button type="button" data-go="till">Till<i id="pileN" hidden>0</i></button></div>
 </div>
 <button type="button" class="x" id="x" aria-label="Put it back">×</button>
 <div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div id="liftCopies"></div><div class="acts" id="liftActs"></div><div id="liftAlike"></div><div id="liftMore"></div></div>

@@ -230,3 +230,48 @@ export async function serveSealed(request, env, ctx, url, opts) {
   if (out.ok && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 }
+
+/* ---------------- Warhammer boxes on the hobby rack ----------------
+   Owner, 2026-11-09: "a rack with boxes of Warhammer product" (the 3D shop's
+   hobby corner, beside the paint racks). GET /showcase/wargames.json answers
+   the newest Games Workshop kits in stock: boxes of miniatures, so not the
+   novels, dice, card packs, journals and rulebooks that share the product
+   type. Same row shape as sealed.json; cached ten minutes. */
+export const WARGAMES_MAX = 12;
+const NOT_A_KIT = /\b(HARDBACK|PAPERBACK|SOFTBACK|NOVEL|DICE|CARD PACK|CARDS|JOURNAL|CODEX|BATTLETOME|RULEBOOK|RULES|WHITE DWARF|MAGAZINE|TOKENS?|TEMPLATES?|PAINT|BRUSH|SPRAY)\b/i;
+export function wargamesOf(products, now) {
+  const out = [];
+  for (const p of products || []) {
+    const title = String((p && p.title) || "");
+    if (!title || NOT_A_KIT.test(title)) continue;
+    const pre = preorderDate(title);
+    if (pre !== null && !(pre <= now)) continue;
+    const v = ((p.variants && p.variants.nodes) || []).find((x) => x && +x.inventoryQuantity > 0 && +x.price > 0 && x.availableForSale !== false);
+    const im = (((p.media && p.media.nodes) || [])[0] || {}).preview; const pic = im && im.image;
+    if (!v || !pic || !pic.url) continue;                  // a rack of boxes needs the box picture
+    out.push({
+      name: sealedName(title), handle: String(p.handle || ""), price: String(v.price), image: pic.url,
+      ar: pic.width > 0 && pic.height > 0 ? Math.round((pic.width / pic.height) * 100) / 100 : 1,
+      variantId: String(v.id || "").replace(/^.*\//, "") || null, qty: +v.inventoryQuantity, added: String(p.createdAt || "").slice(0, 10),
+    });
+    if (out.length >= WARGAMES_MAX) break;
+  }
+  return out;
+}
+export async function serveWargames(request, env, ctx, url, opts) {
+  const o = opts || {};
+  if (!o.gqlFn && (!env || !env.SHOPIFY_ADMIN_TOKEN)) return json({ ok: false, error: "not configured" }, 503);
+  const cache = o.gqlFn ? null : caches.default;
+  const key = new Request(new URL("/showcase/wargames.json", url).toString());
+  const hit = cache && await cache.match(key);
+  if (hit) return hit;
+  let out;
+  try {
+    const q = 'status:active AND published_status:published AND inventory_total:>0 AND vendor:"Games Workshop" AND product_type:"Tabletop Wargames"';
+    const r = o.gqlFn ? await o.gqlFn(SEALED_Q, { q }) : await adminGql({ env, fetch: (u, i) => fetch(u, i) }, SEALED_Q, { q });
+    out = { ok: true, rows: wargamesOf(r.data && r.data.products && r.data.products.nodes, o.now || Date.now()) };
+  } catch (e) { out = { ok: false, error: String((e && e.message) || e).slice(0, 160) }; }
+  const res = json(out, 200, out.ok ? CACHED(600) : NO_STORE);
+  if (out.ok && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}

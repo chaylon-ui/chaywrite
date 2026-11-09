@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX } from "../src/boxes.js";
+import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX } from "../src/boxes.js";
 
 const v = (sid, title, price, qty) => ({ shopifyId: sid, title, price, quantity: qty });
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), img: img || "", variants });
@@ -79,4 +79,23 @@ test("sealedOf: booster boxes in stock, newest first as fed; packs, cases and pr
   assert.match(seen[0], /product_type:"Pokemon Sealed Product"/); assert.match(seen[0], /inventory_total:>0/);
   j = await (await go("?game=chess", async () => { throw new Error("not called"); })).json(); assert.deepEqual(j.rows, []);
   j = await (await go("?game=mtg", async () => { throw new Error("shopify down"); })).json(); assert.equal(j.ok, false);
+});
+
+/* Warhammer boxes on the 3D shop's hobby rack (owner, 2026-11-09). */
+test("wargamesOf: kits in stock with a picture; novels, dice, card packs, journals and pre-orders still to come are left out", async () => {
+  const now = Date.UTC(2026, 10, 9);
+  const P = (title, qty, o) => Object.assign({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), createdAt: "2026-10-31T15:28:33Z", media: { nodes: [{ preview: { image: { url: "https://cdn.shopify.com/k.jpg", width: 600, height: 620 } } }] }, variants: { nodes: [{ id: "gid://shopify/ProductVariant/7", price: "56.10", inventoryQuantity: qty }] } }, o || {});
+  const rows = wargamesOf([
+    P("WARHAMMER: AGE OF SIGMAR KHAZALITE HOLDS ARMY SET", 4), P("WARHAMMER: AGE OF SIGMAR WHISPERBLADE HARDBACK", 1), P("WARHAMMER: THE HORUS HERESY SAGA GALAXY IN FLAMES PAPERBACK", 2),
+    P("NECROMUNDA: HOUSE ORLOCK DICE", 2), P("NECROMUNDA ORLOCK ROAD WARRIORS", 3), P("NECROMUNDA ORLOCK CARD PACK", 3), P("NECROMUNDA UNDERHIVE JOURNAL ORLOCK HOUSE OF IRON", 3),
+    P("WARHAMMER 40,000 NEW KIT PRE ORDER ^ DEC 4/26", 5), P("WARHAMMER 40,000 OUT NOW KIT PRE ORDER ^ NOV 1/26", 5), P("NO PICTURE KIT", 2, { media: { nodes: [] } }), P("SOLD OUT KIT", 0),
+  ], now);
+  assert.deepEqual(rows.map((r) => r.name), ["WARHAMMER: AGE OF SIGMAR KHAZALITE HOLDS ARMY SET", "NECROMUNDA ORLOCK ROAD WARRIORS", "WARHAMMER 40,000 OUT NOW KIT"]);
+  assert.deepEqual(rows[1], { name: "NECROMUNDA ORLOCK ROAD WARRIORS", handle: "necromunda-orlock-road-warriors", price: "56.10", image: "https://cdn.shopify.com/k.jpg", ar: 0.97, variantId: "7", qty: 3, added: "2026-10-31" });
+  assert.equal(wargamesOf(Array.from({ length: 30 }, (_, i) => P("KIT " + i, 1)), now).length, WARGAMES_MAX);
+  const seen = [];
+  const go = (gqlFn) => serveWargames(new Request("https://w.example/showcase/wargames.json"), {}, {}, new URL("https://w.example/showcase/wargames.json"), { gqlFn, now });
+  let j = await (await go(async (q, v) => { seen.push(v.q); return { data: { products: { nodes: [P("NECROMUNDA ORLOCK ROAD WARRIORS", 3)] } } }; })).json();
+  assert.equal(j.ok, true); assert.equal(j.rows.length, 1); assert.match(seen[0], /vendor:"Games Workshop"/); assert.match(seen[0], /product_type:"Tabletop Wargames"/);
+  j = await (await go(async () => { throw new Error("shopify down"); })).json(); assert.equal(j.ok, false);
 });
