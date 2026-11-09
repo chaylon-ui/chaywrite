@@ -10,6 +10,8 @@ test("setLogoKeys: the name, then without BinderPOS's tokens/promos words, then 
   assert.deepEqual(setLogoKeys("Aether Revolt Prerelease Promos"), ["aether revolt prerelease promos", "aether revolt"]);
   assert.deepEqual(setLogoKeys("SV09: Journey Together"), ["sv09 journey together", "journey together"]);
   assert.deepEqual(setLogoKeys("SWSH01: Sword & Shield Base Set"), ["swsh01 sword and shield base set", "swsh01 sword and shield", "sword and shield base set", "sword and shield"]);
+  assert.deepEqual(setLogoKeys("Scarlet & Violet: Journey Together"), ["scarlet and violet journey together", "journey together"]);
+  assert.deepEqual(setLogoKeys("Scarlet & Violet: Base Set"), ["scarlet and violet base set", "scarlet and violet", "base set", "scarlet and violet"].filter((k, i, a) => a.indexOf(k) === i));
   assert.deepEqual(setLogoKeys(""), [""]);
 });
 test("logosOf: each source's shape; only https pictures; the first of a repeated name wins", () => {

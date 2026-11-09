@@ -447,7 +447,7 @@ const SET_EXTRA = /\s+(tokens?|prerelease promos|promos?|extras|art series|minig
 function setLogo(name) {
   if (logos.game !== S.game) return null;
   const n = normSet(name), keys = [n, n.replace(SET_EXTRA, '')], colon = String(name || '').indexOf(':');
-  if (colon > 0 && colon < 12) { const r = normSet(String(name).slice(colon + 1)); keys.push(r, r.replace(SET_EXTRA, '')); }
+  if (colon > 0) { const r = normSet(String(name).slice(colon + 1)); keys.push(r, r.replace(SET_EXTRA, '')); if (r === 'base set' || !r) keys.push(normSet(String(name).slice(0, colon))); }
   for (const k of keys) if (k && logos.map[k]) return logos.map[k];
   return null;
 }

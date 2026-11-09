@@ -8,7 +8,7 @@
    Other games have no such source and answer an empty list. The page looks
    a BinderPOS set name up with setLogoKeys() (the same rule lives in
    public/showcase3d.js): the name itself, then without the words BinderPOS
-   adds for a set's tokens and promos, then without a "SV09: " style prefix. */
+   adds for a set's tokens and promos, then without a "SV09: " or "Scarlet & Violet: " prefix. */
 
 const UA = "ExorShowcase/1.0 (+https://exorgames.com)";
 export const normSet = (s) => String(s || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
@@ -17,8 +17,10 @@ export function setLogoKeys(name) {
   const n = normSet(name), out = [n];
   const add = (k) => { if (k && out.indexOf(k) < 0) out.push(k); };
   add(n.replace(EXTRA, ""));
+  // "SV09: Journey Together" and "Scarlet & Violet: Journey Together" are both Journey Together;
+  // "Scarlet & Violet: Base Set" is the series' own first set
   const colon = String(name || "").indexOf(":");
-  if (colon > 0 && colon < 12) { const rest = normSet(String(name).slice(colon + 1)); add(rest); add(rest.replace(EXTRA, "")); }
+  if (colon > 0) { const rest = normSet(String(name).slice(colon + 1)); add(rest); add(rest.replace(EXTRA, "")); if (rest === "base set" || !rest) add(normSet(String(name).slice(0, colon))); }
   return out;
 }
 const https = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
