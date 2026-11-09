@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE } from "../src/boxes.js";
+import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX } from "../src/boxes.js";
 
 const v = (sid, title, price, qty) => ({ shopifyId: sid, title, price, quantity: qty });
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), img: img || "", variants });
@@ -49,4 +49,34 @@ test("copiesOf: every copy in stock at a price, non-foil first by condition, the
   const out = copiesOf({ variants: { nodes: [vv(5, "Heavily Played Foil", 4, 1), vv(1, "Near Mint", 3.5, 0), vv(2, "Lightly Played", 3.1, 2), vv(3, "Near Mint Foil", 9, 1), vv(4, "Moderately Played", 2.8, 5), vv(6, "Damaged", 0, 3)] } });
   assert.deepEqual(out.map((k) => [k.variantId, k.condition, k.foil, k.price, k.qty]), [["2", "Lightly Played", false, "3.10", 2], ["4", "Moderately Played", false, "2.80", 5], ["3", "Near Mint", true, "9.00", 1], ["5", "Heavily Played", true, "4.00", 1]]);
   assert.deepEqual(copiesOf(null), []);
+});
+
+/* New sealed booster boxes on the 3D shop's back wall (owner, 2026-11-09). */
+test("sealedOf: booster boxes in stock, newest first as fed; packs, cases and pre-orders still to come are left out; titles cleaned", async () => {
+  const now = Date.UTC(2026, 10, 9);
+  const P = (title, qty, o) => Object.assign({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), createdAt: "2026-11-04T17:04:27Z", media: { nodes: [{ preview: { image: { url: "https://cdn.shopify.com/a.jpg", width: 729, height: 1000 } } }] }, variants: { nodes: [{ id: "gid://shopify/ProductVariant/42", price: "279.95", inventoryQuantity: qty }] } }, o || {});
+  assert.equal(preorderDate("MTG X BOOSTER BOX"), null);
+  assert.equal(preorderDate("MTG STAR TREK PLAY BOOSTER BOX  PRE ORDER ^ NOV 6/26"), Date.UTC(2026, 10, 6));
+  assert.equal(preorderDate("YGO X BOOSTER BOX PRE ORDER ^ JAN 29/27"), Date.UTC(2027, 0, 29));
+  assert.ok(Number.isNaN(preorderDate("X BOOSTER BOX PRE-ORDER soon")));
+  assert.equal(sealedName("MTG STAR TREK COLLECTOR BOOSTER BOX (LIMIT 2)"), "MTG STAR TREK COLLECTOR BOOSTER BOX");
+  assert.equal(sealedName("MTG STAR TREK PLAY BOOSTER BOX  PRE ORDER ^ NOV 6/26"), "MTG STAR TREK PLAY BOOSTER BOX");
+  const rows = sealedOf([
+    P("POKEMON ME06 DELTA REIGN BOOSTER PACK", 1459), P("POKEMON ME06 DELTA REIGN BOOSTER BUNDLE", 84), P("POKEMON ME06 DELTA REIGN BOOSTER BOX", 40),
+    P("STAR WARS UNLIMITED ICONS 2027 BOOSTER CASE PRE ORDER ^ NOV 20/26", 2), P("STAR WARS UNLIMITED ICONS 2027 BOOSTER BOX PRE ORDER ^ NOV 20/26", 16),
+    P("MTG STAR TREK PLAY BOOSTER BOX  PRE ORDER ^ NOV 6/26", 144), P("X BOOSTER BOX PRE-ORDER soon", 5), P("SOLD OUT BOOSTER BOX", 0),
+    P("NO PICTURE BOOSTER BOX (LIMIT 1)", 3, { media: { nodes: [] } }), P("BOOSTER BOX CASE OF 6", 2),
+  ], now);
+  assert.deepEqual(rows.map((r) => r.name), ["POKEMON ME06 DELTA REIGN BOOSTER BOX", "MTG STAR TREK PLAY BOOSTER BOX", "NO PICTURE BOOSTER BOX"]);
+  assert.deepEqual(rows[0], { name: "POKEMON ME06 DELTA REIGN BOOSTER BOX", handle: "pokemon-me06-delta-reign-booster-box", price: "279.95", image: "https://cdn.shopify.com/a.jpg", ar: 0.73, variantId: "42", qty: 40, added: "2026-11-04" });
+  assert.equal(rows[2].image, null); assert.equal(rows[2].ar, 1);
+  assert.equal(sealedOf(Array.from({ length: 20 }, (_, i) => P("SET " + i + " BOOSTER BOX", 1)), now).length, SEALED_MAX);
+  // the route: the game's product type in the search, an unknown game answers an empty wall, a Shopify error is reported
+  const seen = [];
+  const go = (q, gqlFn) => serveSealed(new Request("https://w.example/showcase/sealed.json" + q), {}, {}, new URL("https://w.example/showcase/sealed.json" + q), { gqlFn, now });
+  let j = await (await go("?game=pokemon", async (qq, v) => { seen.push(v.q); return { data: { products: { nodes: [P("POKEMON ME06 DELTA REIGN BOOSTER BOX", 40)] } } }; })).json();
+  assert.equal(j.ok, true); assert.equal(j.game, "pokemon"); assert.equal(j.rows.length, 1);
+  assert.match(seen[0], /product_type:"Pokemon Sealed Product"/); assert.match(seen[0], /inventory_total:>0/);
+  j = await (await go("?game=chess", async () => { throw new Error("not called"); })).json(); assert.deepEqual(j.rows, []);
+  j = await (await go("?game=mtg", async () => { throw new Error("shopify down"); })).json(); assert.equal(j.ok, false);
 });

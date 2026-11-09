@@ -161,9 +161,18 @@ function drawBack(g, w, h) {
   rr(g, m, m * 1.6, w - 2 * m, h - m * 2.6, w * .035); g.fillStyle = '#2b1a20'; g.fill(); noise(g, w, h, 1500, ['#3a252c', '#20131a'], .25);
   g.save(); g.translate(w / 2, h * .48); g.rotate(-.06); g.fillStyle = '#e8dcb8'; g.fillRect(-w * .36, -h * .05, w * .72, h * .1); g.fillStyle = '#2a1c0e'; g.font = Math.round(w * .085) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('EXOR GAMES', 0, 0); g.restore();
 }
+// A sealed booster box wears its product photo on a white face, with the price-gun sticker.
+function drawSealed(g, w, h, c, im) {
+  g.fillStyle = '#f7f5ef'; g.fillRect(0, 0, w, h);
+  if (im) { const m = w * .04, s = Math.min((w - 2 * m) / im.width, (h - 2 * m) / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, (w - iw) / 2, (h - ih) / 2, iw, ih); }
+  else { g.fillStyle = '#2a1c0e'; g.font = Math.round(w * .09) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, w / 2, h * .4, w * .84, w * .11, 5); }
+  g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = Math.max(2, w * .012); g.strokeRect(0, 0, w, h);
+  sticker(g, w, gunPrice(c.price), { font: '700 ' + Math.round(w * .09) + 'px "Cutive Mono", monospace', ink: '#1b2a55', y: h * .03, rot: (seed(keyOf(c) + '|st')() - .5) * .14 });
+}
 async function cardTex(c, w) {
   await fonts; let im = null;
-  if (hasPhoto(c)) { try { im = await loadImg(img(c.image, w > 300 ? 1000 : 300)); } catch (x) {} }
+  if (hasPhoto(c)) { try { im = await loadImg(img(c.image, w > 300 ? 1000 : (c.sealed ? 500 : 300))); } catch (x) {} }
+  if (c.sealed) return ctex(w, Math.round(w / (c.ar || 1)), (g, cw, chh) => drawSealed(g, cw, chh, c, im));
   return ctex(w, Math.round(w * CH / CW), (g, cw, chh) => drawCard(g, cw, chh, c, im));
 }
 // Put a card's texture on a mesh; a newer request for the same mesh wins.
@@ -255,7 +264,7 @@ function lights(k) {   // 0 = the tubes, 1 = the evening, with the lamp
   hemi.intensity = lerp(2.6, .5, k); sun.intensity = lerp(1.1, .12, k); lampL.intensity = lerp(0, 2.4, k);
   tubeM.color.setScalar(lerp(1, .12, k)); shadeM.emissive.setRGB(.05 * k, .45 * k, .16 * k);
   const v = lerp(1, .78, k); cardTint.setRGB(v, v * .96, v * .88);
-  scene.traverse((o) => { if (o.userData.card && o.material) o.material.color.copy(cardTint); });
+  scene.traverse((o) => { if (o.userData.card && o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.isMeshBasicMaterial) m.color.copy(cardTint); }); });
 }
 const cardTint = new THREE.Color(1, 1, 1);
 function toggleLights() { const to = S.eve > .5 ? 0 : 1, from = S.eve, t0 = performance.now(); anims.push((now) => { const k = Math.min(1, (now - t0) / (reduce ? 1 : 700)); S.eve = lerp(from, to, k); lights(S.eve); return k < 1; }); kick(); }
@@ -346,12 +355,13 @@ function goShelf(i) {
 
 /* ---------- the boxes on the back wall: every set, by box ---------- */
 const boxes = { list: null, open: null, setIdx: -1, seq: 0 };
-let wallG = null, boxMeshes = [], wallHit = null, wallW = 1;
+let wallG = null, boxMeshes = [], wallHit = null, wallW = 0;
 const WX = -.4, WZ = -3.2;
 function buildWall(d) {
   kill(wallG); wallG = new THREE.Group(); scene.add(wallG); boxMeshes = [];
   if (wallHit) { hot.splice(hot.indexOf(wallHit), 1); kill(wallHit); wallHit = null; }
-  if (!d) return;
+  wallW = 0; S.wallRows = 0;
+  if (!d) { placeSealed(); return; }
   const n = d.boxes.length, rows = n <= 3 ? 1 : n <= 8 ? 2 : n <= 15 ? 3 : 4, cols = Math.ceil(n / rows), bw = .42, bh = .105, px = .46, py = .16;
   wallW = cols * px; const y0 = 1.12;
   const card = lam({ color: 0xf1eee4 });
@@ -367,20 +377,54 @@ function buildWall(d) {
   const sg = pl(.34, .2, new THREE.MeshBasicMaterial({ map: ctex(340, 200, (g, w, h) => { g.fillStyle = '#fbf7ec'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.font = '40px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('Browse our', w / 2, 62); g.fillText('cards by set', w / 2, 112); g.fillStyle = '#16120d'; g.font = '700 30px Caveat, cursive'; g.fillText(Number(d.count).toLocaleString('en-CA') + ' sets  →', w / 2, 164); }) }), WX - wallW / 2 - .3, y0 + rows * py / 2, WZ + .2, .12, wallG);
   sg.rotation.z = -.04;
   wallHit = hit(bx(wallW + .8, rows * py + .2, .5, hitM, WX - .15, y0 + rows * py / 2, WZ), 'boxes');
-  S.wallY = y0 + rows * py / 2 - .03; S.wallH = rows * py;
+  S.wallRows = rows * py; placeSealed();
 }
 function boxesView() {
   // wide enough for the whole wall where the screen allows it; a phone sees two boxes across and pans
-  const fitH = 2 * Math.atan((S.wallH / 2 + .22) / 2.75) * 180 / PI, fitW = 2 * Math.atan((wallW + .9) / 2 / 2.75 / cam.aspect) * 180 / PI;
-  const fov = clamp(Math.max(fitH, Math.min(fitW, cam.aspect < 1 ? 41 : 46)), 20, 46), vw = 2 * 2.75 * hTan(fov), max = Math.max(0, (wallW + .5 - vw) / 2);
+  const L = wallW ? WX - wallW / 2 - .55 : sealX() - .15, R = sealed.rows.length ? sealX() + sealed.w + .12 : WX + wallW / 2 + .15, cx = (L + R) / 2, hh = Math.max(S.wallRows || 0, sealed.h || 0, .3);
+  const fitH = 2 * Math.atan((hh / 2 + .22) / 2.75) * 180 / PI, fitW = 2 * Math.atan((R - L) / 2 / 2.75 / cam.aspect) * 180 / PI;
+  const fov = clamp(Math.max(fitH, Math.min(fitW, cam.aspect < 1 ? 41 : 46)), 20, 46), vw = 2 * 2.75 * hTan(fov), max = Math.max(0, (R - L - vw) / 2);
   S.maxPan = max; S.pan = clamp(S.pan, -max, max);
-  const v = lookView(new V3(WX + S.pan - (max ? 0 : .1), 1.56, -.3), new V3(WX + S.pan - (max ? 0 : .1), S.wallY || 1.3, WZ + .19), fov); v.vw = vw; return v;
+  const v = lookView(new V3(cx + S.pan, 1.56, -.3), new V3(cx + S.pan, 1.09 + hh / 2, WZ + .19), fov); v.vw = vw; return v;
+}
+/* ---------- new sealed booster boxes, on the back wall beside the set boxes (owner, 2026-11-09) ---------- */
+const sealed = { rows: [], w: 0, h: 0 };
+let sealG = null, sealMeshes = [], sealHit = null;
+const sealX = () => (wallW ? WX + wallW / 2 + .34 : WX - sealed.w / 2);
+function placeSealed() { if (sealG) sealG.position.x = sealX(); if (sealHit) sealHit.position.x = sealX() + sealed.w / 2; }
+function buildSealed(rows) {
+  kill(sealG); sealG = null; sealMeshes = []; sealed.rows = rows || []; sealed.w = sealed.h = 0;
+  if (sealHit) { hot.splice(hot.indexOf(sealHit), 1); kill(sealHit); sealHit = null; }
+  const n = sealed.rows.length; if (!n) return;
+  sealG = new THREE.Group(); scene.add(sealG);
+  const nr = n <= 4 ? 1 : 2, cols = Math.ceil(n / nr), px = .29, py = .3, bh = .22, y0 = 1.12, side = lam({ color: 0xe6e1d2 });
+  sealed.w = cols * px; sealed.h = nr * py + .12;
+  for (let r = 0; r < nr; r++) bx(sealed.w + .1, .022, .3, woodM, sealed.w / 2, y0 + r * py - .011, WZ + .05, sealG);
+  bx(.03, nr * py + .06, .3, darkWoodM, -.05, y0 + nr * py / 2 - .03, WZ + .05, sealG); bx(.03, nr * py + .06, .3, darkWoodM, sealed.w + .05, y0 + nr * py / 2 - .03, WZ + .05, sealG);
+  sealed.rows.forEach((c, i) => {   // the newest at the top left
+    const col = i % cols, row = nr - 1 - Math.floor(i / cols), q = seed('seal' + c.name), bw = clamp(bh * (c.ar || 1), .15, .26), face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint });
+    const hgt = bw / (c.ar || 1), m = new THREE.Mesh(new THREE.BoxGeometry(bw, hgt, .08), [side, side, side, side, face, side]);
+    m.position.set(px / 2 + col * px + (q() - .5) * .02, y0 + row * py + hgt / 2, WZ + .1 + (q() - .5) * .02); m.rotation.y = (q() - .5) * .14; m.userData = { card: c }; sealG.add(m); sealMeshes.push(m);
+    cardTex(c, 256).then((t) => { if (!m.parent) { t.dispose(); return; } face.map = t; face.needsUpdate = true; kick(); });
+  });
+  const sg = pl(.5, .11, new THREE.MeshBasicMaterial({ map: ctex(500, 110, (g, w, h) => { g.fillStyle = '#f7e98e'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.font = '44px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('NEW! booster boxes', w / 2, h / 2 + 2); }) }), Math.max(.25, sealed.w / 2), y0 + nr * py + .05, WZ + .06, 0, sealG);
+  sg.rotation.z = .02;
+  sealHit = hit(bx(sealed.w + .2, nr * py + .2, .4, hitM, 0, y0 + nr * py / 2, WZ + .05), 'boxes');
+  placeSealed(); lights(S.eve);
+}
+function loadSealed() {
+  const game = S.game; buildSealed([]);
+  fetch(W + '/showcase/sealed.json?game=' + encodeURIComponent(game), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (!d || !d.ok || game !== S.game || !d.rows) return;
+    const rows = d.rows.map((r) => ({ name: r.name, set: 'Sealed booster box', price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game, sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty }));
+    fonts.then(() => { buildSealed(rows); if (S.mode === 'boxes') setView(boxesView()); kick(); });
+  }).catch(() => {});
 }
 function loadBoxes() {
   const game = S.game; boxes.list = null; buildWall(null);
   fetch(W + '/showcase/boxes.json?game=' + encodeURIComponent(game), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
     if (!d || !d.ok || game !== S.game || !d.boxes || !d.boxes.length) return;
-    boxes.list = d; fonts.then(() => { buildWall(d); kick(); });
+    boxes.list = d; fonts.then(() => { buildWall(d); if (S.mode === 'boxes') setView(boxesView()); kick(); });
   }).catch(() => {});
 }
 function openBox(n) {
@@ -490,13 +534,16 @@ const foilT = keep(ctex(256, 256, (g, w, h) => { const gr = g.createLinearGradie
 const glareT = keep(ctex(256, 256, (g, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(.3, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.55)'); gr.addColorStop(.7, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, [1, 1]));
 hand.foil = new THREE.Mesh(geoC, hm({ map: foilT, opacity: .2, blending: THREE.AdditiveBlending })); hand.foil.renderOrder = 996; hand.foil.position.z = .0002; hand.g.add(hand.foil);
 hand.glare = new THREE.Mesh(geoC, hm({ map: glareT, opacity: .3, blending: THREE.AdditiveBlending })); hand.glare.renderOrder = 997; hand.glare.position.z = .0003; hand.g.add(hand.glare);
-fonts.then(() => { hand.back.material.map = keep(ctex(360, 503, drawBack)); hand.back.material.needsUpdate = true; });
+fonts.then(() => { hand.backT = keep(ctex(360, 503, drawBack)); hand.back.material.map = hand.backT; hand.back.material.needsUpdate = true; });
+const cardBack = () => hand.backT || phTex;
+const boxBackT = keep(ctex(64, 64, (g, w, h) => { g.fillStyle = '#e6e1d2'; g.fillRect(0, 0, w, h); }));
 function stage() { const w = canvas.clientWidth, h = canvas.clientHeight; return w > 720 ? { x: 0, y: 0, w: w - 360, h } : { x: 0, y: 0, w, h: h - 60 }; }
 function placeHand(now) {
   const st = stage(), W_ = canvas.clientWidth, H_ = canvas.clientHeight, d = .24, wpp = 2 * d * Math.tan(rad(cam.fov / 2)) / H_;
-  const cwPx = Math.max(140, Math.min(st.w - 24, (st.h - 28) * CW / CH)), k = reduce ? 1 : Math.min(1, (now - hand.t0) / 320), e = 1 - Math.pow(1 - k, 3);
+  const ar = S.hand.sealed ? S.hand.ar || 1 : CW / CH;   // a card, or a booster box in its own shape
+  const cwPx = Math.max(140, Math.min(st.w - 24, (st.h - 28) * ar)), k = reduce ? 1 : Math.min(1, (now - hand.t0) / 320), e = 1 - Math.pow(1 - k, 3);
   hand.g.position.set((st.x + st.w / 2 - W_ / 2) * wpp, -(st.y + st.h / 2 - H_ / 2) * wpp - .05 * (1 - e), -d);
-  hand.g.scale.setScalar(cwPx * wpp / CW * (.55 + .45 * e));
+  const sc = .55 + .45 * e; hand.g.scale.set(cwPx * wpp / CW * sc, cwPx / ar * wpp / CH * sc, cwPx * wpp / CW * sc);
   if (!hand.drag) { hand.rx += (hand.tx - hand.rx) * .18; hand.ry += (hand.ty - hand.ry) * .18; }
   hand.g.rotation.set(hand.rx, hand.ry, 0);
   const s = Math.sin(hand.ry) * .6 + hand.rx * .5; hand.foil.material.map.offset.set(s, s * .7); hand.glare.material.map.offset.set(s * .9, 0);
@@ -506,7 +553,8 @@ function lift(c, src) {
   if (S.handSrc) S.handSrc.visible = true;
   S.hand = c; S.handSrc = src || null; if (src) src.visible = false;
   document.body.dataset.hand = '1'; hand.g.visible = true; hand.dim.visible = true; hand.rx = hand.ry = hand.tx = hand.ty = 0; hand.t0 = performance.now();
-  hand.front.material.map = phTex; wear(hand.front, c, 720); hand.foil.visible = !!c.foil;
+  hand.front.material.map = phTex; wear(hand.front, c, c.sealed ? 640 : 720); hand.foil.visible = !!c.foil;
+  hand.back.material.map = c.sealed ? boxBackT : cardBack(); hand.back.material.needsUpdate = true;
   fillPanel(c); sheet(false); hint(''); askOrientation(); kick();
 }
 function putBack() {
@@ -555,8 +603,9 @@ const strip = (title, list) => (list.length ? '<h3>' + title + '</h3><div class=
 let liftSeq = 0, copiesSeq = 0;
 function fillPanel(c) {
   $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, condText(c), c.foil ? (c.game === 'pokemon' ? 'Holo' : 'Foil') : '', money(c.price)].filter(Boolean).join(' · ');
-  acts(c); loadCopies(c);
-  minis = []; const seq = ++liftSeq, al = alikeLocal(c), seen = {}; al.forEach((o) => { seen[o.name.toLowerCase()] = 1; });
+  acts(c); minis = [];
+  if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = ['Sealed booster box', c.qty ? c.qty + ' in stock' : '', money(c.price)].filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
+  loadCopies(c); const seq = ++liftSeq, al = alikeLocal(c), seen = {}; al.forEach((o) => { seen[o.name.toLowerCase()] = 1; });
   $('#liftAlike').innerHTML = strip('Similar effects', al);
   $('#liftMore').innerHTML = strip('More like this', similar(c).filter((o) => !seen[o.name.toLowerCase()]));
   if (c.game === 'mtg') {
@@ -594,7 +643,7 @@ function pickCopy(i) {
 }
 function buy(b) {
   const c = S.hand; if (!c || b.disabled) return; b.disabled = true;
-  const done = () => { S.pile.push({ name: c.name, set: c.set, price: c.price, url: c.url, variantId: c.variantId, cond: cond(c), foil: c.foil }); b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
+  const done = () => { S.pile.push({ name: c.name, set: c.set, price: c.price, url: c.url, variantId: c.variantId, cond: c.sealed ? 'sealed' : cond(c), foil: c.foil }); b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
   if (!ON_STORE) { done(); return; }
   b.textContent = 'Adding…';
   fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(c.variantId), quantity: 1, properties: { _xg: 'showcase' } }] }) })
@@ -623,7 +672,7 @@ function viewFor() { return S.mode === 'case' && S.lay.length ? caseView() : S.m
 function go(mode) {
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint('Swipe to walk the case · swipe up to crouch to the next shelf · tap a card'); }
-  else if (mode === 'boxes') { if (!boxes.list) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; glide(boxesView()); hint('Every set we carry · tap a box, pick a set, thumb through'); }
+  else if (mode === 'boxes') { if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
@@ -663,7 +712,7 @@ function tap(x, y) {
   if (S.hand) return putBack();
   if (tw) return;
   if (S.mode === 'case') { const h = pick(caseCards.filter((m) => m.visible), x, y); if (h) { const u = h.object.userData; if (u.si !== S.shelf) goShelf(u.si); else lift(u.card, h.object); return; } }
-  else if (S.mode === 'boxes') { const h = pick(boxMeshes, x, y); if (h) return openBox(h.object.userData.n); }
+  else if (S.mode === 'boxes') { const h = pick(boxMeshes.concat(sealMeshes), x, y); if (h) return h.object.userData.card ? lift(h.object.userData.card, null) : openBox(h.object.userData.n); }
   else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; } }
   const h = pick(hot, x, y); if (h && !(S.mode === 'crate' && cr && cr.kind === h.object.userData.act)) act(h.object.userData.act);
 }
@@ -758,9 +807,9 @@ function load(game) {
     if (S.hand) putBack();
     S.cases = d.cases || []; S.icons = d.icons || []; S.game = d.game; S.shelves = d.shelves || []; S.shelf = 0; S.walk = 0; S.vx = 0; S.idf = null; S.ext = []; boxes.open = null; cr = null; kill(setCrate && setCrate.g); setCrate = null;
     try { history.replaceState(null, '', location.pathname + '?game=' + encodeURIComponent(d.game)); } catch (x) {}
-    tabs(); buildCase(); buildBin(); loadBoxes(); st.classList.add('off');
+    tabs(); buildCase(); buildBin(); loadBoxes(); loadSealed(); st.classList.add('off');
     go(S.mode === 'case' ? 'case' : 'door');
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, cam, kick };
+window.xgShop = { pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };

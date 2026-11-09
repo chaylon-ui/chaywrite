@@ -167,3 +167,66 @@ export async function serveCard(request, env, ctx, url) {
   if (out.ok && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 }
+
+/* ---------------- New sealed booster boxes on the back wall ----------------
+   Owner, 2026-11-09: "put boxes of instock newest sealed booster boxes on the
+   back wall too" (the 3D shop). GET /showcase/sealed.json?game= answers the
+   game's newest booster boxes that are in stock, read from Shopify and cached
+   ten minutes. A pre-order still to come is not in stock, whatever its
+   inventory says; one whose date has passed is (the title keeps the words
+   for a while after release day). */
+export const SEALED_TYPES = {
+  mtg: "Magic Sealed Product", pokemon: "Pokemon Sealed Product", yugioh: "YU-GI-OH Sealed Product",
+  onepiece: "One Piece Card Game Sealed Product", starwars: "Star Wars Unlimited Sealed Product", riftbound: "Riftbound Sealed Product",
+};
+export const SEALED_MAX = 8;
+export const SEALED_Q = `query($q:String!){products(first:60,sortKey:CREATED_AT,reverse:true,query:$q){nodes{title handle createdAt media(first:1){nodes{preview{image{url width height}}}} variants(first:3){nodes{id price inventoryQuantity availableForSale}}}}}`;
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+// "… PRE ORDER ^ NOV 20/26" -> that day (UTC); null when the title names no pre-order; NaN when it does without a date we can read
+export function preorderDate(title) {
+  const m = /PRE[\s-]?ORDER/i.exec(String(title || "")); if (!m) return null;
+  const d = /([A-Z]{3})[A-Z]*\.?\s+(\d{1,2})\s*\/\s*(\d{2,4})/i.exec(String(title).slice(m.index));
+  if (!d || MONTHS[d[1].toLowerCase()] == null) return NaN;
+  return Date.UTC(+d[3] < 100 ? 2000 + +d[3] : +d[3], MONTHS[d[1].toLowerCase()], +d[2]);
+}
+export const sealedName = (title) => String(title || "").replace(/\s*PRE[\s-]?ORDER.*$/i, "").replace(/\s*\(LIMIT\s*\d+\)/i, "").replace(/\s+/g, " ").trim();
+// rows, newest first: { name, handle, price, image, ar (picture width / height), variantId, qty, added }
+export function sealedOf(products, now) {
+  const out = [];
+  for (const p of products || []) {
+    const title = String((p && p.title) || "");
+    if (!/\bBOOSTER\s+BOX\b/i.test(title) || /\bCASE\b/i.test(title)) continue;
+    const pre = preorderDate(title);
+    if (pre !== null && !(pre <= now)) continue;
+    const v = ((p.variants && p.variants.nodes) || []).find((x) => x && +x.inventoryQuantity > 0 && +x.price > 0 && x.availableForSale !== false);
+    if (!v) continue;
+    const im = (((p.media && p.media.nodes) || [])[0] || {}).preview; const pic = im && im.image;
+    out.push({
+      name: sealedName(title), handle: String(p.handle || ""), price: String(v.price), image: (pic && pic.url) || null,
+      ar: pic && pic.width > 0 && pic.height > 0 ? Math.round((pic.width / pic.height) * 100) / 100 : 1,
+      variantId: String(v.id || "").replace(/^.*\//, "") || null, qty: +v.inventoryQuantity, added: String(p.createdAt || "").slice(0, 10),
+    });
+    if (out.length >= SEALED_MAX) break;
+  }
+  return out;
+}
+export async function serveSealed(request, env, ctx, url, opts) {
+  const o = opts || {};
+  const game = String(url.searchParams.get("game") || "mtg").toLowerCase();
+  const type = SEALED_TYPES[game];
+  if (!type) return json({ ok: true, game, rows: [] }, 200, CACHED(600));
+  if (!o.gqlFn && (!env || !env.SHOPIFY_ADMIN_TOKEN)) return json({ ok: false, error: "not configured" }, 503);
+  const cache = o.gqlFn ? null : caches.default;
+  const key = new Request(new URL("/showcase/sealed.json?game=" + game, url).toString());
+  const hit = cache && await cache.match(key);
+  if (hit) return hit;
+  let out;
+  try {
+    const q = 'status:active AND published_status:published AND inventory_total:>0 AND product_type:"' + type + '" AND title:*BOOSTER*';
+    const r = o.gqlFn ? await o.gqlFn(SEALED_Q, { q }) : await adminGql({ env, fetch: (u, i) => fetch(u, i) }, SEALED_Q, { q });
+    out = { ok: true, game, rows: sealedOf(r.data && r.data.products && r.data.products.nodes, o.now || Date.now()) };
+  } catch (e) { out = { ok: false, game, error: String((e && e.message) || e).slice(0, 160) }; }
+  const res = json(out, 200, out.ok ? CACHED(600) : NO_STORE);
+  if (out.ok && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
