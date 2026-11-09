@@ -410,7 +410,7 @@ function caseTextures(now) {
     if (near && !u.has) { u.has = true; wear(m, u.card, 256); }
     if (u.has) { n++; if (!near) far.push(m); }
   }
-  if (n > cap) { far.sort((a, b) => Math.abs(b.userData.x - cx) - Math.abs(a.userData.x - cx)); far.slice(0, n - cap).forEach((m) => { m.userData.has = false; bare(m); }); }
+  if (n > cap) { far.sort((a, b) => Math.abs(b.userData.x - cx) - Math.abs(a.userData.x - cx)); far.slice(0, n - cap).forEach((m) => { m.userData.has = false; m.userData.hi = false; bare(m); }); }
 }
 function visW() { return 2 * (view.dist || .5) * hTan(baseFov()); }
 function caseView() {
@@ -421,6 +421,7 @@ function caseView() {
   return top ? lookView(new V3(x, sy + .43, -.67), new V3(x, sy + .01, -.94)) : lookView(new V3(x, sy + .2, -.29), new V3(x, sy + .07, -.78));
 }
 function goShelf(i) {
+  leanOff();
   const n = clamp(i, 0, S.shelves.length - 1); if (n === S.shelf) return;
   const p = S.maxWalk ? S.walk / S.maxWalk : 0; S.shelf = n; S.vx = 0; S.walk = 1e9; caseView(); S.walk = p * S.maxWalk;   // the same proportion along the new shelf
   glide(caseView(), 520); ui(); hint('');
@@ -742,8 +743,9 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 function viewFor() { return S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
+  leanOff();
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
-  if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint('Swipe to walk the case · swipe up to crouch to the next shelf · tap a card'); }
+  if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'boxes') { if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
@@ -790,20 +792,59 @@ function tap(x, y) {
   else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; } }
   const h = pick(hot, x, y); if (h && !(S.mode === 'crate' && cr && cr.kind === h.object.userData.act)) act(h.object.userData.act);
 }
+/* ---------- leaning in (owner, 2026-11-09): "an elastic pinch to zoom ... without picking up the card
+   and as soon as you let it go it zooms back out, like leaning in to read the card titles better".
+   At the glass case two fingers pinch the camera towards the spot between them; on a desktop holding
+   the mouse button down (or a trackpad pinch) does it. Letting go springs back. The camera moves along
+   the line of sight to that spot, so the spot stays under the fingers, and the cards around it take a
+   sharper picture while you are close. */
+const lean = { k: 0, P: null, on: false, id: 0 };
+const pts = new Map(); let pinch = null, wheelLean = 0;
+function leanView() { const v = caseView(); if (lean.P && lean.k) v.pos.lerp(lean.P, .6 * lean.k); return v; }
+function leanStart(x, y) {
+  if (S.mode !== 'case' || S.hand || tw || !S.lay.length) return false;
+  if (!lean.on) {
+    setView(caseView());
+    cam.position.copy(view.pos); cam.rotation.set(view.pitch, view.yaw, 0); cam.updateMatrixWorld();
+    const h = pick(caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
+    lean.P = h ? h.point.clone() : ray.ray.at(view.dist || .45, new V3());
+    caseCards.forEach((m) => { const u = m.userData; if (u.si === S.shelf && !u.hi && m.position.distanceTo(lean.P) < .14) { u.hi = u.has = true; wear(m, u.card, 512); } });
+  }
+  lean.on = true; lean.id++; S.vx = 0; hint(''); return true;
+}
+function leanTo(k) { lean.k = k; setView(leanView()); }
+function leanAnim(to, ms) {
+  const id = ++lean.id, from = lean.k, t0 = performance.now();
+  anims.push((now) => { if (lean.id !== id) return false; const t = Math.min(1, (now - t0) / (reduce ? 1 : ms)), e = 1 - Math.pow(1 - t, 3); lean.k = lerp(from, to, e); if (S.mode === 'case' && !tw) setView(leanView()); if (t >= 1 && !to) lean.on = false; return t < 1; }); kick();
+}
+function leanOff() { lean.id++; lean.k = 0; lean.on = false; pinch = null; }
+// the stretch between the fingers, with give at both ends
+function elastic(scale) { const r = (scale - 1) / 1.1; return r > 1 ? Math.min(1.12, 1 + (r - 1) * .15) : r < 0 ? Math.max(-.08, r * .1) : r; }
 let drag = null;
 canvas.addEventListener('pointerdown', (e) => {
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pts.size === 2 && !pinch) {
+    const a = Array.from(pts.values());
+    if (leanStart((a[0].x + a[1].x) / 2, (a[0].y + a[1].y) / 2)) { pinch = { d0: Math.max(30, Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y)), k0: lean.k }; if (drag) clearTimeout(drag.holdT); drag = null; try { canvas.setPointerCapture(e.pointerId); } catch (x) {} return; }
+  }
+  if (pinch || pts.size > 1) return;
   if (e.button && e.button !== 0) return;
   drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry };
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
+  // a mouse held still on the case leans in to that spot
+  if (e.pointerType === 'mouse' && S.mode === 'case' && !S.hand) { const d = drag; d.holdT = setTimeout(() => { if (drag === d && !d.moved && leanStart(d.x0, d.y0)) { d.lean = true; leanAnim(1, 320); } }, 280); }
 });
 canvas.addEventListener('pointermove', (e) => {
+  if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch) { const a = Array.from(pts.values()); if (a.length >= 2) { lean.id++; leanTo(clamp(pinch.k0 + elastic(Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) / pinch.d0), -.08, 1.12)); } return; }
+  if (drag && drag.lean) return;
   if (!drag || e.pointerId !== drag.id) {   // a mouse over the held card tilts it
     if (S.hand && e.pointerType === 'mouse' && !reduce) { const st = stage(); hand.tx = clamp(((e.clientY - st.h / 2) / st.h) * -.5, -.3, .3); hand.ty = (Math.abs(hand.ty) > PI / 2 ? PI : 0) + clamp(((e.clientX - st.w / 2) / st.w) * .6, -.35, .35); kick(); }
     return;
   }
   const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0, now = performance.now(), dt = Math.max(1, now - drag.lastT);
-  if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 7) { drag.moved = true; drag.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'; if (tw && !S.hand) { drag.axis = 'none'; } hand.drag = !!S.hand; }
+  if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 7) { drag.moved = true; clearTimeout(drag.holdT); drag.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'; if (tw && !S.hand) { drag.axis = 'none'; } hand.drag = !!S.hand; }
   if (!drag.moved) return;
   if (S.hand) { hand.ry = drag.ry + dx * .011; hand.rx = clamp(drag.rx + dy * .006, -.6, .6); kick(); }
   else if (drag.axis === 'none') { /* a glide is running */ }
@@ -816,7 +857,10 @@ canvas.addEventListener('pointermove', (e) => {
 // the walk without clamping the rubber band at the ends away
 function caseView0() { const w = S.walk, v = caseView(); if (w !== S.walk) { v.pos.x += (w - S.walk) * .5; } return v; }
 function endDrag(e) {
+  pts.delete(e.pointerId);
+  if (pinch) { pinch = null; leanAnim(0, 300); return; }   // let go: back out
   if (!drag || e.pointerId !== drag.id) return; const d = drag; drag = null; hand.drag = false;
+  clearTimeout(d.holdT); if (d.lean) { leanAnim(0, 300); return; }
   const dx = d.x - d.x0, dy = d.y - d.y0;
   if (!d.moved) { if (performance.now() - d.t < 600) tap(e.clientX, e.clientY); return; }
   if (S.hand) { hand.ty = Math.round(hand.ry / PI) * PI; hand.tx = 0; hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
@@ -825,7 +869,7 @@ function endDrag(e) {
   if (S.mode === 'case') {
     if (d.axis === 'y') { if (Math.abs(dy) > 44) goShelf(S.shelf + (dy < 0 ? 1 : -1)); return; }
     S.vx = clamp(d.v, -.06, .06);
-    anims.push(() => { if (S.mode !== 'case' || drag || tw) return false; S.vx *= .93; S.walk = clamp(S.walk + S.vx, 0, S.maxWalk || 0); setView(caseView()); return Math.abs(S.vx) > .0004; }); kick();
+    anims.push(() => { if (S.mode !== 'case' || drag || tw || lean.on) return false; S.vx *= .93; S.walk = clamp(S.walk + S.vx, 0, S.maxWalk || 0); setView(caseView()); return Math.abs(S.vx) > .0004; }); kick();
   } else if (S.mode === 'crate' && cr) {
     if (d.axis === 'x') { if (Math.abs(dx) > 50) crateLane(dx < 0 ? 1 : -1); return; }
     flickTo(cr.ps[cr.lane] + clamp(d.v * 6, -8, 8), 260 + Math.min(400, Math.abs(d.v) * 900));
@@ -835,6 +879,11 @@ canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointerc
 let wheelLock = false;
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault(); if (S.hand || tw) return;
+  if (S.mode === 'case' && e.ctrlKey) {   // a trackpad pinch arrives as ctrl + wheel: lean while it lasts, back out when it stops
+    if (!leanStart(e.clientX, e.clientY)) return; lean.id++; leanTo(clamp(lean.k - e.deltaY * .012, -.05, 1.1));
+    clearTimeout(wheelLean); wheelLean = setTimeout(() => leanAnim(0, 320), 260); return;
+  }
+  if (lean.on) return;
   if (S.mode === 'case') { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { S.walk = clamp(S.walk + (e.shiftKey ? e.deltaY : e.deltaX) * .0012, 0, S.maxWalk || 0); setView(caseView()); return; } if (wheelLock || Math.abs(e.deltaY) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 560); goShelf(S.shelf + (e.deltaY > 0 ? 1 : -1)); }
   else if (S.mode === 'crate' && cr) { if (wheelLock) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 90); flickTo(Math.round(cr.ps[cr.lane]) + (e.deltaY > 0 ? 1 : -1), 160); }
   else if (S.mode === 'boxes') { S.pan = clamp(S.pan + (e.deltaX || e.deltaY) * .0015, -S.maxPan, S.maxPan); setView(boxesView()); }
@@ -886,4 +935,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
