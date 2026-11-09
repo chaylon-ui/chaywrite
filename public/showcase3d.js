@@ -612,7 +612,7 @@ function stage() { const w = canvas.clientWidth, h = canvas.clientHeight; return
 function placeHand(now) {
   const st = stage(), W_ = canvas.clientWidth, H_ = canvas.clientHeight, d = .24, wpp = 2 * d * Math.tan(rad(cam.fov / 2)) / H_;
   const ar = S.hand.sealed ? S.hand.ar || 1 : CW / CH;   // a card, or a booster box in its own shape
-  const cwPx = Math.max(140, Math.min(st.w - 24, (st.h - 28) * ar)), k = reduce ? 1 : Math.min(1, (now - hand.t0) / 320), e = 1 - Math.pow(1 - k, 3);
+  const cwPx = Math.max(140, Math.min(st.w - 24, (st.h - 28) * ar)) * (S.hand.sealed ? .8 : 1), k = reduce ? 1 : Math.min(1, (now - hand.t0) / 320), e = 1 - Math.pow(1 - k, 3);
   hand.g.position.set((st.x + st.w / 2 - W_ / 2) * wpp, -(st.y + st.h / 2 - H_ / 2) * wpp - .05 * (1 - e), -d);
   const sc = .55 + .45 * e; hand.g.scale.set(cwPx * wpp / CW * sc, cwPx / ar * wpp / CH * sc, cwPx * wpp / CW * sc);
   if (!hand.drag) { hand.rx += (hand.tx - hand.rx) * .18; hand.ry += (hand.ty - hand.ry) * .18; }
