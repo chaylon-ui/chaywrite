@@ -242,7 +242,7 @@ function buildRoom() {
   // the front door behind you: daylight through the glass, the OPEN sign seen from inside
   pl(1.05, 2.15, poster(256, 512, (g, w, h) => { g.fillStyle = '#3a200d'; g.fillRect(0, 0, w, h); const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#dfeaf2'); gr.addColorStop(.6, '#b9c9bf'); gr.addColorStop(1, '#8b8f84'); g.fillStyle = gr; g.fillRect(22, 22, w - 44, h - 120); g.fillStyle = '#c0392b'; g.fillRect(70, 120, 116, 56); g.fillStyle = '#fff'; g.font = '700 34px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(128, 160); g.scale(-1, 1); g.fillText('OPEN', 0, 0); g.restore(); g.fillStyle = '#b08a3a'; g.fillRect(w - 44, h * .55, 14, 46); }), 1.7, 1.075, 3.49, PI);
   // posters and notes
-  pl(.62, .86, poster(360, 500, (g, w, h) => { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 150 : 115; g.lineTo(w / 2 + Math.cos(a) * r, 185 + Math.sin(a) * r); } g.fill(); g.fillStyle = '#c0392b'; g.font = '36px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('FRIDAY', w / 2, 170); g.fillText('NIGHT', w / 2, 212); g.fillStyle = '#fff'; g.font = '700 40px Inter, sans-serif'; g.fillText('TOURNAMENT', w / 2, 390); g.font = '600 24px Inter, sans-serif'; g.fillText('7 PM · sign up at the counter', w / 2, 432); g.fillStyle = '#2fd0c5'; g.fillRect(30, 455, w - 60, 8); }), -3.99, 1.8, -.7, PI / 2);
+  pl(.62, .86, poster(360, 500, (g, w, h) => { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 150 : 115; g.lineTo(w / 2 + Math.cos(a) * r, 185 + Math.sin(a) * r); } g.fill(); g.fillStyle = '#c0392b'; g.font = '36px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('FRIDAY', w / 2, 170); g.fillText('NIGHT', w / 2, 212); g.fillStyle = '#fff'; g.font = '700 40px Inter, sans-serif'; g.fillText('TOURNAMENT', w / 2, 390); g.font = '600 24px Inter, sans-serif'; g.fillText('7 PM · sign up at the counter', w / 2, 432); g.fillStyle = '#2fd0c5'; g.fillRect(30, 455, w - 60, 8); }), -3.99, 1.8, 2.0, PI / 2);
   pl(.7, .5, poster(420, 300, (g, w, h) => { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#111'; g.font = '700 62px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('WE BUY', w / 2, 110); g.fillText('CARDS', w / 2, 180); g.font = '30px "Permanent Marker", cursive'; g.fillStyle = '#c0392b'; g.fillText('cash or store credit', w / 2, 245); }), -3.99, 1.75, .9, PI / 2);
   pl(.42, .56, poster(300, 400, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#1d3a8a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; ['Please ask before', 'opening the case.', '', 'No drinks near', 'the cards!', '', '— thanks, mgmt'].forEach((l, i) => g.fillText(l, w / 2, 70 + i * 44)); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(w / 2, 20, 9, 0, PI * 2); g.fill(); }), 3.99, 1.7, -1.5, -PI / 2);
   pl(1.1, .75, poster(550, 375, (g, w, h) => { g.fillStyle = '#9a6b3c'; g.fillRect(0, 0, w, h); noise(g, w, h, 5000, ['#7d5329', '#b98a55', '#8a5f33'], .7); g.strokeStyle = '#4a2a12'; g.lineWidth = 16; g.strokeRect(0, 0, w, h); const r = seed('cork'); [['WANTED:', 'old collections'], ['Sleeves', '2 for $5'], ['League', 'Tuesdays 6pm'], ['Lost binder?', 'ask at the till']].forEach((n, i) => { g.save(); g.translate(90 + i * 125, 110 + (i % 2) * 130); g.rotate((r() - .5) * .2); g.fillStyle = ['#f6f1e2', '#f7e98e', '#cfe6f5', '#f6c9d0'][i]; g.fillRect(-55, -50, 110, 100); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.textAlign = 'center'; g.fillText(n[0], 0, -8); g.fillText(n[1], 0, 20); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(0, -40, 6, 0, PI * 2); g.fill(); g.restore(); }); }), 3.99, 1.65, .8, -PI / 2);
@@ -333,62 +333,197 @@ function buildClerk() {
   loadImg(img(LOGO, 300)).then((im) => { drawLogo(im)(lt.image.getContext('2d'), 256, 160); lt.needsUpdate = true; kick(); }).catch(() => {});
   hit(bx(.5, .95, .3, hitM, 2.12, 1.4, -1.62), 'staff');
 }
-/* ---------- the hobby corner (owner, 2026-11-09): "add warhammer paint rack, vallejo, and army painter ...
-   as well as a rack with boxes of Warhammer product", in the back left corner. The paint racks are scenery:
-   black wire racks with a header board and rows of little pots or dropper bottles running through the
-   colours. The fourth rack holds the newest Warhammer kits in stock (/showcase/wargames.json) as cut-outs
-   you can pick up, like the booster boxes. */
-let kitG = null, kitMeshes = [];
-function paintRack(o) {
-  const g = new THREE.Group(), black = lam({ color: 0x151515 }), dummy2 = new THREE.Object3D(), col = new THREE.Color();
-  bx(o.w, .06, .34, black, 0, .03, .17, g); bx(o.w, o.h, .02, black, 0, o.h / 2, .01, g);
-  bx(.025, o.h, .3, black, -o.w / 2 + .012, o.h / 2, .15, g); bx(.025, o.h, .3, black, o.w / 2 - .012, o.h / 2, .15, g);
-  bx(o.w, .27, .03, black, 0, o.h + .135, .03, g); pl(o.w - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(512, 220, o.sign) }), 0, o.h + .135, .047, 0, g);
-  const pot = o.kind === 'pot', n = o.rows * o.cols, y0 = .3, y1 = o.h - .13;
+/* ---------- the hobby corner (owner, 2026-11-09) ----------
+   "add warhammer paint rack, vallejo, and army painter ... as well as a rack with boxes of Warhammer
+   product", in the back left corner; then "The warhammer box I should be able to look right at it. Also
+   the paints, can it display the color picker technology we made from the website in the rack as it would
+   be displayed in the rack."
+   Four racks, each with a view straight at it. The paint racks hold the paints in stock from the site's
+   colour picker feed (/paints.json, src/paints.js): one pot or dropper bottle per colour, in its chart
+   colour, ordered range by range and through the colour families. A tap on a pot leans in to it and opens
+   the paint: its sizes, price, the till button, and the closest colour from each other brand (the picker's
+   own matching: CIEDE2000 on the chart colours, like for like). The fourth rack stands the newest
+   Warhammer kits in stock (/showcase/wargames.json) as cut-outs you can pick up. */
+const PB = ['Citadel', 'The Army Painter', 'Vallejo', 'Tone Pro'];
+const P_RANGES = {
+  'Citadel': ['Base', 'Layer', 'Shade', 'Contrast', 'Dry', 'Technical', 'Air', 'Spray', 'Glaze'],
+  'The Army Painter': ['Warpaints', 'Warpaints Fanatic', 'Warpaints Fanatic Wash', 'Speedpaint', 'Speedpaint Marker', 'Warpaints Air', 'Warpaints Primer', 'Quickshade Washes Set'],
+  'Vallejo': ['Game Color', 'Game Air', 'Model Color', 'Model Air', 'Mecha Color', 'Xpress Color Intense', 'Xpress Color', 'Panzer Aces', 'Metal Color', 'Surface Primer', 'Wash FX', 'Weathering FX'],
+  'Tone Pro': ['Tone 1', 'Tone 2', 'Tone 3', 'Tone 4', 'Tone 5'],
+};
+const P_FAMS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'brown', 'flesh', 'grey', 'metal', 'wash', 'other'];
+// the colour maths below is the picker's (theme sections/xg-paint-picker.liquid), unchanged
+const pRgb = (hex) => { hex = hex.replace('#', ''); return [parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255]; };
+function pHsl(hex) { const c = pRgb(hex), r = c[0], g = c[1], b = c[2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn; let h = 0, s2 = 0; if (d) { s2 = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; } return [h, s2, l]; }
+function pLab(hex) { const c = pRgb(hex).map((v) => (v > .04045 ? Math.pow((v + .055) / 1.055, 2.4) : v / 12.92)), x = (c[0] * .4124 + c[1] * .3576 + c[2] * .1805) / .95047, y = c[0] * .2126 + c[1] * .7152 + c[2] * .0722, z = (c[0] * .0193 + c[1] * .1192 + c[2] * .9505) / 1.08883, f = (t) => (t > .008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116); return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))]; }
+function de2000(a, b) {
+  const rd = Math.PI / 180, L1 = a[0], a1 = a[1], b1 = a[2], L2 = b[0], a2 = b[1], b2 = b[2];
+  const C1 = Math.sqrt(a1 * a1 + b1 * b1), C2 = Math.sqrt(a2 * a2 + b2 * b2), Cm = (C1 + C2) / 2, G = .5 * (1 - Math.sqrt(Math.pow(Cm, 7) / (Math.pow(Cm, 7) + Math.pow(25, 7))));
+  const a1p = a1 * (1 + G), a2p = a2 * (1 + G), C1p = Math.sqrt(a1p * a1p + b1 * b1), C2p = Math.sqrt(a2p * a2p + b2 * b2);
+  const h1p = C1p ? (Math.atan2(b1, a1p) / rd + 360) % 360 : 0, h2p = C2p ? (Math.atan2(b2, a2p) / rd + 360) % 360 : 0, dL = L2 - L1, dC = C2p - C1p; let dh = 0;
+  if (C1p * C2p) { dh = h2p - h1p; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
+  const dH = 2 * Math.sqrt(C1p * C2p) * Math.sin(dh / 2 * rd), Lm = (L1 + L2) / 2, Cmp = (C1p + C2p) / 2; let hm = h1p + h2p;
+  if (C1p * C2p) hm = Math.abs(h1p - h2p) > 180 ? (h1p + h2p + (h1p + h2p < 360 ? 360 : -360)) / 2 : (h1p + h2p) / 2;
+  const T = 1 - .17 * Math.cos((hm - 30) * rd) + .24 * Math.cos(2 * hm * rd) + .32 * Math.cos((3 * hm + 6) * rd) - .2 * Math.cos((4 * hm - 63) * rd);
+  const SL = 1 + .015 * (Lm - 50) * (Lm - 50) / Math.sqrt(20 + (Lm - 50) * (Lm - 50)), SC = 1 + .045 * Cmp, SH = 1 + .015 * Cmp * T;
+  const RT = -2 * Math.sqrt(Math.pow(Cmp, 7) / (Math.pow(Cmp, 7) + Math.pow(25, 7))) * Math.sin(60 * Math.exp(-Math.pow((hm - 275) / 25, 2)) * rd);
+  return Math.sqrt(Math.pow(dL / SL, 2) + Math.pow(dC / SC, 2) + Math.pow(dH / SH, 2) + RT * (dC / SC) * (dH / SH));
+}
+const P_METAL = /gold|silver|bronze|copper|brass|steel|gunmetal|chainmail|metal|\btin\b|pewter|chrome|leadbelcher|ironbreaker|retributor|alloy|runefang|stormhost|auric|gehenna|sycorax|plate mail|\biron\b|aluminium|mithril/;
+const P_WASH = /\bwash|\bink\b|\bshade\b|\btone\b|quickshade/;
+function pFamily(g) {
+  const n = g.n.toLowerCase(), r = g.items.map((it) => it.r).join(' ').toLowerCase();
+  if (P_METAL.test(n) || /metal/.test(r)) return 'metal';
+  if (g.b !== 'Tone Pro' && (P_WASH.test(n) || /shade|wash/.test(r))) return 'wash';
+  if (!g.h) return 'other';
+  if (/flesh|skin/.test(n)) return 'flesh';
+  if (/brown|umber|hide|bark|soil|leather|earth|mud|rust|wood/.test(n)) return 'brown';
+  const t = pHsl(g.h), h = t[0], s2 = t[1], l = t[2];
+  if (s2 < .13 || l < .09 || l > .93) return 'grey';
+  if (h >= 15 && h < 48 && l < .5 && s2 < .75) return 'brown';
+  if ((h < 15 || h >= 340) && s2 < .45 && l < .5 && !/red|crimson|scarlet|blood|burgundy|wine|maroon|gore/.test(n)) return 'brown';
+  if (h < 12 || h >= 345) return 'red'; if (h < 40) return 'orange'; if (h < 68) return 'yellow'; if (h < 170) return 'green'; if (h < 255) return 'blue'; if (h < 300) return 'purple';
+  return 'pink';
+}
+function pKind(g) { const r = g.items.map((it) => it.r).join(' '); if (g.fam === 'wash') return 'wash'; if (g.fam === 'metal') return 'metal'; if (/Contrast|Speedpaint|Xpress/.test(r)) return 'contrast'; if (/Technical|Weathering/.test(r)) return 'fx'; if (/Primer|Spray/.test(r)) return 'primer'; return 'paint'; }
+const pChroma = (g) => g.sat > .15 && g.l > .08 && g.l < .95;
+const pHueGap = (a, b) => { const x = Math.abs(a.hue - b.hue) % 360; return x > 180 ? 360 - x : x; };
+const paints = { all: [] };
+function pMatches(g) {   // the closest colour from each other brand, like for like
+  if (!g.lab) return []; const out = [];
+  PB.forEach((b) => {
+    if (b === g.b) return; let best = null;
+    paints.all.forEach((o) => {
+      if (o.b !== b || !o.lab || o.kind !== g.kind) return;
+      if (pChroma(g) && pChroma(o) && pHueGap(g, o) > 25) return;
+      const d = de2000(g.lab, o.lab), stock = o.items.some((it) => it.a), score = d + (stock ? 0 : 2.5) + (o.dry && !g.dry ? 3 : 0);
+      if (d < 10 && (!best || score < best.score)) best = { g: o, d, score };
+    });
+    if (best) out.push(best);
+  });
+  return out.sort((a, b) => a.d - b.d);
+}
+
+const racks = [];                      // [{ key, label, link, w, h, at, ry, g, list, pos, hitM }]
+let kitMeshes = [], ringM = null;
+const rackHead = (g, w, h, bg, lines) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.textAlign = 'center'; g.textBaseline = 'middle'; lines.forEach((l) => { g.fillStyle = l[2]; g.font = l[1]; let sc = 1; const tw_ = g.measureText(l[0]).width; if (tw_ > w * .9) sc = w * .9 / tw_; g.save(); g.translate(w / 2, l[3]); g.scale(sc, 1); g.fillText(l[0], 0, 0); g.restore(); }); };
+// One paint rack: black wire, a header board, and a pot or dropper bottle for each paint in `list`
+// (generic colours until the feed answers). Returns the group; fills rack.pos with each paint's place.
+function fillRack(r) {
+  kill(r.g); const g = r.g = new THREE.Group(), black = lam({ color: 0x151515 }), d2 = new THREE.Object3D(), col = new THREE.Color(), pot = r.kind === 'pot';
+  bx(r.w, .06, .34, black, 0, .03, .17, g); bx(r.w, r.h, .02, black, 0, r.h / 2, .01, g);
+  bx(.025, r.h, .3, black, -r.w / 2 + .012, r.h / 2, .15, g); bx(.025, r.h, .3, black, r.w / 2 - .012, r.h / 2, .15, g);
+  bx(r.w, .27, .03, black, 0, r.h + .135, .03, g); pl(r.w - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(512, 220, r.sign) }), 0, r.h + .135, .047, 0, g);
+  const cols = pot ? 16 : 22, cap = cols * 20; let list = r.list;
+  if (list && list.length > cap) list = Array.from({ length: cap }, (_, k) => list[Math.floor(k * list.length / cap)]);   // more colours than hooks: an even spread of them
+  r.shown = list || [];
+  const n = list ? list.length : cols * 12, rows = Math.max(8, Math.ceil(n / cols)), y0 = .3, y1 = r.h - .13, pitch = (y1 - y0) / (rows - 1), sc = Math.min(1, pitch / (pot ? .05 : .078));
   const inst = new THREE.InstancedMesh(pot ? new THREE.CylinderGeometry(.02, .02, .034, 12) : new THREE.CylinderGeometry(.0115, .0115, .05, 10), lam({ color: 0xffffff }), n); g.add(inst);
-  const caps = pot ? null : new THREE.InstancedMesh(new THREE.CylinderGeometry(.004, .008, .02, 8), lam({ color: o.cap || 0xf2f2f2 }), n); if (caps) g.add(caps);
-  const q = seed('rack' + o.kind + o.w + o.rows); let k = 0;
-  for (let r = 0; r < o.rows; r++) {
-    const y = y1 - r * (y1 - y0) / (o.rows - 1); bx(o.w - .06, .006, .1, black, 0, y - .004, .1, g).rotation.x = pot ? .5 : .12;
-    for (let c = 0; c < o.cols; c++) {
-      const x = -o.w / 2 + .06 + c * (o.w - .12) / (o.cols - 1), grey = r >= o.rows - 2;
-      col.setHSL(((r / (o.rows - 2)) * .9 + (c / o.cols) * .06) % 1, grey ? .06 : .55 + q() * .35, grey ? .2 + .6 * c / o.cols : .32 + .3 * q());
-      if (pot) { dummy2.position.set(x, y + .014, .105); dummy2.rotation.set(PI / 2 - .5, 0, 0); } else { dummy2.position.set(x, y + .026, .1); dummy2.rotation.set(-.12, 0, 0); }
-      dummy2.updateMatrix(); inst.setMatrixAt(k, dummy2.matrix); inst.setColorAt(k, col);
-      if (caps) { dummy2.position.set(x, y + .061, .096); dummy2.updateMatrix(); caps.setMatrixAt(k, dummy2.matrix); }
-      k++;
-    }
+  const caps = pot ? null : new THREE.InstancedMesh(new THREE.CylinderGeometry(.004, .008, .02, 8), lam({ color: r.cap || 0xf2f2f2 }), n); if (caps) g.add(caps);
+  const q = seed('rack' + r.key); r.local = [];
+  for (let k = 0; k < n; k++) {
+    const row = Math.floor(k / cols), c = k % cols, y = y1 - row * pitch, x = -r.w / 2 + .06 + c * (r.w - .12) / (cols - 1);
+    if (c === 0) bx(r.w - .06, .006, .1, black, 0, y - .004, .1, g).rotation.x = pot ? .5 : .12;
+    if (list) col.set(list[k].h || '#b9b1a2'); else col.setHSL(((row / rows) * .9 + (c / cols) * .06) % 1, .55 + q() * .35, .32 + .3 * q());
+    if (pot) { d2.position.set(x, y + .014 * sc, .105); d2.rotation.set(PI / 2 - .5, 0, 0); } else { d2.position.set(x, y + .026 * sc, .1); d2.rotation.set(-.12, 0, 0); }
+    d2.scale.setScalar(sc); d2.updateMatrix(); inst.setMatrixAt(k, d2.matrix); inst.setColorAt(k, col); r.local.push(d2.position.clone());
+    if (caps) { d2.position.set(x, y + .061 * sc, .096); d2.updateMatrix(); caps.setMatrixAt(k, d2.matrix); }
   }
-  g.position.set(o.at[0], 0, o.at[1]); g.rotation.y = o.ry || 0; scene.add(g); return g;
+  g.position.set(r.at[0], 0, r.at[1]); g.rotation.y = r.ry || 0; scene.add(g); g.updateMatrixWorld(true);
+  r.pos = r.local.map((v) => v.clone().applyMatrix4(g.matrixWorld));
 }
 function buildHobby() {
-  const head = (g, w, h, bg, lines) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.textAlign = 'center'; g.textBaseline = 'middle'; lines.forEach((l) => { g.fillStyle = l[2]; g.font = l[1]; let sc = 1; const tw_ = g.measureText(l[0]).width; if (tw_ > w * .9) sc = w * .9 / tw_; g.save(); g.translate(w / 2, l[3]); g.scale(sc, 1); g.fillText(l[0], 0, 0); g.restore(); }); };
   const rainbow = (g, x, y, w, h) => { const gr = g.createLinearGradient(x, 0, x + w, 0); ['#e23b2e', '#f29a2e', '#f2d230', '#3fae4a', '#2f7fd0', '#7a4fc0'].forEach((c, i) => gr.addColorStop(i / 5, c)); g.fillStyle = gr; g.fillRect(x, y, w, h); };
   // plain lettering on each header board, in the colours of the range it holds
-  paintRack({ kind: 'pot', w: .64, h: 1.62, rows: 13, cols: 11, at: [-3.45, -3.5], sign: (g, w, h) => { head(g, w, h, '#0c0c0c', [['WARHAMMER', '900 78px Inter, sans-serif', '#ffffff', 82], ['COLOUR', '700 40px Inter, sans-serif', '#ffffff', 172]]); rainbow(g, 60, 128, w - 120, 12); } });
-  paintRack({ kind: 'dropper', w: .64, h: 1.62, rows: 11, cols: 16, cap: 0xf4f4f4, at: [-2.74, -3.5], sign: (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#f08a1c'); gr.addColorStop(1, '#c8321e'); head(g, w, h, '#f08a1c', []); g.fillStyle = gr; g.fillRect(0, 0, w, h); head(g, w, h, 'rgba(0,0,0,0)', [['Vallejo', '700 96px Inter, sans-serif', '#ffffff', 88], ['MODEL COLOR · GAME COLOR', '700 30px Inter, sans-serif', '#fff3d6', 172]]); } });
-  paintRack({ kind: 'dropper', w: .64, h: 1.62, rows: 11, cols: 16, cap: 0x1a1a1a, at: [-4, -2.55], ry: PI / 2, sign: (g, w, h) => { head(g, w, h, '#6b1d22', []); g.fillStyle = '#a8a35a'; g.fillRect(w * .52, 14, w * .48 - 14, h - 28); head(g, w, h, 'rgba(0,0,0,0)', [['WARPAINTS', '900 58px Inter, sans-serif', '#ffffff', 82], ['THE ARMY PAINTER', '700 28px Inter, sans-serif', '#f3e9c8', 162]]); } });
+  racks.push({ key: 'citadel', label: 'Warhammer paints', link: 'citadel-collection', kind: 'pot', w: .78, h: 1.62, at: [-3.05, -3.5], ry: 0, sign: (g, w, h) => { rackHead(g, w, h, '#0c0c0c', [['WARHAMMER', '900 78px Inter, sans-serif', '#ffffff', 82], ['COLOUR · TONE PRO', '700 36px Inter, sans-serif', '#ffffff', 172]]); rainbow(g, 60, 128, w - 120, 12); } });
+  racks.push({ key: 'vallejo', label: 'Vallejo', link: 'all-vallejo', kind: 'dropper', cap: 0xf4f4f4, w: .78, h: 1.62, at: [-2.22, -3.5], ry: 0, sign: (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#f08a1c'); gr.addColorStop(1, '#c8321e'); g.fillStyle = gr; g.fillRect(0, 0, w, h); rackHead(g, w, h, 'rgba(0,0,0,0)', [['Vallejo', '700 96px Inter, sans-serif', '#ffffff', 88], ['MODEL COLOR · GAME COLOR', '700 30px Inter, sans-serif', '#fff3d6', 172]]); } });
+  racks.push({ key: 'army', label: 'Army Painter', link: 'all-the-army-painter', kind: 'dropper', cap: 0x1a1a1a, w: .78, h: 1.62, at: [-4, -1.75], ry: PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#6b1d22', []); g.fillStyle = '#a8a35a'; g.fillRect(w * .52, 14, w * .48 - 14, h - 28); rackHead(g, w, h, 'rgba(0,0,0,0)', [['WARPAINTS', '900 58px Inter, sans-serif', '#ffffff', 82], ['THE ARMY PAINTER', '700 28px Inter, sans-serif', '#f3e9c8', 162]]); } });
+  racks.slice(0, 3).forEach(fillRack);
   // the rack of Warhammer boxes: filled when the feed answers
-  kitG = new THREE.Group(); kitG.position.set(-4, 0, -1.48); kitG.rotation.y = PI / 2; scene.add(kitG);
-  const black = lam({ color: 0x151515 }), W_ = 1.14, H_ = 1.72;
-  bx(W_, H_, .02, black, 0, H_ / 2, .01, kitG); bx(.03, H_, .34, black, -W_ / 2 + .015, H_ / 2, .17, kitG); bx(.03, H_, .34, black, W_ / 2 - .015, H_ / 2, .17, kitG);
-  [.2, .58, .96, 1.34].forEach((y) => bx(W_ - .04, .02, .32, black, 0, y - .01, .17, kitG));
-  bx(W_, .27, .03, black, 0, H_ + .135, .03, kitG);
-  pl(W_ - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(768, 180, (g, w, h) => { head(g, w, h, '#0c0c0c', [['WARHAMMER', '900 96px Inter, sans-serif', '#ffffff', 92]]); g.fillStyle = '#c0392b'; g.fillRect(40, 150, w - 80, 8); }) }), 0, H_ + .135, .047, 0, kitG);
-  hit(bx(1.7, 2.0, .5, hitM, -3.1, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, 2.2, hitM, -3.8, 1.0, -1.95), 'hobby');
+  const kr = { key: 'kits', label: 'Warhammer boxes', kind: 'kits', w: 1.14, h: 1.72, at: [-4, -.45], ry: PI / 2 }; racks.push(kr);
+  const kg = kr.g = new THREE.Group(); kg.position.set(kr.at[0], 0, kr.at[1]); kg.rotation.y = kr.ry; scene.add(kg);
+  const black = lam({ color: 0x151515 }), W_ = kr.w, H_ = kr.h;
+  bx(W_, H_, .02, black, 0, H_ / 2, .01, kg); bx(.03, H_, .34, black, -W_ / 2 + .015, H_ / 2, .17, kg); bx(.03, H_, .34, black, W_ / 2 - .015, H_ / 2, .17, kg);
+  [.2, .58, .96, 1.34].forEach((y) => bx(W_ - .04, .02, .32, black, 0, y - .01, .17, kg));
+  bx(W_, .27, .03, black, 0, H_ + .135, .03, kg);
+  pl(W_ - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(768, 180, (g, w, h) => { rackHead(g, w, h, '#0c0c0c', [['WARHAMMER', '900 96px Inter, sans-serif', '#ffffff', 92]]); g.fillStyle = '#c0392b'; g.fillRect(40, 150, w - 80, 8); }) }), 0, H_ + .135, .047, 0, kg);
+  // a tap box in front of each rack, and the corner as a whole from the door
+  racks.forEach((r, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, r.h + .3, .36), hitM); m.position.set(0, (r.h + .3) / 2, .18); m.userData.rack = i; r.g.parent.add(m); m.position.applyMatrix4(new THREE.Matrix4().makeRotationY(r.ry || 0)); m.position.x += r.at[0]; m.position.z += r.at[1]; m.rotation.y = r.ry || 0; r.hitM = m; });
+  hit(bx(2.0, 2.0, .5, hitM, -2.64, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, 2.7, hitM, -3.8, 1.0, -1.0), 'hobby');
+  ringM = new THREE.Mesh(new THREE.TorusGeometry(.026, .004, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffffff })); ringM.visible = false; scene.add(ringM);
 }
 function loadKits() {
   fetch(W + '/showcase/wargames.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
-    if (!d || !d.ok || !d.rows || !kitG) return;
+    const kr = racks.find((r) => r.key === 'kits'); if (!d || !d.ok || !d.rows || !kr) return;
     d.rows.slice(0, 12).forEach((r, i) => {   // three to a shelf, the newest at the top left
       const c = { name: r.name, set: 'Warhammer', price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: 'warhammer', sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
-      const q = seed('kit' + c.name), bh = .29, bw = clamp(bh * c.ar, .2, .34), hgt = bw / c.ar, face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
+      const q = seed('kit' + c.name), bh = .31, bw = clamp(bh * c.ar, .2, .34), hgt = bw / c.ar, face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;
-      m.position.set(-.37 + (i % 3) * .37 + (q() - .5) * .02, [1.34, .96, .58, .2][Math.floor(i / 3)] + hgt / 2, .2 + (q() - .5) * .03); m.rotation.y = (q() - .5) * .16; m.userData = { card: c }; kitG.add(m); kitMeshes.push(m);
+      m.position.set(-.37 + (i % 3) * .37 + (q() - .5) * .02, [1.34, .96, .58, .2][Math.floor(i / 3)] + hgt / 2, .2 + (q() - .5) * .03); m.rotation.y = (q() - .5) * .16; m.userData = { card: c }; kr.g.add(m); kitMeshes.push(m);
       cardTex(c, 256).then((t) => { face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
     });
     lights(S.eve);
   }).catch(() => {});
+}
+// The picker's feed: every paint on the site, one swatch per colour. The racks take the ones in stock.
+function loadPaints() {
+  fetch(W + '/paints.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((j) => {
+    const all = ((j && j.swatches) || []).filter((g) => PB.indexOf(g.b) > -1 && g.items && g.items.length);
+    all.forEach((g) => { g.fam = pFamily(g); g.kind = pKind(g); g.dry = g.items.every((it) => it.r === 'Dry'); if (g.h) { g.lab = pLab(g.h); const t = pHsl(g.h); g.hue = t[0]; g.sat = t[1]; g.l = t[2]; } else { g.hue = 999; g.sat = 0; g.l = 0; }
+      const ri = (it) => { const k = (P_RANGES[g.b] || []).indexOf(it.r); return k < 0 ? 99 : k; }; g.items.sort((x, y) => ri(x) - ri(y) || (parseFloat(x.s) || 0) - (parseFloat(y.s) || 0)); g.ri = ri(g.items[0]); });
+    paints.all = all; if (!all.length) return;
+    const stock = (g) => g.items.some((it) => it.a), by = (a, b) => a.ri - b.ri || P_FAMS.indexOf(a.fam) - P_FAMS.indexOf(b.fam) || a.hue - b.hue || b.l - a.l;
+    const of = (b) => all.filter((g) => g.b === b && stock(g)).sort(by);
+    const tone = all.filter((g) => g.b === 'Tone Pro' && stock(g)).sort((a, b) => String(a.g || a.n).localeCompare(String(b.g || b.n)) || (a.o || 0) - (b.o || 0));
+    [['citadel', of('Citadel').concat(tone)], ['vallejo', of('Vallejo')], ['army', of('The Army Painter')]].forEach((x) => { const r = racks.find((k) => k.key === x[0]); if (r && x[1].length) { r.list = x[1]; fillRack(r); x[1].forEach((g) => { g.rack = r; }); } });
+    if (S.mode === 'rack' || S.mode === 'hobby') ui(); kick();
+  }).catch(() => {});
+}
+// Looking straight at a rack: far enough back for the whole of it. A wide lens, so the camera stays close and the racks beside it stay out of the way.
+function rackView(r) {
+  const fov = 70, n = new V3(Math.sin(r.ry || 0), 0, Math.cos(r.ry || 0)), hgt = r.h + .32, d = Math.max((hgt / 2 + .12) / Math.tan(rad(fov / 2)), (r.w / 2 + .1) / hTan(fov));
+  const C = new V3(r.at[0], hgt / 2, r.at[1]).addScaledVector(n, .17);
+  return lookView(C.clone().addScaledVector(n, d), C, fov);
+}
+// Leaning in to one paint: it sits clear of the sheet that opens (above it on a phone, left of it on a desktop).
+function paintView(r, k) {
+  const n = new V3(Math.sin(r.ry || 0), 0, Math.cos(r.ry || 0)), right = new V3(n.z, 0, -n.x), P = r.pos[k], ph = cam.aspect < 1;
+  const T = P.clone().add(new V3(0, ph ? -.1 : 0, 0)).addScaledVector(right, ph ? 0 : .13);
+  return lookView(T.clone().addScaledVector(n, ph ? .5 : .62), T, cam.aspect < 1 ? 70 : 55);
+}
+const psel = { g: null, r: null, k: -1, it: null };
+function goRack(i) { const r = racks[i]; if (!r) return; if (S.hand) putBack(); closePaint(true); leanOff(); S.mode = 'rack'; S.rack = i; glide(rackView(r), 800); hint(r.kind === 'kits' ? 'Tap a box to pick it up' : r.list ? 'Tap a paint for its colour, price and closest matches' : ''); ui(); }
+function openPaint(g, it) {
+  const r = g.rack, k = r ? r.shown.indexOf(g) : -1; psel.g = g; psel.r = r; psel.k = k;
+  const its = g.items.filter((x) => x.a); psel.it = it && its.indexOf(it) > -1 ? it : its[0] || g.items[0];
+  if (r && k > -1) { const i = racks.indexOf(r); if (S.mode !== 'rack' || S.rack !== i) { S.mode = 'rack'; S.rack = i; ui(); } ringM.visible = true; ringM.position.copy(r.pos[k]); ringM.rotation.set(r.kind === 'pot' ? -.5 : 0, r.ry || 0, 0); ringM.position.addScaledVector(new V3(Math.sin(r.ry || 0), 0, Math.cos(r.ry || 0)), .03); glide(paintView(r, k), 520); }
+  drawPaint(); $('#paintv').classList.add('on'); hint('');
+}
+function drawPaint() {
+  const g = psel.g, it = psel.it; if (!g) return; const its = g.items.filter((x) => x.a), done = S.pile.some((p) => String(p.variantId) === String(it.v));
+  const chip = (o, cls) => '<span class="' + cls + '" style="background:' + esc(o.h || '#b9b1a2') + '"></span>';
+  $('#paintBody').innerHTML = '<div class="pv__top">' + chip(g, 'pv__chip') + '<div><h2>' + esc(g.n) + '</h2><div class="set">' + esc([g.b === 'Citadel' ? 'Warhammer Colour' : g.b === 'Tone Pro' ? 'Warhammer Tone Pro' : g.b, it.r, it.s, it.c].filter(Boolean).join(' · ')) + '</div></div></div>'
+    + (its.length > 1 ? '<div class="cps">' + its.map((x, i) => '<button type="button" class="cp' + (x === it ? ' on' : '') + '" data-popt="' + g.items.indexOf(x) + '"><b>' + esc(x.r) + '</b>' + (x.s ? '<small>' + esc(x.s) + '</small>' : '') + '<span>' + money(x.p) + '</span></button>').join('') + '</div>' : '')
+    + '<div class="acts">' + (it.a && it.v ? '<button type="button" class="buy" id="pbuy"' + (done ? ' disabled' : '') + '>' + (done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till') + ' · ' + money(it.p)) + '</button>' : '<span class="one">Out of stock</span>')
+    + '<a href="https://exorgames.com/products/' + esc(it.u) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a></div>'
+    + (() => { const m = pMatches(g); return m.length ? '<h3>Closest from other brands</h3><div class="pv__ms">' + m.map((x) => '<button type="button" class="pv__m" data-pmatch="' + paints.all.indexOf(x.g) + '">' + chip(x.g, 'pv__dot') + '<span><b>' + esc(x.g.n) + '</b><small>' + esc((x.g.b === 'Citadel' ? 'Warhammer' : x.g.b) + ' · ' + x.g.items[0].r + (x.g.items.some((y) => y.a) ? '' : ' · out of stock')) + '</small></span><i>' + (x.d < 2 ? 'near identical' : x.d < 5 ? 'very close' : 'close') + '</i></button>').join('') + '</div>' : ''; })();
+}
+function closePaint(quiet) { const was = !!psel.g; psel.g = null; psel.k = -1; if (ringM) ringM.visible = false; $('#paintv').classList.remove('on'); if (was && !quiet && S.mode === 'rack') glide(rackView(racks[S.rack]), 520); }
+function buyPaint(b) {
+  const g = psel.g, it = psel.it; if (!g || !it || b.disabled) return; b.disabled = true;
+  const done = () => { S.pile.push({ name: g.n, set: [g.b, it.r, it.s].filter(Boolean).join(' '), price: it.p, url: 'https://exorgames.com/products/' + it.u, variantId: it.v, cond: '', foil: false }); pile(); drawPaint(); };
+  if (!ON_STORE) { done(); return; }
+  b.textContent = 'Adding…';
+  fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(it.v), quantity: 1, properties: { _xg: 'showcase' } }] }) })
+    .then((r) => { if (!r.ok) throw new Error('cart ' + r.status); return r.json(); }).then(() => { done(); if (window.xgImpact) { try { window.xgImpact('showcase', 'add'); } catch (x) {} } })
+    .catch(() => { b.textContent = 'Could not add'; setTimeout(drawPaint, 2000); });
+}
+// the pot nearest the tap, within a finger's width
+function potAt(r, x, y) {
+  const rc = canvas.getBoundingClientRect(), v = new V3(); let best = -1, bd = 38 * 38;
+  if (!r.list) return -1;
+  for (let k = 0; k < r.pos.length; k++) { v.copy(r.pos[k]).project(cam); const dx = (v.x + 1) / 2 * rc.width + rc.left - x, dy = (1 - v.y) / 2 * rc.height + rc.top - y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = k; } }
+  return best;
 }
 function lights(k) {   // 0 = the tubes, 1 = the evening, with the lamp
   hemi.intensity = lerp(2.6, .5, k); sun.intensity = lerp(1.1, .12, k); lampL.intensity = lerp(0, 2.4, k);
@@ -848,13 +983,13 @@ function showTill() {
 const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lookView(new V3(x, 1.6, 3.2), new V3(x, ph ? 1.3 : 1.18, -1.2), ph ? 82 : 55); v.yaw += S.look.yaw; v.pitch += S.look.pitch; return v; };
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
-const hobbyView = () => lookView(new V3(-1.85, 1.5, cam.aspect < 1 ? .5 : .35), new V3(-3.45, 1.1, -2.7), cam.aspect < 1 ? 80 : 58);
-function viewFor() { return S.mode === 'hobby' ? hobbyView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
-  leanOff();
+  leanOff(); closePaint(true);
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
-  else if (mode === 'hobby') { S.mode = 'hobby'; glide(hobbyView()); hint(kitMeshes.length ? 'Paints and Warhammer · tap a box to pick it up' : 'Paints and Warhammer'); }
+  else if (mode === 'hobby') { S.mode = 'hobby'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
   else if (mode === 'sealed') { if (!sealed.rows.length) { hint('No booster boxes in stock for this game right now'); return; } S.mode = 'boxes'; S.focus = 'sealed'; S.pan = 0; glide(boxesView()); hint('The newest booster boxes in stock · tap one to pick it up'); }
   else if (mode === 'boxes') { S.focus = ''; if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
@@ -864,6 +999,8 @@ function go(mode) {
 }
 function back() {
   if (S.hand) return putBack();
+  if (psel.g) return closePaint();
+  if (S.mode === 'rack') return go('hobby');
   if ($('#setsv').classList.contains('on')) { $('#setsv').classList.remove('on'); return; }
   if ($('#tillv').classList.contains('on')) return go('door');
   if (S.mode === 'crate' && cr && cr.kind === 'set') { go('boxes'); if (boxes.open) openBox(boxes.open.n); return; }
@@ -873,7 +1010,12 @@ let hintT = 0;
 function hint(t) { const el = $('#hint'); clearTimeout(hintT); if (!t) { el.classList.add('gone'); return; } el.textContent = t; el.classList.remove('gone'); hintT = setTimeout(() => el.classList.add('gone'), 6000); }
 function ui() {
   document.body.dataset.mode = S.mode;
-  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode;
+  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' ? 'hobby' : S.mode;
+  if (S.mode === 'hobby' || S.mode === 'rack') {   // the four racks, and for a paint rack the way to the site's own colour picker
+    const r = S.mode === 'rack' ? racks[S.rack] : null;
+    $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Corner</button>' : '') + racks.map((k, i) => '<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>').join('')
+      + (r && r.link ? '<a href="https://exorgames.com/collections/' + r.link + '?view=paints"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Colour picker on the site' + (ON_STORE ? '' : ' ↗') + '</a>' : '');
+  }
   $('#boxNote').textContent = st === 'sealed' ? 'tap a booster box to pick it up' : 'tap a white box for its sets · a booster box to pick it up';
   document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.getAttribute('data-go') === st));
   $('#shelves').innerHTML = S.shelves.map((s, i) => '<button type="button" data-shelf="' + i + '"' + (i === S.shelf ? ' class="on"' : '') + '>' + String.fromCharCode(65 + i) + ' · ' + esc(s.label) + '</button>').join('');
@@ -885,8 +1027,6 @@ function ui() {
     $('#crLaneL').hidden = $('#crLaneR').hidden = cr.n < 2; $('#crLaneL').disabled = cr.lane <= 0; $('#crLaneR').disabled = cr.lane >= cr.n - 1;
   }
 }
-const HOBBY_LINKS = [['Citadel Contrast', 'citadel-contrast-paints'], ['Citadel Layer', 'citadel-layer-paints'], ['Vallejo Game Color', 'vallejo-game-color'], ['Army Painter Warpaints', 'the-army-painter-warpaints']];
-$('#ctxHobby').innerHTML = HOBBY_LINKS.map((l) => '<a href="https://exorgames.com/collections/' + l[1] + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + esc(l[0]) + (ON_STORE ? '' : ' ↗') + '</a>').join('');
 function tabs() {
   $('#tabs').innerHTML = S.cases.map((c) => { const ic = S.icons.indexOf(c.key) > -1; return '<button type="button" data-game="' + esc(c.key) + '" class="' + (ic ? 'ic' : '') + (c.key === S.game ? ' on' : '') + '" title="' + esc(c.label) + '">' + (ic ? '<img src="' + esc(W + '/showcase/icon/' + c.key + '.png') + '" alt="" draggable="false">' : '') + '<span>' + esc(c.label) + '</span></button>'; }).join('');
   $('#flat').href = W + '/showcase?game=' + encodeURIComponent(S.game);
@@ -903,7 +1043,14 @@ function tap(x, y) {
   if (tw) return;
   if (S.mode === 'case') { const h = pick(caseCards.filter((m) => m.visible), x, y); if (h) { const u = h.object.userData; if (u.si !== S.shelf) goShelf(u.si); else lift(u.card, h.object); return; } }
   else if (S.mode === 'boxes') { const h = pick(boxMeshes.concat(sealMeshes), x, y); if (h) return h.object.userData.card ? lift(h.object.userData.card, null) : openBox(h.object.userData.n); }
-  else if (S.mode === 'hobby') { const h = pick(kitMeshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
+  else if (S.mode === 'hobby') { const h = pick(racks.map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
+  else if (S.mode === 'rack') {
+    const r = racks[S.rack];
+    if (r.kind === 'kits') { const h = pick(kitMeshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
+    else { const k = potAt(r, x, y); if (k > -1) return openPaint(r.shown[k]); if (psel.g) return closePaint(); }
+    const o = pick(racks.map((q) => q.hitM), x, y); if (o && o.object.userData.rack !== S.rack) return goRack(o.object.userData.rack);
+    return;
+  }
   else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; } }
   const h = pick(hot, x, y); if (h && !(S.mode === 'crate' && cr && cr.kind === h.object.userData.act)) act(h.object.userData.act);
 }
@@ -1023,6 +1170,12 @@ document.addEventListener('click', (e) => {
   else if (b.hasAttribute('data-set')) openSet(Number(b.getAttribute('data-set')));
   else if (b.hasAttribute('data-copy')) pickCopy(Number(b.getAttribute('data-copy')));
   else if (b.hasAttribute('data-mini')) { const c = minis[Number(b.getAttribute('data-mini'))]; if (c) { if (S.handSrc) S.handSrc.visible = true; lift(c, null); } }
+  else if (b.hasAttribute('data-rack')) goRack(Number(b.getAttribute('data-rack')))
+  else if (b.hasAttribute('data-popt')) { psel.it = psel.g.items[Number(b.getAttribute('data-popt'))]; drawPaint(); }
+  else if (b.hasAttribute('data-pmatch')) { const g = paints.all[Number(b.getAttribute('data-pmatch'))]; if (g) openPaint(g); }
+  else if (b.id === 'pbuy') buyPaint(b);
+  else if (b.id === 'paintX') closePaint();
+  else if (b.id === 'rackBack') go('hobby');
   else if (b.hasAttribute('data-drop')) { S.pile.splice(Number(b.getAttribute('data-drop')), 1); pile(); showTill(); }
   else if (b.id === 'buy') buy(b);
   else if (b.id === 'x') putBack();
@@ -1049,5 +1202,5 @@ function load(game) {
     go(S.mode === 'case' ? 'case' : 'door');
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
-fonts.then(() => { buildRoom(); loadKits(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+fonts.then(() => { buildRoom(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
+window.xgShop = { racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
