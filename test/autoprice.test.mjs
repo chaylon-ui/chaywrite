@@ -537,6 +537,11 @@ test("one tab per game with the error count in brackets and a price alert marker
 import { parseGraded, gradeField, pcPickGraded, isGradedType } from "../src/autoprice.js";
 test("graded titles parse into name, number, set, grader and grade", () => {
   assert.deepEqual(parseGraded("Rapidash (44/64) [Jungle 1st Edition] Graded PSA 9"), { name: "Rapidash", number: "44", set: "Jungle 1st Edition", grader: "PSA", grade: 9, japanese: false });
+  // the grade's word after a Beckett number is not the card's name (2026-11-09)
+  assert.deepEqual(parseGraded("Charizard (SWSH066) [Sword & Shield Black Star Promos] Graded BGS 9.5 Gem Mint"), { name: "Charizard", number: "SWSH066", set: "Sword & Shield Black Star Promos", grader: "BGS", grade: 9.5, japanese: false });
+  assert.deepEqual(parseGraded("Charizard VSTAR (SWSH262) [Sword & Shield Black Star Promos] Graded BGS 9 Mint").name, "Charizard VSTAR");
+  assert.deepEqual(parseGraded("Mew (151/165) [151] Graded CGC 10 Pristine").name, "Mew");
+  assert.equal(parseGraded("Mint Condition Marvel (12) [Set] Graded PSA 9").name, "Mint Condition Marvel");   // a name is left alone
   assert.deepEqual(parseGraded("Fire Energy PSA:9 (102/106) [EX: Emerald] Graded"), { name: "Fire Energy", number: "102", set: "EX: Emerald", grader: "PSA", grade: 9, japanese: false });
   assert.deepEqual(parseGraded("Squirtle Beckett:8.5 (63/102) [Base Set Shadowless Unlimited] GRADED"), { name: "Squirtle", number: "63", set: "Base Set Shadowless Unlimited", grader: "BGS", grade: 8.5, japanese: false });
   assert.deepEqual(parseGraded("Charizard (4/102) [Base Set Unlimited] (7.5 Graded)"), { name: "Charizard", number: "4", set: "Base Set Unlimited", grader: null, grade: 7.5, japanese: false });

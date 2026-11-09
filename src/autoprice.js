@@ -163,7 +163,9 @@ export function parseGraded(title) {
   s = s.replace(/\[[^\]]*\]/g, " ");
   let grader = null, grade = null;
   const gm = /\b(psa|bgs|beckett|cgc|sgc|ags|tag|ace)\s*:?\s*-?\s*(10|[1-9](?:\.5)?)\b/i.exec(s);
-  if (gm) { grader = GRADERS[gm[1].toLowerCase()]; grade = Number(gm[2]); s = s.replace(gm[0], " "); }
+  // Beckett / CGC titles carry the grade's word after the number ("BGS 9.5 Gem Mint", "BGS 9 Mint",
+  // "CGC 10 Pristine"); it is part of the grade, not the card (2026-11-09: "Charizard Gem Mint" searched PriceCharting).
+  if (gm) { grader = GRADERS[gm[1].toLowerCase()]; grade = Number(gm[2]); s = s.slice(0, gm.index) + " " + s.slice(gm.index + gm[0].length).replace(/^\s*(?:gem\s+mint|gem\s+mt|pristine|black\s+label|near\s+mint|nm-?mt|mint|perfect|authentic)\b/i, " "); }
   else { const g2 = /\(?\s*(10|[1-9](?:\.5)?)\s*graded\s*\)?/i.exec(s); if (g2) { grade = Number(g2[1]); s = s.replace(g2[0], " "); } }
   s = s.replace(/\bgraded\b/gi, " ").replace(/\s+-\s+/g, " ");
   let number = null;
