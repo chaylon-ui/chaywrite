@@ -1098,16 +1098,20 @@ function gradedView() {
    games, etc.. where you have headers above the aisles and ... scroll through all the products we have in
    stock. Have signage above the aisles (double sided) that you can walk under into the aisles and see as
    far down as you need to ... exor games branded ... at the right of the counter".
-   The right wall opens at the front into a hall of aisles, one per kind of product (/showcase/aisles.json),
-   each as long as its stock needs: forty products a metre, six shelves a side. A hanging two-sided sign in
-   the shop's red and yellow marks each entrance and repeats down the aisle. Every slot holds a plain box
-   from the start; the boxes near you become the products themselves (their photos cut out, a price sticker),
-   read a page at a time as you walk (/showcase/aisle.json). Drag or scroll to walk; turn to face a shelf. */
-const hall = { list: [], built: false, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3 };
+   The right wall opens at the front into a hall of aisles, one per kind of product (/showcase/aisles.json).
+   Each aisle is shelved in signed sections, the way a shop does it ("Sort of like how they would be in real
+   life in a store"): the newest arrivals by the entrance, then each product line under its own sign.
+   You browse an aisle the way you browse the glass case ("I still find aisles feel clunky and unnatural" of
+   the first build, which had a look-ahead view and a turn to each side): always facing a shelf, one sideways
+   swipe walks you along it; at the far end you turn and come back up the other side, so the whole aisle is one
+   ribbon read left to right. Every slot holds a plain box from the start; the ones in front of you become the
+   products themselves (photo cut out, price sticker), read a page at a time (/showcase/aisle.json). */
+const hall = { list: [], built: false, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
 const aCx = (i) => hall.x0 + .3 + .45 + 1.0 + i * hall.pitch;
-function slotPos(a, k) {   // where product k of an aisle stands: columns of twelve, six down the left side then six down the right
-  const col = Math.floor(k / 12), w = k % 12, left = w < 6;
-  return { x: aCx(a.i) + (left ? -1.14 : 1.14), y: hall.lv[w % 6] + .012, z: hall.zf - .25 - col * hall.colW, ry: left ? PI / 2 : -PI / 2, left, col };
+// where product k of a section stands: columns of six, top shelf down, running along the ribbon
+function slotPos(a, sec, k) {
+  const col = sec.c0 + Math.floor(k / 6), d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + a.U - col * hall.colW;
+  return { x: aCx(a.i) + (sec.left ? -1.14 : 1.14), y: hall.lv[k % 6] + .012, z: hall.zf - d, ry: sec.left ? PI / 2 : -PI / 2, left: sec.left, s: sec.s0 + (col - sec.c0) * hall.colW };
 }
 function drawAisleSign(g, w, h, a) {
   g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, w, 46); g.fillStyle = '#f2c230'; g.fillRect(0, 46, w, 6); g.fillRect(0, h - 12, w, 12);
@@ -1116,9 +1120,28 @@ function drawAisleSign(g, w, h, a) {
   g.font = '900 92px Inter, sans-serif'; g.textAlign = 'left'; let sc = 1; const t = a.label.toUpperCase(), tw_ = g.measureText(t).width; if (tw_ > w - 190) sc = (w - 190) / tw_;
   g.save(); g.translate(164, 154); g.scale(sc, 1); g.fillStyle = '#8f1a17'; g.fillText(t, 4, 5); g.fillStyle = '#f2c230'; g.fillText(t, 0, 0); g.restore();
 }
+// the sign on top of the shelving where a section starts: the shop's black, red and yellow; the new arrivals' one is yellow
+function drawSecSign(g, w, h, sec) {
+  const nw = sec.key === 'new';
+  g.fillStyle = nw ? '#f2c230' : '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, 14, h); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillRect(14, h - 8, w - 14, 8);
+  const n = sec.count.toLocaleString('en-CA'); g.textBaseline = 'middle'; g.font = '800 24px Inter, sans-serif'; g.textAlign = 'right'; g.fillStyle = nw ? '#14100e' : '#ffffffb0'; g.fillText(n, w - 14, h / 2 - 3);
+  const room = w - 44 - g.measureText(n).width - 14, t = (nw ? '★ ' : '') + sec.label.toUpperCase(); g.font = '900 54px Inter, sans-serif'; g.textAlign = 'left';
+  const tw_ = g.measureText(t).width, sc = tw_ > room ? room / tw_ : 1; g.save(); g.translate(30, h / 2 - 2); g.scale(sc, 1); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillText(t, 0, 0); g.restore();
+}
 function buildHall(list) {
   if (hall.built || !list.length) return; hall.built = true;
-  hall.list = list.map((a, i) => ({ key: a.key, label: a.label, count: a.count, i, rows: [], next: '', loading: false, done: false, live: new Map(), L: Math.ceil(a.count / 12) * hall.colW + .6 }));
+  hall.list = list.map((a, i) => {
+    const o = { key: a.key, label: a.label, count: a.count, i, loading: false, live: new Map() };
+    // the sections along the ribbon, each from a fresh column and at least a sign wide
+    o.secs = (a.secs && a.secs.length ? a.secs : [{ key: '', label: a.label, count: a.count }]).map((s, j) => ({ key: s.key, label: s.label, count: s.count, j, rows: [], next: '', done: false, fail: 0, cols: Math.max(3, Math.ceil(s.count / 6)) }));
+    const N = o.secs.reduce((n, s) => n + s.cols, 0); let run = 0, best = 0, bestV = 1e9;
+    o.secs.forEach((s, j) => { run += s.cols; const v = Math.max(run, N - run); if (v < bestV) { bestV = v; best = j + 1; } });   // turn at the section break nearest half way
+    o.nl = o.secs.slice(0, best).reduce((n, s) => n + s.cols, 0); o.nr = N - o.nl;
+    o.U = (Math.max(o.nl, o.nr) - 1) * hall.colW; o.L = o.U + 1.1; o.smax = o.nr ? 2 * o.U + hall.T : o.U;
+    let c = 0, off = 0, left = true;
+    o.secs.forEach((s, j) => { if (left && j >= best && o.nr) { left = false; c = 0; } s.left = left; s.c0 = c; s.s0 = left ? c * hall.colW : o.U + hall.T + c * hall.colW; s.off = off; c += s.cols; off += s.count; });
+    o.slots = off; return o;
+  });
   const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35, Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
   hall.xMax = xMax; hall.zBack = zBack;
   rwFull.visible = false; rwShort.visible = true;
@@ -1141,8 +1164,14 @@ function buildHall(list) {
       bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - a.L, G);
     });
     // every slot stocked with a plain box from the start
-    const inst = a.inst = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, .23, .07).translate(0, .115, 0), lam({ color: 0xffffff }), a.count); const q = seed('aisle' + a.key);
-    for (let k = 0; k < a.count; k++) { const p = slotPos(a, k); d2.position.set(p.x, p.y, p.z + (q() - .5) * .03); d2.rotation.set(0, p.ry, 0); d2.scale.set(.8 + q() * .4, .7 + q() * .45, 1); d2.updateMatrix(); inst.setMatrixAt(k, d2.matrix); col.setHSL(q(), .25 + q() * .35, .3 + q() * .3); inst.setColorAt(k, col); }
+    const inst = a.inst = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, .23, .07).translate(0, .115, 0), lam({ color: 0xffffff }), a.slots); const q = seed('aisle' + a.key);
+    a.secs.forEach((sec) => {
+      for (let k = 0; k < sec.count; k++) { const p = slotPos(a, sec, k); d2.position.set(p.x, p.y, p.z + (q() - .5) * .03); d2.rotation.set(0, p.ry, 0); d2.scale.set(.8 + q() * .4, .7 + q() * .45, 1); d2.updateMatrix(); inst.setMatrixAt(sec.off + k, d2.matrix); col.setHSL(q(), .25 + q() * .35, .3 + q() * .3); inst.setColorAt(sec.off + k, col); }
+      // its sign on top of the shelving where it starts, and a divider down the shelves
+      const sd = sec.left ? -1 : 1, fw = sec.left ? -1 : 1, p0 = slotPos(a, sec, 0), w = Math.min(1.1, sec.cols * hall.colW - .04), zs = p0.z + fw * (w / 2 - hall.colW / 2 + .02);
+      pl(w, .19, new THREE.MeshBasicMaterial({ map: ctex(560, 96, (g, cw, ch) => drawSecSign(g, cw, ch, sec)) }), cx + sd * .985, 2.135, zs, sec.left ? PI / 2 : -PI / 2, G);
+      bx(.44, 1.84, .012, cream, cx + sd * 1.22, 1.07, p0.z - fw * hall.colW / 2, G);
+    });
     G.add(inst);
     // the header over the entrance, and again every nine metres: two-sided, hung from the ceiling
     const sm = new THREE.MeshBasicMaterial({ map: ctex(900, 260, (g, w, h) => drawAisleSign(g, w, h, a)) });
@@ -1158,53 +1187,82 @@ function buildHall(list) {
 function loadAisles() {
   return fetch(W + '/showcase/aisles.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => { if (d && d.ok && d.aisles) buildHall(d.aisles); }).catch(() => {});
 }
-// one more page of an aisle's products, when the walk is getting near the end of what is known
-function aislePage(a) {
-  if (a.loading || a.done) return; a.loading = true;
-  fetch(W + '/showcase/aisle.json?cat=' + a.key + (a.next ? '&after=' + encodeURIComponent(a.next) : ''), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
-    a.loading = false; if (!d || !d.ok) { a.fail = (a.fail || 0) + 1; if (a.fail > 3) a.done = true; return; }
-    d.rows.forEach((r) => a.rows.push({ name: r[0], set: a.label, price: r[2], image: r[3], url: 'https://exorgames.com/products/' + r[1], variantId: r[5], condition: '', foil: false, game: a.key, sealed: true, ar: clamp(Number(r[4]) || 1, .5, 1.7), qty: r[6] }));
-    a.next = d.next || ''; if (!d.next) a.done = true; kick();
+// one more page of a section's products, when the walk is getting near the end of what is known
+function aislePage(a, sec) {
+  if (a.loading || sec.done) return; a.loading = true;
+  fetch(W + '/showcase/aisle.json?cat=' + a.key + (sec.key ? '&sec=' + sec.key : '') + (sec.next ? '&after=' + encodeURIComponent(sec.next) : ''), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    a.loading = false; if (!d || !d.ok) { if (++sec.fail > 3) sec.done = true; return; }
+    d.rows.forEach((r) => sec.rows.push({ name: r[0], set: a.label + (sec.key ? ' · ' + sec.label : ''), price: r[2], image: r[3], url: 'https://exorgames.com/products/' + r[1], variantId: r[5], condition: '', foil: false, game: a.key, sealed: true, ar: clamp(Number(r[4]) || 1, .5, 1.7), qty: r[6] }));
+    sec.next = d.next || ''; if (!d.next || sec.rows.length >= sec.count) sec.done = true; kick();
   }).catch(() => { a.loading = false; });
 }
-// Which slots show the product itself: the ones near you. The rest stay plain boxes.
+const aisleFov = () => (cam.aspect < 1 ? 84 : 76);   // floor to section signs between the bars at the top and bottom of the screen
+const aisleHalf = () => 1.68 * Math.tan(aisleFov() * PI / 360) * cam.aspect;   // half the shelf run on screen, in metres
+// Which slots show the product itself: the ones in front of you. The rest stay plain boxes.
 let stockAt = 0, stockT = 0; const zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
 function aisleStock(now) {
   if (!hall.built) return;
   if (now - stockAt < 160) { if (!stockT) stockT = setTimeout(() => { stockT = 0; kick(); }, 180); return; }   // look again shortly: a page that just arrived may need its shelves filled, or the next page asked for
   stockAt = now;
-  const ph = cam.aspect < 1, cur = S.mode === 'aisle' ? hall.list[S.aisle] : null;
+  const cur = S.mode === 'aisle' ? hall.list[S.aisle] : null, hw = Math.min(3.2, aisleHalf() + .45), sNow = S.as || 0;
   hall.list.forEach((a) => {
-    let lo = 0, hi = -1;
-    if (a === cur) { const c = Math.floor((hall.zf - view.pos.z) / hall.colW); if (S.aface) { lo = c - (ph ? 3 : 6); hi = c + (ph ? 3 : 6); } else { lo = c + (ph ? 4 : -1); hi = c + (ph ? 13 : 11); } }   // looking ahead, a narrow screen only sees the shelves from a few steps on
-    else if (S.mode === 'aisles' || cur) { hi = a === cur || S.mode === 'aisles' ? (ph ? 1 : 2) : -1; }   // from the front: the first columns of every aisle
-    lo = Math.max(0, lo);
-    const want = new Set(); for (let c = lo; c <= hi; c++) for (let w = 0; w < 12; w++) { const k = c * 12 + w; if (k >= a.count) break; if (a === cur && S.aface && (w < 6) !== (S.aface < 0)) continue; want.add(k); }
-    if (hi >= 0 && a.rows.length < Math.min(a.count, (hi + (a === cur ? 8 : 1)) * 12) && !a.done) aislePage(a);
-    a.live.forEach((m, k) => { if (!want.has(k)) { const old = m.material.map; if (old && !old.userData.keep) old.dispose(); m.material.dispose(); m.geometry.dispose(); hall.g.remove(m); a.live.delete(k); const p = slotPos(a, k), d = dummy; d.position.set(p.x, p.y, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1); d.updateMatrix(); a.inst.setMatrixAt(k, d.matrix); a.inst.instanceMatrix.needsUpdate = true; } });
-    want.forEach((k) => {
-      if (a.live.has(k)) return; const c = a.rows[k]; if (!c) { if (a.done && k >= a.rows.length) { a.inst.setMatrixAt(k, zeroM); a.inst.instanceMatrix.needsUpdate = true; } return; }
-      const p = slotPos(a, k), w = c.ar >= 1 ? .27 : .27 * c.ar, h = c.ar >= 1 ? .27 / c.ar : .27, q = seed('slot' + a.key + k);
+    const want = new Map(); let ask = null, askD = 0;
+    if (a === cur || S.mode === 'aisles') a.secs.forEach((sec) => {
+      const n = sec.count; let far = -1;
+      for (let c = 0; c < sec.cols; c++) {
+        const s = sec.s0 + c * hall.colW;
+        if (a === cur ? Math.abs(s - sNow) > hw : !(s < .7 || (a.nr && s > a.smax - .7))) continue;   // from the hall: just the ends of the shelves by the entrance
+        for (let w = 0; w < 6; w++) { const k = c * 6 + w; if (k >= n) break; want.set(sec.off + k, [sec, k]); far = k; }
+      }
+      if (far >= 0 && !sec.done && sec.rows.length < Math.min(sec.count, far + (a === cur ? 36 : 1))) { const dist = Math.max(0, sec.s0 - sNow, sNow - sec.s0 - sec.cols * hall.colW); if (!ask || dist < askD) { ask = sec; askD = dist; } }   // the section you are standing at first
+    });
+    if (ask) aislePage(a, ask);
+    a.live.forEach((m, g) => { if (!want.has(g)) { const old = m.material.map; if (old && !old.userData.keep) old.dispose(); m.material.dispose(); m.geometry.dispose(); hall.g.remove(m); a.live.delete(g); const u = m.userData, p = slotPos(a, u.sec, u.k), d = dummy; d.position.set(p.x, p.y, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1); d.updateMatrix(); a.inst.setMatrixAt(g, d.matrix); a.inst.instanceMatrix.needsUpdate = true; } });
+    want.forEach((sk, g) => {
+      if (a.live.has(g)) return; const sec = sk[0], k = sk[1], c = sec.rows[k]; if (!c) { if (sec.done) { a.inst.setMatrixAt(g, zeroM); a.inst.instanceMatrix.needsUpdate = true; } return; }
+      const p = slotPos(a, sec, k), w = c.ar >= 1 ? .27 : .27 * c.ar, h = c.ar >= 1 ? .27 / c.ar : .27, q = seed('slot' + a.key + g);
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide })); m.visible = false;
-      m.position.set(p.x + (p.left ? .05 : -.05), p.y + h / 2, p.z + (q() - .5) * .03); m.rotation.y = p.ry + (q() - .5) * .12; m.userData = { card: c }; hall.g.add(m); a.live.set(k, m);
-      cardTex(c, 256).then((t) => { if (a.live.get(k) !== m) { t.dispose(); return; } m.material.map = t; m.material.needsUpdate = true; m.visible = true; a.inst.setMatrixAt(k, zeroM); a.inst.instanceMatrix.needsUpdate = true; kick(); });
+      m.position.set(p.x + (p.left ? .05 : -.05), p.y + h / 2, p.z + (q() - .5) * .02); m.rotation.y = p.ry + (q() - .5) * .08; m.userData = { card: c, sec, k }; hall.g.add(m); a.live.set(g, m);
+      cardTex(c, 256).then((t) => { if (a.live.get(g) !== m) { t.dispose(); return; } m.material.map = t; m.material.needsUpdate = true; m.visible = true; a.inst.setMatrixAt(g, zeroM); a.inst.instanceMatrix.needsUpdate = true; kick(); });
     });
   });
 }
 // From the front of the hall, looking along the row of headers.
 function aislesView() { const n = hall.list.length || 1, ph = cam.aspect < 1; return lookView(new V3(hall.x0 + .5, 1.75, 3.2), new V3(aCx(Math.min(n - 1, ph ? 1 : 2)), 1.75, hall.zf - 1.5), ph ? 82 : 62); }
-// In an aisle: az metres in from the entrance; looking ahead, or turned to face the left or right shelf.
+// In an aisle you stand S.as metres along its ribbon: down the left shelf, round at the far end, back up the right.
 function aisleView() {
-  const a = hall.list[S.aisle] || hall.list[0], cx = aCx(a.i); S.amax = Math.max(0, a.L - .6); S.az = clamp(S.az || 0, 0, S.amax);
-  const z = hall.zf + .9 - S.az, f = S.aface || 0;
-  if (!f) return lookView(new V3(cx, 1.55, z), new V3(cx, 1.2, z - 4), cam.aspect < 1 ? 78 : 62);
-  const zs = Math.min(z, hall.zf - .75);   // facing a shelf, stand inside the aisle, not at its mouth
-  return lookView(new V3(cx - f * .68, 1.05, zs), new V3(cx + f * 1.1, 1.02, zs), 76);
+  const a = hall.list[S.aisle] || hall.list[0], cx = aCx(a.i), U = a.U, T = hall.T; S.as = clamp(S.as || 0, 0, a.smax);
+  const s = S.as, t = !a.nr || s <= U ? 0 : s >= U + T ? 1 : (s - U) / T, d = hall.d0 + (t <= 0 ? s : t >= 1 ? U - (s - U - T) : Math.max(0, U - Math.sin(t * PI) * (.6 + 1 / (Math.tan(aisleFov() * PI / 360) * cam.aspect))));   // turning, you step back from the end so both shelves stay in sight
+  const phi = t * t * (3 - 2 * t) * PI, x = cx + .68 * Math.cos(phi), z = hall.zf - d;   // you stand across the aisle from the shelf you face
+  const y = cam.aspect < 1 ? 1.12 : 1.0;
+  return lookView(new V3(x, y, z), new V3(x - Math.cos(phi) * 1.78, y, z - Math.sin(phi) * 1.78), aisleFov());
 }
-function goAisle(i, keep) { if (!hall.built || !hall.list[i]) return; if (S.hand) putBack(); closePaint(true); leanOff(); cabinetDoors(false); S.mode = 'aisle'; S.aisle = i; if (!keep) { S.az = 0; S.aface = 0; } S.avz = 0; glide(aisleView(), 900); hint('Drag or scroll to walk the aisle · turn to face a shelf · tap a product'); ui(); }
-function aisleFace(f) { S.aface = f; S.avz = 0; glide(aisleView(), 420); ui(); }
-function aisleWalk(dz) { S.az = clamp((S.az || 0) + dz, 0, S.amax || 0); setView(aisleView()); aisleBar(); }
-function aisleBar() { const a = hall.list[S.aisle]; if (a) $('#aiTitle').textContent = 'Aisle ' + (a.i + 1) + ' · ' + a.label + ' · ' + Math.round(S.az || 0) + ' m of ' + Math.round(S.amax || 0) + ' m'; }
+const aisleEdge = () => (S.as || 0) - aisleHalf() + .3;   // the ribbon at the left edge of the screen: the section it is in is "where you are"
+function aisleSec() { const a = hall.list[S.aisle]; let cur = a.secs[0]; const e = Math.max(0, aisleEdge()); a.secs.forEach((s) => { if (s.s0 <= e + .01) cur = s; }); return cur; }
+function goAisle(i, keep) {
+  if (!hall.built || !hall.list[i]) return; if (S.hand) putBack(); closePaint(true); leanOff(); cabinetDoors(false);
+  S.mode = 'aisle'; S.aisle = i; if (!keep) S.as = 0; S.avz = 0; hall.secOn = -1; glide(aisleView(), 1000);
+  hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk along the shelf · pinch to lean in · tap a product' : 'Drag or scroll to walk along the shelf · hold the mouse down to lean in · click a product'); ui();
+}
+// walk the ribbon to a spot, turning at the far end if it is on the other side
+function aisleTo(s, ms) {
+  const a = hall.list[S.aisle]; if (!a) return; leanOff(); S.avz = 0; const from = S.as || 0, to = clamp(s, 0, a.smax), t0 = performance.now(), id = hall.walk = (hall.walk || 0) + 1;
+  ms = reduce ? 1 : ms || clamp(380 + Math.abs(to - from) * 110, 380, 1700);
+  anims.push((now) => { if (hall.walk !== id || S.mode !== 'aisle' || drag) return false; const k = Math.min(1, (now - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; S.as = lerp(from, to, e); setView(aisleView()); aisleBar(); return k < 1; }); kick();
+}
+function goSec(j) { const a = hall.list[S.aisle], sec = a && a.secs[j]; if (!sec) return; hint(''); aisleTo(sec.s0 + Math.max(0, aisleHalf() - .28)); }
+// turn to the shelf behind you
+function aisleTurn() {
+  const a = hall.list[S.aisle]; if (!a || !a.nr) return; const U = a.U, T = hall.T, s = S.as || 0; hall.walk = (hall.walk || 0) + 1; leanOff(); S.avz = 0;
+  S.as = s <= U + T / 2 ? U + T + (U - Math.min(s, U)) : U - (Math.max(s, U + T) - U - T); glide(aisleView(), 520, aisleBar); aisleBar(); hint('');
+}
+function aisleWalk(ds) { hall.walk = (hall.walk || 0) + 1; S.as = clamp((S.as || 0) + ds, 0, (hall.list[S.aisle] || {}).smax || 0); setView(aisleView()); aisleBar(); }
+function aisleBar() {
+  const a = hall.list[S.aisle]; if (!a) return; const sec = aisleSec();
+  if (hall.secOn === a.i * 100 + sec.j) return; hall.secOn = a.i * 100 + sec.j;
+  $('#aiTitle').textContent = 'Aisle ' + (a.i + 1) + ' · ' + a.label + (sec.key ? ' · ' + sec.label + ' (' + sec.count.toLocaleString('en-CA') + ')' : '');
+  const box = $('#aiSecs'); Array.from(box.children).forEach((b, j) => { b.classList.toggle('on', j === sec.j); if (j === sec.j) box.scrollTo({ left: b.offsetLeft - box.clientWidth / 2 + b.offsetWidth / 2, behavior: reduce ? 'auto' : 'smooth' }); });
+}
 
 // from the door: the case and the till side by side, centred
 const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lookView(new V3(x, 1.6, 3.2), new V3(x, ph ? 1.3 : 1.18, -1.2), ph ? 82 : 55); v.yaw += S.look.yaw; v.pitch += S.look.pitch; return v; };
@@ -1228,7 +1286,7 @@ function go(mode) {
 }
 function back() {
   if (S.hand) return putBack();
-  if (S.mode === 'aisle') { if (S.aface) return aisleFace(0); return go('aisles'); }
+  if (S.mode === 'aisle') return go('aisles');
   if (psel.g) return closePaint();
   if (S.mode === 'rack') return go('hobby');
   if ($('#setsv').classList.contains('on')) { $('#setsv').classList.remove('on'); return; }
@@ -1242,7 +1300,9 @@ function ui() {
   document.body.dataset.mode = S.mode;
   const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode;
   if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '">' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
-  if (S.mode === 'aisle') { aisleBar(); $('#aiL').classList.toggle('on', S.aface < 0); $('#aiA').classList.toggle('on', !S.aface); $('#aiR').classList.toggle('on', S.aface > 0); }
+  if (S.mode === 'aisle') { const a = hall.list[S.aisle];   // the aisle's sections to jump to, and the turn to the shelf behind
+    if (hall.secsFor !== a.i) { hall.secsFor = a.i; hall.secOn = -1; $('#aiSecs').innerHTML = a.secs.length > 1 ? a.secs.map((s) => '<button type="button" data-sec="' + s.j + '">' + esc(s.label) + '</button>').join('') : ''; $('#aiTurn').hidden = !a.nr; }
+    aisleBar(); }
   if (S.mode === 'hobby' || S.mode === 'rack') {   // the four racks, and for a paint rack the way to the site's own colour picker
     const r = S.mode === 'rack' ? racks[S.rack] : null;
     $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Back</button>' : '') + racks.map((k, i) => ('<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>')).join('')
@@ -1298,19 +1358,21 @@ function tap(x, y) {
 const lean = { k: 0, P: null, on: false, id: 0 };
 const pts = new Map(); let pinch = null, wheelLean = 0;
 // the same lean at the graded cabinet (owner, 2026-11-10: "graded cards should also allow me to pinch zoom elastic like the counter")
-const leanBase = () => (S.mode === 'graded' ? gradedView() : caseView());
+const leanBase = () => (S.mode === 'graded' ? gradedView() : S.mode === 'aisle' ? aisleView() : caseView());
+const leanable = () => S.mode === 'case' || S.mode === 'graded' || S.mode === 'aisle';
 function leanView() { const v = leanBase(); if (lean.P && lean.k) v.pos.lerp(lean.P, (S.mode === 'graded' ? .55 : .6) * lean.k); return v; }
 function leanStart(x, y) {
-  const gr = S.mode === 'graded';
-  if ((S.mode !== 'case' && !gr) || S.hand || tw || (!gr && !S.lay.length)) return false;
+  const gr = S.mode === 'graded', ai = S.mode === 'aisle';
+  if (!leanable() || S.hand || tw || (S.mode === 'case' && !S.lay.length)) return false;
+  if (ai) { hall.walk = (hall.walk || 0) + 1; S.avz = 0; }
   if (!lean.on) {
     setView(leanBase());
     cam.position.copy(view.pos); cam.rotation.set(view.pitch, view.yaw, 0); cam.updateMatrixWorld();
-    const h = pick(gr ? gcab.meshes.filter((m) => m.visible) : caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
+    const h = pick(ai ? Array.from(hall.list[S.aisle].live.values()).filter((m) => m.visible) : gr ? gcab.meshes.filter((m) => m.visible) : caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
     lean.P = h ? h.point.clone() : ray.ray.at(view.dist || .45, new V3());
     if (gr && !h) { const px = gcab.at[0] + .2, dx = ray.ray.direction.x; if (Math.abs(dx) > .01) lean.P = ray.ray.at((px - ray.ray.origin.x) / dx, new V3()); }   // between two slabs: the spot on the slabs' own plane, not past it (live probe 42802013535)
     const wp = new V3();
-    if (gr) gcab.meshes.forEach((m) => { const u = m.userData; if (u.hi || !m.visible || m.getWorldPosition(wp).distanceTo(lean.P) > .32) return; u.hi = true;   // the slabs around the spot take a sharper picture
+    if (gr || ai) (ai ? Array.from(hall.list[S.aisle].live.values()) : gcab.meshes).forEach((m) => { const u = m.userData; if (u.hi || !m.visible || m.getWorldPosition(wp).distanceTo(lean.P) > (ai ? .5 : .32)) return; u.hi = true;   // the slabs around the spot take a sharper picture
       cardTex(u.card, 512).then((t) => { const old = m.material.map; m.material.map = t; m.material.needsUpdate = true; if (old && !old.userData.keep) old.dispose(); kick(); }).catch(() => {}); });
     else caseCards.forEach((m) => { const u = m.userData; if (u.si === S.shelf && !u.hi && m.position.distanceTo(lean.P) < .14) { u.hi = u.has = true; wear(m, u.card, 512); } });
   }
@@ -1319,7 +1381,7 @@ function leanStart(x, y) {
 function leanTo(k) { lean.k = k; setView(leanView()); }
 function leanAnim(to, ms) {
   const id = ++lean.id, from = lean.k, t0 = performance.now();
-  anims.push((now) => { if (lean.id !== id) return false; const t = Math.min(1, (now - t0) / (reduce ? 1 : ms)), e = 1 - Math.pow(1 - t, 3); lean.k = lerp(from, to, e); if ((S.mode === 'case' || S.mode === 'graded') && !tw) setView(leanView()); if (t >= 1 && !to) lean.on = false; return t < 1; }); kick();
+  anims.push((now) => { if (lean.id !== id) return false; const t = Math.min(1, (now - t0) / (reduce ? 1 : ms)), e = 1 - Math.pow(1 - t, 3); lean.k = lerp(from, to, e); if (leanable() && !tw) setView(leanView()); if (t >= 1 && !to) lean.on = false; return t < 1; }); kick();
 }
 function leanOff() { lean.id++; lean.k = 0; lean.on = false; pinch = null; }
 // the stretch between the fingers, with give at both ends
@@ -1333,11 +1395,11 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pinch || pts.size > 1) return;
   if (e.button && e.button !== 0) return;
-  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, az: S.az || 0 };
+  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0 };
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
   // a mouse held still on the case leans in to that spot
-  if (e.pointerType === 'mouse' && (S.mode === 'case' || S.mode === 'graded') && !S.hand) { const d = drag; d.holdT = setTimeout(() => { if (drag === d && !d.moved && leanStart(d.x0, d.y0)) { d.lean = true; leanAnim(1, 320); } }, 280); }
+  if (e.pointerType === 'mouse' && leanable() && !S.hand) { const d = drag; d.holdT = setTimeout(() => { if (drag === d && !d.moved && leanStart(d.x0, d.y0)) { d.lean = true; leanAnim(1, 320); } }, 280); }
 });
 canvas.addEventListener('pointermove', (e) => {
   if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1353,10 +1415,8 @@ canvas.addEventListener('pointermove', (e) => {
   if (S.hand) { hand.ry = drag.ry + dx * .011; hand.rx = clamp(drag.rx + dy * .006, -.6, .6); kick(); }
   else if (drag.axis === 'none') { /* a glide is running */ }
   else if (S.mode === 'graded') { const mpp = (gcab.vw || 1) / canvas.clientWidth; gcab.gx = drag.gx - dx * mpp; gcab.gy = drag.gy + dy * mpp; setView(gradedView()); }
-  else if (S.mode === 'aisle') {
-    const now2 = performance.now();
-    if (!S.aface && drag.axis === 'y') { S.az = clamp(drag.az + dy * .014, 0, S.amax || 0); drag.v = (e.clientY - drag.lastY) * .014 / dt * 16; setView(aisleView()); aisleBar(); }
-    else if (S.aface && drag.axis === 'x') { const mpp = 2.7 * cam.aspect / canvas.clientWidth * (S.aface < 0 ? -1 : 1); S.az = clamp(drag.az + dx * mpp, 0, S.amax || 0); drag.v = (e.clientX - drag.lastX) * mpp / dt * 16; setView(aisleView()); aisleBar(); }
+  else if (S.mode === 'aisle') {   // the shelf follows the finger, as the glass case does
+    if (drag.axis === 'x') { const a = hall.list[S.aisle], mpp = 2 * aisleHalf() / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.as = clamp(drag.as - dx * mpp, 0, a.smax); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aisleView()); aisleBar(); }
   }
   else if (S.mode === 'door') { S.look.yaw = clamp(drag.yaw + dx * .004, -1.5, 1.5); S.look.pitch = clamp(drag.pitch + dy * .003, -.45, .4); setView(doorView()); }
   else if (S.mode === 'case' && drag.axis === 'x') { const mpp = visW() / canvas.clientWidth; S.walk = clamp(drag.walk - dx * mpp, -.03, (S.maxWalk || 0) + .03); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(caseView0()); }
@@ -1377,10 +1437,9 @@ function endDrag(e) {
   if (d.axis === 'none') return;
   hint('');
   if (S.mode === 'aisle') {
-    if (!S.aface && d.axis === 'x') { if (Math.abs(dx) > 50) aisleFace(dx > 0 ? -1 : 1); return; }   // a sideways swipe turns you to that shelf
-    if (S.aface && d.axis === 'y') { if (Math.abs(dy) > 60) aisleFace(0); return; }
-    S.avz = clamp(d.v, -.5, .5);
-    anims.push(() => { if (S.mode !== 'aisle' || drag || tw) return false; S.avz *= .93; aisleWalk(S.avz); return Math.abs(S.avz) > .003; }); kick(); return;
+    if (d.axis !== 'x') return;
+    S.avz = clamp(d.v, -.12, .12); const id = hall.walk = (hall.walk || 0) + 1;
+    anims.push(() => { if (S.mode !== 'aisle' || drag || tw || lean.on || hall.walk !== id) return false; S.avz *= .94; S.as = clamp((S.as || 0) + S.avz, 0, hall.list[S.aisle].smax); setView(aisleView()); aisleBar(); return Math.abs(S.avz) > .0006; }); kick(); return;
   }
   if (S.mode === 'case') {
     if (d.axis === 'y') { if (Math.abs(dy) > 44) goShelf(S.shelf + (dy < 0 ? 1 : -1)); return; }
@@ -1395,12 +1454,12 @@ canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointerc
 let wheelLock = false;
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault(); if (S.hand || tw) return;
-  if ((S.mode === 'case' || S.mode === 'graded') && e.ctrlKey) {   // a trackpad pinch arrives as ctrl + wheel: lean while it lasts, back out when it stops
+  if (leanable() && e.ctrlKey) {   // a trackpad pinch arrives as ctrl + wheel: lean while it lasts, back out when it stops
     if (!leanStart(e.clientX, e.clientY)) return; lean.id++; leanTo(clamp(lean.k - e.deltaY * .012, -.05, 1.1));
     clearTimeout(wheelLean); wheelLean = setTimeout(() => leanAnim(0, 320), 260); return;
   }
   if (lean.on) return;
-  if (S.mode === 'aisle') { aisleWalk((e.deltaY || e.deltaX) * .004); return; }
+  if (S.mode === 'aisle') { aisleWalk((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .0035); return; }
   if (S.mode === 'graded') { gcab.gx += e.deltaX * .002; gcab.gy -= e.deltaY * .002; setView(gradedView()); return; }
   if (S.mode === 'case') { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { S.walk = clamp(S.walk + (e.shiftKey ? e.deltaY : e.deltaX) * .0012, 0, S.maxWalk || 0); setView(caseView()); return; } if (wheelLock || Math.abs(e.deltaY) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 560); goShelf(S.shelf + (e.deltaY > 0 ? 1 : -1)); }
   else if (S.mode === 'crate' && cr) { if (wheelLock) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 90); flickTo(Math.round(cr.ps[cr.lane]) + (e.deltaY > 0 ? 1 : -1), 160); }
@@ -1411,7 +1470,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { back(); return; }
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
   const k = e.key;
-  if (S.mode === 'aisle') { if (k === 'ArrowUp' || k === 'ArrowDown') { S.az = clamp((S.az || 0) + (k === 'ArrowUp' ? 1.2 : -1.2), 0, S.amax || 0); glide(aisleView(), 300); aisleBar(); } else if (k === 'ArrowLeft') aisleFace(S.aface < 0 ? 0 : -1); else if (k === 'ArrowRight') aisleFace(S.aface > 0 ? 0 : 1); else return; e.preventDefault(); hint(''); return; }
+  if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
   else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') lift(cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])], null); else return; }
   else if (S.mode === 'boxes') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.pan = clamp(S.pan + (k === 'ArrowRight' ? .3 : -.3), -S.maxPan, S.maxPan); glide(boxesView(), 260); } else return; }
@@ -1435,9 +1494,8 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'rackBack') go('hobby');
   else if (b.hasAttribute('data-aisle')) goAisle(Number(b.getAttribute('data-aisle')));
   else if (b.id === 'aiBack') go('aisles');
-  else if (b.id === 'aiL') aisleFace(S.aface < 0 ? 0 : -1);
-  else if (b.id === 'aiA') aisleFace(0);
-  else if (b.id === 'aiR') aisleFace(S.aface > 0 ? 0 : 1);
+  else if (b.hasAttribute('data-sec')) goSec(Number(b.getAttribute('data-sec')));
+  else if (b.id === 'aiTurn') aisleTurn();
   else if (b.hasAttribute('data-drop')) { S.pile.splice(Number(b.getAttribute('data-drop')), 1); pile(); showTill(); }
   else if (b.id === 'buy') buy(b);
   else if (b.id === 'x') putBack();
@@ -1465,4 +1523,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, goAisle, aisleFace, aisleWalk, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
