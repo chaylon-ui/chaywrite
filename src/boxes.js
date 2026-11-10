@@ -180,6 +180,16 @@ export const SEALED_TYPES = {
   onepiece: "One Piece Card Game Sealed Product", starwars: "Star Wars Unlimited Sealed Product", riftbound: "Riftbound Sealed Product",
 };
 export const SEALED_MAX = 8;
+// Shopify answers "throttled" when several of these feeds are built at once (live probe 42725056109: the
+// page asked for five; two came back empty). A throttled call waits for the bucket to refill and tries
+// again, twice at most.
+export async function gqlPatient(call, waitMs) {
+  for (let i = 0; ; i++) {
+    try { return await call(); }
+    catch (e) { if (i >= 2 || !/throttl/i.test(String((e && e.message) || e))) throw e; await new Promise((r) => setTimeout(r, waitMs == null ? 1500 * (i + 1) : waitMs)); }
+  }
+}
+export const productsQ = (n) => `query($q:String!){products(first:${n},sortKey:CREATED_AT,reverse:true,query:$q){nodes{title handle createdAt media(first:1){nodes{preview{image{url width height}}}} variants(first:2){nodes{id price inventoryQuantity availableForSale}}}}}`;
 export const SEALED_Q = `query($q:String!){products(first:60,sortKey:CREATED_AT,reverse:true,query:$q){nodes{title handle createdAt media(first:1){nodes{preview{image{url width height}}}} variants(first:3){nodes{id price inventoryQuantity availableForSale}}}}}`;
 const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
 // "… PRE ORDER ^ NOV 20/26" -> that day (UTC); null when the title names no pre-order; NaN when it does without a date we can read
@@ -223,7 +233,7 @@ export async function serveSealed(request, env, ctx, url, opts) {
   let out;
   try {
     const q = 'status:active AND published_status:published AND inventory_total:>0 AND product_type:"' + type + '" AND title:*BOOSTER*';
-    const r = o.gqlFn ? await o.gqlFn(SEALED_Q, { q }) : await adminGql({ env, fetch: (u, i) => fetch(u, i) }, SEALED_Q, { q });
+    const r = await gqlPatient(() => (o.gqlFn ? o.gqlFn(SEALED_Q, { q }) : adminGql({ env, fetch: (u, i) => fetch(u, i) }, SEALED_Q, { q })), o.waitMs);
     out = { ok: true, game, rows: sealedOf(r.data && r.data.products && r.data.products.nodes, o.now || Date.now()) };
   } catch (e) { out = { ok: false, game, error: String((e && e.message) || e).slice(0, 160) }; }
   const res = json(out, 200, out.ok ? CACHED(600) : NO_STORE);
@@ -268,7 +278,7 @@ export async function serveWargames(request, env, ctx, url, opts) {
   let out;
   try {
     const q = 'status:active AND published_status:published AND inventory_total:>0 AND vendor:"Games Workshop" AND product_type:"Tabletop Wargames"';
-    const r = o.gqlFn ? await o.gqlFn(SEALED_Q, { q }) : await adminGql({ env, fetch: (u, i) => fetch(u, i) }, SEALED_Q, { q });
+    const Q = productsQ(50); const r = await gqlPatient(() => (o.gqlFn ? o.gqlFn(Q, { q }) : adminGql({ env, fetch: (u, i) => fetch(u, i) }, Q, { q })), o.waitMs);
     out = { ok: true, rows: wargamesOf(r.data && r.data.products && r.data.products.nodes, o.now || Date.now()) };
   } catch (e) { out = { ok: false, error: String((e && e.message) || e).slice(0, 160) }; }
   const res = json(out, 200, out.ok ? CACHED(600) : NO_STORE);
@@ -318,7 +328,7 @@ export async function serveShelf(request, env, ctx, url, opts) {
   let out;
   try {
     const q = "status:active AND published_status:published AND inventory_total:>0 AND " + type;
-    const r = o.gqlFn ? await o.gqlFn(SEALED_Q, { q }) : await adminGql({ env, fetch: (u, i) => fetch(u, i) }, SEALED_Q, { q });
+    const Q = productsQ(24); const r = await gqlPatient(() => (o.gqlFn ? o.gqlFn(Q, { q }) : adminGql({ env, fetch: (u, i) => fetch(u, i) }, Q, { q })), o.waitMs);
     out = { ok: true, kind, rows: shelfOf(r.data && r.data.products && r.data.products.nodes, o.now || Date.now()) };
   } catch (e) { out = { ok: false, kind, error: String((e && e.message) || e).slice(0, 160) }; }
   const res = json(out, 200, out.ok ? CACHED(600) : NO_STORE);

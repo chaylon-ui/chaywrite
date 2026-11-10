@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX } from "../src/boxes.js";
+import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX, gqlPatient } from "../src/boxes.js";
 
 const v = (sid, title, price, qty) => ({ shopifyId: sid, title, price, quantity: qty });
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), img: img || "", variants });
@@ -116,4 +116,15 @@ test("shelf.json: the kind's product type in stock with a picture, newest first;
   }
   const bad = await go("?kind=everything", async () => { throw new Error("not asked"); }); assert.equal(bad.status, 400);
   const down = await (await go("?kind=gunpla", async () => { throw new Error("shopify down"); })).json(); assert.equal(down.ok, false);
+});
+
+test("gqlPatient: a throttled call is tried again, twice at most; any other error is thrown at once", async () => {
+  let n = 0;
+  assert.equal(await gqlPatient(async () => { if (++n < 3) throw new Error("throttled"); return "ok"; }, 0), "ok"); assert.equal(n, 3);
+  n = 0; await assert.rejects(gqlPatient(async () => { n++; throw new Error("Throttled"); }, 0), /Throttled/); assert.equal(n, 3);
+  n = 0; await assert.rejects(gqlPatient(async () => { n++; throw new Error("boom"); }, 0), /boom/); assert.equal(n, 1);
+  // through a route: the second try answers
+  n = 0;
+  const j = await (await serveShelf(new Request("https://w.example/showcase/shelf.json?kind=gunpla"), {}, {}, new URL("https://w.example/showcase/shelf.json?kind=gunpla"), { waitMs: 0, now: Date.UTC(2026, 10, 10), gqlFn: async () => { if (++n < 2) throw new Error("throttled"); return { data: { products: { nodes: [] } } }; } })).json();
+  assert.equal(j.ok, true); assert.equal(n, 2);
 });

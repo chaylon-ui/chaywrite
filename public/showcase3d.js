@@ -461,20 +461,22 @@ function buildHobby() {
   hit(bx(.5, 2.0, 3.6, hitM, 3.8, 1.0, .9), 'models');
   ringM = new THREE.Mesh(new THREE.TorusGeometry(.026, .004, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffffff })); ringM.visible = false; scene.add(ringM);
 }
+// One rack's feed after another (asked for all at once, the shop's API throttled two of them - live probe
+// 42725056109); a rack whose feed fails is asked once more a few seconds later.
 function loadKits() {
-  racks.filter((r) => r.kind === 'kits').forEach((kr) => {
-    fetch(W + kr.feed, { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
-      if (!d || !d.ok || !d.rows) return;
-      d.rows.slice(0, 12).forEach((r, i) => {   // three to a shelf, the newest at the top left
-        const c = { name: r.name, set: kr.set, price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: kr.key, sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
-        const q = seed('kit' + c.name), bh = .31, bw = clamp(bh * c.ar, .2, .34), hgt = bw / c.ar, face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;
-        m.position.set(-.37 + (i % 3) * .37 + (q() - .5) * .02, [1.34, .96, .58, .2][Math.floor(i / 3)] + hgt / 2, .2 + (q() - .5) * .03); m.rotation.y = (q() - .5) * .16; m.userData = { card: c }; kr.g.add(m); kr.meshes.push(m);
-        cardTex(c, 256).then((t) => { face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
-      });
-      lights(S.eve);
-    }).catch(() => {});
-  });
+  const list = racks.filter((r) => r.kind === 'kits');
+  const one = (kr, again) => fetch(W + kr.feed, { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (!d || !d.ok || !d.rows) throw new Error('feed');
+    d.rows.slice(0, 12).forEach((r, i) => {   // three to a shelf, the newest at the top left
+      const c = { name: r.name, set: kr.set, price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: kr.key, sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
+      const q = seed('kit' + c.name), bh = .31, bw = clamp(bh * c.ar, .2, .34), hgt = bw / c.ar, face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;
+      m.position.set(-.37 + (i % 3) * .37 + (q() - .5) * .02, [1.34, .96, .58, .2][Math.floor(i / 3)] + hgt / 2, .2 + (q() - .5) * .03); m.rotation.y = (q() - .5) * .16; m.userData = { card: c }; kr.g.add(m); kr.meshes.push(m);
+      cardTex(c, 256).then((t) => { face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
+    });
+    lights(S.eve);
+  }).catch(() => { if (!again) return new Promise((res) => setTimeout(res, 5000)).then(() => one(kr, true)); });
+  list.reduce((p, kr) => p.then(() => one(kr)), Promise.resolve());
 }
 // The picker's feed: every paint on the site, one swatch per colour. The racks take the ones in stock.
 function loadPaints() {
