@@ -1221,7 +1221,7 @@ function go(mode) {
   else if (mode === 'boxes') { S.focus = ''; if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
-  else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? 'Graded cards · tap one to take it out · drag it to turn it over' : 'The graded cabinet is being stocked'); }
+  else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
   else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } S.mode = 'aisles'; glide(aislesView()); hint('Tap an aisle to walk into it'); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
   ui();
@@ -1297,22 +1297,28 @@ function tap(x, y) {
    sharper picture while you are close. */
 const lean = { k: 0, P: null, on: false, id: 0 };
 const pts = new Map(); let pinch = null, wheelLean = 0;
-function leanView() { const v = caseView(); if (lean.P && lean.k) v.pos.lerp(lean.P, .6 * lean.k); return v; }
+// the same lean at the graded cabinet (owner, 2026-11-10: "graded cards should also allow me to pinch zoom elastic like the counter")
+const leanBase = () => (S.mode === 'graded' ? gradedView() : caseView());
+function leanView() { const v = leanBase(); if (lean.P && lean.k) v.pos.lerp(lean.P, (S.mode === 'graded' ? .72 : .6) * lean.k); return v; }
 function leanStart(x, y) {
-  if (S.mode !== 'case' || S.hand || tw || !S.lay.length) return false;
+  const gr = S.mode === 'graded';
+  if ((S.mode !== 'case' && !gr) || S.hand || tw || (!gr && !S.lay.length)) return false;
   if (!lean.on) {
-    setView(caseView());
+    setView(leanBase());
     cam.position.copy(view.pos); cam.rotation.set(view.pitch, view.yaw, 0); cam.updateMatrixWorld();
-    const h = pick(caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
+    const h = pick(gr ? gcab.meshes.filter((m) => m.visible) : caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
     lean.P = h ? h.point.clone() : ray.ray.at(view.dist || .45, new V3());
-    caseCards.forEach((m) => { const u = m.userData; if (u.si === S.shelf && !u.hi && m.position.distanceTo(lean.P) < .14) { u.hi = u.has = true; wear(m, u.card, 512); } });
+    const wp = new V3();
+    if (gr) gcab.meshes.forEach((m) => { const u = m.userData; if (u.hi || !m.visible || m.getWorldPosition(wp).distanceTo(lean.P) > .32) return; u.hi = true;   // the slabs around the spot take a sharper picture
+      cardTex(u.card, 512).then((t) => { const old = m.material.map; m.material.map = t; m.material.needsUpdate = true; if (old && !old.userData.keep) old.dispose(); kick(); }).catch(() => {}); });
+    else caseCards.forEach((m) => { const u = m.userData; if (u.si === S.shelf && !u.hi && m.position.distanceTo(lean.P) < .14) { u.hi = u.has = true; wear(m, u.card, 512); } });
   }
   lean.on = true; lean.id++; S.vx = 0; hint(''); return true;
 }
 function leanTo(k) { lean.k = k; setView(leanView()); }
 function leanAnim(to, ms) {
   const id = ++lean.id, from = lean.k, t0 = performance.now();
-  anims.push((now) => { if (lean.id !== id) return false; const t = Math.min(1, (now - t0) / (reduce ? 1 : ms)), e = 1 - Math.pow(1 - t, 3); lean.k = lerp(from, to, e); if (S.mode === 'case' && !tw) setView(leanView()); if (t >= 1 && !to) lean.on = false; return t < 1; }); kick();
+  anims.push((now) => { if (lean.id !== id) return false; const t = Math.min(1, (now - t0) / (reduce ? 1 : ms)), e = 1 - Math.pow(1 - t, 3); lean.k = lerp(from, to, e); if ((S.mode === 'case' || S.mode === 'graded') && !tw) setView(leanView()); if (t >= 1 && !to) lean.on = false; return t < 1; }); kick();
 }
 function leanOff() { lean.id++; lean.k = 0; lean.on = false; pinch = null; }
 // the stretch between the fingers, with give at both ends
@@ -1330,7 +1336,7 @@ canvas.addEventListener('pointerdown', (e) => {
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
   // a mouse held still on the case leans in to that spot
-  if (e.pointerType === 'mouse' && S.mode === 'case' && !S.hand) { const d = drag; d.holdT = setTimeout(() => { if (drag === d && !d.moved && leanStart(d.x0, d.y0)) { d.lean = true; leanAnim(1, 320); } }, 280); }
+  if (e.pointerType === 'mouse' && (S.mode === 'case' || S.mode === 'graded') && !S.hand) { const d = drag; d.holdT = setTimeout(() => { if (drag === d && !d.moved && leanStart(d.x0, d.y0)) { d.lean = true; leanAnim(1, 320); } }, 280); }
 });
 canvas.addEventListener('pointermove', (e) => {
   if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1388,7 +1394,7 @@ canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointerc
 let wheelLock = false;
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault(); if (S.hand || tw) return;
-  if (S.mode === 'case' && e.ctrlKey) {   // a trackpad pinch arrives as ctrl + wheel: lean while it lasts, back out when it stops
+  if ((S.mode === 'case' || S.mode === 'graded') && e.ctrlKey) {   // a trackpad pinch arrives as ctrl + wheel: lean while it lasts, back out when it stops
     if (!leanStart(e.clientX, e.clientY)) return; lean.id++; leanTo(clamp(lean.k - e.deltaY * .012, -.05, 1.1));
     clearTimeout(wheelLean); wheelLean = setTimeout(() => leanAnim(0, 320), 260); return;
   }
