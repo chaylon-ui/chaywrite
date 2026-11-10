@@ -415,7 +415,9 @@ document.addEventListener('keyup', (e) => { delete arc.keys[e.key]; });
    a swipe down drops it; arrows, up and space on a keyboard.
    The TV: tap it and a made-up 1990s infomercial for selling your cards to the shop plays on a loop, with a
    button under it to the real buylist page. It promises nothing the shop has not said: we buy cards, singles
-   or bulk, cash or store credit, build a list online. */
+   or bulk, cash or store credit, build a list online. A second spot follows it for Mallow Games, with the
+   logo the owner sent (public/mallow-games.jpg): sell your cards online on the buylist, get Exor store
+   credit, spend it at Exor. */
 const stk = { W: 8, H: 14, C: 12, state: 'attract', grid: [], p: null, nx: null, score: 0, lines: 0, hi: 0, t: 0, fall: 0, keys: {}, flash: 0 };
 stk.cv = document.createElement('canvas'); stk.cv.width = 480; stk.cv.height = 384; stk.g = stk.cv.getContext('2d');
 stk.tex = keep(new THREE.CanvasTexture(stk.cv)); stk.tex.colorSpace = THREE.SRGBColorSpace; stk.tex.magFilter = THREE.NearestFilter;
@@ -469,7 +471,7 @@ const tv = { t: 0, logo: null, scene: -1 };
 tv.cv = document.createElement('canvas'); tv.cv.width = 512; tv.cv.height = 392; tv.g = tv.cv.getContext('2d');
 tv.tex = keep(new THREE.CanvasTexture(tv.cv)); tv.tex.colorSpace = THREE.SRGBColorSpace;
 function tvDraw(idle) {
-  const g = tv.g, W_ = 256, H_ = 196, L = 27, t = idle ? 7.6 : tv.t % L; g.setTransform(2, 0, 0, 2, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.filter = 'none';
+  const g = tv.g, W_ = 256, H_ = 196, L = 47, t = idle ? 7.6 : tv.t % L; g.setTransform(2, 0, 0, 2, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.filter = 'none';
   const big = (txt, y, px, fill, stroke, rot) => { g.save(); g.translate(W_ / 2, y); g.rotate(rot || 0); g.font = 'italic 900 ' + px + 'px Inter, sans-serif'; g.lineJoin = 'round'; g.lineWidth = px / 5; g.strokeStyle = stroke || '#111'; g.strokeText(txt, 0, 0); g.fillStyle = fill; g.fillText(txt, 0, 0); g.restore(); };
   const burst = (cx, cy, r1, r2, n, col, a0) => { g.fillStyle = col; g.beginPath(); for (let i = 0; i < n * 2; i++) { const a = (a0 || 0) + i / (n * 2) * PI * 2, r = i % 2 ? r1 : r2; g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); } g.fill(); };
   const rays = (c1, c2) => { g.fillStyle = c1; g.fillRect(0, 0, W_, H_); g.fillStyle = c2; for (let i = 0; i < 12; i++) { const a = t * .5 + i / 12 * PI * 2; g.beginPath(); g.moveTo(W_ / 2, H_ / 2); g.lineTo(W_ / 2 + Math.cos(a) * 300, H_ / 2 + Math.sin(a) * 300); g.lineTo(W_ / 2 + Math.cos(a + .26) * 300, H_ / 2 + Math.sin(a + .26) * 300); g.fill(); } };
@@ -492,13 +494,30 @@ function tvDraw(idle) {
     g.font = 'italic 900 30px Inter, sans-serif'; g.lineWidth = 6; g.strokeStyle = '#111'; g.strokeText('CASH', 64, 90); g.fillStyle = fl ? '#ffd23a' : '#fff'; g.fillText('CASH', 64, 90); g.font = 'italic 900 19px Inter, sans-serif'; g.strokeText('STORE', 192, 80); g.strokeText('CREDIT', 192, 102); g.fillStyle = fl ? '#fff' : '#ffd23a'; g.fillText('STORE', 192, 80); g.fillText('CREDIT', 192, 102);
     burst(W_ / 2, 92, 15, 22, 10, '#d62c28', t); g.font = '900 14px Inter, sans-serif'; g.fillStyle = '#fff'; g.fillText('OR', W_ / 2, 93); big('YOUR CALL!', 168, 20, '#fff', '#111'); }
   else if (t < 22.5) { sc = 5; rays('#1524c8', '#3f5ff0'); const b = 1 + Math.sin(t * 10) * .05; g.save(); g.translate(W_ / 2, 0); g.scale(b, b); g.translate(-W_ / 2, 0); big('BUT WAIT —', 50, 26, '#fff', '#111', -.05); big("THERE'S MORE!", 84, 28, '#ffd23a', '#111', -.05); g.restore(); if (t > 20.3) { g.font = '18px "Permanent Marker", cursive'; g.fillStyle = '#fff'; g.fillText('...cards. We also sell cards.', W_ / 2, 136); g.fillText('Look around!', W_ / 2, 160); } }
-  else { sc = 6; rays('#d62c28', '#ff7a2a'); big("DON'T DELAY!", 34, 26, '#fff', '#111'); big('SELL TODAY!', 66, 28, '#ffd23a', '#111'); g.fillStyle = '#111'; g.fillRect(20, 92, W_ - 40, 40); g.font = '900 22px Inter, sans-serif'; g.fillStyle = Math.floor(t * 4) % 2 ? '#7dfff0' : '#fff'; g.fillText('EXORGAMES.COM', W_ / 2, 113); g.font = '700 10px Inter, sans-serif'; g.fillStyle = '#fff'; g.fillText('or bring them to the counter', W_ / 2, 146); g.font = '600 7px Inter, sans-serif'; g.fillStyle = '#ffffffc0'; g.fillText('Operators are not standing by. It is a website. Shoebox not included.', W_ / 2, 180); }
+  else if (t < 27) { sc = 6; rays('#d62c28', '#ff7a2a'); big("DON'T DELAY!", 34, 26, '#fff', '#111'); big('SELL TODAY!', 66, 28, '#ffd23a', '#111'); g.fillStyle = '#111'; g.fillRect(20, 92, W_ - 40, 40); g.font = '900 22px Inter, sans-serif'; g.fillStyle = Math.floor(t * 4) % 2 ? '#7dfff0' : '#fff'; g.fillText('EXORGAMES.COM', W_ / 2, 113); g.font = '700 10px Inter, sans-serif'; g.fillStyle = '#fff'; g.fillText('or bring them to the counter', W_ / 2, 146); g.font = '600 7px Inter, sans-serif'; g.fillStyle = '#ffffffc0'; g.fillText('Operators are not standing by. It is a website. Shoebox not included.', W_ / 2, 180); }
+  else {   // the second spot: Mallow Games (owner, 2026-11-10: "another add with that logo where you can get exor store credit to buy cards etc buylist online")
+    const m = t - 27, CR = '#fbe3b5', PK = '#d0588f', BL = '#4fb0d8', BR = '#2e1f1c';
+    const dots = (bg, c) => { g.fillStyle = bg; g.fillRect(0, 0, W_, H_); g.fillStyle = c; for (let y = -1; y < 9; y++) for (let x = -1; x < 11; x++) { g.beginPath(); g.arc(x * 28 + (y % 2) * 14 + (m * 8) % 28, y * 26 + 8, 5, 0, PI * 2); g.fill(); } };
+    const logo = (cx, cy, w) => { g.fillStyle = '#fff'; rr(g, cx - w / 2 - 4, cy - w * .47 - 4, w + 8, w * .94 + 8, 10); g.fill(); if (tv.mallow) g.drawImage(tv.mallow, cx - w / 2, cy - w * .47, w, w * tv.mallow.height / tv.mallow.width); else { g.font = '900 ' + w / 6 + 'px Inter, sans-serif'; g.fillStyle = PK; g.fillText('MALLOW', cx, cy - w / 10); g.fillStyle = BL; g.fillText('GAMES', cx, cy + w / 10); } };
+    if (m < 2.5) { sc = 7; ['#fff', '#ffd23a', BL, '#4fd65a', PK, '#d62c28', '#3f5ff0'].forEach((c, i) => { g.fillStyle = c; g.fillRect(i * W_ / 7, 0, W_ / 7 + 1, H_); }); g.fillStyle = '#111'; g.fillRect(0, 70, W_, 56); g.font = '700 13px "Cutive Mono", monospace'; g.fillStyle = '#fff'; g.fillText('AND NOW A WORD FROM', W_ / 2, 88); g.fillText('OUR FRIENDS AT...', W_ / 2, 108); }
+    else if (m < 7) { sc = 8; dots(CR, '#f6cfa0'); const k = Math.min(1, (m - 2.5) / .6), e = 1 - Math.pow(1 - k, 3), w = 118 * (e + Math.sin(k * PI) * .15); logo(W_ / 2, 80 + Math.sin(m * 5) * 2, w); if (m > 3.6) { big('SELL YOUR CARDS', 156, 19, '#fff', PK); big('ONLINE!', 178, 21, '#fff', BL); } }
+    else if (m < 12) { sc = 9; dots('#ffe4ef', '#ffd0e2'); big('HOW IT WORKS', 20, 18, '#fff', BR); const k1 = clamp((m - 7.4) / .4, 0, 1), k2 = clamp((m - 8.6) / .4, 0, 1), k3 = clamp((m - 9.8) / .4, 0, 1);
+      const cap = (txt, x, y, c) => { g.font = '900 9px Inter, sans-serif'; g.fillStyle = c || BR; txt.split('|').forEach((l, i) => g.fillText(l, x, y + i * 11)); }, arrow = (x) => { g.fillStyle = BR; g.fillRect(x - 9, 84, 12, 5); g.beginPath(); g.moveTo(x + 3, 78); g.lineTo(x + 12, 86.5); g.lineTo(x + 3, 95); g.fill(); };
+      if (k1) { g.globalAlpha = k1; for (let i = 0; i < 4; i++) cardAt(34 + i * 7, 86 - i * 2, (i - 1.5) * .25, 1.2); cap('YOUR CARDS', 44, 122); g.globalAlpha = 1; }
+      if (k2) { g.globalAlpha = k2; arrow(86); logo(128, 86, 54); cap('BUYLIST|ONLINE', 128, 128, PK); g.globalAlpha = 1; }
+      if (k3) { g.globalAlpha = k3; arrow(172); burst(212, 86, 26, 34, 12, '#d62c28', m); g.font = '900 9px Inter, sans-serif'; g.fillStyle = '#fff'; g.fillText('EXOR', 212, 76); g.fillText('STORE', 212, 87); g.fillText('CREDIT', 212, 98); g.globalAlpha = 1; }
+      if (m > 10.6) big('IT IS THAT SWEET!', 168, 18, '#fff', PK, -.03); }
+    else if (m < 16) { sc = 10; rays(BL, '#7fcdea'); for (let i = 0; i < 10; i++) cardAt((i * 53) % 256, ((m * 55 + i * 71) % 240) - 20, i + m, .9);
+      big('THEN SPEND IT', 30, 22, '#fff', BR); big('AT EXOR GAMES!', 58, 22, '#ffd23a', BR); if (tv.logo) { const w = 96, h = w * tv.logo.height / tv.logo.width; g.drawImage(tv.logo, W_ / 2 - w / 2, 106 - h / 2, w, h); } if (m > 13.4) big('CARDS! BOXES! MORE CARDS!', 166, 14, '#fff', '#d62c28'); }
+    else { sc = 11; dots(CR, '#f6cfa0'); logo(62, 84, 92); g.textAlign = 'left'; g.font = '900 26px Inter, sans-serif'; g.lineJoin = 'round'; g.lineWidth = 5; g.strokeStyle = '#fff'; g.strokeText('MALLOW', 122, 62); g.strokeText('GAMES', 122, 90); g.fillStyle = PK; g.fillText('MALLOW', 122, 62); g.fillStyle = BL; g.fillText('GAMES', 122, 90);
+      g.font = '900 11px Inter, sans-serif'; g.fillStyle = BR; g.fillText('SELL ONLINE ·', 122, 114); g.fillText('GET EXOR CREDIT', 122, 128); g.textAlign = 'center'; g.fillStyle = BR; g.fillRect(20, 148, W_ - 40, 22); g.font = '900 12px Inter, sans-serif'; g.fillStyle = Math.floor(m * 4) % 2 ? '#ffd23a' : '#fff'; g.fillText('THE BUYLIST IS ONLINE', W_ / 2, 159); g.font = '600 7px Inter, sans-serif'; g.fillStyle = BR; g.fillText('Sweet deals. Not actual marshmallow.', W_ / 2, 182); }
+  }
   // the tape: scan lines, a band of tracking noise, the counter
   g.fillStyle = 'rgba(0,0,0,.16)'; for (let y = 0; y < H_; y += 3) g.fillRect(0, y, W_, 1);
   const by = (tv.t * 37) % (H_ + 40) - 20; g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(0, by, W_, 4); g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(0, by + 7, W_, 2);
   g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = '#fff'; g.textAlign = 'left'; if (idle || tv.t < 2.5) g.fillText('PLAY ▶', 8, 12); g.textAlign = 'right'; const s = Math.floor(idle ? 0 : tv.t); g.fillText('0:' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'), W_ - 8, H_ - 10);
   if (idle) { g.textAlign = 'center'; g.fillStyle = '#000000a0'; g.fillRect(0, H_ - 44, W_, 22); g.fillStyle = '#fff'; g.font = '700 11px "Cutive Mono", monospace'; g.fillText('▶ TAP THE TV TO WATCH', W_ / 2, H_ - 33); }
-  if (!idle && sc !== tv.scene) { tv.scene = sc; arcBlip([330, 392, 523, 440, 587, 659, 784][sc], .16, .02); }
+  if (!idle && sc !== tv.scene) { tv.scene = sc; arcBlip([330, 392, 523, 440, 587, 659, 784, 262, 698, 587, 784, 880][sc], .16, .02); }
   tv.tex.needsUpdate = true;
 }
 function tvView() { const fov = 50, d = Math.max(.6, .3 / hTan(fov)); return lookView(new V3(3.321 - .7071 * d, 2.19, -2.923 + .7071 * d), new V3(3.321, 2.19, -2.923), fov); }
@@ -562,6 +581,7 @@ function buildNineties() {
   const T = grp(3.52, 2.18, -3.08, -PI / 4), tvM = lam({ color: 0x2c2c30 });
   bx(.62, .5, .5, tvM, 0, 0, 0, T); bx(.5, .04, .4, blk, 0, -.27, 0, T); bx(.05, .05, .5, blk, 0, -.29, -.3, T);
   pl(.48, .37, basic({ map: tv.tex }), -.03, .01, .252, 0, T); tvDraw(true); hit(bx(.75, .62, .75, hitM, 3.5, 2.18, -3.05), 'tv');
+  loadImg(W + '/mallow-games.jpg').then((im) => { tv.mallow = im; }).catch(() => {});
   loadImg(img(LOGO, 700)).then((im) => { tv.logo = im; if (S.mode !== 'tv') { tvDraw(true); kick(); } }).catch(() => {});
 
   // a console on the floor in front of its own TV, and two bean bags
@@ -1413,7 +1433,7 @@ const hall = { list: [], built: false, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.
 const aCx = (i) => hall.x0 + .3 + .45 + 1.0 + i * hall.pitch;
 // where product k of a section stands: columns of six, top shelf down, running along the ribbon
 function slotPos(a, sec, k) {
-  const col = sec.c0 + Math.floor(k / 6), d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + a.U - col * hall.colW;
+  const col = sec.c0 + Math.floor(k / 6), d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + (a.nr - 1 - col) * hall.colW;   // the right side ends at the entrance, so a shorter side is bare at the far end, not at the mouth (owner's screenshot, 2026-11-10)
   return { x: aCx(a.i) + (sec.left ? -1.14 : 1.14), y: hall.lv[k % 6] + .012, z: hall.zf - d, ry: sec.left ? PI / 2 : -PI / 2, left: sec.left, s: sec.s0 + (col - sec.c0) * hall.colW };
 }
 function drawAisleSign(g, w, h, a) {
@@ -1442,7 +1462,7 @@ function buildHall(list) {
     o.nl = o.secs.slice(0, best).reduce((n, s) => n + s.cols, 0); o.nr = N - o.nl;
     o.U = (Math.max(o.nl, o.nr) - 1) * hall.colW; o.L = o.U + 1.1; o.smax = o.nr ? 2 * o.U + hall.T : o.U;
     let c = 0, off = 0, left = true;
-    o.secs.forEach((s, j) => { if (left && j >= best && o.nr) { left = false; c = 0; } s.left = left; s.c0 = c; s.s0 = left ? c * hall.colW : o.U + hall.T + c * hall.colW; s.off = off; c += s.cols; off += s.count; });
+    o.secs.forEach((s, j) => { if (left && j >= best && o.nr) { left = false; c = 0; } s.left = left; s.c0 = c; s.s0 = left ? c * hall.colW : o.U + hall.T + (o.U - (o.nr - 1) * hall.colW) + c * hall.colW; s.off = off; c += s.cols; off += s.count; });
     o.slots = off; return o;
   });
   const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35, Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
@@ -1703,6 +1723,10 @@ function leanOff() { lean.id++; lean.k = 0; lean.on = false; pinch = null; }
 // the stretch between the fingers, with give at both ends
 function elastic(scale) { const r = (scale - 1) / 1.1; return r > 1 ? Math.min(1.12, 1 + (r - 1) * .15) : r < 0 ? Math.max(-.08, r * .1) : r; }
 let drag = null;
+// A swipe that starts at the very edge of a phone's screen is the browser's "back" gesture: thumbing left from
+// a box's first lane took you out of the shop to the page before it (owner, 2026-11-10: "if I am in left most
+// lane of the box if I go left again it goes to the showcase"). A touch that starts there stays ours.
+canvas.addEventListener('touchstart', (e) => { const t = e.touches[0]; if (t && (t.clientX < 28 || t.clientX > innerWidth - 28)) e.preventDefault(); }, { passive: false });
 canvas.addEventListener('pointerdown', (e) => {
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pts.size === 2 && !pinch) {
