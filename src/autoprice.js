@@ -1974,6 +1974,7 @@ async function controlAction(cx, b) {
   if (action === "cert") return certAction(cx, b);
   if (action === "cert-read") return certRead(cx, b);
   if (action === "pc-search") return pcSearchAction(cx, b);
+  if (action === "psa-check") { const { psaProbe } = await import("./graded.js"); return psaProbe(cx, b.ids || {}); }   // the same read-only PSA check as GET /autoprice/psa-check, as a control action (the peek runner prints these in full)
   if (action === "publish-all") {
     // Every staged row the page is showing (one game's tab, or all of them),
     // at the suggested price, newest report first. Capped per press so the
@@ -2231,7 +2232,7 @@ export async function serveAutoprice(request, env, url, staffOk) {
 }
 
 // Which permission each control action needs (src/stage-auth.js AP_PERMS).
-const CONTROL_NEEDS = { publish: "publish", keep: "publish", "publish-all": "publish", settings: "settings", add: "settings", remove: "settings", "pc-search": "settings", mode: "config", config: "config", run: "config", "ntfy-test": "config" };
+const CONTROL_NEEDS = { publish: "publish", keep: "publish", "publish-all": "publish", settings: "settings", add: "settings", remove: "settings", "pc-search": "settings", "psa-check": "settings", mode: "config", config: "config", run: "config", "ntfy-test": "config" };
 const NEED_LABEL = { publish: "publish staged prices", settings: "per-product settings, add and remove", config: "page rules, mode and run now" };
 
 function renderLogin(o) {

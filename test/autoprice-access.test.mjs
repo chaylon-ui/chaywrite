@@ -198,6 +198,12 @@ test("GET /autoprice/psa-check asks PSA's six calls with the worker's token for 
     assert.deepEqual([by.order.status, by.order.said], [404, "Not Found"]);
     assert.equal(j.approvedAny, true);
     assert.ok(!ok.text.includes("tok-secret"), "the token never appears in the answer");
+    // the same check as a control action (settings permission), for the runner that prints control answers in full
+    seen.length = 0;
+    const ctl = await hit(w, "/autoprice/control", { cookie: "np_s=" + TOKEN, json: { action: "psa-check" } });
+    assert.equal(ctl.status, 200);
+    const cj = JSON.parse(ctl.text);
+    assert.equal(cj.calls.length, 6); assert.equal(seen.length, 6); assert.ok(!ctl.text.includes("tok-secret"));
   } finally { globalThis.fetch = realFetch; }
   const router = (await import("node:fs")).readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
   assert.match(router, /url\.pathname === "\/autoprice\/psa-check"/);

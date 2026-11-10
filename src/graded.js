@@ -380,7 +380,7 @@ export async function psaProbe(cx, ids) {
     const id = String((ids && ids[c.key]) || c.sample).replace(/[^\w-]/g, "").slice(0, 32);
     const row = { key: c.key, what: c.what, path: c.path + id, status: null, said: "", ok: false };
     try {
-      const r = await cx.fetch(PSA_BASE + c.path + encodeURIComponent(id), { headers: { authorization: "bearer " + cx.env.PSA_API_TOKEN, accept: "application/json", "user-agent": "ExorGraded/1.0 (+workers.dev)" }, signal: AbortSignal.timeout(12000) });
+      const r = await (cx.fetch || ((u, i) => fetch(u, i)))(PSA_BASE + c.path + encodeURIComponent(id), { headers: { authorization: "bearer " + cx.env.PSA_API_TOKEN, accept: "application/json", "user-agent": "ExorGraded/1.0 (+workers.dev)" }, signal: AbortSignal.timeout(12000) });
       row.status = r.status; row.ok = r.ok;
       const t = await r.text().catch(() => "");
       let said = "";
