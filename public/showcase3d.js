@@ -696,6 +696,19 @@ function buildWall(d) {
   // "Browse our cards by set" (owner, 2026-11-04), on a card taped to the shelf end
   const sg = pl(.34, .2, new THREE.MeshBasicMaterial({ map: ctex(340, 200, (g, w, h) => { g.fillStyle = '#fbf7ec'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.font = '40px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('Browse our', w / 2, 62); g.fillText('cards by set', w / 2, 112); g.fillStyle = '#16120d'; g.font = '700 30px Caveat, cursive'; g.fillText(Number(d.count).toLocaleString('en-CA') + ' sets  →', w / 2, 164); }) }), WX - wallW / 2 - .3, y0 + rows * py / 2, WZ + .2, .12, wallG);
   sg.rotation.z = -.04;
+  // (owner, 2026-11-10): "Above the white boxes ... below the exor games sign ... a handwritten sign with a drawn arrow
+  // pointing down to the white boxes that says 'Card Singles By Set'": marker on a sheet of paper taped to the wall
+  const top = y0 + (rows - 1) * py + bh;
+  const hs = pl(.86, .26, new THREE.MeshBasicMaterial({ map: ctex(860, 260, (g, w, h) => {
+    g.clearRect(0, 0, w, h); g.save(); g.translate(w / 2, h / 2); g.rotate(-.012); g.fillStyle = '#fbf7ec'; g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 10; g.shadowOffsetY = 4; g.fillRect(-w / 2 + 14, -h / 2 + 16, w - 28, h - 34); g.restore();
+    g.fillStyle = 'rgba(232,220,184,.92)'; [[30, 6, -.5], [w - 110, 4, .45]].forEach((t) => { g.save(); g.translate(t[0] + 40, t[1] + 16); g.rotate(t[2]); g.fillRect(-42, -13, 84, 26); g.restore(); });   // two bits of masking tape
+    g.fillStyle = '#16120d'; g.font = '74px "Permanent Marker", cursive'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.save(); g.translate(46, h / 2 + 4); g.rotate(-.02); let sc = 1; const tw_ = g.measureText('Card Singles By Set').width; if (tw_ > w - 210) sc = (w - 210) / tw_; g.scale(sc, 1); g.fillText('Card Singles By Set', 0, 0); g.restore();
+    // the arrow, drawn in one go with a red marker: a wobbly shaft and a head pointing down at the boxes
+    g.strokeStyle = '#c0392b'; g.lineWidth = 11; g.lineCap = 'round'; g.lineJoin = 'round'; const ax = w - 96;
+    g.beginPath(); g.moveTo(ax - 8, 44); g.bezierCurveTo(ax + 16, 84, ax - 18, 130, ax + 2, h - 46); g.stroke();
+    g.beginPath(); g.moveTo(ax - 38, h - 86); g.lineTo(ax + 3, h - 40); g.lineTo(ax + 40, h - 92); g.stroke();
+  }), transparent: true }), WX, Math.min(top + .16, 1.9), -3.47, 0, wallG);
+  hs.rotation.z = .012;
   wallHit = hit(bx(wallW + .8, rows * py + .2, .5, hitM, WX - .15, y0 + rows * py / 2, WZ), 'boxes');
   S.wallRows = rows * py; placeSealed(); decorateWall();
 }
