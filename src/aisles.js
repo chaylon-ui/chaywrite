@@ -22,22 +22,25 @@ import { gqlPatient, preorderDate, sealedName } from "./boxes.js";
 // secs: [key, sign, Shopify search filter], in CLAIM order - a product stands in the first section whose
 // filter it meets and in no other, and whatever meets none stands in the last one (rest). order: the keys in
 // the order they stand along the shelf, where that differs. Filters checked against the live catalogue
-// 2026-11-10 (Gunpla 111 + 19 + 51 + 28 + 35 = 244).
+// 2026-11-10 (live probe 42811306178: every aisle's sections add up to the aisle, Gunpla 111 + 19 + 51 + 28 + 35 = 244).
 export const AISLES = [
   { key: "gunpla", label: "Gunpla", q: 'product_type:"Gunpla"', rest: "More Gunpla", secs: [
     ["hg", "High Grade", "title:HG*"], ["rg", "Real Grade", "title:RG"], ["mg", "Master Grade", "title:MG"], ["sd", "SD Gundam", "title:SD*"]] },
   { key: "models", label: "Model Kits", q: 'product_type:"Plastic Model Kit"', rest: "More model kits", secs: [
-    ["tools", "Tools & supplies", '(title:"HOBBY DETAILS" OR title:"MASTER TOOLS")'],
-    ["pokemon", "Pokémon kits", "(title:POKEMON OR title:POKÉMON)"], ["rise", "Figure-rise", "title:FIGURE-RISE"],
-    ["cars", "Cars & sci-fi", '(title:AMT OR title:MPC OR title:"POLAR LIGHTS")'], ["puzzles", "3D puzzles & book nooks", "(title:ROKR OR title:ROLIFE)"],
-    ["blocks", "Building blocks", "(title:IM.MASTER OR title:KOCO)"]],
-    order: ["pokemon", "rise", "cars", "puzzles", "blocks", "rest", "tools"] },
+    ["tools", "Tools & supplies", '(title:"HOBBY DETAILS" OR title:"MASTER TOOLS" OR title:"AK INTERACTIVE" OR title:NIPPER* OR title:TWEEZER* OR title:SANDING OR title:"ACTION BASE" OR title:TAPE OR title:BRUSH* OR title:GLUE OR title:CEMENT OR title:"ARMY PAINTER" OR title:VALLEJO OR title:"MR. HOBBY" OR title:"PANEL LINE" OR title:MARKER* OR title:PRIMER OR title:SURFACER OR title:"TOOL KIT")'],
+    ["pokemon", "Pokémon kits", "(title:POKEMON OR title:POKÉMON)"], ["rise", "Figure-rise", "title:FIGURE-RISE"], ["30mm", "30 Minutes Missions", "(title:30MM OR title:30MF OR title:30MS)"],
+    ["cars", "Cars", '(title:AMT OR title:MPC OR title:"POLAR LIGHTS" OR title:"1/24" OR title:"1/25" OR title:AOSHIMA)'],
+    ["planes", "Planes, ships & armour", '(title:"1/72" OR title:"1/48" OR title:"1/35" OR title:"1/32" OR title:"1/700" OR title:"1/350" OR title:"1/200" OR title:"1:72" OR title:"1:48" OR title:"1:200" OR title:"ARMA HOBBY" OR title:TAMIYA OR title:HASEGAWA OR title:ACADEMY OR title:AIRFIX OR title:REVELL)'],
+    ["puzzles", "3D puzzles & book nooks", "(title:ROKR OR title:ROLIFE)"], ["blocks", "Building blocks", "(title:IM.MASTER OR title:KOCO)"]],
+    order: ["pokemon", "rise", "30mm", "cars", "planes", "puzzles", "blocks", "rest", "tools"] },
   { key: "figures", label: "Figures & Funko", q: '(product_type:"Figures" OR product_type:"Funko")', rest: "More figures", secs: [
     ["funko", "Funko Pop!", '(product_type:"Funko" OR tag:"figline:Funko Pop!")'], ["nendo", "Nendoroid", 'tag:"figline:Nendoroid"'],
     ["shf", "S.H.Figuarts", 'tag:"figline:S.H.Figuarts"'], ["figma", "figma", 'tag:"figline:figma"'], ["pup", "Pop Up Parade", 'tag:"figline:Pop Up Parade"'],
     ["prize", "Prize figures", '(tag:"figline:Banpresto" OR tag:"figline:SEGA Prize")'], ["scale", "Statues & scale figures", '(tag:"figline:ARTFX" OR tag:"figline:MegaHouse" OR tag:"figline:FiguartsZERO")']] },
   { key: "blind", label: "Blind Boxes", q: 'product_type:"Blind Box"', rest: "More blind boxes", secs: [
-    ["pokemon", "Pokémon", 'tag:"fig:Pokemon"'], ["mini", "Miniverse", "title:MINIVERSE"]] },
+    ["pokemon", "Pokémon", 'tag:"fig:Pokemon"'], ["mini", "Miniverse", "title:MINIVERSE"],
+    ["sanrio", "Sanrio, Kirby & friends", '(title:SANRIO OR title:"HELLO KITTY" OR title:CINNAMOROLL OR title:HANGYODON OR title:KUROMI OR title:KIRBY* OR title:TAMAGOTCHI)'],
+    ["anime", "Anime", '(title:GUNDAM OR title:"ONE PIECE" OR title:"DEMON SLAYER" OR title:JUJUTSU OR title:FRIEREN OR title:EVANGELION OR title:"CHAINSAW MAN" OR title:MIKU OR title:JOJO* OR title:GINTAMA OR title:"BLACK BUTLER" OR title:SAKAMOTO OR title:NARUTO OR title:"DRAGON BALL" OR title:"SPY X FAMILY" OR title:"MY HERO" OR title:GHIBLI OR title:"SPIRITED AWAY" OR title:KIKI* OR title:TOTORO)']] },
   { key: "board", label: "Board Games", q: 'product_type:"Board Games"', rest: "More board games", secs: [
     ["chess", "Chess & classics", 'tag:"bg:Chess & Classics"'], ["puzzles", "Puzzles & escape rooms", 'tag:"bg:Puzzles & Escape Rooms"'], ["exp", "Expansions", 'tag:"bg:Expansions"'],
     ["party", "Party games", 'tag:"bg:Party Games"'], ["family", "Family & kids", 'tag:"bg:Family & Kids"'], ["trivia", "Trivia & word", 'tag:"bg:Trivia & Word"'],
