@@ -662,15 +662,35 @@ function buildClerk() {
   });
   cyl(.05, .055, .09, skin, 0, 1.56, 0);                                      // neck
   const col = new THREE.Mesh(new THREE.TorusGeometry(.066, .02, 8, 20), polo); col.rotation.x = PI / 2; col.position.set(0, 1.525, .005); g.add(col);
-  ball(.105, skin, 0, 1.69, 0, 1.14);                                         // head
-  const hr = new THREE.Mesh(new THREE.SphereGeometry(.111, 20, 12, 0, PI * 2, 0, PI * .5), hair); hr.position.set(0, 1.705, -.012); hr.scale.y = 1.1; g.add(hr);
-  const bd = new THREE.Mesh(new THREE.SphereGeometry(.094, 20, 12, 0, PI, PI * .56, PI * .44), hair); bd.position.set(0, 1.69, .016); bd.scale.y = 1.2; g.add(bd);   // a short beard
-  [-1, 1].forEach((sd) => {
-    ball(.011, lam({ color: 0x1a1a1a }), sd * .038, 1.705, .096);
-    const gl = new THREE.Mesh(new THREE.TorusGeometry(.027, .0045, 8, 20), lam({ color: 0x111111 })); gl.position.set(sd * .039, 1.705, .103); g.add(gl);
+  // The head (owner, 2026-11-10: "The employee looks like he is wearing a mask, can you make him look more like
+  // a person"): the beard that covered the lower face like a mask and the hair that came down to the eyes are
+  // gone. The face is painted on the head - eyes with whites and brows, a nose, a smile, a little stubble -
+  // with a nose and ears standing out from it, hair set back off the forehead, and the glasses over the eyes.
+  const faceT = ctex(512, 256, (c, w, h) => {
+    c.fillStyle = '#d8a47c'; c.fillRect(0, 0, w, h); const X = w * .25, Y = h / 2;    // the middle of the face on the sphere's front
+    const soft = (x, y, r, col) => { const gr = c.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gr; c.fillRect(x - r, y - r, r * 2, r * 2); };
+    soft(X - 40, Y + 16, 22, 'rgba(214,120,96,.35)'); soft(X + 40, Y + 16, 22, 'rgba(214,120,96,.35)');           // cheeks
+    soft(X, Y + 52, 60, 'rgba(70,45,30,.20)');                                                                      // stubble under the jaw line
+    const r = seed('stubble'); c.fillStyle = 'rgba(58,38,24,.28)'; for (let i = 0; i < 420; i++) { const a = r() * PI, d = 26 + r() * 30; c.fillRect(X + Math.cos(a) * d * 1.25, Y + 14 + Math.sin(a) * d * .78, 1.3, 1.3); }
+    [-1, 1].forEach((sd) => {
+      const ex = X + sd * 29, ey = Y - 11;
+      c.fillStyle = '#fbf6ee'; c.beginPath(); c.ellipse(ex, ey, 9.5, 5.5, 0, 0, PI * 2); c.fill();
+      c.fillStyle = '#5a3a22'; c.beginPath(); c.arc(ex + sd * -.5, ey + .3, 4.4, 0, PI * 2); c.fill(); c.fillStyle = '#16100c'; c.beginPath(); c.arc(ex + sd * -.5, ey + .3, 2.1, 0, PI * 2); c.fill();
+      c.fillStyle = '#fff'; c.fillRect(ex + 1, ey - 2.4, 1.6, 1.6);
+      c.strokeStyle = '#4a2f1e'; c.lineWidth = 1.8; c.lineCap = 'round'; c.beginPath(); c.ellipse(ex, ey, 9.5, 5.5, 0, PI * 1.05, PI * 1.95); c.stroke();      // the upper lid
+      c.strokeStyle = '#3a2618'; c.lineWidth = 4.2; c.beginPath(); c.moveTo(ex - sd * 11, ey - 13); c.quadraticCurveTo(ex, ey - 18.5, ex + sd * 11, ey - 14.5); c.stroke();   // brow
+    });
+    c.strokeStyle = 'rgba(120,70,48,.55)'; c.lineWidth = 2; c.beginPath(); c.moveTo(X - 7, Y + 14); c.quadraticCurveTo(X, Y + 18, X + 7, Y + 14); c.stroke();   // under the nose
+    c.strokeStyle = '#7a3b2a'; c.lineWidth = 3; c.beginPath(); c.moveTo(X - 17, Y + 29); c.quadraticCurveTo(X, Y + 41, X + 17, Y + 29); c.stroke();           // a smile
+    c.strokeStyle = 'rgba(190,110,90,.6)'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(X - 9, Y + 39); c.quadraticCurveTo(X, Y + 43, X + 9, Y + 39); c.stroke();
   });
-  bx(.026, .005, .005, lam({ color: 0x111111 }), 0, 1.708, .106, g);          // the bridge of the glasses
-  const sm = new THREE.Mesh(new THREE.TorusGeometry(.03, .0045, 6, 14, PI * .7), lam({ color: 0x7a3b2a })); sm.position.set(0, 1.668, .094); sm.rotation.z = PI + PI * .15; g.add(sm);   // a smile
+  const head = ball(.105, lam({ map: faceT }), 0, 1.69, 0, 1.14);
+  const nose = ball(.016, skin, 0, 1.688, .106); nose.scale.set(.8, 1.25, 1);
+  [-1, 1].forEach((sd) => { const e = ball(.024, skin, sd * .104, 1.693, -.004); e.scale.set(.45, 1.2, .8); });       // ears
+  const hr = new THREE.Mesh(new THREE.SphereGeometry(.112, 22, 12, 0, PI * 2, 0, PI * .42), hair); hr.position.set(0, 1.7, -.008); hr.scale.y = 1.14; hr.rotation.x = -.42; g.add(hr);   // set back: the forehead shows
+  [-1, 1].forEach((sd) => { const sb = ball(.03, hair, sd * .097, 1.74, -.03); sb.scale.set(.5, 1.5, 1.6); });         // over the ears
+  [-1, 1].forEach((sd) => { const gl = new THREE.Mesh(new THREE.TorusGeometry(.027, .004, 8, 20), lam({ color: 0x111111 })); gl.position.set(sd * .039, 1.707, .104); g.add(gl); bx(.004, .004, .1, lam({ color: 0x111111 }), sd * .069, 1.709, .056, g); });
+  bx(.026, .005, .005, lam({ color: 0x111111 }), 0, 1.71, .107, g);          // the bridge of the glasses
   // the logo on the chest: the shop's own when the CDN lets us draw it, the name until then
   const drawLogo = (im) => (c, w, h) => { c.clearRect(0, 0, w, h); if (im) { const s = Math.min(w / im.width, h / im.height); c.drawImage(im, (w - im.width * s) / 2, (h - im.height * s) / 2, im.width * s, im.height * s); } else { c.fillStyle = '#e23b2e'; c.font = '700 54px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EXOR', w / 2, h * .32); c.fillStyle = '#f2c230'; c.fillText('GAMES', w / 2, h * .72); } };
   const lt = ctex(256, 160, drawLogo(null)), lg = pl(.1, .0625, new THREE.MeshBasicMaterial({ map: lt, transparent: true }), .085, 1.36, .123, .3, g);
