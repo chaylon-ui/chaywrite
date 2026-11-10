@@ -320,6 +320,83 @@ function buildRoom() {
   pileG = new THREE.Group(); pileG.position.set(1.7, TOP, -1.0); scene.add(pileG);
   buildHobby();
 }
+/* ---------- the arcade cabinet plays (owner, 2026-11-10) ----------
+   "Can you make the arcade play space invaders but the ship is a sword". The cabinet runs a shooter of that
+   kind, drawn and named for this shop rather than copied from the original: SWORD STORM. A sword at the
+   bottom throws daggers up at rows of bats, skulls and slimes that march across and step down, faster as
+   they thin out, dropping fireballs. Three lives, waves, a high score kept on this device. Tap the cabinet
+   to walk up; drag (or the arrow keys) moves the sword, it throws by itself (space throws too). */
+const arc = { W: 240, H: 192, state: 'attract', x: 120, score: 0, hi: 0, lives: 3, wave: 1, en: [], shots: [], balls: [], ox: 0, oy: 0, dir: 1, t: 0, fire: 0, drop: 0, safe: 0, keys: {}, last: 0, pops: [] };
+arc.cv = document.createElement('canvas'); arc.cv.width = arc.W * 2; arc.cv.height = arc.H * 2; arc.g = arc.cv.getContext('2d');
+arc.tex = keep(new THREE.CanvasTexture(arc.cv)); arc.tex.colorSpace = THREE.SRGBColorSpace; arc.tex.magFilter = THREE.NearestFilter;
+try { arc.hi = Number(localStorage.getItem('xgSwordStormHi')) || 0; } catch (x) {}
+function arcBlip(f, d, v) { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(Math.max(40, f * .5), t + d); g.gain.setValueAtTime(v || .03, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d + .02); } catch (x) {} }
+function arcWave() {
+  arc.en = []; for (let r = 0; r < 4; r++) for (let c = 0; c < 8; c++) arc.en.push({ c, r, kind: r === 0 ? 'bat' : r === 1 ? 'skull' : 'slime', alive: true });
+  arc.ox = 0; arc.oy = Math.min(40, (arc.wave - 1) * 6); arc.dir = 1; arc.shots = []; arc.balls = []; arc.drop = 1.2;
+}
+function arcNew() { arc.state = 'play'; arc.score = 0; arc.lives = 3; arc.wave = 1; arc.x = 120; arc.safe = 1; arc.fire = .3; arcWave(); }
+const arcPos = (e) => ({ x: 22 + e.c * 22 + arc.ox, y: 26 + e.r * 16 + arc.oy });
+function arcStep(dt) {
+  arc.t += dt; if (arc.state !== 'play') return;
+  const k = arc.keys; if (k.ArrowLeft) arc.x -= 130 * dt; if (k.ArrowRight) arc.x += 130 * dt; arc.x = clamp(arc.x, 10, arc.W - 10);
+  arc.safe = Math.max(0, arc.safe - dt); arc.fire -= dt;
+  if (arc.fire <= 0 || (k[' '] && arc.fire < .22)) { arc.shots.push({ x: arc.x, y: 160 }); arc.fire = .45; arcBlip(880, .06, .015); }
+  arc.shots.forEach((s) => { s.y -= 190 * dt; }); arc.shots = arc.shots.filter((s) => s.y > 8);
+  const live = arc.en.filter((e) => e.alive); if (!live.length) { arc.wave++; arcWave(); arcBlip(1320, .3, .03); return; }
+  let lo = 1e9, hi = -1e9, low = 0; live.forEach((e) => { const p = arcPos(e); lo = Math.min(lo, p.x); hi = Math.max(hi, p.x); low = Math.max(low, p.y); });
+  arc.ox += arc.dir * (10 + (32 - live.length) * 1.9 + arc.wave * 3) * dt;
+  if ((arc.dir > 0 && hi > arc.W - 14) || (arc.dir < 0 && lo < 14)) { arc.dir *= -1; arc.oy += 7; }
+  // daggers against the horde
+  arc.shots.forEach((s) => { if (s.dead) return; for (const e of live) { if (!e.alive) continue; const p = arcPos(e); if (Math.abs(s.x - p.x) < 8 && Math.abs(s.y - p.y) < 7) { e.alive = false; s.dead = true; arc.score += e.kind === 'bat' ? 30 : e.kind === 'skull' ? 20 : 10; arc.pops.push({ x: p.x, y: p.y, t: .25 }); arcBlip(220, .09, .03); break; } } });
+  arc.shots = arc.shots.filter((s) => !s.dead); arc.pops.forEach((p) => { p.t -= dt; }); arc.pops = arc.pops.filter((p) => p.t > 0);
+  // fireballs from whoever is lowest in a column
+  arc.drop -= dt; if (arc.drop <= 0) { const cols = {}; live.forEach((e) => { if (!cols[e.c] || cols[e.c].r < e.r) cols[e.c] = e; }); const list = Object.keys(cols), e = cols[list[Math.floor(Math.random() * list.length)]], p = arcPos(e); arc.balls.push({ x: p.x, y: p.y + 6 }); arc.drop = Math.max(.35, 1.15 - arc.wave * .08) * (.6 + Math.random() * .8); }
+  arc.balls.forEach((b) => { b.y += (62 + arc.wave * 7) * dt; if (!arc.safe && Math.abs(b.x - arc.x) < 6 && b.y > 158 && b.y < 180) { b.y = 999; arc.lives--; arc.safe = 1.4; arcBlip(110, .35, .05); } }); arc.balls = arc.balls.filter((b) => b.y < arc.H);
+  if (arc.lives <= 0 || low > 152) { arc.state = 'over'; arc.overAt = arc.t; if (arc.score > arc.hi) { arc.hi = arc.score; try { localStorage.setItem('xgSwordStormHi', String(arc.hi)); } catch (x) {} } }
+}
+function arcSword(g, x, y, s) {   // point up; x, y = the middle of the crossguard
+  s = s || 1; g.fillStyle = '#e8eef2'; g.fillRect(x - 1.5 * s, y - 13 * s, 3 * s, 13 * s); g.fillRect(x - .5 * s, y - 15 * s, s, 2 * s); g.fillStyle = '#9fb2bd'; g.fillRect(x + .5 * s, y - 13 * s, s, 13 * s);
+  g.fillStyle = '#ffd23a'; g.fillRect(x - 6 * s, y, 12 * s, 2 * s); g.fillStyle = '#8a4b22'; g.fillRect(x - 1.5 * s, y + 2 * s, 3 * s, 5 * s); g.fillStyle = '#ffd23a'; g.fillRect(x - 2 * s, y + 7 * s, 4 * s, 2 * s);
+}
+function arcFoe(g, kind, x, y, f) {
+  if (kind === 'slime') { g.fillStyle = '#4fd65a'; g.fillRect(x - 6, y - 1 - f, 12, 6 + f); g.fillRect(x - 4, y - 4 - f, 8, 3); g.fillRect(x - 7, y + 3, 14, 2); g.fillStyle = '#062b0a'; g.fillRect(x - 3, y - 1 - f, 2, 2); g.fillRect(x + 1, y - 1 - f, 2, 2); }
+  else if (kind === 'skull') { g.fillStyle = '#efe7d2'; g.fillRect(x - 5, y - 5, 10, 7); g.fillRect(x - 3, y + 2, 6, 2 + f); g.fillStyle = '#111'; g.fillRect(x - 3, y - 3, 2, 3); g.fillRect(x + 1, y - 3, 2, 3); g.fillRect(x - 1, y + 3 + f, 1, 1); g.fillRect(x + 1, y + 3 + f, 1, 1); }
+  else { g.fillStyle = '#b064ff'; g.fillRect(x - 2, y - 3, 4, 6); g.fillRect(x - 3, y - 5, 1, 2); g.fillRect(x + 2, y - 5, 1, 2); const wy = f ? -4 : 0; g.fillRect(x - 8, y - 1 + wy, 6, 2); g.fillRect(x + 2, y - 1 + wy, 6, 2); g.fillRect(x - 8, y + 1 + wy, 2, 2); g.fillRect(x + 6, y + 1 + wy, 2, 2); g.fillStyle = '#ffd23a'; g.fillRect(x - 1, y - 2, 1, 1); g.fillRect(x + 1, y - 2, 1, 1); }
+}
+function arcDraw() {
+  const g = arc.g, W_ = arc.W, H_ = arc.H; g.setTransform(2, 0, 0, 2, 0, 0); g.imageSmoothingEnabled = false;
+  g.fillStyle = '#07061a'; g.fillRect(0, 0, W_, H_); const r = seed('arcstars'); for (let i = 0; i < 40; i++) { g.fillStyle = i % 3 ? '#3a3a6a' : '#8a8ad0'; g.fillRect(Math.floor(r() * W_), Math.floor((r() * H_ + arc.t * (i % 3 ? 4 : 9)) % H_), 1, 1); }
+  g.fillStyle = '#2a1b4a'; g.fillRect(0, 182, W_, 10); g.fillStyle = '#ff4f9a'; g.fillRect(0, 181, W_, 1);
+  g.font = '700 9px "Cutive Mono", monospace'; g.textBaseline = 'top'; g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText('SCORE ' + String(arc.score).padStart(5, '0'), 6, 4); g.textAlign = 'right'; g.fillText('HI ' + String(Math.max(arc.hi, arc.score)).padStart(5, '0'), W_ - 6, 4);
+  const f = Math.floor(arc.t * 2.5) % 2;
+  if (arc.state === 'attract') {
+    ['bat', 'skull', 'slime'].forEach((kd, i) => { for (let c = 0; c < 6; c++) arcFoe(g, kd, 50 + c * 28 + Math.sin(arc.t + i) * 8, 40 + i * 18, f); });
+    g.textAlign = 'center'; g.font = '900 24px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('SWORD STORM', W_ / 2 + 1, 101); g.fillStyle = '#ffd23a'; g.fillText('SWORD STORM', W_ / 2, 100);
+    arcSword(g, W_ / 2, 150, 1.4); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText(S.mode === 'arcade' ? 'TAP TO START' : 'INSERT COIN', W_ / 2, 168);
+  } else {
+    arc.en.forEach((e) => { if (e.alive) { const p = arcPos(e); arcFoe(g, e.kind, p.x, p.y, f); } });
+    arc.pops.forEach((p) => { g.fillStyle = '#ffd23a'; [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, -7], [0, 7], [-7, 0], [7, 0]].forEach((d) => g.fillRect(p.x + d[0] * (1.3 - p.t * 3), p.y + d[1] * (1.3 - p.t * 3), 2, 2)); });
+    g.fillStyle = '#e8eef2'; arc.shots.forEach((s) => { g.fillRect(s.x - .5, s.y - 5, 1, 6); g.fillRect(s.x - 1.5, s.y, 3, 1); });
+    arc.balls.forEach((b) => { g.fillStyle = '#ff7a2a'; g.fillRect(b.x - 1.5, b.y - 2, 3, 4); g.fillStyle = '#ffd23a'; g.fillRect(b.x - .5, b.y - 4, 1, 3); });
+    if (arc.state === 'play' && !(arc.safe && Math.floor(arc.t * 12) % 2)) arcSword(g, arc.x, 166, 1);
+    for (let i = 0; i < arc.lives; i++) arcSword(g, 10 + i * 12, 186, .5);
+    g.textAlign = 'right'; g.fillStyle = '#7dfff0'; g.fillText('WAVE ' + arc.wave, W_ - 6, 183);
+    if (arc.state === 'over') { g.textAlign = 'center'; g.fillStyle = '#000000b0'; g.fillRect(30, 70, W_ - 60, 56); g.font = '900 20px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('GAME OVER', W_ / 2, 78); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText('TAP TO PLAY AGAIN', W_ / 2, 106); }
+  }
+  arc.tex.needsUpdate = true;
+}
+// straight at the screen, as close as it fits
+function arcadeView() { const fov = 50, d = Math.max(.56, .29 / hTan(fov)); return lookView(new V3(3.448 - d, 1.3, -.1), new V3(3.448, 1.3, -.1), fov); }
+function arcTap() { if (arc.state === 'attract' || (arc.state === 'over' && arc.t - arc.overAt > .6)) { arcNew(); arcBlip(660, .2, .03); hint(''); } else if (arc.state === 'play' && arc.fire < .25) arc.fire = 0; }
+function arcRun() {
+  arc.state = 'attract'; arc.keys = {}; arc.last = 0; const id = arc.id = (arc.id || 0) + 1;
+  anims.push((now) => { if (S.mode !== 'arcade' || arc.id !== id) return false; const dt = arc.last ? Math.min(.05, (now - arc.last) / 1000) : 0; arc.last = now; arcStep(dt); arcDraw(); return true; }); kick();
+}
+function arcStop() { if (arc.state === 'attract' && !arc.id) return; arc.id = (arc.id || 0) + 1; arc.state = 'attract'; arc.keys = {}; arcDraw(); kick(); }
+document.addEventListener('keydown', (e) => { if (S.mode !== 'arcade') return; if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === ' ') { arc.keys[e.key] = true; e.preventDefault(); if (e.key === ' ' && arc.state !== 'play') arcTap(); } else if (e.key === 'Enter') arcTap(); });
+document.addEventListener('keyup', (e) => { delete arc.keys[e.key]; });
+
 /* ---------- the 1990s lying around (owner, 2026-11-10) ----------
    "I need it to be much more 1990s looking. More ambient items laying around. Stuff from the 1990s."
    Nothing here is stock or a tap target: an arcade cabinet and a gumball machine on the right wall, a TV with
@@ -353,14 +430,11 @@ function buildNineties() {
   const A = grp(3.6, 0, -.1, -PI / 2), cab = lam({ color: 0x1b1640 }), blk = lam({ color: 0x111114 });
   bx(.66, .92, .7, cab, 0, .46, 0, A); bx(.66, .8, .5, cab, 0, 1.32, -.1, A); bx(.66, .2, .58, cab, 0, 1.82, -.06, A);
   const deck = bx(.66, .05, .3, blk, 0, .95, .3, A); deck.rotation.x = .12;
-  const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#1b1640', 26, 'cab'); g.fillStyle = YEL; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText('STAR BLASTER', 0, 18); g.restore(); }) });
+  const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#1b1640', 26, 'cab'); g.fillStyle = YEL; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText('SWORD STORM', 0, 18); g.restore(); }) });
   pl(.7, 1.9, side, -.332, .96, 0, -PI / 2, A); pl(.7, 1.9, side, .332, .96, 0, PI / 2, A);
-  pl(.5, .4, basic({ map: ctex(256, 204, (g, w, h) => {   // a made-up shooter on the screen
-    g.fillStyle = '#050510'; g.fillRect(0, 0, w, h); const r = seed('stars'); g.fillStyle = '#fff'; for (let i = 0; i < 60; i++) g.fillRect(r() * w, r() * h, 2, 2);
-    [PINK, TEAL, YEL].forEach((c, row) => { g.fillStyle = c; for (let i = 0; i < 7; i++) { const x = 34 + i * 28, y = 34 + row * 24; g.fillRect(x, y, 16, 8); g.fillRect(x + 4, y - 4, 8, 4); g.fillRect(x - 2, y + 8, 4, 4); g.fillRect(x + 14, y + 8, 4, 4); } });
-    g.fillStyle = '#7dff7a'; g.fillRect(118, 170, 24, 8); g.fillRect(127, 162, 6, 8); g.fillRect(129, 120, 2, 14); g.fillStyle = '#fff'; g.font = '700 14px "Cutive Mono", monospace'; g.textAlign = 'left'; g.fillText('1UP 004200', 8, 16); g.textAlign = 'right'; g.fillText('HI 096000', w - 8, 16); scan(g, w, h);
-  }) }), 0, 1.3, .152, 0, A);
-  pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, PURP); gr.addColorStop(1, PINK); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 58px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText('STAR BLASTER', w / 2, h / 2 + 3); g.fillText('STAR BLASTER', w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
+  pl(.5, .4, basic({ map: arc.tex }), 0, 1.3, .152, 0, A); arcDraw();   // the game itself: see the arcade section
+  hit(bx(.8, 1.95, .8, hitM, 3.6, .98, -.1), 'arcade');
+  pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, PURP); gr.addColorStop(1, PINK); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 58px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText('SWORD STORM', w / 2, h / 2 + 3); g.fillText('SWORD STORM', w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
   cyl(.008, .008, .07, blk, -.16, 1.0, .3, A); const knob = new THREE.Mesh(new THREE.SphereGeometry(.022, 12, 8), lam({ color: 0xd62c28 })); knob.position.set(-.16, 1.045, .3); A.add(knob);
   [[.02, 0xffd23a], [.09, 0x19b5a5], [.16, 0xff4f9a]].forEach((b) => cyl(.018, .018, .012, lam({ color: b[1] }), b[0], .985, .3, A));
   pl(.2, .26, lam({ map: ctex(100, 130, (g, w, h) => { g.fillStyle = '#26262b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#6a6a72'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12); g.fillStyle = '#ff8a2a'; g.fillRect(34, 40, 32, 22); g.fillStyle = '#111'; g.font = '700 13px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('25¢', 50, 56); g.fillRect(44, 84, 12, 26); }) }), 0, .5, .352, 0, A);
@@ -1391,9 +1465,9 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
-  leanOff(); closePaint(true); cabinetDoors(mode === 'graded');
+  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop();
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
@@ -1403,6 +1477,7 @@ function go(mode) {
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
   else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hx = aCx(S.aisle) - hallLead() - hall.x0 - .5; else if (S.mode !== 'aisles') S.hx = 0; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the hall · tap an aisle to walk in' : 'Drag or scroll to walk the hall · click an aisle to walk in'); }
+  else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move the sword · it throws by itself' : 'Click to start · drag or arrow keys move the sword · space throws'); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
   ui();
 }
@@ -1459,6 +1534,7 @@ function tap(x, y) {
   else if (S.mode === 'boxes') { const h = pick(boxMeshes.concat(sealMeshes), x, y); if (h) return h.object.userData.card ? lift(h.object.userData.card, null) : openBox(h.object.userData.n); }
   else if (S.mode === 'hobby') { const h = pick(racks.map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
   else if (S.mode === 'graded') { const h = pick(gcab.meshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
+  else if (S.mode === 'arcade') return arcTap();
   else if (S.mode === 'aisles') { const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
   else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); const o = pick(hall.list.map((q) => q.hit), x, y); if (o && o.object.userData.aisle !== S.aisle) return goAisle(o.object.userData.aisle); return; }
   else if (S.mode === 'rack') {
@@ -1517,7 +1593,7 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pinch || pts.size > 1) return;
   if (e.button && e.button !== 0) return;
-  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0, hx: S.hx || 0 };
+  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0, hx: S.hx || 0, sx: arc.x };
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
   // a mouse held still on the case leans in to that spot
@@ -1537,6 +1613,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (S.hand) { hand.ry = drag.ry + dx * .011; hand.rx = clamp(drag.rx + dy * .006, -.6, .6); kick(); }
   else if (drag.axis === 'none') { /* a glide is running */ }
   else if (S.mode === 'graded') { const mpp = (gcab.vw || 1) / canvas.clientWidth; gcab.gx = drag.gx - dx * mpp; gcab.gy = drag.gy + dy * mpp; setView(gradedView()); }
+  else if (S.mode === 'arcade') { arc.x = clamp(drag.sx + dx * arc.W / (.5 / (2 * (view.dist || .6) * hTan(view.fov)) * canvas.clientWidth), 10, arc.W - 10); }
   else if (S.mode === 'aisles') {
     if (drag.axis === 'x') { const mpp = 2 * 2.6 * hTan(view.fov) / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.hx = clamp(drag.hx - dx * mpp, 0, hall.hmax || 0); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aislesView()); }
   }
@@ -1631,7 +1708,7 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'buy') buy(b);
   else if (b.id === 'x') putBack();
   else if (b.id === 'pull') sheet(!$('#panel').classList.contains('open'));
-  else if (b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
+  else if (b.id === 'arcBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
   else if (b.id === 'crPrevSet') openSet(boxes.setIdx - 1);
   else if (b.id === 'crNextSet') openSet(boxes.setIdx + 1);
   else if (b.id === 'crLaneL') crateLane(-1);
@@ -1654,4 +1731,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, arc, arcTap, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
