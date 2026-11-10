@@ -325,7 +325,12 @@ function buildRoom() {
    kind, drawn and named for this shop rather than copied from the original: SWORD STORM. A sword at the
    bottom throws daggers up at rows of bats, skulls and slimes that march across and step down, faster as
    they thin out, dropping fireballs. Three lives, waves, a high score kept on this device. Tap the cabinet
-   to walk up; drag (or the arrow keys) moves the sword, it throws by itself (space throws too). */
+   to walk up; drag (or the arrow keys) moves the sword, it throws by itself (space throws too).
+   Owner, later the same day, with the Mallow Games mascot: "Make sword shooter into Mallow Shooter where it
+   sprays molting hot marsh mallow into the invaders. This is the main character" -> the sword is now the
+   mascot (white marshmallow head with two points, a pink curl, a dark collar with a blue button, a blue
+   bowl), drawn small in pixels, and what it throws is a fan of three blobs of molten marshmallow that splat
+   on what they hit. The cabinet and the title read MALLOW SHOOTER. */
 const arc = { W: 240, H: 192, state: 'attract', x: 120, score: 0, hi: 0, lives: 3, wave: 1, en: [], shots: [], balls: [], ox: 0, oy: 0, dir: 1, t: 0, fire: 0, drop: 0, safe: 0, keys: {}, last: 0, pops: [] };
 arc.cv = document.createElement('canvas'); arc.cv.width = arc.W * 2; arc.cv.height = arc.H * 2; arc.g = arc.cv.getContext('2d');
 arc.tex = keep(new THREE.CanvasTexture(arc.cv)); arc.tex.colorSpace = THREE.SRGBColorSpace; arc.tex.magFilter = THREE.NearestFilter;
@@ -341,8 +346,8 @@ function arcStep(dt) {
   arc.t += dt; if (arc.state !== 'play') return;
   const k = arc.keys; if (k.ArrowLeft) arc.x -= 130 * dt; if (k.ArrowRight) arc.x += 130 * dt; arc.x = clamp(arc.x, 10, arc.W - 10);
   arc.safe = Math.max(0, arc.safe - dt); arc.fire -= dt;
-  if (arc.fire <= 0 || (k[' '] && arc.fire < .22)) { arc.shots.push({ x: arc.x, y: 160 }); arc.fire = .45; arcBlip(880, .06, .015); }
-  arc.shots.forEach((s) => { s.y -= 190 * dt; }); arc.shots = arc.shots.filter((s) => s.y > 8);
+  if (arc.fire <= 0 || (k[' '] && arc.fire < .22)) { [-30, 0, 30].forEach((vx) => arc.shots.push({ x: arc.x + vx * .08, y: 150, vx })); arc.fire = .55; arcBlip(520, .09, .015); }
+  arc.shots.forEach((s) => { s.y -= 170 * dt; s.x += s.vx * dt; }); arc.shots = arc.shots.filter((s) => s.y > 8 && s.x > 2 && s.x < arc.W - 2);
   const live = arc.en.filter((e) => e.alive); if (!live.length) { arc.wave++; arcWave(); arcBlip(1320, .3, .03); return; }
   let lo = 1e9, hi = -1e9, low = 0; live.forEach((e) => { const p = arcPos(e); lo = Math.min(lo, p.x); hi = Math.max(hi, p.x); low = Math.max(low, p.y); });
   arc.ox += arc.dir * (10 + (32 - live.length) * 1.9 + arc.wave * 3) * dt;
@@ -352,12 +357,17 @@ function arcStep(dt) {
   arc.shots = arc.shots.filter((s) => !s.dead); arc.pops.forEach((p) => { p.t -= dt; }); arc.pops = arc.pops.filter((p) => p.t > 0);
   // fireballs from whoever is lowest in a column
   arc.drop -= dt; if (arc.drop <= 0) { const cols = {}; live.forEach((e) => { if (!cols[e.c] || cols[e.c].r < e.r) cols[e.c] = e; }); const list = Object.keys(cols), e = cols[list[Math.floor(Math.random() * list.length)]], p = arcPos(e); arc.balls.push({ x: p.x, y: p.y + 6 }); arc.drop = Math.max(.35, 1.15 - arc.wave * .08) * (.6 + Math.random() * .8); }
-  arc.balls.forEach((b) => { b.y += (62 + arc.wave * 7) * dt; if (!arc.safe && Math.abs(b.x - arc.x) < 6 && b.y > 158 && b.y < 180) { b.y = 999; arc.lives--; arc.safe = 1.4; arcBlip(110, .35, .05); } }); arc.balls = arc.balls.filter((b) => b.y < arc.H);
+  arc.balls.forEach((b) => { b.y += (62 + arc.wave * 7) * dt; if (!arc.safe && Math.abs(b.x - arc.x) < 10 && b.y > 153 && b.y < 180) { b.y = 999; arc.lives--; arc.safe = 1.4; arcBlip(110, .35, .05); } }); arc.balls = arc.balls.filter((b) => b.y < arc.H);
   if (arc.lives <= 0 || low > 152) { arc.state = 'over'; arc.overAt = arc.t; if (arc.score > arc.hi) { arc.hi = arc.score; try { localStorage.setItem('xgSwordStormHi', String(arc.hi)); } catch (x) {} } }
 }
-function arcSword(g, x, y, s) {   // point up; x, y = the middle of the crossguard
-  s = s || 1; g.fillStyle = '#e8eef2'; g.fillRect(x - 1.5 * s, y - 13 * s, 3 * s, 13 * s); g.fillRect(x - .5 * s, y - 15 * s, s, 2 * s); g.fillStyle = '#9fb2bd'; g.fillRect(x + .5 * s, y - 13 * s, s, 13 * s);
-  g.fillStyle = '#ffd23a'; g.fillRect(x - 6 * s, y, 12 * s, 2 * s); g.fillStyle = '#8a4b22'; g.fillRect(x - 1.5 * s, y + 2 * s, 3 * s, 5 * s); g.fillStyle = '#ffd23a'; g.fillRect(x - 2 * s, y + 7 * s, 4 * s, 2 * s);
+function arcSword(g, x, y, s) {   // the Mallow Games mascot; x, y = the middle of its collar
+  s = s || 1; const R = (c, ax, ay, w, h) => { g.fillStyle = c; g.fillRect(x + ax * s, y + ay * s, w * s, h * s); };
+  R('#fff', -7, -9, 14, 9); R('#fff', -6, -10, 12, 1); R('#fff', -8, -7, 16, 6);                       // the head
+  R('#fff', -9, -11, 2, 4); R('#fff', -10, -12, 1, 2); R('#fff', 7, -11, 2, 4); R('#fff', 9, -12, 1, 2);   // its two points
+  R('#c2478f', -2, -13, 5, 4); R('#c2478f', -1, -14, 3, 1); R('#c2478f', 2, -10, 2, 1); R('#fff', 0, -12, 1, 1);   // the curl
+  R('#f5d9a8', -4, -7, 2, 4); R('#f5d9a8', 2, -7, 2, 4);                                              // eyes
+  R('#2e1f1c', -9, -1, 18, 2); R('#4aa3c7', -8, 1, 16, 2); R('#4aa3c7', -6, 3, 12, 1);                  // collar and bowl
+  R('#4aa3c7', -2, -2, 4, 4); R('#fff', -1, -1, 2, 2);                                                 // the button
 }
 function arcFoe(g, kind, x, y, f) {
   if (kind === 'slime') { g.fillStyle = '#4fd65a'; g.fillRect(x - 6, y - 1 - f, 12, 6 + f); g.fillRect(x - 4, y - 4 - f, 8, 3); g.fillRect(x - 7, y + 3, 14, 2); g.fillStyle = '#062b0a'; g.fillRect(x - 3, y - 1 - f, 2, 2); g.fillRect(x + 1, y - 1 - f, 2, 2); }
@@ -372,15 +382,15 @@ function arcDraw() {
   const f = Math.floor(arc.t * 2.5) % 2;
   if (arc.state === 'attract') {
     ['bat', 'skull', 'slime'].forEach((kd, i) => { for (let c = 0; c < 6; c++) arcFoe(g, kd, 50 + c * 28 + Math.sin(arc.t + i) * 8, 40 + i * 18, f); });
-    g.textAlign = 'center'; g.font = '900 24px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('SWORD STORM', W_ / 2 + 1, 101); g.fillStyle = '#ffd23a'; g.fillText('SWORD STORM', W_ / 2, 100);
-    arcSword(g, W_ / 2, 150, 1.4); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText(S.mode === 'arcade' ? 'TAP TO START' : 'INSERT COIN', W_ / 2, 168);
+    g.textAlign = 'center'; g.font = '900 24px Inter, sans-serif'; g.fillStyle = '#111'; g.fillText('MALLOW', W_ / 2 + 1, 89); g.fillText('SHOOTER', W_ / 2 + 1, 111); g.fillStyle = '#e06aa6'; g.fillText('MALLOW', W_ / 2, 88); g.fillStyle = '#4fb3da'; g.fillText('SHOOTER', W_ / 2, 110);
+    arcSword(g, W_ / 2, 152, 1.9); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText(S.mode === 'arcade' ? 'TAP TO START' : 'INSERT COIN', W_ / 2, 166);
   } else {
     arc.en.forEach((e) => { if (e.alive) { const p = arcPos(e); arcFoe(g, e.kind, p.x, p.y, f); } });
-    arc.pops.forEach((p) => { g.fillStyle = '#ffd23a'; [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, -7], [0, 7], [-7, 0], [7, 0]].forEach((d) => g.fillRect(p.x + d[0] * (1.3 - p.t * 3), p.y + d[1] * (1.3 - p.t * 3), 2, 2)); });
-    g.fillStyle = '#e8eef2'; arc.shots.forEach((s) => { g.fillRect(s.x - .5, s.y - 5, 1, 6); g.fillRect(s.x - 1.5, s.y, 3, 1); });
+    arc.pops.forEach((p) => { g.fillStyle = '#fff'; g.fillRect(p.x - 3, p.y - 2, 6, 4); g.fillStyle = '#fff3d6'; [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, -7], [0, 7], [-7, 0], [7, 0]].forEach((d) => g.fillRect(p.x + d[0] * (1.3 - p.t * 3), p.y + d[1] * (1.3 - p.t * 3), 2, 2)); });
+    arc.shots.forEach((s) => { g.fillStyle = '#ff9a3a'; g.fillRect(s.x - 1, s.y + 3, 2, 3); g.fillStyle = '#fff'; g.fillRect(s.x - 2, s.y - 2, 4, 5); g.fillRect(s.x - 1, s.y - 3, 2, 1); g.fillStyle = '#ffe9a8'; g.fillRect(s.x - 1, s.y, 2, 2); });   // molten marshmallow: white, hot in the middle, a drip behind
     arc.balls.forEach((b) => { g.fillStyle = '#ff7a2a'; g.fillRect(b.x - 1.5, b.y - 2, 3, 4); g.fillStyle = '#ffd23a'; g.fillRect(b.x - .5, b.y - 4, 1, 3); });
-    if (arc.state === 'play' && !(arc.safe && Math.floor(arc.t * 12) % 2)) arcSword(g, arc.x, 166, 1);
-    for (let i = 0; i < arc.lives; i++) arcSword(g, 10 + i * 12, 186, .5);
+    if (arc.state === 'play' && !(arc.safe && Math.floor(arc.t * 12) % 2)) arcSword(g, arc.x, 172, 1.4);
+    for (let i = 0; i < arc.lives; i++) arcSword(g, 10 + i * 13, 190, .5);
     g.textAlign = 'right'; g.fillStyle = '#7dfff0'; g.fillText('WAVE ' + arc.wave, W_ - 6, 183);
     if (arc.state === 'over') { g.textAlign = 'center'; g.fillStyle = '#000000b0'; g.fillRect(30, 70, W_ - 60, 56); g.font = '900 20px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('GAME OVER', W_ / 2, 78); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText('TAP TO PLAY AGAIN', W_ / 2, 106); }
   }
@@ -530,16 +540,16 @@ function buildNineties() {
     const A = grp(3.6, 0, z, -PI / 2), cab = lam({ color: body });
     bx(.66, .92, .7, cab, 0, .46, 0, A); bx(.66, .8, .5, cab, 0, 1.32, -.1, A); bx(.66, .2, .58, cab, 0, 1.82, -.06, A);
     const deck = bx(.66, .05, .3, blk, 0, .95, .3, A); deck.rotation.x = .12;
-    const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#' + body.toString(16).padStart(6, '0'), 26, 'cab' + name); g.fillStyle = YEL; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText(name, 0, 18); g.restore(); }) });
+    const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#' + body.toString(16).padStart(6, '0'), 26, 'cab' + name); g.fillStyle = YEL; g.font = '900 ' + Math.min(54, Math.floor(590 / name.length)) + 'px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText(name, 0, 18); g.restore(); }) });
     pl(.7, 1.9, side, -.332, .96, 0, -PI / 2, A); pl(.7, 1.9, side, .332, .96, 0, PI / 2, A);
     pl(.5, .4, basic({ map: tex }), 0, 1.3, .152, 0, A);
     hit(bx(.8, 1.95, .8, hitM, 3.6, .98, z), actName);
-    pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, c1); gr.addColorStop(1, c2); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 58px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText(name, w / 2, h / 2 + 3); g.fillText(name, w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
+    pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, c1); gr.addColorStop(1, c2); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 ' + Math.min(58, Math.floor(570 / name.length)) + 'px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText(name, w / 2, h / 2 + 3); g.fillText(name, w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
     cyl(.008, .008, .07, blk, -.16, 1.0, .3, A); const knob = new THREE.Mesh(new THREE.SphereGeometry(.022, 12, 8), lam({ color: 0xd62c28 })); knob.position.set(-.16, 1.045, .3); A.add(knob);
     [[.02, 0xffd23a], [.09, 0x19b5a5], [.16, 0xff4f9a]].forEach((b) => cyl(.018, .018, .012, lam({ color: b[1] }), b[0], .985, .3, A));
     pl(.2, .26, lam({ map: ctex(100, 130, (g, w, h) => { g.fillStyle = '#26262b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#6a6a72'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12); g.fillStyle = '#ff8a2a'; g.fillRect(34, 40, 32, 22); g.fillStyle = '#111'; g.font = '700 13px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('25¢', 50, 56); g.fillRect(44, 84, 12, 26); }) }), 0, .5, .352, 0, A);
   };
-  cabinet(-.1, 'SWORD STORM', 0x1b1640, PURP, PINK, arc.tex, 'arcade'); arcDraw();
+  cabinet(-.1, 'MALLOW SHOOTER', 0x1b1640, PURP, PINK, arc.tex, 'arcade'); arcDraw();
   cabinet(.62, 'BOX STACK', 0x0e3b46, TEAL, '#3f8fe0', stk.tex, 'stack'); stkDraw();
 
   // the gumball machine
@@ -1581,7 +1591,7 @@ function go(mode) {
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
   else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hx = aCx(S.aisle) - hallLead() - hall.x0 - .5; else if (S.mode !== 'aisles') S.hx = 0; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the hall · tap an aisle to walk in' : 'Drag or scroll to walk the hall · click an aisle to walk in'); }
-  else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move the sword · it throws by itself' : 'Click to start · drag or arrow keys move the sword · space throws'); }
+  else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move Mallow · it sprays by itself' : 'Click to start · drag or arrow keys move Mallow · space sprays'); }
   else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(.62), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
   else if (mode === 'tv') { S.mode = 'tv'; glide(tvView(), 900); tvRun(); hint(''); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
