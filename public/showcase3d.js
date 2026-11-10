@@ -170,16 +170,18 @@ function drawBack(g, w, h) {
 function cutWhite(g, w, h, photo) {
   let d; try { d = g.getImageData(0, 0, w, h); } catch (x) { return null; }
   const px = d.data, seen = new Uint8Array(w * h), st = [];
-  let white = (i) => px[i * 4 + 3] < 16 || (px[i * 4] > 232 && px[i * 4 + 1] > 232 && px[i * 4 + 2] > 232);
-  if (photo) {   // a photo's background is rarely pure white: take the colour the corners agree on, when it is light and even
-    const cs = [0, w - 1, (h - 1) * w, h * w - 1].map((i) => [px[i * 4], px[i * 4 + 1], px[i * 4 + 2]]), bg = [0, 1, 2].map((k) => (cs[0][k] + cs[1][k] + cs[2][k] + cs[3][k]) / 4);
-    const even = cs.every((c) => Math.max(Math.abs(c[0] - bg[0]), Math.abs(c[1] - bg[1]), Math.abs(c[2] - bg[2])) < 26);
-    if (!even || Math.min(bg[0], bg[1], bg[2]) < 165) return null;
-    white = (i) => px[i * 4 + 3] < 16 || Math.max(Math.abs(px[i * 4] - bg[0]), Math.abs(px[i * 4 + 1] - bg[1]), Math.abs(px[i * 4 + 2] - bg[2])) < 30;
-  }
-  const push = (i) => { if (!seen[i] && white(i)) { seen[i] = 1; st.push(i); } };
-  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); } for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
-  while (st.length) { const i = st.pop(), x = i % w; px[i * 4 + 3] = 0; if (x > 0) push(i - 1); if (x < w - 1) push(i + 1); if (i >= w) push(i - w); if (i < w * (h - 1)) push(i + w); }
+  const white = (i) => px[i * 4 + 3] < 16 || (px[i * 4] > 232 && px[i * 4 + 1] > 232 && px[i * 4 + 2] > 232);
+  // A photo (a graded slab on a sheet of paper) has no pure white: its background is light, nearly grey, and shades
+  // off towards the corners. So there the fill takes any light, low-colour pixel that differs little from the one
+  // it came from - it follows the shading and stops at the slab's edge (live probe 42735937053: the first rule,
+  // one colour for all four corners, cut nothing).
+  const light = (i) => { const r = px[i * 4], g2 = px[i * 4 + 1], b = px[i * 4 + 2], mn = Math.min(r, g2, b); return px[i * 4 + 3] < 16 || (mn > 138 && Math.max(r, g2, b) - mn < 50); };
+  const near = (i, j) => Math.abs(px[i * 4] - px[j * 4]) < 9 && Math.abs(px[i * 4 + 1] - px[j * 4 + 1]) < 9 && Math.abs(px[i * 4 + 2] - px[j * 4 + 2]) < 9;
+  const push = (i, from) => { if (seen[i]) return; if (photo ? light(i) && (from < 0 || near(i, from)) : white(i)) { seen[i] = 1; st.push(i); } };
+  for (let x = 0; x < w; x++) { push(x, -1); push((h - 1) * w + x, -1); } for (let y = 0; y < h; y++) { push(y * w, -1); push(y * w + w - 1, -1); }
+  while (st.length) { const i = st.pop(), x = i % w; if (x > 0) push(i - 1, i); if (x < w - 1) push(i + 1, i); if (i >= w) push(i - w, i); if (i < w * (h - 1)) push(i + w, i); }
+  if (photo) { let n = 0; for (let i = 0; i < w * h; i++) n += seen[i]; if (n < w * h * .12 || n > w * h * .8) return null; }   // too little or nearly everything gone: not a slab on a plain sheet, leave the photo whole
+  for (let i = 0; i < w * h; i++) if (seen[i]) px[i * 4 + 3] = 0;
   // soften the cut: a kept pixel beside a cleared one goes half see-through
   for (let i = 0; i < w * h; i++) { if (seen[i]) continue; const x = i % w; if ((x > 0 && seen[i - 1]) || (x < w - 1 && seen[i + 1]) || (i >= w && seen[i - w]) || (i < w * (h - 1) && seen[i + w])) px[i * 4 + 3] = Math.min(px[i * 4 + 3], 150); }
   g.putImageData(d, 0, 0);
@@ -198,6 +200,16 @@ function drawSealed(g, w, h, c, im) {
 async function cardTex(c, w) {
   await fonts; let im = null;
   if (hasPhoto(c)) { try { im = await loadImg(img(c.image, w > 300 ? 1000 : (c.sealed ? 500 : 300))); } catch (x) {} }
+  if (c.slab && im) {
+    const tw = Math.min(1400, Math.round(w * 1.8)), th = Math.round(tw * im.height / im.width), tmp = document.createElement('canvas'); tmp.width = tw; tmp.height = th;
+    const tg = tmp.getContext('2d', { willReadFrequently: true }); tg.drawImage(im, 0, 0, tw, th);
+    const bb = cutWhite(tg, tw, th, true); let sx = 0, sy = 0, sw = tw, sh = th;
+    if (bb && bb.x1 - bb.x0 > tw * .25 && bb.y1 - bb.y0 > th * .25) { sx = bb.x0; sy = bb.y0; sw = bb.x1 - bb.x0 + 1; sh = bb.y1 - bb.y0 + 1; }
+    if (!c.noSticker) c.cut = sw / sh;   // the slab's own shape, for whatever holds it
+    return ctex(w, Math.round(w * sh / sw), (g, cw, chh) => { g.clearRect(0, 0, cw, chh); g.drawImage(tmp, sx, sy, sw, sh, 0, 0, cw, chh); if (c.noSticker) return;
+      if (c.ask) sticker(g, cw, 'ASK', { font: '700 ' + Math.round(cw * .17) + 'px Caveat, cursive', ink: '#b3261e', y: chh * .01, right: cw - cw * .01, rot: -.08 });
+      else sticker(g, cw, gunPrice(c.price), { font: '700 ' + Math.round(cw * .1) + 'px "Cutive Mono", monospace', ink: '#1b2a55', y: chh * .01, right: cw - cw * .01, rot: (seed(keyOf(c) + '|st')() - .5) * .12 }); });
+  }
   if (c.sealed) return ctex(w, Math.round(w / (c.ar || 1)), (g, cw, chh) => drawSealed(g, cw, chh, c, im));
   return ctex(w, Math.round(w * CH / CW), (g, cw, chh) => drawCard(g, cw, chh, c, im));
 }
@@ -886,7 +898,7 @@ fonts.then(() => { hand.sleeveT = keep(ctex(360, 503, drawBack)); hand.back.mate
 function stage() { const w = canvas.clientWidth, h = canvas.clientHeight; return w > 720 ? { x: 0, y: 0, w: w - 360, h } : { x: 0, y: 0, w, h: h - 60 }; }
 function placeHand(now) {
   const st = stage(), W_ = canvas.clientWidth, H_ = canvas.clientHeight, d = .24, wpp = 2 * d * Math.tan(rad(cam.fov / 2)) / H_;
-  const ar = S.hand.sealed ? S.hand.ar || 1 : CW / CH;   // a card, or a booster box in its own shape
+  const ar = S.hand.sealed ? S.hand.cut || S.hand.ar || 1 : CW / CH;   // a card, or a booster box in its own shape
   const cwPx = Math.max(140, Math.min(st.w - 24, (st.h - 28) * ar)) * (S.hand.sealed ? .8 : 1), k = reduce ? 1 : Math.min(1, (now - hand.t0) / 320), e = 1 - Math.pow(1 - k, 3);
   hand.g.position.set((st.x + st.w / 2 - W_ / 2) * wpp, -(st.y + st.h / 2 - H_ / 2) * wpp - .05 * (1 - e), -d);
   const sc = .55 + .45 * e; hand.g.scale.set(cwPx * wpp / CW * sc, cwPx / ar * wpp / CH * sc, cwPx * wpp / CW * sc);
@@ -1063,7 +1075,7 @@ function loadGraded() {
 // the slabs' pictures arrive a few at a time, the first time you walk up
 function stockCabinet() {
   if (gcab.queued) return; gcab.queued = true; let k = 0;
-  const next = () => { const m = gcab.meshes[k++]; if (!m) return; cardTex(m.userData.card, 256).then((t) => { m.material.map = t; m.material.needsUpdate = true; m.visible = true; kick(); }).catch(() => {}).then(next); };
+  const next = () => { const m = gcab.meshes[k++]; if (!m) return; cardTex(m.userData.card, 256).then((t) => { const c = m.userData.card; if (c.cut) m.scale.x = c.cut / c.ar; m.material.map = t; m.material.needsUpdate = true; m.visible = true; kick(); }).catch(() => {}).then(next); };
   for (let i = 0; i < 5; i++) next();
 }
 function cabinetDoors(open) {
