@@ -320,6 +320,121 @@ function buildRoom() {
   pileG = new THREE.Group(); pileG.position.set(1.7, TOP, -1.0); scene.add(pileG);
   buildHobby();
 }
+/* ---------- the 1990s lying around (owner, 2026-11-10) ----------
+   "I need it to be much more 1990s looking. More ambient items laying around. Stuff from the 1990s."
+   Nothing here is stock or a tap target: an arcade cabinet and a gumball machine on the right wall, a TV with
+   a tape playing up in the corner, a console and bean bags, a games table with a pizza box in the middle of
+   the floor, a boom box and long boxes on top of the graded cabinet, a lava lamp and milk caps on the
+   counter, posters, a wall clock, and a squiggle border round the top of the walls. All made up: no real
+   game, brand or character is drawn. */
+function buildNineties() {
+  const G = new THREE.Group(); scene.add(G);
+  const basic = (o) => new THREE.MeshBasicMaterial(o), TEAL = '#19b5a5', PINK = '#ff4f9a', PURP = '#7a3fc4', YEL = '#ffd23a';
+  const cyl = (rt, rb, h, mat, x, y, z, parent, seg) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 16), mat); m.position.set(x, y, z); (parent || G).add(m); return m; };
+  const grp = (x, y, z, ry) => { const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry || 0; G.add(g); return g; };
+  // shapes of the decade: triangles, squiggles, dots, on any background
+  const memphis = (g, w, h, bg, n, sd) => {
+    g.fillStyle = bg; g.fillRect(0, 0, w, h); const r = seed(sd || 'memphis'), cols = [TEAL, PINK, PURP, YEL, '#111111'];
+    for (let i = 0; i < n; i++) {
+      const x = r() * w, y = r() * h, s = (.25 + r() * .3) * h, k = Math.floor(r() * 4); g.save(); g.translate(x, y); g.rotate(r() * PI * 2); g.fillStyle = g.strokeStyle = cols[Math.floor(r() * 5)]; g.lineWidth = Math.max(2, h * .05); g.lineCap = 'round';
+      if (k === 0) { g.beginPath(); g.moveTo(-s / 2, s / 2); g.lineTo(s / 2, s / 2); g.lineTo(0, -s / 2); g.closePath(); g.fill(); }
+      else if (k === 1) { g.beginPath(); for (let j = 0; j <= 6; j++) g.lineTo((j - 3) * s * .22, (j % 2 ? -1 : 1) * s * .16); g.stroke(); }
+      else if (k === 2) { g.beginPath(); g.arc(0, 0, s * .28, 0, PI * 2); g.fill(); }
+      else { g.beginPath(); g.arc(0, 0, s * .4, 0, PI * 1.2); g.stroke(); }
+      g.restore();
+    }
+  };
+  const scan = (g, w, h) => { g.fillStyle = 'rgba(0,0,0,.22)'; for (let y = 0; y < h; y += 4) g.fillRect(0, y, w, 2); };
+  // a border round the top of the walls
+  const fr = (len) => basic({ map: ctex(1024, 96, (g, w, h) => memphis(g, w, h, '#f4efe0', 46, 'frieze'), [Math.max(1, Math.round(len / 2.4)), 1]) });
+  pl(8, .2, fr(8), 0, 2.78, -3.492, 0, G); pl(8, .2, fr(8), 0, 2.78, 3.492, PI, G); pl(7, .2, fr(7), -3.992, 2.78, 0, PI / 2, G); pl(4.7, .2, fr(4.7), 3.992, 2.78, -1.15, -PI / 2, G);
+
+  // the arcade cabinet
+  const A = grp(3.6, 0, -.1, -PI / 2), cab = lam({ color: 0x1b1640 }), blk = lam({ color: 0x111114 });
+  bx(.66, .92, .7, cab, 0, .46, 0, A); bx(.66, .8, .5, cab, 0, 1.32, -.1, A); bx(.66, .2, .58, cab, 0, 1.82, -.06, A);
+  const deck = bx(.66, .05, .3, blk, 0, .95, .3, A); deck.rotation.x = .12;
+  const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#1b1640', 26, 'cab'); g.fillStyle = YEL; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText('STAR BLASTER', 0, 18); g.restore(); }) });
+  pl(.7, 1.9, side, -.332, .96, 0, -PI / 2, A); pl(.7, 1.9, side, .332, .96, 0, PI / 2, A);
+  pl(.5, .4, basic({ map: ctex(256, 204, (g, w, h) => {   // a made-up shooter on the screen
+    g.fillStyle = '#050510'; g.fillRect(0, 0, w, h); const r = seed('stars'); g.fillStyle = '#fff'; for (let i = 0; i < 60; i++) g.fillRect(r() * w, r() * h, 2, 2);
+    [PINK, TEAL, YEL].forEach((c, row) => { g.fillStyle = c; for (let i = 0; i < 7; i++) { const x = 34 + i * 28, y = 34 + row * 24; g.fillRect(x, y, 16, 8); g.fillRect(x + 4, y - 4, 8, 4); g.fillRect(x - 2, y + 8, 4, 4); g.fillRect(x + 14, y + 8, 4, 4); } });
+    g.fillStyle = '#7dff7a'; g.fillRect(118, 170, 24, 8); g.fillRect(127, 162, 6, 8); g.fillRect(129, 120, 2, 14); g.fillStyle = '#fff'; g.font = '700 14px "Cutive Mono", monospace'; g.textAlign = 'left'; g.fillText('1UP 004200', 8, 16); g.textAlign = 'right'; g.fillText('HI 096000', w - 8, 16); scan(g, w, h);
+  }) }), 0, 1.3, .152, 0, A);
+  pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, PURP); gr.addColorStop(1, PINK); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 58px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText('STAR BLASTER', w / 2, h / 2 + 3); g.fillText('STAR BLASTER', w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
+  cyl(.008, .008, .07, blk, -.16, 1.0, .3, A); const knob = new THREE.Mesh(new THREE.SphereGeometry(.022, 12, 8), lam({ color: 0xd62c28 })); knob.position.set(-.16, 1.045, .3); A.add(knob);
+  [[.02, 0xffd23a], [.09, 0x19b5a5], [.16, 0xff4f9a]].forEach((b) => cyl(.018, .018, .012, lam({ color: b[1] }), b[0], .985, .3, A));
+  pl(.2, .26, lam({ map: ctex(100, 130, (g, w, h) => { g.fillStyle = '#26262b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#6a6a72'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12); g.fillStyle = '#ff8a2a'; g.fillRect(34, 40, 32, 22); g.fillStyle = '#111'; g.font = '700 13px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('25¢', 50, 56); g.fillRect(44, 84, 12, 26); }) }), 0, .5, .352, 0, A);
+
+  // the gumball machine
+  const red = lam({ color: 0xd62c28 }), chrome = lam({ color: 0xc9ccd2 });
+  cyl(.13, .15, .06, red, 3.62, .03, .82); cyl(.022, .022, .72, chrome, 3.62, .42, .82); cyl(.11, .1, .16, red, 3.62, .86, .82);
+  const gum = new THREE.Mesh(new THREE.SphereGeometry(.15, 20, 14), basic({ map: ctex(256, 128, (g, w, h) => { g.fillStyle = '#e9f2f5'; g.fillRect(0, 0, w, h); const r = seed('gum'); for (let i = 0; i < 260; i++) { g.fillStyle = [PINK, TEAL, YEL, PURP, '#ff7a2a', '#3f8fe0', '#fff'][Math.floor(r() * 7)]; g.beginPath(); g.arc(r() * w, h * .3 + r() * h * .7, 7, 0, PI * 2); g.fill(); } }) })); gum.position.set(3.62, 1.06, .82); G.add(gum);
+  cyl(.05, .09, .05, red, 3.62, 1.215, .82);
+
+  // a TV up in the corner with a tape playing
+  const T = grp(3.52, 2.18, -3.08, -PI / 4), tvM = lam({ color: 0x2c2c30 });
+  bx(.62, .5, .5, tvM, 0, 0, 0, T); bx(.5, .04, .4, blk, 0, -.27, 0, T); bx(.05, .05, .5, blk, 0, -.29, -.3, T);
+  pl(.48, .37, basic({ map: ctex(256, 196, (g, w, h) => { g.fillStyle = '#1524c8'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = '700 22px "Cutive Mono", monospace'; g.textAlign = 'left'; g.fillText('PLAY ▶', 14, 30); g.fillText('SP', 14, h - 16); g.textAlign = 'right'; g.fillText('0:13:37', w - 14, h - 16); g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(0, 120, w, 5); g.fillRect(0, 131, w, 2); scan(g, w, h); }) }), -.03, .01, .252, 0, T);
+
+  // a console on the floor in front of its own TV, and two bean bags
+  bx(.5, .42, .8, darkWoodM, 3.72, .21, -2.3, G); const tv2 = grp(3.7, .42, -2.3, -PI / 2);
+  bx(.56, .46, .46, lam({ color: 0x8a8a86 }), 0, .23, 0, tv2);
+  pl(.42, .32, basic({ map: ctex(256, 196, (g, w, h) => {   // a made-up platform game
+    g.fillStyle = '#58b8f8'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; [[40, 40], [150, 60], [210, 30]].forEach((c) => { g.fillRect(c[0], c[1], 44, 12); g.fillRect(c[0] + 8, c[1] - 8, 26, 8); });
+    g.fillStyle = '#3fae4a'; g.fillRect(0, 156, w, 12); g.fillStyle = '#9a5a2c'; g.fillRect(0, 168, w, 28); g.fillStyle = '#c87a3a'; for (let i = 0; i < 3; i++) g.fillRect(96 + i * 20, 104, 18, 18);
+    g.fillStyle = PURP; g.fillRect(60, 132, 14, 24); g.fillStyle = '#ffd9b0'; g.fillRect(62, 124, 10, 10); g.fillStyle = YEL; g.beginPath(); g.arc(170, 96, 7, 0, PI * 2); g.fill(); g.beginPath(); g.arc(196, 96, 7, 0, PI * 2); g.fill();
+    g.fillStyle = '#fff'; g.font = '700 14px "Cutive Mono", monospace'; g.fillText('WORLD 1-2', 10, 16); scan(g, w, h);
+  }) }), 0, .25, .232, 0, tv2);
+  bx(.3, .06, .22, lam({ color: 0x55555c }), 3.12, .03, -2.3, G); bx(.12, .02, .07, lam({ color: 0xb9b9bf }), 2.9, .012, -2.12, G); bx(.12, .02, .07, lam({ color: 0xb9b9bf }), 2.86, .012, -2.5, G);
+  [[2.62, -2.78, 0x19b5a5], [2.55, -1.85, 0x7a3fc4]].forEach((b) => { const m = new THREE.Mesh(new THREE.SphereGeometry(.34, 18, 12), lam({ color: b[2] })); m.scale.set(1, .55, 1); m.position.set(b[0], .17, b[1]); G.add(m); });
+
+  // the games table in the middle of the floor: folding table and chairs, a game half played, pizza
+  const P = grp(2.3, 0, 1.85, .12), tblM = lam({ color: 0xb9ad98 }), leg = lam({ color: 0x55555c });
+  bx(1.5, .035, .75, tblM, 0, .72, 0, P); [[-.68, -.3], [.68, -.3], [-.68, .3], [.68, .3]].forEach((l) => bx(.03, .7, .03, leg, l[0], .35, l[1], P));
+  const flat = (w, d, mat, x, z, ry) => { const m = pl(w, d, mat, x, .739 + flat.n++ * .0006, z, 0, P); m.rotation.set(-PI / 2, 0, ry || 0); return m; }; flat.n = 0;
+  flat(.6, .35, lam({ map: ctex(300, 175, (g, w, h) => { memphis(g, w, h, '#16324a', 14, 'mat'); g.strokeStyle = '#ffffff55'; g.lineWidth = 3; g.strokeRect(8, 8, w - 16, h - 16); }) }), -.3, .12, 0);
+  const backM = lam({ map: ctex(126, 176, drawBack) }), r = seed('table');
+  for (let i = 0; i < 9; i++) flat(CW, CH, backM, -.52 + (i % 5) * .095 + r() * .02, .06 + Math.floor(i / 5) * .12 + r() * .02, (r() - .5) * .5);
+  bx(CW, .022, CH, backM, -.02, .749, .2, P).rotation.y = .2; bx(CW, .03, CH, backM, .1, .753, -.22, P).rotation.y = -.4;
+  const d20 = new THREE.Mesh(new THREE.IcosahedronGeometry(.016), lam({ color: 0xd62c28 })); d20.position.set(-.1, .752, .02); P.add(d20);
+  const d20b = new THREE.Mesh(new THREE.IcosahedronGeometry(.016), lam({ color: 0x19b5a5 })); d20b.position.set(-.42, .752, -.12); P.add(d20b);
+  const pz = bx(.36, .045, .36, lam({ color: 0xe9e2d0 }), .42, .76, -.05, P); pz.rotation.y = .3;
+  const pzT = flat(.34, .34, lam({ map: ctex(256, 256, (g, w, h) => { g.fillStyle = '#efe7d2'; g.fillRect(0, 0, w, h); g.strokeStyle = '#c0392b'; g.lineWidth = 8; g.strokeRect(14, 14, w - 28, h - 28); g.fillStyle = '#c0392b'; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('HOT', w / 2, 104); g.fillText('PIZZA', w / 2, 160); g.font = '700 20px Inter, sans-serif'; g.fillStyle = '#2f7a3a'; g.fillText('fresh · fast · 2 for 1 tuesdays', w / 2, 204); }) }), .42, -.05, -.3); pzT.position.y = .784;
+  [[.2, .2, 0x2f7fd0], [.62, .26, 0xd62c28], [-.6, -.26, 0x3fae4a]].forEach((c) => { cyl(.028, .028, .105, lam({ color: c[2] }), c[0], .79, c[1], P); cyl(.026, .026, .004, chrome, c[0], .8445, c[1], P); });
+  const hh = bx(.075, .02, .125, lam({ color: 0xbfbfc4 }), .16, .748, -.02, P); hh.rotation.y = .5;   // a handheld someone left
+  const hs = flat(.045, .04, basic({ color: 0x7c9a4a }), .1505, -.0375, -.5); hs.position.y = .7585;
+  const chair = (x, z, ry) => { const c = new THREE.Group(); c.position.set(x, 0, z); c.rotation.y = ry; P.add(c); bx(.4, .025, .4, leg, 0, .45, 0, c); bx(.4, .3, .02, leg, 0, .78, -.19, c); [[-.18, -.18], [.18, -.18], [-.18, .18], [.18, .18]].forEach((l) => bx(.022, .45, .022, tvM, l[0], .225, l[1], c)); bx(.022, .36, .022, tvM, -.18, .62, -.19, c); bx(.022, .36, .022, tvM, .18, .62, -.19, c); };
+  chair(-.3, -.62, .2); chair(.35, .68, PI - .3); chair(1.02, .0, -PI / 2 + .5);
+  const bag = new THREE.Mesh(new THREE.SphereGeometry(.2, 14, 10), lam({ color: 0x7a3fc4 })); bag.scale.set(1, 1.15, .6); bag.position.set(-.82, .22, .42); P.add(bag); bx(.24, .14, .06, lam({ color: 0x19b5a5 }), -.82, .17, .55, P);
+  // long boxes of commons under the table and by the door
+  const card = lam({ color: 0xe6e0cf });
+  bx(.2, .16, .7, card, .3, .08, 0, P).rotation.y = .1; bx(.2, .16, .7, card, 0, .08, .05, P);
+  bx(.7, .16, .2, card, 2.75, .08, 3.3, G); bx(.7, .16, .2, card, 2.78, .24, 3.3, G); bx(.2, .16, .7, card, 3.3, .08, 3.1, G).rotation.y = .3;
+
+  // on the floor inside the door: a rug of the decade, and a skateboard left by the counter
+  const rug = pl(1.7, 1.05, lam({ map: ctex(512, 316, (g, w, h) => { memphis(g, w, h, '#101018', 30, 'rug'); g.strokeStyle = TEAL; g.lineWidth = 14; g.strokeRect(7, 7, w - 14, h - 14); g.strokeStyle = PINK; g.lineWidth = 5; g.strokeRect(22, 22, w - 44, h - 44); }) }), .15, .006, .75, 0, G); rug.rotation.set(-PI / 2, 0, .06);
+  const sk = grp(-.75, 0, 1.45, 1.0); bx(.2, .012, .74, lam({ map: ctex(64, 256, (g, w, h) => memphis(g, w, h, '#ff4f9a', 16, 'deck')) }), 0, .085, 0, sk);
+  [[-.07, -.24], [.07, -.24], [-.07, .24], [.07, .24]].forEach((q) => { const wl = cyl(.028, .028, .03, lam({ color: 0xffd23a }), q[0], .028, q[1], sk, 12); wl.rotation.z = PI / 2; }); bx(.16, .02, .04, chrome, 0, .06, -.24, sk); bx(.16, .02, .04, chrome, 0, .06, .24, sk);
+
+  // on top of the graded cabinet: a boom box, tapes, more long boxes
+  const B = grp(-3.78, gcab.h, .95, PI / 2);
+  bx(.56, .26, .15, lam({ color: 0x232327 }), 0, .13, 0, B); bx(.4, .02, .02, chrome, 0, .33, 0, B); bx(.02, .08, .02, chrome, -.19, .29, 0, B); bx(.02, .08, .02, chrome, .19, .29, 0, B);
+  pl(.54, .24, lam({ map: ctex(432, 192, (g, w, h) => { g.fillStyle = '#2a2a2f'; g.fillRect(0, 0, w, h); [[84, 104], [348, 104]].forEach((c) => { g.fillStyle = '#0c0c0e'; g.beginPath(); g.arc(c[0], c[1], 66, 0, PI * 2); g.fill(); g.strokeStyle = '#8a8a92'; g.lineWidth = 5; g.stroke(); g.fillStyle = '#3a3a40'; g.beginPath(); g.arc(c[0], c[1], 24, 0, PI * 2); g.fill(); }); g.fillStyle = '#111'; g.fillRect(166, 70, 100, 62); g.strokeStyle = '#c9ccd2'; g.lineWidth = 3; g.strokeRect(166, 70, 100, 62); g.fillStyle = '#efe7d2'; g.fillRect(180, 82, 72, 20); g.fillStyle = '#c0392b'; g.fillRect(166, 30, 100, 22); g.fillStyle = YEL; for (let i = 0; i < 6; i++) g.fillRect(170 + i * 16, 148, 12, 16); }) }), 0, .13, .077, 0, B);
+  [[.42, 0], [.46, .03], [.44, .06]].forEach((t, i) => bx(.1, .016, .065, lam({ color: [0xff4f9a, 0x19b5a5, 0xffd23a][i] }), t[0], .008 + i * .016, t[1], B).rotation.y = i * .25);
+  bx(.2, .16, .68, card, -3.78, gcab.h + .08, 2.8, G); bx(.2, .16, .68, card, -3.76, gcab.h + .24, 2.82, G).rotation.y = .06;
+
+  // on the counter: a lava lamp, a stack of milk caps and a few loose
+  const lava = basic({ color: 0xff3fa0 }); cyl(.03, .045, .07, chrome, 1.02, TOP + .035, -1.05); cyl(.022, .04, .2, lava, 1.02, TOP + .17, -1.05); cyl(.012, .022, .05, chrome, 1.02, TOP + .295, -1.05);
+  const capM = lam({ map: ctex(96, 96, (g, w, h) => { g.fillStyle = YEL; g.fillRect(0, 0, w, h); g.fillStyle = PURP; g.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * PI * 2, q = i % 2 ? 44 : 22; g.lineTo(48 + Math.cos(a) * q, 48 + Math.sin(a) * q); } g.fill(); g.fillStyle = PINK; g.beginPath(); g.arc(48, 48, 12, 0, PI * 2); g.fill(); }) });
+  cyl(.02, .02, .07, [lam({ color: 0xf4efe0 }), capM, capM], 1.42, TOP + .035, -.72);
+  [[1.36, -.7, 0], [1.47, -.69, 1], [1.4, -.66, 2]].forEach((c) => cyl(.02, .02, .003, [lam({ color: 0xf4efe0 }), capM, capM], c[0], TOP + .0016 + c[2] * .0004, c[1]));
+
+  // on the walls: a clock, and three more posters
+  pl(.42, .42, basic({ transparent: true, map: ctex(256, 256, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#16121c'; g.beginPath(); g.arc(128, 128, 120, 0, PI * 2); g.fill(); g.shadowColor = TEAL; g.shadowBlur = 18; g.strokeStyle = '#7dfff0'; g.lineWidth = 9; g.beginPath(); g.arc(128, 128, 108, 0, PI * 2); g.stroke(); g.shadowColor = PINK; g.strokeStyle = '#ff9ac6'; g.lineWidth = 7; g.beginPath(); g.moveTo(128, 128); g.lineTo(128, 58); g.stroke(); g.beginPath(); g.moveTo(128, 128); g.lineTo(176, 150); g.stroke(); g.shadowBlur = 0; g.fillStyle = '#fff'; for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; g.fillRect(126 + Math.cos(a) * 90, 126 + Math.sin(a) * 90, 4, 4); } }) }), 3.985, 2.3, .82, -PI / 2, G);
+  pl(.56, .78, poster(336, 468, (g, w, h) => { memphis(g, w, h, '#101018', 18, 'p1'); g.fillStyle = '#101018e0'; g.fillRect(24, 120, w - 48, 230); g.fillStyle = YEL; g.font = '900 64px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MILK', w / 2, 196); g.fillText('CAPS', w / 2, 262); g.fillStyle = '#fff'; g.font = '700 24px Inter, sans-serif'; g.fillText('& SLAMMERS', w / 2, 300); g.fillStyle = PINK; g.font = '34px "Permanent Marker", cursive'; g.fillText('sold here!', w / 2, 338); }), 3.988, 2.0, -.86, -PI / 2, G);
+  pl(.62, .84, poster(372, 504, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#0a0a2a'); gr.addColorStop(1, PURP); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.strokeStyle = TEAL; g.lineWidth = 2; for (let i = 0; i <= 10; i++) { g.beginPath(); g.moveTo(w / 2 + (i - 5) * 8, 300); g.lineTo(w / 2 + (i - 5) * 80, h); g.stroke(); } for (let i = 0; i < 7; i++) { const y = 300 + i * i * 4.2; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } g.fillStyle = YEL; g.beginPath(); g.arc(w / 2, 210, 80, PI, 0); g.fill(); g.fillStyle = '#fff'; g.font = 'italic 900 50px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('SURF THE', w / 2, 70); g.fillText('WEB', w / 2, 120); g.font = '700 22px Inter, sans-serif'; g.fillStyle = '#7dfff0'; g.fillText('28.8k dial-up · $5 an hour', w / 2, h - 60); g.fillStyle = '#fff'; g.fillText('ask at the counter', w / 2, h - 28); }), 2.95, 1.75, 3.488, PI, G);
+  pl(.5, .62, poster(300, 372, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.fillRect(0, 0, w, 84); g.fillStyle = '#fff'; g.font = '900 44px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MARCH 1996', w / 2, 58); g.fillStyle = '#222'; g.font = '600 20px Inter, sans-serif'; for (let d = 1; d <= 31; d++) { const k = d + 4, x = 30 + (k % 7) * 40, y = 130 + Math.floor(k / 7) * 44; g.fillText(String(d), x, y); } g.strokeStyle = '#c0392b'; g.lineWidth = 4; g.beginPath(); g.arc(30 + 5 * 40, 124 + 2 * 44, 18, 0, PI * 2); g.stroke(); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.fillText('prerelease!', 200, 124 + 2 * 44 + 40); }), 3.988, 1.72, -2.9, -PI / 2, G);
+}
 // The person behind the till (owner, 2026-11-09: "a typical card shop employee
 // behind it with a black polo shirt with an exor logo on the shirt"): a simple
 // figure of plain shapes, glasses and a beard, the logo on the chest. A tap says hello.
@@ -1069,7 +1184,7 @@ function loadGraded() {
       m.position.set(-gcab.w / 2 + .07 + (col + .5) * pitch, gcab.levels[Math.min(row, 4)] + hgt / 2 + .006, .2 + (q() - .5) * .02); m.rotation.set(-.1, (q() - .5) * .1, 0); m.userData = { card: c }; gcab.g.add(m); gcab.meshes.push(m);
     });
     $('#gradedN').textContent = n; $('#gradedN').hidden = !n;
-    if (S.mode === 'graded') stockCabinet();
+    stockCabinet();   // straight away: from the door an unstocked cabinet looks empty (owner, 2026-11-10)
   }).catch(() => {});
 }
 // the slabs' pictures arrive a few at a time, the first time you walk up
@@ -1177,7 +1292,7 @@ function buildHall(list) {
     const sm = new THREE.MeshBasicMaterial({ map: ctex(900, 260, (g, w, h) => drawAisleSign(g, w, h, a)) });
     for (let z = hall.zf + .15; z > hall.zf - a.L; z -= 9) { pl(1.8, .52, sm, cx, 2.42, z + .012, 0, G); pl(1.8, .52, sm, cx, 2.42, z - .012, PI, G); bx(1.84, .56, .02, steel, cx, 2.42, z, G); [-.8, .8].forEach((dx) => bx(.012, .24, .012, steel, cx + dx, 2.78, z, G)); }
     for (let z = hall.zf - 1.5; z > hall.zf - a.L; z -= 4.5) tubes.push([cx, z]);
-    a.hit = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.6, 1.2), hitM); a.hit.position.set(cx, 1.3, hall.zf - .6); a.hit.userData.aisle = a.i; G.add(a.hit);
+    a.hit = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.9, 1.4), hitM); a.hit.position.set(cx, 1.45, hall.zf - .5); a.hit.userData.aisle = a.i; G.add(a.hit);
   });
   for (let x = hall.x0 + 2; x < xMax; x += 4) tubes.push([x, 2.4]);
   const ti = new THREE.InstancedMesh(new THREE.BoxGeometry(.16, .03, 1.3), tubeM, tubes.length); tubes.forEach((t, k) => { d2.position.set(t[0], 2.86, t[1]); d2.rotation.set(0, 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); ti.setMatrixAt(k, d2.matrix); }); G.add(ti);
@@ -1227,8 +1342,15 @@ function aisleStock(now) {
     });
   });
 }
-// From the front of the hall, looking along the row of headers.
-function aislesView() { const n = hall.list.length || 1, ph = cam.aspect < 1; return lookView(new V3(hall.x0 + .5, 1.75, 3.2), new V3(aCx(Math.min(n - 1, ph ? 1 : 2)), 1.75, hall.zf - 1.5), ph ? 82 : 62); }
+// Along the front of the hall, looking ahead and across at the aisle mouths; S.hx metres along it (owner,
+// 2026-11-10: "can I walk down the main hallway better right now you stay stationary and can hardly click the
+// last aisle"): a sideways swipe walks you past the headers, as far as the last aisle.
+const hallLead = () => (cam.aspect < 1 ? 2.1 : 2.4);
+function aislesView() {
+  const n = hall.list.length || 1, ph = cam.aspect < 1; hall.hmax = Math.max(0, aCx(n - 1) - hallLead() + .35 - (hall.x0 + .5)); S.hx = clamp(S.hx || 0, 0, hall.hmax);
+  const x = hall.x0 + .5 + S.hx; return lookView(new V3(x, 1.7, ph ? 3.3 : 3.05), new V3(x + hallLead(), ph ? 1.4 : 1.62, hall.zf - (ph ? .5 : 1.0)), ph ? 82 : 62);
+}
+function hallTo(x, ms) { const from = S.hx || 0, to = clamp(x, 0, hall.hmax || 0), t0 = performance.now(), id = hall.walk = (hall.walk || 0) + 1; ms = reduce ? 1 : ms || 420; anims.push((now) => { if (hall.walk !== id || S.mode !== 'aisles' || drag) return false; const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); S.hx = lerp(from, to, e); setView(aislesView()); return k < 1; }); kick(); }
 // In an aisle you stand S.as metres along its ribbon: down the left shelf, round at the far end, back up the right.
 function aisleView() {
   const a = hall.list[S.aisle] || hall.list[0], cx = aCx(a.i), U = a.U, T = hall.T; S.as = clamp(S.as || 0, 0, a.smax);
@@ -1280,7 +1402,7 @@ function go(mode) {
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
-  else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } S.mode = 'aisles'; glide(aislesView()); hint('Tap an aisle to walk into it'); }
+  else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hx = aCx(S.aisle) - hallLead() - hall.x0 - .5; else if (S.mode !== 'aisles') S.hx = 0; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the hall · tap an aisle to walk in' : 'Drag or scroll to walk the hall · click an aisle to walk in'); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
   ui();
 }
@@ -1395,7 +1517,7 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pinch || pts.size > 1) return;
   if (e.button && e.button !== 0) return;
-  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0 };
+  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0, hx: S.hx || 0 };
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
   // a mouse held still on the case leans in to that spot
@@ -1415,6 +1537,9 @@ canvas.addEventListener('pointermove', (e) => {
   if (S.hand) { hand.ry = drag.ry + dx * .011; hand.rx = clamp(drag.rx + dy * .006, -.6, .6); kick(); }
   else if (drag.axis === 'none') { /* a glide is running */ }
   else if (S.mode === 'graded') { const mpp = (gcab.vw || 1) / canvas.clientWidth; gcab.gx = drag.gx - dx * mpp; gcab.gy = drag.gy + dy * mpp; setView(gradedView()); }
+  else if (S.mode === 'aisles') {
+    if (drag.axis === 'x') { const mpp = 2 * 2.6 * hTan(view.fov) / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.hx = clamp(drag.hx - dx * mpp, 0, hall.hmax || 0); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aislesView()); }
+  }
   else if (S.mode === 'aisle') {   // the shelf follows the finger, as the glass case does
     if (drag.axis === 'x') { const a = hall.list[S.aisle], mpp = 2 * aisleHalf() / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.as = clamp(drag.as - dx * mpp, 0, a.smax); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aisleView()); aisleBar(); }
   }
@@ -1436,6 +1561,10 @@ function endDrag(e) {
   if (S.hand) { hand.ty = Math.round(hand.ry / PI) * PI; hand.tx = 0; hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
   if (d.axis === 'none') return;
   hint('');
+  if (S.mode === 'aisles') {
+    if (d.axis !== 'x') return; let v = clamp(d.v, -.14, .14); const id = hall.walk = (hall.walk || 0) + 1;
+    anims.push(() => { if (S.mode !== 'aisles' || drag || tw || hall.walk !== id) return false; v *= .94; S.hx = clamp((S.hx || 0) + v, 0, hall.hmax || 0); setView(aislesView()); return Math.abs(v) > .0006; }); kick(); return;
+  }
   if (S.mode === 'aisle') {
     if (d.axis !== 'x') return;
     S.avz = clamp(d.v, -.12, .12); const id = hall.walk = (hall.walk || 0) + 1;
@@ -1459,6 +1588,7 @@ canvas.addEventListener('wheel', (e) => {
     clearTimeout(wheelLean); wheelLean = setTimeout(() => leanAnim(0, 320), 260); return;
   }
   if (lean.on) return;
+  if (S.mode === 'aisles') { hall.walk = (hall.walk || 0) + 1; S.hx = (S.hx || 0) + (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .004; setView(aislesView()); return; }
   if (S.mode === 'aisle') { aisleWalk((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .0035); return; }
   if (S.mode === 'graded') { gcab.gx += e.deltaX * .002; gcab.gy -= e.deltaY * .002; setView(gradedView()); return; }
   if (S.mode === 'case') { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { S.walk = clamp(S.walk + (e.shiftKey ? e.deltaY : e.deltaX) * .0012, 0, S.maxWalk || 0); setView(caseView()); return; } if (wheelLock || Math.abs(e.deltaY) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 560); goShelf(S.shelf + (e.deltaY > 0 ? 1 : -1)); }
@@ -1470,6 +1600,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { back(); return; }
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
   const k = e.key;
+  if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallTo((S.hx || 0) + (k === 'ArrowRight' ? 1.45 : -1.45)); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
   else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') lift(cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])], null); else return; }
@@ -1522,5 +1653,5 @@ function load(game) {
     go(S.mode === 'case' ? 'case' : 'door');
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
-fonts.then(() => { buildRoom(); buildCabinet(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
+window.xgShop = { gcab, hall, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
