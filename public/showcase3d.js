@@ -41,7 +41,8 @@ let renderer;
 try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }); } catch (x) { window.xgFlat(); throw x; }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0809);
-const cam = new THREE.PerspectiveCamera(60, 1, .02, 30); cam.rotation.order = 'YXZ'; scene.add(cam);
+scene.fog = new THREE.Fog(0x17120f, 16, 62);   // the far end of a long aisle fades out
+const cam = new THREE.PerspectiveCamera(60, 1, .02, 150); cam.rotation.order = 'YXZ'; scene.add(cam);
 const view = { pos: new V3(0, 1.6, 2.9), yaw: 0, pitch: -.1, fov: 60 };
 const baseFov = () => (cam.aspect < 1 ? 70 : 55);
 const hTan = (fov) => Math.tan(rad(fov / 2)) * cam.aspect;
@@ -62,6 +63,7 @@ function frame(now) {
   if (cam.fov !== view.fov) { cam.fov = view.fov; cam.updateProjectionMatrix(); }
   if (S.hand) placeHand(now);
   if (S.mode === 'case') caseTextures(now);
+  if (S.mode === 'aisle' || S.mode === 'aisles') aisleStock(now);
   renderer.render(scene, cam);
   if (busy) kick();
 }
@@ -165,10 +167,16 @@ function drawBack(g, w, h) {
 // background (owner, 2026-11-09: "Booster boxes have white backgrounds"):
 // white that touches the picture's edge is cleared, white inside the box art
 // stays. The price-gun sticker goes on top.
-function cutWhite(g, w, h) {
+function cutWhite(g, w, h, photo) {
   let d; try { d = g.getImageData(0, 0, w, h); } catch (x) { return null; }
   const px = d.data, seen = new Uint8Array(w * h), st = [];
-  const white = (i) => px[i * 4 + 3] < 16 || (px[i * 4] > 232 && px[i * 4 + 1] > 232 && px[i * 4 + 2] > 232);
+  let white = (i) => px[i * 4 + 3] < 16 || (px[i * 4] > 232 && px[i * 4 + 1] > 232 && px[i * 4 + 2] > 232);
+  if (photo) {   // a photo's background is rarely pure white: take the colour the corners agree on, when it is light and even
+    const cs = [0, w - 1, (h - 1) * w, h * w - 1].map((i) => [px[i * 4], px[i * 4 + 1], px[i * 4 + 2]]), bg = [0, 1, 2].map((k) => (cs[0][k] + cs[1][k] + cs[2][k] + cs[3][k]) / 4);
+    const even = cs.every((c) => Math.max(Math.abs(c[0] - bg[0]), Math.abs(c[1] - bg[1]), Math.abs(c[2] - bg[2])) < 26);
+    if (!even || Math.min(bg[0], bg[1], bg[2]) < 165) return null;
+    white = (i) => px[i * 4 + 3] < 16 || Math.max(Math.abs(px[i * 4] - bg[0]), Math.abs(px[i * 4 + 1] - bg[1]), Math.abs(px[i * 4 + 2] - bg[2])) < 30;
+  }
   const push = (i) => { if (!seen[i] && white(i)) { seen[i] = 1; st.push(i); } };
   for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); } for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
   while (st.length) { const i = st.pop(), x = i % w; px[i * 4 + 3] = 0; if (x > 0) push(i - 1); if (x < w - 1) push(i + 1); if (i >= w) push(i - w); if (i < w * (h - 1)) push(i + w); }
@@ -181,8 +189,10 @@ function cutWhite(g, w, h) {
 }
 function drawSealed(g, w, h, c, im) {
   g.clearRect(0, 0, w, h); let bb = null;
-  if (im) { const s = Math.min(w / im.width, h / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, (w - iw) / 2, (h - ih) / 2, iw, ih); bb = cutWhite(g, w, h); }
+  if (im) { const s = Math.min(w / im.width, h / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, (w - iw) / 2, (h - ih) / 2, iw, ih); bb = cutWhite(g, w, h, !!c.slab); }
   else { g.fillStyle = '#e6e1d2'; g.fillRect(0, 0, w, h); g.fillStyle = '#2a1c0e'; g.font = Math.round(w * .09) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, w / 2, h * .4, w * .84, w * .11, 5); }
+  if (c.noSticker) return;
+  if (c.ask) { sticker(g, w, 'ASK', { font: '700 ' + Math.round(w * .15) + 'px Caveat, cursive', ink: '#b3261e', y: h * .02, right: w - w * .02, rot: -.08 }); return; }
   sticker(g, w, gunPrice(c.price), { font: '700 ' + Math.round(w * .09) + 'px "Cutive Mono", monospace', ink: '#1b2a55', y: bb ? Math.max(h * .01, bb.y0 + (bb.y1 - bb.y0) * .08) : h * .03, right: bb ? Math.min(w - w * .01, bb.x1 + w * .02) : null, rot: (seed(keyOf(c) + '|st')() - .5) * .14 });
 }
 async function cardTex(c, w) {
@@ -226,7 +236,7 @@ const hot = [];                              // things a tap can walk to or set 
 const hit = (mesh, act) => { mesh.userData.act = act; hot.push(mesh); return mesh; };
 
 /* ---------- the room ---------- */
-let hemi, sun, lampL, tubeM, shadeM, bell, pileG, signT, neonL, neonHalo;
+let hemi, sun, lampL, tubeM, shadeM, bell, pileG, signT, neonL, neonHalo, rwFull, rwShort;
 function poster(w, h, draw) { return new THREE.MeshLambertMaterial({ map: ctex(w, h, draw) }); }
 function buildRoom() {
   hemi = new THREE.HemisphereLight(0xfff3dc, 0x4a3a2c, 2.6); scene.add(hemi);
@@ -235,15 +245,15 @@ function buildRoom() {
   const floor = pl(8, 7, lam({ map: ctex(256, 256, drawCarpet, [9, 8]) }), 0, 0, 0); floor.rotation.x = -PI / 2;
   const ceil = pl(8, 7, lam({ map: ctex(128, 128, drawCeil, [13, 12]) }), 0, 2.9, 0); ceil.rotation.x = PI / 2;
   const wallM = lam({ map: ctex(512, 1024, drawWall, [8, 1]) });
-  pl(8, 2.9, wallM, 0, 1.45, -3.5, 0); pl(8, 2.9, wallM, 0, 1.45, 3.5, PI); pl(7, 2.9, wallM, -4, 1.45, 0, PI / 2); pl(7, 2.9, wallM, 4, 1.45, 0, -PI / 2);
+  pl(8, 2.9, wallM, 0, 1.45, -3.5, 0); pl(8, 2.9, wallM, 0, 1.45, 3.5, PI); pl(7, 2.9, wallM, -4, 1.45, 0, PI / 2); rwFull = pl(7, 2.9, wallM, 4, 1.45, 0, -PI / 2); rwShort = pl(4.7, 2.9, lam({ map: ctex(512, 1024, drawWall, [5, 1]) }), 4, 1.45, -1.15, -PI / 2); rwShort.visible = false;
   // fluorescent tubes
   tubeM = new THREE.MeshBasicMaterial({ color: 0xffffff });
   [[-1.8, -1.2], [1.8, -1.2], [-1.8, 1.6], [1.8, 1.6]].forEach((p) => { bx(1.3, .05, .3, lam({ color: 0xbdb8a8 }), p[0], 2.875, p[1]); bx(1.2, .03, .06, tubeM, p[0], 2.84, p[1] - .07); bx(1.2, .03, .06, tubeM, p[0], 2.84, p[1] + .07); });
   // the front door behind you: daylight through the glass, the OPEN sign seen from inside
   pl(1.05, 2.15, poster(256, 512, (g, w, h) => { g.fillStyle = '#3a200d'; g.fillRect(0, 0, w, h); const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#dfeaf2'); gr.addColorStop(.6, '#b9c9bf'); gr.addColorStop(1, '#8b8f84'); g.fillStyle = gr; g.fillRect(22, 22, w - 44, h - 120); g.fillStyle = '#c0392b'; g.fillRect(70, 120, 116, 56); g.fillStyle = '#fff'; g.font = '700 34px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(128, 160); g.scale(-1, 1); g.fillText('OPEN', 0, 0); g.restore(); g.fillStyle = '#b08a3a'; g.fillRect(w - 44, h * .55, 14, 46); }), 1.7, 1.075, 3.49, PI);
   // posters and notes
-  pl(.62, .86, poster(360, 500, (g, w, h) => { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 150 : 115; g.lineTo(w / 2 + Math.cos(a) * r, 185 + Math.sin(a) * r); } g.fill(); g.fillStyle = '#c0392b'; g.font = '36px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('FRIDAY', w / 2, 170); g.fillText('NIGHT', w / 2, 212); g.fillStyle = '#fff'; g.font = '700 40px Inter, sans-serif'; g.fillText('TOURNAMENT', w / 2, 390); g.font = '600 24px Inter, sans-serif'; g.fillText('7 PM · sign up at the counter', w / 2, 432); g.fillStyle = '#2fd0c5'; g.fillRect(30, 455, w - 60, 8); }), -3.99, 1.8, 2.0, PI / 2);
-  pl(.7, .5, poster(420, 300, (g, w, h) => { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#111'; g.font = '700 62px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('WE BUY', w / 2, 110); g.fillText('CARDS', w / 2, 180); g.font = '30px "Permanent Marker", cursive'; g.fillStyle = '#c0392b'; g.fillText('cash or store credit', w / 2, 245); }), -3.99, 1.75, .9, PI / 2);
+  pl(.62, .86, poster(360, 500, (g, w, h) => { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 150 : 115; g.lineTo(w / 2 + Math.cos(a) * r, 185 + Math.sin(a) * r); } g.fill(); g.fillStyle = '#c0392b'; g.font = '36px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('FRIDAY', w / 2, 170); g.fillText('NIGHT', w / 2, 212); g.fillStyle = '#fff'; g.font = '700 40px Inter, sans-serif'; g.fillText('TOURNAMENT', w / 2, 390); g.font = '600 24px Inter, sans-serif'; g.fillText('7 PM · sign up at the counter', w / 2, 432); g.fillStyle = '#2fd0c5'; g.fillRect(30, 455, w - 60, 8); }), .78, 1.8, 3.49, PI);
+  pl(.7, .5, poster(420, 300, (g, w, h) => { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#111'; g.font = '700 62px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('WE BUY', w / 2, 110); g.fillText('CARDS', w / 2, 180); g.font = '30px "Permanent Marker", cursive'; g.fillStyle = '#c0392b'; g.fillText('cash or store credit', w / 2, 245); }), -.2, 1.75, 3.49, PI);
   pl(.42, .56, poster(300, 400, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#1d3a8a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; ['Please ask before', 'opening the case.', '', 'No drinks near', 'the cards!', '', '— thanks, mgmt'].forEach((l, i) => g.fillText(l, w / 2, 70 + i * 44)); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(w / 2, 20, 9, 0, PI * 2); g.fill(); }), 3.99, 1.7, -1.5, -PI / 2);
   pl(1.1, .75, poster(550, 375, (g, w, h) => { g.fillStyle = '#9a6b3c'; g.fillRect(0, 0, w, h); noise(g, w, h, 5000, ['#7d5329', '#b98a55', '#8a5f33'], .7); g.strokeStyle = '#4a2a12'; g.lineWidth = 16; g.strokeRect(0, 0, w, h); const r = seed('cork'); [['WANTED:', 'old collections'], ['Sleeves', '2 for $5'], ['League', 'Tuesdays 6pm'], ['Lost binder?', 'ask at the till']].forEach((n, i) => { g.save(); g.translate(90 + i * 125, 110 + (i % 2) * 130); g.rotate((r() - .5) * .2); g.fillStyle = ['#f6f1e2', '#f7e98e', '#cfe6f5', '#f6c9d0'][i]; g.fillRect(-55, -50, 110, 100); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.textAlign = 'center'; g.fillText(n[0], 0, -8); g.fillText(n[1], 0, 20); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(0, -40, 6, 0, PI * 2); g.fill(); g.restore(); }); }), -1.6, 1.65, 3.49, PI);   // the cork board hangs on the door wall now: the right wall has the model racks
   // the shop sign over the boxes: the logo when the CDN lets us draw it, the name in marker until then
@@ -443,9 +453,6 @@ function buildHobby() {
   // wall (owner, 2026-11-10: "Here can we put gunpla rack, models rack and another rack with blind boxes")
   const stripes = (g, w, h, cols) => cols.forEach((c, k) => { g.fillStyle = c; g.fillRect(40 + k * (w - 80) / cols.length, 150, (w - 80) / cols.length, 10); });
   [{ key: 'kits', label: 'Warhammer boxes', set: 'Warhammer', feed: '/showcase/wargames.json', side: 'left', at: [-4, -.45], ry: PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#0c0c0c', [['WARHAMMER', '900 96px Inter, sans-serif', '#ffffff', 92]]); stripes(g, w, h, ['#c0392b']); } },
-    { key: 'gunpla', label: 'Gunpla', set: 'Gunpla', feed: '/showcase/shelf.json?kind=gunpla', side: 'right', at: [4, -.3], ry: -PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#f4f4f0', [['GUNPLA', '900 104px Inter, sans-serif', '#14181c', 88]]); stripes(g, w, h, ['#1f4fb0', '#d62c28', '#f2c230']); } },
-    { key: 'models', label: 'Model kits', set: 'Model kit', feed: '/showcase/shelf.json?kind=models', side: 'right', at: [4, .9], ry: -PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#3d4a2c', [['MODEL KITS', '900 92px Inter, sans-serif', '#f1eadb', 88]]); stripes(g, w, h, ['#f1eadb']); } },
-    { key: 'blind', label: 'Blind boxes', set: 'Blind box', feed: '/showcase/shelf.json?kind=blind', side: 'right', at: [4, 2.1], ry: -PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#f6c9d0', [['BLIND BOXES', '900 88px Inter, sans-serif', '#3a1c2a', 82]]); g.fillStyle = '#3a1c2a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; g.fillText('which one will you get?', w / 2, 150); } },
   ].forEach((o) => {
     const kr = Object.assign({ kind: 'kits', w: 1.14, h: 1.72, meshes: [] }, o); racks.push(kr);
     const kg = kr.g = new THREE.Group(); kg.position.set(kr.at[0], 0, kr.at[1]); kg.rotation.y = kr.ry; scene.add(kg);
@@ -458,7 +465,6 @@ function buildHobby() {
   // a tap box in front of each rack, and the corner as a whole from the door
   racks.forEach((r, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, r.h + .3, .36), hitM); m.position.set(0, (r.h + .3) / 2, .18); m.userData.rack = i; r.g.parent.add(m); m.position.applyMatrix4(new THREE.Matrix4().makeRotationY(r.ry || 0)); m.position.x += r.at[0]; m.position.z += r.at[1]; m.rotation.y = r.ry || 0; r.hitM = m; });
   hit(bx(2.0, 2.0, .5, hitM, -2.64, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, 2.7, hitM, -3.8, 1.0, -1.0), 'hobby');
-  hit(bx(.5, 2.0, 3.6, hitM, 3.8, 1.0, .9), 'models');
   ringM = new THREE.Mesh(new THREE.TorusGeometry(.026, .004, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffffff })); ringM.visible = false; scene.add(ringM);
 }
 // One rack's feed after another (asked for all at once, the shop's API throttled two of them - live probe
@@ -476,7 +482,7 @@ function loadKits() {
     });
     lights(S.eve);
   }).catch(() => { if (!again) return new Promise((res) => setTimeout(res, 5000)).then(() => one(kr, true)); });
-  list.reduce((p, kr) => p.then(() => one(kr)), Promise.resolve());
+  list.reduce((p, kr) => p.then(() => one(kr)), Promise.resolve()).then(loadGraded).then(loadAisles);   // then the cabinet and the hall, still one feed at a time
 }
 // The picker's feed: every paint on the site, one swatch per colour. The racks take the ones in stock.
 function loadPaints() {
@@ -876,7 +882,7 @@ const foilT = keep(ctex(256, 256, (g, w, h) => { const gr = g.createLinearGradie
 const glareT = keep(ctex(256, 256, (g, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(.3, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.55)'); gr.addColorStop(.7, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, [1, 1]));
 hand.foil = new THREE.Mesh(geoC, hm({ map: foilT, opacity: .2, blending: THREE.AdditiveBlending })); hand.foil.renderOrder = 996; hand.foil.position.z = .0002; hand.g.add(hand.foil);
 hand.glare = new THREE.Mesh(geoC, hm({ map: glareT, opacity: .3, blending: THREE.AdditiveBlending })); hand.glare.renderOrder = 997; hand.glare.position.z = .0003; hand.g.add(hand.glare);
-fonts.then(() => { hand.back.material.map = keep(ctex(360, 503, drawBack)); hand.back.material.needsUpdate = true; });
+fonts.then(() => { hand.sleeveT = keep(ctex(360, 503, drawBack)); hand.back.material.map = hand.sleeveT; hand.back.material.needsUpdate = true; });
 function stage() { const w = canvas.clientWidth, h = canvas.clientHeight; return w > 720 ? { x: 0, y: 0, w: w - 360, h } : { x: 0, y: 0, w, h: h - 60 }; }
 function placeHand(now) {
   const st = stage(), W_ = canvas.clientWidth, H_ = canvas.clientHeight, d = .24, wpp = 2 * d * Math.tan(rad(cam.fov / 2)) / H_;
@@ -894,7 +900,11 @@ function lift(c, src) {
   S.hand = c; S.handSrc = src || null; if (src) src.visible = false;
   document.body.dataset.hand = '1'; hand.g.visible = true; hand.dim.visible = true; hand.rx = hand.ry = hand.tx = hand.ty = 0; hand.t0 = performance.now();
   hand.front.material.map = phTex; wear(hand.front, c, c.sealed ? 640 : 720); hand.foil.visible = !!c.foil;
-  hand.back.visible = !c.sealed; hand.front.material.side = c.sealed ? THREE.DoubleSide : THREE.FrontSide; hand.glare.visible = !c.sealed; hand.front.material.needsUpdate = true;   // a cut-out box has no sleeve back and no flat glare
+  const two = !c.sealed || !!c.back;   // a card in its sleeve, or a slab with a photo of its back: two faces; a cut-out box: one, seen from both sides
+  hand.back.visible = two; hand.front.material.side = two ? THREE.FrontSide : THREE.DoubleSide; hand.glare.visible = !c.sealed;
+  { const old = hand.back.material.map; hand.back.material.map = hand.sleeveT || phTex; if (old && !old.userData.keep) old.dispose(); const tk = hand.backTk = (hand.backTk || 0) + 1;
+    if (c.back) { hand.back.material.map = phTex; cardTex({ name: c.name, image: c.back, sealed: true, slab: true, noSticker: true, ar: c.ar, price: 0 }, 640).then((t) => { if (hand.backTk !== tk || S.hand !== c) { t.dispose(); return; } hand.back.material.map = t; hand.back.material.needsUpdate = true; kick(); }); }
+    hand.back.material.needsUpdate = true; } hand.front.material.needsUpdate = true;   // a cut-out box has no sleeve back and no flat glare
   fillPanel(c); sheet(false); hint(''); askOrientation(); kick();
 }
 function putBack() {
@@ -944,7 +954,7 @@ let liftSeq = 0, copiesSeq = 0;
 function fillPanel(c) {
   $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, condText(c), c.foil ? (c.game === 'pokemon' ? 'Holo' : 'Foil') : '', money(c.price)].filter(Boolean).join(' · ');
   acts(c); minis = [];
-  if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = [c.set || 'Sealed', c.qty ? c.qty + ' in stock' : '', money(c.price)].filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
+  if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = (c.slab ? ['Graded card', c.grade, c.ask ? 'price on request' : money(c.price), c.back ? 'drag to turn it over' : ''] : [c.set || 'Sealed', c.qty ? c.qty + ' in stock' : '', money(c.price)]).filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
   loadCopies(c); const seq = ++liftSeq, al = alikeLocal(c), seen = {}; al.forEach((o) => { seen[o.name.toLowerCase()] = 1; });
   $('#liftAlike').innerHTML = strip('Similar effects', al);
   $('#liftMore').innerHTML = strip('More like this', similar(c).filter((o) => !seen[o.name.toLowerCase()]));
@@ -961,6 +971,12 @@ function fillPanel(c) {
 }
 const inPile = (c) => S.pile.some((p) => String(p.variantId) === String(c.variantId) && p.name === c.name);
 function acts(c) {
+  if (c.ask) {   // not priced: the button writes to the shop (owner, 2026-11-10), the card's name and link already in the email
+    const body = 'Hi Exor Games,\n\nI would like to ask about this graded card:\n\n' + c.name + '\n' + c.url + '\n\n';
+    $('#liftActs').innerHTML = '<a class="buy" href="mailto:customerservice@exorgames.com?subject=' + encodeURIComponent('Question about: ' + c.name) + '&body=' + encodeURIComponent(body) + '">Ask about this card</a>'
+      + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
+    return;
+  }
   const done = inPile(c);
   $('#liftActs').innerHTML = (c.variantId ? '<button type="button" class="buy" id="buy"' + (done ? ' disabled' : '') + '>' + (done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till')) + '</button>' : '')
     + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the listing' : 'Open on exorgames.com ↗') + '</a>';
@@ -1005,30 +1021,204 @@ function showTill() {
 }
 
 /* ---------- where you stand ---------- */
+/* ---------- the graded cabinet (owner, 2026-11-10) ----------
+   "a tall glass showcase (the kind that opens at the front with a lock) that you can put graded cards in ...
+   auto delete the white background of the graded card image ... take it out of showcase and flip it over to
+   see the back", then "Fill it with all graded cards" and "$999,999 says to ask which opens an email".
+   On the left wall by the door: every graded card in stock (/showcase/graded.json) stands on its glass
+   shelves cut out of its photo, the ones to ask about first, then the dearest down. Walking up unlocks it
+   and the doors swing open; a tap takes a slab out, a drag turns it over to the photo of its back. */
+const gcab = { at: [-4, 1.85], w: 2.9, h: 2.02, g: null, doors: [], meshes: [], rows: [], open: 0, gx: 0, gy: 0, queued: false };
+function buildCabinet() {
+  const g = gcab.g = new THREE.Group(); g.position.set(gcab.at[0], 0, gcab.at[1]); g.rotation.y = PI / 2; scene.add(g);
+  const W_ = gcab.w, H_ = gcab.h, wood = darkWoodM, glassShelf = new THREE.MeshBasicMaterial({ color: 0xcfe6f5, transparent: true, opacity: .22, depthWrite: false });
+  bx(W_, .2, .42, wood, 0, .1, .21, g); bx(W_, .07, .42, wood, 0, H_ - .035, .21, g); bx(W_, H_, .02, lam({ color: 0xece5d3, emissive: 0x2a2620 }), 0, H_ / 2, .01, g);
+  bx(.04, H_, .42, wood, -W_ / 2 + .02, H_ / 2, .21, g); bx(.04, H_, .42, wood, W_ / 2 - .02, H_ / 2, .21, g);
+  bx(W_ - .1, .02, .03, new THREE.MeshBasicMaterial({ color: 0xfff4d6 }), 0, H_ - .085, .36, g);                    // the strip light under the top
+  gcab.levels = [1.6, 1.3, 1.0, .7, .4, .22].slice(0, 6); gcab.levels.forEach((y, i) => { if (i < 5) bx(W_ - .08, .008, .34, glassShelf, 0, y - .004, .2, g); });
+  pl(.7, .1, new THREE.MeshBasicMaterial({ map: ctex(700, 100, (c, w, h) => { c.fillStyle = '#16100c'; c.fillRect(0, 0, w, h); c.fillStyle = '#f2c230'; c.font = '900 58px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('GRADED CARDS', w / 2, h / 2 + 2); }) }), 0, H_ + .06, .2, 0, g);
+  // two glass doors hinged at the sides, a lock where they meet
+  [-1, 1].forEach((sd) => {
+    const d = new THREE.Group(); d.position.set(sd * (W_ / 2 - .02), 0, .42); g.add(d); gcab.doors.push(d); d.userData.sd = sd;
+    const dw = W_ / 2 - .03; pl(dw, H_ - .3, glassM, -sd * dw / 2, .2 + (H_ - .3) / 2, 0, 0, d);
+    bx(dw, .03, .02, wood, -sd * dw / 2, .215, 0, d); bx(dw, .03, .02, wood, -sd * dw / 2, H_ - .085, 0, d); bx(.025, H_ - .3, .02, wood, -sd * (dw - .012), .2 + (H_ - .3) / 2, 0, d);
+    if (sd > 0) bx(.035, .05, .03, lam({ color: 0xd0a63c, emissive: 0x3a2a08 }), -sd * (dw - .012), 1.02, .012, d);   // the lock
+  });
+  hit(bx(.5, H_, W_, hitM, gcab.at[0] + .25, H_ / 2, gcab.at[1]), 'graded');
+}
+function loadGraded() {
+  return fetch(W + '/showcase/graded.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (!d || !d.ok || !d.rows || !gcab.g) return;
+    gcab.rows = d.rows.map((r) => ({ name: r.name, set: 'Graded card', price: r.price, image: r.front, back: r.back, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: 'graded', sealed: true, slab: true, ask: !!r.ask, grade: r.grade, ar: clamp(Number(r.ar) || .75, .55, 1), qty: 1 }));
+    const n = gcab.rows.length, per = Math.max(8, Math.ceil(n / 5)), pitch = (gcab.w - .14) / per, sh = Math.min(.24, pitch / .78);   // five shelves; the slabs as big as the row allows
+    gcab.rows.forEach((c, i) => {
+      const row = Math.floor(i / per), col = i % per, q = seed('slab' + c.name), hgt = sh, bw = hgt * c.ar;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide })); m.visible = false;
+      m.position.set(-gcab.w / 2 + .07 + (col + .5) * pitch, gcab.levels[Math.min(row, 4)] + hgt / 2 + .006, .2 + (q() - .5) * .02); m.rotation.set(-.1, (q() - .5) * .1, 0); m.userData = { card: c }; gcab.g.add(m); gcab.meshes.push(m);
+    });
+    $('#gradedN').textContent = n; $('#gradedN').hidden = !n;
+    if (S.mode === 'graded') stockCabinet();
+  }).catch(() => {});
+}
+// the slabs' pictures arrive a few at a time, the first time you walk up
+function stockCabinet() {
+  if (gcab.queued) return; gcab.queued = true; let k = 0;
+  const next = () => { const m = gcab.meshes[k++]; if (!m) return; cardTex(m.userData.card, 256).then((t) => { m.material.map = t; m.material.needsUpdate = true; m.visible = true; kick(); }).catch(() => {}).then(next); };
+  for (let i = 0; i < 5; i++) next();
+}
+function cabinetDoors(open) {
+  const to = open ? 1 : 0; if (gcab.target === to) return; gcab.target = to; const from = gcab.open, t0 = performance.now();
+  if (open) click2();
+  anims.push((now) => { if (gcab.target !== to) return false; const k = Math.min(1, (now - t0) / (reduce ? 1 : 700)), e = 1 - Math.pow(1 - k, 3); gcab.open = lerp(from, to, e); gcab.doors.forEach((d) => { d.rotation.y = d.userData.sd * gcab.open * 1.95; }); return k < 1; }); kick();
+}
+function click2() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const t = ac.currentTime; [0, .09].forEach((dt, i) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = i ? 900 : 1500; g.gain.setValueAtTime(.06, t + dt); g.gain.exponentialRampToValueAtTime(.0001, t + dt + .05); o.connect(g); g.connect(ac.destination); o.start(t + dt); o.stop(t + dt + .06); }); } catch (x) {} }
+// straight at the cabinet: a wide screen takes the whole of it, a phone stands closer and pans
+function gradedView() {
+  const fov = 70, ph = cam.aspect < 1, fit = Math.max((gcab.h / 2 + .1) / Math.tan(rad(fov / 2)), (gcab.w / 2 + .08) / hTan(fov)), d = ph ? Math.min(fit, 1.25) : fit;
+  const vw = 2 * d * hTan(fov), vh = 2 * d * Math.tan(rad(fov / 2)), mx = Math.max(0, (gcab.w + .1 - vw) / 2), my = Math.max(0, (gcab.h + .1 - vh) / 2);
+  gcab.mx = mx; gcab.my = my; gcab.vw = vw; gcab.gx = clamp(gcab.gx, -mx, mx); gcab.gy = clamp(gcab.gy, -my, my);
+  const C = new V3(gcab.at[0] + .2, gcab.h / 2 + gcab.gy, gcab.at[1] - gcab.gx);
+  return lookView(new V3(C.x + d, C.y, C.z), C, fov);
+}
+
+/* ---------- the hall of aisles (owner, 2026-11-10) ----------
+   "make the store much larger so we can display all our product on the shelves for gunpla, figures, board
+   games, etc.. where you have headers above the aisles and ... scroll through all the products we have in
+   stock. Have signage above the aisles (double sided) that you can walk under into the aisles and see as
+   far down as you need to ... exor games branded ... at the right of the counter".
+   The right wall opens at the front into a hall of aisles, one per kind of product (/showcase/aisles.json),
+   each as long as its stock needs: forty products a metre, six shelves a side. A hanging two-sided sign in
+   the shop's red and yellow marks each entrance and repeats down the aisle. Every slot holds a plain box
+   from the start; the boxes near you become the products themselves (their photos cut out, a price sticker),
+   read a page at a time as you walk (/showcase/aisle.json). Drag or scroll to walk; turn to face a shelf. */
+const hall = { list: [], built: false, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3 };
+const aCx = (i) => hall.x0 + .3 + .45 + 1.0 + i * hall.pitch;
+function slotPos(a, k) {   // where product k of an aisle stands: columns of twelve, six down the left side then six down the right
+  const col = Math.floor(k / 12), w = k % 12, left = w < 6;
+  return { x: aCx(a.i) + (left ? -1.14 : 1.14), y: hall.lv[w % 6] + .012, z: hall.zf - .25 - col * hall.colW, ry: left ? PI / 2 : -PI / 2, left, col };
+}
+function drawAisleSign(g, w, h, a) {
+  g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, w, 46); g.fillStyle = '#f2c230'; g.fillRect(0, 46, w, 6); g.fillRect(0, h - 12, w, 12);
+  g.fillStyle = '#ffffff'; g.font = '900 26px Inter, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText('EXOR GAMES', 22, 24); g.textAlign = 'right'; g.fillText(a.count.toLocaleString('en-CA') + ' in stock', w - 22, 24);
+  g.beginPath(); g.arc(86, 150, 54, 0, PI * 2); g.fillStyle = '#f2c230'; g.fill(); g.fillStyle = '#14100e'; g.font = '900 68px Inter, sans-serif'; g.textAlign = 'center'; g.fillText(String(a.i + 1), 86, 154);
+  g.font = '900 92px Inter, sans-serif'; g.textAlign = 'left'; let sc = 1; const t = a.label.toUpperCase(), tw_ = g.measureText(t).width; if (tw_ > w - 190) sc = (w - 190) / tw_;
+  g.save(); g.translate(164, 154); g.scale(sc, 1); g.fillStyle = '#8f1a17'; g.fillText(t, 4, 5); g.fillStyle = '#f2c230'; g.fillText(t, 0, 0); g.restore();
+}
+function buildHall(list) {
+  if (hall.built || !list.length) return; hall.built = true;
+  hall.list = list.map((a, i) => ({ key: a.key, label: a.label, count: a.count, i, rows: [], next: '', loading: false, done: false, live: new Map(), L: Math.ceil(a.count / 12) * hall.colW + .6 }));
+  const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35, Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
+  hall.xMax = xMax; hall.zBack = zBack;
+  rwFull.visible = false; rwShort.visible = true;
+  const G = hall.g = new THREE.Group(); scene.add(G);
+  const fl = pl(W_, D_, lam({ map: ctex(256, 256, drawCarpet, [W_ * 1.1, D_ * 1.1]) }), xc, 0, zc, 0, G); fl.rotation.x = -PI / 2;
+  const ce = pl(W_, D_, lam({ map: ctex(128, 128, drawCeil, [W_ * 1.65, D_ * 1.65]) }), xc, 2.9, zc, 0, G); ce.rotation.x = PI / 2;
+  const wall = (len) => lam({ map: ctex(512, 1024, drawWall, [Math.max(1, Math.round(len)), 1]) });
+  pl(W_, 2.9, wall(W_), xc, 1.45, 3.5, PI, G); pl(W_, 2.9, wall(W_), xc, 1.45, zBack, 0, G); pl(D_, 2.9, wall(D_), xMax, 1.45, zc, -PI / 2, G);
+  pl(hall.zf - zBack, 2.9, wall(hall.zf - zBack), hall.x0 + .02, 1.45, (hall.zf + zBack) / 2, PI / 2, G);   // the hall's side of the wall it shares with the shop
+  // shelving in the shop's colours: charcoal steel, a red kick plate, a yellow edge on every shelf
+  const steel = lam({ color: 0x1c1b1d }), cream = lam({ color: 0xe9e2d0 }), red = lam({ color: 0xd62c28 }), yellow = lam({ color: 0xf2c230 });
+  const tubes = [], col = new THREE.Color(), d2 = new THREE.Object3D();
+  hall.list.forEach((a) => {
+    const cx = aCx(a.i), zm = hall.zf - a.L / 2;
+    [-1, 1].forEach((sd) => {
+      const xf = cx + sd * 1.0;   // the shelf's front edge; it runs back from there
+      bx(.03, 1.98, a.L, cream, xf + sd * .44, .99, zm, G); bx(.45, .15, a.L, red, xf + sd * .225, .075, zm, G); bx(.46, .05, a.L, red, xf + sd * .225, 2.0, zm, G);
+      hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, a.L, steel, xf + sd * .22, y - .009, zm, G); bx(.012, .034, a.L, yellow, xf + sd * .004, y - .017, zm, G); });
+      for (let z = hall.zf; z > hall.zf - a.L - .01; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
+      bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - a.L, G);
+    });
+    // every slot stocked with a plain box from the start
+    const inst = a.inst = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, .23, .07).translate(0, .115, 0), lam({ color: 0xffffff }), a.count); const q = seed('aisle' + a.key);
+    for (let k = 0; k < a.count; k++) { const p = slotPos(a, k); d2.position.set(p.x, p.y, p.z + (q() - .5) * .03); d2.rotation.set(0, p.ry, 0); d2.scale.set(.8 + q() * .4, .7 + q() * .45, 1); d2.updateMatrix(); inst.setMatrixAt(k, d2.matrix); col.setHSL(q(), .25 + q() * .35, .3 + q() * .3); inst.setColorAt(k, col); }
+    G.add(inst);
+    // the header over the entrance, and again every nine metres: two-sided, hung from the ceiling
+    const sm = new THREE.MeshBasicMaterial({ map: ctex(900, 260, (g, w, h) => drawAisleSign(g, w, h, a)) });
+    for (let z = hall.zf + .15; z > hall.zf - a.L; z -= 9) { pl(1.8, .52, sm, cx, 2.42, z + .012, 0, G); pl(1.8, .52, sm, cx, 2.42, z - .012, PI, G); bx(1.84, .56, .02, steel, cx, 2.42, z, G); [-.8, .8].forEach((dx) => bx(.012, .24, .012, steel, cx + dx, 2.78, z, G)); }
+    for (let z = hall.zf - 1.5; z > hall.zf - a.L; z -= 4.5) tubes.push([cx, z]);
+    a.hit = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.6, 1.2), hitM); a.hit.position.set(cx, 1.3, hall.zf - .6); a.hit.userData.aisle = a.i; G.add(a.hit);
+  });
+  for (let x = hall.x0 + 2; x < xMax; x += 4) tubes.push([x, 2.4]);
+  const ti = new THREE.InstancedMesh(new THREE.BoxGeometry(.16, .03, 1.3), tubeM, tubes.length); tubes.forEach((t, k) => { d2.position.set(t[0], 2.86, t[1]); d2.rotation.set(0, 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); ti.setMatrixAt(k, d2.matrix); }); G.add(ti);
+  hit(bx(.4, 2.6, 2.3, hitM, hall.x0 + .1, 1.3, 2.35), 'aisles');
+  $('#aislesN').textContent = n; $('#aislesN').hidden = false; lights(S.eve); ui(); kick();
+}
+function loadAisles() {
+  return fetch(W + '/showcase/aisles.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => { if (d && d.ok && d.aisles) buildHall(d.aisles); }).catch(() => {});
+}
+// one more page of an aisle's products, when the walk is getting near the end of what is known
+function aislePage(a) {
+  if (a.loading || a.done) return; a.loading = true;
+  fetch(W + '/showcase/aisle.json?cat=' + a.key + (a.next ? '&after=' + encodeURIComponent(a.next) : ''), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    a.loading = false; if (!d || !d.ok) { a.fail = (a.fail || 0) + 1; if (a.fail > 3) a.done = true; return; }
+    d.rows.forEach((r) => a.rows.push({ name: r[0], set: a.label, price: r[2], image: r[3], url: 'https://exorgames.com/products/' + r[1], variantId: r[5], condition: '', foil: false, game: a.key, sealed: true, ar: clamp(Number(r[4]) || 1, .5, 1.7), qty: r[6] }));
+    a.next = d.next || ''; if (!d.next) a.done = true; kick();
+  }).catch(() => { a.loading = false; });
+}
+// Which slots show the product itself: the ones near you. The rest stay plain boxes.
+let stockAt = 0, stockT = 0; const zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
+function aisleStock(now) {
+  if (!hall.built) return;
+  if (now - stockAt < 160) { if (!stockT) stockT = setTimeout(() => { stockT = 0; kick(); }, 180); return; }   // look again shortly: a page that just arrived may need its shelves filled, or the next page asked for
+  stockAt = now;
+  const ph = cam.aspect < 1, cur = S.mode === 'aisle' ? hall.list[S.aisle] : null;
+  hall.list.forEach((a) => {
+    let lo = 0, hi = -1;
+    if (a === cur) { const c = Math.floor((hall.zf - view.pos.z) / hall.colW); if (S.aface) { lo = c - (ph ? 3 : 6); hi = c + (ph ? 3 : 6); } else { lo = c + (ph ? 4 : -1); hi = c + (ph ? 13 : 11); } }   // looking ahead, a narrow screen only sees the shelves from a few steps on
+    else if (S.mode === 'aisles' || cur) { hi = a === cur || S.mode === 'aisles' ? (ph ? 1 : 2) : -1; }   // from the front: the first columns of every aisle
+    lo = Math.max(0, lo);
+    const want = new Set(); for (let c = lo; c <= hi; c++) for (let w = 0; w < 12; w++) { const k = c * 12 + w; if (k >= a.count) break; if (a === cur && S.aface && (w < 6) !== (S.aface < 0)) continue; want.add(k); }
+    if (hi >= 0 && a.rows.length < Math.min(a.count, (hi + (a === cur ? 8 : 1)) * 12) && !a.done) aislePage(a);
+    a.live.forEach((m, k) => { if (!want.has(k)) { const old = m.material.map; if (old && !old.userData.keep) old.dispose(); m.material.dispose(); m.geometry.dispose(); hall.g.remove(m); a.live.delete(k); const p = slotPos(a, k), d = dummy; d.position.set(p.x, p.y, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1); d.updateMatrix(); a.inst.setMatrixAt(k, d.matrix); a.inst.instanceMatrix.needsUpdate = true; } });
+    want.forEach((k) => {
+      if (a.live.has(k)) return; const c = a.rows[k]; if (!c) { if (a.done && k >= a.rows.length) { a.inst.setMatrixAt(k, zeroM); a.inst.instanceMatrix.needsUpdate = true; } return; }
+      const p = slotPos(a, k), w = c.ar >= 1 ? .27 : .27 * c.ar, h = c.ar >= 1 ? .27 / c.ar : .27, q = seed('slot' + a.key + k);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide })); m.visible = false;
+      m.position.set(p.x + (p.left ? .05 : -.05), p.y + h / 2, p.z + (q() - .5) * .03); m.rotation.y = p.ry + (q() - .5) * .12; m.userData = { card: c }; hall.g.add(m); a.live.set(k, m);
+      cardTex(c, 256).then((t) => { if (a.live.get(k) !== m) { t.dispose(); return; } m.material.map = t; m.material.needsUpdate = true; m.visible = true; a.inst.setMatrixAt(k, zeroM); a.inst.instanceMatrix.needsUpdate = true; kick(); });
+    });
+  });
+}
+// From the front of the hall, looking along the row of headers.
+function aislesView() { const n = hall.list.length || 1, ph = cam.aspect < 1; return lookView(new V3(hall.x0 + .5, 1.75, 3.2), new V3(aCx(Math.min(n - 1, ph ? 1 : 2)), 1.75, hall.zf - 1.5), ph ? 82 : 62); }
+// In an aisle: az metres in from the entrance; looking ahead, or turned to face the left or right shelf.
+function aisleView() {
+  const a = hall.list[S.aisle] || hall.list[0], cx = aCx(a.i); S.amax = Math.max(0, a.L - .6); S.az = clamp(S.az || 0, 0, S.amax);
+  const z = hall.zf + .9 - S.az, f = S.aface || 0;
+  if (!f) return lookView(new V3(cx, 1.55, z), new V3(cx, 1.2, z - 4), cam.aspect < 1 ? 78 : 62);
+  const zs = Math.min(z, hall.zf - .75);   // facing a shelf, stand inside the aisle, not at its mouth
+  return lookView(new V3(cx - f * .68, 1.05, zs), new V3(cx + f * 1.1, 1.02, zs), 76);
+}
+function goAisle(i, keep) { if (!hall.built || !hall.list[i]) return; if (S.hand) putBack(); closePaint(true); leanOff(); cabinetDoors(false); S.mode = 'aisle'; S.aisle = i; if (!keep) { S.az = 0; S.aface = 0; } S.avz = 0; glide(aisleView(), 900); hint('Drag or scroll to walk the aisle · turn to face a shelf · tap a product'); ui(); }
+function aisleFace(f) { S.aface = f; S.avz = 0; glide(aisleView(), 420); ui(); }
+function aisleWalk(dz) { S.az = clamp((S.az || 0) + dz, 0, S.amax || 0); setView(aisleView()); aisleBar(); }
+function aisleBar() { const a = hall.list[S.aisle]; if (a) $('#aiTitle').textContent = 'Aisle ' + (a.i + 1) + ' · ' + a.label + ' · ' + Math.round(S.az || 0) + ' m of ' + Math.round(S.amax || 0) + ' m'; }
+
 // from the door: the case and the till side by side, centred
 const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lookView(new V3(x, 1.6, 3.2), new V3(x, ph ? 1.3 : 1.18, -1.2), ph ? 82 : 55); v.yaw += S.look.yaw; v.pitch += S.look.pitch; return v; };
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
-const modelsView = () => lookView(new V3(1.3, 1.5, cam.aspect < 1 ? 3.1 : 2.6), new V3(3.9, 1.05, .8), cam.aspect < 1 ? 80 : 58);
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? (S.side === 'right' ? modelsView() : hobbyView()) : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
-  leanOff(); closePaint(true);
+  leanOff(); closePaint(true); cabinetDoors(mode === 'graded');
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
-  else if (mode === 'models') { S.mode = 'hobby'; S.side = 'right'; glide(modelsView()); hint('Gunpla, model kits and blind boxes · tap a rack to look straight at it'); }
   else if (mode === 'sealed') { if (!sealed.rows.length) { hint('No booster boxes in stock for this game right now'); return; } S.mode = 'boxes'; S.focus = 'sealed'; S.pan = 0; glide(boxesView()); hint('The newest booster boxes in stock · tap one to pick it up'); }
   else if (mode === 'boxes') { S.focus = ''; if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
+  else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? 'Graded cards · tap one to take it out · drag it to turn it over' : 'The graded cabinet is being stocked'); }
+  else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } S.mode = 'aisles'; glide(aislesView()); hint('Tap an aisle to walk into it'); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
   ui();
 }
 function back() {
   if (S.hand) return putBack();
+  if (S.mode === 'aisle') { if (S.aface) return aisleFace(0); return go('aisles'); }
   if (psel.g) return closePaint();
-  if (S.mode === 'rack') return go(S.side === 'right' ? 'models' : 'hobby');
+  if (S.mode === 'rack') return go('hobby');
   if ($('#setsv').classList.contains('on')) { $('#setsv').classList.remove('on'); return; }
   if ($('#tillv').classList.contains('on')) return go('door');
   if (S.mode === 'crate' && cr && cr.kind === 'set') { go('boxes'); if (boxes.open) openBox(boxes.open.n); return; }
@@ -1038,10 +1228,12 @@ let hintT = 0;
 function hint(t) { const el = $('#hint'); clearTimeout(hintT); if (!t) { el.classList.add('gone'); return; } el.textContent = t; el.classList.remove('gone'); hintT = setTimeout(() => el.classList.add('gone'), 6000); }
 function ui() {
   document.body.dataset.mode = S.mode;
-  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? (S.side === 'right' ? 'models' : 'hobby') : S.mode;
+  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode;
+  if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '">' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
+  if (S.mode === 'aisle') { aisleBar(); $('#aiL').classList.toggle('on', S.aface < 0); $('#aiA').classList.toggle('on', !S.aface); $('#aiR').classList.toggle('on', S.aface > 0); }
   if (S.mode === 'hobby' || S.mode === 'rack') {   // the four racks, and for a paint rack the way to the site's own colour picker
     const r = S.mode === 'rack' ? racks[S.rack] : null;
-    $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Back</button>' : '') + racks.map((k, i) => (k.side !== S.side ? '' : '<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>')).join('')
+    $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Back</button>' : '') + racks.map((k, i) => ('<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>')).join('')
       + (r && r.link ? '<a href="https://exorgames.com/collections/' + r.link + '?view=paints"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Colour picker on the site' + (ON_STORE ? '' : ' ↗') + '</a>' : '');
   }
   $('#boxNote').textContent = st === 'sealed' ? 'tap a booster box to pick it up' : 'tap a white box for its sets · a booster box to pick it up';
@@ -1071,7 +1263,10 @@ function tap(x, y) {
   if (tw) return;
   if (S.mode === 'case') { const h = pick(caseCards.filter((m) => m.visible), x, y); if (h) { const u = h.object.userData; if (u.si !== S.shelf) goShelf(u.si); else lift(u.card, h.object); return; } }
   else if (S.mode === 'boxes') { const h = pick(boxMeshes.concat(sealMeshes), x, y); if (h) return h.object.userData.card ? lift(h.object.userData.card, null) : openBox(h.object.userData.n); }
-  else if (S.mode === 'hobby') { const h = pick(racks.filter((r) => r.side === S.side).map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
+  else if (S.mode === 'hobby') { const h = pick(racks.map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
+  else if (S.mode === 'graded') { const h = pick(gcab.meshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
+  else if (S.mode === 'aisles') { const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
+  else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); const o = pick(hall.list.map((q) => q.hit), x, y); if (o && o.object.userData.aisle !== S.aisle) return goAisle(o.object.userData.aisle); return; }
   else if (S.mode === 'rack') {
     const r = racks[S.rack];
     if (r.kind === 'kits') { const h = pick(r.meshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
@@ -1119,7 +1314,7 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pinch || pts.size > 1) return;
   if (e.button && e.button !== 0) return;
-  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry };
+  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, az: S.az || 0 };
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
   // a mouse held still on the case leans in to that spot
@@ -1138,6 +1333,12 @@ canvas.addEventListener('pointermove', (e) => {
   if (!drag.moved) return;
   if (S.hand) { hand.ry = drag.ry + dx * .011; hand.rx = clamp(drag.rx + dy * .006, -.6, .6); kick(); }
   else if (drag.axis === 'none') { /* a glide is running */ }
+  else if (S.mode === 'graded') { const mpp = (gcab.vw || 1) / canvas.clientWidth; gcab.gx = drag.gx - dx * mpp; gcab.gy = drag.gy + dy * mpp; setView(gradedView()); }
+  else if (S.mode === 'aisle') {
+    const now2 = performance.now();
+    if (!S.aface && drag.axis === 'y') { S.az = clamp(drag.az + dy * .014, 0, S.amax || 0); drag.v = (e.clientY - drag.lastY) * .014 / dt * 16; setView(aisleView()); aisleBar(); }
+    else if (S.aface && drag.axis === 'x') { const mpp = 2.7 * cam.aspect / canvas.clientWidth * (S.aface < 0 ? -1 : 1); S.az = clamp(drag.az + dx * mpp, 0, S.amax || 0); drag.v = (e.clientX - drag.lastX) * mpp / dt * 16; setView(aisleView()); aisleBar(); }
+  }
   else if (S.mode === 'door') { S.look.yaw = clamp(drag.yaw + dx * .004, -1.5, 1.5); S.look.pitch = clamp(drag.pitch + dy * .003, -.45, .4); setView(doorView()); }
   else if (S.mode === 'case' && drag.axis === 'x') { const mpp = visW() / canvas.clientWidth; S.walk = clamp(drag.walk - dx * mpp, -.03, (S.maxWalk || 0) + .03); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(caseView0()); }
   else if (S.mode === 'boxes' && drag.axis === 'x') { const v = boxesView(); S.pan = clamp(drag.pan - dx * v.vw / canvas.clientWidth, -S.maxPan, S.maxPan); setView(boxesView()); }
@@ -1156,6 +1357,12 @@ function endDrag(e) {
   if (S.hand) { hand.ty = Math.round(hand.ry / PI) * PI; hand.tx = 0; hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
   if (d.axis === 'none') return;
   hint('');
+  if (S.mode === 'aisle') {
+    if (!S.aface && d.axis === 'x') { if (Math.abs(dx) > 50) aisleFace(dx > 0 ? -1 : 1); return; }   // a sideways swipe turns you to that shelf
+    if (S.aface && d.axis === 'y') { if (Math.abs(dy) > 60) aisleFace(0); return; }
+    S.avz = clamp(d.v, -.5, .5);
+    anims.push(() => { if (S.mode !== 'aisle' || drag || tw) return false; S.avz *= .93; aisleWalk(S.avz); return Math.abs(S.avz) > .003; }); kick(); return;
+  }
   if (S.mode === 'case') {
     if (d.axis === 'y') { if (Math.abs(dy) > 44) goShelf(S.shelf + (dy < 0 ? 1 : -1)); return; }
     S.vx = clamp(d.v, -.06, .06);
@@ -1174,6 +1381,8 @@ canvas.addEventListener('wheel', (e) => {
     clearTimeout(wheelLean); wheelLean = setTimeout(() => leanAnim(0, 320), 260); return;
   }
   if (lean.on) return;
+  if (S.mode === 'aisle') { aisleWalk((e.deltaY || e.deltaX) * .004); return; }
+  if (S.mode === 'graded') { gcab.gx += e.deltaX * .002; gcab.gy -= e.deltaY * .002; setView(gradedView()); return; }
   if (S.mode === 'case') { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { S.walk = clamp(S.walk + (e.shiftKey ? e.deltaY : e.deltaX) * .0012, 0, S.maxWalk || 0); setView(caseView()); return; } if (wheelLock || Math.abs(e.deltaY) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 560); goShelf(S.shelf + (e.deltaY > 0 ? 1 : -1)); }
   else if (S.mode === 'crate' && cr) { if (wheelLock) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 90); flickTo(Math.round(cr.ps[cr.lane]) + (e.deltaY > 0 ? 1 : -1), 160); }
   else if (S.mode === 'boxes') { S.pan = clamp(S.pan + (e.deltaX || e.deltaY) * .0015, -S.maxPan, S.maxPan); setView(boxesView()); }
@@ -1183,6 +1392,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { back(); return; }
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
   const k = e.key;
+  if (S.mode === 'aisle') { if (k === 'ArrowUp' || k === 'ArrowDown') { S.az = clamp((S.az || 0) + (k === 'ArrowUp' ? 1.2 : -1.2), 0, S.amax || 0); glide(aisleView(), 300); aisleBar(); } else if (k === 'ArrowLeft') aisleFace(S.aface < 0 ? 0 : -1); else if (k === 'ArrowRight') aisleFace(S.aface > 0 ? 0 : 1); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
   else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') lift(cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])], null); else return; }
   else if (S.mode === 'boxes') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.pan = clamp(S.pan + (k === 'ArrowRight' ? .3 : -.3), -S.maxPan, S.maxPan); glide(boxesView(), 260); } else return; }
@@ -1203,7 +1413,12 @@ document.addEventListener('click', (e) => {
   else if (b.hasAttribute('data-pmatch')) { const g = paints.all[Number(b.getAttribute('data-pmatch'))]; if (g) openPaint(g); }
   else if (b.id === 'pbuy') buyPaint(b);
   else if (b.id === 'paintX') closePaint();
-  else if (b.id === 'rackBack') go(S.side === 'right' ? 'models' : 'hobby');
+  else if (b.id === 'rackBack') go('hobby');
+  else if (b.hasAttribute('data-aisle')) goAisle(Number(b.getAttribute('data-aisle')));
+  else if (b.id === 'aiBack') go('aisles');
+  else if (b.id === 'aiL') aisleFace(S.aface < 0 ? 0 : -1);
+  else if (b.id === 'aiA') aisleFace(0);
+  else if (b.id === 'aiR') aisleFace(S.aface > 0 ? 0 : 1);
   else if (b.hasAttribute('data-drop')) { S.pile.splice(Number(b.getAttribute('data-drop')), 1); pile(); showTill(); }
   else if (b.id === 'buy') buy(b);
   else if (b.id === 'x') putBack();
@@ -1230,5 +1445,5 @@ function load(game) {
     go(S.mode === 'case' ? 'case' : 'door');
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
-fonts.then(() => { buildRoom(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+fonts.then(() => { buildRoom(); buildCabinet(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
+window.xgShop = { gcab, hall, goAisle, aisleFace, aisleWalk, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
