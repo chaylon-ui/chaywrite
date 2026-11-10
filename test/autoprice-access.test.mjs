@@ -171,6 +171,38 @@ test("the 401 runner's door opens only with the relay bearer, lists what to sear
   assert.equal((await call("POST", "", { op: "put", rows: [] })).status, 401);
 });
 
+test("GET /autoprice/psa-check asks PSA's six calls with the worker's token for a signed-in account, never for strangers, and the router knows the path", async () => {
+  const w = world();
+  await seed(w);
+  w.env.PSA_API_TOKEN = "tok-secret";
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (u, init) => {
+    seen.push([String(u), init && init.headers && init.headers.authorization]);
+    if (/GetByCertNumber\/49764414$/.test(String(u))) return new Response(JSON.stringify({ PSACert: { CertNumber: "49764414", Subject: "Fire Energy" } }), { status: 200, headers: { "content-type": "application/json" } });
+    if (/GetPSASpecPopulation/.test(String(u))) return new Response(JSON.stringify({ ServerMessage: "Access to this API is limited to approved customers." }), { status: 403 });
+    return new Response("<html>Not Found</html>", { status: 404 });
+  };
+  try {
+    const none = await hit(w, "/autoprice/psa-check");
+    assert.equal(none.status, 401); assert.deepEqual(seen, []);
+    const ok = await hit(w, "/autoprice/psa-check", { cookie: "np_s=" + TOKEN });
+    assert.equal(ok.status, 200);
+    const j = JSON.parse(ok.text);
+    assert.equal(j.calls.length, 6);
+    assert.equal(seen.length, 6);
+    assert.ok(seen.every(([u, a]) => u.startsWith("https://api.psacard.com/publicapi/") && a === "bearer tok-secret"));
+    const by = Object.fromEntries(j.calls.map((c) => [c.key, c]));
+    assert.deepEqual([by.cert.status, by.cert.ok, by.cert.said], [200, true, "answered: PSACert"]);
+    assert.deepEqual([by.pop.status, by.pop.ok, by.pop.unapproved, by.pop.said], [403, false, true, "Access to this API is limited to approved customers."]);
+    assert.deepEqual([by.order.status, by.order.said], [404, "Not Found"]);
+    assert.equal(j.approvedAny, true);
+    assert.ok(!ok.text.includes("tok-secret"), "the token never appears in the answer");
+  } finally { globalThis.fetch = realFetch; }
+  const router = (await import("node:fs")).readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+  assert.match(router, /url\.pathname === "\/autoprice\/psa-check"/);
+});
+
 test("GET /autoprice/img?u= proxies a store CDN photo to a signed-in account, refuses strangers and other hosts, and the router knows the path", async () => {
   const w = world();
   await seed(w);

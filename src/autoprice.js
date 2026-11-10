@@ -2165,6 +2165,13 @@ export async function serveAutoprice(request, env, url, staffOk) {
     if (!u) return Response.json({ error: "no photo on PriceCharting" }, { status: 404, headers: { "cache-control": "no-store" } });
     return new Response("", { status: 302, headers: { location: u, "cache-control": "private, max-age=86400" } });
   }
+  // GET /autoprice/psa-check -> which of PSA's API calls answer for the worker's token (owner, 2026-11-10; src/graded.js psaProbe). Read-only; never the token.
+  if (url.pathname === "/autoprice/psa-check") {
+    const { psaProbe } = await import("./graded.js");
+    const ids = { cert: url.searchParams.get("cert") || "", pop: url.searchParams.get("spec") || "", order: url.searchParams.get("order") || "", submission: url.searchParams.get("submission") || "" };
+    ids.certFlat = ids.cert; ids.images = ids.cert;
+    return Response.json(await psaProbe({ env, fetch: (u, i) => fetch(u, i) }, ids), { headers: { "cache-control": "no-store" } });
+  }
   // GET /autoprice/img?u=<store CDN url> -> that photo through this origin, so the page can read its QR code on a canvas (owner, 2026-11-09)
   if (url.pathname === "/autoprice/img") {
     const u = String(url.searchParams.get("u") || "");

@@ -320,7 +320,7 @@ export function psaToForm(c) {
   return {
     grader: "PSA", cert: String((c && c.CertNumber) || "").trim(), grade: gm ? gm[1] : "", gradeText,
     name: titleCase(c && c.Subject), number: String((c && c.CardNumber) || "").trim(), set: titleCase(set), variety: titleCase(c && c.Variety),
-    year: String((c && c.YearIssued) || "").trim(), category: titleCase(cat), game, japanese,
+    year: String((c && (c.Year || c.YearIssued)) || "").trim(), category: titleCase(cat), game, japanese,
     population: num(c && c.TotalPopulation), higher: num(c && c.PopulationHigher),
   };
 }
@@ -350,6 +350,47 @@ export async function certLookup(cx, grader, cert) {
   const out = { ok: true, ...psaToForm(c) };
   if (cache) { const put = cache.put(key, Response.json(out, { headers: { "cache-control": "public, max-age=604800" } })).catch(() => {}); if (cx.ctx && cx.ctx.waitUntil) cx.ctx.waitUntil(put); else await put; }
   return out;
+}
+
+/* ---- Which of PSA's calls answer for this token (owner, 2026-11-10: "check
+   these calls"). PSA's swagger (api.psacard.com/publicapi/swagger.json, read
+   2026-11-10) lists six GETs, all behind the same bearer token:
+     /cert/GetByCertNumber/{cert}              the one certLookup uses
+     /cert/GetByCertNumberForFileAppend/{cert} the same record, flatter
+     /cert/GetImagesByCertNumber/{cert}        PSA's own photos of the slab
+     /pop/GetPSASpecPopulation/{specID}        the pop report by grade for a spec
+     /order/GetProgress/{orderNumber}          a PSA order's progress
+     /order/GetSubmissionProgress/{submission} a submission's progress
+   No pricing call exists. psaProbe asks each with a sample id and reports
+   the HTTP status and what PSA said (never the token), so 9Pocket can show
+   whether the account is approved for any of them. */
+export const PSA_BASE = "https://api.psacard.com/publicapi";
+export const PSA_CALLS = [
+  { key: "cert", path: "/cert/GetByCertNumber/", sample: "49764414", what: "certificate (the lookup 9Pocket uses)" },
+  { key: "certFlat", path: "/cert/GetByCertNumberForFileAppend/", sample: "49764414", what: "certificate, flat form" },
+  { key: "images", path: "/cert/GetImagesByCertNumber/", sample: "49764414", what: "PSA's photos of the slab" },
+  { key: "pop", path: "/pop/GetPSASpecPopulation/", sample: "1", what: "population by grade for a spec" },
+  { key: "order", path: "/order/GetProgress/", sample: "1", what: "order progress" },
+  { key: "submission", path: "/order/GetSubmissionProgress/", sample: "1", what: "submission progress" },
+];
+export async function psaProbe(cx, ids) {
+  if (!psaConfigured(cx.env)) return { ok: false, configured: false, error: "no PSA_API_TOKEN on the worker", calls: [] };
+  const calls = [];
+  for (const c of PSA_CALLS) {
+    const id = String((ids && ids[c.key]) || c.sample).replace(/[^\w-]/g, "").slice(0, 32);
+    const row = { key: c.key, what: c.what, path: c.path + id, status: null, said: "", ok: false };
+    try {
+      const r = await cx.fetch(PSA_BASE + c.path + encodeURIComponent(id), { headers: { authorization: "bearer " + cx.env.PSA_API_TOKEN, accept: "application/json", "user-agent": "ExorGraded/1.0 (+workers.dev)" }, signal: AbortSignal.timeout(12000) });
+      row.status = r.status; row.ok = r.ok;
+      const t = await r.text().catch(() => "");
+      let said = "";
+      try { const j = JSON.parse(t); said = String((j && (j.ServerMessage || j.Message || j.message || j.title)) || ""); if (!said && j && typeof j === "object") said = "answered: " + Object.keys(j).slice(0, 8).join(", "); } catch { said = t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(); }
+      row.said = said.slice(0, 160);
+      row.unapproved = r.status === 403 && /approved customers/i.test(said);
+    } catch (e) { row.said = "did not answer: " + String((e && e.message) || e).slice(0, 120); }
+    calls.push(row);
+  }
+  return { ok: true, configured: true, approvedAny: calls.some((c) => c.ok), calls };
 }
 
 /* ---- Reading the label with Claude (owner, 2026-10-28: "is there any other
