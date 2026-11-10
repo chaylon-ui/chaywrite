@@ -383,7 +383,7 @@ function arcDraw() {
   if (arc.state === 'attract') {
     ['bat', 'skull', 'slime'].forEach((kd, i) => { for (let c = 0; c < 6; c++) arcFoe(g, kd, 50 + c * 28 + Math.sin(arc.t + i) * 8, 40 + i * 18, f); });
     g.textAlign = 'center'; g.font = '900 24px Inter, sans-serif'; g.fillStyle = '#111'; g.fillText('MALLOW', W_ / 2 + 1, 89); g.fillText('SHOOTER', W_ / 2 + 1, 111); g.fillStyle = '#e06aa6'; g.fillText('MALLOW', W_ / 2, 88); g.fillStyle = '#4fb3da'; g.fillText('SHOOTER', W_ / 2, 110);
-    arcSword(g, W_ / 2, 152, 1.9); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText(S.mode === 'arcade' ? 'TAP TO START' : 'INSERT COIN', W_ / 2, 166);
+    arcSword(g, W_ / 2, 155, 1.45); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText(S.mode === 'arcade' ? 'TAP TO START' : 'INSERT COIN', W_ / 2, 168);
   } else {
     arc.en.forEach((e) => { if (e.alive) { const p = arcPos(e); arcFoe(g, e.kind, p.x, p.y, f); } });
     arc.pops.forEach((p) => { g.fillStyle = '#fff'; g.fillRect(p.x - 3, p.y - 2, 6, 4); g.fillStyle = '#fff3d6'; [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, -7], [0, 7], [-7, 0], [7, 0]].forEach((d) => g.fillRect(p.x + d[0] * (1.3 - p.t * 3), p.y + d[1] * (1.3 - p.t * 3), 2, 2)); });
