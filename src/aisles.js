@@ -87,7 +87,10 @@ export function gradedOf(products) {
   const out = [];
   for (const p of products || []) {
     const title = String((p && p.title) || "");
-    if (!/\bgraded\b/i.test(title) && !/graded/i.test(String((p && p.productType) || ""))) continue;
+    // a graded card: its type says "Single Graded", or its title names the grade ("Graded PSA 10"). Slab cases,
+    // graded-card sleeves and stands also carry the word (live probe 42737187751) and are not for this cabinet.
+    const type = String((p && p.productType) || "");
+    if (!(/graded/i.test(type) && /single/i.test(type)) && !GRADE_RE.test(title)) continue;
     const v = ((p.variants && p.variants.nodes) || [])[0];
     if (!v || !(+v.inventoryQuantity > 0) || !(+v.price > 0) || v.availableForSale === false) continue;
     const pics = ((p.media && p.media.nodes) || []).map((m) => m && m.preview && m.preview.image).filter((i) => i && i.url);
