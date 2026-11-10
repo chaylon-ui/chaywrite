@@ -1299,7 +1299,7 @@ const lean = { k: 0, P: null, on: false, id: 0 };
 const pts = new Map(); let pinch = null, wheelLean = 0;
 // the same lean at the graded cabinet (owner, 2026-11-10: "graded cards should also allow me to pinch zoom elastic like the counter")
 const leanBase = () => (S.mode === 'graded' ? gradedView() : caseView());
-function leanView() { const v = leanBase(); if (lean.P && lean.k) v.pos.lerp(lean.P, (S.mode === 'graded' ? .72 : .6) * lean.k); return v; }
+function leanView() { const v = leanBase(); if (lean.P && lean.k) v.pos.lerp(lean.P, (S.mode === 'graded' ? .55 : .6) * lean.k); return v; }
 function leanStart(x, y) {
   const gr = S.mode === 'graded';
   if ((S.mode !== 'case' && !gr) || S.hand || tw || (!gr && !S.lay.length)) return false;
@@ -1308,6 +1308,7 @@ function leanStart(x, y) {
     cam.position.copy(view.pos); cam.rotation.set(view.pitch, view.yaw, 0); cam.updateMatrixWorld();
     const h = pick(gr ? gcab.meshes.filter((m) => m.visible) : caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
     lean.P = h ? h.point.clone() : ray.ray.at(view.dist || .45, new V3());
+    if (gr && !h) { const px = gcab.at[0] + .2, dx = ray.ray.direction.x; if (Math.abs(dx) > .01) lean.P = ray.ray.at((px - ray.ray.origin.x) / dx, new V3()); }   // between two slabs: the spot on the slabs' own plane, not past it (live probe 42802013535)
     const wp = new V3();
     if (gr) gcab.meshes.forEach((m) => { const u = m.userData; if (u.hi || !m.visible || m.getWorldPosition(wp).distanceTo(lean.P) > .32) return; u.hi = true;   // the slabs around the spot take a sharper picture
       cardTex(u.card, 512).then((t) => { const old = m.material.map; m.material.map = t; m.material.needsUpdate = true; if (old && !old.userData.keep) old.dispose(); kick(); }).catch(() => {}); });
