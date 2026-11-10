@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX } from "../src/boxes.js";
+import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX } from "../src/boxes.js";
 
 const v = (sid, title, price, qty) => ({ shopifyId: sid, title, price, quantity: qty });
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), img: img || "", variants });
@@ -98,4 +98,22 @@ test("wargamesOf: kits in stock with a picture; novels, dice, card packs, journa
   let j = await (await go(async (q, v) => { seen.push(v.q); return { data: { products: { nodes: [P("NECROMUNDA ORLOCK ROAD WARRIORS", 3)] } } }; })).json();
   assert.equal(j.ok, true); assert.equal(j.rows.length, 1); assert.match(seen[0], /vendor:"Games Workshop"/); assert.match(seen[0], /product_type:"Tabletop Wargames"/);
   j = await (await go(async () => { throw new Error("shopify down"); })).json(); assert.equal(j.ok, false);
+});
+
+/* Gunpla, model kits and blind boxes on the 3D shop's right wall (owner, 2026-11-10). */
+test("shelf.json: the kind's product type in stock with a picture, newest first; unknown kinds are refused", async () => {
+  const now = Date.UTC(2026, 10, 10);
+  const P = (title, qty, o) => Object.assign({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), createdAt: "2026-11-01T10:00:00Z", media: { nodes: [{ preview: { image: { url: "https://cdn.shopify.com/g.jpg", width: 800, height: 600 } } }] }, variants: { nodes: [{ id: "gid://shopify/ProductVariant/9", price: "32.95", inventoryQuantity: qty }] } }, o || {});
+  const rows = shelfOf([P("HG 1/144 RX-78-2 GUNDAM", 3), P("MG 1/100 SOLD OUT", 0), P("RG 1/144 NEXT MONTH PRE ORDER ^ DEC 20/26", 4), P("NO PICTURE", 2, { media: { nodes: [] } }), P("PG 1/60 UNICORN (LIMIT 1)", 1)], now);
+  assert.deepEqual(rows.map((r) => r.name), ["HG 1/144 RX-78-2 GUNDAM", "PG 1/60 UNICORN"]);
+  assert.deepEqual(rows[0], { name: "HG 1/144 RX-78-2 GUNDAM", handle: "hg-1-144-rx-78-2-gundam", price: "32.95", image: "https://cdn.shopify.com/g.jpg", ar: 1.33, variantId: "9", qty: 3, added: "2026-11-01" });
+  assert.equal(shelfOf(Array.from({ length: 40 }, (_, i) => P("KIT " + i, 1)), now).length, SHELF_MAX);
+  const seen = [];
+  const go = (q, gqlFn) => serveShelf(new Request("https://w.example/showcase/shelf.json" + q), {}, {}, new URL("https://w.example/showcase/shelf.json" + q), { gqlFn, now });
+  for (const [kind, type] of [["gunpla", "Gunpla"], ["models", "Plastic Model Kit"], ["blind", "Blind Box"]]) {
+    const j = await (await go("?kind=" + kind, async (qq, v) => { seen.push(v.q); return { data: { products: { nodes: [P("A KIT", 2)] } } }; })).json();
+    assert.equal(j.ok, true); assert.equal(j.kind, kind); assert.equal(j.rows.length, 1); assert.ok(seen[seen.length - 1].includes('product_type:"' + type + '"'));
+  }
+  const bad = await go("?kind=everything", async () => { throw new Error("not asked"); }); assert.equal(bad.status, 400);
+  const down = await (await go("?kind=gunpla", async () => { throw new Error("shopify down"); })).json(); assert.equal(down.ok, false);
 });

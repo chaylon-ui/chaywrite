@@ -245,7 +245,7 @@ function buildRoom() {
   pl(.62, .86, poster(360, 500, (g, w, h) => { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 150 : 115; g.lineTo(w / 2 + Math.cos(a) * r, 185 + Math.sin(a) * r); } g.fill(); g.fillStyle = '#c0392b'; g.font = '36px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('FRIDAY', w / 2, 170); g.fillText('NIGHT', w / 2, 212); g.fillStyle = '#fff'; g.font = '700 40px Inter, sans-serif'; g.fillText('TOURNAMENT', w / 2, 390); g.font = '600 24px Inter, sans-serif'; g.fillText('7 PM · sign up at the counter', w / 2, 432); g.fillStyle = '#2fd0c5'; g.fillRect(30, 455, w - 60, 8); }), -3.99, 1.8, 2.0, PI / 2);
   pl(.7, .5, poster(420, 300, (g, w, h) => { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#111'; g.font = '700 62px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('WE BUY', w / 2, 110); g.fillText('CARDS', w / 2, 180); g.font = '30px "Permanent Marker", cursive'; g.fillStyle = '#c0392b'; g.fillText('cash or store credit', w / 2, 245); }), -3.99, 1.75, .9, PI / 2);
   pl(.42, .56, poster(300, 400, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#1d3a8a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; ['Please ask before', 'opening the case.', '', 'No drinks near', 'the cards!', '', '— thanks, mgmt'].forEach((l, i) => g.fillText(l, w / 2, 70 + i * 44)); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(w / 2, 20, 9, 0, PI * 2); g.fill(); }), 3.99, 1.7, -1.5, -PI / 2);
-  pl(1.1, .75, poster(550, 375, (g, w, h) => { g.fillStyle = '#9a6b3c'; g.fillRect(0, 0, w, h); noise(g, w, h, 5000, ['#7d5329', '#b98a55', '#8a5f33'], .7); g.strokeStyle = '#4a2a12'; g.lineWidth = 16; g.strokeRect(0, 0, w, h); const r = seed('cork'); [['WANTED:', 'old collections'], ['Sleeves', '2 for $5'], ['League', 'Tuesdays 6pm'], ['Lost binder?', 'ask at the till']].forEach((n, i) => { g.save(); g.translate(90 + i * 125, 110 + (i % 2) * 130); g.rotate((r() - .5) * .2); g.fillStyle = ['#f6f1e2', '#f7e98e', '#cfe6f5', '#f6c9d0'][i]; g.fillRect(-55, -50, 110, 100); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.textAlign = 'center'; g.fillText(n[0], 0, -8); g.fillText(n[1], 0, 20); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(0, -40, 6, 0, PI * 2); g.fill(); g.restore(); }); }), 3.99, 1.65, .8, -PI / 2);
+  pl(1.1, .75, poster(550, 375, (g, w, h) => { g.fillStyle = '#9a6b3c'; g.fillRect(0, 0, w, h); noise(g, w, h, 5000, ['#7d5329', '#b98a55', '#8a5f33'], .7); g.strokeStyle = '#4a2a12'; g.lineWidth = 16; g.strokeRect(0, 0, w, h); const r = seed('cork'); [['WANTED:', 'old collections'], ['Sleeves', '2 for $5'], ['League', 'Tuesdays 6pm'], ['Lost binder?', 'ask at the till']].forEach((n, i) => { g.save(); g.translate(90 + i * 125, 110 + (i % 2) * 130); g.rotate((r() - .5) * .2); g.fillStyle = ['#f6f1e2', '#f7e98e', '#cfe6f5', '#f6c9d0'][i]; g.fillRect(-55, -50, 110, 100); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.textAlign = 'center'; g.fillText(n[0], 0, -8); g.fillText(n[1], 0, 20); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(0, -40, 6, 0, PI * 2); g.fill(); g.restore(); }); }), -1.6, 1.65, 3.49, PI);   // the cork board hangs on the door wall now: the right wall has the model racks
   // the shop sign over the boxes: the logo when the CDN lets us draw it, the name in marker until then
   // (owner, 2026-11-09: "make the exor logo neon lit"): a dark backing board, the logo glowing on it, a halo on the wall and a light of its own
   const drawSign = (im) => (g, w, h) => {
@@ -294,7 +294,7 @@ function buildRoom() {
   const l3 = new THREE.Mesh(new THREE.CylinderGeometry(.045, .075, .07, 20, 1, false, 0, PI), shadeM); l3.rotation.z = PI / 2; l3.rotation.y = PI / 2; l3.position.set(0, .23, .03); lamp.add(l3);
   hit(bx(.2, .32, .2, hitM, 2.42, TOP + .15, -1.0), 'lights');
   // a wall switch by the cork board does the same
-  bx(.01, .12, .08, lam({ color: 0xe9e4d4 }), 3.985, 1.3, -.2); hit(bx(.04, .2, .16, hitM, 3.97, 1.3, -.2), 'lights');
+  bx(.01, .12, .08, lam({ color: 0xe9e4d4 }), 3.985, 1.3, -1.08); hit(bx(.04, .2, .16, hitM, 3.97, 1.3, -1.08), 'lights');
   pileG = new THREE.Group(); pileG.position.set(1.7, TOP, -1.0); scene.add(pileG);
   buildHobby();
 }
@@ -405,7 +405,7 @@ function pMatches(g) {   // the closest colour from each other brand, like for l
 }
 
 const racks = [];                      // [{ key, label, link, w, h, at, ry, g, list, pos, hitM }]
-let kitMeshes = [], ringM = null;
+let ringM = null;
 const rackHead = (g, w, h, bg, lines) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.textAlign = 'center'; g.textBaseline = 'middle'; lines.forEach((l) => { g.fillStyle = l[2]; g.font = l[1]; let sc = 1; const tw_ = g.measureText(l[0]).width; if (tw_ > w * .9) sc = w * .9 / tw_; g.save(); g.translate(w / 2, l[3]); g.scale(sc, 1); g.fillText(l[0], 0, 0); g.restore(); }); };
 // One paint rack: black wire, a header board, and a pot or dropper bottle for each paint in `list`
 // (generic colours until the feed answers). Returns the group; fills rack.pos with each paint's place.
@@ -438,32 +438,43 @@ function buildHobby() {
   racks.push({ key: 'citadel', label: 'Warhammer paints', link: 'citadel-collection', kind: 'pot', w: .78, h: 1.62, at: [-3.05, -3.5], ry: 0, sign: (g, w, h) => { rackHead(g, w, h, '#0c0c0c', [['WARHAMMER', '900 78px Inter, sans-serif', '#ffffff', 82], ['COLOUR · TONE PRO', '700 36px Inter, sans-serif', '#ffffff', 172]]); rainbow(g, 60, 128, w - 120, 12); } });
   racks.push({ key: 'vallejo', label: 'Vallejo', link: 'all-vallejo', kind: 'dropper', cap: 0xf4f4f4, w: .78, h: 1.62, at: [-2.22, -3.5], ry: 0, sign: (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#f08a1c'); gr.addColorStop(1, '#c8321e'); g.fillStyle = gr; g.fillRect(0, 0, w, h); rackHead(g, w, h, 'rgba(0,0,0,0)', [['Vallejo', '700 96px Inter, sans-serif', '#ffffff', 88], ['MODEL COLOR · GAME COLOR', '700 30px Inter, sans-serif', '#fff3d6', 172]]); } });
   racks.push({ key: 'army', label: 'Army Painter', link: 'all-the-army-painter', kind: 'dropper', cap: 0x1a1a1a, w: .78, h: 1.62, at: [-4, -1.75], ry: PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#6b1d22', []); g.fillStyle = '#a8a35a'; g.fillRect(w * .52, 14, w * .48 - 14, h - 28); rackHead(g, w, h, 'rgba(0,0,0,0)', [['WARPAINTS', '900 58px Inter, sans-serif', '#ffffff', 82], ['THE ARMY PAINTER', '700 28px Inter, sans-serif', '#f3e9c8', 162]]); } });
-  racks.slice(0, 3).forEach(fillRack);
-  // the rack of Warhammer boxes: filled when the feed answers
-  const kr = { key: 'kits', label: 'Warhammer boxes', kind: 'kits', w: 1.14, h: 1.72, at: [-4, -.45], ry: PI / 2 }; racks.push(kr);
-  const kg = kr.g = new THREE.Group(); kg.position.set(kr.at[0], 0, kr.at[1]); kg.rotation.y = kr.ry; scene.add(kg);
-  const black = lam({ color: 0x151515 }), W_ = kr.w, H_ = kr.h;
-  bx(W_, H_, .02, black, 0, H_ / 2, .01, kg); bx(.03, H_, .34, black, -W_ / 2 + .015, H_ / 2, .17, kg); bx(.03, H_, .34, black, W_ / 2 - .015, H_ / 2, .17, kg);
-  [.2, .58, .96, 1.34].forEach((y) => bx(W_ - .04, .02, .32, black, 0, y - .01, .17, kg));
-  bx(W_, .27, .03, black, 0, H_ + .135, .03, kg);
-  pl(W_ - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(768, 180, (g, w, h) => { rackHead(g, w, h, '#0c0c0c', [['WARHAMMER', '900 96px Inter, sans-serif', '#ffffff', 92]]); g.fillStyle = '#c0392b'; g.fillRect(40, 150, w - 80, 8); }) }), 0, H_ + .135, .047, 0, kg);
+  racks.forEach((r) => { r.side = 'left'; }); racks.forEach(fillRack);
+  // racks of boxed product, filled when their feed answers: Warhammer kits beside the paints, and on the right
+  // wall (owner, 2026-11-10: "Here can we put gunpla rack, models rack and another rack with blind boxes")
+  const stripes = (g, w, h, cols) => cols.forEach((c, k) => { g.fillStyle = c; g.fillRect(40 + k * (w - 80) / cols.length, 150, (w - 80) / cols.length, 10); });
+  [{ key: 'kits', label: 'Warhammer boxes', set: 'Warhammer', feed: '/showcase/wargames.json', side: 'left', at: [-4, -.45], ry: PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#0c0c0c', [['WARHAMMER', '900 96px Inter, sans-serif', '#ffffff', 92]]); stripes(g, w, h, ['#c0392b']); } },
+    { key: 'gunpla', label: 'Gunpla', set: 'Gunpla', feed: '/showcase/shelf.json?kind=gunpla', side: 'right', at: [4, -.3], ry: -PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#f4f4f0', [['GUNPLA', '900 104px Inter, sans-serif', '#14181c', 88]]); stripes(g, w, h, ['#1f4fb0', '#d62c28', '#f2c230']); } },
+    { key: 'models', label: 'Model kits', set: 'Model kit', feed: '/showcase/shelf.json?kind=models', side: 'right', at: [4, .9], ry: -PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#3d4a2c', [['MODEL KITS', '900 92px Inter, sans-serif', '#f1eadb', 88]]); stripes(g, w, h, ['#f1eadb']); } },
+    { key: 'blind', label: 'Blind boxes', set: 'Blind box', feed: '/showcase/shelf.json?kind=blind', side: 'right', at: [4, 2.1], ry: -PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#f6c9d0', [['BLIND BOXES', '900 88px Inter, sans-serif', '#3a1c2a', 82]]); g.fillStyle = '#3a1c2a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; g.fillText('which one will you get?', w / 2, 150); } },
+  ].forEach((o) => {
+    const kr = Object.assign({ kind: 'kits', w: 1.14, h: 1.72, meshes: [] }, o); racks.push(kr);
+    const kg = kr.g = new THREE.Group(); kg.position.set(kr.at[0], 0, kr.at[1]); kg.rotation.y = kr.ry; scene.add(kg);
+    const black = lam({ color: 0x151515 }), W_ = kr.w, H_ = kr.h;
+    bx(W_, H_, .02, black, 0, H_ / 2, .01, kg); bx(.03, H_, .34, black, -W_ / 2 + .015, H_ / 2, .17, kg); bx(.03, H_, .34, black, W_ / 2 - .015, H_ / 2, .17, kg);
+    [.2, .58, .96, 1.34].forEach((y) => bx(W_ - .04, .02, .32, black, 0, y - .01, .17, kg));
+    bx(W_, .27, .03, black, 0, H_ + .135, .03, kg);
+    pl(W_ - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(768, 180, kr.sign) }), 0, H_ + .135, .047, 0, kg);
+  });
   // a tap box in front of each rack, and the corner as a whole from the door
   racks.forEach((r, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, r.h + .3, .36), hitM); m.position.set(0, (r.h + .3) / 2, .18); m.userData.rack = i; r.g.parent.add(m); m.position.applyMatrix4(new THREE.Matrix4().makeRotationY(r.ry || 0)); m.position.x += r.at[0]; m.position.z += r.at[1]; m.rotation.y = r.ry || 0; r.hitM = m; });
   hit(bx(2.0, 2.0, .5, hitM, -2.64, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, 2.7, hitM, -3.8, 1.0, -1.0), 'hobby');
+  hit(bx(.5, 2.0, 3.6, hitM, 3.8, 1.0, .9), 'models');
   ringM = new THREE.Mesh(new THREE.TorusGeometry(.026, .004, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffffff })); ringM.visible = false; scene.add(ringM);
 }
 function loadKits() {
-  fetch(W + '/showcase/wargames.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
-    const kr = racks.find((r) => r.key === 'kits'); if (!d || !d.ok || !d.rows || !kr) return;
-    d.rows.slice(0, 12).forEach((r, i) => {   // three to a shelf, the newest at the top left
-      const c = { name: r.name, set: 'Warhammer', price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: 'warhammer', sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
-      const q = seed('kit' + c.name), bh = .31, bw = clamp(bh * c.ar, .2, .34), hgt = bw / c.ar, face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;
-      m.position.set(-.37 + (i % 3) * .37 + (q() - .5) * .02, [1.34, .96, .58, .2][Math.floor(i / 3)] + hgt / 2, .2 + (q() - .5) * .03); m.rotation.y = (q() - .5) * .16; m.userData = { card: c }; kr.g.add(m); kitMeshes.push(m);
-      cardTex(c, 256).then((t) => { face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
-    });
-    lights(S.eve);
-  }).catch(() => {});
+  racks.filter((r) => r.kind === 'kits').forEach((kr) => {
+    fetch(W + kr.feed, { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+      if (!d || !d.ok || !d.rows) return;
+      d.rows.slice(0, 12).forEach((r, i) => {   // three to a shelf, the newest at the top left
+        const c = { name: r.name, set: kr.set, price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: kr.key, sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
+        const q = seed('kit' + c.name), bh = .31, bw = clamp(bh * c.ar, .2, .34), hgt = bw / c.ar, face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;
+        m.position.set(-.37 + (i % 3) * .37 + (q() - .5) * .02, [1.34, .96, .58, .2][Math.floor(i / 3)] + hgt / 2, .2 + (q() - .5) * .03); m.rotation.y = (q() - .5) * .16; m.userData = { card: c }; kr.g.add(m); kr.meshes.push(m);
+        cardTex(c, 256).then((t) => { face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
+      });
+      lights(S.eve);
+    }).catch(() => {});
+  });
 }
 // The picker's feed: every paint on the site, one swatch per colour. The racks take the ones in stock.
 function loadPaints() {
@@ -492,7 +503,7 @@ function paintView(r, k) {
   return lookView(T.clone().addScaledVector(n, ph ? .5 : .62), T, cam.aspect < 1 ? 70 : 55);
 }
 const psel = { g: null, r: null, k: -1, it: null };
-function goRack(i) { const r = racks[i]; if (!r) return; if (S.hand) putBack(); closePaint(true); leanOff(); S.mode = 'rack'; S.rack = i; glide(rackView(r), 800); hint(r.kind === 'kits' ? 'Tap a box to pick it up' : r.list ? 'Tap a paint for its colour, price and closest matches' : ''); ui(); }
+function goRack(i) { const r = racks[i]; if (!r) return; S.side = r.side; if (S.hand) putBack(); closePaint(true); leanOff(); S.mode = 'rack'; S.rack = i; glide(rackView(r), 800); hint(r.kind === 'kits' ? 'Tap a box to pick it up' : r.list ? 'Tap a paint for its colour, price and closest matches' : ''); ui(); }
 function openPaint(g, it) {
   const r = g.rack, k = r ? r.shown.indexOf(g) : -1; psel.g = g; psel.r = r; psel.k = k;
   const its = g.items.filter((x) => x.a); psel.it = it && its.indexOf(it) > -1 ? it : its[0] || g.items[0];
@@ -984,12 +995,14 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+const modelsView = () => lookView(new V3(1.3, 1.5, cam.aspect < 1 ? 3.1 : 2.6), new V3(3.9, 1.05, .8), cam.aspect < 1 ? 80 : 58);
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? (S.side === 'right' ? modelsView() : hobbyView()) : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
   leanOff(); closePaint(true);
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
-  else if (mode === 'hobby') { S.mode = 'hobby'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
+  else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
+  else if (mode === 'models') { S.mode = 'hobby'; S.side = 'right'; glide(modelsView()); hint('Gunpla, model kits and blind boxes · tap a rack to look straight at it'); }
   else if (mode === 'sealed') { if (!sealed.rows.length) { hint('No booster boxes in stock for this game right now'); return; } S.mode = 'boxes'; S.focus = 'sealed'; S.pan = 0; glide(boxesView()); hint('The newest booster boxes in stock · tap one to pick it up'); }
   else if (mode === 'boxes') { S.focus = ''; if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
@@ -1000,7 +1013,7 @@ function go(mode) {
 function back() {
   if (S.hand) return putBack();
   if (psel.g) return closePaint();
-  if (S.mode === 'rack') return go('hobby');
+  if (S.mode === 'rack') return go(S.side === 'right' ? 'models' : 'hobby');
   if ($('#setsv').classList.contains('on')) { $('#setsv').classList.remove('on'); return; }
   if ($('#tillv').classList.contains('on')) return go('door');
   if (S.mode === 'crate' && cr && cr.kind === 'set') { go('boxes'); if (boxes.open) openBox(boxes.open.n); return; }
@@ -1010,10 +1023,10 @@ let hintT = 0;
 function hint(t) { const el = $('#hint'); clearTimeout(hintT); if (!t) { el.classList.add('gone'); return; } el.textContent = t; el.classList.remove('gone'); hintT = setTimeout(() => el.classList.add('gone'), 6000); }
 function ui() {
   document.body.dataset.mode = S.mode;
-  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' ? 'hobby' : S.mode;
+  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? (S.side === 'right' ? 'models' : 'hobby') : S.mode;
   if (S.mode === 'hobby' || S.mode === 'rack') {   // the four racks, and for a paint rack the way to the site's own colour picker
     const r = S.mode === 'rack' ? racks[S.rack] : null;
-    $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Corner</button>' : '') + racks.map((k, i) => '<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>').join('')
+    $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Back</button>' : '') + racks.map((k, i) => (k.side !== S.side ? '' : '<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>')).join('')
       + (r && r.link ? '<a href="https://exorgames.com/collections/' + r.link + '?view=paints"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Colour picker on the site' + (ON_STORE ? '' : ' ↗') + '</a>' : '');
   }
   $('#boxNote').textContent = st === 'sealed' ? 'tap a booster box to pick it up' : 'tap a white box for its sets · a booster box to pick it up';
@@ -1043,10 +1056,10 @@ function tap(x, y) {
   if (tw) return;
   if (S.mode === 'case') { const h = pick(caseCards.filter((m) => m.visible), x, y); if (h) { const u = h.object.userData; if (u.si !== S.shelf) goShelf(u.si); else lift(u.card, h.object); return; } }
   else if (S.mode === 'boxes') { const h = pick(boxMeshes.concat(sealMeshes), x, y); if (h) return h.object.userData.card ? lift(h.object.userData.card, null) : openBox(h.object.userData.n); }
-  else if (S.mode === 'hobby') { const h = pick(racks.map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
+  else if (S.mode === 'hobby') { const h = pick(racks.filter((r) => r.side === S.side).map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
   else if (S.mode === 'rack') {
     const r = racks[S.rack];
-    if (r.kind === 'kits') { const h = pick(kitMeshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
+    if (r.kind === 'kits') { const h = pick(r.meshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
     else { const k = potAt(r, x, y); if (k > -1) return openPaint(r.shown[k]); if (psel.g) return closePaint(); }
     const o = pick(racks.map((q) => q.hitM), x, y); if (o && o.object.userData.rack !== S.rack) return goRack(o.object.userData.rack);
     return;
@@ -1175,7 +1188,7 @@ document.addEventListener('click', (e) => {
   else if (b.hasAttribute('data-pmatch')) { const g = paints.all[Number(b.getAttribute('data-pmatch'))]; if (g) openPaint(g); }
   else if (b.id === 'pbuy') buyPaint(b);
   else if (b.id === 'paintX') closePaint();
-  else if (b.id === 'rackBack') go('hobby');
+  else if (b.id === 'rackBack') go(S.side === 'right' ? 'models' : 'hobby');
   else if (b.hasAttribute('data-drop')) { S.pile.splice(Number(b.getAttribute('data-drop')), 1); pile(); showTill(); }
   else if (b.id === 'buy') buy(b);
   else if (b.id === 'x') putBack();

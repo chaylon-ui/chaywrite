@@ -275,3 +275,53 @@ export async function serveWargames(request, env, ctx, url, opts) {
   if (out.ok && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 }
+
+/* ---------------- Gunpla, model kits and blind boxes on the 3D shop's right wall ----------------
+   Owner, 2026-11-10 (the right wall circled): "Here can we put gunpla rack, models rack and another
+   rack with blind boxes". GET /showcase/shelf.json?kind=gunpla|models|blind answers the newest
+   products of that type in stock, with a picture; same row shape as sealed.json and wargames.json;
+   cached ten minutes. */
+export const SHELF_KINDS = {
+  gunpla: 'product_type:"Gunpla"',
+  models: 'product_type:"Plastic Model Kit"',
+  blind: 'product_type:"Blind Box"',
+};
+export const SHELF_MAX = 12;
+export function shelfOf(products, now) {
+  const out = [];
+  for (const p of products || []) {
+    const title = String((p && p.title) || ""); if (!title) continue;
+    const pre = preorderDate(title);
+    if (pre !== null && !(pre <= now)) continue;
+    const v = ((p.variants && p.variants.nodes) || []).find((x) => x && +x.inventoryQuantity > 0 && +x.price > 0 && x.availableForSale !== false);
+    const im = (((p.media && p.media.nodes) || [])[0] || {}).preview; const pic = im && im.image;
+    if (!v || !pic || !pic.url) continue;
+    out.push({
+      name: sealedName(title), handle: String(p.handle || ""), price: String(v.price), image: pic.url,
+      ar: pic.width > 0 && pic.height > 0 ? Math.round((pic.width / pic.height) * 100) / 100 : 1,
+      variantId: String(v.id || "").replace(/^.*\//, "") || null, qty: +v.inventoryQuantity, added: String(p.createdAt || "").slice(0, 10),
+    });
+    if (out.length >= SHELF_MAX) break;
+  }
+  return out;
+}
+export async function serveShelf(request, env, ctx, url, opts) {
+  const o = opts || {};
+  const kind = String(url.searchParams.get("kind") || "").toLowerCase();
+  const type = SHELF_KINDS[kind];
+  if (!type) return json({ ok: false, error: "kind must be one of " + Object.keys(SHELF_KINDS).join(", ") }, 400);
+  if (!o.gqlFn && (!env || !env.SHOPIFY_ADMIN_TOKEN)) return json({ ok: false, error: "not configured" }, 503);
+  const cache = o.gqlFn ? null : caches.default;
+  const key = new Request(new URL("/showcase/shelf.json?kind=" + kind, url).toString());
+  const hit = cache && await cache.match(key);
+  if (hit) return hit;
+  let out;
+  try {
+    const q = "status:active AND published_status:published AND inventory_total:>0 AND " + type;
+    const r = o.gqlFn ? await o.gqlFn(SEALED_Q, { q }) : await adminGql({ env, fetch: (u, i) => fetch(u, i) }, SEALED_Q, { q });
+    out = { ok: true, kind, rows: shelfOf(r.data && r.data.products && r.data.products.nodes, o.now || Date.now()) };
+  } catch (e) { out = { ok: false, kind, error: String((e && e.message) || e).slice(0, 160) }; }
+  const res = json(out, 200, out.ok ? CACHED(600) : NO_STORE);
+  if (out.ok && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
