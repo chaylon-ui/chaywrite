@@ -387,7 +387,7 @@ function arcDraw() {
   arc.tex.needsUpdate = true;
 }
 // straight at the screen, as close as it fits
-function arcadeView() { const fov = 50, d = Math.max(.56, .29 / hTan(fov)); return lookView(new V3(3.448 - d, 1.3, -.1), new V3(3.448, 1.3, -.1), fov); }
+const arcadeView = () => cabView(-.1);
 function arcTap() { if (arc.state === 'attract' || (arc.state === 'over' && arc.t - arc.overAt > .6)) { arcNew(); arcBlip(660, .2, .03); hint(''); } else if (arc.state === 'play' && arc.fire < .25) arc.fire = 0; }
 function arcRun() {
   arc.state = 'attract'; arc.keys = {}; arc.last = 0; const id = arc.id = (arc.id || 0) + 1;
@@ -397,9 +397,107 @@ function arcStop() { if (arc.state === 'attract' && !arc.id) return; arc.id = (a
 document.addEventListener('keydown', (e) => { if (S.mode !== 'arcade') return; if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === ' ') { arc.keys[e.key] = true; e.preventDefault(); if (e.key === ' ' && arc.state !== 'play') arcTap(); } else if (e.key === 'Enter') arcTap(); });
 document.addEventListener('keyup', (e) => { delete arc.keys[e.key]; });
 
+/* ---------- a second cabinet and the TV (owner, 2026-11-10) ----------
+   "Put another arcade that is Tetris. Tv on wall make it clickable and it play an ad for exor to sell us
+   cards in a 1990s infomercial way".
+   BOX STACK: a falling-block puzzle of that kind with its own name, pieces and look - card boxes of two to
+   four drop into a well eight wide, a full row is sold off the shelf. Drag moves the piece, a tap turns it,
+   a swipe down drops it; arrows, up and space on a keyboard.
+   The TV: tap it and a made-up 1990s infomercial for selling your cards to the shop plays on a loop, with a
+   button under it to the real buylist page. It promises nothing the shop has not said: we buy cards, singles
+   or bulk, cash or store credit, build a list online. */
+const stk = { W: 8, H: 14, C: 12, state: 'attract', grid: [], p: null, nx: null, score: 0, lines: 0, hi: 0, t: 0, fall: 0, keys: {}, flash: 0 };
+stk.cv = document.createElement('canvas'); stk.cv.width = 480; stk.cv.height = 384; stk.g = stk.cv.getContext('2d');
+stk.tex = keep(new THREE.CanvasTexture(stk.cv)); stk.tex.colorSpace = THREE.SRGBColorSpace; stk.tex.magFilter = THREE.NearestFilter;
+try { stk.hi = Number(localStorage.getItem('xgBoxStackHi')) || 0; } catch (x) {}
+const STK_P = [[[0, 0], [1, 0]], [[0, 0], [1, 0], [2, 0]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 0], [0, 1], [1, 1]], [[0, 0], [1, 0], [2, 0], [3, 0]], [[0, 0], [1, 0], [2, 0], [0, 1]], [[0, 0], [1, 0], [2, 0], [1, 1]], [[1, 0], [2, 0], [0, 1], [1, 1]]];
+const STK_C = ['#ffd23a', '#19b5a5', '#ff4f9a', '#7a3fc4', '#3f8fe0', '#ff7a2a', '#4fd65a', '#d62c28'];
+const stkPiece = () => { const k = Math.floor(Math.random() * STK_P.length); return { k, cells: STK_P[k].map((c) => c.slice()), x: 3, y: 0 }; };
+const stkFits = (cells, x, y) => cells.every((c) => { const cx = x + c[0], cy = y + c[1]; return cx >= 0 && cx < stk.W && cy < stk.H && (cy < 0 || !stk.grid[cy][cx]); });
+function stkNew() { stk.grid = Array.from({ length: stk.H }, () => Array(stk.W).fill(0)); stk.score = 0; stk.lines = 0; stk.fall = 0; stk.state = 'play'; stk.nx = stkPiece(); stkSpawn(); }
+function stkSpawn() { stk.p = stk.nx; stk.nx = stkPiece(); stk.p.x = 3; stk.p.y = 0; if (!stkFits(stk.p.cells, stk.p.x, stk.p.y)) { stk.state = 'over'; stk.overAt = stk.t; if (stk.score > stk.hi) { stk.hi = stk.score; try { localStorage.setItem('xgBoxStackHi', String(stk.hi)); } catch (x) {} } arcBlip(110, .4, .05); } }
+function stkMove(dx) { if (stk.state !== 'play') return false; if (stkFits(stk.p.cells, stk.p.x + dx, stk.p.y)) { stk.p.x += dx; return true; } return false; }
+function stkTurn() {
+  if (stk.state !== 'play') return; let c = stk.p.cells.map((q) => [-q[1], q[0]]); const mx = Math.min.apply(null, c.map((q) => q[0])), my = Math.min.apply(null, c.map((q) => q[1])); c = c.map((q) => [q[0] - mx, q[1] - my]);
+  for (const kx of [0, -1, 1, -2]) if (stkFits(c, stk.p.x + kx, stk.p.y)) { stk.p.cells = c; stk.p.x += kx; arcBlip(700, .04, .012); return; }
+}
+function stkLock() {
+  stk.p.cells.forEach((c) => { const y = stk.p.y + c[1]; if (y >= 0) stk.grid[y][stk.p.x + c[0]] = stk.p.k + 1; });
+  const keepRows = stk.grid.filter((r) => r.some((v) => !v)), n = stk.H - keepRows.length, lvl = 1 + Math.floor(stk.lines / 8);
+  if (n) { stk.grid = Array.from({ length: n }, () => Array(stk.W).fill(0)).concat(keepRows); stk.lines += n; stk.score += [0, 100, 300, 500, 800][n] * lvl; stk.flash = .25; arcBlip(520 + n * 180, .18, .035); } else arcBlip(160, .05, .02);
+  stkSpawn();
+}
+function stkDown(hard) { if (stk.state !== 'play') return; if (hard) { while (stkFits(stk.p.cells, stk.p.x, stk.p.y + 1)) { stk.p.y++; stk.score += 1; } stkLock(); stk.fall = 0; return; } if (stkFits(stk.p.cells, stk.p.x, stk.p.y + 1)) stk.p.y++; else stkLock(); stk.fall = 0; }
+function stkStep(dt) { stk.t += dt; stk.flash = Math.max(0, stk.flash - dt); if (stk.state !== 'play') return; stk.fall += dt * (stk.keys.ArrowDown ? 8 : 1); if (stk.fall >= Math.max(.1, .75 - (Math.floor(stk.lines / 8)) * .07)) stkDown(false); }
+function stkBox(g, x, y, k, s) { s = s || 12; g.fillStyle = '#efe7d2'; g.fillRect(x, y, s - 1, s - 1); g.fillStyle = STK_C[k]; g.fillRect(x, y + Math.round(s * .25), s - 1, Math.round(s * .42)); g.fillStyle = '#00000030'; g.fillRect(x, y + s - 2, s - 1, 1); g.fillRect(x + s - 2, y, 1, s - 1); }
+function stkDraw() {
+  const g = stk.g, C = stk.C, X0 = 24, Y0 = 16; g.setTransform(2, 0, 0, 2, 0, 0); g.imageSmoothingEnabled = false;
+  g.fillStyle = '#10182c'; g.fillRect(0, 0, 240, 192); g.fillStyle = '#060a14'; g.fillRect(X0, Y0, stk.W * C, stk.H * C); g.strokeStyle = '#19b5a5'; g.lineWidth = 2; g.strokeRect(X0 - 2, Y0 - 2, stk.W * C + 4, stk.H * C + 4);
+  g.fillStyle = '#0d1424'; for (let x = 1; x < stk.W; x++) g.fillRect(X0 + x * C - .5, Y0, 1, stk.H * C);
+  const f = Math.floor(stk.t * 2.5) % 2; g.textBaseline = 'top'; g.textAlign = 'left';
+  if (stk.state === 'attract') { const r = seed('stack'); for (let y = 8; y < stk.H; y++) for (let x = 0; x < stk.W; x++) if (r() < .25 + (y - 8) * .11) stkBox(g, X0 + x * C, Y0 + y * C, Math.floor(r() * 8)); STK_P[6].forEach((c) => stkBox(g, X0 + (2 + c[0]) * C, Y0 + (2 + Math.floor(stk.t * 1.5) % 5 + c[1]) * C, 6)); }
+  else { stk.grid.forEach((row, y) => row.forEach((v, x) => { if (v) stkBox(g, X0 + x * C, Y0 + y * C, v - 1); })); if (stk.state === 'play' && stk.p) { let gy = stk.p.y; while (stkFits(stk.p.cells, stk.p.x, gy + 1)) gy++; g.strokeStyle = '#ffffff40'; g.lineWidth = 1; stk.p.cells.forEach((c) => g.strokeRect(X0 + (stk.p.x + c[0]) * C + .5, Y0 + (gy + c[1]) * C + .5, C - 2, C - 2)); stk.p.cells.forEach((c) => stkBox(g, X0 + (stk.p.x + c[0]) * C, Y0 + (stk.p.y + c[1]) * C, stk.p.k)); } }
+  if (stk.flash) { g.fillStyle = 'rgba(255,255,255,' + (stk.flash * 2).toFixed(2) + ')'; g.fillRect(X0, Y0, stk.W * C, stk.H * C); }
+  g.font = '900 17px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('BOX', 137, 15); g.fillText('STACK', 137, 33); g.fillStyle = '#ffd23a'; g.fillText('BOX', 136, 14); g.fillText('STACK', 136, 32);
+  g.font = '700 9px "Cutive Mono", monospace'; g.fillStyle = '#7dfff0'; g.fillText('SCORE', 136, 62); g.fillText('ROWS', 136, 86); g.fillText('BEST', 136, 110); g.fillText('NEXT', 136, 134);
+  g.fillStyle = '#fff'; g.fillText(String(stk.score).padStart(6, '0'), 136, 72); g.fillText(String(stk.lines), 136, 96); g.fillText(String(Math.max(stk.hi, stk.score)).padStart(6, '0'), 136, 120);
+  if (stk.nx && stk.state !== 'attract') stk.nx.cells.forEach((c) => stkBox(g, 138 + c[0] * 10, 146 + c[1] * 10, stk.nx.k, 10));
+  g.textAlign = 'center';
+  if (stk.state === 'attract') { g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText(S.mode === 'stack' ? 'TAP TO START' : 'INSERT COIN', X0 + stk.W * C / 2, 76); }
+  if (stk.state === 'over') { g.fillStyle = '#000000c0'; g.fillRect(X0, 70, stk.W * C, 46); g.font = '900 14px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('GAME OVER', X0 + stk.W * C / 2, 76); g.font = '700 8px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText('TAP TO PLAY AGAIN', X0 + stk.W * C / 2, 98); }
+  stk.tex.needsUpdate = true;
+}
+const cabView = (z) => { const fov = 50, d = Math.max(.56, .29 / hTan(fov)); return lookView(new V3(3.448 - d, 1.3, z), new V3(3.448, 1.3, z), fov); };
+function stkTap() { if (stk.state === 'attract' || (stk.state === 'over' && stk.t - stk.overAt > .6)) { stkNew(); arcBlip(660, .2, .03); hint(''); } else stkTurn(); }
+function stkRun() { stk.state = 'attract'; stk.keys = {}; stk.last = 0; const id = stk.id = (stk.id || 0) + 1; anims.push((now) => { if (S.mode !== 'stack' || stk.id !== id) return false; const dt = stk.last ? Math.min(.05, (now - stk.last) / 1000) : 0; stk.last = now; stkStep(dt); stkDraw(); return true; }); kick(); }
+function stkStop() { stk.id = (stk.id || 0) + 1; stk.state = 'attract'; stk.keys = {}; stkDraw(); kick(); }
+document.addEventListener('keydown', (e) => { if (S.mode !== 'stack') return; const k = e.key; if (k === 'ArrowLeft') stkMove(-1); else if (k === 'ArrowRight') stkMove(1); else if (k === 'ArrowUp') stkTap(); else if (k === 'ArrowDown') stk.keys.ArrowDown = true; else if (k === ' ' || k === 'Enter') { if (stk.state === 'play') stkDown(true); else stkTap(); } else return; e.preventDefault(); });
+document.addEventListener('keyup', (e) => { delete stk.keys[e.key]; });
+
+// ---- the TV's infomercial ----
+const tv = { t: 0, logo: null, scene: -1 };
+tv.cv = document.createElement('canvas'); tv.cv.width = 512; tv.cv.height = 392; tv.g = tv.cv.getContext('2d');
+tv.tex = keep(new THREE.CanvasTexture(tv.cv)); tv.tex.colorSpace = THREE.SRGBColorSpace;
+function tvDraw(idle) {
+  const g = tv.g, W_ = 256, H_ = 196, L = 27, t = idle ? 7.6 : tv.t % L; g.setTransform(2, 0, 0, 2, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.filter = 'none';
+  const big = (txt, y, px, fill, stroke, rot) => { g.save(); g.translate(W_ / 2, y); g.rotate(rot || 0); g.font = 'italic 900 ' + px + 'px Inter, sans-serif'; g.lineJoin = 'round'; g.lineWidth = px / 5; g.strokeStyle = stroke || '#111'; g.strokeText(txt, 0, 0); g.fillStyle = fill; g.fillText(txt, 0, 0); g.restore(); };
+  const burst = (cx, cy, r1, r2, n, col, a0) => { g.fillStyle = col; g.beginPath(); for (let i = 0; i < n * 2; i++) { const a = (a0 || 0) + i / (n * 2) * PI * 2, r = i % 2 ? r1 : r2; g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); } g.fill(); };
+  const rays = (c1, c2) => { g.fillStyle = c1; g.fillRect(0, 0, W_, H_); g.fillStyle = c2; for (let i = 0; i < 12; i++) { const a = t * .5 + i / 12 * PI * 2; g.beginPath(); g.moveTo(W_ / 2, H_ / 2); g.lineTo(W_ / 2 + Math.cos(a) * 300, H_ / 2 + Math.sin(a) * 300); g.lineTo(W_ / 2 + Math.cos(a + .26) * 300, H_ / 2 + Math.sin(a + .26) * 300); g.fill(); } };
+  const cardAt = (x, y, rot, s) => { g.save(); g.translate(x, y); g.rotate(rot); g.fillStyle = '#f4efe0'; g.fillRect(-7 * s, -10 * s, 14 * s, 20 * s); g.fillStyle = '#7a3fc4'; g.fillRect(-5 * s, -8 * s, 10 * s, 9 * s); g.fillStyle = '#999'; g.fillRect(-5 * s, 3 * s, 10 * s, 1.5 * s); g.fillRect(-5 * s, 6 * s, 7 * s, 1.5 * s); g.restore(); };
+  let sc = 0;
+  if (t < 4) {   // the problem, in black and white
+    g.fillStyle = '#8a8a8a'; g.fillRect(0, 0, W_, H_); const sh = Math.sin(t * 30) * 1.5;
+    g.fillStyle = '#5a5a5a'; g.fillRect(84 + sh, 110, 88, 46); g.fillStyle = '#444'; g.fillRect(80 + sh, 104, 96, 10); for (let i = 0; i < 9; i++) cardAt(92 + i * 9 + sh, 100 - (i % 3) * 6, (i - 4) * .22, 1);
+    g.fillStyle = '#222'; g.beginPath(); g.arc(208, 78, 9, 0, PI * 2); g.fill(); g.fillRect(205, 87, 6, 34); g.save(); g.strokeStyle = '#222'; g.lineWidth = 4; g.beginPath(); g.moveTo(208, 96); g.lineTo(192, 80 + sh); g.moveTo(208, 96); g.lineTo(226, 80 - sh); g.moveTo(208, 121); g.lineTo(200, 150); g.moveTo(208, 121); g.lineTo(217, 150); g.stroke(); g.restore();
+    big('ARE YOUR OLD CARDS', 26, 17, '#fff', '#222'); big('STUCK IN A SHOEBOX?', 46, 17, '#fff', '#222');
+    if (t > 2.4) { g.strokeStyle = '#d62c28'; g.lineWidth = 9; g.beginPath(); g.moveTo(70, 90); g.lineTo(186, 166); g.moveTo(186, 90); g.lineTo(70, 166); g.stroke(); }
+  } else if (t < 6.5) { sc = 1; g.fillStyle = '#777'; g.fillRect(0, 0, W_, H_); const z = 1 + Math.min(1, (t - 4) / 2.5) * .25; g.save(); g.translate(W_ / 2, H_ / 2); g.scale(z, z); g.translate(-W_ / 2, -H_ / 2); big("THERE'S GOT TO BE", 76, 21, '#fff', '#111', -.04); big('A BETTER WAY!', 106, 26, '#ffd23a', '#111', -.04); g.restore(); }
+  else if (t < 10.5) { sc = 2; rays('#ff4f9a', '#ffd23a'); const k = Math.min(1, (t - 6.5) / .5), s = .2 + k * .8;
+    if (tv.logo) { const w = 150 * s, h = w * tv.logo.height / tv.logo.width; g.drawImage(tv.logo, W_ / 2 - w / 2, 62 - h / 2, w, h); } else big('EXOR GAMES', 62, 30 * s, '#d62c28', '#fff');
+    if (t > 7.3) { burst(W_ / 2, 138, 44 + Math.sin(t * 8) * 2, 58 + Math.sin(t * 8) * 2, 14, '#d62c28', t); big('WE BUY', 128, 20, '#fff', '#111'); big('CARDS!', 150, 22, '#ffd23a', '#111'); } }
+  else if (t < 15) { sc = 3; g.fillStyle = '#19b5a5'; g.fillRect(0, 0, W_, H_); g.fillStyle = '#0e8a7d'; for (let i = -6; i < 12; i++) g.fillRect(i * 30 + (t * 20) % 30, 0, 12, H_);
+    big('WE TAKE...', 24, 20, '#fff', '#111'); ['SINGLES!', 'BULK!', 'BUILD A LIST ONLINE!'].forEach((txt, i) => { const k = clamp((t - 11 - i * 1.1) / .35, 0, 1); if (!k) return; const x = lerp(-140, 0, 1 - Math.pow(1 - k, 3)); g.save(); g.translate(x, 0); g.fillStyle = '#ffd23a'; g.fillRect(28, 50 + i * 42, 200, 30); g.fillStyle = '#111'; g.font = 'italic 900 ' + (i === 2 ? 15 : 20) + 'px Inter, sans-serif'; g.textAlign = 'left'; g.fillText('✔ ' + txt, 38, 66 + i * 42); g.textAlign = 'center'; g.restore(); }); }
+  else if (t < 19) { sc = 4; const fl = Math.floor(t * 3) % 2; g.fillStyle = '#2f9a44'; g.fillRect(0, 0, W_ / 2, H_); g.fillStyle = '#7a3fc4'; g.fillRect(W_ / 2, 0, W_ / 2, H_);
+    for (let i = 0; i < 9; i++) { const y = ((t * 60 + i * 47) % 240) - 20; g.fillStyle = '#c9f0c0'; g.fillRect(8 + (i * 37) % 100, y, 22, 11); g.fillStyle = '#2f9a44'; g.fillRect(16 + (i * 37) % 100, y + 3, 6, 5); cardAt(140 + (i * 41) % 100, ((t * 50 + i * 61) % 240) - 20, i + t, .8); }
+    g.font = 'italic 900 30px Inter, sans-serif'; g.lineWidth = 6; g.strokeStyle = '#111'; g.strokeText('CASH', 64, 90); g.fillStyle = fl ? '#ffd23a' : '#fff'; g.fillText('CASH', 64, 90); g.font = 'italic 900 19px Inter, sans-serif'; g.strokeText('STORE', 192, 80); g.strokeText('CREDIT', 192, 102); g.fillStyle = fl ? '#fff' : '#ffd23a'; g.fillText('STORE', 192, 80); g.fillText('CREDIT', 192, 102);
+    burst(W_ / 2, 92, 15, 22, 10, '#d62c28', t); g.font = '900 14px Inter, sans-serif'; g.fillStyle = '#fff'; g.fillText('OR', W_ / 2, 93); big('YOUR CALL!', 168, 20, '#fff', '#111'); }
+  else if (t < 22.5) { sc = 5; rays('#1524c8', '#3f5ff0'); const b = 1 + Math.sin(t * 10) * .05; g.save(); g.translate(W_ / 2, 0); g.scale(b, b); g.translate(-W_ / 2, 0); big('BUT WAIT —', 50, 26, '#fff', '#111', -.05); big("THERE'S MORE!", 84, 28, '#ffd23a', '#111', -.05); g.restore(); if (t > 20.3) { g.font = '18px "Permanent Marker", cursive'; g.fillStyle = '#fff'; g.fillText('...cards. We also sell cards.', W_ / 2, 136); g.fillText('Look around!', W_ / 2, 160); } }
+  else { sc = 6; rays('#d62c28', '#ff7a2a'); big("DON'T DELAY!", 34, 26, '#fff', '#111'); big('SELL TODAY!', 66, 28, '#ffd23a', '#111'); g.fillStyle = '#111'; g.fillRect(20, 92, W_ - 40, 40); g.font = '900 22px Inter, sans-serif'; g.fillStyle = Math.floor(t * 4) % 2 ? '#7dfff0' : '#fff'; g.fillText('EXORGAMES.COM', W_ / 2, 113); g.font = '700 10px Inter, sans-serif'; g.fillStyle = '#fff'; g.fillText('or bring them to the counter', W_ / 2, 146); g.font = '600 7px Inter, sans-serif'; g.fillStyle = '#ffffffc0'; g.fillText('Operators are not standing by. It is a website. Shoebox not included.', W_ / 2, 180); }
+  // the tape: scan lines, a band of tracking noise, the counter
+  g.fillStyle = 'rgba(0,0,0,.16)'; for (let y = 0; y < H_; y += 3) g.fillRect(0, y, W_, 1);
+  const by = (tv.t * 37) % (H_ + 40) - 20; g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(0, by, W_, 4); g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(0, by + 7, W_, 2);
+  g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = '#fff'; g.textAlign = 'left'; if (idle || tv.t < 2.5) g.fillText('PLAY ▶', 8, 12); g.textAlign = 'right'; const s = Math.floor(idle ? 0 : tv.t); g.fillText('0:' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'), W_ - 8, H_ - 10);
+  if (idle) { g.textAlign = 'center'; g.fillStyle = '#000000a0'; g.fillRect(0, H_ - 44, W_, 22); g.fillStyle = '#fff'; g.font = '700 11px "Cutive Mono", monospace'; g.fillText('▶ TAP THE TV TO WATCH', W_ / 2, H_ - 33); }
+  if (!idle && sc !== tv.scene) { tv.scene = sc; arcBlip([330, 392, 523, 440, 587, 659, 784][sc], .16, .02); }
+  tv.tex.needsUpdate = true;
+}
+function tvView() { const fov = 50, d = Math.max(.6, .3 / hTan(fov)); return lookView(new V3(3.321 - .7071 * d, 2.19, -2.923 + .7071 * d), new V3(3.321, 2.19, -2.923), fov); }
+function tvRun() { tv.t = 0; tv.scene = -1; tv.last = 0; const id = tv.id = (tv.id || 0) + 1; anims.push((now) => { if (S.mode !== 'tv' || tv.id !== id) return false; const dt = tv.last ? Math.min(.1, (now - tv.last) / 1000) : 0; tv.last = now; tv.t += dt; tvDraw(false); return true; }); kick(); }
+function tvStop() { tv.id = (tv.id || 0) + 1; tvDraw(true); kick(); }
+
 /* ---------- the 1990s lying around (owner, 2026-11-10) ----------
    "I need it to be much more 1990s looking. More ambient items laying around. Stuff from the 1990s."
-   Nothing here is stock or a tap target: an arcade cabinet and a gumball machine on the right wall, a TV with
+   Nothing here is stock; the cabinets and the TV are tap targets (see above): two arcade cabinets and a gumball machine on the right wall, a TV with
    a tape playing up in the corner, a console and bean bags, a games table with a pizza box in the middle of
    the floor, a boom box and long boxes on top of the graded cabinet, a lava lamp and milk caps on the
    counter, posters, a wall clock, and a squiggle border round the top of the walls. All made up: no real
@@ -426,29 +524,35 @@ function buildNineties() {
   const fr = (len) => basic({ map: ctex(1024, 96, (g, w, h) => memphis(g, w, h, '#f4efe0', 46, 'frieze'), [Math.max(1, Math.round(len / 2.4)), 1]) });
   pl(8, .2, fr(8), 0, 2.78, -3.492, 0, G); pl(8, .2, fr(8), 0, 2.78, 3.492, PI, G); pl(7, .2, fr(7), -3.992, 2.78, 0, PI / 2, G); pl(4.7, .2, fr(4.7), 3.992, 2.78, -1.15, -PI / 2, G);
 
-  // the arcade cabinet
-  const A = grp(3.6, 0, -.1, -PI / 2), cab = lam({ color: 0x1b1640 }), blk = lam({ color: 0x111114 });
-  bx(.66, .92, .7, cab, 0, .46, 0, A); bx(.66, .8, .5, cab, 0, 1.32, -.1, A); bx(.66, .2, .58, cab, 0, 1.82, -.06, A);
-  const deck = bx(.66, .05, .3, blk, 0, .95, .3, A); deck.rotation.x = .12;
-  const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#1b1640', 26, 'cab'); g.fillStyle = YEL; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText('SWORD STORM', 0, 18); g.restore(); }) });
-  pl(.7, 1.9, side, -.332, .96, 0, -PI / 2, A); pl(.7, 1.9, side, .332, .96, 0, PI / 2, A);
-  pl(.5, .4, basic({ map: arc.tex }), 0, 1.3, .152, 0, A); arcDraw();   // the game itself: see the arcade section
-  hit(bx(.8, 1.95, .8, hitM, 3.6, .98, -.1), 'arcade');
-  pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, PURP); gr.addColorStop(1, PINK); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 58px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText('SWORD STORM', w / 2, h / 2 + 3); g.fillText('SWORD STORM', w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
-  cyl(.008, .008, .07, blk, -.16, 1.0, .3, A); const knob = new THREE.Mesh(new THREE.SphereGeometry(.022, 12, 8), lam({ color: 0xd62c28 })); knob.position.set(-.16, 1.045, .3); A.add(knob);
-  [[.02, 0xffd23a], [.09, 0x19b5a5], [.16, 0xff4f9a]].forEach((b) => cyl(.018, .018, .012, lam({ color: b[1] }), b[0], .985, .3, A));
-  pl(.2, .26, lam({ map: ctex(100, 130, (g, w, h) => { g.fillStyle = '#26262b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#6a6a72'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12); g.fillStyle = '#ff8a2a'; g.fillRect(34, 40, 32, 22); g.fillStyle = '#111'; g.font = '700 13px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('25¢', 50, 56); g.fillRect(44, 84, 12, 26); }) }), 0, .5, .352, 0, A);
+  // the arcade cabinets: the game on each screen is drawn by its own section above
+  const blk = lam({ color: 0x111114 });
+  const cabinet = (z, name, body, c1, c2, tex, actName) => {
+    const A = grp(3.6, 0, z, -PI / 2), cab = lam({ color: body });
+    bx(.66, .92, .7, cab, 0, .46, 0, A); bx(.66, .8, .5, cab, 0, 1.32, -.1, A); bx(.66, .2, .58, cab, 0, 1.82, -.06, A);
+    const deck = bx(.66, .05, .3, blk, 0, .95, .3, A); deck.rotation.x = .12;
+    const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#' + body.toString(16).padStart(6, '0'), 26, 'cab' + name); g.fillStyle = YEL; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText(name, 0, 18); g.restore(); }) });
+    pl(.7, 1.9, side, -.332, .96, 0, -PI / 2, A); pl(.7, 1.9, side, .332, .96, 0, PI / 2, A);
+    pl(.5, .4, basic({ map: tex }), 0, 1.3, .152, 0, A);
+    hit(bx(.8, 1.95, .8, hitM, 3.6, .98, z), actName);
+    pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, c1); gr.addColorStop(1, c2); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 58px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText(name, w / 2, h / 2 + 3); g.fillText(name, w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
+    cyl(.008, .008, .07, blk, -.16, 1.0, .3, A); const knob = new THREE.Mesh(new THREE.SphereGeometry(.022, 12, 8), lam({ color: 0xd62c28 })); knob.position.set(-.16, 1.045, .3); A.add(knob);
+    [[.02, 0xffd23a], [.09, 0x19b5a5], [.16, 0xff4f9a]].forEach((b) => cyl(.018, .018, .012, lam({ color: b[1] }), b[0], .985, .3, A));
+    pl(.2, .26, lam({ map: ctex(100, 130, (g, w, h) => { g.fillStyle = '#26262b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#6a6a72'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12); g.fillStyle = '#ff8a2a'; g.fillRect(34, 40, 32, 22); g.fillStyle = '#111'; g.font = '700 13px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('25¢', 50, 56); g.fillRect(44, 84, 12, 26); }) }), 0, .5, .352, 0, A);
+  };
+  cabinet(-.1, 'SWORD STORM', 0x1b1640, PURP, PINK, arc.tex, 'arcade'); arcDraw();
+  cabinet(.62, 'BOX STACK', 0x0e3b46, TEAL, '#3f8fe0', stk.tex, 'stack'); stkDraw();
 
   // the gumball machine
   const red = lam({ color: 0xd62c28 }), chrome = lam({ color: 0xc9ccd2 });
-  cyl(.13, .15, .06, red, 3.62, .03, .82); cyl(.022, .022, .72, chrome, 3.62, .42, .82); cyl(.11, .1, .16, red, 3.62, .86, .82);
-  const gum = new THREE.Mesh(new THREE.SphereGeometry(.15, 20, 14), basic({ map: ctex(256, 128, (g, w, h) => { g.fillStyle = '#e9f2f5'; g.fillRect(0, 0, w, h); const r = seed('gum'); for (let i = 0; i < 260; i++) { g.fillStyle = [PINK, TEAL, YEL, PURP, '#ff7a2a', '#3f8fe0', '#fff'][Math.floor(r() * 7)]; g.beginPath(); g.arc(r() * w, h * .3 + r() * h * .7, 7, 0, PI * 2); g.fill(); } }) })); gum.position.set(3.62, 1.06, .82); G.add(gum);
-  cyl(.05, .09, .05, red, 3.62, 1.215, .82);
+  cyl(.13, .15, .06, red, 3.62, .03, 1.07); cyl(.022, .022, .72, chrome, 3.62, .42, 1.07); cyl(.11, .1, .16, red, 3.62, .86, 1.07);
+  const gum = new THREE.Mesh(new THREE.SphereGeometry(.15, 20, 14), basic({ map: ctex(256, 128, (g, w, h) => { g.fillStyle = '#e9f2f5'; g.fillRect(0, 0, w, h); const r = seed('gum'); for (let i = 0; i < 260; i++) { g.fillStyle = [PINK, TEAL, YEL, PURP, '#ff7a2a', '#3f8fe0', '#fff'][Math.floor(r() * 7)]; g.beginPath(); g.arc(r() * w, h * .3 + r() * h * .7, 7, 0, PI * 2); g.fill(); } }) })); gum.position.set(3.62, 1.06, 1.07); G.add(gum);
+  cyl(.05, .09, .05, red, 3.62, 1.215, 1.07);
 
   // a TV up in the corner with a tape playing
   const T = grp(3.52, 2.18, -3.08, -PI / 4), tvM = lam({ color: 0x2c2c30 });
   bx(.62, .5, .5, tvM, 0, 0, 0, T); bx(.5, .04, .4, blk, 0, -.27, 0, T); bx(.05, .05, .5, blk, 0, -.29, -.3, T);
-  pl(.48, .37, basic({ map: ctex(256, 196, (g, w, h) => { g.fillStyle = '#1524c8'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = '700 22px "Cutive Mono", monospace'; g.textAlign = 'left'; g.fillText('PLAY ▶', 14, 30); g.fillText('SP', 14, h - 16); g.textAlign = 'right'; g.fillText('0:13:37', w - 14, h - 16); g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(0, 120, w, 5); g.fillRect(0, 131, w, 2); scan(g, w, h); }) }), -.03, .01, .252, 0, T);
+  pl(.48, .37, basic({ map: tv.tex }), -.03, .01, .252, 0, T); tvDraw(true); hit(bx(.75, .62, .75, hitM, 3.5, 2.18, -3.05), 'tv');
+  loadImg(img(LOGO, 700)).then((im) => { tv.logo = im; if (S.mode !== 'tv') { tvDraw(true); kick(); } }).catch(() => {});
 
   // a console on the floor in front of its own TV, and two bean bags
   bx(.5, .42, .8, darkWoodM, 3.72, .21, -2.3, G); const tv2 = grp(3.7, .42, -2.3, -PI / 2);
@@ -1465,9 +1569,9 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(.62) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
-  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop();
+  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'tv') tvStop();
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
@@ -1478,6 +1582,8 @@ function go(mode) {
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
   else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hx = aCx(S.aisle) - hallLead() - hall.x0 - .5; else if (S.mode !== 'aisles') S.hx = 0; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the hall · tap an aisle to walk in' : 'Drag or scroll to walk the hall · click an aisle to walk in'); }
   else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move the sword · it throws by itself' : 'Click to start · drag or arrow keys move the sword · space throws'); }
+  else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(.62), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
+  else if (mode === 'tv') { S.mode = 'tv'; glide(tvView(), 900); tvRun(); hint(''); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
   ui();
 }
@@ -1535,6 +1641,8 @@ function tap(x, y) {
   else if (S.mode === 'hobby') { const h = pick(racks.map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
   else if (S.mode === 'graded') { const h = pick(gcab.meshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
   else if (S.mode === 'arcade') return arcTap();
+  else if (S.mode === 'stack') return stkTap();
+  else if (S.mode === 'tv') return;
   else if (S.mode === 'aisles') { const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
   else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); const o = pick(hall.list.map((q) => q.hit), x, y); if (o && o.object.userData.aisle !== S.aisle) return goAisle(o.object.userData.aisle); return; }
   else if (S.mode === 'rack') {
@@ -1613,6 +1721,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (S.hand) { hand.ry = drag.ry + dx * .011; hand.rx = clamp(drag.rx + dy * .006, -.6, .6); kick(); }
   else if (drag.axis === 'none') { /* a glide is running */ }
   else if (S.mode === 'graded') { const mpp = (gcab.vw || 1) / canvas.clientWidth; gcab.gx = drag.gx - dx * mpp; gcab.gy = drag.gy + dy * mpp; setView(gradedView()); }
+  else if (S.mode === 'stack') { if (drag.axis === 'x') { const n = Math.round(dx * 240 / (.5 / (2 * (view.dist || .6) * hTan(view.fov)) * canvas.clientWidth) / 14); let m = n - (drag.cells || 0); while (m) { const st = m > 0 ? 1 : -1; stkMove(st); m -= st; } drag.cells = n; } }
   else if (S.mode === 'arcade') { arc.x = clamp(drag.sx + dx * arc.W / (.5 / (2 * (view.dist || .6) * hTan(view.fov)) * canvas.clientWidth), 10, arc.W - 10); }
   else if (S.mode === 'aisles') {
     if (drag.axis === 'x') { const mpp = 2 * 2.6 * hTan(view.fov) / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.hx = clamp(drag.hx - dx * mpp, 0, hall.hmax || 0); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aislesView()); }
@@ -1638,6 +1747,7 @@ function endDrag(e) {
   if (S.hand) { hand.ty = Math.round(hand.ry / PI) * PI; hand.tx = 0; hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
   if (d.axis === 'none') return;
   hint('');
+  if (S.mode === 'stack') { if (d.axis === 'y' && dy > 40) stkDown(true); return; }
   if (S.mode === 'aisles') {
     if (d.axis !== 'x') return; let v = clamp(d.v, -.14, .14); const id = hall.walk = (hall.walk || 0) + 1;
     anims.push(() => { if (S.mode !== 'aisles' || drag || tw || hall.walk !== id) return false; v *= .94; S.hx = clamp((S.hx || 0) + v, 0, hall.hmax || 0); setView(aislesView()); return Math.abs(v) > .0006; }); kick(); return;
@@ -1708,7 +1818,7 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'buy') buy(b);
   else if (b.id === 'x') putBack();
   else if (b.id === 'pull') sheet(!$('#panel').classList.contains('open'));
-  else if (b.id === 'arcBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
+  else if (b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
   else if (b.id === 'crPrevSet') openSet(boxes.setIdx - 1);
   else if (b.id === 'crNextSet') openSet(boxes.setIdx + 1);
   else if (b.id === 'crLaneL') crateLane(-1);
@@ -1731,4 +1841,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, arc, arcTap, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };

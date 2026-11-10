@@ -44,7 +44,7 @@ a{color:inherit}
 .ctx button:disabled{opacity:.35}
 .ctx .ttl img{height:20px;max-width:60px;object-fit:contain;vertical-align:-5px;margin-right:7px;background:#fbf7ec;border-radius:4px;padding:2px 4px}
 .ctx .ttl{font-family:"Special Elite",monospace;font-size:13px;color:var(--tape);padding:0 4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body[data-mode=arcade] #ctxArcade,body[data-mode=aisles] #ctxAisles,body[data-mode=aisle] #ctxAisle,body[data-mode=hobby] #ctxHobby,body[data-mode=rack] #ctxHobby,body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
+body[data-mode=arcade] #ctxArcade,body[data-mode=stack] #ctxStack,body[data-mode=tv] #ctxTv,body[data-mode=aisles] #ctxAisles,body[data-mode=aisle] #ctxAisle,body[data-mode=hobby] #ctxHobby,body[data-mode=rack] #ctxHobby,body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
 .nav{display:flex;gap:6px;justify-content:safe center;overflow-x:auto;scrollbar-width:none;padding:5px 4px 3px}
 .nav::-webkit-scrollbar{display:none}
 .nav button{flex:0 0 auto;white-space:nowrap}
@@ -136,6 +136,8 @@ body[data-hand] .panel{display:block}
   <div class="ctx" id="ctxBoxes"><span class="ttl" id="boxNote">tap a white box for its sets · a booster box to pick it up</span></div>
   <div class="ctx" id="ctxHobby"></div>
   <div class="ctx" id="ctxAisles"></div>
+  <div class="ctx" id="ctxStack"><button type="button" id="stkBack">‹ Back</button><span class="ttl">BOX STACK · drag · tap turns · swipe down drops</span></div>
+  <div class="ctx" id="ctxTv"><button type="button" id="tvBack">‹ Back</button><a href="https://exorgames.com/pages/sell-to-exor-games-bulk-or-create-a-list" target="_blank" rel="noopener">Sell us your cards ↗</a></div>
   <div class="ctx" id="ctxArcade"><button type="button" id="arcBack">‹ Back</button><span class="ttl">SWORD STORM · drag to move the sword</span></div>
   <div class="ctx" id="ctxAisle"><button type="button" id="aiBack">‹ Aisles</button><span class="ttl" id="aiTitle"></span><button type="button" id="aiTurn">Turn around ⟲</button><div class="secs" id="aiSecs"></div></div>
   <div class="ctx" id="ctxCrate"><button type="button" id="crBack">‹ Sets</button><button type="button" id="crPrevSet">‹ set</button><span class="ttl" id="crTitle"></span><button type="button" id="crNextSet">set ›</button><button type="button" id="crLaneL" aria-label="Row to the left">◀ row</button><button type="button" id="crLaneR" aria-label="Row to the right">row ▶</button></div>
