@@ -911,6 +911,9 @@ function fillRack(r) {
   g.position.set(r.at[0], 0, r.at[1]); g.rotation.y = r.ry || 0; scene.add(g); g.updateMatrixWorld(true);
   r.pos = r.local.map((v) => v.clone().applyMatrix4(g.matrixWorld));
 }
+let hobbyHits = [];
+// a rack's tap box, wherever the rack stands
+function rackHit(r) { const m = r.hitM, ry = r.ry || 0; if (!m) return; m.position.set(r.at[0] + Math.sin(ry) * .18, (r.h + .3) / 2, r.at[1] + Math.cos(ry) * .18); m.rotation.y = ry; }
 function buildHobby() {
   const rainbow = (g, x, y, w, h) => { const gr = g.createLinearGradient(x, 0, x + w, 0); ['#e23b2e', '#f29a2e', '#f2d230', '#3fae4a', '#2f7fd0', '#7a4fc0'].forEach((c, i) => gr.addColorStop(i / 5, c)); g.fillStyle = gr; g.fillRect(x, y, w, h); };
   // plain lettering on each header board, in the colours of the range it holds
@@ -932,8 +935,8 @@ function buildHobby() {
     pl(W_ - .02, .25, new THREE.MeshBasicMaterial({ map: ctex(768, 180, kr.sign) }), 0, H_ + .135, .047, 0, kg);
   });
   // a tap box in front of each rack, and the corner as a whole from the door
-  racks.forEach((r, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, r.h + .3, .36), hitM); m.position.set(0, (r.h + .3) / 2, .18); m.userData.rack = i; r.g.parent.add(m); m.position.applyMatrix4(new THREE.Matrix4().makeRotationY(r.ry || 0)); m.position.x += r.at[0]; m.position.z += r.at[1]; m.rotation.y = r.ry || 0; r.hitM = m; });
-  hit(bx(2.0, 2.0, .5, hitM, -2.64, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, .9, hitM, -3.8, 1.0, -1.75), 'hobby');
+  racks.forEach((r, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, r.h + .3, .36), hitM); m.userData.rack = i; scene.add(m); r.hitM = m; rackHit(r); });
+  hobbyHits = [hit(bx(2.0, 2.0, .5, hitM, -2.64, 1.0, -3.3), 'hobby'), hit(bx(.5, 2.0, .9, hitM, -3.8, 1.0, -1.75), 'hobby')];
   ringM = new THREE.Mesh(new THREE.TorusGeometry(.026, .004, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffffff })); ringM.visible = false; scene.add(ringM);
 }
 // One rack's feed after another (asked for all at once, the shop's API throttled two of them - live probe
@@ -1717,7 +1720,7 @@ function gradedView() {
    swipe walks you along it; at the far end you turn and come back up the other side, so the whole aisle is one
    ribbon read left to right. Every slot holds a plain box from the start; the ones in front of you become the
    products themselves (photo cut out, price sticker), read a page at a time (/showcase/aisle.json). */
-const hall = { list: [], built: false, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
+const hall = { list: [], built: false, x0: 4, zf: -.5,   /* the shelving starts well back from the front of the hall (owner, 2026-11-11: "they need to be back further so we can see them" - the paint racks on its ends) */ pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
 // (owner, 2026-11-11: "I don't want the shelving to be right at the opening I want an aisle First", then, of the
 // dressed shelf that stood there, "There should be no fake product aisle like this one it should be product right
 // away"): the FIRST AISLE is the walkway along the shop's open side. It has one shelf, the one facing the shop,
@@ -1831,6 +1834,14 @@ function buildHall(list) {
   // a banner hung over the open side, facing the shop: what is through there
   const bm = new THREE.MeshBasicMaterial({ map: ctex(1200, 200, (g, w, h) => { g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, w, 14); g.fillStyle = '#f2c230'; g.fillRect(0, h - 14, w, 14); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f2c230'; g.font = '900 78px Inter, sans-serif'; g.fillText('MORE STORE THIS WAY  ▸', w / 2, 72); g.fillStyle = '#fff'; g.font = '800 34px Inter, sans-serif'; let t = hall.list.map((a) => a.label.toUpperCase()).join('  ·  '), sc = Math.min(1, (w - 60) / g.measureText(t).width); g.save(); g.translate(w / 2, 142); g.scale(sc, 1); g.fillText(t, 0, 0); g.restore(); }) });
   pl(3.0, .5, bm, hall.x0 - .02, 2.36, -1.0, -PI / 2, G); bx(.02, .54, 3.04, steel, hall.x0, 2.36, -1.0, G); [-1.4, 1.4].forEach((dz) => bx(.012, CEIL - 2.62, .012, steel, hall.x0, (CEIL + 2.62) / 2, -1.0 + dz, G));
+  // The paint racks stand at the ends of the shelving now (owner, 2026-11-11: "The paints need to be moved to the
+  // end of the aisles closest to warhammer and gunpla"): Vallejo on the end beside the Gunpla aisle, Warhammer
+  // paints and Army Painter on the two ends at the Warhammer aisle, each facing the front of the hall and
+  // standing proud of the shelving so it shows from the hall and from the shop.
+  { const iG = Math.max(0, hall.list.findIndex((a) => a.key === 'gunpla')), fw = hall.list.findIndex((a) => a.key === 'wargames'), iW = fw < 0 ? n - 1 : fw;
+    const put = (key, x) => { const r = racks.find((q) => q.key === key); if (!r) return; r.at = [x, hall.zf + .03]; r.ry = 0; fillRack(r); rackHit(r); };
+    put('vallejo', aCx(iG) + 1.45); put('citadel', iW > 0 ? aCx(iW) - 1.45 : aCx(iW) + 1.45); put('army', aCx(iW) + 1.22 + (iW > 0 ? 0 : .9));
+    hobbyHits.forEach((m) => { const k = hot.indexOf(m); if (k > -1) hot.splice(k, 1); kill(m); }); hobbyHits = []; hall.paints = true; hall.iW = iW; }
   $('#aislesN').textContent = n; $('#aislesN').hidden = false; lights(S.eve); ui(); kick();
 }
 function loadAisles() {
@@ -1883,7 +1894,7 @@ function aisleStock(now) {
 function aislesView() {
   const n = hall.list.length || 1, ph = cam.aspect < 1; S.hs = clamp(S.hs == null ? -1 : S.hs, -1, n - 1);
   if (S.hs < 0) return lookView(new V3(hall.x0 + .5, 1.7, ph ? 3.3 : 3.05), new V3(hall.x0 + .5 + (ph ? 2.1 : 2.4), ph ? 1.4 : 1.62, hall.zf - (ph ? .5 : 1.0)), ph ? 82 : 62);
-  const cx = aCx(S.hs); return lookView(new V3(cx, 1.62, 3.2), new V3(cx, 1.3, hall.zf - 7), ph ? 76 : 58);
+  const cx = aCx(S.hs); return lookView(new V3(cx, 1.62, 3.3), new V3(cx, 1.25, hall.zf - 6), ph ? 80 : 58);
 }
 function hallStep(d) { const n = hall.list.length, to = clamp((S.hs == null ? -1 : S.hs) + d, -1, n - 1); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
 function hallTo(i) { S.hs = i; setView(aislesView()); }
@@ -1927,13 +1938,14 @@ function aisleBar() {
 const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lookView(new V3(x, 1.6, 3.2), new V3(x, ph ? 1.3 : 1.18, -1.2), ph ? 82 : 55); v.yaw += S.look.yaw; v.pitch += S.look.pitch; return v; };
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
-const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
+const hobbyView = () => (hall.paints ? lookView(new V3(aCx(hall.iW) - 2.9, 1.6, 3.25), new V3(aCx(hall.iW) + .5, 1.05, hall.zf + .2), cam.aspect < 1 ? 82 : 62)   // from the hall, across the two racks at the Warhammer end
+  : lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58));
 function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
   leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
-  else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
+  else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint(hall.paints ? 'The paints are at the ends of the aisles · tap a rack, or pick one below' : 'Paints · tap a rack to look straight at it'); }
   else if (mode === 'sealed') { if (!sealed.rows.length) { hint('No booster boxes in stock for this game right now'); return; } S.mode = 'boxes'; S.focus = 'sealed'; S.pan = 0; glide(boxesView()); hint('The newest booster boxes in stock · tap one to pick it up'); }
   else if (mode === 'boxes') { S.focus = ''; if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
@@ -2005,7 +2017,7 @@ function tap(x, y) {
   else if (S.mode === 'arcade') return arcTap();
   else if (S.mode === 'stack') return stkTap();
   else if (S.mode === 'tv') return;
-  else if (S.mode === 'aisles') { const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
+  else if (S.mode === 'aisles') { const rk = hall.paints && pick(racks.map((r) => r.hitM).filter(Boolean), x, y); if (rk) return goRack(rk.object.userData.rack); const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
   else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); pick([a.hit], x, y);   // (sets the tap's ray; a tap that misses the products no longer jumps to the aisle behind the shelf)
     // a tap past the end of the shelf, on the hall you can see beyond it, walks you back out to the hall (owner, 2026-11-11: "When clicking here I should be able to go back into the aisle again")
     const dx = ray.ray.direction.x, px = aCx(a.i) + (dx > 0 ? 1.0 : -1.0); if (Math.abs(dx) > .05) { const t = (px - ray.ray.origin.x) / dx, z = ray.ray.origin.z + ray.ray.direction.z * t; if (t > 0 && z > hall.zf + .05) return go('aisles'); }
