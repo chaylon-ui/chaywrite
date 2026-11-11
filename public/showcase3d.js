@@ -252,6 +252,11 @@ function drawSealed(g, w, h, c, im) {
 async function cardTex(c, w) {
   await fonts; let im = null;
   if (hasPhoto(c)) { try { im = await loadImg(img(c.image, w > 300 ? 1000 : (c.sealed ? 500 : 300))); } catch (x) {} }
+  if (c.slab && im && c.plain) {   // in the hand: the whole photo as taken, on white - the cut-out is for the cabinet (owner, 2026-11-12: "the X screen make it white background")
+    return ctex(w, Math.round(w / (c.ar || .75)), (g, cw, chh) => { g.fillStyle = '#fff'; g.fillRect(0, 0, cw, chh); const sc = Math.min(cw / im.width, chh / im.height), iw = im.width * sc, ih = im.height * sc; g.drawImage(im, (cw - iw) / 2, (chh - ih) / 2, iw, ih); if (c.noSticker) return;
+      if (c.ask) sticker(g, cw, 'ASK', { font: '700 ' + Math.round(cw * .13) + 'px Caveat, cursive', ink: '#b3261e', y: chh * .015, right: cw - cw * .02, rot: -.08 });
+      else sticker(g, cw, gunPrice(c.price), { font: '700 ' + Math.round(cw * .075) + 'px "Cutive Mono", monospace', ink: '#1b2a55', y: chh * .015, right: cw - cw * .02, rot: (seed(keyOf(c) + '|st')() - .5) * .1 }); });
+  }
   if (c.slab && im) {
     const tw = Math.min(1400, Math.round(w * 1.8)), th = Math.round(tw * im.height / im.width), tmp = document.createElement('canvas'); tmp.width = tw; tmp.height = th;
     const tg = tmp.getContext('2d', { willReadFrequently: true }); tg.drawImage(im, 0, 0, tw, th);
@@ -1602,7 +1607,7 @@ fonts.then(() => { hand.sleeveT = keep(ctex(360, 503, drawBack)); hand.back.mate
 function stage() { const w = canvas.clientWidth, h = canvas.clientHeight; return w > 720 ? { x: 0, y: 0, w: w - 360, h } : { x: 0, y: 0, w, h: h - 60 }; }
 function placeHand(now) {
   const st = stage(), W_ = canvas.clientWidth, H_ = canvas.clientHeight, d = .24, wpp = 2 * d * Math.tan(rad(cam.fov / 2)) / H_;
-  const ar = S.hand.sealed ? S.hand.cut || S.hand.ar || 1 : CW / CH;   // a card, or a booster box in its own shape
+  const ar = S.hand.slab ? S.hand.ar || .75 : S.hand.sealed ? S.hand.cut || S.hand.ar || 1 : CW / CH;   // a card, or a booster box in its own shape
   const cwPx = Math.max(140, Math.min(st.w - 24, (st.h - 28) * ar)) * (S.hand.sealed ? .8 : 1), k = reduce ? 1 : Math.min(1, (now - hand.t0) / 320), e = 1 - Math.pow(1 - k, 3);
   hand.g.position.set((st.x + st.w / 2 - W_ / 2) * wpp, -(st.y + st.h / 2 - H_ / 2) * wpp - .05 * (1 - e), -d);
   const sc = .55 + .45 * e; hand.g.scale.set(cwPx * wpp / CW * sc, cwPx / ar * wpp / CH * sc, cwPx * wpp / CW * sc);
@@ -1616,11 +1621,11 @@ function lift(c, src) {
   if (S.handSrc) S.handSrc.visible = true;
   S.hand = c; S.handSrc = src || null; if (src) src.visible = false;
   document.body.dataset.hand = '1'; hand.g.visible = true; hand.dim.visible = true; hand.rx = hand.ry = hand.tx = hand.ty = 0; hand.t0 = performance.now();
-  hand.front.material.map = phTex; wear(hand.front, c, c.sealed ? 640 : 720); hand.foil.visible = !!c.foil;
+  hand.front.material.map = phTex; wear(hand.front, c.slab ? Object.assign({}, c, { plain: true }) : c, c.slab ? 900 : c.sealed ? 640 : 720); hand.foil.visible = !!c.foil;
   const two = !c.sealed || !!c.back;   // a card in its sleeve, or a slab with a photo of its back: two faces; a cut-out box: one, seen from both sides
   hand.back.visible = two; hand.front.material.side = two ? THREE.FrontSide : THREE.DoubleSide; hand.glare.visible = !c.sealed;
   { const old = hand.back.material.map; hand.back.material.map = hand.sleeveT || phTex; if (old && !old.userData.keep) old.dispose(); const tk = hand.backTk = (hand.backTk || 0) + 1;
-    if (c.back) { hand.back.material.map = phTex; cardTex({ name: c.name, image: c.back, sealed: true, slab: true, noSticker: true, ar: c.ar, price: 0 }, 640).then((t) => { if (hand.backTk !== tk || S.hand !== c) { t.dispose(); return; } hand.back.material.map = t; hand.back.material.needsUpdate = true; kick(); }); }
+    if (c.back) { hand.back.material.map = phTex; cardTex({ name: c.name, image: c.back, sealed: true, slab: true, plain: true, noSticker: true, ar: c.ar, price: 0 }, 900).then((t) => { if (hand.backTk !== tk || S.hand !== c) { t.dispose(); return; } hand.back.material.map = t; hand.back.material.needsUpdate = true; kick(); }); }
     hand.back.material.needsUpdate = true; } hand.front.material.needsUpdate = true;   // a cut-out box has no sleeve back and no flat glare
   fillPanel(c); sheet(false); hint(''); askOrientation(); kick();
 }
@@ -2362,7 +2367,7 @@ function endDrag(e) {
   clearTimeout(d.holdT); if (d.lean) { leanAnim(0, 300); return; }
   const dx = d.x - d.x0, dy = d.y - d.y0;
   if (!d.moved) { if (performance.now() - d.t < 600) tap(e.clientX, e.clientY); return; }
-  if (S.hand) { hand.ty = Math.round(hand.ry / PI) * PI; hand.tx = 0; hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
+  if (S.hand) { const was = Math.round(d.ry / PI), two = hand.back.visible; hand.ty = (two && Math.abs(dx) > 45 && Math.round(hand.ry / PI) === was ? was + (dx > 0 ? 1 : -1) : Math.round(hand.ry / PI)) * PI; hand.tx = 0;   /* a sideways swipe turns it over (owner, 2026-11-12), a longer drag as before */ hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
   if (d.axis === 'none') return;
   hint('');
   if (S.mode === 'hobby' && hall.paints) { if (d.axis === 'x' && Math.abs(dx) > 36) { S.mode = 'aisles'; S.hs = hall.iW; hallStep(dx < 0 ? 1 : -1); } return; }   /* the paints view is in the hall: a swipe walks on along the aisles */
