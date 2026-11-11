@@ -463,7 +463,7 @@ function arcDraw() {
   arc.tex.needsUpdate = true;
 }
 // straight at the screen, as close as it fits
-const CAB_Z = { arcade: -.13, stack: -.85 };   // the two cabinets, on the left wall
+const CAB_Z = { arcade: -.13, stack: -.85, dunk: -1.57 };   // the three cabinets, on the left wall
 const arcadeView = () => cabView(CAB_Z.arcade);
 function arcTap() { if (arc.state === 'attract' || (arc.state === 'over' && arc.t - arc.overAt > .6)) { arcNew(); arcBlip(660, .2, .03); hint(''); } else if (arc.state === 'play' && arc.fire < .25) arc.fire = 0; }
 function arcRun() {
@@ -633,6 +633,87 @@ function flagHang(parent, n, x, y, z, ry, w, hung) {
   return m;
 }
 
+/* ---------- the third cabinet: SCALPER DUNK (owner, 2026-11-12) ----------
+   "Add another arcade game called 'Scalper Dunk' where you throw apples to dunk scalpers in shark infested
+   water. When you throw the apple and miss they taunt you with how much they are going to resell product for
+   and get them all as soon as the box store opens up."
+   A dunk tank: a scalper sits on a plank over the water, a bullseye slides up and down beside them. Tap where
+   to throw; the apple takes a moment to get there, so lead the target. A hit drops the plank and they go in
+   with the sharks; a miss gets a taunt. Ten apples, one back for every dunk; each scalper's target is smaller
+   and quicker. The owner asked for the scalpers to look like the people in five photos sent with the request:
+   NOT done - they are real people; the five here are made-up cartoon characters with made-up names. */
+const dnk = { state: 'attract', t: 0, apples: 0, dunked: 0, hi: 0, who: 0, ty: 80, tdir: 1, shot: null, fall: 0, taunt: '', tauntT: 0, lvl: 0, splash: 0 };
+dnk.cv = document.createElement('canvas'); dnk.cv.width = 480; dnk.cv.height = 384; dnk.g = dnk.cv.getContext('2d');
+dnk.tex = keep(new THREE.CanvasTexture(dnk.cv)); dnk.tex.colorSpace = THREE.SRGBColorSpace; dnk.tex.magFilter = THREE.NearestFilter;
+try { dnk.hi = Number(localStorage.getItem('xgScalperDunkHi')) || 0; } catch (x) {}
+const DNK_WHO = [   // made up: name, skin, top, hat colour (0 = hood up in the top's colour), shades
+  ['FLIP', '#e8b88a', '#6a3fb0', 0, 0], ['MARKUP', '#b97a4e', '#2f9a54', '#f2c230', 1], ['THE BOT', '#f0c9a4', '#2b3a55', '#d62c28', 0], ['CART GUY', '#8a5a3a', '#d0722a', 0, 1], ['RESTOCK', '#dba87c', '#c0397a', '#19b5a5', 0]];
+const DNK_TAUNTS = ['Missed! These go for $300 a box online!', 'Doors open at 8. By 8:01 the shelf is MINE.', 'Limit two each? I brought nine cousins!', 'MSRP is for suckers. I charge triple!', 'Every Elite Trainer Box in town - in my trunk!', 'Your kid wants one? That will be $180.', 'I cleared out the big box store before you woke up!', 'Nice throw. See you on the resale sites!', 'I bought the whole pallet. Bidding starts at $500!', 'Restock day? I had a bot in line at midnight!'];
+const dnkR = () => Math.max(7, 14 - dnk.lvl * 1.2), dnkSpd = () => 34 + dnk.lvl * 11;
+function dnkNew() { dnk.state = 'play'; dnk.apples = 10; dnk.dunked = 0; dnk.lvl = 0; dnk.who = Math.floor(Math.random() * DNK_WHO.length); dnk.ty = 80; dnk.shot = null; dnk.fall = 0; dnk.taunt = ''; dnk.splash = 0; }
+function dnkThrow(gx, gy) { if (dnk.state !== 'play' || dnk.shot || dnk.fall || dnk.apples < 1) return; dnk.apples--; dnk.shot = { x: clamp(gx, 6, 234), y: clamp(gy, 22, 150), t: 0 }; arcBlip(520, .1, .02); }
+function dnkStep(dt) {
+  dnk.t += dt; dnk.tauntT = Math.max(0, dnk.tauntT - dt); dnk.splash = Math.max(0, dnk.splash - dt); if (dnk.state !== 'play') return;
+  if (!dnk.fall) { dnk.ty += dnk.tdir * dnkSpd() * dt; if (dnk.ty > 118) { dnk.ty = 118; dnk.tdir = -1; } if (dnk.ty < 40) { dnk.ty = 40; dnk.tdir = 1; } }
+  if (dnk.shot) { dnk.shot.t += dt / .5; if (dnk.shot.t >= 1) {
+    const hit = Math.hypot(dnk.shot.x - 176, dnk.shot.y - dnk.ty) <= dnkR() + 3; dnk.shot = null;
+    if (hit) { dnk.fall = .001; dnk.taunt = ''; dnk.tauntT = 0; arcBlip(880, .12, .04); }
+    else { dnk.taunt = DNK_TAUNTS[Math.floor(Math.random() * DNK_TAUNTS.length)]; dnk.tauntT = 2.6; arcBlip(150, .25, .03); }
+  } }
+  if (dnk.fall) { const was = dnk.fall; dnk.fall += dt; if (was < .55 && dnk.fall >= .55) { dnk.splash = .7; arcBlip(90, .4, .05); }
+    if (dnk.fall > 2.1) { dnk.fall = 0; dnk.dunked++; dnk.apples++; dnk.lvl++; dnk.who = (dnk.who + 1 + Math.floor(Math.random() * (DNK_WHO.length - 1))) % DNK_WHO.length; dnk.ty = 80; } }
+  if (!dnk.apples && !dnk.shot && !dnk.fall && !dnk.tauntT) { dnk.state = 'over'; dnk.overAt = dnk.t; if (dnk.dunked > dnk.hi) { dnk.hi = dnk.dunked; try { localStorage.setItem('xgScalperDunkHi', String(dnk.hi)); } catch (x) {} } }
+}
+function dnkGuy(g, x, y, w, wet) {   // sitting, feet dangling; x, y = the seat
+  const skin = w[1], top = w[2], hat = w[3] || top;
+  g.fillStyle = '#2b3a55'; g.fillRect(x - 7, y - 2, 14, 5); g.fillRect(x - 7, y + 3, 4, 9); g.fillRect(x + 3, y + 3, 4, 9); g.fillStyle = '#111'; g.fillRect(x - 8, y + 12, 6, 3); g.fillRect(x + 2, y + 12, 6, 3);
+  g.fillStyle = top; g.fillRect(x - 8, y - 18, 16, 17); g.fillRect(x - 12, y - 16, 4, 11); g.fillRect(x + 8, y - 16, 4, 11);
+  g.fillStyle = '#efe7d2'; g.fillRect(x + 9, y - 12, 9, 7); g.fillRect(x + 10, y - 19, 8, 7); g.fillStyle = '#d62c28'; g.fillRect(x + 9, y - 10, 9, 2); g.fillRect(x + 10, y - 17, 8, 2);   // the boxes they are hugging
+  g.fillStyle = skin; g.fillRect(x - 6, y - 30, 12, 12); g.fillRect(x - 13, y - 6, 4, 3); g.fillRect(x + 9, y - 6, 4, 3);
+  g.fillStyle = hat; if (w[3]) { g.fillRect(x - 7, y - 33, 14, 5); g.fillRect(x - 7, y - 29, 17, 2); } else { g.fillRect(x - 8, y - 33, 16, 6); g.fillRect(x - 8, y - 29, 3, 11); g.fillRect(x + 5, y - 29, 3, 11); }
+  g.fillStyle = '#111'; if (w[4]) g.fillRect(x - 5, y - 26, 10, 3); else { g.fillRect(x - 4, y - 26, 2, 2); g.fillRect(x + 2, y - 26, 2, 2); }
+  if (wet) { g.fillRect(x - 2, y - 22, 4, 3); } else { g.fillRect(x - 3, y - 21, 6, 1); g.fillRect(x + 2, y - 22, 2, 1); }   // a smirk, or a yell on the way down
+}
+function dnkDraw() {
+  const g = dnk.g, W_ = 240, H_ = 192, f = Math.floor(dnk.t * 2.5) % 2, w = DNK_WHO[dnk.who]; g.setTransform(2, 0, 0, 2, 0, 0); g.imageSmoothingEnabled = false; g.textBaseline = 'top';
+  const sky = g.createLinearGradient(0, 0, 0, 140); sky.addColorStop(0, '#2a1b5a'); sky.addColorStop(1, '#ff7aa8'); g.fillStyle = sky; g.fillRect(0, 0, W_, H_);
+  for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? '#d62c28' : '#f4efe0'; g.beginPath(); g.moveTo(i * 20, 0); g.lineTo(i * 20 + 20, 0); g.lineTo(i * 20 + 10, 13); g.closePath(); g.fill(); }
+  // the tank, the water, the fins
+  g.fillStyle = '#1c4f8a'; g.fillRect(20, 132, 200, 60); g.fillStyle = '#2f7fd0'; for (let x = 20; x < 220; x += 16) g.fillRect(x + ((dnk.t * 14) % 16), 132 + (Math.floor(x / 16 + dnk.t * 2) % 2), 9, 2);
+  g.strokeStyle = '#9fd0ff'; g.lineWidth = 2; g.strokeRect(20, 96, 200, 96);
+  [[0, 1], [70, -1], [140, 1]].forEach((s, i) => { const near = dnk.fall > .55, cx = near ? lerp(40 + ((dnk.t * 24 * s[1] + s[0] + 400) % 180), 84, Math.min(1, (dnk.fall - .55) * 1.6)) + (i - 1) * 16 : 30 + ((dnk.t * 24 * s[1] + s[0] + 400) % 180), cy = 150 + i * 12; g.fillStyle = '#8f9aa6'; g.beginPath(); g.moveTo(cx - 8, cy + 6); g.lineTo(cx + (s[1] > 0 ? 3 : -3), cy - 8); g.lineTo(cx + 8, cy + 6); g.closePath(); g.fill(); g.fillStyle = '#2f7fd0'; g.fillRect(cx - 10, cy + 5, 20, 2); });
+  // the plank and whoever is on it
+  const fl = dnk.fall, drop = fl ? Math.min(1, fl / .55) : 0, gy = 100 + (fl ? Math.min(60, fl * fl * 190) : 0);
+  g.fillStyle = '#7a4a22'; g.fillRect(40, 60, 5, 74); g.save(); g.translate(45, 100); g.rotate(drop * 1.2); g.fillStyle = '#b9834a'; g.fillRect(0, -3, 62, 5); g.restore();
+  if (!fl || fl < 1.1) { g.save(); if (gy > 132) { g.beginPath(); g.rect(0, 0, W_, 136); g.clip(); } dnkGuy(g, 84, gy - 3, w, fl > 0); g.restore(); }
+  if (dnk.splash) { g.fillStyle = '#cfe8ff'; for (let i = 0; i < 9; i++) { const a = PI * (1.1 + i * .1), r = (1 - dnk.splash / .7) * 34 + 6; g.fillRect(84 + Math.cos(a) * r, 134 + Math.sin(a) * r, 3, 3); } }
+  // the bullseye on its rail
+  g.fillStyle = '#55555c'; g.fillRect(175, 30, 3, 100); const r = dnkR(), ty = dnk.ty;
+  [['#f4efe0', 1], ['#d62c28', .68], ['#f4efe0', .38], ['#d62c28', .16]].forEach((c) => { g.fillStyle = c[0]; g.beginPath(); g.arc(176, ty, r * c[1], 0, PI * 2); g.fill(); }); g.fillStyle = '#55555c'; g.fillRect(146, 99, 30, 2);
+  // the apple in the air
+  if (dnk.shot) { const k = dnk.shot.t, ax = lerp(120, dnk.shot.x, k), ay = lerp(186, dnk.shot.y, k) - Math.sin(k * PI) * 34, s = lerp(9, 4, k); g.fillStyle = '#d62c28'; g.beginPath(); g.arc(ax, ay, s, 0, PI * 2); g.fill(); g.fillStyle = '#3fae4a'; g.fillRect(ax, ay - s - 2, 3, 3); g.fillStyle = '#ffffff90'; g.fillRect(ax - s * .4, ay - s * .4, 2, 2); }
+  // what they shout when you miss
+  if (dnk.tauntT && dnk.taunt) { g.font = '700 9px Inter, sans-serif'; const words = dnk.taunt.split(' '), lines = []; let ln = ''; words.forEach((wd) => { if (g.measureText(ln + ' ' + wd).width > 118 && ln) { lines.push(ln); ln = wd; } else ln = ln ? ln + ' ' + wd : wd; }); lines.push(ln);
+    const bw = 128, bh = lines.length * 11 + 8, bx0 = 100, by0 = 20; g.fillStyle = '#fff'; rr(g, bx0, by0, bw, bh, 6); g.fill(); g.beginPath(); g.moveTo(bx0 + 10, by0 + bh); g.lineTo(bx0 - 4, by0 + bh + 12); g.lineTo(bx0 + 24, by0 + bh); g.closePath(); g.fill(); g.fillStyle = '#16120d'; g.textAlign = 'left'; lines.forEach((l, i) => g.fillText(l, bx0 + 6, by0 + 5 + i * 11)); }
+  if (fl > .55) { g.textAlign = 'center'; g.font = '900 22px Inter, sans-serif'; g.fillStyle = '#111'; g.fillText('DUNKED!', 121, 41); g.fillStyle = '#ffd23a'; g.fillText('DUNKED!', 120, 40); }
+  // the counts
+  g.font = '700 9px "Cutive Mono", monospace'; g.textAlign = 'left'; g.fillStyle = '#fff'; g.fillText('DUNKED ' + dnk.dunked, 6, 17); g.textAlign = 'right'; g.fillText('BEST ' + Math.max(dnk.hi, dnk.dunked), W_ - 6, 17);
+  if (dnk.state !== 'attract') { g.textAlign = 'center'; g.fillStyle = '#ffd23a'; g.fillText(w[0], 84, 62); for (let i = 0; i < dnk.apples; i++) { g.fillStyle = '#d62c28'; g.beginPath(); g.arc(10 + i * 9, 184, 3.5, 0, PI * 2); g.fill(); g.fillStyle = '#3fae4a'; g.fillRect(10 + i * 9, 179, 2, 2); } }
+  g.textAlign = 'center';
+  if (dnk.state === 'attract') { g.font = '900 24px Inter, sans-serif'; g.fillStyle = '#111'; g.fillText('SCALPER DUNK', 121, 31); g.fillStyle = '#ffd23a'; g.fillText('SCALPER DUNK', 120, 30); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText(S.mode === 'dunk' ? 'TAP TO START' : 'INSERT COIN', 120, 54); }
+  if (dnk.state === 'over') { g.fillStyle = '#000000c0'; g.fillRect(40, 62, 160, 52); g.font = '900 18px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('OUT OF APPLES', 120, 68); g.font = '700 9px "Cutive Mono", monospace'; g.fillStyle = '#fff'; g.fillText(dnk.dunked + ' DUNKED', 120, 90); g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText('TAP TO PLAY AGAIN', 120, 101); }
+  dnk.tex.needsUpdate = true;
+}
+// a tap on the screen of the cabinet, in the game's own 240 x 192
+function dnkTap(x, y) {
+  if (dnk.state === 'attract' || (dnk.state === 'over' && dnk.t - dnk.overAt > .6)) { dnkNew(); arcBlip(660, .2, .03); hint(''); return; }
+  const z = CAB_Z.dunk, rc = canvas.getBoundingClientRect(), a = new V3(-3.448, 1.5, z + .25).project(cam), b = new V3(-3.448, 1.1, z - .25).project(cam), px = (v) => [(v.x + 1) / 2 * rc.width + rc.left, (1 - v.y) / 2 * rc.height + rc.top], A = px(a), B = px(b);
+  dnkThrow((x - A[0]) / (B[0] - A[0]) * 240, (y - A[1]) / (B[1] - A[1]) * 192);
+}
+function dnkRun() { dnk.state = 'attract'; dnk.last = 0; dnk.fall = 0; dnk.shot = null; dnk.taunt = ''; const id = dnk.id = (dnk.id || 0) + 1; anims.push((now) => { if (S.mode !== 'dunk' || dnk.id !== id) return false; const dt = dnk.last ? Math.min(.05, (now - dnk.last) / 1000) : 0; dnk.last = now; dnkStep(dt); dnkDraw(); return true; }); kick(); }
+function dnkStop() { dnk.id = (dnk.id || 0) + 1; dnk.state = 'attract'; dnk.fall = 0; dnk.shot = null; dnk.taunt = ''; dnk.tauntT = 0; dnkDraw(); kick(); }
+document.addEventListener('keydown', (e) => { if (S.mode === 'dunk' && (e.key === ' ' || e.key === 'Enter')) { if (dnk.state === 'play') dnkThrow(176, dnk.ty); else dnkTap(0, 0); e.preventDefault(); } });
+
 /* ---------- the 1990s lying around (owner, 2026-11-10) ----------
    "I need it to be much more 1990s looking. More ambient items laying around. Stuff from the 1990s."
    Nothing here is stock; the cabinets and the TV are tap targets (see above): two arcade cabinets and a gumball machine on the right wall, a TV with
@@ -679,6 +760,7 @@ function buildNineties() {
   };
   cabinet(CAB_Z.arcade, 'MALLOW SHOOTER', 0x1b1640, PURP, PINK, arc.tex, 'arcade'); arcDraw();
   cabinet(CAB_Z.stack, 'BOX STACK', 0x0e3b46, TEAL, '#3f8fe0', stk.tex, 'stack'); stkDraw();
+  cabinet(CAB_Z.dunk, 'SCALPER DUNK', 0x4a1420, '#d62c28', YEL, dnk.tex, 'dunk'); dnkDraw();
 
   // the gumball machine
   const red = lam({ color: 0xd62c28 }), chrome = lam({ color: 0xc9ccd2 });
@@ -1966,9 +2048,9 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => (hall.paints ? lookView(new V3(aCx(hall.iW) - 2.9, 1.6, 3.25), new V3(aCx(hall.iW) + .5, 1.05, hall.zf + .2), cam.aspect < 1 ? 82 : 62)   // from the hall, across the two racks at the Warhammer end
   : lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58));
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? wallView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'dunk' ? cabView(CAB_Z.dunk) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? wallView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
-  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
+  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'dunk') dnkStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint(hall.paints ? 'The paints are at the ends of the aisles · tap a rack, or pick one below' : 'Paints · tap a rack to look straight at it'); }
@@ -1979,6 +2061,7 @@ function go(mode) {
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
   else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hs = S.aisle; else if (S.mode !== 'aisles') S.hs = -1; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to the next aisle · tap an aisle to walk in' : 'Drag, scroll or arrow keys for the next aisle · click an aisle to walk in'); }
   else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move Mallow · it sprays by itself' : 'Click to start · drag or arrow keys move Mallow · space sprays'); }
+  else if (mode === 'dunk') { S.mode = 'dunk'; glide(cabView(CAB_Z.dunk), 800); dnkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · tap where to throw - lead the target' : 'Click to start · click where to throw - lead the target'); }
   else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(CAB_Z.stack), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
   else if (mode === 'tv') { S.mode = 'tv'; glide(tvView(), 900); tvRun(); hint(''); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
@@ -2042,6 +2125,7 @@ function tap(x, y) {
   else if (S.mode === 'ask') return fanTap(x, y);
   else if (S.mode === 'arcade') return arcTap();
   else if (S.mode === 'stack') return stkTap();
+  else if (S.mode === 'dunk') return dnkTap(x, y);
   else if (S.mode === 'tv') return;
   else if (S.mode === 'aisles') { const rk = hall.paints && pick(racks.map((r) => r.hitM).filter(Boolean), x, y); if (rk) return goRack(rk.object.userData.rack); const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
   else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); pick([a.hit], x, y);   // (sets the tap's ray; a tap that misses the products no longer jumps to the aisle behind the shelf)
@@ -2232,7 +2316,7 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'capBuy') capBuy(b);
   else if (b.id === 'x') putBack();
   else if (b.id === 'pull') sheet(!$('#panel').classList.contains('open'));
-  else if (b.id === 'askBack' || b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
+  else if (b.id === 'dnkBack' || b.id === 'askBack' || b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
   else if (b.id === 'crPrevSet') openSet(boxes.setIdx - 1);
   else if (b.id === 'crNextSet') openSet(boxes.setIdx + 1);
   else if (b.id === 'crLaneL') crateLane(-1);
@@ -2255,4 +2339,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, dnk, dnkTap, dnkThrow, dnkDraw, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
