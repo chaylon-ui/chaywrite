@@ -1408,11 +1408,19 @@ function makeCrate(o) {
     if (lu) loadImg(lu).then((im) => { if (!sgn.parent) return; draw(im)(t.image.getContext('2d'), 320, 180); t.needsUpdate = true; kick(); }).catch(() => {});
   }
   if (o.kind === 'bin') { const s = pl(.13, .075, new THREE.MeshBasicMaterial({ map: ctex(260, 150, (gg, ww, hh) => { gg.fillStyle = '#f7e98e'; gg.fillRect(0, 0, ww, hh); gg.fillStyle = '#c0392b'; gg.font = '40px "Permanent Marker", cursive'; gg.textAlign = 'center'; gg.fillText('BARGAIN BIN', ww / 2, 62); gg.fillStyle = '#16120d'; gg.font = '700 34px Caveat, cursive'; gg.fillText(o.note || '', ww / 2, 112); }), side: THREE.DoubleSide }), 0, .13, -Lz / 2 - .003, 0, g); s.rotation.z = .04; bx(.006, .1, .004, lam({ color: 0x6b4020 }), 0, .08, -Lz / 2 - .006, g); }
-  const divs = [];
+  const divs = []; let endSign = null, endTex = null;
+  if (o.kind === 'set') { endTex = ctex(256, 352, (gg) => gg.clearRect(0, 0, 256, 352)); endSign = new THREE.Mesh(geoB, new THREE.MeshBasicMaterial({ map: endTex, side: THREE.DoubleSide, color: cardTint })); endSign.userData = { end: true, what: '' }; g.add(endSign); }
   if (o.kind === 'set') o.lanes.forEach((ln, l) => { let prev = ''; ln.forEach((cd, i) => { const ch = divLetter(cd); if (ch !== prev) { prev = ch; if (ln.length > 12 || i) { const m = new THREE.Mesh(geoDiv, divMat(ch)); m.userData = { div: true, lane: l, idx: i, ch }; g.add(m); divs.push(m); } } }); });
-  const c = { kind: o.kind, name: o.name || '', title: o.title, lanes: o.lanes, ps: o.lanes.map(() => 0), lane: 0, v: 0, sp, Lz, n, g, inst, faces, divs, at: o.at };
+  const c = { kind: o.kind, name: o.name || '', title: o.title, lanes: o.lanes, ps: o.lanes.map(() => 0), lane: 0, v: 0, sp, Lz, n, g, inst, faces, divs, endSign, endTex, at: o.at };
   updateCrate(c); return c;
 }
+// The end of a row (owner, 2026-11-12: "At the end of a row you should be able to flip the last card and then it
+// have a part on the back of the row on the box that says go to next row"): in a set's box the last card can be
+// flipped down too, and behind it stands a sign - "NEXT ROW", or on the last row "NEXT SET" / "FIRST ROW" - a tap
+// on it goes there.
+const laneMax = (c, l) => c.lanes[l].length - (c.kind === 'set' ? 0 : 1);
+function endWhat(c) { if (c.lane < c.n - 1) return 'row'; const b = boxes.open; return b && boxes.setIdx < b.sets.length - 1 ? 'set' : c.n > 1 ? 'first' : ''; }
+function endGo() { const c = cr; if (!c) return; const w = endWhat(c); if (w === 'row') { c.ps[c.lane + 1] = 0; crateLane(1); } else if (w === 'set') openSet(boxes.setIdx + 1); else if (w === 'first') { c.ps[0] = 0; crateLane(-c.lane); } }
 const laneX = (c, l) => (l - (c.n - 1) / 2) * (c.n * LW) / c.n;
 const baseZ = (c, i) => c.Lz / 2 - .125 - i * c.sp;
 function pose(u) {   // u = how far past this card the thumb is: -1 standing, 0 lifted to face you, 1 tipped onto the pile
@@ -1428,6 +1436,10 @@ function updateCrate(c) {
   c.lanes.forEach((ln, l) => { const p = c.ps[l], x = laneX(c, l); for (let i = 0; i < ln.length; i++) { const ps = pose(p - i); dummy.position.set(x, .004 + ps[1], baseZ(c, i) + ps[2]); dummy.rotation.set(ps[0], 0, 0); dummy.updateMatrix(); c.inst.setMatrixAt(k++, dummy.matrix); } });
   c.inst.instanceMatrix.needsUpdate = true;
   (c.divs || []).forEach((m) => { const u = m.userData, ps = pose(c.ps[u.lane] - (u.idx - .5)); m.position.set(laneX(c, u.lane), .004 + ps[1], baseZ(c, u.idx) + c.sp * .5 + ps[2]); m.rotation.set(ps[0], 0, 0); m.visible = c.ps[u.lane] - (u.idx - .5) < .9; });   // a divider you have thumbed past lies under the pile
+  if (c.endSign) {   // the sign at the back of the row you are in
+    const w = endWhat(c), es = c.endSign; es.visible = !!w; es.position.set(laneX(c, c.lane), .004, baseZ(c, c.lanes[c.lane].length) - .002); es.rotation.set(A_UP, 0, 0);
+    if (w && es.userData.what !== w) { es.userData.what = w; const gg = c.endTex.image.getContext('2d'); gg.fillStyle = '#14100e'; gg.fillRect(0, 0, 256, 352); gg.strokeStyle = '#f2c230'; gg.lineWidth = 10; gg.strokeRect(10, 10, 236, 332); gg.textAlign = 'center'; gg.fillStyle = '#fff'; gg.font = '700 30px Inter, sans-serif'; gg.fillText('END OF ROW', 128, 84); gg.fillStyle = '#f2c230'; gg.font = '900 54px Inter, sans-serif'; (w === 'row' ? ['NEXT', 'ROW'] : w === 'set' ? ['NEXT', 'SET'] : ['FIRST', 'ROW']).forEach((t, i) => gg.fillText(t, 128, 170 + i * 58)); gg.font = '900 70px Inter, sans-serif'; gg.fillText(w === 'first' ? '↺' : '▶', 128, 312); c.endTex.needsUpdate = true; }
+  }
   const ln = c.lanes[c.lane], p = c.ps[c.lane], k0 = Math.max(0, Math.floor(p)), x = laneX(c, c.lane);
   c.faces.forEach((f) => { f.userData.want = -1; });
   for (let i = k0; i < Math.min(ln.length, k0 + 6); i++) c.faces[i % 6].userData.want = i;
@@ -1449,12 +1461,14 @@ function enterCrate(c, drop) {
   hint(c.kind === 'bin' ? 'Drag towards you to thumb through · tap the card to pick it up' : 'Drag towards you to thumb through · swipe sideways for the next row');
 }
 function flickTo(p, ms) {
-  const c = cr; if (!c) return; const l = c.lane, max = c.lanes[l].length - 1, from = c.ps[l], to = clamp(Math.round(p), 0, max), t0 = performance.now(); c.v = 0; c.anim = (c.anim || 0) + 1; const id = c.anim;
+  const c = cr; if (!c) return; const l = c.lane, max = laneMax(c, l), from = c.ps[l], to = clamp(Math.round(p), 0, max), t0 = performance.now(); c.v = 0; c.anim = (c.anim || 0) + 1; const id = c.anim;
   anims.push((now) => { if (c.anim !== id || cr !== c) return false; const k = Math.min(1, (now - t0) / (reduce ? 1 : (ms || 220))), e = 1 - Math.pow(1 - k, 3); c.ps[l] = lerp(from, to, e); updateCrate(c); setView(crateView(c)); return k < 1; }); kick();
 }
 function crateLane(d) { const c = cr; if (!c) return; const l = clamp(c.lane + d, 0, c.n - 1); if (l === c.lane) return; c.lane = l; c.anim = (c.anim || 0) + 1; updateCrate(c); glide(crateView(c), 380); ui(); }
 function caption() {
-  const c = cr; if (!c) return; const ln = c.lanes[c.lane], i = clamp(Math.round(c.ps[c.lane]), 0, ln.length - 1), k = ln[i];
+  const c = cr; if (!c) return; const ln = c.lanes[c.lane];
+  if (Math.round(c.ps[c.lane]) >= ln.length) { const w = endWhat(c); $('#capName').textContent = 'End of row ' + (c.lane + 1) + (c.n > 1 ? ' of ' + c.n : ''); $('#capSet').textContent = w === 'row' ? 'tap the sign for the next row' : w === 'set' ? 'that is the whole set · tap the sign for the next set' : w === 'first' ? 'that is the whole set · tap the sign for the first row' : 'that is the whole set'; $('#capBuy').hidden = true; $('#capTip').hidden = true; capCard = null; return; }
+  $('#capTip').hidden = false; const i = clamp(Math.round(c.ps[c.lane]), 0, ln.length - 1), k = ln[i];
   $('#capName').textContent = k.name; $('#capSet').textContent = [k.set, condText(k), money(k.price), (i + 1) + ' of ' + ln.length + (c.n > 1 ? ' · row ' + (c.lane + 1) + ' of ' + c.n : '')].filter(Boolean).join(' · ');
   // the quick button (owner, 2026-11-11: "Add an 'set it by the til' quick button here"): the card in front goes to the pile without picking it up
   const b = $('#capBuy'), done = inPile(k); capCard = k; b.hidden = !k.variantId; b.disabled = done; b.textContent = done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till');
@@ -1686,7 +1700,10 @@ function placeFan() {
 }
 function fanTo(i, ms) { const from = fan.p, to = clamp(i, 0, Math.max(0, fan.rows.length - 1)), t0 = performance.now(), id = fan.walk = (fan.walk || 0) + 1; anims.push((now) => { if (fan.walk !== id || S.mode !== 'ask' || drag) return false; const k = Math.min(1, (now - t0) / (reduce ? 1 : ms || 220)), e = 1 - Math.pow(1 - k, 3); fan.p = lerp(from, to, e); askBar(); return k < 1; }); kick(); }
 function fanTap(x, y) { const h = pick(Array.from(fan.live.values()).filter((m) => m.visible).sort((a, b) => b.renderOrder - a.renderOrder), x, y); if (!h) return; let top = h.object; fan.live.forEach((m) => { if (m.visible && m !== top && m.renderOrder > top.renderOrder && pick([m], x, y)) top = m; }); const i = top.userData.fi; if (i === Math.round(fan.p)) lift(top.userData.card, null); else fanTo(i); }
-document.addEventListener('submit', (e) => { if (e.target && e.target.id === 'askBar') { e.preventDefault(); const inp = $('#askQ'); askFor(inp.value); inp.blur(); } });
+// In an open box the note is folded to a small button so the letter tabs show (owner, 2026-11-12: "The ask part
+// covers the letters"); a tap unfolds it for typing, and it folds again when left empty.
+document.addEventListener('submit', (e) => { if (e.target && e.target.id === 'askBar') { e.preventDefault(); const bar = $('#askBar'), inp = $('#askQ'); if (S.mode === 'crate' && !bar.classList.contains('open')) { bar.classList.add('open'); inp.focus(); return; } bar.classList.remove('open'); askFor(inp.value); inp.blur(); } });
+document.addEventListener('focusout', (e) => { if (e.target && e.target.id === 'askQ') setTimeout(() => { if (document.activeElement !== $('#askQ') && !$('#askQ').value.trim()) $('#askBar').classList.remove('open'); }, 250); });
 
 /* ---------- a product's own page (owner, 2026-11-11) ----------
    "When clicking on a product on the shelves I should be able to zoom in on the photos and swipe left to right
@@ -2142,6 +2159,7 @@ function tap(x, y) {
     return;
   }
   else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; }
+    if (cr.endSign && cr.endSign.visible && pick([cr.endSign], x, y)) { if (Math.round(cr.ps[cr.lane]) >= cr.lanes[cr.lane].length) endGo(); else flickTo(cr.lanes[cr.lane].length, 420); return; }
     const dv = pick(cr.divs || [], x, y); if (dv) { const u = dv.object.userData; if (u.lane !== cr.lane) { cr.lane = u.lane; ui(); } flickTo(u.idx, 420); hint(u.ch === '#' ? 'Numbers' : 'The ' + u.ch + 's'); return; } }
   const h = pick(hot, x, y); if (h && !(S.mode === 'crate' && cr && cr.kind === h.object.userData.act)) act(h.object.userData.act);
 }
@@ -2228,7 +2246,7 @@ canvas.addEventListener('pointermove', (e) => {
   else if (S.mode === 'case' && drag.axis === 'x') { const mpp = visW() / canvas.clientWidth; S.walk = clamp(drag.walk - dx * mpp, -.03, (S.maxWalk || 0) + .03); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(caseView0()); }
   else if (S.mode === 'boxes' && S.focus === 'sealed') { const mpp = (sealed.vw || 1) / canvas.clientWidth; S.sx = drag.ssx - dx * mpp; S.sy = drag.ssy + dy * mpp; setView(sealedView()); }
   else if (S.mode === 'boxes' && drag.axis === 'x') { const v = wallView(); S.pan = clamp(drag.pan - dx * v.vw / canvas.clientWidth, -S.maxPan, S.maxPan); setView(wallView()); }
-  else if (S.mode === 'crate' && cr && drag.axis === 'y') { const max = cr.lanes[cr.lane].length - 1; cr.ps[cr.lane] = clamp(drag.p + dy / 46, -.3, max + .3); drag.v = (e.clientY - drag.lastY) / 46 / dt * 16; updateCrate(cr); setView(crateView(cr)); }
+  else if (S.mode === 'crate' && cr && drag.axis === 'y') { const max = laneMax(cr, cr.lane); cr.ps[cr.lane] = clamp(drag.p + dy / 46, -.3, max + .3); drag.v = (e.clientY - drag.lastY) / 46 / dt * 16; updateCrate(cr); setView(crateView(cr)); }
   drag.lastX = e.clientX; drag.lastY = e.clientY; drag.lastT = now; drag.x = e.clientX; drag.y = e.clientY;
 });
 // the walk without clamping the rubber band at the ends away
@@ -2289,7 +2307,7 @@ document.addEventListener('keydown', (e) => {
   if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallStep(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter' && S.hs >= 0) goAisle(S.hs); else return; e.preventDefault(); return; }
   if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2) * (hall.list[S.aisle].flip ? -1 : 1), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
-  else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') lift(cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])], null); else return; }
+  else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') { const cd = cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])]; if (cd) lift(cd, null); else endGo(); } else return; }
   else if (S.mode === 'boxes' && S.focus === 'sealed') { if (k === 'ArrowRight' || k === 'ArrowLeft') S.sx = (S.sx || 0) + (k === 'ArrowRight' ? .3 : -.3); else if (k === 'ArrowUp' || k === 'ArrowDown') S.sy = (S.sy || 0) + (k === 'ArrowUp' ? .3 : -.3); else return; glide(sealedView(), 240); }
   else if (S.mode === 'boxes') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.pan = clamp(S.pan + (k === 'ArrowRight' ? .3 : -.3), -S.maxPan, S.maxPan); glide(wallView(), 260); } else return; }
   else return;

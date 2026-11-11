@@ -69,6 +69,9 @@ body[data-mode=ask] #capBuy{top:auto;bottom:calc(296px + env(safe-area-inset-bot
 #askBar button{border:0;background:#2a1c0e;color:var(--label);border-radius:6px;padding:8px 12px;font:600 14px Inter,sans-serif}
 body[data-mode=case] #askBar,body[data-mode=boxes] #askBar,body[data-mode=crate] #askBar,body[data-mode=till] #askBar,body[data-mode=ask] #askBar{display:flex}
 body[data-hand] #askBar{display:none}
+body[data-mode=crate] #askBar:not(.open){width:auto;left:10px;transform:rotate(-1.5deg);padding:4px 5px}
+body[data-mode=crate] #askBar:not(.open) label,body[data-mode=crate] #askBar:not(.open) input{display:none}
+body[data-mode=crate] #askBar:not(.open) button::after{content:" for a card"}
 body[data-mode=case] .hint,body[data-mode=boxes] .hint,body[data-mode=crate] .hint,body[data-mode=till] .hint,body[data-mode=ask] .hint{top:calc(150px + env(safe-area-inset-top))}
 @media (max-width:480px){#askBar label{font-size:16px}}
 .cap{background:#0a0809c9;border-radius:10px;padding:6px 14px 4px}
