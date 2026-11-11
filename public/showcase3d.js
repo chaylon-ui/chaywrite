@@ -1167,7 +1167,7 @@ function buildSealed(rows) {
   });
   const sg = pl(.5, .11, new THREE.MeshBasicMaterial({ map: ctex(500, 110, (g, w, h) => { g.fillStyle = '#f7e98e'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.font = '44px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('NEW! booster boxes', w / 2, h / 2 + 2); }) }), Math.max(.25, sealed.w / 2), y0 + nr * py + .05, WZ + .06, 0, sealG);
   sg.rotation.z = .02;
-  sealHit = hit(bx(sealed.w + .2, nr * py + .2, .4, hitM, 0, y0 + nr * py / 2, WZ + .05), 'boxes');
+  sealHit = hit(bx(sealed.w + .2, nr * py + .2, .4, hitM, 0, y0 + nr * py / 2, WZ + .05), 'sealed');   // the booster-box shelf walks you to itself, not to the set boxes beside it (owner, 2026-11-11)
   placeSealed(); lights(S.eve);
 }
 function loadSealed() {
