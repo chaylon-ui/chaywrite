@@ -266,7 +266,7 @@ function buildRoom() {
   // posters and notes
   pl(.62, .86, poster(360, 500, (g, w, h) => { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 150 : 115; g.lineTo(w / 2 + Math.cos(a) * r, 185 + Math.sin(a) * r); } g.fill(); g.fillStyle = '#c0392b'; g.font = '36px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillText('FRIDAY', w / 2, 170); g.fillText('NIGHT', w / 2, 212); g.fillStyle = '#fff'; g.font = '700 40px Inter, sans-serif'; g.fillText('TOURNAMENT', w / 2, 390); g.font = '600 24px Inter, sans-serif'; g.fillText('7 PM · sign up at the counter', w / 2, 432); g.fillStyle = '#2fd0c5'; g.fillRect(30, 455, w - 60, 8); }), .78, 1.8, 3.49, PI);
   pl(.7, .5, poster(420, 300, (g, w, h) => { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#111'; g.font = '700 62px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('WE BUY', w / 2, 110); g.fillText('CARDS', w / 2, 180); g.font = '30px "Permanent Marker", cursive'; g.fillStyle = '#c0392b'; g.fillText('cash or store credit', w / 2, 245); }), -.2, 1.75, 3.49, PI);
-  pl(.42, .56, poster(300, 400, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#1d3a8a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; ['Please ask before', 'opening the case.', '', 'No drinks near', 'the cards!', '', '— thanks, mgmt'].forEach((l, i) => g.fillText(l, w / 2, 70 + i * 44)); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(w / 2, 20, 9, 0, PI * 2); g.fill(); }), 3.99, 1.7, -1.5, -PI / 2);
+  pl(.42, .56, poster(300, 400, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#1d3a8a'; g.font = '700 34px Caveat, cursive'; g.textAlign = 'center'; ['Please ask before', 'opening the case.', '', 'No drinks near', 'the cards!', '', '— thanks, mgmt'].forEach((l, i) => g.fillText(l, w / 2, 70 + i * 44)); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(w / 2, 20, 9, 0, PI * 2); g.fill(); }), -2.75, 1.7, 3.49, PI);   // on the door wall: the right wall is gone (owner, 2026-11-11)
   pl(1.1, .75, poster(550, 375, (g, w, h) => { g.fillStyle = '#9a6b3c'; g.fillRect(0, 0, w, h); noise(g, w, h, 5000, ['#7d5329', '#b98a55', '#8a5f33'], .7); g.strokeStyle = '#4a2a12'; g.lineWidth = 16; g.strokeRect(0, 0, w, h); const r = seed('cork'); [['WANTED:', 'old collections'], ['Sleeves', '2 for $5'], ['League', 'Tuesdays 6pm'], ['Lost binder?', 'ask at the till']].forEach((n, i) => { g.save(); g.translate(90 + i * 125, 110 + (i % 2) * 130); g.rotate((r() - .5) * .2); g.fillStyle = ['#f6f1e2', '#f7e98e', '#cfe6f5', '#f6c9d0'][i]; g.fillRect(-55, -50, 110, 100); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.textAlign = 'center'; g.fillText(n[0], 0, -8); g.fillText(n[1], 0, 20); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(0, -40, 6, 0, PI * 2); g.fill(); g.restore(); }); }), -1.6, 1.65, 3.49, PI);   // the cork board hangs on the door wall now: the right wall has the model racks
   // the shop sign over the boxes: the logo when the CDN lets us draw it, the name in marker until then
   // (owner, 2026-11-09: "make the exor logo neon lit"): a dark backing board, the logo glowing on it, a halo on the wall and a light of its own
@@ -315,8 +315,6 @@ function buildRoom() {
   shadeM = new THREE.MeshLambertMaterial({ color: 0x1f6b3a, emissive: 0x000000 });
   const l3 = new THREE.Mesh(new THREE.CylinderGeometry(.045, .075, .07, 20, 1, false, 0, PI), shadeM); l3.rotation.z = PI / 2; l3.rotation.y = PI / 2; l3.position.set(0, .23, .03); lamp.add(l3);
   hit(bx(.2, .32, .2, hitM, 2.42, TOP + .15, -1.0), 'lights');
-  // a wall switch by the cork board does the same
-  bx(.01, .12, .08, lam({ color: 0xe9e4d4 }), 3.985, 1.3, -1.08); hit(bx(.04, .2, .16, hitM, 3.97, 1.3, -1.08), 'lights');
   pileG = new THREE.Group(); pileG.position.set(1.7, TOP, -1.0); scene.add(pileG);
   buildHobby();
 }
@@ -397,7 +395,8 @@ function arcDraw() {
   arc.tex.needsUpdate = true;
 }
 // straight at the screen, as close as it fits
-const arcadeView = () => cabView(-.1);
+const CAB_Z = { arcade: -.13, stack: -.85 };   // the two cabinets, on the left wall
+const arcadeView = () => cabView(CAB_Z.arcade);
 function arcTap() { if (arc.state === 'attract' || (arc.state === 'over' && arc.t - arc.overAt > .6)) { arcNew(); arcBlip(660, .2, .03); hint(''); } else if (arc.state === 'play' && arc.fire < .25) arc.fire = 0; }
 function arcRun() {
   arc.state = 'attract'; arc.keys = {}; arc.last = 0; const id = arc.id = (arc.id || 0) + 1;
@@ -460,7 +459,7 @@ function stkDraw() {
   if (stk.state === 'over') { g.fillStyle = '#000000c0'; g.fillRect(X0, 70, stk.W * C, 46); g.font = '900 14px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('GAME OVER', X0 + stk.W * C / 2, 76); g.font = '700 8px "Cutive Mono", monospace'; g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText('TAP TO PLAY AGAIN', X0 + stk.W * C / 2, 98); }
   stk.tex.needsUpdate = true;
 }
-const cabView = (z) => { const fov = 50, d = Math.max(.56, .29 / hTan(fov)); return lookView(new V3(3.448 - d, 1.3, z), new V3(3.448, 1.3, z), fov); };
+const cabView = (z) => { const fov = 50, d = Math.max(.56, .29 / hTan(fov)); return lookView(new V3(-3.448 + d, 1.3, z), new V3(-3.448, 1.3, z), fov); };
 function stkTap() { if (stk.state === 'attract' || (stk.state === 'over' && stk.t - stk.overAt > .6)) { stkNew(); arcBlip(660, .2, .03); hint(''); } else stkTurn(); }
 function stkRun() { stk.state = 'attract'; stk.keys = {}; stk.last = 0; const id = stk.id = (stk.id || 0) + 1; anims.push((now) => { if (S.mode !== 'stack' || stk.id !== id) return false; const dt = stk.last ? Math.min(.05, (now - stk.last) / 1000) : 0; stk.last = now; stkStep(dt); stkDraw(); return true; }); kick(); }
 function stkStop() { stk.id = (stk.id || 0) + 1; stk.state = 'attract'; stk.keys = {}; stkDraw(); kick(); }
@@ -553,31 +552,31 @@ function buildNineties() {
   const scan = (g, w, h) => { g.fillStyle = 'rgba(0,0,0,.22)'; for (let y = 0; y < h; y += 4) g.fillRect(0, y, w, 2); };
   // a border round the top of the walls
   const fr = (len) => basic({ map: ctex(1024, 96, (g, w, h) => memphis(g, w, h, '#f4efe0', 46, 'frieze'), [Math.max(1, Math.round(len / 2.4)), 1]) });
-  pl(8, .2, fr(8), 0, 2.78, -3.492, 0, G); pl(8, .2, fr(8), 0, 2.78, 3.492, PI, G); pl(7, .2, fr(7), -3.992, 2.78, 0, PI / 2, G); pl(4.7, .2, fr(4.7), 3.992, 2.78, -1.15, -PI / 2, G);
+  pl(8, .2, fr(8), 0, 2.78, -3.492, 0, G); pl(8, .2, fr(8), 0, 2.78, 3.492, PI, G); pl(7, .2, fr(7), -3.992, 2.78, 0, PI / 2, G);
 
   // the arcade cabinets: the game on each screen is drawn by its own section above
   const blk = lam({ color: 0x111114 });
   const cabinet = (z, name, body, c1, c2, tex, actName) => {
-    const A = grp(3.6, 0, z, -PI / 2), cab = lam({ color: body });
+    const A = grp(-3.6, 0, z, PI / 2), cab = lam({ color: body });
     bx(.66, .92, .7, cab, 0, .46, 0, A); bx(.66, .8, .5, cab, 0, 1.32, -.1, A); bx(.66, .2, .58, cab, 0, 1.82, -.06, A);
     const deck = bx(.66, .05, .3, blk, 0, .95, .3, A); deck.rotation.x = .12;
     const side = lam({ map: ctex(256, 512, (g, w, h) => { memphis(g, w, h, '#' + body.toString(16).padStart(6, '0'), 26, 'cab' + name); g.fillStyle = YEL; g.font = '900 ' + Math.min(54, Math.floor(590 / name.length)) + 'px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h / 2); g.rotate(-PI / 2); g.fillText(name, 0, 18); g.restore(); }) });
     pl(.7, 1.9, side, -.332, .96, 0, -PI / 2, A); pl(.7, 1.9, side, .332, .96, 0, PI / 2, A);
     pl(.5, .4, basic({ map: tex }), 0, 1.3, .152, 0, A);
-    hit(bx(.8, 1.95, .8, hitM, 3.6, .98, z), actName);
+    hit(bx(.8, 1.95, .7, hitM, -3.6, .98, z), actName);
     pl(.62, .16, basic({ map: ctex(400, 104, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, c1); gr.addColorStop(1, c2); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = YEL; g.strokeStyle = '#111'; g.lineWidth = 6; g.font = 'italic 900 ' + Math.min(58, Math.floor(570 / name.length)) + 'px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText(name, w / 2, h / 2 + 3); g.fillText(name, w / 2, h / 2 + 3); }) }), 0, 1.82, .232, 0, A);
     cyl(.008, .008, .07, blk, -.16, 1.0, .3, A); const knob = new THREE.Mesh(new THREE.SphereGeometry(.022, 12, 8), lam({ color: 0xd62c28 })); knob.position.set(-.16, 1.045, .3); A.add(knob);
     [[.02, 0xffd23a], [.09, 0x19b5a5], [.16, 0xff4f9a]].forEach((b) => cyl(.018, .018, .012, lam({ color: b[1] }), b[0], .985, .3, A));
     pl(.2, .26, lam({ map: ctex(100, 130, (g, w, h) => { g.fillStyle = '#26262b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#6a6a72'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12); g.fillStyle = '#ff8a2a'; g.fillRect(34, 40, 32, 22); g.fillStyle = '#111'; g.font = '700 13px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('25¢', 50, 56); g.fillRect(44, 84, 12, 26); }) }), 0, .5, .352, 0, A);
   };
-  cabinet(-.1, 'MALLOW SHOOTER', 0x1b1640, PURP, PINK, arc.tex, 'arcade'); arcDraw();
-  cabinet(.62, 'BOX STACK', 0x0e3b46, TEAL, '#3f8fe0', stk.tex, 'stack'); stkDraw();
+  cabinet(CAB_Z.arcade, 'MALLOW SHOOTER', 0x1b1640, PURP, PINK, arc.tex, 'arcade'); arcDraw();
+  cabinet(CAB_Z.stack, 'BOX STACK', 0x0e3b46, TEAL, '#3f8fe0', stk.tex, 'stack'); stkDraw();
 
   // the gumball machine
   const red = lam({ color: 0xd62c28 }), chrome = lam({ color: 0xc9ccd2 });
-  cyl(.13, .15, .06, red, 3.62, .03, 1.07); cyl(.022, .022, .72, chrome, 3.62, .42, 1.07); cyl(.11, .1, .16, red, 3.62, .86, 1.07);
-  const gum = new THREE.Mesh(new THREE.SphereGeometry(.15, 20, 14), basic({ map: ctex(256, 128, (g, w, h) => { g.fillStyle = '#e9f2f5'; g.fillRect(0, 0, w, h); const r = seed('gum'); for (let i = 0; i < 260; i++) { g.fillStyle = [PINK, TEAL, YEL, PURP, '#ff7a2a', '#3f8fe0', '#fff'][Math.floor(r() * 7)]; g.beginPath(); g.arc(r() * w, h * .3 + r() * h * .7, 7, 0, PI * 2); g.fill(); } }) })); gum.position.set(3.62, 1.06, 1.07); G.add(gum);
-  cyl(.05, .09, .05, red, 3.62, 1.215, 1.07);
+  cyl(.13, .15, .06, red, .95, .03, 3.25); cyl(.022, .022, .72, chrome, .95, .42, 3.25); cyl(.11, .1, .16, red, .95, .86, 3.25);
+  const gum = new THREE.Mesh(new THREE.SphereGeometry(.15, 20, 14), basic({ map: ctex(256, 128, (g, w, h) => { g.fillStyle = '#e9f2f5'; g.fillRect(0, 0, w, h); const r = seed('gum'); for (let i = 0; i < 260; i++) { g.fillStyle = [PINK, TEAL, YEL, PURP, '#ff7a2a', '#3f8fe0', '#fff'][Math.floor(r() * 7)]; g.beginPath(); g.arc(r() * w, h * .3 + r() * h * .7, 7, 0, PI * 2); g.fill(); } }) })); gum.position.set(.95, 1.06, 3.25); G.add(gum);
+  cyl(.05, .09, .05, red, .95, 1.215, 3.25);
 
   // a TV up in the corner with a tape playing
   const T = grp(3.52, 2.18, -3.08, -PI / 4), tvM = lam({ color: 0x2c2c30 });
@@ -640,10 +639,10 @@ function buildNineties() {
   [[1.36, -.7, 0], [1.47, -.69, 1], [1.4, -.66, 2]].forEach((c) => cyl(.02, .02, .003, [lam({ color: 0xf4efe0 }), capM, capM], c[0], TOP + .0016 + c[2] * .0004, c[1]));
 
   // on the walls: a clock, and three more posters
-  pl(.42, .42, basic({ transparent: true, map: ctex(256, 256, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#16121c'; g.beginPath(); g.arc(128, 128, 120, 0, PI * 2); g.fill(); g.shadowColor = TEAL; g.shadowBlur = 18; g.strokeStyle = '#7dfff0'; g.lineWidth = 9; g.beginPath(); g.arc(128, 128, 108, 0, PI * 2); g.stroke(); g.shadowColor = PINK; g.strokeStyle = '#ff9ac6'; g.lineWidth = 7; g.beginPath(); g.moveTo(128, 128); g.lineTo(128, 58); g.stroke(); g.beginPath(); g.moveTo(128, 128); g.lineTo(176, 150); g.stroke(); g.shadowBlur = 0; g.fillStyle = '#fff'; for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; g.fillRect(126 + Math.cos(a) * 90, 126 + Math.sin(a) * 90, 4, 4); } }) }), 3.985, 2.3, .82, -PI / 2, G);
-  pl(.56, .78, poster(336, 468, (g, w, h) => { memphis(g, w, h, '#101018', 18, 'p1'); g.fillStyle = '#101018e0'; g.fillRect(24, 120, w - 48, 230); g.fillStyle = YEL; g.font = '900 64px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MILK', w / 2, 196); g.fillText('CAPS', w / 2, 262); g.fillStyle = '#fff'; g.font = '700 24px Inter, sans-serif'; g.fillText('& SLAMMERS', w / 2, 300); g.fillStyle = PINK; g.font = '34px "Permanent Marker", cursive'; g.fillText('sold here!', w / 2, 338); }), 3.988, 2.0, -.86, -PI / 2, G);
+  pl(.42, .42, basic({ transparent: true, map: ctex(256, 256, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#16121c'; g.beginPath(); g.arc(128, 128, 120, 0, PI * 2); g.fill(); g.shadowColor = TEAL; g.shadowBlur = 18; g.strokeStyle = '#7dfff0'; g.lineWidth = 9; g.beginPath(); g.arc(128, 128, 108, 0, PI * 2); g.stroke(); g.shadowColor = PINK; g.strokeStyle = '#ff9ac6'; g.lineWidth = 7; g.beginPath(); g.moveTo(128, 128); g.lineTo(128, 58); g.stroke(); g.beginPath(); g.moveTo(128, 128); g.lineTo(176, 150); g.stroke(); g.shadowBlur = 0; g.fillStyle = '#fff'; for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; g.fillRect(126 + Math.cos(a) * 90, 126 + Math.sin(a) * 90, 4, 4); } }) }), 1.7, 2.5, 3.485, PI, G);   // over the door
+  pl(.45, .63, poster(336, 468, (g, w, h) => { memphis(g, w, h, '#101018', 18, 'p1'); g.fillStyle = '#101018e0'; g.fillRect(24, 120, w - 48, 230); g.fillStyle = YEL; g.font = '900 64px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MILK', w / 2, 196); g.fillText('CAPS', w / 2, 262); g.fillStyle = '#fff'; g.font = '700 24px Inter, sans-serif'; g.fillText('& SLAMMERS', w / 2, 300); g.fillStyle = PINK; g.font = '34px "Permanent Marker", cursive'; g.fillText('sold here!', w / 2, 338); }), -3.988, 2.27, -.49, PI / 2, G);   // over the cabinets
   pl(.62, .84, poster(372, 504, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#0a0a2a'); gr.addColorStop(1, PURP); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.strokeStyle = TEAL; g.lineWidth = 2; for (let i = 0; i <= 10; i++) { g.beginPath(); g.moveTo(w / 2 + (i - 5) * 8, 300); g.lineTo(w / 2 + (i - 5) * 80, h); g.stroke(); } for (let i = 0; i < 7; i++) { const y = 300 + i * i * 4.2; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } g.fillStyle = YEL; g.beginPath(); g.arc(w / 2, 210, 80, PI, 0); g.fill(); g.fillStyle = '#fff'; g.font = 'italic 900 50px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('SURF THE', w / 2, 70); g.fillText('WEB', w / 2, 120); g.font = '700 22px Inter, sans-serif'; g.fillStyle = '#7dfff0'; g.fillText('28.8k dial-up · $5 an hour', w / 2, h - 60); g.fillStyle = '#fff'; g.fillText('ask at the counter', w / 2, h - 28); }), 2.95, 1.75, 3.488, PI, G);
-  pl(.5, .62, poster(300, 372, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.fillRect(0, 0, w, 84); g.fillStyle = '#fff'; g.font = '900 44px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MARCH 1996', w / 2, 58); g.fillStyle = '#222'; g.font = '600 20px Inter, sans-serif'; for (let d = 1; d <= 31; d++) { const k = d + 4, x = 30 + (k % 7) * 40, y = 130 + Math.floor(k / 7) * 44; g.fillText(String(d), x, y); } g.strokeStyle = '#c0392b'; g.lineWidth = 4; g.beginPath(); g.arc(30 + 5 * 40, 124 + 2 * 44, 18, 0, PI * 2); g.stroke(); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.fillText('prerelease!', 200, 124 + 2 * 44 + 40); }), 3.988, 1.72, -2.9, -PI / 2, G);
+  pl(.5, .62, poster(300, 372, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.fillRect(0, 0, w, 84); g.fillStyle = '#fff'; g.font = '900 44px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MARCH 1996', w / 2, 58); g.fillStyle = '#222'; g.font = '600 20px Inter, sans-serif'; for (let d = 1; d <= 31; d++) { const k = d + 4, x = 30 + (k % 7) * 40, y = 130 + Math.floor(k / 7) * 44; g.fillText(String(d), x, y); } g.strokeStyle = '#c0392b'; g.lineWidth = 4; g.beginPath(); g.arc(30 + 5 * 40, 124 + 2 * 44, 18, 0, PI * 2); g.stroke(); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.fillText('prerelease!', 200, 124 + 2 * 44 + 40); }), 3.45, 1.5, -3.488, 0, G);   // on the back wall under the TV
 }
 // The person behind the till (owner, 2026-11-09: "a typical card shop employee
 // behind it with a black polo shirt with an exor logo on the shirt"): a simple
@@ -809,8 +808,8 @@ function buildHobby() {
   // racks of boxed product, filled when their feed answers: Warhammer kits beside the paints, and on the right
   // wall (owner, 2026-11-10: "Here can we put gunpla rack, models rack and another rack with blind boxes")
   const stripes = (g, w, h, cols) => cols.forEach((c, k) => { g.fillStyle = c; g.fillRect(40 + k * (w - 80) / cols.length, 150, (w - 80) / cols.length, 10); });
-  [{ key: 'kits', label: 'Warhammer boxes', set: 'Warhammer', feed: '/showcase/wargames.json', side: 'left', at: [-4, -.45], ry: PI / 2, sign: (g, w, h) => { rackHead(g, w, h, '#0c0c0c', [['WARHAMMER', '900 96px Inter, sans-serif', '#ffffff', 92]]); stripes(g, w, h, ['#c0392b']); } },
-  ].forEach((o) => {
+  // (owner, 2026-11-11: "no longer need the warhammer display on the left perhaps put arcades there" - the aisles carry Warhammer now; the two cabinets stand in its place)
+  [].forEach((o) => {
     const kr = Object.assign({ kind: 'kits', w: 1.14, h: 1.72, meshes: [] }, o); racks.push(kr);
     const kg = kr.g = new THREE.Group(); kg.position.set(kr.at[0], 0, kr.at[1]); kg.rotation.y = kr.ry; scene.add(kg);
     const black = lam({ color: 0x151515 }), W_ = kr.w, H_ = kr.h;
@@ -821,7 +820,7 @@ function buildHobby() {
   });
   // a tap box in front of each rack, and the corner as a whole from the door
   racks.forEach((r, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, r.h + .3, .36), hitM); m.position.set(0, (r.h + .3) / 2, .18); m.userData.rack = i; r.g.parent.add(m); m.position.applyMatrix4(new THREE.Matrix4().makeRotationY(r.ry || 0)); m.position.x += r.at[0]; m.position.z += r.at[1]; m.rotation.y = r.ry || 0; r.hitM = m; });
-  hit(bx(2.0, 2.0, .5, hitM, -2.64, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, 2.7, hitM, -3.8, 1.0, -1.0), 'hobby');
+  hit(bx(2.0, 2.0, .5, hitM, -2.64, 1.0, -3.3), 'hobby'); hit(bx(.5, 2.0, .9, hitM, -3.8, 1.0, -1.75), 'hobby');
   ringM = new THREE.Mesh(new THREE.TorusGeometry(.026, .004, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffffff })); ringM.visible = false; scene.add(ringM);
 }
 // One rack's feed after another (asked for all at once, the shop's API throttled two of them - live probe
@@ -1489,13 +1488,14 @@ function buildHall(list) {
   });
   const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35, Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
   hall.xMax = xMax; hall.zBack = zBack;
-  rwFull.visible = false; rwShort.visible = true;
+  // (owner, 2026-11-11: "remove the red wall as it ... makes it hard to know unless you turn to look, that there is more store that way")
+  rwFull.visible = false; rwShort.visible = false;
   const G = hall.g = new THREE.Group(); scene.add(G);
   const fl = pl(W_, D_, lam({ map: ctex(256, 256, drawCarpet, [W_ * 1.1, D_ * 1.1]) }), xc, 0, zc, 0, G); fl.rotation.x = -PI / 2;
   const ce = pl(W_, D_, lam({ map: ctex(128, 128, drawCeil, [W_ * 1.65, D_ * 1.65]) }), xc, 2.9, zc, 0, G); ce.rotation.x = PI / 2;
   const wall = (len) => lam({ map: ctex(512, 1024, drawWall, [Math.max(1, Math.round(len)), 1]) });
   pl(W_, 2.9, wall(W_), xc, 1.45, 3.5, PI, G); pl(W_, 2.9, wall(W_), xc, 1.45, zBack, 0, G); pl(D_, 2.9, wall(D_), xMax, 1.45, zc, -PI / 2, G);
-  pl(hall.zf - zBack, 2.9, wall(hall.zf - zBack), hall.x0 + .02, 1.45, (hall.zf + zBack) / 2, PI / 2, G);   // the hall's side of the wall it shares with the shop
+  if (zBack < -3.51) pl(-3.5 - zBack, 2.9, wall(-3.5 - zBack), hall.x0 + .02, 1.45, (-3.5 + zBack) / 2, PI / 2, G);   // the hall runs on behind the shop: a wall there, none between the two rooms
   // shelving in the shop's colours: charcoal steel, a red kick plate, a yellow edge on every shelf
   const steel = lam({ color: 0x1c1b1d }), cream = lam({ color: 0xe9e2d0 }), red = lam({ color: 0xd62c28 }), yellow = lam({ color: 0xf2c230 });
   const tubes = [], col = new THREE.Color(), d2 = new THREE.Object3D();
@@ -1503,7 +1503,8 @@ function buildHall(list) {
     const cx = aCx(a.i), zm = hall.zf - a.L / 2;
     [-1, 1].forEach((sd) => {
       const xf = cx + sd * 1.0;   // the shelf's front edge; it runs back from there
-      bx(.03, 1.98, a.L, cream, xf + sd * .44, .99, zm, G); bx(.45, .15, a.L, red, xf + sd * .225, .075, zm, G); bx(.46, .05, a.L, red, xf + sd * .225, 2.0, zm, G);
+      if (a.i || sd > 0) bx(.03, 1.98, a.L, cream, xf + sd * .44, .99, zm, G);   // the shelving facing the shop has no back: you see through it into the aisles
+      bx(.45, .15, a.L, red, xf + sd * .225, .075, zm, G); bx(.46, .05, a.L, red, xf + sd * .225, 2.0, zm, G);
       hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, a.L, steel, xf + sd * .22, y - .009, zm, G); bx(.012, .034, a.L, yellow, xf + sd * .004, y - .017, zm, G); });
       for (let z = hall.zf; z > hall.zf - a.L - .01; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
       bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - a.L, G);
@@ -1526,7 +1527,10 @@ function buildHall(list) {
   });
   for (let x = hall.x0 + 2; x < xMax; x += 4) tubes.push([x, 2.4]);
   const ti = new THREE.InstancedMesh(new THREE.BoxGeometry(.16, .03, 1.3), tubeM, tubes.length); tubes.forEach((t, k) => { d2.position.set(t[0], 2.86, t[1]); d2.rotation.set(0, 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); ti.setMatrixAt(k, d2.matrix); }); G.add(ti);
-  hit(bx(.4, 2.6, 2.3, hitM, hall.x0 + .1, 1.3, 2.35), 'aisles');
+  hit(bx(.4, 2.6, 7, hitM, hall.x0 + .25, 1.3, 0), 'aisles');   // anywhere along the open side
+  // a banner hung over the open side, facing the shop: what is through there
+  const bm = new THREE.MeshBasicMaterial({ map: ctex(1200, 200, (g, w, h) => { g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, w, 14); g.fillStyle = '#f2c230'; g.fillRect(0, h - 14, w, 14); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f2c230'; g.font = '900 78px Inter, sans-serif'; g.fillText('MORE STORE THIS WAY  ▸', w / 2, 72); g.fillStyle = '#fff'; g.font = '800 34px Inter, sans-serif'; let t = hall.list.map((a) => a.label.toUpperCase()).join('  ·  '), sc = Math.min(1, (w - 60) / g.measureText(t).width); g.save(); g.translate(w / 2, 142); g.scale(sc, 1); g.fillText(t, 0, 0); g.restore(); }) });
+  pl(3.0, .5, bm, hall.x0 - .02, 2.36, -1.0, -PI / 2, G); bx(.02, .54, 3.04, steel, hall.x0, 2.36, -1.0, G); [-1.4, 1.4].forEach((dz) => bx(.012, .28, .012, steel, hall.x0, 2.76, -1.0 + dz, G));
   $('#aislesN').textContent = n; $('#aislesN').hidden = false; lights(S.eve); ui(); kick();
 }
 function loadAisles() {
@@ -1621,7 +1625,7 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(.62) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
   leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'tv') tvStop();
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
@@ -1634,7 +1638,7 @@ function go(mode) {
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
   else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hx = aCx(S.aisle) - hallLead() - hall.x0 - .5; else if (S.mode !== 'aisles') S.hx = 0; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the hall · tap an aisle to walk in' : 'Drag or scroll to walk the hall · click an aisle to walk in'); }
   else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move Mallow · it sprays by itself' : 'Click to start · drag or arrow keys move Mallow · space sprays'); }
-  else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(.62), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
+  else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(CAB_Z.stack), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
   else if (mode === 'tv') { S.mode = 'tv'; glide(tvView(), 900); tvRun(); hint(''); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
   ui();
