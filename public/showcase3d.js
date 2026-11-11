@@ -1450,8 +1450,10 @@ function gradedView() {
    swipe walks you along it; at the far end you turn and come back up the other side, so the whole aisle is one
    ribbon read left to right. Every slot holds a plain box from the start; the ones in front of you become the
    products themselves (photo cut out, price sticker), read a page at a time (/showcase/aisle.json). */
-const hall = { list: [], built: false, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
-const aCx = (i) => hall.x0 + .3 + .45 + 1.0 + i * hall.pitch;
+const hall = { list: [], built: false, walk0: 1.7, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
+// (owner, 2026-11-11: "I don't want the shelving to be right at the opening I want an aisle First"): a walkway
+// hall.walk0 wide runs along the open side of the shop before the first shelving.
+const aCx = (i) => hall.x0 + hall.walk0 + .3 + .45 + 1.0 + i * hall.pitch;
 // where product k of a section stands: columns of six, top shelf down, running along the ribbon
 function slotPos(a, sec, k) {
   const col = sec.c0 + Math.floor(k / 6), d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + (a.nr - 1 - col) * hall.colW;   // the right side ends at the entrance, so a shorter side is bare at the far end, not at the mouth (owner's screenshot, 2026-11-10)
@@ -1503,7 +1505,15 @@ function buildHall(list) {
     const cx = aCx(a.i), zm = hall.zf - a.L / 2;
     [-1, 1].forEach((sd) => {
       const xf = cx + sd * 1.0;   // the shelf's front edge; it runs back from there
-      if (a.i || sd > 0) bx(.03, 1.98, a.L, cream, xf + sd * .44, .99, zm, G);   // the shelving facing the shop has no back: you see through it into the aisles
+      bx(.03, 1.98, a.L, cream, xf + sd * .44, .99, zm, G);
+      if (!a.i && sd < 0) {   // the side of the first shelving that faces the walkway and the shop: shelves of boxed stock too (dressing, not for picking up), so it reads as more shop, not as a wall
+        const xo = xf - .44; bx(.42, .15, a.L, red, xo - .21, .075, zm, G); bx(.44, .05, a.L, red, xo - .21, 2.0, zm, G);
+        hall.lv.forEach((y, r) => { if (r < 5) bx(.4, .018, a.L, steel, xo - .2, y - .009, zm, G); bx(.012, .034, a.L, yellow, xo - .41, y - .017, zm, G); });
+        for (let z = hall.zf; z > hall.zf - a.L - .01; z -= 1.2) bx(.035, 1.98, .035, steel, xo - .4, .99, z, G);
+        const nc = Math.floor((a.L - .3) / hall.colW), di = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, .23, .07).translate(0, .115, 0), lam({ color: 0xffffff }), nc * 6), q2 = seed('walkway');
+        for (let c = 0; c < nc; c++) for (let r = 0; r < 6; r++) { d2.position.set(xo - .16, hall.lv[r] + .012, hall.zf - .3 - c * hall.colW + (q2() - .5) * .03); d2.rotation.set(0, -PI / 2, 0); d2.scale.set(.8 + q2() * .4, .7 + q2() * .45, 1); d2.updateMatrix(); di.setMatrixAt(c * 6 + r, d2.matrix); col.setHSL(q2(), .3 + q2() * .35, .32 + q2() * .3); di.setColorAt(c * 6 + r, col); }
+        G.add(di);
+      }
       bx(.45, .15, a.L, red, xf + sd * .225, .075, zm, G); bx(.46, .05, a.L, red, xf + sd * .225, 2.0, zm, G);
       hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, a.L, steel, xf + sd * .22, y - .009, zm, G); bx(.012, .034, a.L, yellow, xf + sd * .004, y - .017, zm, G); });
       for (let z = hall.zf; z > hall.zf - a.L - .01; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
@@ -1526,6 +1536,7 @@ function buildHall(list) {
     a.hit = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.9, 1.4), hitM); a.hit.position.set(cx, 1.45, hall.zf - .5); a.hit.userData.aisle = a.i; G.add(a.hit);
   });
   for (let x = hall.x0 + 2; x < xMax; x += 4) tubes.push([x, 2.4]);
+  for (let z = -.6; z > zBack + 1; z -= 4.5) tubes.push([hall.x0 + hall.walk0 / 2 + .15, z]);   // over the walkway
   const ti = new THREE.InstancedMesh(new THREE.BoxGeometry(.16, .03, 1.3), tubeM, tubes.length); tubes.forEach((t, k) => { d2.position.set(t[0], 2.86, t[1]); d2.rotation.set(0, 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); ti.setMatrixAt(k, d2.matrix); }); G.add(ti);
   hit(bx(.4, 2.6, 7, hitM, hall.x0 + .25, 1.3, 0), 'aisles');   // anywhere along the open side
   // a banner hung over the open side, facing the shop: what is through there
