@@ -1207,7 +1207,7 @@ function boxesView() {
    kind (booster boxes, commander decks, Elite Trainer Boxes, bundles, decks, box sets). It does not change
    with the game tab. Looked at from behind the counter, close: drag to move over it, pinch to lean in, tap a
    box for its page. The set boxes move left to make room. */
-const sealed = { rows: [], w: 2.92, h: 0, x0: 1.02, y0: 1.12, py: .3, px: .243, nr: 8, loaded: false };
+const sealed = { rows: [], w: 2.93, h: 0, x0: 1.02, y0: 1.12, py: .3, px: .225, nr: 9, loaded: false };   // 13 columns x 9 shelves = 117 places
 let sealG = null, sealMeshes = [], sealHit = null;
 function buildSealed(games) {
   kill(sealG); sealG = null; sealMeshes = []; sealed.rows = [];
@@ -1230,7 +1230,7 @@ function buildSealed(games) {
     pl(Math.min(bw0 - .03, .9), .14, new THREE.MeshBasicMaterial({ map: ctex(600, 96, (c, w, h) => { c.fillStyle = '#14100e'; c.fillRect(0, 0, w, h); c.fillStyle = '#d62c28'; c.fillRect(0, 0, w, 8); c.fillStyle = '#f2c230'; c.font = '900 56px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const t = g.label.toUpperCase(), sc = Math.min(1, (w - 30) / c.measureText(t).width); c.save(); c.translate(w / 2, h / 2 + 6); c.scale(sc, 1); c.fillText(t, 0, 0); c.restore(); }) }), c0 * px + bw0 / 2, y0 + nr * py + .1, WZ + .2, 0, sealG);
     rows.forEach((r, i) => {   // the newest of the first kind at the top left of its block
       const c = { name: r.name, set: r.kind + ' · ' + g.label, price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: g.game, sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
-      const col = c0 + (i % g.cols), row = nr - 1 - Math.floor(i / g.cols), q = seed('seal' + c.name), bw = clamp(bh * c.ar, .14, .228), face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
+      const col = c0 + (i % g.cols), row = nr - 1 - Math.floor(i / g.cols), q = seed('seal' + c.name), bw = clamp(bh * c.ar, .14, .212), face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
       const hgt = Math.min(bw / c.ar, py - .05), m = new THREE.Mesh(new THREE.PlaneGeometry(hgt * c.ar, hgt), face); m.visible = false;
       m.position.set(px / 2 + col * px + (q() - .5) * .012, y0 + row * py + hgt / 2, WZ + .1 + (q() - .5) * .02); m.rotation.y = (q() - .5) * .1; m.userData = { card: c }; sealG.add(m); sealMeshes.push(m); sealed.rows.push(c);
       cardTex(c, 256).then((t) => { if (!m.parent) { t.dispose(); return; } face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
