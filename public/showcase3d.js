@@ -63,6 +63,7 @@ function frame(now) {
   cam.position.copy(view.pos); cam.rotation.set(view.pitch, view.yaw, 0);
   if (cam.fov !== view.fov) { cam.fov = view.fov; cam.updateProjectionMatrix(); }
   if (S.hand) placeHand(now);
+  placeFan();
   if (S.mode === 'case') caseTextures(now);
   if (hall.built) aisleStock(now);
   renderer.render(scene, cam);
@@ -1497,6 +1498,54 @@ function showTill() {
 }
 
 /* ---------- where you stand ---------- */
+/* ---------- asking at the counter (owner, 2026-11-11) ----------
+   "Add a section here that alludes to asking the shop employee for a card.. if the card comes up we have in
+   stock, make them on top loader plastic cases in a virtual hand and as you scroll through the instore copies
+   it is like you are fanning through the results in top loaders".
+   A note at the top of the screen takes a card's name. You are walked to the till, the person there "checks"
+   (/showcase/find.json: the shop's own in-stock search for the game on the tab), and every copy found comes
+   back as a top loader in a fan held in front of you: swipe (or arrows, or the wheel) fans through them, the
+   one in the middle stands up; tap it to take it in the hand as any card, or use the quick button for the
+   till. A card's copies come best condition first, the card asked for by name before near matches. */
+const fan = { g: new THREE.Group(), rows: [], p: 0, live: new Map(), q: '', seq: 0 };
+fan.g.visible = false; cam.add(fan.g);
+fan.dim = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), hm({ color: 0x050304, opacity: .8 })); fan.dim.position.z = -.5; fan.dim.renderOrder = 940; fan.g.add(fan.dim);
+function askFor(q) {
+  q = String(q || '').replace(/\s+/g, ' ').trim(); if (q.length < 2) { hint('Type at least two letters of the card\'s name'); return; }
+  if (S.hand) putBack(); if (S.mode !== 'ask') go('till'); $('#tillv').classList.remove('on'); askClear(); S.mode = 'ask'; fan.q = q; const seq = ++fan.seq; ui(); glide(tillView(), 700);
+  hint('“' + q + '? Let me check what we have…”');
+  fetch(W + '/showcase/find.json?game=' + encodeURIComponent(S.game || 'mtg') + '&q=' + encodeURIComponent(q), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (seq !== fan.seq || S.mode !== 'ask') return;
+    if (!d || !d.ok) { hint('“Sorry, I could not look that up just now - ask me again in a minute.”'); askBar(); return; }
+    fan.rows = (d.rows || []).map((r) => expand(r, r[8] || '')); fan.p = 0;
+    hint(fan.rows.length ? '“Here' + (fan.rows.length === 1 ? ' is the one copy' : ' are the ' + fan.rows.length + ' copies') + ' we have. Swipe to fan through them.”' : '“Sorry, nothing called ' + q + ' in stock right now.”');
+    askBar(); kick();
+  }).catch(() => { if (seq === fan.seq) hint('“Sorry, I could not look that up just now - ask me again in a minute.”'); });
+}
+function askClear() { fan.seq++; fan.live.forEach((m) => { const t = m.material.map; if (t && !t.userData.keep) t.dispose(); m.material.dispose(); fan.g.remove(m); }); fan.live.clear(); fan.rows = []; fan.p = 0; fan.g.visible = false; }
+function askBar() {
+  const n = fan.rows.length, i = clamp(Math.round(fan.p), 0, Math.max(0, n - 1)), k = fan.rows[i];
+  $('#askTtl').textContent = n ? '“' + fan.q + '” · ' + n + (n === 1 ? ' copy' : ' copies') + ' in stock' : '“' + fan.q + '”';
+  if (!k) { $('#capName').textContent = ''; $('#capSet').textContent = ''; $('#capBuy').hidden = true; document.body.dataset.fan = ''; return; }
+  document.body.dataset.fan = '1'; $('#capName').textContent = k.name; $('#capSet').textContent = [k.set, condText(k), k.foil ? 'Foil' : '', money(k.price), (i + 1) + ' of ' + n].filter(Boolean).join(' · ');
+  const b = $('#capBuy'), done = inPile(k); capCard = k; b.hidden = !k.variantId; b.disabled = done; b.textContent = done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till');
+}
+// the fan, laid out each frame it is up: the cards turn about a point below the hand, the middle one raised
+function placeFan() {
+  const on = S.mode === 'ask' && fan.rows.length > 0 && !S.hand; fan.g.visible = on; if (!on) return;
+  const W_ = canvas.clientWidth, H_ = canvas.clientHeight, d = .3, wpp = 2 * d * Math.tan(rad(cam.fov / 2)) / H_, hPx = Math.min(H_ * .44, W_ * .6 / (CW / CH)), sc = hPx * wpp / CH, R = hPx * wpp * 1.7, n = fan.rows.length, mid = Math.round(fan.p);
+  fan.cardPx = hPx * CW / CH;
+  for (let i = Math.max(0, mid - 5); i <= Math.min(n - 1, mid + 5); i++) if (!fan.live.has(i)) { const m = new THREE.Mesh(geoC, hm({ map: phTex })); m.userData = { card: fan.rows[i], fi: i }; fan.g.add(m); fan.live.set(i, m); wear(m, fan.rows[i], 512); }
+  fan.live.forEach((m, i) => {
+    if (Math.abs(i - mid) > 6) { const t = m.material.map; if (t && !t.userData.keep) t.dispose(); m.material.dispose(); fan.g.remove(m); fan.live.delete(i); return; }
+    const o = i - fan.p, a = clamp(o * .27, -1.25, 1.25), up = Math.max(0, 1 - Math.abs(o)), s = sc * (1 + .1 * up);
+    m.position.set(Math.sin(a) * R, (Math.cos(a) - 1) * R + .012 + up * .012, -d); m.rotation.set(0, 0, -a); m.scale.set(s, s, s); m.renderOrder = 980 - Math.round(Math.abs(o) * 4); m.visible = Math.abs(o) < 4.6;
+  });
+}
+function fanTo(i, ms) { const from = fan.p, to = clamp(i, 0, Math.max(0, fan.rows.length - 1)), t0 = performance.now(), id = fan.walk = (fan.walk || 0) + 1; anims.push((now) => { if (fan.walk !== id || S.mode !== 'ask' || drag) return false; const k = Math.min(1, (now - t0) / (reduce ? 1 : ms || 220)), e = 1 - Math.pow(1 - k, 3); fan.p = lerp(from, to, e); askBar(); return k < 1; }); kick(); }
+function fanTap(x, y) { const h = pick(Array.from(fan.live.values()).filter((m) => m.visible).sort((a, b) => b.renderOrder - a.renderOrder), x, y); if (!h) return; let top = h.object; fan.live.forEach((m) => { if (m.visible && m !== top && m.renderOrder > top.renderOrder && pick([m], x, y)) top = m; }); const i = top.userData.fi; if (i === Math.round(fan.p)) lift(top.userData.card, null); else fanTo(i); }
+document.addEventListener('submit', (e) => { if (e.target && e.target.id === 'askBar') { e.preventDefault(); const inp = $('#askQ'); askFor(inp.value); inp.blur(); } });
+
 /* ---------- a product's own page (owner, 2026-11-11) ----------
    "When clicking on a product on the shelves I should be able to zoom in on the photos and swipe left to right
    to look at any other of the photos for that product. That view should be less like card singles and more
@@ -1848,9 +1897,9 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 // the till and the person behind it; on a wide screen the pile's sheet covers the right, so they sit left of centre
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58);
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
-  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'tv') tvStop();
+  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint('Paints and Warhammer · tap a rack to look straight at it'); }
@@ -1881,7 +1930,7 @@ let hintT = 0;
 function hint(t) { const el = $('#hint'); clearTimeout(hintT); if (!t) { el.classList.add('gone'); return; } el.textContent = t; el.classList.remove('gone'); hintT = setTimeout(() => el.classList.add('gone'), 6000); }
 function ui() {
   document.body.dataset.mode = S.mode;
-  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode;
+  const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode === 'ask' ? 'till' : S.mode;
   if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '"' + (a.i === S.hs ? ' class="on"' : '') + '>' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
   if (S.mode === 'aisle') { const a = hall.list[S.aisle];   // the aisle's sections to jump to, and the turn to the shelf behind
     if (hall.secsFor !== a.i) { hall.secsFor = a.i; hall.secOn = -1; $('#aiSecs').innerHTML = a.secs.length > 1 ? a.secs.map((s) => '<button type="button" data-sec="' + s.j + '">' + esc(s.label) + '</button>').join('') : ''; $('#aiTurn').hidden = !a.nr; }
@@ -1920,6 +1969,7 @@ function tap(x, y) {
   else if (S.mode === 'boxes') { const h = pick(boxMeshes.concat(sealMeshes), x, y); if (h) return h.object.userData.card ? lift(h.object.userData.card, null) : openBox(h.object.userData.n); }
   else if (S.mode === 'hobby') { const h = pick(racks.map((r) => r.hitM), x, y); if (h) return goRack(h.object.userData.rack); }
   else if (S.mode === 'graded') { const h = pick(gcab.meshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
+  else if (S.mode === 'ask') return fanTap(x, y);
   else if (S.mode === 'arcade') return arcTap();
   else if (S.mode === 'stack') return stkTap();
   else if (S.mode === 'tv') return;
@@ -1988,7 +2038,7 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pinch || pts.size > 1) return;
   if (e.button && e.button !== 0) return;
-  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0, hx: S.hx || 0, sx: arc.x };
+  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0, hx: S.hx || 0, sx: arc.x, fp: fan.p };
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
   // a mouse held still on the case leans in to that spot
@@ -2008,6 +2058,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (S.hand) { hand.ry = drag.ry + dx * .011; hand.rx = clamp(drag.rx + dy * .006, -.6, .6); kick(); }
   else if (drag.axis === 'none') { /* a glide is running */ }
   else if (S.mode === 'graded') { const mpp = (gcab.vw || 1) / canvas.clientWidth; gcab.gx = drag.gx - dx * mpp; gcab.gy = drag.gy + dy * mpp; setView(gradedView()); }
+  else if (S.mode === 'ask') { if (drag.axis === 'x' && fan.rows.length) { fan.walk = (fan.walk || 0) + 1; fan.p = clamp(drag.fp - dx / ((fan.cardPx || 160) * .5), -.3, fan.rows.length - .7); askBar(); kick(); } }
   else if (S.mode === 'stack') { if (drag.axis === 'x') { const n = Math.round(dx * 240 / (.5 / (2 * (view.dist || .6) * hTan(view.fov)) * canvas.clientWidth) / 14); let m = n - (drag.cells || 0); while (m) { const st = m > 0 ? 1 : -1; stkMove(st); m -= st; } drag.cells = n; } }
   else if (S.mode === 'arcade') { arc.x = clamp(drag.sx + dx * arc.W / (.5 / (2 * (view.dist || .6) * hTan(view.fov)) * canvas.clientWidth), 10, arc.W - 10); }
   else if (S.mode === 'aisles') {
@@ -2034,6 +2085,7 @@ function endDrag(e) {
   if (S.hand) { hand.ty = Math.round(hand.ry / PI) * PI; hand.tx = 0; hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
   if (d.axis === 'none') return;
   hint('');
+  if (S.mode === 'ask') { fanTo(Math.round(fan.p + clamp(-(d.x - d.x0) * .002, -.6, .6))); return; }
   if (S.mode === 'stack') { if (d.axis === 'y' && dy > 40) stkDown(true); return; }
   if (S.mode === 'aisles') { if (d.axis === 'x' && Math.abs(dx) > 36) hallStep(dx < 0 ? 1 : -1); else glide(aislesView(), 260); return; }
   if (S.mode === 'aisle') {
@@ -2059,6 +2111,7 @@ canvas.addEventListener('wheel', (e) => {
     clearTimeout(wheelLean); wheelLean = setTimeout(() => leanAnim(0, 320), 260); return;
   }
   if (lean.on) return;
+  if (S.mode === 'ask') { if (wheelLock || !fan.rows.length) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 110); fanTo(Math.round(fan.p) + ((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) > 0 ? 1 : -1), 140); return; }
   if (S.mode === 'aisles') { const dl = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; if (wheelLock || Math.abs(dl) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 620); hallStep(dl > 0 ? 1 : -1); return; }
   if (S.mode === 'aisle') { aisleWalk((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .0035 * (hall.list[S.aisle].flip ? -1 : 1)); return; }
   if (S.mode === 'graded') { gcab.gx += e.deltaX * .002; gcab.gy -= e.deltaY * .002; setView(gradedView()); return; }
@@ -2072,6 +2125,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { back(); return; }
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
   const k = e.key;
+  if (S.mode === 'ask') { if (k === 'ArrowRight' || k === 'ArrowLeft') fanTo(Math.round(fan.p) + (k === 'ArrowRight' ? 1 : -1)); else if (k === 'Enter' && fan.rows.length) lift(fan.rows[clamp(Math.round(fan.p), 0, fan.rows.length - 1)], null); else return; e.preventDefault(); return; }
   if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallStep(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter' && S.hs >= 0) goAisle(S.hs); else return; e.preventDefault(); return; }
   if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2) * (hall.list[S.aisle].flip ? -1 : 1), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
@@ -2104,7 +2158,7 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'capBuy') capBuy(b);
   else if (b.id === 'x') putBack();
   else if (b.id === 'pull') sheet(!$('#panel').classList.contains('open'));
-  else if (b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
+  else if (b.id === 'askBack' || b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
   else if (b.id === 'crPrevSet') openSet(boxes.setIdx - 1);
   else if (b.id === 'crNextSet') openSet(boxes.setIdx + 1);
   else if (b.id === 'crLaneL') crateLane(-1);
@@ -2127,4 +2181,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };

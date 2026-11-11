@@ -105,6 +105,42 @@ export async function setCards(game, set, fetcher) {
   return { rows: rowsOf(products), count };
 }
 
+/* GET /showcase/find.json?game=&q=  "asking at the counter" (owner, 2026-11-11: "a section ... that alludes to
+   asking the shop employee for a card.. if the card comes up we have in stock" the copies come back in top
+   loaders to fan through). The feed's own title search, in stock only: every copy of every match, a card's
+   copies together best first, each row as in a set plus the set's name: [..., copies, set]. */
+export const FIND_MAX = 60;
+export function findRows(products, q) {
+  const k = String(q || "").toLowerCase(), groups = [];
+  for (const p of products || []) {
+    const rows = rowsFor(p); if (!rows.length) continue;
+    const m = String(p.title || "").match(/\[([^\]]+)\]\s*$/), set = m ? m[1].trim() : "";
+    const n = rows[0][0].toLowerCase(), rank = n === k ? 0 : n.indexOf(k) === 0 ? 1 : 2;   // the card asked for by name first, then names that start with it
+    groups.push({ rank, rows: rows.map((r) => r.concat([set])) });
+  }
+  groups.sort((a, b) => (a.rank - b.rank) || byName(a.rows[0][0], b.rows[0][0]) || byName(a.rows[0][8], b.rows[0][8]));
+  return groups.map((g) => g.rows).flat().slice(0, FIND_MAX);
+}
+export async function serveFind(request, env, ctx, url, opts) {
+  const o = opts || {}, game = String(url.searchParams.get("game") || "mtg").toLowerCase(), g = BOX_GAMES[game];
+  if (!g) return json({ ok: false, error: "no such game" }, 404);
+  const q = String(url.searchParams.get("q") || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (q.length < 2) return json({ ok: false, error: "q needs two letters or more" }, 400);
+  const cache = o.fetcher ? null : caches.default, key = new Request(new URL("/showcase/find.json?game=" + game + "&q=" + encodeURIComponent(q.toLowerCase()), url).toString());
+  const hit = cache && await cache.match(key); if (hit) return hit;
+  let out;
+  try {
+    const body = { storeUrl: STORE, game: g.bp, strict: null, sortTypes: [{ type: "title", asc: true, order: 1 }], variants: null, title: q, priceGreaterThan: 0, priceLessThan: null, instockOnly: true, limit: 80, offset: 0, setNames: [], rarities: [], types: [] };
+    const r = await (o.fetcher || fetch)(FEED_URL, { method: "POST", headers: FEED_HEADERS, body: JSON.stringify(body), signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error("feed HTTP " + r.status);
+    const j = await r.json(), rows = findRows(Array.isArray(j && j.products) ? j.products : [], q);
+    out = { ok: true, game, q, count: rows.length, rows };
+  } catch (e) { return json({ ok: false, game, q, error: String((e && e.message) || e).slice(0, 160) }, 502); }
+  const res = json(out, 200, CACHED(300));
+  if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
+
 export async function serveBoxes(request, env, ctx, url) {
   const game = String(url.searchParams.get("game") || "mtg").toLowerCase();
   const g = BOX_GAMES[game];

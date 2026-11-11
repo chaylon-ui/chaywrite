@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, rowsOf, rowsFor, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX, gqlPatient } from "../src/boxes.js";
+import { rowOf, rowsOf, rowsFor, findRows, serveFind, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX, gqlPatient } from "../src/boxes.js";
 
 const v = (sid, title, price, qty) => ({ shopifyId: sid, title, price, quantity: qty });
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), img: img || "", variants });
@@ -136,4 +136,16 @@ test("a set's box: every copy in stock is a row, the best condition first and th
   assert.equal(rowOf(bolt)[5], "Near Mint"); assert.equal(rowsFor(bolt)[1][7], 8);
   const rows = rowsOf([P("Zap [M3]", [["Near Mint", 1, 1]]), bolt, P("Gone [M3]", [["Near Mint", 1, 0]])]);
   assert.deepEqual(rows.map((r) => r[0] + ":" + r[5]), ["Lightning Bolt:Near Mint", "Lightning Bolt:Lightly Played", "Lightning Bolt:Heavily Played", "Lightning Bolt:Damaged", "Lightning Bolt:Near Mint", "Zap:Near Mint"]);
+});
+
+test("find.json: asking for a card - the feed's title search, every copy in stock, the card asked for first, each row with its set", async () => {
+  const P = (title, vs) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), img: "", variants: vs.map((x, i) => ({ shopifyId: "gid://shopify/ProductVariant/" + (i + 1), title: x[0], price: x[1], quantity: x[2] })) });
+  const prods = [P("Lightning Bolt Token [T]", [["Near Mint", 1, 1]]), P("Lightning Bolt [M3]", [["Lightly Played", 3, 1], ["Near Mint", 4, 1]]), P("Lightning Bolt [Alpha]", [["Heavily Played", 300, 1]]), P("Chain Lightning Bolt [X]", [["Near Mint", 2, 0]])];
+  assert.deepEqual(findRows(prods, "lightning bolt").map((r) => r[0] + "|" + r[8] + "|" + r[5]), ["Lightning Bolt|Alpha|Heavily Played", "Lightning Bolt|M3|Near Mint", "Lightning Bolt|M3|Lightly Played", "Lightning Bolt Token|T|Near Mint"]);
+  let sent = null;
+  const U2 = (q) => new URL("https://w.example/showcase/find.json" + q);
+  const j = await (await serveFind(new Request(U2("?game=mtg&q=Lightning%20%20Bolt")), {}, {}, U2("?game=mtg&q=Lightning%20%20Bolt"), { fetcher: async (u, init) => { sent = JSON.parse(init.body); return new Response(JSON.stringify({ products: prods, count: 4 })); } })).json();
+  assert.equal(j.ok, true); assert.equal(j.count, 4); assert.equal(sent.title, "Lightning Bolt"); assert.equal(sent.instockOnly, true); assert.deepEqual(sent.setNames, []);
+  assert.equal((await serveFind(new Request(U2("?game=mtg&q=a")), {}, {}, U2("?game=mtg&q=a"), { fetcher: async () => { throw new Error("not asked"); } })).status, 400);
+  assert.equal((await serveFind(new Request(U2("?game=nope&q=bolt")), {}, {}, U2("?game=nope&q=bolt"), { fetcher: async () => { throw new Error("not asked"); } })).status, 404);
 });

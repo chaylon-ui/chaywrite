@@ -7,7 +7,7 @@ import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO 
 import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql, PRICE_DO } from "./price-history.js";
 import { serveShowcase, serveShowcaseIcon, serveShowcaseAlike, serveShowcaseImg } from "./showcase.js";
-import { serveBoxes, serveCard, serveSealed, serveWargames, serveShelf } from "./boxes.js";
+import { serveBoxes, serveFind, serveCard, serveSealed, serveWargames, serveShelf } from "./boxes.js";
 import { serveSetLogos } from "./setlogos.js";
 import { serveAisles, serveAisle, serveGraded, serveProduct } from "./aisles.js";
 import { servePlamodTargets } from "./plamod.js";
@@ -400,6 +400,7 @@ async function route(request, env, ctx) {
     if (url.pathname === "/showcase/alike.json") return serveShowcaseAlike(request, env, ctx);
     if (url.pathname === "/showcase/boxes.json" || url.pathname === "/showcase/set.json") return serveBoxes(request, env, ctx, url);
     if (url.pathname === "/showcase/card.json") return serveCard(request, env, ctx, url);
+    if (url.pathname === "/showcase/find.json") return serveFind(request, env, ctx, url);
     if (url.pathname === "/showcase/sealed.json") return serveSealed(request, env, ctx, url);
     if (url.pathname === "/showcase/wargames.json") return serveWargames(request, env, ctx, url);
     if (url.pathname === "/showcase/shelf.json") return serveShelf(request, env, ctx, url);
