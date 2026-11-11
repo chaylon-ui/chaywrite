@@ -32,6 +32,7 @@ const V3 = THREE.Vector3, PI = Math.PI;
 const CW = .063, CH = .088;                 // a toploader
 const X1 = .9, ZF = -.65, ZB = -1.15;       // the glass case: its right end, front and back
 const TOP = 1.0;                            // counter height
+const CEIL = 4.3;                           // the ceiling (owner, 2026-11-11: "make ceilings much taller with lights"); the walls' paper and panelling stop at 2.9, plain paint above
 
 const S = { mode: 'door', game: '', cases: [], icons: [], shelves: [], lay: [], shelf: 0, walk: 0, vx: 0, x0: -1, caseLen: 2, pan: 0, look: { yaw: 0, pitch: 0 }, hand: null, handSrc: null, pile: [], ext: [], idf: null, busy: false, eve: 0 };
 
@@ -63,7 +64,7 @@ function frame(now) {
   if (cam.fov !== view.fov) { cam.fov = view.fov; cam.updateProjectionMatrix(); }
   if (S.hand) placeHand(now);
   if (S.mode === 'case') caseTextures(now);
-  if (S.mode === 'aisle' || S.mode === 'aisles') aisleStock(now);
+  if (hall.built) aisleStock(now);
   renderer.render(scene, cam);
   if (busy) kick();
 }
@@ -248,19 +249,35 @@ const hot = [];                              // things a tap can walk to or set 
 const hit = (mesh, act) => { mesh.userData.act = act; hot.push(mesh); return mesh; };
 
 /* ---------- the room ---------- */
-let hemi, sun, lampL, tubeM, shadeM, bell, pileG, signT, neonL, neonHalo, rwFull, rwShort;
+let hemi, sun, lampL, tubeM, shadeM, bell, pileG, signT, neonL, neonHalo, rwFull, rwShort, rwUp;
+// Track lighting (owner, 2026-11-11: "can we put some track lighting up"): black cans on a rail, each with a lit lens.
+// heads: [x, y, z, tilt about x, tilt about z]
+function trackHeads(parent, heads) {
+  const can = new THREE.InstancedMesh(new THREE.CylinderGeometry(.04, .055, .13, 12), lam({ color: 0x141416 }), heads.length), lens = new THREE.InstancedMesh(new THREE.SphereGeometry(.036, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff3cf }), heads.length), o = new THREE.Object3D(), dir = new V3();
+  heads.forEach((h, k) => { o.position.set(h[0], h[1], h[2]); o.rotation.set(h[3], 0, h[4]); o.scale.set(1, 1, 1); o.updateMatrix(); can.setMatrixAt(k, o.matrix); dir.set(0, -1, 0).applyEuler(o.rotation); o.position.addScaledVector(dir, .06); o.updateMatrix(); lens.setMatrixAt(k, o.matrix); });
+  parent.add(can); parent.add(lens);
+}
 function poster(w, h, draw) { return new THREE.MeshLambertMaterial({ map: ctex(w, h, draw) }); }
 function buildRoom() {
   hemi = new THREE.HemisphereLight(0xfff3dc, 0x4a3a2c, 2.6); scene.add(hemi);
   sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(1.5, 4, 3); scene.add(sun);
   lampL = new THREE.PointLight(0xffc27a, 0, 6, 1.6); lampL.position.set(2.2, 1.35, -.85); scene.add(lampL);
   const floor = pl(8, 7, lam({ map: ctex(256, 256, drawCarpet, [9, 8]) }), 0, 0, 0); floor.rotation.x = -PI / 2;
-  const ceil = pl(8, 7, lam({ map: ctex(128, 128, drawCeil, [13, 12]) }), 0, 2.9, 0); ceil.rotation.x = PI / 2;
+  const ceil = pl(8, 7, lam({ map: ctex(128, 128, drawCeil, [13, 12]) }), 0, CEIL, 0); ceil.rotation.x = PI / 2;
   const wallM = lam({ map: ctex(512, 1024, drawWall, [8, 1]) });
   pl(8, 2.9, wallM, 0, 1.45, -3.5, 0); pl(8, 2.9, wallM, 0, 1.45, 3.5, PI); pl(7, 2.9, wallM, -4, 1.45, 0, PI / 2); rwFull = pl(7, 2.9, wallM, 4, 1.45, 0, -PI / 2); rwShort = pl(4.7, 2.9, lam({ map: ctex(512, 1024, drawWall, [5, 1]) }), 4, 1.45, -1.15, -PI / 2); rwShort.visible = false;
-  // fluorescent tubes
+  const upM = lam({ color: 0xc4b693 }), uh = CEIL - 2.9, uy = 2.9 + uh / 2;   // the walls above the border
+  pl(8, uh, upM, 0, uy, -3.5, 0); pl(8, uh, upM, 0, uy, 3.5, PI); pl(7, uh, upM, -4, uy, 0, PI / 2); rwUp = pl(7, uh, upM, 4, uy, 0, -PI / 2);
+  // fluorescent tubes, hung on rods now the ceiling is high
   tubeM = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  [[-1.8, -1.2], [1.8, -1.2], [-1.8, 1.6], [1.8, 1.6]].forEach((p) => { bx(1.3, .05, .3, lam({ color: 0xbdb8a8 }), p[0], 2.875, p[1]); bx(1.2, .03, .06, tubeM, p[0], 2.84, p[1] - .07); bx(1.2, .03, .06, tubeM, p[0], 2.84, p[1] + .07); });
+  [[-1.8, -1.2], [1.8, -1.2], [-1.8, 1.6], [1.8, 1.6]].forEach((p) => { bx(1.3, .05, .3, lam({ color: 0xbdb8a8 }), p[0], 3.5, p[1]); bx(1.2, .03, .06, tubeM, p[0], 3.465, p[1] - .07); bx(1.2, .03, .06, tubeM, p[0], 3.465, p[1] + .07); [-.5, .5].forEach((dx) => bx(.012, CEIL - 3.525, .012, lam({ color: 0x55555c }), p[0] + dx, (CEIL + 3.525) / 2, p[1])); });
+  // track lights: a rail over the counter aimed at the case and the back wall, one down the left side for the cabinet, racks and arcades
+  const railM = lam({ color: 0x141416 }), th = [];
+  bx(5.6, .03, .05, railM, -.5, 3.2, .1); [-2.8, -.5, 1.8].forEach((x) => bx(.012, CEIL - 3.2, .012, railM, x, (CEIL + 3.2) / 2, .1));
+  for (let i = 0; i < 8; i++) th.push([-3.0 + i * .72, 3.12, .1, i % 2 ? .75 : .45, 0]);
+  bx(.05, .03, 5.4, railM, -2.6, 3.2, .3); [-2.0, .3, 2.6].forEach((z) => bx(.012, CEIL - 3.2, .012, railM, -2.6, (CEIL + 3.2) / 2, z));
+  for (let i = 0; i < 7; i++) th.push([-2.6, 3.12, -2.2 + i * .82, 0, -.6]);
+  trackHeads(scene, th);
   // the front door behind you: daylight through the glass, the OPEN sign seen from inside
   pl(1.05, 2.15, poster(256, 512, (g, w, h) => { g.fillStyle = '#3a200d'; g.fillRect(0, 0, w, h); const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#dfeaf2'); gr.addColorStop(.6, '#b9c9bf'); gr.addColorStop(1, '#8b8f84'); g.fillStyle = gr; g.fillRect(22, 22, w - 44, h - 120); g.fillStyle = '#c0392b'; g.fillRect(70, 120, 116, 56); g.fillStyle = '#fff'; g.font = '700 34px Inter, sans-serif'; g.textAlign = 'center'; g.save(); g.translate(128, 160); g.scale(-1, 1); g.fillText('OPEN', 0, 0); g.restore(); g.fillStyle = '#b08a3a'; g.fillRect(w - 44, h * .55, 14, 46); }), 1.7, 1.075, 3.49, PI);
   // posters and notes
@@ -1450,14 +1467,16 @@ function gradedView() {
    swipe walks you along it; at the far end you turn and come back up the other side, so the whole aisle is one
    ribbon read left to right. Every slot holds a plain box from the start; the ones in front of you become the
    products themselves (photo cut out, price sticker), read a page at a time (/showcase/aisle.json). */
-const hall = { list: [], built: false, walk0: 1.7, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
-// (owner, 2026-11-11: "I don't want the shelving to be right at the opening I want an aisle First"): a walkway
-// hall.walk0 wide runs along the open side of the shop before the first shelving.
-const aCx = (i) => hall.x0 + hall.walk0 + .3 + .45 + 1.0 + i * hall.pitch;
+const hall = { list: [], built: false, x0: 4, zf: 1.2, pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
+// (owner, 2026-11-11: "I don't want the shelving to be right at the opening I want an aisle First", then, of the
+// dressed shelf that stood there, "There should be no fake product aisle like this one it should be product right
+// away"): the FIRST AISLE is the walkway along the shop's open side. It has one shelf, the one facing the shop,
+// holding all of its products (a.flip: its ribbon runs the other way across the screen).
+const aCx = (i) => hall.x0 + 1.0 + i * hall.pitch;
 // where product k of a section stands: columns of six, top shelf down, running along the ribbon
 function slotPos(a, sec, k) {
-  const col = sec.c0 + Math.floor(k / 6), d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + (a.nr - 1 - col) * hall.colW;   // the right side ends at the entrance, so a shorter side is bare at the far end, not at the mouth (owner's screenshot, 2026-11-10)
-  return { x: aCx(a.i) + (sec.left ? -1.14 : 1.14), y: hall.lv[k % 6] + .012, z: hall.zf - d, ry: sec.left ? PI / 2 : -PI / 2, left: sec.left, s: sec.s0 + (col - sec.c0) * hall.colW };
+  const right = a.flip || !sec.left, col = sec.c0 + Math.floor(k / 6), d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + (a.nr - 1 - col) * hall.colW;   // the right side ends at the entrance, so a shorter side is bare at the far end, not at the mouth (owner's screenshot, 2026-11-10)
+  return { x: aCx(a.i) + (right ? 1.14 : -1.14), y: hall.lv[k % 6] + .012, z: hall.zf - d, ry: right ? -PI / 2 : PI / 2, left: !right, s: sec.s0 + (col - sec.c0) * hall.colW };
 }
 function drawAisleSign(g, w, h, a) {
   g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, w, 46); g.fillStyle = '#f2c230'; g.fillRect(0, 46, w, 6); g.fillRect(0, h - 12, w, 12);
@@ -1482,6 +1501,7 @@ function buildHall(list) {
     o.secs = (a.secs && a.secs.length ? a.secs : [{ key: '', label: a.label, count: a.count }]).map((s, j) => ({ key: s.key, label: s.label, count: s.count, j, rows: [], next: '', done: false, fail: 0, cols: Math.max(3, Math.ceil(s.count / 6)) }));
     const N = o.secs.reduce((n, s) => n + s.cols, 0); let run = 0, best = 0, bestV = 1e9;
     o.secs.forEach((s, j) => { run += s.cols; const v = Math.max(run, N - run); if (v < bestV) { bestV = v; best = j + 1; } });   // turn at the section break nearest half way
+    if (!i) { best = o.secs.length; o.flip = true; }   // the first aisle: one shelf, facing the shop
     o.nl = o.secs.slice(0, best).reduce((n, s) => n + s.cols, 0); o.nr = N - o.nl;
     o.U = (Math.max(o.nl, o.nr) - 1) * hall.colW; o.L = o.U + 1.1; o.smax = o.nr ? 2 * o.U + hall.T : o.U;
     let c = 0, off = 0, left = true;
@@ -1491,12 +1511,13 @@ function buildHall(list) {
   const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35, Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
   hall.xMax = xMax; hall.zBack = zBack;
   // (owner, 2026-11-11: "remove the red wall as it ... makes it hard to know unless you turn to look, that there is more store that way")
-  rwFull.visible = false; rwShort.visible = false;
+  rwFull.visible = false; rwShort.visible = false; rwUp.visible = false;
   const G = hall.g = new THREE.Group(); scene.add(G);
   const fl = pl(W_, D_, lam({ map: ctex(256, 256, drawCarpet, [W_ * 1.1, D_ * 1.1]) }), xc, 0, zc, 0, G); fl.rotation.x = -PI / 2;
-  const ce = pl(W_, D_, lam({ map: ctex(128, 128, drawCeil, [W_ * 1.65, D_ * 1.65]) }), xc, 2.9, zc, 0, G); ce.rotation.x = PI / 2;
+  const ce = pl(W_, D_, lam({ map: ctex(128, 128, drawCeil, [W_ * 1.65, D_ * 1.65]) }), xc, CEIL, zc, 0, G); ce.rotation.x = PI / 2;
   const wall = (len) => lam({ map: ctex(512, 1024, drawWall, [Math.max(1, Math.round(len)), 1]) });
   pl(W_, 2.9, wall(W_), xc, 1.45, 3.5, PI, G); pl(W_, 2.9, wall(W_), xc, 1.45, zBack, 0, G); pl(D_, 2.9, wall(D_), xMax, 1.45, zc, -PI / 2, G);
+  const upM = lam({ color: 0xc4b693 }), uh = CEIL - 2.9, uy = 2.9 + uh / 2; pl(W_, uh, upM, xc, uy, 3.5, PI, G); pl(W_, uh, upM, xc, uy, zBack, 0, G); pl(D_, uh, upM, xMax, uy, zc, -PI / 2, G); if (zBack < -3.51) pl(-3.5 - zBack, uh, upM, hall.x0 + .02, uy, (-3.5 + zBack) / 2, PI / 2, G);
   if (zBack < -3.51) pl(-3.5 - zBack, 2.9, wall(-3.5 - zBack), hall.x0 + .02, 1.45, (-3.5 + zBack) / 2, PI / 2, G);   // the hall runs on behind the shop: a wall there, none between the two rooms
   // shelving in the shop's colours: charcoal steel, a red kick plate, a yellow edge on every shelf
   const steel = lam({ color: 0x1c1b1d }), cream = lam({ color: 0xe9e2d0 }), red = lam({ color: 0xd62c28 }), yellow = lam({ color: 0xf2c230 });
@@ -1505,15 +1526,8 @@ function buildHall(list) {
     const cx = aCx(a.i), zm = hall.zf - a.L / 2;
     [-1, 1].forEach((sd) => {
       const xf = cx + sd * 1.0;   // the shelf's front edge; it runs back from there
+      if (a.flip && sd < 0) return;   // the first aisle is open to the shop on that side
       bx(.03, 1.98, a.L, cream, xf + sd * .44, .99, zm, G);
-      if (!a.i && sd < 0) {   // the side of the first shelving that faces the walkway and the shop: shelves of boxed stock too (dressing, not for picking up), so it reads as more shop, not as a wall
-        const xo = xf - .44; bx(.42, .15, a.L, red, xo - .21, .075, zm, G); bx(.44, .05, a.L, red, xo - .21, 2.0, zm, G);
-        hall.lv.forEach((y, r) => { if (r < 5) bx(.4, .018, a.L, steel, xo - .2, y - .009, zm, G); bx(.012, .034, a.L, yellow, xo - .41, y - .017, zm, G); });
-        for (let z = hall.zf; z > hall.zf - a.L - .01; z -= 1.2) bx(.035, 1.98, .035, steel, xo - .4, .99, z, G);
-        const nc = Math.floor((a.L - .3) / hall.colW), di = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, .23, .07).translate(0, .115, 0), lam({ color: 0xffffff }), nc * 6), q2 = seed('walkway');
-        for (let c = 0; c < nc; c++) for (let r = 0; r < 6; r++) { d2.position.set(xo - .16, hall.lv[r] + .012, hall.zf - .3 - c * hall.colW + (q2() - .5) * .03); d2.rotation.set(0, -PI / 2, 0); d2.scale.set(.8 + q2() * .4, .7 + q2() * .45, 1); d2.updateMatrix(); di.setMatrixAt(c * 6 + r, d2.matrix); col.setHSL(q2(), .3 + q2() * .35, .32 + q2() * .3); di.setColorAt(c * 6 + r, col); }
-        G.add(di);
-      }
       bx(.45, .15, a.L, red, xf + sd * .225, .075, zm, G); bx(.46, .05, a.L, red, xf + sd * .225, 2.0, zm, G);
       hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, a.L, steel, xf + sd * .22, y - .009, zm, G); bx(.012, .034, a.L, yellow, xf + sd * .004, y - .017, zm, G); });
       for (let z = hall.zf; z > hall.zf - a.L - .01; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
@@ -1524,24 +1538,48 @@ function buildHall(list) {
     a.secs.forEach((sec) => {
       for (let k = 0; k < sec.count; k++) { const p = slotPos(a, sec, k); d2.position.set(p.x, p.y, p.z + (q() - .5) * .03); d2.rotation.set(0, p.ry, 0); d2.scale.set(.8 + q() * .4, .7 + q() * .45, 1); d2.updateMatrix(); inst.setMatrixAt(sec.off + k, d2.matrix); col.setHSL(q(), .25 + q() * .35, .3 + q() * .3); inst.setColorAt(sec.off + k, col); }
       // its sign on top of the shelving where it starts, and a divider down the shelves
-      const sd = sec.left ? -1 : 1, fw = sec.left ? -1 : 1, p0 = slotPos(a, sec, 0), w = Math.min(1.1, sec.cols * hall.colW - .04), zs = p0.z + fw * (w / 2 - hall.colW / 2 + .02);
-      pl(w, .19, new THREE.MeshBasicMaterial({ map: ctex(560, 96, (g, cw, ch) => drawSecSign(g, cw, ch, sec)) }), cx + sd * .985, 2.135, zs, sec.left ? PI / 2 : -PI / 2, G);
+      const fw = sec.left ? -1 : 1, p0 = slotPos(a, sec, 0), sd = p0.left ? -1 : 1, w = Math.min(1.1, sec.cols * hall.colW - .04), zs = p0.z + fw * (w / 2 - hall.colW / 2 + .02);
+      pl(w, .19, new THREE.MeshBasicMaterial({ map: ctex(560, 96, (g, cw, ch) => drawSecSign(g, cw, ch, sec)) }), cx + sd * .985, 2.135, zs, p0.left ? PI / 2 : -PI / 2, G);
       bx(.44, 1.84, .012, cream, cx + sd * 1.22, 1.07, p0.z - fw * hall.colW / 2, G);
     });
     G.add(inst);
     // the header over the entrance, and again every nine metres: two-sided, hung from the ceiling
     const sm = new THREE.MeshBasicMaterial({ map: ctex(900, 260, (g, w, h) => drawAisleSign(g, w, h, a)) });
-    for (let z = hall.zf + .15; z > hall.zf - a.L; z -= 9) { pl(1.8, .52, sm, cx, 2.42, z + .012, 0, G); pl(1.8, .52, sm, cx, 2.42, z - .012, PI, G); bx(1.84, .56, .02, steel, cx, 2.42, z, G); [-.8, .8].forEach((dx) => bx(.012, .24, .012, steel, cx + dx, 2.78, z, G)); }
+    for (let z = hall.zf + .15; z > hall.zf - a.L; z -= 9) { pl(1.8, .52, sm, cx, 2.42, z + .012, 0, G); pl(1.8, .52, sm, cx, 2.42, z - .012, PI, G); bx(1.84, .56, .02, steel, cx, 2.42, z, G); [-.8, .8].forEach((dx) => bx(.012, CEIL - 2.66, .012, steel, cx + dx, (CEIL + 2.66) / 2, z, G)); }
     for (let z = hall.zf - 1.5; z > hall.zf - a.L; z -= 4.5) tubes.push([cx, z]);
     a.hit = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.9, 1.4), hitM); a.hit.position.set(cx, 1.45, hall.zf - .5); a.hit.userData.aisle = a.i; G.add(a.hit);
   });
+  // Track lights down every aisle, and the floor behind the shorter aisles set out as play space (owner,
+  // 2026-11-11: "These dead areas should be filled with 'play space' tables"): folding tables with a mat and
+  // four chairs each, under a hanging sign.
+  const railM = lam({ color: 0x141416 }), heads = [], tabs = [];
+  const psM = new THREE.MeshBasicMaterial({ map: ctex(800, 200, (g, w, h) => { g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#19b5a5'; g.fillRect(0, 0, w, 14); g.fillStyle = '#ff4f9a'; g.fillRect(0, h - 14, w, 14); g.fillStyle = '#f2c230'; g.font = '900 96px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('PLAY SPACE', w / 2, 86); g.fillStyle = '#fff'; g.font = '700 30px Inter, sans-serif'; g.fillText('pull up a chair · open play all day', w / 2, 156); }) });
+  hall.list.forEach((a) => {
+    const cx = aCx(a.i), z0 = hall.zf - a.L;
+    bx(.05, .03, a.L, railM, cx, 3.2, hall.zf - a.L / 2, G); for (let z = hall.zf - .4; z > z0; z -= 3.2) bx(.012, CEIL - 3.2, .012, railM, cx, (CEIL + 3.2) / 2, z, G);
+    for (let z = hall.zf - .7, k = 0; z > z0 + .3; z -= 1.5, k++) heads.push([cx, 3.12, z, 0, a.flip ? .6 : k % 2 ? .6 : -.6]);
+    const zs = z0 - 1.6, ze = zBack + 1.2; if (zs - ze < 1.5) return;
+    pl(1.6, .4, psM, cx, 2.5, zs + .7 + .012, 0, G); pl(1.6, .4, psM, cx, 2.5, zs + .7 - .012, PI, G); bx(1.64, .44, .02, steel, cx, 2.5, zs + .7, G); [-.7, .7].forEach((dx) => bx(.012, CEIL - 2.72, .012, steel, cx + dx, (CEIL + 2.72) / 2, zs + .7, G));
+    for (let z = zs; z > ze; z -= 2.3) { tabs.push([cx, z]); if (Math.round((zs - z) / 2.3) % 2 === 0) tubes.push([cx, z]); }
+  });
+  trackHeads(G, heads);
+  if (tabs.length) {
+    const im = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); G.add(m); return m; }, nT = tabs.length, q3 = seed('play');
+    const top = im(new THREE.BoxGeometry(1.5, .035, .75), lam({ color: 0xb9ad98 }), nT), legs = im(new THREE.BoxGeometry(.03, .7, .03), lam({ color: 0x55555c }), nT * 4), seat = im(new THREE.BoxGeometry(.4, .025, .4), lam({ color: 0x55555c }), nT * 4), back = im(new THREE.BoxGeometry(.4, .3, .02), lam({ color: 0x55555c }), nT * 4), mat = im(new THREE.BoxGeometry(.6, .004, .35), lam({ color: 0xffffff }), nT * 2);
+    const put = (m, k, x, y, z, ry) => { d2.position.set(x, y, z); d2.rotation.set(0, ry || 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); m.setMatrixAt(k, d2.matrix); };
+    tabs.forEach((t, k) => {
+      const x = t[0] + (q3() - .5) * .2, z = t[1], ry = (q3() - .5) * .12;
+      put(top, k, x, .72, z, ry); [[-.68, -.3], [.68, -.3], [-.68, .3], [.68, .3]].forEach((l, j) => put(legs, k * 4 + j, x + l[0], .35, z + l[1], 0));
+      [[-.36, -.62, 0], [.36, -.62, 0], [-.36, .62, PI], [.36, .62, PI]].forEach((c, j) => { const cz = z + c[1] + (q3() - .5) * .12, cr = c[2] + (q3() - .5) * .5; put(seat, k * 4 + j, x + c[0], .45, cz, cr); put(back, k * 4 + j, x + c[0] - Math.sin(cr) * .19, .62, cz - Math.cos(cr) * .19, cr); });
+      [-.36, .36].forEach((dx, j) => { put(mat, k * 2 + j, x + dx, .74, z, ry); col.setHSL(q3(), .55, .42); mat.setColorAt(k * 2 + j, col); });
+    });
+  }
   for (let x = hall.x0 + 2; x < xMax; x += 4) tubes.push([x, 2.4]);
-  for (let z = -.6; z > zBack + 1; z -= 4.5) tubes.push([hall.x0 + hall.walk0 / 2 + .15, z]);   // over the walkway
-  const ti = new THREE.InstancedMesh(new THREE.BoxGeometry(.16, .03, 1.3), tubeM, tubes.length); tubes.forEach((t, k) => { d2.position.set(t[0], 2.86, t[1]); d2.rotation.set(0, 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); ti.setMatrixAt(k, d2.matrix); }); G.add(ti);
+  const ti = new THREE.InstancedMesh(new THREE.BoxGeometry(.16, .03, 1.3), tubeM, tubes.length); tubes.forEach((t, k) => { d2.position.set(t[0], CEIL - .04, t[1]); d2.rotation.set(0, 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); ti.setMatrixAt(k, d2.matrix); }); G.add(ti);
   hit(bx(.4, 2.6, 7, hitM, hall.x0 + .25, 1.3, 0), 'aisles');   // anywhere along the open side
   // a banner hung over the open side, facing the shop: what is through there
   const bm = new THREE.MeshBasicMaterial({ map: ctex(1200, 200, (g, w, h) => { g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, w, 14); g.fillStyle = '#f2c230'; g.fillRect(0, h - 14, w, 14); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f2c230'; g.font = '900 78px Inter, sans-serif'; g.fillText('MORE STORE THIS WAY  ▸', w / 2, 72); g.fillStyle = '#fff'; g.font = '800 34px Inter, sans-serif'; let t = hall.list.map((a) => a.label.toUpperCase()).join('  ·  '), sc = Math.min(1, (w - 60) / g.measureText(t).width); g.save(); g.translate(w / 2, 142); g.scale(sc, 1); g.fillText(t, 0, 0); g.restore(); }) });
-  pl(3.0, .5, bm, hall.x0 - .02, 2.36, -1.0, -PI / 2, G); bx(.02, .54, 3.04, steel, hall.x0, 2.36, -1.0, G); [-1.4, 1.4].forEach((dz) => bx(.012, .28, .012, steel, hall.x0, 2.76, -1.0 + dz, G));
+  pl(3.0, .5, bm, hall.x0 - .02, 2.36, -1.0, -PI / 2, G); bx(.02, .54, 3.04, steel, hall.x0, 2.36, -1.0, G); [-1.4, 1.4].forEach((dz) => bx(.012, CEIL - 2.62, .012, steel, hall.x0, (CEIL + 2.62) / 2, -1.0 + dz, G));
   $('#aislesN').textContent = n; $('#aislesN').hidden = false; lights(S.eve); ui(); kick();
 }
 function loadAisles() {
@@ -1567,11 +1605,11 @@ function aisleStock(now) {
   const cur = S.mode === 'aisle' ? hall.list[S.aisle] : null, hw = Math.min(3.2, aisleHalf() + .45), sNow = S.as || 0;
   hall.list.forEach((a) => {
     const want = new Map(); let ask = null, askD = 0;
-    if (a === cur || S.mode === 'aisles') a.secs.forEach((sec) => {
+    if (a === cur || S.mode === 'aisles' || a.flip) a.secs.forEach((sec) => {
       const n = sec.count; let far = -1;
       for (let c = 0; c < sec.cols; c++) {
         const s = sec.s0 + c * hall.colW;
-        if (a === cur ? Math.abs(s - sNow) > hw : !(s < .7 || (a.nr && s > a.smax - .7))) continue;   // from the hall: just the ends of the shelves by the entrance
+        if (a === cur ? Math.abs(s - sNow) > hw : !(s < (a.flip ? 4.9 : .7) || (a.nr && s > a.smax - .7))) continue;   // from the hall: just the ends of the shelves by the entrance; the first aisle's shelf faces the shop, so the run of it the shop can see
         for (let w = 0; w < 6; w++) { const k = c * 6 + w; if (k >= n) break; want.set(sec.off + k, [sec, k]); far = k; }
       }
       if (far >= 0 && !sec.done && sec.rows.length < Math.min(sec.count, far + (a === cur ? 36 : 1))) { const dist = Math.max(0, sec.s0 - sNow, sNow - sec.s0 - sec.cols * hall.colW); if (!ask || dist < askD) { ask = sec; askD = dist; } }   // the section you are standing at first
@@ -1600,7 +1638,7 @@ function hallTo(x, ms) { const from = S.hx || 0, to = clamp(x, 0, hall.hmax || 0
 function aisleView() {
   const a = hall.list[S.aisle] || hall.list[0], cx = aCx(a.i), U = a.U, T = hall.T; S.as = clamp(S.as || 0, 0, a.smax);
   const s = S.as, t = !a.nr || s <= U ? 0 : s >= U + T ? 1 : (s - U) / T, d = hall.d0 + (t <= 0 ? s : t >= 1 ? U - (s - U - T) : Math.max(0, U - Math.sin(t * PI) * (.6 + 1 / (Math.tan(aisleFov() * PI / 360) * cam.aspect))));   // turning, you step back from the end so both shelves stay in sight
-  const phi = t * t * (3 - 2 * t) * PI, x = cx + .68 * Math.cos(phi), z = hall.zf - d;   // you stand across the aisle from the shelf you face
+  const phi = a.flip ? PI : t * t * (3 - 2 * t) * PI, x = cx + .68 * Math.cos(phi), z = hall.zf - (a.flip ? hall.d0 + s : d);   // you stand across the aisle from the shelf you face
   const y = cam.aspect < 1 ? 1.12 : 1.0;
   return lookView(new V3(x, y, z), new V3(x - Math.cos(phi) * 1.78, y, z - Math.sin(phi) * 1.78), aisleFov());
 }
@@ -1609,7 +1647,8 @@ function aisleSec() { const a = hall.list[S.aisle]; let cur = a.secs[0]; const e
 function goAisle(i, keep) {
   if (!hall.built || !hall.list[i]) return; if (S.hand) putBack(); closePaint(true); leanOff(); cabinetDoors(false);
   S.mode = 'aisle'; S.aisle = i; if (!keep) S.as = 0; S.avz = 0; hall.secOn = -1; glide(aisleView(), 1000);
-  hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk along the shelf · pinch to lean in · tap a product' : 'Drag or scroll to walk along the shelf · hold the mouse down to lean in · click a product'); ui();
+  const fl = hall.list[i].flip;   // the first aisle's shelf runs away to your left
+  hint(matchMedia('(pointer:coarse)').matches ? (fl ? 'Swipe right to walk along the shelf' : 'Swipe to walk along the shelf') + ' · pinch to lean in · tap a product' : 'Drag or scroll to walk along the shelf · hold the mouse down to lean in · click a product'); ui();
 }
 // walk the ribbon to a spot, turning at the far end if it is on the other side
 function aisleTo(s, ms) {
@@ -1798,7 +1837,7 @@ canvas.addEventListener('pointermove', (e) => {
     if (drag.axis === 'x') { const mpp = 2 * 2.6 * hTan(view.fov) / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.hx = clamp(drag.hx - dx * mpp, 0, hall.hmax || 0); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aislesView()); }
   }
   else if (S.mode === 'aisle') {   // the shelf follows the finger, as the glass case does
-    if (drag.axis === 'x') { const a = hall.list[S.aisle], mpp = 2 * aisleHalf() / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.as = clamp(drag.as - dx * mpp, 0, a.smax); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aisleView()); aisleBar(); }
+    if (drag.axis === 'x') { const a = hall.list[S.aisle], mpp = 2 * aisleHalf() / canvas.clientWidth * (a.flip ? -1 : 1); hall.walk = (hall.walk || 0) + 1; S.as = clamp(drag.as - dx * mpp, 0, a.smax); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aisleView()); aisleBar(); }
   }
   else if (S.mode === 'door') { S.look.yaw = clamp(drag.yaw + dx * .004, -1.5, 1.5); S.look.pitch = clamp(drag.pitch + dy * .003, -.45, .4); setView(doorView()); }
   else if (S.mode === 'case' && drag.axis === 'x') { const mpp = visW() / canvas.clientWidth; S.walk = clamp(drag.walk - dx * mpp, -.03, (S.maxWalk || 0) + .03); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(caseView0()); }
@@ -1847,7 +1886,7 @@ canvas.addEventListener('wheel', (e) => {
   }
   if (lean.on) return;
   if (S.mode === 'aisles') { hall.walk = (hall.walk || 0) + 1; S.hx = (S.hx || 0) + (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .004; setView(aislesView()); return; }
-  if (S.mode === 'aisle') { aisleWalk((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .0035); return; }
+  if (S.mode === 'aisle') { aisleWalk((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .0035 * (hall.list[S.aisle].flip ? -1 : 1)); return; }
   if (S.mode === 'graded') { gcab.gx += e.deltaX * .002; gcab.gy -= e.deltaY * .002; setView(gradedView()); return; }
   if (S.mode === 'case') { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { S.walk = clamp(S.walk + (e.shiftKey ? e.deltaY : e.deltaX) * .0012, 0, S.maxWalk || 0); setView(caseView()); return; } if (wheelLock || Math.abs(e.deltaY) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 560); goShelf(S.shelf + (e.deltaY > 0 ? 1 : -1)); }
   else if (S.mode === 'crate' && cr) { if (wheelLock) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 90); flickTo(Math.round(cr.ps[cr.lane]) + (e.deltaY > 0 ? 1 : -1), 160); }
@@ -1859,7 +1898,7 @@ document.addEventListener('keydown', (e) => {
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
   const k = e.key;
   if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallTo((S.hx || 0) + (k === 'ArrowRight' ? 1.45 : -1.45)); else return; e.preventDefault(); hint(''); return; }
-  if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
+  if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2) * (hall.list[S.aisle].flip ? -1 : 1), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
   else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') lift(cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])], null); else return; }
   else if (S.mode === 'boxes') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.pan = clamp(S.pan + (k === 'ArrowRight' ? .3 : -.3), -S.maxPan, S.maxPan); glide(boxesView(), 260); } else return; }
