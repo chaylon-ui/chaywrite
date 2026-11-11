@@ -1750,7 +1750,10 @@ function tap(x, y) {
   else if (S.mode === 'stack') return stkTap();
   else if (S.mode === 'tv') return;
   else if (S.mode === 'aisles') { const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
-  else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); const o = pick(hall.list.map((q) => q.hit), x, y); if (o && o.object.userData.aisle !== S.aisle) return goAisle(o.object.userData.aisle); return; }
+  else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); const o = pick(hall.list.map((q) => q.hit), x, y); if (o && o.object.userData.aisle !== S.aisle) return goAisle(o.object.userData.aisle);
+    // a tap past the end of the shelf, on the hall you can see beyond it, walks you back out to the hall (owner, 2026-11-11: "When clicking here I should be able to go back into the aisle again")
+    const dx = ray.ray.direction.x, px = aCx(a.i) + (dx > 0 ? 1.0 : -1.0); if (Math.abs(dx) > .05) { const t = (px - ray.ray.origin.x) / dx, z = ray.ray.origin.z + ray.ray.direction.z * t; if (t > 0 && z > hall.zf + .05) return go('aisles'); }
+    return; }
   else if (S.mode === 'rack') {
     const r = racks[S.rack];
     if (r.kind === 'kits') { const h = pick(r.meshes.filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); }
