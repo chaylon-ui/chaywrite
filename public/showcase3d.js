@@ -741,7 +741,8 @@ function buildNineties() {
   const scan = (g, w, h) => { g.fillStyle = 'rgba(0,0,0,.22)'; for (let y = 0; y < h; y += 4) g.fillRect(0, y, w, 2); };
   // a border round the top of the walls
   const fr = (len) => basic({ map: ctex(1024, 96, (g, w, h) => memphis(g, w, h, '#f4efe0', 46, 'frieze'), [Math.max(1, Math.round(len / 2.4)), 1]) });
-  pl(8, .2, fr(8), 0, 2.78, -3.492, 0, G); pl(8, .2, fr(8), 0, 2.78, 3.492, PI, G); pl(7, .2, fr(7), -3.992, 2.78, 0, PI / 2, G);
+  pl(4.95, .2, fr(4.95), -1.525, 2.78, -3.492, 0, G);   /* on the back wall it stops where the sealed wall starts: it showed as a white band between the shelves (owner, 2026-11-12: "Remove the white design on the wall") */
+  pl(8, .2, fr(8), 0, 2.78, 3.492, PI, G); pl(7, .2, fr(7), -3.992, 2.78, 0, PI / 2, G);
 
   // the arcade cabinets: the game on each screen is drawn by its own section above
   const blk = lam({ color: 0x111114 });
