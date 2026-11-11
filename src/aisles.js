@@ -134,6 +134,35 @@ export async function serveAisle(request, env, ctx, url, opts) {
   });
 }
 
+/* GET /showcase/product.json?handle=  one product as its page on the site shows it: every photo, the
+   description as plain text, the vendor and type, each variant in stock with its price. The 3D shop opens
+   this when a product is taken off a shelf (owner, 2026-11-11: "I should be able to zoom in on the photos
+   and swipe left to right to look at any other of the photos for that product. That view should be ...
+   more website looking ... as there is more info and photos to view"). */
+export const PRODUCT_Q = `query($q:String!){products(first:1,query:$q){nodes{title handle vendor productType descriptionHtml media(first:12){nodes{preview{image{url width height}}}} variants(first:25){nodes{id title price compareAtPrice inventoryQuantity availableForSale}}}}}`;
+export function plainText(html) {
+  return String(html || "").replace(/<(script|style)[\s\S]*?<\/\1>/gi, "").replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6]|\/tr)\s*\/?>/gi, "\n").replace(/<li[^>]*>/gi, "• ").replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'")
+    .split("\n").map((l) => l.replace(/[ \t]+/g, " ").trim()).filter((l, i, a) => l || (i && a[i - 1])).join("\n").trim().slice(0, 4000);
+}
+export function productOf(p) {
+  const photos = ((p.media && p.media.nodes) || []).map((m) => m && m.preview && m.preview.image).filter((i) => i && i.url)
+    .map((i) => ({ url: i.url, ar: i.width > 0 && i.height > 0 ? Math.round((i.width / i.height) * 100) / 100 : 1 }));
+  const variants = ((p.variants && p.variants.nodes) || []).filter((v) => v && +v.inventoryQuantity > 0 && +v.price > 0 && v.availableForSale !== false)
+    .map((v) => ({ id: String(v.id || "").replace(/^.*\//, ""), title: v.title === "Default Title" ? "" : String(v.title || ""), price: String(v.price), was: v.compareAtPrice && +v.compareAtPrice > +v.price ? String(v.compareAtPrice) : "", qty: +v.inventoryQuantity }));
+  return { ok: true, title: String(p.title || "").replace(/\s+/g, " ").trim(), handle: String(p.handle || ""), vendor: String(p.vendor || ""), type: String(p.productType || ""), text: plainText(p.descriptionHtml), photos, variants };
+}
+export async function serveProduct(request, env, ctx, url, opts) {
+  const o = opts || {}, handle = String(url.searchParams.get("handle") || "").toLowerCase();
+  if (!/^[a-z0-9][a-z0-9_-]{0,254}$/.test(handle)) return json({ ok: false, error: "bad handle" }, 400);
+  if (!o.gqlFn && (!env || !env.SHOPIFY_ADMIN_TOKEN)) return json({ ok: false, error: "not configured" }, 503);
+  return cached(o, ctx, new URL("/showcase/product.json?handle=" + handle, url).toString(), async () => {
+    const r = await run(env, o, PRODUCT_Q, { q: "status:active AND published_status:published AND handle:" + handle });
+    const p = (((r.data && r.data.products) || {}).nodes || []).find((n) => n && String(n.handle || "").toLowerCase() === handle);
+    return p ? productOf(p) : { ok: false, error: "not found" };
+  });
+}
+
 export const GRADED_Q = `query($after:String){products(first:100,after:$after,sortKey:CREATED_AT,reverse:true,query:${JSON.stringify(BASE + "title:Graded")}){pageInfo{hasNextPage endCursor}nodes{title handle productType media(first:2){nodes{preview{image{url width height}}}} variants(first:1){nodes{id price inventoryQuantity availableForSale}}}}}`;
 const GRADE_RE = /\bGraded\s+((?:PSA|BGS|CGC|TAG|SGC|ACE|AGS|HGA|GMA|MNT)\s*[0-9]+(?:\.[0-9])?)/i;
 // The cabinet's cards: the ones to ask about first (the grails), then the dearest down to the cheapest.

@@ -1314,6 +1314,7 @@ function placeHand(now) {
   if (k < 1 || Math.abs(hand.tx - hand.rx) + Math.abs(hand.ty - hand.ry) > .002) kick();
 }
 function lift(c, src) {
+  if (c.sealed && !c.slab && handleOf(c)) return openProduct(c);   // a boxed product opens as its own page
   if (S.handSrc) S.handSrc.visible = true;
   S.hand = c; S.handSrc = src || null; if (src) src.visible = false;
   document.body.dataset.hand = '1'; hand.g.visible = true; hand.dim.visible = true; hand.rx = hand.ry = hand.tx = hand.ty = 0; hand.t0 = performance.now();
@@ -1439,6 +1440,73 @@ function showTill() {
 }
 
 /* ---------- where you stand ---------- */
+/* ---------- a product's own page (owner, 2026-11-11) ----------
+   "When clicking on a product on the shelves I should be able to zoom in on the photos and swipe left to right
+   to look at any other of the photos for that product. That view should be less like card singles and more
+   website looking once you click the product as there is more info and photos to view".
+   A boxed product taken off a shelf (the aisles, the booster-box shelf) opens as a page over the shop, not as
+   a card in the hand: a gallery of every photo (swipe, thumbnails, arrow keys), a tap on a photo zooms in on
+   that spot (drag to move, tap to close), then the name, vendor, price, stock, variants, the button for the
+   till / cart, the link to the listing and the description (/showcase/product.json). Graded slabs and card
+   singles still come to the hand. */
+const prod = { c: null, d: null, v: null };
+function openProduct(c) {
+  prod.c = c; prod.d = null; prod.v = null; $('#prodv').classList.add('on'); hint(''); prodDraw();
+  const h = handleOf(c);
+  fetch(W + '/showcase/product.json?handle=' + encodeURIComponent(h), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (prod.c !== c || !d || !d.ok) return; prod.d = d; prod.v = d.variants.find((v) => String(v.id) === String(c.variantId)) || d.variants[0] || null; prodDraw();
+  }).catch(() => {});
+}
+function closeProduct() { if (zoomOff()) return; $('#prodv').classList.remove('on'); prod.c = null; kick(); }
+function prodDraw() {
+  const c = prod.c, d = prod.d, v = prod.v; if (!c) return;
+  const photos = d && d.photos.length ? d.photos : (hasPhoto(c) ? [{ url: c.image, ar: c.ar || 1 }] : []), price = v ? v.price : c.price, qty = v ? v.qty : c.qty, vid = v ? v.id : c.variantId;
+  const done = S.pile.some((p) => String(p.variantId) === String(vid));
+  $('#prodCrumb').textContent = c.set || '';
+  $('#prodBody').innerHTML = '<div class="pgalw"><div class="pgal" id="pgal">' + (photos.length ? photos.map((ph, i) => '<button type="button" class="pshot" data-zoom="' + i + '"><img src="' + esc(img(ph.url, 1000)) + '" alt="' + esc((d ? d.title : c.name) + ' - photo ' + (i + 1)) + '"' + (i ? ' loading="lazy"' : '') + '></button>').join('') : '<div class="pshot none">No photo yet</div>') + '</div>'
+    + (photos.length > 1 ? '<span class="pcount" id="pcount">1 / ' + photos.length + '</span><div class="pthumbs">' + photos.map((ph, i) => '<button type="button" data-shot="' + i + '"' + (i ? '' : ' class="on"') + '><img src="' + esc(img(ph.url, 160)) + '" alt=""></button>').join('') + '</div>' : '') + (photos.length ? '<p class="ptip">Tap a photo to zoom in' + (photos.length > 1 ? ' · swipe for more' : '') + '</p>' : '') + '</div>'
+    + '<div class="pinfo"><h1>' + esc(d ? d.title : c.name) + '</h1>' + (d && (d.vendor || d.type) ? '<p class="pmeta">' + esc([d.type, d.vendor].filter(Boolean).join(' · ')) + '</p>' : '')
+    + '<p class="pprice">' + money(price) + (v && v.was ? ' <s>' + money(v.was) + '</s>' : '') + '</p>' + (qty > 0 ? '<p class="pstock">' + (qty > 5 ? 'In stock' : qty + ' in stock') + '</p>' : '')
+    + (d && d.variants.length > 1 ? '<div class="pvars">' + d.variants.map((x, i) => '<button type="button" data-pvar="' + i + '"' + (x === v ? ' class="on"' : '') + '>' + esc(x.title || 'Option ' + (i + 1)) + ' · ' + money(x.price) + '</button>').join('') + '</div>' : '')
+    + '<div class="pacts">' + (vid ? '<button type="button" class="buy" id="pbuy2"' + (done ? ' disabled' : '') + '>' + (done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till')) + '</button>' : '')
+    + '<a href="' + esc(c.url) + '"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>' + (ON_STORE ? 'See the full listing' : 'Open on exorgames.com ↗') + '</a></div>'
+    + (d ? (d.text ? '<h2>About this product</h2>' + d.text.split('\n').map((l) => (l ? '<p>' + esc(l) + '</p>' : '')).join('') : '') : '<p class="pwait">Fetching the rest of the photos and details…</p>') + '</div>';
+  $('#prodBody').scrollTop = 0; prod.photos = photos;
+  const gal = $('#pgal'); if (gal) gal.addEventListener('scroll', () => { const i = Math.round(gal.scrollLeft / Math.max(1, gal.clientWidth)); if ($('#pcount')) $('#pcount').textContent = (i + 1) + ' / ' + photos.length; document.querySelectorAll('.pthumbs button').forEach((b, k) => b.classList.toggle('on', k === i)); }, { passive: true });
+}
+function prodShot(i) { const gal = $('#pgal'); if (gal) gal.scrollTo({ left: clamp(i, 0, (prod.photos || []).length - 1) * gal.clientWidth, behavior: reduce ? 'auto' : 'smooth' }); }
+function prodBuy(b) {
+  const c = prod.c, d = prod.d, v = prod.v; if (!c || b.disabled) return; b.disabled = true;
+  const vid = v ? v.id : c.variantId, name = (d ? d.title : c.name) + (v && v.title ? ' - ' + v.title : '');
+  const done = () => { S.pile.push({ name, set: c.set, price: v ? v.price : c.price, url: c.url, variantId: vid, cond: 'sealed', foil: false }); b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
+  if (!ON_STORE) { done(); return; }
+  b.textContent = 'Adding…';
+  fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(vid), quantity: 1, properties: { _xg: 'showcase' } }] }) })
+    .then((r) => { if (!r.ok) throw new Error('cart ' + r.status); return r.json(); }).then(() => { done(); if (window.xgImpact) { try { window.xgImpact('showcase', 'add'); } catch (x) {} } })
+    .catch(() => { b.textContent = 'Could not add'; setTimeout(() => { b.textContent = 'Add to cart'; b.disabled = false; }, 2000); });
+}
+// the zoom: the photo two and a half times the screen, the spot you tapped under your finger; drag to move, tap to close
+function zoomOn(i, ex, ey, box) {
+  const ph = (prod.photos || [])[i]; if (!ph) return; const z = $('#zoomv'), im = $('#zoomImg'), sc = $('#zoomIn');
+  const fx = box ? clamp((ex - box.left) / Math.max(1, box.width), 0, 1) : .5, fy = box ? clamp((ey - box.top) / Math.max(1, box.height), 0, 1) : .5;
+  z.classList.add('on'); im.src = img(ph.url, 2000); const vw = sc.clientWidth, vh = sc.clientHeight, fit = Math.min(vw / ph.ar, vh), h = fit * 2.6, w = h * ph.ar;
+  im.style.width = w + 'px'; im.style.height = h + 'px'; sc.scrollLeft = fx * w - vw / 2; sc.scrollTop = fy * h - vh / 2;
+}
+function zoomOff() { const z = $('#zoomv'); if (!z.classList.contains('on')) return false; z.classList.remove('on'); $('#zoomImg').removeAttribute('src'); return true; }
+// a mouse has no finger to pan with: dragging moves the zoomed photo, and a drag is not the tap that closes it
+let zdrag = null;
+document.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.target.closest('#zoomv')) { const sc = $('#zoomIn'); zdrag = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop, moved: false }; e.preventDefault(); } });
+document.addEventListener('pointermove', (e) => { if (!zdrag) return; const dx = e.clientX - zdrag.x, dy = e.clientY - zdrag.y; if (Math.abs(dx) + Math.abs(dy) > 5) zdrag.moved = true; const sc = $('#zoomIn'); sc.scrollLeft = zdrag.l - dx; sc.scrollTop = zdrag.t - dy; });
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#zoomv')) { const moved = zdrag && zdrag.moved; zdrag = null; if (!moved) zoomOff(); return; }
+  const b = e.target.closest('#prodv button'); if (!b) return;
+  if (b.hasAttribute('data-zoom')) { const im = b.querySelector('img'); zoomOn(Number(b.getAttribute('data-zoom')), e.clientX, e.clientY, im ? im.getBoundingClientRect() : null); }
+  else if (b.hasAttribute('data-shot')) prodShot(Number(b.getAttribute('data-shot')));
+  else if (b.hasAttribute('data-pvar')) { prod.v = prod.d.variants[Number(b.getAttribute('data-pvar'))]; const g = $('#pgal'), x = g ? g.scrollLeft : 0; prodDraw(); if ($('#pgal')) $('#pgal').scrollLeft = x; }
+  else if (b.id === 'pbuy2') prodBuy(b);
+  else if (b.id === 'prodX') closeProduct();
+});
+
 /* ---------- the graded cabinet (owner, 2026-11-10) ----------
    "a tall glass showcase (the kind that opens at the front with a lock) that you can put graded cards in ...
    auto delete the white background of the graded card image ... take it out of showcase and flip it over to
@@ -1740,6 +1808,7 @@ function go(mode) {
   ui();
 }
 function back() {
+  if ($('#prodv').classList.contains('on')) return closeProduct();
   if (S.hand) return putBack();
   if (S.mode === 'aisle') return go('aisles');
   if (psel.g) return closePaint();
@@ -1796,7 +1865,7 @@ function tap(x, y) {
   else if (S.mode === 'stack') return stkTap();
   else if (S.mode === 'tv') return;
   else if (S.mode === 'aisles') { const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
-  else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); const o = pick(hall.list.map((q) => q.hit), x, y); if (o && o.object.userData.aisle !== S.aisle) return goAisle(o.object.userData.aisle);
+  else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); pick([a.hit], x, y);   // (sets the tap's ray; a tap that misses the products no longer jumps to the aisle behind the shelf)
     // a tap past the end of the shelf, on the hall you can see beyond it, walks you back out to the hall (owner, 2026-11-11: "When clicking here I should be able to go back into the aisle again")
     const dx = ray.ray.direction.x, px = aCx(a.i) + (dx > 0 ? 1.0 : -1.0); if (Math.abs(dx) > .05) { const t = (px - ray.ray.origin.x) / dx, z = ray.ray.origin.z + ray.ray.direction.z * t; if (t > 0 && z > hall.zf + .05) return go('aisles'); }
     return; }
@@ -1942,6 +2011,7 @@ canvas.addEventListener('wheel', (e) => {
   else if (S.mode === 'boxes') { S.pan = clamp(S.pan + (e.deltaX || e.deltaY) * .0015, -S.maxPan, S.maxPan); setView(boxesView()); }
 }, { passive: false });
 document.addEventListener('keydown', (e) => {
+  if ($('#prodv').classList.contains('on')) { if (e.key === 'Escape') closeProduct(); else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const g = $('#pgal'); if (g) prodShot(Math.round(g.scrollLeft / Math.max(1, g.clientWidth)) + (e.key === 'ArrowRight' ? 1 : -1)); e.preventDefault(); } return; }
   if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) { if (e.key === 'Escape') back(); return; }
   if (e.key === 'Escape') { back(); return; }
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
@@ -2000,4 +2070,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };

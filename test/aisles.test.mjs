@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AISLES, secQuery, aisleRows, gradedOf, serveAisles, serveAisle, serveGraded, AISLE_PAGE } from "../src/aisles.js";
+import { AISLES, secQuery, serveProduct, plainText, aisleRows, gradedOf, serveAisles, serveAisle, serveGraded, AISLE_PAGE } from "../src/aisles.js";
 
 /* The 3D shop's aisles and graded cabinet (owner, 2026-11-10). */
 const P = (title, qty, o) => Object.assign({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), productType: "Figures",
@@ -54,4 +54,18 @@ test("graded.json: every graded card with front and back, the grade read from th
   let n = 0;
   const j = await (await serveGraded(new Request(U("graded.json")), {}, {}, U("graded.json"), { gqlFn: async (q, v) => { n++; return n === 1 ? { data: { products: { pageInfo: { hasNextPage: true, endCursor: "c1" }, nodes: [G("A Graded PSA 10", "10.00")] } } } : { data: { products: { pageInfo: { hasNextPage: false }, nodes: [G("B Graded PSA 9", "20.00")] } } }; } })).json();
   assert.equal(j.ok, true); assert.equal(n, 2); assert.deepEqual(j.rows.map((r) => r.name), ["B Graded PSA 9", "A Graded PSA 10"]);
+});
+
+test("product.json: every photo, the description as plain text, the variants in stock; a wrong or unknown handle is refused", async () => {
+  assert.equal(plainText('<p>Snap-fit kit.&nbsp;No glue &amp; no paint.</p><ul><li>Runners x 12</li><li>Stickers</li></ul><script>x()</script>'), "Snap-fit kit. No glue & no paint.\n• Runners x 12\n• Stickers");
+  const node = { title: "MG  Duel Gundam", handle: "mg-duel", vendor: "Plamod", productType: "Gunpla", descriptionHtml: "<p>Big kit</p>",
+    media: { nodes: [{ preview: { image: { url: "https://cdn.shopify.com/1.jpg", width: 1500, height: 1190 } } }, { preview: { image: { url: "https://cdn.shopify.com/2.jpg", width: 920, height: 1170 } } }, { preview: null }] },
+    variants: { nodes: [{ id: "gid://shopify/ProductVariant/42", title: "Default Title", price: "72.95", compareAtPrice: "89.95", inventoryQuantity: 1 }, { id: "gid://shopify/ProductVariant/43", title: "Damaged box", price: "60.00", compareAtPrice: null, inventoryQuantity: 0 }] } };
+  const seen = [];
+  const go = (q, nodes) => serveProduct(new Request(U("product.json" + q)), {}, {}, U("product.json" + q), { gqlFn: async (query, v) => { seen.push(v.q); return { data: { products: { nodes } } }; } });
+  const j = await (await go("?handle=MG-Duel", [node])).json();
+  assert.equal(seen[0], "status:active AND published_status:published AND handle:mg-duel");
+  assert.deepEqual(j, { ok: true, title: "MG Duel Gundam", handle: "mg-duel", vendor: "Plamod", type: "Gunpla", text: "Big kit", photos: [{ url: "https://cdn.shopify.com/1.jpg", ar: 1.26 }, { url: "https://cdn.shopify.com/2.jpg", ar: 0.79 }], variants: [{ id: "42", title: "", price: "72.95", was: "89.95", qty: 1 }] });
+  assert.equal((await (await go("?handle=mg-duel-2", [node])).json()).ok, false);   // the search found a different handle
+  assert.equal((await go('?handle=' + encodeURIComponent('x" OR 1'), [])).status, 400);
 });

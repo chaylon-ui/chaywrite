@@ -116,6 +116,37 @@ body[data-hand] .panel{display:block}
 .trow button{border:0;background:none;color:var(--muted);font-size:18px;padding:0 4px}
 .sheet .foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px solid #ffffff22;font-size:14px}
 .sheet .foot a{background:var(--ember);color:#1a0f06;font-weight:600;border-radius:8px;padding:10px 14px;text-decoration:none}
+/* a product's own page: light, like the site, over the shop */
+#prodv{background:#f7f4ee;color:#1d1a17;padding:0;z-index:12;font-family:Inter,system-ui,sans-serif}
+#prodv .pbar{display:flex;align-items:center;gap:12px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:#14100e;color:#f4efe0;border-bottom:3px solid #d62c28}
+#prodv .pbar button{border:1px solid #ffffff44;background:none;border-radius:8px;padding:8px 12px;font-size:14px;color:inherit;white-space:nowrap}
+#prodv .pbar span{font-size:13px;color:#f2c230;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#prodv .pscroll{flex:1;overflow-y:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch;padding:0 0 calc(28px + env(safe-area-inset-bottom))}
+#prodv .pgalw{position:relative;background:#fff;border-bottom:1px solid #e3ddd2}
+#prodv .pgal{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;touch-action:pan-x pan-y;scrollbar-width:none;-webkit-overflow-scrolling:touch}#prodv .pgal::-webkit-scrollbar{display:none}
+#prodv .pshot{flex:0 0 100%;scroll-snap-align:center;height:min(54dvh,520px);display:flex;align-items:center;justify-content:center;background:#fff;border:0;padding:10px;cursor:zoom-in;color:#8a8378}
+#prodv .pshot img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+#prodv .pcount{position:absolute;top:10px;right:12px;background:#14100ecc;color:#fff;font-size:12px;font-weight:600;border-radius:99px;padding:4px 10px}
+#prodv .pthumbs{display:flex;gap:8px;overflow-x:auto;touch-action:pan-x;padding:8px 12px 4px;scrollbar-width:none}#prodv .pthumbs::-webkit-scrollbar{display:none}
+#prodv .pthumbs button{flex:0 0 58px;height:58px;border:2px solid #e3ddd2;border-radius:8px;background:#fff;padding:2px}#prodv .pthumbs button.on{border-color:#d62c28}
+#prodv .pthumbs img{width:100%;height:100%;object-fit:contain;display:block}
+#prodv .ptip{font-size:12px;color:#8a8378;text-align:center;padding:4px 0 10px}
+#prodv .pinfo{padding:16px 16px 0;max-width:720px}
+#prodv h1{font-size:22px;line-height:1.2;font-weight:600;letter-spacing:-.01em}
+#prodv .pmeta{font-size:13px;color:#7a7368;margin-top:6px}
+#prodv .pprice{font-size:28px;font-weight:600;margin-top:12px}#prodv .pprice s{font-size:16px;color:#9a938a;font-weight:400}
+#prodv .pstock{font-size:13px;font-weight:600;color:#1f7a3a;margin-top:4px}
+#prodv .pvars{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}#prodv .pvars button{border:1px solid #cfc8bb;background:#fff;border-radius:8px;padding:8px 12px;font-size:14px;color:inherit}#prodv .pvars button.on{border-color:#d62c28;box-shadow:0 0 0 1px #d62c28 inset}
+#prodv .pacts{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 6px}
+#prodv .pacts .buy{background:#d62c28;color:#fff;border:0;border-radius:10px;padding:14px 22px;font-size:16px;font-weight:600;flex:1 1 200px}#prodv .pacts .buy:disabled{background:#1f7a3a}
+#prodv .pacts a{border:1px solid #cfc8bb;border-radius:10px;padding:13px 16px;font-size:14px;color:inherit;text-decoration:none;background:#fff;text-align:center;flex:1 1 160px}
+#prodv h2{font-size:15px;font-weight:600;margin:22px 0 8px;padding-top:16px;border-top:1px solid #e3ddd2}
+#prodv .pinfo p{font-size:15px;line-height:1.55}#prodv .pinfo .pprice{font-size:28px;line-height:1.2}#prodv .pinfo .pmeta,#prodv .pinfo .pstock,#prodv .pinfo .pwait{font-size:13px}#prodv .pinfo h2~p{margin-bottom:8px;color:#3a352f}#prodv .pwait{color:#8a8378;font-size:13px;margin-top:16px}
+@media (min-width:860px){#prodv .pscroll{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);align-items:start;gap:8px 24px;padding:24px 28px 40px}#prodv .pgalw{border:1px solid #e3ddd2;border-radius:12px;overflow:hidden;position:sticky;top:0}#prodv .pinfo{padding:4px 0 0}#prodv .pshot{height:min(68dvh,640px)}}
+#zoomv{position:fixed;inset:0;z-index:20;background:#000;display:none}#zoomv.on{display:block}
+#zoomIn{position:absolute;inset:0;overflow:auto;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch;cursor:zoom-out;scrollbar-width:none}#zoomIn::-webkit-scrollbar{display:none}
+#zoomImg{display:block;max-width:none;background:#fff}
+#zoomv span{position:absolute;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000a;color:#fff;font:600 12px Inter,sans-serif;border-radius:99px;padding:6px 12px;pointer-events:none;white-space:nowrap}
 /* the pile by the till is a sheet at the bottom, so the till stays in view */
 #paintv{z-index:7}
 #paintv h2{font-size:19px;line-height:1.2}#paintv .set{color:var(--muted);font-size:13px;margin-top:3px}#paintv h3{font-family:"Special Elite",monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--tape);margin:14px 0 8px}
@@ -147,6 +178,8 @@ body[data-hand] .panel{display:block}
 <div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div id="liftCopies"></div><div class="acts" id="liftActs"></div><div id="liftAlike"></div><div id="liftMore"></div></div>
 <div class="sheet" id="setsv"><div class="sh"><button type="button" id="setsBack">‹ Back to the boxes</button><span class="ttl" id="setsTitle"></span><input id="setsFind" type="search" placeholder="Jump to a set…" autocomplete="off"></div><div class="list" id="setsList"></div></div>
 <div class="sheet" id="paintv"><div class="sh"><button type="button" id="paintX">‹ Back to the rack</button></div><div class="list" id="paintBody" style="display:block"></div></div>
+<div class="sheet" id="prodv"><div class="pbar"><button type="button" id="prodX">‹ Back to the shelf</button><span id="prodCrumb"></span></div><div class="pscroll" id="prodBody"></div></div>
+<div id="zoomv"><div id="zoomIn"><img id="zoomImg" alt=""></div><span>drag to move · tap to close</span></div>
 <div class="sheet" id="tillv"><div class="sh"><button type="button" id="tillBack">‹ Back to the shop</button><span class="ttl">By the till</span></div><div class="list" id="tillList" style="grid-template-columns:1fr"></div><div class="foot" id="tillFoot"></div></div>
 <div class="state" id="state">Unlocking the shop…</div>
 <script>
