@@ -542,6 +542,46 @@ function tvView() { const fov = 50, d = Math.max(.6, .3 / hTan(fov)); return loo
 function tvRun() { tv.t = 0; tv.scene = -1; tv.last = 0; const id = tv.id = (tv.id || 0) + 1; anims.push((now) => { if (S.mode !== 'tv' || tv.id !== id) return false; const dt = tv.last ? Math.min(.1, (now - tv.last) / 1000) : 0; tv.last = now; tv.t += dt; tvDraw(false); return true; }); kick(); }
 function tvStop() { tv.id = (tv.id || 0) + 1; tvDraw(true); kick(); }
 
+/* ---------- flags (owner, 2026-11-11) ----------
+   "Put mana symbol flags and pokemon characters on the wall for hanging flags etc". Pennants on the tall
+   walls of the shop and hung from the ceiling over the play space. Nothing on them is drawn here: the five
+   Magic flags carry the mana symbols as published (Scryfall's symbol files, the same source as the set
+   logos), and the Pokemon flags each carry the picture of a Pokemon card the shop has in its own showcase
+   feed right now - so the characters on the wall are the shop's stock. Until a picture arrives, or if it
+   never does, a flag is its plain colour. */
+const FLAG_MANA = [['W', '#f8f1d0', '#b9a25a'], ['U', '#aee0f8', '#2f6f9f'], ['B', '#cfc6c2', '#3a3230'], ['R', '#f7ab90', '#b03a22'], ['G', '#a2d6b2', '#2a6b3c']];
+const FLAG_POKE = [['#ffd23a', '#2a4fa0'], ['#e8433a', '#f4efe0'], ['#3f8fe0', '#ffd23a'], ['#4fd65a', '#1c5a2a']];
+const flagList = { mana: [], poke: [], asked: false };
+function flagMake(kind, i) {
+  const list = flagList[kind]; if (list[i]) return list[i];
+  const f = { kind, i, im: null }, c = document.createElement('canvas'); c.width = 256; c.height = 384;
+  f.draw = () => {
+    const g = c.getContext('2d'), mana = kind === 'mana', bg = mana ? FLAG_MANA[i][1] : FLAG_POKE[i % 4][0], edge = mana ? FLAG_MANA[i][2] : FLAG_POKE[i % 4][1];
+    g.clearRect(0, 0, 256, 384); g.beginPath(); g.moveTo(4, 4); g.lineTo(252, 4); g.lineTo(252, 300); g.lineTo(128, 380); g.lineTo(4, 300); g.closePath(); g.fillStyle = bg; g.fill(); g.lineWidth = 12; g.strokeStyle = edge; g.stroke();
+    g.fillStyle = '#1c1b1d'; g.fillRect(0, 0, 256, 18);
+    if (mana) { g.fillStyle = '#ffffffb0'; g.beginPath(); g.arc(128, 158, 96, 0, PI * 2); g.fill(); if (f.im) g.drawImage(f.im, 44, 74, 168, 168); }
+    else if (f.im) { const w = 172, h = Math.min(250, w * (f.im.height / f.im.width || 1.4)); g.fillStyle = '#fff'; g.fillRect(128 - w / 2 - 5, 36, w + 10, h + 10); g.drawImage(f.im, 128 - w / 2, 41, w, h); }
+    if (f.tex) f.tex.needsUpdate = true;
+  };
+  f.draw(); f.tex = keep(new THREE.CanvasTexture(c)); f.tex.colorSpace = THREE.SRGBColorSpace; f.tex.anisotropy = 4;
+  f.mat = keep(new THREE.MeshBasicMaterial({ map: f.tex, transparent: true, alphaTest: .5, side: THREE.DoubleSide }));
+  list[i] = f; return f;
+}
+function flagLoad() {
+  if (flagList.asked) return; flagList.asked = true;
+  FLAG_MANA.forEach((m, i) => loadImg('https://svgs.scryfall.io/card-symbols/' + m[0] + '.svg').then((im) => { const f = flagMake('mana', i); f.im = im; f.draw(); kick(); }).catch(() => {}));
+  fetch(W + '/showcase.json?game=pokemon', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    const cards = []; ((d && d.shelves) || []).forEach((sh) => (sh.cards || []).forEach((c) => { if (hasPhoto(c)) cards.push(c); }));
+    cards.sort((a, b) => Number(b.price) - Number(a.price)).slice(0, 8).forEach((c, i) => loadImg(img(c.image, 300)).then((im) => { const f = flagMake('poke', i); f.im = im; f.draw(); kick(); }).catch(() => {}));
+  }).catch(() => {});
+}
+// one flag: against a wall (ry = the way it faces), or hung in the open on a rod from the ceiling (hung: seen from both sides)
+function flagHang(parent, n, x, y, z, ry, w, hung) {
+  const f = n % 2 ? flagMake('poke', (n >> 1) % 8) : flagMake('mana', (n >> 1) % 5), h = w * 1.5, m = pl(w, h, f.mat, x, y, z, ry, parent);
+  if (hung) { const rod = lam({ color: 0x1c1b1d }); bx(Math.abs(Math.cos(ry)) * w + .04, .02, Math.abs(Math.sin(ry)) * w + .04, rod, x, y + h / 2, z, parent); bx(.012, CEIL - (y + h / 2), .012, rod, x, (CEIL + y + h / 2) / 2, z, parent); }
+  return m;
+}
+
 /* ---------- the 1990s lying around (owner, 2026-11-10) ----------
    "I need it to be much more 1990s looking. More ambient items laying around. Stuff from the 1990s."
    Nothing here is stock; the cabinets and the TV are tap targets (see above): two arcade cabinets and a gumball machine on the right wall, a TV with
@@ -655,6 +695,11 @@ function buildNineties() {
   cyl(.02, .02, .07, [lam({ color: 0xf4efe0 }), capM, capM], 1.42, TOP + .035, -.72);
   [[1.36, -.7, 0], [1.47, -.69, 1], [1.4, -.66, 2]].forEach((c) => cyl(.02, .02, .003, [lam({ color: 0xf4efe0 }), capM, capM], c[0], TOP + .0016 + c[2] * .0004, c[1]));
 
+  // flags on the tall walls above the border: mana along the back wall, Pokemon cards on the door wall and the left wall
+  [-3.2, -1.6, 0, 1.6, 3.2].forEach((x, i) => flagHang(G, i * 2, x, 3.55, -3.488, 0, .62));
+  [-3, -1, 1, 3].forEach((x, i) => flagHang(G, i * 2 + 1, x, 3.55, 3.488, PI, .62));
+  [-2.3, -.4, 1.5].forEach((z, i) => flagHang(G, (i + 4) * 2 + 1, -3.988, 3.55, z, PI / 2, .62));
+  flagLoad();
   // on the walls: a clock, and three more posters
   pl(.42, .42, basic({ transparent: true, map: ctex(256, 256, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#16121c'; g.beginPath(); g.arc(128, 128, 120, 0, PI * 2); g.fill(); g.shadowColor = TEAL; g.shadowBlur = 18; g.strokeStyle = '#7dfff0'; g.lineWidth = 9; g.beginPath(); g.arc(128, 128, 108, 0, PI * 2); g.stroke(); g.shadowColor = PINK; g.strokeStyle = '#ff9ac6'; g.lineWidth = 7; g.beginPath(); g.moveTo(128, 128); g.lineTo(128, 58); g.stroke(); g.beginPath(); g.moveTo(128, 128); g.lineTo(176, 150); g.stroke(); g.shadowBlur = 0; g.fillStyle = '#fff'; for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; g.fillRect(126 + Math.cos(a) * 90, 126 + Math.sin(a) * 90, 4, 4); } }) }), 1.7, 2.5, 3.485, PI, G);   // over the door
   pl(.45, .63, poster(336, 468, (g, w, h) => { memphis(g, w, h, '#101018', 18, 'p1'); g.fillStyle = '#101018e0'; g.fillRect(24, 120, w - 48, 230); g.fillStyle = YEL; g.font = '900 64px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MILK', w / 2, 196); g.fillText('CAPS', w / 2, 262); g.fillStyle = '#fff'; g.font = '700 24px Inter, sans-serif'; g.fillText('& SLAMMERS', w / 2, 300); g.fillStyle = PINK; g.font = '34px "Permanent Marker", cursive'; g.fillText('sold here!', w / 2, 338); }), -3.988, 2.27, -.49, PI / 2, G);   // over the cabinets
@@ -1560,6 +1605,7 @@ function buildHall(list) {
     for (let z = hall.zf - .7, k = 0; z > z0 + .3; z -= 1.5, k++) heads.push([cx, 3.12, z, 0, a.flip ? .6 : k % 2 ? .6 : -.6]);
     const zs = z0 - 1.6, ze = zBack + 1.2; if (zs - ze < 1.5) return;
     pl(1.6, .4, psM, cx, 2.5, zs + .7 + .012, 0, G); pl(1.6, .4, psM, cx, 2.5, zs + .7 - .012, PI, G); bx(1.64, .44, .02, steel, cx, 2.5, zs + .7, G); [-.7, .7].forEach((dx) => bx(.012, CEIL - 2.72, .012, steel, cx + dx, (CEIL + 2.72) / 2, zs + .7, G));
+    for (let z = zs - 1.15, k = a.i; z > ze; z -= 4.6, k++) [-.75, .75].forEach((dx, j) => flagHang(G, k * 2 + j + (k % 2), cx + dx, 3.45, z, 0, .56, true));
     for (let z = zs; z > ze; z -= 2.3) { tabs.push([cx, z]); if (Math.round((zs - z) / 2.3) % 2 === 0) tubes.push([cx, z]); }
   });
   trackHeads(G, heads);
@@ -1954,4 +2000,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
