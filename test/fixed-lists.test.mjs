@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { quote, remaining, cleanList, cleanLines, cardsOf, publicView, summaryView, visible, fixedDo, releaseFixed, renderLists, serveListsStaff, SEED, slug, productInputOf, shopifyOf, priceChanges, stockChanges, stockFixed, productsOnShopify, stockText, skuOf, LOCATION } from "../src/fixed-lists.js";
+import { cleanEmails, quote, remaining, cleanList, cleanLines, cardsOf, publicView, summaryView, visible, fixedDo, releaseFixed, renderLists, serveListsStaff, SEED, slug, productInputOf, shopifyOf, priceChanges, stockChanges, stockFixed, productsOnShopify, stockText, skuOf, LOCATION } from "../src/fixed-lists.js";
 import { stageDoFetch, shapeRecord, STAGE_DO } from "../src/stage.js";
 import { renderSheet, renderList } from "../src/stage-ui.js";
 import { buildEmail, buildStaffBuylistEmail } from "../src/stage-email.js";
@@ -209,6 +209,7 @@ test("the editor: the seed button, the switch, the preview link, the rows; the l
   const l = cleanList({ ...SEED }, null, T0, "me");
   l.items[0].offers.loose = { ...OFFER, bought: 4 };
   const page = renderLists({ user: ADMIN, lists: [l], origin: "https://w.example" });
+  assert.ok(page.includes('data-f="emails"') && page.includes("Email each submitted list to") && page.includes("emails:card.querySelector('[data-f=\"emails\"]').value"), "the editor has the address box and saves it");
   assert.ok(!page.includes('value="seed"'));
   assert.ok(page.includes("OFF - nobody sees it") && page.includes('value="on"') && page.includes(">Switch on<"));
   assert.ok(page.includes("xgfl=" + SEED.id + "&amp;pv=" + l.pv + "#buylist"));
@@ -403,4 +404,14 @@ test("the room, the editor and the worksheet: products action, price sync on sav
   assert.equal(marked.body.record.events.pop().action, "stocked on Shopify");
   const sheet = renderSheet({ ...marked.body.record, number: "9P-1" }, { user: ADMIN, on: true, emailOn: true });
   assert.ok(sheet.includes("<b>Shopify stock:</b> added +2 Pikachu (Loose) · now live: Pikachu"));
+});
+
+test("a list's own addresses (owner, 2026-11-11): cleaned, kept across a save that does not mention them, dropped on an empty box", () => {
+  assert.deepEqual(cleanEmails("Exorstaff2@example.test, bad, two@x.test\n exorstaff2@example.test ;three@x.test"), ["exorstaff2@example.test", "two@x.test", "three@x.test"]);
+  assert.deepEqual(cleanEmails(["a@x.test", "A@X.TEST", "nope"]), ["a@x.test"]);
+  assert.deepEqual(cleanEmails(null), []);
+  const l = cleanList({ id: "mcd", title: "Toys", emails: "staff@x.test, two@x.test", items: [] }, null, 1, "");
+  assert.deepEqual(l.emails, ["staff@x.test", "two@x.test"]);
+  assert.deepEqual(cleanList({ id: "mcd", title: "Toys", items: [] }, l, 2, "").emails, ["staff@x.test", "two@x.test"], "a save without the field keeps them");
+  assert.deepEqual(cleanList({ id: "mcd", title: "Toys", emails: "", items: [] }, l, 3, "").emails, [], "an emptied box clears them");
 });

@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { emailFrom, EMAIL_FROM_DEFAULT, buildStaffBuylistEmail } from "../src/stage-email.js";
-import { parseNotifyList, BUYLIST_NOTIFY_DEFAULT } from "../src/stage.js";
+import { parseNotifyList, BUYLIST_NOTIFY_DEFAULT, staffRecipients, emailStaffBuylist } from "../src/stage.js";
 
 test("emailFrom trims a trailing newline from the secret", () => {
   assert.equal(emailFrom({ EMAIL_FROM: "Exor Games <customerservice@exorgames.com>\n" }), "Exor Games <customerservice@exorgames.com>");
@@ -44,4 +44,21 @@ test("the staff copy of a buylist: who, how to reach them, every card with both 
   assert.deepEqual(parseNotifyList(""), []); assert.deepEqual(parseNotifyList(null), []);
   assert.equal(parseNotifyList(Array.from({ length: 14 }, (_, i) => `a${i}@x.test`).join("\n")).length, 10);
   assert.deepEqual(BUYLIST_NOTIFY_DEFAULT, ["customerservice@exorgames.com"]);
+});
+
+test("the staff copy goes to the Buylist emails list plus a fixed-price list's own addresses, each once (owner, 2026-11-11)", async () => {
+  assert.deepEqual(staffRecipients(["a@x.test"], ["B@X.TEST", "a@x.test", "nope", "c@x.test"]), ["a@x.test", "b@x.test", "c@x.test"]);
+  assert.deepEqual(staffRecipients([], ["toys@x.test"]), ["toys@x.test"], "the list's addresses alone when the Buylist emails list is off");
+  assert.deepEqual(staffRecipients(null, undefined), []);
+  const sent = [];
+  const fetchFn = async (u, init) => { sent.push(JSON.parse(init.body)); return new Response(JSON.stringify({ id: "m" + sent.length }), { status: 200, headers: { "content-type": "application/json" } }); };
+  const env = { RESEND_API_KEY: "re_test", ROOM: { idFromName: (n) => n, get: () => ({ fetch: async (req) => new Response(JSON.stringify(new URL(req.url).pathname === "/_stage/cfg" ? { ok: true, buylistTo: ["cs@x.test"] } : { ok: false }), { headers: { "content-type": "application/json" } }) }) } };
+  const rec = { id: "01-1", number: "9P-2001", customer: "123", customerName: "Ada Lovelace", customerEmail: "ada@example.test", paymentType: "Cash", delivery: "in-store",
+    cards: [{ cardName: "Pikachu", setName: "2026 McDonalds Pokémon Toys", conditionName: "Loose", quantity: "12", cashBuyPrice: 3, storeCreditBuyPrice: 4 }], totals: { cash: 36, credit: 48, units: 12, lines: 1 }, fixed: { list: "mcd", title: "2026 McDonalds Pokémon Toys" } };
+  const r = await emailStaffBuylist(env, new URL("https://w.example/x"), rec, { staged: true, extraTo: ["exorstaff2@example.test", "cs@x.test"], fetchFn, link: "https://w.example/9pocket/b/01-1" });
+  assert.deepEqual([r.n, r.sent], [2, 2]);
+  assert.deepEqual(sent.map((m) => m.to), [["cs@x.test"], ["exorstaff2@example.test"]], "one email per address, nobody twice");
+  assert.equal(sent[1].subject, "New 2026 McDonalds Pokémon Toys list 9P-2001: Ada Lovelace - 12 items, $36.00 cash (waiting for approval)");
+  assert.ok(sent[1].html.includes("Pikachu") && sent[1].html.includes("$36.00") && sent[1].html.includes("Ada Lovelace") && sent[1].html.includes("https://w.example/9pocket/b/01-1"));
+  assert.equal(sent[1].reply_to, "ada@example.test");
 });

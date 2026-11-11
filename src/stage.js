@@ -933,8 +933,10 @@ export async function stageSubmit(env, url, { customer, paymentType, cards, repr
   let rec = null, customerMail = null;
   try { rec = (await doCall(env, url.origin, "/_stage/get?id=" + encodeURIComponent(j.id))).record; if (rec) rec.trackUrl = track; customerMail = await emailCustomer(env, url, rec, ""); } catch {}
   try { await notifyStaff(env, url, { id: j.id, number: j.number, customer, customerName: who.name, paymentType, totals: j.totals }); } catch {}
-  // The staff copy (owner, 2026-10-22), one email per address.
-  try { if (rec) await emailStaffBuylist(env, url, { ...rec, customerPhone: who.phone || "" }, { staged: true, customerMail: customerMail ? { ...customerMail, to: rec.customerEmail } : null, link: url.origin + BASE + "/b/" + encodeURIComponent(j.id) }); } catch {}
+  // The staff copy (owner, 2026-10-22), one email per address; a fixed-price list's own addresses join in (owner, 2026-11-11).
+  let extraTo = [];
+  if (fixed && fixed.list) { try { const g = await doCall(env, url.origin, "/_stage/fl/get?id=" + encodeURIComponent(fixed.list)); if (g.ok && g.list && Array.isArray(g.list.emails)) extraTo = g.list.emails; } catch {} }
+  try { if (rec) await emailStaffBuylist(env, url, { ...rec, customerPhone: who.phone || "" }, { staged: true, extraTo, customerMail: customerMail ? { ...customerMail, to: rec.customerEmail } : null, link: url.origin + BASE + "/b/" + encodeURIComponent(j.id) }); } catch {}
   return { id: j.id, number: j.number, totals: j.totals, delivery: deliveryOf(delivery), trackUrl: track };
 }
 
@@ -1010,9 +1012,15 @@ export async function buylistNotifyList(env, origin) {
   try { c = await stageCfg(env, origin); } catch {}
   return c && Array.isArray(c.buylistTo) ? c.buylistTo : BUYLIST_NOTIFY_DEFAULT.slice();
 }
+// The Buylist emails list plus a list's own addresses, each once.
+export function staffRecipients(base, extra) {
+  const out = [];
+  for (const a of [...(Array.isArray(base) ? base : []), ...(Array.isArray(extra) ? extra : [])]) { const e = normEmail(a); if (validEmail(e) && !out.includes(e)) out.push(e); }
+  return out;
+}
 export async function emailStaffBuylist(env, url, rec, o) {
   const op = o || {};
-  const to = await buylistNotifyList(env, url.origin);
+  const to = staffRecipients(await buylistNotifyList(env, url.origin), op.extraTo);
   if (!to.length) return { n: 0, sent: 0, failed: [] };
   const msg = buildStaffBuylistEmail(rec, op);
   const results = await Promise.all(to.map((a) => sendEmail(env, a, msg, { replyTo: rec.customerEmail || undefined, fetchFn: op.fetchFn }).catch((e) => ({ ok: false, error: String((e && e.message) || e).slice(0, 160) }))));

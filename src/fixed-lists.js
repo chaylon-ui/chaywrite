@@ -93,6 +93,16 @@ function cleanShopify(v) {
   return { product: v.product, handle: str(v.handle, 200), status: String(v.status || "").toUpperCase() === "ACTIVE" ? "ACTIVE" : "DRAFT", variants };
 }
 
+// Who gets each submitted list besides the Buylist emails list (owner,
+// 2026-11-11: the toy lists to a staff inbox of their own): up to ten
+// addresses, typed one per line or comma-separated in the editor.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export function cleanEmails(v) {
+  const raw = Array.isArray(v) ? v.join("\n") : String(v == null ? "" : v);
+  const out = [];
+  for (const piece of raw.split(/[\s,;]+/)) { const e = piece.trim().toLowerCase(); if (e && EMAIL_RE.test(e) && !out.includes(e)) out.push(e); }
+  return out.slice(0, 10);
+}
 export function cleanList(b, prev, now, by) {
   const id = slug(b && b.id) || (prev && prev.id);
   if (!id) return null;
@@ -114,6 +124,7 @@ export function cleanList(b, prev, now, by) {
     banner: cleanUrl(b && b.banner),   // owner, 2026-11-06: the McDonald's x Pokémon logo at the top of the list
     tile: cleanUrl(b && b.tile),       // the square picture beside the game tiles on the sell page (owner: "like Pokemon, mtg, Star Wars etc")
     info: cleanUrl(b && b.info),       // the wide explainer at the top of the open list (owner: "another informational one once the McDonald's toys are chosen")
+    emails: b && b.emails !== undefined ? cleanEmails(b.emails) : (prev && prev.emails) || [],   // besides the Buylist emails list; kept when a save does not mention it
     on: prev ? !!prev.on : false, pv: (prev && prev.pv) || token(), conditions: conds, items,
     created: (prev && prev.created) || now, updatedAt: now, updatedBy: str(by, 160),
   };
@@ -577,7 +588,7 @@ ${inp(c.key, "max", of.max, "1", "the most we buy in all (blank = no cap)")}${in
 <a class="btn" href="${esc(preview)}" target="_blank" rel="noopener" title="Opens the sell page with this list showing for you only, even while it is off">Preview as a shopper ↗</a>
 ${missing ? `<form method="post" action="${BASE}/lists/control">${hid}<input type="hidden" name="action" value="addseed"><button type="submit" class="ok" title="The 15 Happy Meal figures with their pictures, prices blank">Add the ${missing === 15 ? "15 " : ""}McDonald's toys${missing === 15 ? "" : " (" + missing + " missing)"}</button></form>` : ""}
 ${l.on ? "" : `<form method="post" action="${BASE}/lists/control" onsubmit="return confirm('Delete this list and its prices? This cannot be undone.')">${hid}<input type="hidden" name="action" value="delete"><button type="submit">Delete</button></form>`}</div>
-<div class="fl-meta"><label>Title<input class="text" data-f="title" value="${esc(l.title)}"></label><label>Blurb on the sell page<input class="text" data-f="blurb" value="${esc(l.blurb || "")}" placeholder="one or two sentences"></label>
+<div class="fl-meta"><label>Title<input class="text" data-f="title" value="${esc(l.title)}"></label><label>Blurb on the sell page<input class="text" data-f="blurb" value="${esc(l.blurb || "")}" placeholder="one or two sentences"></label><label>Email each submitted list to<input class="text" data-f="emails" value="${esc((l.emails || []).join(", "))}" placeholder="addresses, comma-separated - besides the Buylist emails list on Admin"></label>
 <label class="fl-banner">Banner image (a Shopify Files URL; shown at the top of the list)<span class="fl-bannerrow"><input class="text" data-f="banner" value="${esc(l.banner || "")}" placeholder="https://cdn.shopify.com/..."><button type="button" class="sm" data-act="logo" title="Fills the three boxes from your Files: the McDonald's x Pokémon 30th Anniversary Collab logo, the square tile made from it, and the 'Sell us your Pokémon Happy Meal toys!' explainer">Use the McDonald's × Pokémon logo, tile and explainer</button></span>${l.banner ? `<img class="fl-bannerpv" src="${esc(l.banner)}" alt="">` : ""}</label>
 <label class="fl-banner">Tile image (square; sits in the row of game tiles on the sell page while the list is on - without one the banner is used)<span class="fl-bannerrow"><input class="text" data-f="tile" value="${esc(l.tile || "")}" placeholder="https://cdn.shopify.com/..."></span>${l.tile ? `<img class="fl-bannerpv fl-tilepv" src="${esc(l.tile)}" alt="">` : ""}</label>
 <label class="fl-banner">Explainer image (wide; heads the open list in place of the banner, so it can say what the list is)<span class="fl-bannerrow"><input class="text" data-f="info" value="${esc(l.info || "")}" placeholder="https://cdn.shopify.com/..."></span>${l.info ? `<img class="fl-bannerpv" src="${esc(l.info)}" alt="">` : ""}</label></div>
@@ -600,7 +611,7 @@ ${hasSeed ? "" : `<form method="post" action="${BASE}/lists/control" class="act"
 <form method="post" action="${BASE}/lists/control" class="act"><input type="hidden" name="__form" value="1"><input type="hidden" name="action" value="create"><input class="text" name="title" placeholder="title, e.g. 2026 McDonald's Pokémon Toys" required><label class="chk"><input type="checkbox" name="withToys" value="1" checked> with the 15 McDonald's toys</label><button type="submit">Create (off)</button></form></div>
 <script>
 (function(){var CTL=${JSON.stringify(BASE + "/lists/control")};
-function collect(card){var list={title:card.querySelector('[data-f="title"]').value,blurb:card.querySelector('[data-f="blurb"]').value,banner:card.querySelector('[data-f="banner"]').value,tile:card.querySelector('[data-f="tile"]').value,info:card.querySelector('[data-f="info"]').value,items:[]};
+function collect(card){var list={title:card.querySelector('[data-f="title"]').value,blurb:card.querySelector('[data-f="blurb"]').value,emails:card.querySelector('[data-f="emails"]').value,banner:card.querySelector('[data-f="banner"]').value,tile:card.querySelector('[data-f="tile"]').value,info:card.querySelector('[data-f="info"]').value,items:[]};
 card.querySelectorAll('.fl-item').forEach(function(el){var it={key:el.getAttribute('data-item'),name:el.querySelector('[data-f="name"]').value,image:el.querySelector('[data-f="image"]').value,retired:el.querySelector('[data-f="retired"]').checked,offers:{}};
 el.querySelectorAll('.fl-row').forEach(function(r){var o={};r.querySelectorAll('input[data-k]').forEach(function(i){o[i.getAttribute('data-f')]=i.value;});it.offers[r.getAttribute('data-cond')]=o;});list.items.push(it);});return list;}
 function post(body,cb){fetch(CTL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}).then(cb,function(e){cb({ok:false,error:String(e)});});}
