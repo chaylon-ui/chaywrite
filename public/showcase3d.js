@@ -1277,6 +1277,18 @@ function crateLane(d) { const c = cr; if (!c) return; const l = clamp(c.lane + d
 function caption() {
   const c = cr; if (!c) return; const ln = c.lanes[c.lane], i = clamp(Math.round(c.ps[c.lane]), 0, ln.length - 1), k = ln[i];
   $('#capName').textContent = k.name; $('#capSet').textContent = [k.set, condText(k), money(k.price), (i + 1) + ' of ' + ln.length + (c.n > 1 ? ' · row ' + (c.lane + 1) + ' of ' + c.n : '')].filter(Boolean).join(' · ');
+  // the quick button (owner, 2026-11-11: "Add an 'set it by the til' quick button here"): the card in front goes to the pile without picking it up
+  const b = $('#capBuy'), done = inPile(k); capCard = k; b.hidden = !k.variantId; b.disabled = done; b.textContent = done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till');
+}
+let capCard = null;
+function capBuy(b) {
+  const c = capCard; if (!c || b.disabled) return; b.disabled = true;
+  const done = () => { S.pile.push({ name: c.name, set: c.set, price: c.price, url: c.url, variantId: c.variantId, cond: c.sealed ? 'sealed' : cond(c), foil: c.foil }); if (capCard === c) b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
+  if (!ON_STORE) { done(); return; }
+  b.textContent = 'Adding…';
+  fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(c.variantId), quantity: 1, properties: { _xg: 'showcase' } }] }) })
+    .then((r) => { if (!r.ok) throw new Error('cart ' + r.status); return r.json(); }).then(() => { done(); if (window.xgImpact) { try { window.xgImpact('showcase', 'add'); } catch (x) {} } })
+    .catch(() => { if (capCard === c) { b.textContent = 'Could not add'; setTimeout(() => { if (capCard === c) { b.textContent = 'Add to cart'; b.disabled = false; } }, 2000); } });
 }
 function buildBin() {
   if (binHit) { hot.splice(hot.indexOf(binHit), 1); kill(binHit); binHit = null; }
@@ -2044,6 +2056,7 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'aiTurn') aisleTurn();
   else if (b.hasAttribute('data-drop')) { S.pile.splice(Number(b.getAttribute('data-drop')), 1); pile(); showTill(); }
   else if (b.id === 'buy') buy(b);
+  else if (b.id === 'capBuy') capBuy(b);
   else if (b.id === 'x') putBack();
   else if (b.id === 'pull') sheet(!$('#panel').classList.contains('open'));
   else if (b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();

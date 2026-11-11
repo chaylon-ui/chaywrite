@@ -58,6 +58,9 @@ body[data-mode=arcade] #ctxArcade,body[data-mode=stack] #ctxStack,body[data-mode
 .state.off{opacity:0;pointer-events:none}
 .cap{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(118px + env(safe-area-inset-bottom));z-index:4;text-align:center;display:none;max-width:94vw;pointer-events:none;text-shadow:0 1px 3px #000,0 0 8px #000}
 body[data-mode=crate]:not([data-hand]) .cap{display:block}
+#capBuy{position:fixed;z-index:5;left:max(10px,calc(50% - 340px));top:56%;display:none;width:92px;padding:10px 8px;border-radius:12px;border:0;background:var(--ember);color:#1a0f06;font:600 13px/1.2 Inter,sans-serif;box-shadow:0 4px 14px #0009;touch-action:manipulation}
+#capBuy:disabled{background:#1f7a3a;color:#fff}
+body[data-mode=crate]:not([data-hand]) #capBuy:not([hidden]){display:block}
 .cap{background:#0a0809c9;border-radius:10px;padding:6px 14px 4px}
 .cap strong{display:block;font-size:16px}.cap span{display:block;font-size:12.5px;color:var(--tape)}.cap em{display:block;font-family:"Caveat",cursive;font-size:19px;color:var(--ember);font-style:normal}
 /* the card in the hand: the 3D card fills the stage; this is the details panel */
@@ -162,6 +165,7 @@ body[data-hand] .panel{display:block}
 <div class="top"><img class="hlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><a class="flat" id="flat" href="/showcase">flat view</a><div class="tabs" id="tabs"></div></div>
 <div class="hint gone" id="hint"></div>
 <div class="cap" id="cap"><strong id="capName"></strong><span id="capSet"></span><em id="capTip">tap the card to pick it up</em></div>
+<button type="button" id="capBuy" hidden>Set it by the till</button>
 <div class="bot">
   <div class="ctx" id="ctxCase"><button type="button" data-walk="-1" aria-label="Walk left">◀</button><span id="shelves" style="display:contents"></span><button type="button" data-walk="1" aria-label="Walk right">▶</button></div>
   <div class="ctx" id="ctxBoxes"><span class="ttl" id="boxNote">tap a white box for its sets · a booster box to pick it up</span></div>
