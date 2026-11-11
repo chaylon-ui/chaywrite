@@ -1739,15 +1739,17 @@ function aisleStock(now) {
     });
   });
 }
-// Along the front of the hall, looking ahead and across at the aisle mouths; S.hx metres along it (owner,
-// 2026-11-10: "can I walk down the main hallway better right now you stay stationary and can hardly click the
-// last aisle"): a sideways swipe walks you past the headers, as far as the last aisle.
-const hallLead = () => (cam.aspect < 1 ? 2.1 : 2.4);
+// The hall is walked a stop at a time (owner, 2026-11-11: "one swipe should move the camera to view down the
+// aisle like you're about to walk down it ... the next swipe it snaps to the next aisle"). S.hs: -1 = where you
+// come in, looking along the row of headers; 0..n-1 = standing square at the mouth of that aisle, looking down
+// it. A swipe steps one stop; a tap on the aisle walks in.
 function aislesView() {
-  const n = hall.list.length || 1, ph = cam.aspect < 1; hall.hmax = Math.max(0, aCx(n - 1) - hallLead() + .35 - (hall.x0 + .5)); S.hx = clamp(S.hx || 0, 0, hall.hmax);
-  const x = hall.x0 + .5 + S.hx; return lookView(new V3(x, 1.7, ph ? 3.3 : 3.05), new V3(x + hallLead(), ph ? 1.4 : 1.62, hall.zf - (ph ? .5 : 1.0)), ph ? 82 : 62);
+  const n = hall.list.length || 1, ph = cam.aspect < 1; S.hs = clamp(S.hs == null ? -1 : S.hs, -1, n - 1);
+  if (S.hs < 0) return lookView(new V3(hall.x0 + .5, 1.7, ph ? 3.3 : 3.05), new V3(hall.x0 + .5 + (ph ? 2.1 : 2.4), ph ? 1.4 : 1.62, hall.zf - (ph ? .5 : 1.0)), ph ? 82 : 62);
+  const cx = aCx(S.hs); return lookView(new V3(cx, 1.62, 3.2), new V3(cx, 1.3, hall.zf - 7), ph ? 76 : 58);
 }
-function hallTo(x, ms) { const from = S.hx || 0, to = clamp(x, 0, hall.hmax || 0), t0 = performance.now(), id = hall.walk = (hall.walk || 0) + 1; ms = reduce ? 1 : ms || 420; anims.push((now) => { if (hall.walk !== id || S.mode !== 'aisles' || drag) return false; const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); S.hx = lerp(from, to, e); setView(aislesView()); return k < 1; }); kick(); }
+function hallStep(d) { const n = hall.list.length, to = clamp((S.hs == null ? -1 : S.hs) + d, -1, n - 1); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
+function hallTo(i) { S.hs = i; setView(aislesView()); }
 // In an aisle you stand S.as metres along its ribbon: down the left shelf, round at the far end, back up the right.
 function aisleView() {
   const a = hall.list[S.aisle] || hall.list[0], cx = aCx(a.i), U = a.U, T = hall.T; S.as = clamp(S.as || 0, 0, a.smax);
@@ -1800,7 +1802,7 @@ function go(mode) {
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
-  else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hx = aCx(S.aisle) - hallLead() - hall.x0 - .5; else if (S.mode !== 'aisles') S.hx = 0; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the hall · tap an aisle to walk in' : 'Drag or scroll to walk the hall · click an aisle to walk in'); }
+  else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hs = S.aisle; else if (S.mode !== 'aisles') S.hs = -1; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to the next aisle · tap an aisle to walk in' : 'Drag, scroll or arrow keys for the next aisle · click an aisle to walk in'); }
   else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move Mallow · it sprays by itself' : 'Click to start · drag or arrow keys move Mallow · space sprays'); }
   else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(CAB_Z.stack), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
   else if (mode === 'tv') { S.mode = 'tv'; glide(tvView(), 900); tvRun(); hint(''); }
@@ -1823,7 +1825,7 @@ function hint(t) { const el = $('#hint'); clearTimeout(hintT); if (!t) { el.clas
 function ui() {
   document.body.dataset.mode = S.mode;
   const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode;
-  if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '">' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
+  if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '"' + (a.i === S.hs ? ' class="on"' : '') + '>' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
   if (S.mode === 'aisle') { const a = hall.list[S.aisle];   // the aisle's sections to jump to, and the turn to the shelf behind
     if (hall.secsFor !== a.i) { hall.secsFor = a.i; hall.secOn = -1; $('#aiSecs').innerHTML = a.secs.length > 1 ? a.secs.map((s) => '<button type="button" data-sec="' + s.j + '">' + esc(s.label) + '</button>').join('') : ''; $('#aiTurn').hidden = !a.nr; }
     aisleBar(); }
@@ -1952,7 +1954,7 @@ canvas.addEventListener('pointermove', (e) => {
   else if (S.mode === 'stack') { if (drag.axis === 'x') { const n = Math.round(dx * 240 / (.5 / (2 * (view.dist || .6) * hTan(view.fov)) * canvas.clientWidth) / 14); let m = n - (drag.cells || 0); while (m) { const st = m > 0 ? 1 : -1; stkMove(st); m -= st; } drag.cells = n; } }
   else if (S.mode === 'arcade') { arc.x = clamp(drag.sx + dx * arc.W / (.5 / (2 * (view.dist || .6) * hTan(view.fov)) * canvas.clientWidth), 10, arc.W - 10); }
   else if (S.mode === 'aisles') {
-    if (drag.axis === 'x') { const mpp = 2 * 2.6 * hTan(view.fov) / canvas.clientWidth; hall.walk = (hall.walk || 0) + 1; S.hx = clamp(drag.hx - dx * mpp, 0, hall.hmax || 0); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aislesView()); }
+    if (drag.axis === 'x') { const v = aislesView(); v.yaw += clamp(dx * .0014, -.3, .3); setView(v); }   // the view leans with the finger; letting go steps to the next stop
   }
   else if (S.mode === 'aisle') {   // the shelf follows the finger, as the glass case does
     if (drag.axis === 'x') { const a = hall.list[S.aisle], mpp = 2 * aisleHalf() / canvas.clientWidth * (a.flip ? -1 : 1); hall.walk = (hall.walk || 0) + 1; S.as = clamp(drag.as - dx * mpp, 0, a.smax); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(aisleView()); aisleBar(); }
@@ -1976,10 +1978,7 @@ function endDrag(e) {
   if (d.axis === 'none') return;
   hint('');
   if (S.mode === 'stack') { if (d.axis === 'y' && dy > 40) stkDown(true); return; }
-  if (S.mode === 'aisles') {
-    if (d.axis !== 'x') return; let v = clamp(d.v, -.14, .14); const id = hall.walk = (hall.walk || 0) + 1;
-    anims.push(() => { if (S.mode !== 'aisles' || drag || tw || hall.walk !== id) return false; v *= .94; S.hx = clamp((S.hx || 0) + v, 0, hall.hmax || 0); setView(aislesView()); return Math.abs(v) > .0006; }); kick(); return;
-  }
+  if (S.mode === 'aisles') { if (d.axis === 'x' && Math.abs(dx) > 36) hallStep(dx < 0 ? 1 : -1); else glide(aislesView(), 260); return; }
   if (S.mode === 'aisle') {
     if (d.axis !== 'x') return;
     S.avz = clamp(d.v, -.12, .12); const id = hall.walk = (hall.walk || 0) + 1;
@@ -2003,7 +2002,7 @@ canvas.addEventListener('wheel', (e) => {
     clearTimeout(wheelLean); wheelLean = setTimeout(() => leanAnim(0, 320), 260); return;
   }
   if (lean.on) return;
-  if (S.mode === 'aisles') { hall.walk = (hall.walk || 0) + 1; S.hx = (S.hx || 0) + (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .004; setView(aislesView()); return; }
+  if (S.mode === 'aisles') { const dl = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; if (wheelLock || Math.abs(dl) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 620); hallStep(dl > 0 ? 1 : -1); return; }
   if (S.mode === 'aisle') { aisleWalk((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * .0035 * (hall.list[S.aisle].flip ? -1 : 1)); return; }
   if (S.mode === 'graded') { gcab.gx += e.deltaX * .002; gcab.gy -= e.deltaY * .002; setView(gradedView()); return; }
   if (S.mode === 'case') { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { S.walk = clamp(S.walk + (e.shiftKey ? e.deltaY : e.deltaX) * .0012, 0, S.maxWalk || 0); setView(caseView()); return; } if (wheelLock || Math.abs(e.deltaY) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 560); goShelf(S.shelf + (e.deltaY > 0 ? 1 : -1)); }
@@ -2016,7 +2015,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { back(); return; }
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
   const k = e.key;
-  if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallTo((S.hx || 0) + (k === 'ArrowRight' ? 1.45 : -1.45)); else return; e.preventDefault(); hint(''); return; }
+  if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallStep(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter' && S.hs >= 0) goAisle(S.hs); else return; e.preventDefault(); return; }
   if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2) * (hall.list[S.aisle].flip ? -1 : 1), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
   else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') lift(cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])], null); else return; }
@@ -2070,4 +2069,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
