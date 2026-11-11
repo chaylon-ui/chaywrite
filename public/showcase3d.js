@@ -1065,7 +1065,7 @@ function paintView(r, k) {
   return lookView(T.clone().addScaledVector(n, ph ? .5 : .62), T, cam.aspect < 1 ? 70 : 55);
 }
 const psel = { g: null, r: null, k: -1, it: null };
-function goRack(i) { const r = racks[i]; if (!r) return; S.side = r.side; if (S.hand) putBack(); closePaint(true); leanOff(); S.mode = 'rack'; S.rack = i; glide(rackView(r), 800); hint(r.kind === 'kits' ? 'Tap a box to pick it up' : r.list ? 'Tap a paint for its colour, price and closest matches' : ''); ui(); }
+function goRack(i) { const r = racks[i]; if (!r) return; if (S.mode !== 'rack') S.rackFrom = S.mode;   /* where to go back to */ S.side = r.side; if (S.hand) putBack(); closePaint(true); leanOff(); S.mode = 'rack'; S.rack = i; glide(rackView(r), 800); hint(r.kind === 'kits' ? 'Tap a box to pick it up' : r.list ? 'Tap a paint for its colour, price and closest matches' : ''); ui(); }
 function openPaint(g, it) {
   const r = g.rack, k = r ? r.shown.indexOf(g) : -1; psel.g = g; psel.r = r; psel.k = k;
   const its = g.items.filter((x) => x.a); psel.it = it && its.indexOf(it) > -1 ? it : its[0] || g.items[0];
@@ -2073,7 +2073,9 @@ function back() {
   if (S.hand) return putBack();
   if (S.mode === 'aisle') return go('aisles');
   if (psel.g) return closePaint();
-  if (S.mode === 'rack') return go('hobby');
+  // back from a paint rack: to the hall stop you tapped it from, still able to swipe along (owner, 2026-11-12:
+  // "when I came back out to the aisles I could no longer scroll"), else to the paints view
+  if (S.mode === 'rack') { if (hall.paints && S.rackFrom === 'aisles') { S.mode = 'aisles'; glide(aislesView(), 600); hint(''); ui(); return; } return go('hobby'); }
   if ($('#setsv').classList.contains('on')) { $('#setsv').classList.remove('on'); return; }
   if ($('#tillv').classList.contains('on')) return go('door');
   if (S.mode === 'crate' && cr && cr.kind === 'set') { go('boxes'); if (boxes.open) openBox(boxes.open.n); return; }
@@ -2241,6 +2243,7 @@ function endDrag(e) {
   if (S.hand) { hand.ty = Math.round(hand.ry / PI) * PI; hand.tx = 0; hand.ry = hand.ry; kick(); return; }   // it settles on its nearer face
   if (d.axis === 'none') return;
   hint('');
+  if (S.mode === 'hobby' && hall.paints) { if (d.axis === 'x' && Math.abs(dx) > 36) { S.mode = 'aisles'; S.hs = hall.iW; hallStep(dx < 0 ? 1 : -1); } return; }   /* the paints view is in the hall: a swipe walks on along the aisles */
   if (S.mode === 'ask') { fanTo(Math.round(fan.p + clamp(-(d.x - d.x0) * .002, -.6, .6))); return; }
   if (S.mode === 'stack') { if (d.axis === 'y' && dy > 40) stkDown(true); return; }
   if (S.mode === 'aisles') { if (d.axis === 'x' && Math.abs(dx) > 36) hallStep(dx < 0 ? 1 : -1); else glide(aislesView(), 260); return; }
@@ -2306,7 +2309,7 @@ document.addEventListener('click', (e) => {
   else if (b.hasAttribute('data-pmatch')) { const g = paints.all[Number(b.getAttribute('data-pmatch'))]; if (g) openPaint(g); }
   else if (b.id === 'pbuy') buyPaint(b);
   else if (b.id === 'paintX') closePaint();
-  else if (b.id === 'rackBack') go('hobby');
+  else if (b.id === 'rackBack') back();
   else if (b.hasAttribute('data-aisle')) goAisle(Number(b.getAttribute('data-aisle')));
   else if (b.id === 'aiBack') go('aisles');
   else if (b.hasAttribute('data-sec')) goSec(Number(b.getAttribute('data-sec')));
