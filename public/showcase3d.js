@@ -195,6 +195,13 @@ function drawCard(g, w, h, c, im) {
   g.save(); rr(g, x, y, cw, chh, w * .035); g.clip();
   if (im) { const s = Math.max(cw / im.width, chh / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, x + (cw - iw) / 2, y + (chh - ih) / 2, iw, ih); }
   else { g.fillStyle = '#241a1c'; g.fillRect(x, y, cw, chh); g.fillStyle = '#e8dcb8'; g.font = Math.round(w * .1) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, x + cw / 2, y + chh * .42, cw * .86, w * .125, 5); }
+  if (c.foil && !c.sealed) {   // a foil looks foil (owner, 2026-11-11: "The foil should look foil"): a rainbow sheen across the card and two bright bands, on every picture of it
+    const q2 = seed(keyOf(c) + '|foil'), off = q2() * .5, rb = g.createLinearGradient(x - cw * off, y, x + cw * (1.3 - off), y + chh);
+    ['#ff4f9a', '#ffd23a', '#5dff9a', '#4fc3ff', '#b07aff', '#ff4f9a', '#ffd23a', '#5dff9a', '#4fc3ff'].forEach((col, i, a) => rb.addColorStop(i / (a.length - 1), col));
+    g.save(); g.globalCompositeOperation = 'overlay'; g.globalAlpha = .5; g.fillStyle = rb; g.fillRect(x, y, cw, chh);
+    g.globalCompositeOperation = 'screen'; g.globalAlpha = 1; [.18 + q2() * .2, .62 + q2() * .2].forEach((t, i) => { const b = g.createLinearGradient(x + cw * (t - .16), y, x + cw * (t + .16), y + chh * .5); b.addColorStop(0, 'rgba(255,255,255,0)'); b.addColorStop(.5, 'rgba(255,255,255,' + (i ? .2 : .32) + ')'); b.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = b; g.beginPath(); g.moveTo(x + cw * (t - .1), y); g.lineTo(x + cw * (t + .14), y); g.lineTo(x + cw * (t - .2), y + chh); g.lineTo(x + cw * (t - .44), y + chh); g.closePath(); g.fill(); });
+    g.restore();
+  }
   if (!c.sealed) drawWear(g, x, y, cw, chh, wearLevel(c), String(c.name) + '|' + String(c.set) + (c.foil ? '|foil' : ''), !!c.foil);
   g.restore();
   const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, 'rgba(255,255,255,.18)'); gr.addColorStop(.35, 'rgba(255,255,255,0)'); gr.addColorStop(.62, 'rgba(255,255,255,.07)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
@@ -1257,6 +1264,20 @@ function openSet(i) {
    of carry a picture. */
 let cr = null, binCrate = null, setCrate = null, binHit = null;
 const LW = .074, A_UP = -.6, A_SHOW = -.72, A_DOWN = 1.2;
+// Letter dividers in a set's box (owner, 2026-11-11: "add letter dividers that stick up a little higher in the
+// boxes that you can click on and move to that letter"): a taller card where each letter starts, its tab to the
+// left, middle or right in turn so several show at once; a tap on a tab thumbs the row to that letter.
+const divLetter = (c) => { const m = String(c.name || '').match(/[A-Za-z0-9]/); return m ? (/[0-9]/.test(m[0]) ? '#' : m[0].toUpperCase()) : '#'; };
+const geoDiv = keep(new THREE.PlaneGeometry(CW * 1.02, CH * 1.24).translate(0, CH * .62, 0)), divMats = {};
+function divMat(ch) {
+  if (divMats[ch]) return divMats[ch];
+  const slot = (ch === '#' ? 0 : ch.charCodeAt(0) - 64) % 3, t = keep(ctex(128, 220, (g, w, h) => {
+    g.clearRect(0, 0, w, h); const top = h * (1 - 1 / 1.24), tw = w * .4, tx = slot * (w - tw) / 2;
+    g.fillStyle = '#e9cf7a'; g.fillRect(0, top, w, h - top); rr(g, tx, 2, tw, top + 10, 7); g.fill(); g.fillStyle = '#b8963c'; g.fillRect(0, top, w, 3);
+    g.fillStyle = '#2a1c0e'; g.font = '900 ' + Math.round(top * .86) + 'px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, tx + tw / 2, top / 2 + 5);
+  }));
+  return (divMats[ch] = keep(new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: .5, side: THREE.DoubleSide, color: cardTint })));
+}
 function makeCrate(o) {
   const n = o.lanes.length, m = Math.max.apply(null, o.lanes.map((l) => l.length)), sp = clamp(.26 / m, .0025, .01), Lz = m * sp + .2, w = n * LW + .012;
   const g = new THREE.Group(); g.position.copy(o.at); scene.add(g);
@@ -1276,7 +1297,9 @@ function makeCrate(o) {
     if (lu) loadImg(lu).then((im) => { if (!sgn.parent) return; draw(im)(t.image.getContext('2d'), 320, 180); t.needsUpdate = true; kick(); }).catch(() => {});
   }
   if (o.kind === 'bin') { const s = pl(.13, .075, new THREE.MeshBasicMaterial({ map: ctex(260, 150, (gg, ww, hh) => { gg.fillStyle = '#f7e98e'; gg.fillRect(0, 0, ww, hh); gg.fillStyle = '#c0392b'; gg.font = '40px "Permanent Marker", cursive'; gg.textAlign = 'center'; gg.fillText('BARGAIN BIN', ww / 2, 62); gg.fillStyle = '#16120d'; gg.font = '700 34px Caveat, cursive'; gg.fillText(o.note || '', ww / 2, 112); }), side: THREE.DoubleSide }), 0, .13, -Lz / 2 - .003, 0, g); s.rotation.z = .04; bx(.006, .1, .004, lam({ color: 0x6b4020 }), 0, .08, -Lz / 2 - .006, g); }
-  const c = { kind: o.kind, name: o.name || '', title: o.title, lanes: o.lanes, ps: o.lanes.map(() => 0), lane: 0, v: 0, sp, Lz, n, g, inst, faces, at: o.at };
+  const divs = [];
+  if (o.kind === 'set') o.lanes.forEach((ln, l) => { let prev = ''; ln.forEach((cd, i) => { const ch = divLetter(cd); if (ch !== prev) { prev = ch; if (ln.length > 12 || i) { const m = new THREE.Mesh(geoDiv, divMat(ch)); m.userData = { div: true, lane: l, idx: i, ch }; g.add(m); divs.push(m); } } }); });
+  const c = { kind: o.kind, name: o.name || '', title: o.title, lanes: o.lanes, ps: o.lanes.map(() => 0), lane: 0, v: 0, sp, Lz, n, g, inst, faces, divs, at: o.at };
   updateCrate(c); return c;
 }
 const laneX = (c, l) => (l - (c.n - 1) / 2) * (c.n * LW) / c.n;
@@ -1293,6 +1316,7 @@ function updateCrate(c) {
   let k = 0;
   c.lanes.forEach((ln, l) => { const p = c.ps[l], x = laneX(c, l); for (let i = 0; i < ln.length; i++) { const ps = pose(p - i); dummy.position.set(x, .004 + ps[1], baseZ(c, i) + ps[2]); dummy.rotation.set(ps[0], 0, 0); dummy.updateMatrix(); c.inst.setMatrixAt(k++, dummy.matrix); } });
   c.inst.instanceMatrix.needsUpdate = true;
+  (c.divs || []).forEach((m) => { const u = m.userData, ps = pose(c.ps[u.lane] - (u.idx - .5)); m.position.set(laneX(c, u.lane), .004 + ps[1], baseZ(c, u.idx) + c.sp * .5 + ps[2]); m.rotation.set(ps[0], 0, 0); m.visible = c.ps[u.lane] - (u.idx - .5) < .9; });   // a divider you have thumbed past lies under the pile
   const ln = c.lanes[c.lane], p = c.ps[c.lane], k0 = Math.max(0, Math.floor(p)), x = laneX(c, c.lane);
   c.faces.forEach((f) => { f.userData.want = -1; });
   for (let i = k0; i < Math.min(ln.length, k0 + 6); i++) c.faces[i % 6].userData.want = i;
@@ -1354,7 +1378,7 @@ hand.front = new THREE.Mesh(geoC, hm({ map: phTex })); hand.front.renderOrder = 
 hand.back = new THREE.Mesh(geoC, hm({ map: phTex })); hand.back.rotation.y = PI; hand.back.renderOrder = 995; hand.g.add(hand.back);
 const foilT = keep(ctex(256, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, h); ['#ff5a8a', '#ffd35a', '#6dff9a', '#5ad1ff', '#b07aff', '#ff5a8a'].forEach((c, i) => gr.addColorStop(i / 5, c)); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, [1, 1]));
 const glareT = keep(ctex(256, 256, (g, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(.3, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.55)'); gr.addColorStop(.7, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, [1, 1]));
-hand.foil = new THREE.Mesh(geoC, hm({ map: foilT, opacity: .2, blending: THREE.AdditiveBlending })); hand.foil.renderOrder = 996; hand.foil.position.z = .0002; hand.g.add(hand.foil);
+hand.foil = new THREE.Mesh(geoC, hm({ map: foilT, opacity: .16, blending: THREE.AdditiveBlending })); hand.foil.renderOrder = 996; hand.foil.position.z = .0002; hand.g.add(hand.foil);
 hand.glare = new THREE.Mesh(geoC, hm({ map: glareT, opacity: .3, blending: THREE.AdditiveBlending })); hand.glare.renderOrder = 997; hand.glare.position.z = .0003; hand.g.add(hand.glare);
 fonts.then(() => { hand.sleeveT = keep(ctex(360, 503, drawBack)); hand.back.material.map = hand.sleeveT; hand.back.material.needsUpdate = true; });
 function stage() { const w = canvas.clientWidth, h = canvas.clientHeight; return w > 720 ? { x: 0, y: 0, w: w - 360, h } : { x: 0, y: 0, w, h: h - 60 }; }
@@ -1512,7 +1536,7 @@ fan.g.visible = false; cam.add(fan.g);
 fan.dim = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), hm({ color: 0x050304, opacity: .8 })); fan.dim.position.z = -.5; fan.dim.renderOrder = 940; fan.g.add(fan.dim);
 function askFor(q) {
   q = String(q || '').replace(/\s+/g, ' ').trim(); if (q.length < 2) { hint('Type at least two letters of the card\'s name'); return; }
-  if (S.hand) putBack(); if (S.mode !== 'ask') go('till'); $('#tillv').classList.remove('on'); askClear(); S.mode = 'ask'; fan.q = q; const seq = ++fan.seq; ui(); glide(tillView(), 700);
+  if (S.hand) putBack(); if (S.mode !== 'ask') { fan.from = { mode: S.mode, cr: S.mode === 'crate' ? cr : null, focus: S.focus }; go('till'); } $('#tillv').classList.remove('on'); askClear(); S.mode = 'ask'; fan.q = q; const seq = ++fan.seq; ui(); glide(tillView(), 700);
   hint('“' + q + '? Let me check what we have…”');
   fetch(W + '/showcase/find.json?game=' + encodeURIComponent(S.game || 'mtg') + '&q=' + encodeURIComponent(q), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
     if (seq !== fan.seq || S.mode !== 'ask') return;
@@ -1521,6 +1545,13 @@ function askFor(q) {
     hint(fan.rows.length ? '“Here' + (fan.rows.length === 1 ? ' is the one copy' : ' are the ' + fan.rows.length + ' copies') + ' we have. Swipe to fan through them.”' : '“Sorry, nothing called ' + q + ' in stock right now.”');
     askBar(); kick();
   }).catch(() => { if (seq === fan.seq) hint('“Sorry, I could not look that up just now - ask me again in a minute.”'); });
+}
+// Back from the counter: to where you were when you asked, the box you had open still open at its card
+// (owner, 2026-11-11: "When you press back from the worker search results it should go back to the place you were")
+function askLeave() {
+  const f = fan.from || {}; fan.from = null; askClear(); document.body.dataset.fan = '';
+  if (f.mode === 'crate' && f.cr && f.cr.g && f.cr.g.parent) { S.mode = 'door'; enterCrate(f.cr); return; }
+  go(f.mode === 'boxes' ? (f.focus === 'sealed' ? 'sealed' : 'boxes') : f.mode === 'case' || f.mode === 'till' ? f.mode : 'door');
 }
 function askClear() { fan.seq++; fan.live.forEach((m) => { const t = m.material.map; if (t && !t.userData.keep) t.dispose(); m.material.dispose(); fan.g.remove(m); }); fan.live.clear(); fan.rows = []; fan.p = 0; fan.g.visible = false; }
 function askBar() {
@@ -1917,6 +1948,7 @@ function go(mode) {
 }
 function back() {
   if ($('#prodv').classList.contains('on')) return closeProduct();
+  if (S.mode === 'ask' && !S.hand) return askLeave();
   if (S.hand) return putBack();
   if (S.mode === 'aisle') return go('aisles');
   if (psel.g) return closePaint();
@@ -1985,7 +2017,8 @@ function tap(x, y) {
     const o = pick(racks.map((q) => q.hitM), x, y); if (o && o.object.userData.rack !== S.rack) return goRack(o.object.userData.rack);
     return;
   }
-  else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; } }
+  else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; }
+    const dv = pick(cr.divs || [], x, y); if (dv) { const u = dv.object.userData; if (u.lane !== cr.lane) { cr.lane = u.lane; ui(); } flickTo(u.idx, 420); hint(u.ch === '#' ? 'Numbers' : 'The ' + u.ch + 's'); return; } }
   const h = pick(hot, x, y); if (h && !(S.mode === 'crate' && cr && cr.kind === h.object.userData.act)) act(h.object.userData.act);
 }
 /* ---------- leaning in (owner, 2026-11-09): "an elastic pinch to zoom ... without picking up the card
