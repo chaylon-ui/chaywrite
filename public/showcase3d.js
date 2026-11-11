@@ -153,14 +153,16 @@ function sticker(g, w, text, o) {
    frayed edges or tears. The marks are an ILLUSTRATION of the grade, the same for every copy of that grade of
    that card - not a picture of the copy in stock - and the card's details say so. */
 const COND_GUIDE = [
-  ['Near Mint', 'Minor superficial imperfections at most. Edges sharp and clean with little noticeable whitening or wear; corners crisp; no clouding or staining.'],
-  ['Lightly Played', 'Minor imperfections visible on close inspection: slight edge wear or a bit of whitening, lightly worn corners, maybe a few very light scratches. No major creases.'],
+  ['Near Mint', 'Minor superficial imperfections at most. Edges sharp and clean with little noticeable whitening or wear; corners crisp; no clouding or staining.', 'Foils have little to no scuffing or clouding.'],
+  ['Lightly Played', 'Minor imperfections visible on close inspection: slight edge wear or a bit of whitening, lightly worn corners, maybe a few very light scratches. No major creases.', 'Foils may have light scuffing or minor clouding.'],
   ['Moderately Played', 'Moderate wear, still suitable for sleeve play: moderate edge wear or whitening, corners with moderate wear or minor creases, noticeable scuffing or light scratches.'],
-  ['Heavily Played', 'Significant wear, but intact and lying flat: significant edge wear and whitening, worn corners, scuffing or scratches; major creases, fading or minor staining may be present.'],
-  ['Damaged', 'Major flaws: heavy scratches, staining or indents, frayed edges or tears, heavy corner wear, major creases or bends, possibly water damage or writing.']];
+  ['Heavily Played', 'Significant wear, but intact and lying flat: significant edge wear and whitening, worn corners, scuffing or scratches; major creases, fading or minor staining may be present.', 'Foils show significant clouding or wear.'],
+  ['Damaged', 'Major flaws: heavy scratches, staining or indents, frayed edges or tears, heavy corner wear, major creases or bends, possibly water damage or writing.', 'Foils in this condition are typically not tournament-legal.']];
 function wearLevel(c) { const t = String((c && c.condition) || '').toLowerCase(); return /damaged|\bdmg\b/.test(t) ? 4 : /heav/.test(t) ? 3 : /moder/.test(t) ? 2 : /light/.test(t) ? 1 : 0; }
-function drawWear(g, x, y, cw, ch, lvl, key) {
+function drawWear(g, x, y, cw, ch, lvl, key, foil) {
   if (!lvl) return; const q = seed(key + '|wear'), u = cw / 340, rnd = (a, b) => a + q() * (b - a);
+  // a foil clouds as it wears (the guide: LP foils "light scuffing/minor clouding", HP "significant clouding or wear"; owner, 2026-11-11: "Same if there is foil")
+  if (foil) for (let i = 0, n = [0, 2, 4, 7, 9][lvl]; i < n; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), r = rnd(.16, .34) * cw, gr = g.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, 'rgba(236,240,244,' + [0, .12, .18, .26, .32][lvl] + ')'); gr.addColorStop(1, 'rgba(236,240,244,0)'); g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2); }
   if (lvl >= 3) { g.fillStyle = 'rgba(255,255,255,' + (lvl > 3 ? .13 : .08) + ')'; g.fillRect(x, y, cw, ch); }                       // fading
   if (lvl >= 2) for (let i = 0; i < lvl * 2; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), r = rnd(18, 46) * u, gr = g.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, 'rgba(255,255,255,' + (.05 + lvl * .02) + ')'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2); }   // scuffing
   g.lineCap = 'round';
@@ -192,7 +194,7 @@ function drawCard(g, w, h, c, im) {
   g.save(); rr(g, x, y, cw, chh, w * .035); g.clip();
   if (im) { const s = Math.max(cw / im.width, chh / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, x + (cw - iw) / 2, y + (chh - ih) / 2, iw, ih); }
   else { g.fillStyle = '#241a1c'; g.fillRect(x, y, cw, chh); g.fillStyle = '#e8dcb8'; g.font = Math.round(w * .1) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, x + cw / 2, y + chh * .42, cw * .86, w * .125, 5); }
-  if (!c.sealed) drawWear(g, x, y, cw, chh, wearLevel(c), String(c.name) + '|' + String(c.set));
+  if (!c.sealed) drawWear(g, x, y, cw, chh, wearLevel(c), String(c.name) + '|' + String(c.set) + (c.foil ? '|foil' : ''), !!c.foil);
   g.restore();
   const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, 'rgba(255,255,255,.18)'); gr.addColorStop(.35, 'rgba(255,255,255,0)'); gr.addColorStop(.62, 'rgba(255,255,255,.07)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
   let sy = h * .03;
@@ -1428,7 +1430,7 @@ function fillPanel(c) {
   acts(c); minis = [];
   if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = (c.slab ? ['Graded card', c.grade, c.ask ? 'price on request' : money(c.price), c.back ? 'drag to turn it over' : ''] : [c.set || 'Sealed', c.qty ? c.qty + ' in stock' : '', money(c.price)]).filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftCond').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
   { const lv = wearLevel(c), gd = /near mint|\bnm\b/i.test(String(c.condition || '')) || lv ? COND_GUIDE[lv] : null;
-    $('#liftCond').innerHTML = gd ? '<h3>' + esc(gd[0]) + '</h3><p>' + esc(gd[1]) + (lv ? ' <em>The marks drawn on this card illustrate the grade; they are not a picture of this copy.</em>' : '') + ' <a href="https://exorgames.com/pages/grading-guide"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Grading guide' + (ON_STORE ? '' : ' ↗') + '</a></p>' : ''; }
+    $('#liftCond').innerHTML = gd ? '<h3>' + esc(gd[0]) + (c.foil ? ' · foil' : '') + '</h3><p>' + esc(gd[1]) + (c.foil && gd[2] ? ' ' + esc(gd[2]) : '') + (lv ? ' <em>The marks drawn on this card illustrate the grade; they are not a picture of this copy.</em>' : '') + ' <a href="https://exorgames.com/pages/grading-guide"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Grading guide' + (ON_STORE ? '' : ' ↗') + '</a></p>' : ''; }
   loadCopies(c); const seq = ++liftSeq, al = alikeLocal(c), seen = {}; al.forEach((o) => { seen[o.name.toLowerCase()] = 1; });
   $('#liftAlike').innerHTML = strip('Similar effects', al);
   $('#liftMore').innerHTML = strip('More like this', similar(c).filter((o) => !seen[o.name.toLowerCase()]));
