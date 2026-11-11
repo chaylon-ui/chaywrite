@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, rowsOf, rowsFor, findRows, serveFind, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX, gqlPatient } from "../src/boxes.js";
+import { rowOf, rowsOf, rowsFor, findRows, serveFind, wallKind, wallOf, serveSealedWall, SEALED_TYPES, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX, gqlPatient } from "../src/boxes.js";
 
 const v = (sid, title, price, qty) => ({ shopifyId: sid, title, price, quantity: qty });
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), img: img || "", variants });
@@ -148,4 +148,17 @@ test("find.json: asking for a card - the feed's title search, every copy in stoc
   assert.equal(j.ok, true); assert.equal(j.count, 4); assert.equal(sent.title, "Lightning Bolt"); assert.equal(sent.instockOnly, true); assert.deepEqual(sent.setNames, []);
   assert.equal((await serveFind(new Request(U2("?game=mtg&q=a")), {}, {}, U2("?game=mtg&q=a"), { fetcher: async () => { throw new Error("not asked"); } })).status, 400);
   assert.equal((await serveFind(new Request(U2("?game=nope&q=bolt")), {}, {}, U2("?game=nope&q=bolt"), { fetcher: async () => { throw new Error("not asked"); } })).status, 404);
+});
+
+test("sealedwall.json: every game's sealed product by kind; loose packs, cases and pre-orders still to come left out", async () => {
+  assert.deepEqual(["MTG STAR TREK PLAY BOOSTER BOX", "MTG STAR TREK COMMANDER DECK - KLINGONS", "POKEMON SV10 ELITE TRAINER BOX", "MTG FOUNDATIONS BUNDLE", "YGO STRUCTURE DECK BLUE-EYES", "POKEMON CHARIZARD EX PREMIUM COLLECTION", "MTG STAR TREK PLAY BOOSTER PACK", "MTG STAR TREK PLAY BOOSTER BOX CASE (6)", "POKEMON SV10 SLEEVED BOOSTER", "ONE PIECE PLAYMAT"].map(wallKind),
+    ["Booster box", "Commander deck", "Elite Trainer Box", "Bundle", "Deck", "Box set", null, null, null, "Sealed"]);
+  const P = (title, qty) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), createdAt: "2026-11-01T00:00:00Z", media: { nodes: [{ preview: { image: { url: "https://cdn.shopify.com/x.jpg", width: 1200, height: 1000 } } }] }, variants: { nodes: [{ id: "gid://shopify/ProductVariant/7", price: "59.95", inventoryQuantity: qty }] } });
+  const now2 = Date.UTC(2026, 10, 11);
+  const rows = wallOf([P("MTG A COMMANDER DECK", 2), P("MTG A BOOSTER PACK", 9), P("MTG B BUNDLE PRE ORDER ^ DEC 20/26", 4), P("MTG C BUNDLE", 0), P("MTG D BUNDLE (LIMIT 2)", 1)], now2);
+  assert.deepEqual(rows.map((r) => r.name + "|" + r.kind), ["MTG A COMMANDER DECK|Commander deck", "MTG D BUNDLE|Bundle"]); assert.equal(rows[0].ar, 1.2); assert.equal(rows[0].variantId, "7");
+  const asked = [];
+  const j = await (await serveSealedWall(new Request("https://w.example/showcase/sealedwall.json"), {}, {}, new URL("https://w.example/showcase/sealedwall.json"), { now: now2, gqlFn: async (q, v) => { asked.push(v.q); return { data: { products: { nodes: asked.length === 2 ? [P("POKEMON X ELITE TRAINER BOX", 3)] : asked.length === 1 ? [P("MTG A COMMANDER DECK", 2)] : [] } } }; } })).json();
+  assert.equal(asked.length, Object.keys(SEALED_TYPES).length); assert.match(asked[0], /product_type:"Magic Sealed Product"$/);
+  assert.deepEqual(j.games.map((g) => g.game + ":" + g.label + ":" + g.rows.length), ["mtg:Magic:1", "pokemon:Pokémon:1"]);
 });

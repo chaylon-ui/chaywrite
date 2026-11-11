@@ -589,7 +589,7 @@ function tvDraw(idle) {
   if (!idle && sc !== tv.scene) { tv.scene = sc; arcBlip([330, 392, 523, 440, 587, 659, 784, 262, 698, 587, 784, 880][sc], .16, .02); }
   tv.tex.needsUpdate = true;
 }
-function tvView() { const fov = 50, d = Math.max(.6, .3 / hTan(fov)); return lookView(new V3(3.321 - .7071 * d, 2.19, -2.923 + .7071 * d), new V3(3.321, 2.19, -2.923), fov); }
+function tvView() { const fov = 50, d = Math.max(.6, .3 / hTan(fov)); return lookView(new V3(-3.363 + .7071 * d, 2.19, -2.881 + .7071 * d), new V3(-3.363, 2.19, -2.881), fov); }
 function tvRun() { tv.t = 0; tv.scene = -1; tv.last = 0; const id = tv.id = (tv.id || 0) + 1; anims.push((now) => { if (S.mode !== 'tv' || tv.id !== id) return false; const dt = tv.last ? Math.min(.1, (now - tv.last) / 1000) : 0; tv.last = now; tv.t += dt; tvDraw(false); return true; }); kick(); }
 function tvStop() { tv.id = (tv.id || 0) + 1; tvDraw(true); kick(); }
 
@@ -687,9 +687,9 @@ function buildNineties() {
   cyl(.05, .09, .05, red, .95, 1.215, 3.25);
 
   // a TV up in the corner with a tape playing
-  const T = grp(3.52, 2.18, -3.08, -PI / 4), tvM = lam({ color: 0x2c2c30 });
+  const T = grp(-3.52, 2.18, -3.08, PI / 4), tvM   /* in the back-left corner now: the sealed wall has the right of the back wall */ = lam({ color: 0x2c2c30 });
   bx(.62, .5, .5, tvM, 0, 0, 0, T); bx(.5, .04, .4, blk, 0, -.27, 0, T); bx(.05, .05, .5, blk, 0, -.29, -.3, T);
-  pl(.48, .37, basic({ map: tv.tex }), -.03, .01, .252, 0, T); tvDraw(true); hit(bx(.75, .62, .75, hitM, 3.5, 2.18, -3.05), 'tv');
+  pl(.48, .37, basic({ map: tv.tex }), -.03, .01, .252, 0, T); tvDraw(true); hit(bx(.75, .62, .75, hitM, -3.5, 2.18, -3.05), 'tv');
   loadImg(W + '/mallow-games.jpg').then((im) => { tv.mallow = im; }).catch(() => {});
   loadImg(img(LOGO, 700)).then((im) => { tv.logo = im; if (S.mode !== 'tv') { tvDraw(true); kick(); } }).catch(() => {});
 
@@ -747,7 +747,7 @@ function buildNineties() {
   [[1.36, -.7, 0], [1.47, -.69, 1], [1.4, -.66, 2]].forEach((c) => cyl(.02, .02, .003, [lam({ color: 0xf4efe0 }), capM, capM], c[0], TOP + .0016 + c[2] * .0004, c[1]));
 
   // flags on the tall walls above the border: mana along the back wall, Pokemon cards on the door wall and the left wall
-  [-3.2, -1.6, 0, 1.6, 3.2].forEach((x, i) => flagHang(G, i * 2, x, 3.55, -3.488, 0, .62));
+  [-3.5, -2.7, -1.9, -1.1, -.3].forEach((x, i) => flagHang(G, i * 2, x, 3.55, -3.488, 0, .62));   // left of the sealed wall
   [-3, -1, 1, 3].forEach((x, i) => flagHang(G, i * 2 + 1, x, 3.55, 3.488, PI, .62));
   [-2.3, -.4, 1.5].forEach((z, i) => flagHang(G, (i + 4) * 2 + 1, -3.988, 3.55, z, PI / 2, .62));
   flagLoad();
@@ -755,7 +755,7 @@ function buildNineties() {
   pl(.42, .42, basic({ transparent: true, map: ctex(256, 256, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#16121c'; g.beginPath(); g.arc(128, 128, 120, 0, PI * 2); g.fill(); g.shadowColor = TEAL; g.shadowBlur = 18; g.strokeStyle = '#7dfff0'; g.lineWidth = 9; g.beginPath(); g.arc(128, 128, 108, 0, PI * 2); g.stroke(); g.shadowColor = PINK; g.strokeStyle = '#ff9ac6'; g.lineWidth = 7; g.beginPath(); g.moveTo(128, 128); g.lineTo(128, 58); g.stroke(); g.beginPath(); g.moveTo(128, 128); g.lineTo(176, 150); g.stroke(); g.shadowBlur = 0; g.fillStyle = '#fff'; for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; g.fillRect(126 + Math.cos(a) * 90, 126 + Math.sin(a) * 90, 4, 4); } }) }), 1.7, 2.5, 3.485, PI, G);   // over the door
   pl(.45, .63, poster(336, 468, (g, w, h) => { memphis(g, w, h, '#101018', 18, 'p1'); g.fillStyle = '#101018e0'; g.fillRect(24, 120, w - 48, 230); g.fillStyle = YEL; g.font = '900 64px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MILK', w / 2, 196); g.fillText('CAPS', w / 2, 262); g.fillStyle = '#fff'; g.font = '700 24px Inter, sans-serif'; g.fillText('& SLAMMERS', w / 2, 300); g.fillStyle = PINK; g.font = '34px "Permanent Marker", cursive'; g.fillText('sold here!', w / 2, 338); }), -3.988, 2.27, -.49, PI / 2, G);   // over the cabinets
   pl(.62, .84, poster(372, 504, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#0a0a2a'); gr.addColorStop(1, PURP); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.strokeStyle = TEAL; g.lineWidth = 2; for (let i = 0; i <= 10; i++) { g.beginPath(); g.moveTo(w / 2 + (i - 5) * 8, 300); g.lineTo(w / 2 + (i - 5) * 80, h); g.stroke(); } for (let i = 0; i < 7; i++) { const y = 300 + i * i * 4.2; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } g.fillStyle = YEL; g.beginPath(); g.arc(w / 2, 210, 80, PI, 0); g.fill(); g.fillStyle = '#fff'; g.font = 'italic 900 50px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('SURF THE', w / 2, 70); g.fillText('WEB', w / 2, 120); g.font = '700 22px Inter, sans-serif'; g.fillStyle = '#7dfff0'; g.fillText('28.8k dial-up · $5 an hour', w / 2, h - 60); g.fillStyle = '#fff'; g.fillText('ask at the counter', w / 2, h - 28); }), 2.95, 1.75, 3.488, PI, G);
-  pl(.5, .62, poster(300, 372, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.fillRect(0, 0, w, 84); g.fillStyle = '#fff'; g.font = '900 44px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MARCH 1996', w / 2, 58); g.fillStyle = '#222'; g.font = '600 20px Inter, sans-serif'; for (let d = 1; d <= 31; d++) { const k = d + 4, x = 30 + (k % 7) * 40, y = 130 + Math.floor(k / 7) * 44; g.fillText(String(d), x, y); } g.strokeStyle = '#c0392b'; g.lineWidth = 4; g.beginPath(); g.arc(30 + 5 * 40, 124 + 2 * 44, 18, 0, PI * 2); g.stroke(); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.fillText('prerelease!', 200, 124 + 2 * 44 + 40); }), 3.45, 1.5, -3.488, 0, G);   // on the back wall under the TV
+  pl(.5, .62, poster(300, 372, (g, w, h) => { g.fillStyle = '#f6f1e2'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.fillRect(0, 0, w, 84); g.fillStyle = '#fff'; g.font = '900 44px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('MARCH 1996', w / 2, 58); g.fillStyle = '#222'; g.font = '600 20px Inter, sans-serif'; for (let d = 1; d <= 31; d++) { const k = d + 4, x = 30 + (k % 7) * 40, y = 130 + Math.floor(k / 7) * 44; g.fillText(String(d), x, y); } g.strokeStyle = '#c0392b'; g.lineWidth = 4; g.beginPath(); g.arc(30 + 5 * 40, 124 + 2 * 44, 18, 0, PI * 2); g.stroke(); g.fillStyle = '#1d3a8a'; g.font = '700 22px Caveat, cursive'; g.fillText('prerelease!', 200, 124 + 2 * 44 + 40); }), -3.988, 1.6, -2.72, PI / 2, G);   // on the left wall by the TV
 }
 // The person behind the till (owner, 2026-11-09: "a typical card shop employee
 // behind it with a black polo shirt with an exor logo on the shirt"): a simple
@@ -1154,14 +1154,14 @@ function decorateWall() {
     });
   });
 }
-const WX = -.4, WZ = -3.2;
+let WX = -.4; const WZ = -3.2;
 function buildWall(d) {
   kill(wallG); wallG = new THREE.Group(); scene.add(wallG); boxMeshes = []; wallFaces = []; wallGen++;
   if (wallHit) { hot.splice(hot.indexOf(wallHit), 1); kill(wallHit); wallHit = null; }
   wallW = 0; S.wallRows = 0;
-  if (!d) { placeSealed(); return; }
+  if (!d) return;
   const n = d.boxes.length, rows = n <= 3 ? 1 : n <= 8 ? 2 : n <= 15 ? 3 : 4, cols = Math.ceil(n / rows), bw = .42, bh = .105, px = .46, py = .16;
-  wallW = cols * px; const y0 = 1.12;
+  wallW = cols * px; const y0 = 1.12; WX = Math.min(-.4, sealed.x0 - .3 - wallW / 2);   // clear of the sealed wall on its right
   const card = lam({ color: 0xf1eee4 });
   for (let r = 0; r < rows; r++) bx(wallW + .12, .022, .44, woodM, WX, y0 + r * py - .011, WZ, wallG);
   bx(.03, rows * py + .1, .44, darkWoodM, WX - wallW / 2 - .06, y0 + rows * py / 2 - .03, WZ, wallG); bx(.03, rows * py + .1, .44, darkWoodM, WX + wallW / 2 + .06, y0 + rows * py / 2 - .03, WZ, wallG);
@@ -1188,55 +1188,81 @@ function buildWall(d) {
   }), transparent: true }), WX, Math.min(top + .16, 1.9), -3.47, 0, wallG);
   hs.rotation.z = .012;
   wallHit = hit(bx(wallW + .8, rows * py + .2, .5, hitM, WX - .15, y0 + rows * py / 2, WZ), 'boxes');
-  S.wallRows = rows * py; placeSealed(); decorateWall();
+  S.wallRows = rows * py; decorateWall();
 }
 function boxesView() {
-  // wide enough for the whole wall where the screen allows it; a phone sees two boxes across and pans
-  const only = S.focus === 'sealed' && sealed.rows.length;   // the Booster boxes button looks at that shelf alone
-  const L = only || !wallW ? sealX() - .15 : WX - wallW / 2 - .55, R = sealed.rows.length ? sealX() + sealed.w + .12 : WX + wallW / 2 + .15, cx = (L + R) / 2, hh = only ? sealed.h : Math.max(S.wallRows || 0, sealed.h || 0, .3);
+  // the set boxes: wide enough for the whole of them where the screen allows it; a phone sees two boxes across and pans
+  const L = WX - wallW / 2 - .3, R = WX + wallW / 2 + .15, cx = (L + R) / 2, hh = Math.max(S.wallRows || 0, .3);
   const fitH = 2 * Math.atan((hh / 2 + .22) / 2.75) * 180 / PI, fitW = 2 * Math.atan((R - L) / 2 / 2.75 / cam.aspect) * 180 / PI;
   const fov = clamp(Math.max(fitH, Math.min(fitW, cam.aspect < 1 ? 41 : 46)), 20, 46), vw = 2 * 2.75 * hTan(fov), max = Math.max(0, (R - L - vw) / 2);
   S.maxPan = max; S.pan = clamp(S.pan, -max, max);
   const v = lookView(new V3(cx + S.pan, 1.56, -.3), new V3(cx + S.pan, 1.09 + hh / 2, WZ + .19), fov); v.vw = vw; return v;
 }
 /* ---------- new sealed booster boxes, on the back wall beside the set boxes (owner, 2026-11-09) ---------- */
-const sealed = { rows: [], w: 0, h: 0 };
+/* The sealed wall behind the counter (owner, 2026-11-11: "Make the wall behind the employee larger allowing us
+   to have all our new sealed booster boxes, commander decks, etb and bundles etc for Pokémon, mtg, etc out for
+   sale. You should be able to pinch zoom before picking one up"). Eight shelves from counter height to under
+   the flags, from the set boxes to the right-hand end of the back wall; every card game's sealed product in
+   stock (/showcase/sealedwall.json), a block of columns per game under its name, each game's newest first by
+   kind (booster boxes, commander decks, Elite Trainer Boxes, bundles, decks, box sets). It does not change
+   with the game tab. Looked at from behind the counter, close: drag to move over it, pinch to lean in, tap a
+   box for its page. The set boxes move left to make room. */
+const sealed = { rows: [], w: 2.92, h: 0, x0: 1.02, y0: 1.12, py: .3, px: .243, nr: 8, loaded: false };
 let sealG = null, sealMeshes = [], sealHit = null;
-const sealX = () => (wallW ? WX + wallW / 2 + .34 : WX - sealed.w / 2);
-function placeSealed() { if (sealG) sealG.position.x = sealX(); if (sealHit) sealHit.position.x = sealX() + sealed.w / 2; }
-function buildSealed(rows) {
-  kill(sealG); sealG = null; sealMeshes = []; sealed.rows = rows || []; sealed.w = sealed.h = 0;
+function buildSealed(games) {
+  kill(sealG); sealG = null; sealMeshes = []; sealed.rows = [];
   if (sealHit) { hot.splice(hot.indexOf(sealHit), 1); kill(sealHit); sealHit = null; }
-  const n = sealed.rows.length; if (!n) return;
-  sealG = new THREE.Group(); scene.add(sealG);
-  const nr = n <= 4 ? 1 : 2, cols = Math.ceil(n / nr), px = .29, py = .3, bh = .22, y0 = 1.12;
-  sealed.w = cols * px; sealed.h = nr * py + .12;
-  for (let r = 0; r < nr; r++) bx(sealed.w + .1, .022, .3, woodM, sealed.w / 2, y0 + r * py - .011, WZ + .05, sealG);
-  bx(.03, nr * py + .06, .3, darkWoodM, -.05, y0 + nr * py / 2 - .03, WZ + .05, sealG); bx(.03, nr * py + .06, .3, darkWoodM, sealed.w + .05, y0 + nr * py / 2 - .03, WZ + .05, sealG);
-  sealed.rows.forEach((c, i) => {   // the newest at the top left
-    const col = i % cols, row = nr - 1 - Math.floor(i / cols), q = seed('seal' + c.name), bw = clamp(bh * (c.ar || 1), .15, .26), face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
-    const hgt = bw / (c.ar || 1), m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hgt), face); m.visible = false;   // a cut-out standing on the shelf, shown once its picture is in
-    m.position.set(px / 2 + col * px + (q() - .5) * .02, y0 + row * py + hgt / 2, WZ + .1 + (q() - .5) * .02); m.rotation.y = (q() - .5) * .14; m.userData = { card: c }; sealG.add(m); sealMeshes.push(m);
-    cardTex(c, 256).then((t) => { if (!m.parent) { t.dispose(); return; } face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
+  games = (games || []).filter((g) => g.rows && g.rows.length); if (!games.length) return;
+  const nr = sealed.nr, px = sealed.px, py = sealed.py, y0 = sealed.y0, cols = Math.floor(sealed.w / px), total = games.reduce((n, g) => n + g.rows.length, 0), bh = .235;
+  // columns per game: by its share of the stock, one at least, the sum exactly the wall
+  let left = cols; games.forEach((g, i) => { g.cols = Math.max(1, Math.min(Math.ceil(g.rows.length / nr), Math.round(cols * g.rows.length / total))); });
+  let sum = games.reduce((n, g) => n + g.cols, 0);
+  while (sum > cols) { const g = games.slice().sort((a, b) => b.cols - a.cols)[0]; g.cols--; sum--; }
+  while (sum < cols) { const g = games.filter((q) => q.cols * nr < q.rows.length).sort((a, b) => (b.rows.length - b.cols * nr) - (a.rows.length - a.cols * nr))[0]; if (!g) break; g.cols++; sum++; }
+  sealed.w2 = sum * px; sealed.h = nr * py + .26;
+  sealG = new THREE.Group(); sealG.position.x = sealed.x0; scene.add(sealG);
+  for (let r = 0; r <= nr; r++) bx(sealed.w2 + .08, .02, .28, r === nr ? darkWoodM : woodM, sealed.w2 / 2, y0 + r * py - .01, WZ + .05, sealG);
+  bx(.03, nr * py + .04, .28, darkWoodM, -.04, y0 + nr * py / 2 - .01, WZ + .05, sealG); bx(.03, nr * py + .04, .28, darkWoodM, sealed.w2 + .04, y0 + nr * py / 2 - .01, WZ + .05, sealG);
+  let c0 = 0;
+  games.forEach((g, gi) => {
+    const rows = g.rows.slice(0, g.cols * nr), bw0 = g.cols * px;
+    if (gi) bx(.02, nr * py, .27, darkWoodM, c0 * px, y0 + nr * py / 2 - .01, WZ + .05, sealG);
+    pl(Math.min(bw0 - .03, .9), .14, new THREE.MeshBasicMaterial({ map: ctex(600, 96, (c, w, h) => { c.fillStyle = '#14100e'; c.fillRect(0, 0, w, h); c.fillStyle = '#d62c28'; c.fillRect(0, 0, w, 8); c.fillStyle = '#f2c230'; c.font = '900 56px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const t = g.label.toUpperCase(), sc = Math.min(1, (w - 30) / c.measureText(t).width); c.save(); c.translate(w / 2, h / 2 + 6); c.scale(sc, 1); c.fillText(t, 0, 0); c.restore(); }) }), c0 * px + bw0 / 2, y0 + nr * py + .1, WZ + .2, 0, sealG);
+    rows.forEach((r, i) => {   // the newest of the first kind at the top left of its block
+      const c = { name: r.name, set: r.kind + ' · ' + g.label, price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game: g.game, sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty };
+      const col = c0 + (i % g.cols), row = nr - 1 - Math.floor(i / g.cols), q = seed('seal' + c.name), bw = clamp(bh * c.ar, .14, .228), face = new THREE.MeshBasicMaterial({ map: phTex, color: cardTint, transparent: true, alphaTest: .35, side: THREE.DoubleSide });
+      const hgt = Math.min(bw / c.ar, py - .05), m = new THREE.Mesh(new THREE.PlaneGeometry(hgt * c.ar, hgt), face); m.visible = false;
+      m.position.set(px / 2 + col * px + (q() - .5) * .012, y0 + row * py + hgt / 2, WZ + .1 + (q() - .5) * .02); m.rotation.y = (q() - .5) * .1; m.userData = { card: c }; sealG.add(m); sealMeshes.push(m); sealed.rows.push(c);
+      cardTex(c, 256).then((t) => { if (!m.parent) { t.dispose(); return; } face.map = t; face.needsUpdate = true; m.visible = true; kick(); });
+    });
+    c0 += g.cols;
   });
-  const sg = pl(.5, .11, new THREE.MeshBasicMaterial({ map: ctex(500, 110, (g, w, h) => { g.fillStyle = '#f7e98e'; g.fillRect(0, 0, w, h); g.fillStyle = '#c0392b'; g.font = '44px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('NEW! booster boxes', w / 2, h / 2 + 2); }) }), Math.max(.25, sealed.w / 2), y0 + nr * py + .05, WZ + .06, 0, sealG);
-  sg.rotation.z = .02;
-  sealHit = hit(bx(sealed.w + .2, nr * py + .2, .4, hitM, 0, y0 + nr * py / 2, WZ + .05), 'sealed');   // the booster-box shelf walks you to itself, not to the set boxes beside it (owner, 2026-11-11)
-  placeSealed(); lights(S.eve);
+  sealHit = hit(bx(sealed.w2 + .1, nr * py + .3, .4, hitM, sealed.x0 + sealed.w2 / 2, y0 + nr * py / 2, WZ + .05), 'sealed');
+  lights(S.eve);
 }
 function loadSealed() {
-  const game = S.game; buildSealed([]);
-  fetch(W + '/showcase/sealed.json?game=' + encodeURIComponent(game), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
-    if (!d || !d.ok || game !== S.game || !d.rows) return;
-    const rows = d.rows.map((r) => ({ name: r.name, set: 'Sealed booster box', price: r.price, image: r.image, url: 'https://exorgames.com/products/' + r.handle, variantId: r.variantId, condition: '', foil: false, game, sealed: true, ar: clamp(Number(r.ar) || 1, .6, 1.5), qty: r.qty }));
-    fonts.then(() => { buildSealed(rows); if (S.mode === 'boxes') setView(boxesView()); kick(); });
-  }).catch(() => {});
+  if (sealed.loaded) return; sealed.loaded = true;
+  fetch(W + '/showcase/sealedwall.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
+    if (!d || !d.ok || !d.games) { sealed.loaded = false; return; }
+    const order = (k) => { const i = ['Booster box', 'Commander deck', 'Elite Trainer Box', 'Bundle', 'Deck', 'Box set', 'Sealed'].indexOf(k); return i < 0 ? 9 : i; };
+    d.games.forEach((g) => { g.rows = g.rows.map((r, i) => [r, i]).sort((a, b) => (order(a[0].kind) - order(b[0].kind)) || (a[1] - b[1])).map((x) => x[0]); });
+    fonts.then(() => { buildSealed(d.games); if (S.mode === 'boxes') setView(wallView()); kick(); });
+  }).catch(() => { sealed.loaded = false; });
 }
+// straight at the sealed wall from behind the counter: close, so it is moved over (S.sx, S.sy) on any screen
+function sealedView() {
+  const fov = 62, W_ = sealed.w2 || sealed.w, H_ = sealed.h, fit = Math.max((H_ / 2 + .1) / Math.tan(rad(fov / 2)), (W_ / 2 + .08) / hTan(fov)), d = Math.min(fit, 1.2);
+  const vw = 2 * d * hTan(fov), vh = 2 * d * Math.tan(rad(fov / 2)), mx = Math.max(0, (W_ + .16 - vw) / 2), my = Math.max(0, (H_ + .1 - vh) / 2);
+  sealed.mx = mx; sealed.my = my; sealed.vw = vw; S.sx = clamp(S.sx || 0, -mx, mx); S.sy = clamp(S.sy == null ? -1e9 : S.sy, -my, my);
+  const C = new V3(sealed.x0 + W_ / 2 + S.sx, sealed.y0 + H_ / 2 - .08 + S.sy, WZ + .1);
+  return lookView(new V3(C.x, C.y, C.z + d), C, fov);
+}
+const wallView = () => (S.focus === 'sealed' && sealed.rows.length ? sealedView() : boxesView());
 function loadBoxes() {
   const game = S.game; boxes.list = null; buildWall(null);
   fetch(W + '/showcase/boxes.json?game=' + encodeURIComponent(game), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => {
     if (!d || !d.ok || game !== S.game || !d.boxes || !d.boxes.length) return;
-    boxes.list = d; fonts.then(() => { buildWall(d); if (S.mode === 'boxes') setView(boxesView()); kick(); });
+    boxes.list = d; fonts.then(() => { buildWall(d); if (S.mode === 'boxes') setView(wallView()); kick(); });
   }).catch(() => {});
 }
 function openBox(n) {
@@ -1940,14 +1966,14 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => (hall.paints ? lookView(new V3(aCx(hall.iW) - 2.9, 1.6, 3.25), new V3(aCx(hall.iW) + .5, 1.05, hall.zf + .2), cam.aspect < 1 ? 82 : 62)   // from the hall, across the two racks at the Warhammer end
   : lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58));
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? boxesView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? wallView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
   leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint(hall.paints ? 'The paints are at the ends of the aisles · tap a rack, or pick one below' : 'Paints · tap a rack to look straight at it'); }
-  else if (mode === 'sealed') { if (!sealed.rows.length) { hint('No booster boxes in stock for this game right now'); return; } S.mode = 'boxes'; S.focus = 'sealed'; S.pan = 0; glide(boxesView()); hint('The newest booster boxes in stock · tap one to pick it up'); }
-  else if (mode === 'boxes') { S.focus = ''; if (!boxes.list && !sealed.rows.length) { hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(boxesView()); hint(sealed.rows.length ? 'Tap a white box for its sets · the new sealed booster boxes are on the right' : 'Every set we carry · tap a box, pick a set, thumb through'); }
+  else if (mode === 'sealed') { if (!sealed.rows.length) { hint('The sealed wall is still being stocked - try again in a moment'); return; } S.mode = 'boxes'; S.focus = 'sealed'; S.sx = cam.aspect < 1 ? -1e9 : 0; S.sy = -1e9; glide(wallView()); hint(matchMedia('(pointer:coarse)').matches ? 'Sealed boxes, decks and bundles · drag to move · pinch to lean in · tap one for its page' : 'Sealed boxes, decks and bundles · drag to move · hold the mouse down to lean in · click one for its page'); }
+  else if (mode === 'boxes') { S.focus = ''; if (!boxes.list) { if (sealed.rows.length) return go('sealed'); hint('The boxes for this game are not on the shelf yet'); return; } S.mode = 'boxes'; if (cam.aspect < 1) S.pan = -1e9; glide(wallView()); hint('Every set we carry · tap a box, pick a set, thumb through'); }
   else if (mode === 'bin') { if (!binCrate) return; enterCrate(binCrate); return; }
   else if (mode === 'till') { S.mode = 'till'; glide(tillView(), 900, showTill); hint(''); }
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
@@ -1984,7 +2010,7 @@ function ui() {
     $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Back</button>' : '') + racks.map((k, i) => ('<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>')).join('')
       + (r && r.link ? '<a href="https://exorgames.com/collections/' + r.link + '?view=paints"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Colour picker on the site' + (ON_STORE ? '' : ' ↗') + '</a>' : '');
   }
-  $('#boxNote').textContent = st === 'sealed' ? 'tap a booster box to pick it up' : 'tap a white box for its sets · a booster box to pick it up';
+  $('#boxNote').textContent = st === 'sealed' ? 'drag to move · pinch to lean in · tap a box for its page' : 'tap a white box for its sets · a booster box to pick it up';
   document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.getAttribute('data-go') === st));
   $('#shelves').innerHTML = S.shelves.map((s, i) => '<button type="button" data-shelf="' + i + '"' + (i === S.shelf ? ' class="on"' : '') + '>' + String.fromCharCode(65 + i) + ' · ' + esc(s.label) + '</button>').join('');
   if (S.mode === 'crate' && cr) {
@@ -2042,21 +2068,21 @@ function tap(x, y) {
 const lean = { k: 0, P: null, on: false, id: 0 };
 const pts = new Map(); let pinch = null, wheelLean = 0;
 // the same lean at the graded cabinet (owner, 2026-11-10: "graded cards should also allow me to pinch zoom elastic like the counter")
-const leanBase = () => (S.mode === 'graded' ? gradedView() : S.mode === 'aisle' ? aisleView() : caseView());
-const leanable = () => S.mode === 'case' || S.mode === 'graded' || S.mode === 'aisle';
+const leanBase = () => (S.mode === 'graded' ? gradedView() : S.mode === 'aisle' ? aisleView() : S.mode === 'boxes' ? wallView() : caseView());
+const leanable = () => S.mode === 'case' || S.mode === 'graded' || S.mode === 'aisle' || (S.mode === 'boxes' && S.focus === 'sealed');   // the sealed wall too (owner, 2026-11-11: "You should be able to pinch zoom before picking one up")
 function leanView() { const v = leanBase(); if (lean.P && lean.k) v.pos.lerp(lean.P, (S.mode === 'graded' ? .55 : .6) * lean.k); return v; }
 function leanStart(x, y) {
-  const gr = S.mode === 'graded', ai = S.mode === 'aisle';
+  const gr = S.mode === 'graded', ai = S.mode === 'aisle', sw = S.mode === 'boxes';
   if (!leanable() || S.hand || tw || (S.mode === 'case' && !S.lay.length)) return false;
   if (ai) { hall.walk = (hall.walk || 0) + 1; S.avz = 0; }
   if (!lean.on) {
     setView(leanBase());
     cam.position.copy(view.pos); cam.rotation.set(view.pitch, view.yaw, 0); cam.updateMatrixWorld();
-    const h = pick(ai ? Array.from(hall.list[S.aisle].live.values()).filter((m) => m.visible) : gr ? gcab.meshes.filter((m) => m.visible) : caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
+    const h = pick(sw ? sealMeshes.filter((m) => m.visible) : ai ? Array.from(hall.list[S.aisle].live.values()).filter((m) => m.visible) : gr ? gcab.meshes.filter((m) => m.visible) : caseCards.filter((m) => m.visible && m.userData.si === S.shelf), x, y);
     lean.P = h ? h.point.clone() : ray.ray.at(view.dist || .45, new V3());
     if (gr && !h) { const px = gcab.at[0] + .2, dx = ray.ray.direction.x; if (Math.abs(dx) > .01) lean.P = ray.ray.at((px - ray.ray.origin.x) / dx, new V3()); }   // between two slabs: the spot on the slabs' own plane, not past it (live probe 42802013535)
     const wp = new V3();
-    if (gr || ai) (ai ? Array.from(hall.list[S.aisle].live.values()) : gcab.meshes).forEach((m) => { const u = m.userData; if (u.hi || !m.visible || m.getWorldPosition(wp).distanceTo(lean.P) > (ai ? .5 : .32)) return; u.hi = true;   // the slabs around the spot take a sharper picture
+    if (gr || ai || sw) (sw ? sealMeshes : ai ? Array.from(hall.list[S.aisle].live.values()) : gcab.meshes).forEach((m) => { const u = m.userData; if (u.hi || !m.visible || m.getWorldPosition(wp).distanceTo(lean.P) > (ai || sw ? .5 : .32)) return; u.hi = true;   // the slabs around the spot take a sharper picture
       cardTex(u.card, 512).then((t) => { const old = m.material.map; m.material.map = t; m.material.needsUpdate = true; if (old && !old.userData.keep) old.dispose(); kick(); }).catch(() => {}); });
     else caseCards.forEach((m) => { const u = m.userData; if (u.si === S.shelf && !u.hi && m.position.distanceTo(lean.P) < .14) { u.hi = u.has = true; wear(m, u.card, 512); } });
   }
@@ -2083,7 +2109,7 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pinch || pts.size > 1) return;
   if (e.button && e.button !== 0) return;
-  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0, hx: S.hx || 0, sx: arc.x, fp: fan.p };
+  drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, axis: '', lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), v: 0, walk: S.walk, pan: S.pan, yaw: S.look.yaw, pitch: S.look.pitch, p: cr ? cr.ps[cr.lane] : 0, rx: hand.rx, ry: hand.ry, gx: gcab.gx, gy: gcab.gy, as: S.as || 0, hx: S.hx || 0, sx: arc.x, fp: fan.p, ssx: S.sx || 0, ssy: S.sy || 0 };
   try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   S.vx = 0; if (cr) cr.anim = (cr.anim || 0) + 1;
   // a mouse held still on the case leans in to that spot
@@ -2114,7 +2140,8 @@ canvas.addEventListener('pointermove', (e) => {
   }
   else if (S.mode === 'door') { S.look.yaw = clamp(drag.yaw + dx * .004, -1.5, 1.5); S.look.pitch = clamp(drag.pitch + dy * .003, -.45, .4); setView(doorView()); }
   else if (S.mode === 'case' && drag.axis === 'x') { const mpp = visW() / canvas.clientWidth; S.walk = clamp(drag.walk - dx * mpp, -.03, (S.maxWalk || 0) + .03); drag.v = (drag.lastX - e.clientX) * mpp / dt * 16; setView(caseView0()); }
-  else if (S.mode === 'boxes' && drag.axis === 'x') { const v = boxesView(); S.pan = clamp(drag.pan - dx * v.vw / canvas.clientWidth, -S.maxPan, S.maxPan); setView(boxesView()); }
+  else if (S.mode === 'boxes' && S.focus === 'sealed') { const mpp = (sealed.vw || 1) / canvas.clientWidth; S.sx = drag.ssx - dx * mpp; S.sy = drag.ssy + dy * mpp; setView(sealedView()); }
+  else if (S.mode === 'boxes' && drag.axis === 'x') { const v = wallView(); S.pan = clamp(drag.pan - dx * v.vw / canvas.clientWidth, -S.maxPan, S.maxPan); setView(wallView()); }
   else if (S.mode === 'crate' && cr && drag.axis === 'y') { const max = cr.lanes[cr.lane].length - 1; cr.ps[cr.lane] = clamp(drag.p + dy / 46, -.3, max + .3); drag.v = (e.clientY - drag.lastY) / 46 / dt * 16; updateCrate(cr); setView(crateView(cr)); }
   drag.lastX = e.clientX; drag.lastY = e.clientY; drag.lastT = now; drag.x = e.clientX; drag.y = e.clientY;
 });
@@ -2162,7 +2189,8 @@ canvas.addEventListener('wheel', (e) => {
   if (S.mode === 'graded') { gcab.gx += e.deltaX * .002; gcab.gy -= e.deltaY * .002; setView(gradedView()); return; }
   if (S.mode === 'case') { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { S.walk = clamp(S.walk + (e.shiftKey ? e.deltaY : e.deltaX) * .0012, 0, S.maxWalk || 0); setView(caseView()); return; } if (wheelLock || Math.abs(e.deltaY) < 12) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 560); goShelf(S.shelf + (e.deltaY > 0 ? 1 : -1)); }
   else if (S.mode === 'crate' && cr) { if (wheelLock) return; wheelLock = true; setTimeout(() => { wheelLock = false; }, 90); flickTo(Math.round(cr.ps[cr.lane]) + (e.deltaY > 0 ? 1 : -1), 160); }
-  else if (S.mode === 'boxes') { S.pan = clamp(S.pan + (e.deltaX || e.deltaY) * .0015, -S.maxPan, S.maxPan); setView(boxesView()); }
+  else if (S.mode === 'boxes' && S.focus === 'sealed') { S.sx = (S.sx || 0) + e.deltaX * .002; S.sy = (S.sy || 0) - e.deltaY * .002; setView(sealedView()); }
+  else if (S.mode === 'boxes') { S.pan = clamp(S.pan + (e.deltaX || e.deltaY) * .0015, -S.maxPan, S.maxPan); setView(wallView()); }
 }, { passive: false });
 document.addEventListener('keydown', (e) => {
   if ($('#prodv').classList.contains('on')) { if (e.key === 'Escape') closeProduct(); else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const g = $('#pgal'); if (g) prodShot(Math.round(g.scrollLeft / Math.max(1, g.clientWidth)) + (e.key === 'ArrowRight' ? 1 : -1)); e.preventDefault(); } return; }
@@ -2175,7 +2203,8 @@ document.addEventListener('keydown', (e) => {
   if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2) * (hall.list[S.aisle].flip ? -1 : 1), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
   else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') lift(cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])], null); else return; }
-  else if (S.mode === 'boxes') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.pan = clamp(S.pan + (k === 'ArrowRight' ? .3 : -.3), -S.maxPan, S.maxPan); glide(boxesView(), 260); } else return; }
+  else if (S.mode === 'boxes' && S.focus === 'sealed') { if (k === 'ArrowRight' || k === 'ArrowLeft') S.sx = (S.sx || 0) + (k === 'ArrowRight' ? .3 : -.3); else if (k === 'ArrowUp' || k === 'ArrowDown') S.sy = (S.sy || 0) + (k === 'ArrowUp' ? .3 : -.3); else return; glide(sealedView(), 240); }
+  else if (S.mode === 'boxes') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.pan = clamp(S.pan + (k === 'ArrowRight' ? .3 : -.3), -S.maxPan, S.maxPan); glide(wallView(), 260); } else return; }
   else return;
   e.preventDefault(); hint('');
 });

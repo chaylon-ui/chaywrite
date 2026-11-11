@@ -67,9 +67,9 @@ body[data-mode=ask] #capBuy{top:auto;bottom:calc(296px + env(safe-area-inset-bot
 #askBar label{font-family:Caveat,cursive;font-size:19px;font-weight:700;white-space:nowrap;line-height:1}
 #askBar input{flex:1;min-width:0;border:0;border-bottom:2px solid #2a1c0e55;background:none;color:#2a1c0e;font:600 16px Inter,sans-serif;padding:5px 4px;outline:none;border-radius:0}
 #askBar button{border:0;background:#2a1c0e;color:var(--label);border-radius:6px;padding:8px 12px;font:600 14px Inter,sans-serif}
-body[data-mode=door] #askBar,body[data-mode=case] #askBar,body[data-mode=boxes] #askBar,body[data-mode=crate] #askBar,body[data-mode=till] #askBar,body[data-mode=ask] #askBar{display:flex}
+body[data-mode=case] #askBar,body[data-mode=boxes] #askBar,body[data-mode=crate] #askBar,body[data-mode=till] #askBar,body[data-mode=ask] #askBar{display:flex}
 body[data-hand] #askBar{display:none}
-body[data-mode=door] .hint,body[data-mode=case] .hint,body[data-mode=boxes] .hint,body[data-mode=crate] .hint,body[data-mode=till] .hint,body[data-mode=ask] .hint{top:calc(150px + env(safe-area-inset-top))}
+body[data-mode=case] .hint,body[data-mode=boxes] .hint,body[data-mode=crate] .hint,body[data-mode=till] .hint,body[data-mode=ask] .hint{top:calc(150px + env(safe-area-inset-top))}
 @media (max-width:480px){#askBar label{font-size:16px}}
 .cap{background:#0a0809c9;border-radius:10px;padding:6px 14px 4px}
 .cap strong{display:block;font-size:16px}.cap span{display:block;font-size:12.5px;color:var(--tape)}.cap em{display:block;font-family:"Caveat",cursive;font-size:19px;color:var(--ember);font-style:normal}
@@ -189,7 +189,7 @@ body[data-hand] .panel{display:block}
   <div class="ctx" id="ctxArcade"><button type="button" id="arcBack">‹ Back</button><span class="ttl">MALLOW SHOOTER · drag to move Mallow</span></div>
   <div class="ctx" id="ctxAisle"><button type="button" id="aiBack">‹ Aisles</button><span class="ttl" id="aiTitle"></span><button type="button" id="aiTurn">Turn around ⟲</button><div class="secs" id="aiSecs"></div></div>
   <div class="ctx" id="ctxCrate"><button type="button" id="crBack">‹ Sets</button><button type="button" id="crPrevSet">‹ set</button><span class="ttl" id="crTitle"></span><button type="button" id="crNextSet">set ›</button><button type="button" id="crLaneL" aria-label="Row to the left">◀ row</button><button type="button" id="crLaneR" aria-label="Row to the right">row ▶</button></div>
-  <div class="nav" id="nav"><button type="button" data-go="door">Door</button><button type="button" data-go="case">Glass case</button><button type="button" data-go="graded">Graded<i id="gradedN" hidden>0</i></button><button type="button" data-go="boxes">Boxes</button><button type="button" data-go="sealed">Booster boxes</button><button type="button" data-go="bin">Bargain bin</button><button type="button" data-go="hobby">Paints</button><button type="button" data-go="aisles">Aisles<i id="aislesN" hidden>0</i></button><button type="button" data-go="till">Till<i id="pileN" hidden>0</i></button></div>
+  <div class="nav" id="nav"><button type="button" data-go="door">Door</button><button type="button" data-go="case">Glass case</button><button type="button" data-go="graded">Graded<i id="gradedN" hidden>0</i></button><button type="button" data-go="boxes">Boxes</button><button type="button" data-go="sealed">Sealed</button><button type="button" data-go="bin">Bargain bin</button><button type="button" data-go="hobby">Paints</button><button type="button" data-go="aisles">Aisles<i id="aislesN" hidden>0</i></button><button type="button" data-go="till">Till<i id="pileN" hidden>0</i></button></div>
 </div>
 <button type="button" class="x" id="x" aria-label="Put it back">×</button>
 <div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div id="liftCopies"></div><div class="acts" id="liftActs"></div><div id="liftCond"></div><div id="liftAlike"></div><div id="liftMore"></div></div>

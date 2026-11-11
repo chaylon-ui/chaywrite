@@ -281,6 +281,67 @@ export async function serveSealed(request, env, ctx, url, opts) {
   return res;
 }
 
+/* ---------------- The sealed wall behind the counter ----------------
+   Owner, 2026-11-11: "Make the wall behind the employee larger allowing us to have all our new sealed booster
+   boxes, commander decks, etb and bundles etc for Pokémon, mtg, etc out for sale."
+   GET /showcase/sealedwall.json  every card game's sealed product in stock, newest first, each with its kind:
+   booster boxes, commander decks, Elite Trainer Boxes, bundles, other decks, box sets and tins, the rest.
+   Loose booster packs and whole cases are left out, as are pre-orders still to come. One Shopify call per
+   game, in turn; cached ten minutes. */
+export const WALL_LABELS = { mtg: "Magic", pokemon: "Pokémon", yugioh: "Yu-Gi-Oh!", onepiece: "One Piece", starwars: "Star Wars Unlimited", riftbound: "Riftbound" };
+export const WALL_KINDS = ["Booster box", "Commander deck", "Elite Trainer Box", "Bundle", "Deck", "Box set", "Sealed"];
+export const WALL_PER_GAME = 60;
+export function wallKind(title) {
+  const t = String(title || "");
+  if (/\bCASE\b/i.test(t) || /\bBOOSTER\s+PACK\b|\bSLEEVED\b|\bBLISTER\b/i.test(t)) return null;
+  if (/\bBOOSTER\s+(BOX|DISPLAY)\b/i.test(t)) return WALL_KINDS[0];
+  if (/\bCOMMANDER\b/i.test(t)) return WALL_KINDS[1];
+  if (/\bELITE\s+TRAINER\b|\bETB\b/i.test(t)) return WALL_KINDS[2];
+  if (/\bBUNDLE\b/i.test(t)) return WALL_KINDS[3];
+  if (/\bDECKS?\b|\bSTARTER\b|\bSTRUCTURE\b/i.test(t)) return WALL_KINDS[4];
+  if (/\bTINS?\b|\bCOLLECTION\b|\bPREMIUM\b|\bGIFT\b|\bBOX\b|\bSET\b|\bKIT\b/i.test(t)) return WALL_KINDS[5];
+  if (/\bBOOSTERS?\b|\bPACKS?\b/i.test(t)) return null;   // a loose pack by another name
+  return WALL_KINDS[6];
+}
+export function wallOf(products, now) {
+  const out = [];
+  for (const p of products || []) {
+    const title = String((p && p.title) || ""), kind = wallKind(title);
+    if (!title || !kind) continue;
+    const pre = preorderDate(title);
+    if (pre !== null && !(pre <= now)) continue;
+    const v = ((p.variants && p.variants.nodes) || []).find((x) => x && +x.inventoryQuantity > 0 && +x.price > 0 && x.availableForSale !== false);
+    if (!v) continue;
+    const im = (((p.media && p.media.nodes) || [])[0] || {}).preview; const pic = im && im.image;
+    out.push({ name: sealedName(title), handle: String(p.handle || ""), price: String(v.price), image: (pic && pic.url) || null,
+      ar: pic && pic.width > 0 && pic.height > 0 ? Math.round((pic.width / pic.height) * 100) / 100 : 1,
+      variantId: String(v.id || "").replace(/^.*\//, "") || null, qty: +v.inventoryQuantity, added: String(p.createdAt || "").slice(0, 10), kind });
+    if (out.length >= WALL_PER_GAME) break;
+  }
+  return out;
+}
+export const WALL_Q = `query($q:String!){products(first:120,sortKey:CREATED_AT,reverse:true,query:$q){nodes{title handle createdAt media(first:1){nodes{preview{image{url width height}}}} variants(first:3){nodes{id price inventoryQuantity availableForSale}}}}}`;
+export async function serveSealedWall(request, env, ctx, url, opts) {
+  const o = opts || {};
+  if (!o.gqlFn && (!env || !env.SHOPIFY_ADMIN_TOKEN)) return json({ ok: false, error: "not configured" }, 503);
+  const cache = o.gqlFn ? null : caches.default, key = new Request(new URL("/showcase/sealedwall.json", url).toString());
+  const hit = cache && await cache.match(key); if (hit) return hit;
+  let out;
+  try {
+    const games = [];
+    for (const game of Object.keys(SEALED_TYPES)) {
+      const q = 'status:active AND published_status:published AND inventory_total:>0 AND product_type:"' + SEALED_TYPES[game] + '"';
+      const r = await gqlPatient(() => (o.gqlFn ? o.gqlFn(WALL_Q, { q }) : adminGql({ env, fetch: (u, i) => fetch(u, i) }, WALL_Q, { q })), o.waitMs);
+      const rows = wallOf(r.data && r.data.products && r.data.products.nodes, o.now || Date.now());
+      if (rows.length) games.push({ game, label: WALL_LABELS[game] || game, rows });
+    }
+    out = { ok: true, games };
+  } catch (e) { out = { ok: false, error: String((e && e.message) || e).slice(0, 160) }; }
+  const res = json(out, 200, out.ok ? CACHED(600) : NO_STORE);
+  if (out.ok && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
+
 /* ---------------- Warhammer boxes on the hobby rack ----------------
    Owner, 2026-11-09: "a rack with boxes of Warhammer product" (the 3D shop's
    hobby corner, beside the paint racks). GET /showcase/wargames.json answers
