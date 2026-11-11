@@ -366,7 +366,7 @@ function buildRoom() {
   for (let i = 0; i < 12; i++) bx(.03, .012, .03, lam({ color: i === 11 ? 0xc0392b : 0xe9e4d4 }), -.09 + (i % 4) * .045, .112 + (2 - Math.floor(i / 4)) * .011, .04 + Math.floor(i / 4) * .042, till).rotation.x = .25;
   // (owner, 2026-11-09: "Till should be facing away from customer"): the keys and the big display face the staff; the customer sees its back and a small total display
   till.rotation.y = PI;
-  pl(.14, .035, new THREE.MeshBasicMaterial({ map: ctex(140, 35, (g, w, h) => { g.fillStyle = '#0d1a0d'; g.fillRect(0, 0, w, h); g.fillStyle = '#5dff7a'; g.font = '700 26px "Cutive Mono", monospace'; g.textAlign = 'right'; g.fillText('0.00', w - 8, 27); }) }), 0, .175, -.1705, PI, till);
+  tillT = ctex(140, 35, (g) => drawTill(g, 0)); pl(.14, .035, new THREE.MeshBasicMaterial({ map: tillT }), 0, .175, -.1705, PI, till);
   hit(bx(.42, .34, .44, hitM, 2.0, TOP + .15, -.93), 'till');
   buildClerk();
   // the counter bell
@@ -1634,15 +1634,24 @@ function buy(b) {
     .catch(() => { b.textContent = 'Could not add'; setTimeout(() => { b.textContent = 'Add to cart'; b.disabled = false; }, 2000); });
 }
 // What you have picked sits in a pile beside the till.
+/* The till shows what the pile comes to AFTER TAX (owner, 2026-11-12: "TIL should show the after tax price of the
+   products set aside"). The shop's prices are before tax (Shopify: taxesIncluded false) and the shop is in
+   Charlottetown, Prince Edward Island, where the sales tax is HST at 15%: that is what a sale at this counter
+   adds. An order shipped to another province is taxed at that province's rate at checkout - the sheet says so. */
+const TAX = { rate: .15, name: 'HST', where: 'PEI' };
+let tillT = null;
+const pileSum = () => S.pile.reduce((a, p) => a + (Number(p.price) || 0), 0), withTax = (n) => Math.round(n * (1 + TAX.rate) * 100) / 100;
+function drawTill(g, total) { g.fillStyle = '#0d1a0d'; g.fillRect(0, 0, 140, 35); g.fillStyle = '#5dff7a'; const t = total.toFixed(2); g.font = '700 ' + (t.length > 7 ? 19 : 26) + 'px "Cutive Mono", monospace'; g.textAlign = 'right'; g.textBaseline = 'alphabetic'; g.fillText(t, 132, 27); }
 function pile() {
+  if (tillT) { drawTill(tillT.image.getContext('2d'), withTax(pileSum())); tillT.needsUpdate = true; }
   while (pileG.children.length) pileG.remove(pileG.children[0]);
   S.pile.slice(0, 14).forEach((p, i) => { const q = seed(p.name + i), m = new THREE.Mesh(geoSlab, lam({ color: 0xd7dfe2 })); m.rotation.set(-PI / 2, 0, (q() - .5) * .7); m.position.set((q() - .5) * .012, .001 + i * .0022, CH / 2 + (q() - .5) * .012); m.scale.z = 3; pileG.add(m); });
   const n = $('#pileN'); n.hidden = !S.pile.length; n.textContent = S.pile.length; kick();
 }
 function showTill() {
-  const sum = S.pile.reduce((a, p) => a + (Number(p.price) || 0), 0);
+  const sum = pileSum(), total = withTax(sum), cash = (n) => '$' + n.toFixed(2);
   $('#tillList').innerHTML = S.pile.length ? S.pile.map((p, i) => '<div class="trow"><span>' + esc(p.name) + '<small>' + esc([p.set, p.cond, p.foil ? 'foil' : ''].filter(Boolean).join(' · ')) + '</small></span><b>' + money(p.price) + '</b>' + (ON_STORE ? '' : '<a href="' + esc(p.url) + '" target="_blank" rel="noopener">open ↗</a><button type="button" data-drop="' + i + '" aria-label="Take it off the pile">×</button>') + '</div>').join('') : '<div class="empty">Nothing by the till yet. Pick a card up from the case, a box or the bin and set it here.</div>';
-  $('#tillFoot').innerHTML = S.pile.length ? '<span>' + S.pile.length + ' card' + (S.pile.length === 1 ? '' : 's') + ' · ' + money(sum) + '</span>' + (ON_STORE ? '<a href="/cart">Go to your cart</a>' : '<span style="color:var(--muted)">This is the preview: on exorgames.com these go into the cart.</span>') : '';
+  $('#tillFoot').innerHTML = S.pile.length ? '<div class="tsum"><span>' + S.pile.length + ' item' + (S.pile.length === 1 ? '' : 's') + ' · subtotal</span><b>' + cash(sum) + '</b><span>' + TAX.name + ' ' + Math.round(TAX.rate * 100) + '% (' + TAX.where + ')</span><b>' + cash(total - sum) + '</b><span class="tot">Total after tax</span><b class="tot">' + cash(total) + '</b></div><span class="tnote">Tax as charged at the counter in Charlottetown. Orders shipped to another province are taxed at that province’s rate at checkout.</span>' + (ON_STORE ? '<a href="/cart">Go to your cart</a>' : '<span style="color:var(--muted)">This is the preview: on exorgames.com these go into the cart.</span>') : '';
   $('#tillv').classList.add('on');
 }
 
