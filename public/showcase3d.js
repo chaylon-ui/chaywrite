@@ -2010,7 +2010,7 @@ function ui() {
     $('#ctxHobby').innerHTML = (r ? '<button type="button" id="rackBack">‹ Back</button>' : '') + racks.map((k, i) => ('<button type="button" data-rack="' + i + '"' + (k === r ? ' class="on"' : '') + '>' + esc(k.label) + '</button>')).join('')
       + (r && r.link ? '<a href="https://exorgames.com/collections/' + r.link + '?view=paints"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Colour picker on the site' + (ON_STORE ? '' : ' ↗') + '</a>' : '');
   }
-  $('#boxNote').textContent = st === 'sealed' ? 'drag to move · pinch to lean in · tap a box for its page' : 'tap a white box for its sets · a booster box to pick it up';
+  $('#boxNote').textContent = st === 'sealed' ? 'drag to move · pinch to lean in · tap a box for its page' : 'tap a white box for its sets';
   document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.getAttribute('data-go') === st));
   $('#shelves').innerHTML = S.shelves.map((s, i) => '<button type="button" data-shelf="' + i + '"' + (i === S.shelf ? ' class="on"' : '') + '>' + String.fromCharCode(65 + i) + ' · ' + esc(s.label) + '</button>').join('');
   if (S.mode === 'crate' && cr) {
