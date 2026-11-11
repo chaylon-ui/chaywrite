@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rowOf, rowsOf, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX, gqlPatient } from "../src/boxes.js";
+import { rowOf, rowsOf, rowsFor, boxesOf, condOf, copiesOf, setCards, SETS_PER_BOX, FEED_PAGE, STORE, sealedOf, sealedName, preorderDate, serveSealed, SEALED_MAX, wargamesOf, serveWargames, WARGAMES_MAX, shelfOf, serveShelf, SHELF_MAX, gqlPatient } from "../src/boxes.js";
 
 const v = (sid, title, price, qty) => ({ shopifyId: sid, title, price, quantity: qty });
 const product = (title, variants, img) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, ""), img: img || "", variants });
@@ -127,4 +127,13 @@ test("gqlPatient: a throttled call is tried again, twice at most; any other erro
   n = 0;
   const j = await (await serveShelf(new Request("https://w.example/showcase/shelf.json?kind=gunpla"), {}, {}, new URL("https://w.example/showcase/shelf.json?kind=gunpla"), { waitMs: 0, now: Date.UTC(2026, 10, 10), gqlFn: async () => { if (++n < 2) throw new Error("throttled"); return { data: { products: { nodes: [] } } }; } })).json();
   assert.equal(j.ok, true); assert.equal(n, 2);
+});
+
+test("a set's box: every copy in stock is a row, the best condition first and the others behind it; foil after not foil", () => {
+  const P = (title, vs) => ({ title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), img: "", variants: vs.map((x, i) => ({ shopifyId: "gid://shopify/ProductVariant/" + (i + 1), title: x[0], price: x[1], quantity: x[2] })) });
+  const bolt = P("Lightning Bolt [M3]", [["Lightly Played", 3.1, 2], ["Near Mint", 3.5, 1], ["Damaged", 1, 1], ["Near Mint Foil", 9, 1], ["Moderately Played", 2.5, 0], ["Heavily Played", 2, 3]]);
+  assert.deepEqual(rowsFor(bolt).map((r) => r[5] + (r[6] ? " foil" : "")), ["Near Mint", "Lightly Played", "Heavily Played", "Damaged", "Near Mint foil"]);
+  assert.equal(rowOf(bolt)[5], "Near Mint"); assert.equal(rowsFor(bolt)[1][7], 8);
+  const rows = rowsOf([P("Zap [M3]", [["Near Mint", 1, 1]]), bolt, P("Gone [M3]", [["Near Mint", 1, 0]])]);
+  assert.deepEqual(rows.map((r) => r[0] + ":" + r[5]), ["Lightning Bolt:Near Mint", "Lightning Bolt:Lightly Played", "Lightning Bolt:Heavily Played", "Lightning Bolt:Damaged", "Lightning Bolt:Near Mint", "Zap:Near Mint"]);
 });

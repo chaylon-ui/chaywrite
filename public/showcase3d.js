@@ -145,6 +145,46 @@ function sticker(g, w, text, o) {
   g.shadowColor = 'transparent'; g.fillStyle = o.ink; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 0, bh * .07); g.restore();
   return o.y + bh + w * .012;
 }
+/* The grade drawn on the card (owner, 2026-11-11: "add some condition related characteristics to the card based
+   off of" the shop's grading guide, exorgames.com/pages/grading-guide). What each grade may show is taken from
+   that page: LP slight edge wear or a bit of whitening, lightly worn corners, a few very light scratches; MP
+   moderate edge wear and whitening, worn corners, noticeable scuffing or light scratches; HP significant edge
+   wear, worn corners, a major crease, fading, minor staining; DMG heavy scratches, staining, major creases,
+   frayed edges or tears. The marks are an ILLUSTRATION of the grade, the same for every copy of that grade of
+   that card - not a picture of the copy in stock - and the card's details say so. */
+const COND_GUIDE = [
+  ['Near Mint', 'Minor superficial imperfections at most. Edges sharp and clean with little noticeable whitening or wear; corners crisp; no clouding or staining.'],
+  ['Lightly Played', 'Minor imperfections visible on close inspection: slight edge wear or a bit of whitening, lightly worn corners, maybe a few very light scratches. No major creases.'],
+  ['Moderately Played', 'Moderate wear, still suitable for sleeve play: moderate edge wear or whitening, corners with moderate wear or minor creases, noticeable scuffing or light scratches.'],
+  ['Heavily Played', 'Significant wear, but intact and lying flat: significant edge wear and whitening, worn corners, scuffing or scratches; major creases, fading or minor staining may be present.'],
+  ['Damaged', 'Major flaws: heavy scratches, staining or indents, frayed edges or tears, heavy corner wear, major creases or bends, possibly water damage or writing.']];
+function wearLevel(c) { const t = String((c && c.condition) || '').toLowerCase(); return /damaged|\bdmg\b/.test(t) ? 4 : /heav/.test(t) ? 3 : /moder/.test(t) ? 2 : /light/.test(t) ? 1 : 0; }
+function drawWear(g, x, y, cw, ch, lvl, key) {
+  if (!lvl) return; const q = seed(key + '|wear'), u = cw / 340, rnd = (a, b) => a + q() * (b - a);
+  if (lvl >= 3) { g.fillStyle = 'rgba(255,255,255,' + (lvl > 3 ? .13 : .08) + ')'; g.fillRect(x, y, cw, ch); }                       // fading
+  if (lvl >= 2) for (let i = 0; i < lvl * 2; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), r = rnd(18, 46) * u, gr = g.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, 'rgba(255,255,255,' + (.05 + lvl * .02) + ')'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2); }   // scuffing
+  g.lineCap = 'round';
+  for (let i = 0, n = [0, 3, 8, 14, 26][lvl]; i < n; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), a = rnd(0, PI), l = rnd(.05, lvl > 2 ? .3 : .16) * cw; g.strokeStyle = 'rgba(255,255,255,' + rnd(.1, lvl > 3 ? .42 : .26) + ')'; g.lineWidth = (lvl > 3 ? rnd(.6, 1.8) : .7) * u; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); g.stroke(); }   // scratches
+  if (lvl >= 3) {   // staining; water damage on a damaged card
+    const cx = rnd(x + cw * .2, x + cw * .8), cy = rnd(y + ch * .25, y + ch * .85), r = rnd(.14, .22) * cw * (lvl > 3 ? 1.5 : 1), gr = g.createRadialGradient(cx, cy, r * .2, cx, cy, r); gr.addColorStop(0, 'rgba(120,84,40,' + (lvl > 3 ? .2 : .1) + ')'); gr.addColorStop(.85, 'rgba(120,84,40,' + (lvl > 3 ? .16 : .07) + ')'); gr.addColorStop(.93, 'rgba(90,60,25,' + (lvl > 3 ? .3 : .1) + ')'); gr.addColorStop(1, 'rgba(120,84,40,0)'); g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    for (let i = 0; i < lvl - 2; i++) {   // a crease: a dark fold with a lit edge
+      const cor = q() < .6, x0 = cor ? x + rnd(.5, .95) * cw : x, y0 = cor ? y : y + rnd(.2, .8) * ch, x1 = cor ? x + cw : x + cw, y1 = cor ? y + rnd(.08, .4) * ch : y0 + rnd(-.12, .12) * ch;
+      g.strokeStyle = 'rgba(0,0,0,.34)'; g.lineWidth = 1.6 * u; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1.1 * u; g.beginPath(); g.moveTo(x0, y0 + 1.8 * u); g.lineTo(x1, y1 + 1.8 * u); g.stroke();
+    }
+  }
+  // edge wear: white nicks along the border, and the corners rubbed white
+  g.fillStyle = '#f4f1ea';
+  for (let i = 0, n = [0, 12, 40, 80, 140][lvl]; i < n; i++) { const side = Math.floor(q() * 4), t = q(), len = rnd(2, lvl > 2 ? 14 : 8) * u, th = rnd(.8, [0, 1.6, 2.2, 3, 4.4][lvl]) * u; g.globalAlpha = rnd(.55, .95);
+    if (side === 0) g.fillRect(x + t * cw, y, len, th); else if (side === 1) g.fillRect(x + t * cw, y + ch - th, len, th); else if (side === 2) g.fillRect(x, y + t * ch, th, len); else g.fillRect(x + cw - th, y + t * ch, th, len); }
+  g.globalAlpha = [0, .5, .75, .9, .95][lvl]; const cr = [0, 5, 9, 15, 22][lvl] * u;
+  [[x, y, 1, 1], [x + cw, y, -1, 1], [x, y + ch, 1, -1], [x + cw, y + ch, -1, -1]].forEach((k) => { const r = cr * rnd(.6, 1.2); g.beginPath(); g.moveTo(k[0], k[1]); g.lineTo(k[0] + k[2] * r, k[1]); g.lineTo(k[0], k[1] + k[3] * r); g.closePath(); g.fill(); });
+  g.globalAlpha = 1;
+  if (lvl > 3) {   // a tear in from an edge: the sleeve shows through
+    const t = rnd(.2, .8), dp = rnd(.07, .12) * cw, wd = rnd(.03, .05) * cw, top = q() < .5; g.fillStyle = '#d7dfe2'; g.beginPath();
+    if (top) { g.moveTo(x + t * cw - wd, y); g.lineTo(x + t * cw + wd * .4, y + dp); g.lineTo(x + t * cw + wd, y); } else { g.moveTo(x + cw, y + t * ch - wd); g.lineTo(x + cw - dp, y + t * ch + wd * .4); g.lineTo(x + cw, y + t * ch + wd); }
+    g.closePath(); g.fill(); g.strokeStyle = '#f4f1ea'; g.lineWidth = 1.4 * u; g.stroke();
+  }
+}
 function drawCard(g, w, h, c, im) {
   const q = seed(keyOf(c) + '|st');
   g.clearRect(0, 0, w, h); rr(g, 0, 0, w, h, w * .03); g.fillStyle = '#d7dfe2'; g.fill();
@@ -152,6 +192,7 @@ function drawCard(g, w, h, c, im) {
   g.save(); rr(g, x, y, cw, chh, w * .035); g.clip();
   if (im) { const s = Math.max(cw / im.width, chh / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, x + (cw - iw) / 2, y + (chh - ih) / 2, iw, ih); }
   else { g.fillStyle = '#241a1c'; g.fillRect(x, y, cw, chh); g.fillStyle = '#e8dcb8'; g.font = Math.round(w * .1) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, x + cw / 2, y + chh * .42, cw * .86, w * .125, 5); }
+  if (!c.sealed) drawWear(g, x, y, cw, chh, wearLevel(c), String(c.name) + '|' + String(c.set));
   g.restore();
   const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, 'rgba(255,255,255,.18)'); gr.addColorStop(.35, 'rgba(255,255,255,0)'); gr.addColorStop(.62, 'rgba(255,255,255,.07)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
   let sy = h * .03;
@@ -1200,7 +1241,7 @@ function openSet(i) {
     const cards = (j.rows || []).map((r) => expand(r, nm));
     if (!cards.length) { $('#setsTitle').textContent = 'Nothing from ' + nm + ' in stock right now - pick another set.'; return; }
     // four rows when the set fills them, fewer for a small set
-    const nl = clamp(Math.ceil(cards.length / 8), 1, 4), per = Math.max(1, Math.ceil(cards.length / nl)), lanes = []; for (let l = 0; l < nl; l++) { const s = cards.slice(l * per, (l + 1) * per); if (s.length) lanes.push(s); }
+    const nl = clamp(Math.ceil(cards.length / 8), 1, 4), per = Math.max(1, Math.ceil(cards.length / nl)), lanes = []; for (let l = 0, at = 0; l < nl && at < cards.length; l++) { let end = l === nl - 1 ? cards.length : Math.min(cards.length, at + per); while (end < cards.length && cards[end].name === cards[end - 1].name) end++; lanes.push(cards.slice(at, end)); at = end; }   // a card's other conditions stay in its row, behind it
     kill(setCrate && setCrate.g); setCrate = makeCrate({ kind: 'set', name: nm, lanes, at: new V3(X1 - .3, TOP + .004, -.9), title: boxes.list.label + ' · ' + nm + ' · ' + cards.length + ' in stock' });
     $('#setsv').classList.remove('on'); enterCrate(setCrate, true);
   }).catch(() => { if (seq === boxes.seq) $('#setsTitle').textContent = 'Could not reach the shop. Try again in a minute.'; });
@@ -1385,7 +1426,9 @@ let liftSeq = 0, copiesSeq = 0;
 function fillPanel(c) {
   $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, condText(c), c.foil ? (c.game === 'pokemon' ? 'Holo' : 'Foil') : '', money(c.price)].filter(Boolean).join(' · ');
   acts(c); minis = [];
-  if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = (c.slab ? ['Graded card', c.grade, c.ask ? 'price on request' : money(c.price), c.back ? 'drag to turn it over' : ''] : [c.set || 'Sealed', c.qty ? c.qty + ' in stock' : '', money(c.price)]).filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
+  if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = (c.slab ? ['Graded card', c.grade, c.ask ? 'price on request' : money(c.price), c.back ? 'drag to turn it over' : ''] : [c.set || 'Sealed', c.qty ? c.qty + ' in stock' : '', money(c.price)]).filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftCond').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
+  { const lv = wearLevel(c), gd = /near mint|\bnm\b/i.test(String(c.condition || '')) || lv ? COND_GUIDE[lv] : null;
+    $('#liftCond').innerHTML = gd ? '<h3>' + esc(gd[0]) + '</h3><p>' + esc(gd[1]) + (lv ? ' <em>The marks drawn on this card illustrate the grade; they are not a picture of this copy.</em>' : '') + ' <a href="https://exorgames.com/pages/grading-guide"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Grading guide' + (ON_STORE ? '' : ' ↗') + '</a></p>' : ''; }
   loadCopies(c); const seq = ++liftSeq, al = alikeLocal(c), seen = {}; al.forEach((o) => { seen[o.name.toLowerCase()] = 1; });
   $('#liftAlike').innerHTML = strip('Similar effects', al);
   $('#liftMore').innerHTML = strip('More like this', similar(c).filter((o) => !seen[o.name.toLowerCase()]));

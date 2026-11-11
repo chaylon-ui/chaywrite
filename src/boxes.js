@@ -64,22 +64,26 @@ export function boxesOf(names) {
   return { sets, boxes };
 }
 
-// One feed product -> one compact row, or null when nothing is in stock at a price.
-// The card shown is the best non-foil copy in stock, the foil only when that is all.
-export function rowOf(p) {
+// One feed product -> its rows, one for every copy in stock at a price: the best first (not foil before foil,
+// then Near Mint, Lightly Played, Moderately Played, Heavily Played, Damaged), so in a box the other
+// conditions stand BEHIND the best one (owner, 2026-11-11: "If there are other conditions in stock put them
+// behind the higher condition.. so LP BEHIND NM").
+export function rowsFor(p) {
   const title = String((p && p.title) || "").trim();
   const m = title.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
   const name = (m ? m[1] : title).trim();
-  if (!name) return null;
+  if (!name) return [];
   const vs = ((p && p.variants) || []).filter((v) => v && Number(v.price) > 0 && Number(v.quantity) > 0);
-  if (!vs.length) return null;
-  vs.sort((a, b) => (isFoil(a) - isFoil(b)) || (Number(b.price) - Number(a.price)));
-  const v = vs[0];
+  if (!vs.length) return [];
+  vs.sort((a, b) => (isFoil(a) - isFoil(b)) || (condRank(condOf(a.title)) - condRank(condOf(b.title))) || (Number(b.price) - Number(a.price)));
   const copies = vs.reduce((n, x) => n + Math.max(0, Number(x.quantity) || 0), 0);
-  return [name, String(p.handle || ""), Number(v.price).toFixed(2), String(p.img || p.tcgImage || ""), String(v.shopifyId || "").replace(/\D/g, ""), condOf(v.title), isFoil(v) ? 1 : 0, copies];
+  return vs.map((v) => [name, String(p.handle || ""), Number(v.price).toFixed(2), String(p.img || p.tcgImage || ""), String(v.shopifyId || "").replace(/\D/g, ""), condOf(v.title), isFoil(v) ? 1 : 0, copies]);
 }
+// the copy a card is shown by where only one is wanted: the best in stock, or null
+export function rowOf(p) { return rowsFor(p)[0] || null; }
 export function rowsOf(products) {
-  return products.map(rowOf).filter(Boolean).sort((a, b) => byName(a[0], b[0]) || Number(b[2]) - Number(a[2]));
+  // cards by name (two printings of a name: the dearer first), each card's copies kept together in their order
+  return products.map(rowsFor).filter((r) => r.length).sort((a, b) => byName(a[0][0], b[0][0]) || Number(b[0][2]) - Number(a[0][2])).flat();
 }
 
 // One page of the feed for a set.
