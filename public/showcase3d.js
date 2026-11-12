@@ -65,7 +65,7 @@ function frame(now) {
   if (S.hand) placeHand(now);
   placeFan();
   if (S.mode === 'case') caseTextures(now);
-  if (hall.built) aisleStock(now);
+  if (hall.built) { aisleStock(now); pplTick(); }
   renderer.render(scene, cam);
   if (busy) kick();
 }
@@ -1970,6 +1970,61 @@ function gradedView() {
   return lookView(new V3(C.x + d, C.y, C.z), C, fov);
 }
 
+/* ---------- customers (owner, 2026-11-12) ----------
+   "Matching the look of the cashier can you also add customers who are sitting and playing games at the tables,
+   walking down the aisles browsing etc.. they need to look like typical mtg and pokemon players etc.."
+   People in the cashier's own style (plain shapes, a painted face, hair, glasses): players sat across from each
+   other at the play-space tables with cards in hand, and browsers stood at the shelves down the aisles. Dress
+   of a game night: graphic tees (a d20, a star, a bolt - no game's own marks), hoodies, flannel, caps, backpacks,
+   a binder or a deck box in hand; some younger and smaller. All made up, decoration only. They stand still (the
+   page draws only when something changes); a browser steps out of the way when you come to the shelf they are at. */
+const ppl = { list: [], mats: {}, geo: null };
+function pplFace(skin, glasses, beard, k) {
+  const key = 'f' + skin + glasses + beard + (k % 2); if (ppl.mats[key]) return ppl.mats[key];
+  return (ppl.mats[key] = lam({ map: ctex(256, 128, (c, w, h) => {
+    c.fillStyle = skin; c.fillRect(0, 0, w, h); const X = w * .25, Y = h / 2;
+    [-1, 1].forEach((sd) => { const ex = X + sd * 15, ey = Y - 6; c.fillStyle = '#fbf6ee'; c.beginPath(); c.ellipse(ex, ey, 5, 3, 0, 0, PI * 2); c.fill(); c.fillStyle = '#2a1a10'; c.beginPath(); c.arc(ex, ey, 2.2, 0, PI * 2); c.fill();
+      c.strokeStyle = '#3a2618'; c.lineWidth = 2.2; c.beginPath(); c.moveTo(ex - 6, ey - 7); c.lineTo(ex + 6, ey - 8); c.stroke();
+      if (glasses) { c.strokeStyle = '#111'; c.lineWidth = 2; c.strokeRect(ex - 8, ey - 6, 16, 12); } });
+    if (glasses) { c.strokeStyle = '#111'; c.lineWidth = 2; c.beginPath(); c.moveTo(X - 7, Y - 6); c.lineTo(X + 7, Y - 6); c.stroke(); }
+    if (beard) { c.fillStyle = 'rgba(50,32,20,.75)'; c.beginPath(); c.ellipse(X, Y + 22, 22, 16, 0, 0, PI * 2); c.fill(); }
+    c.strokeStyle = '#7a3b2a'; c.lineWidth = 2; c.beginPath(); c.moveTo(X - 8, Y + 15); c.quadraticCurveTo(X, Y + (k % 2 ? 21 : 18), X + 8, Y + 15); c.stroke();
+  }) }));
+}
+function pplShirt(i) {
+  const key = 's' + i; if (ppl.mats[key]) return ppl.mats[key];
+  const S_ = [['#141414', 'd20'], ['#1f2a6b', 'star'], ['#5a5f66', 'hood'], ['#8a2a22', 'plaid'], ['#f2c230', 'bolt'], ['#2f6b3a', ''], ['#6a3fb0', 'd20'], ['#e9e2d0', 'star']][i % 8];
+  return (ppl.mats[key] = lam({ map: ctex(256, 128, (c, w, h) => {
+    c.fillStyle = S_[0]; c.fillRect(0, 0, w, h); const X = w / 2, Y = h * .45, ink = S_[0] === '#f2c230' || S_[0] === '#e9e2d0' ? '#14100e' : '#f4efe0';
+    if (S_[1] === 'plaid') { c.fillStyle = '#00000050'; for (let x = 0; x < w; x += 22) c.fillRect(x, 0, 9, h); for (let y = 0; y < h; y += 22) c.fillRect(0, y, w, 9); }
+    else if (S_[1] === 'hood') { c.fillStyle = '#00000030'; c.fillRect(X - 2, 0, 4, h); c.fillStyle = '#e9e2d0'; c.fillRect(X - 14, 18, 3, 34); c.fillRect(X + 11, 18, 3, 34); c.fillStyle = '#00000028'; c.fillRect(X - 30, 84, 60, 26); }
+    else if (S_[1] === 'd20') { c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); for (let k = 0; k < 6; k++) { const a = k / 6 * PI * 2 + PI / 6; c.lineTo(X + Math.cos(a) * 24, Y + Math.sin(a) * 24); } c.closePath(); c.stroke(); c.beginPath(); c.moveTo(X, Y - 14); c.lineTo(X + 13, Y + 9); c.lineTo(X - 13, Y + 9); c.closePath(); c.stroke(); c.fillStyle = ink; c.font = '900 13px Inter, sans-serif'; c.textAlign = 'center'; c.fillText('20', X, Y + 6); }
+    else if (S_[1] === 'star') { c.fillStyle = ink; c.beginPath(); for (let k = 0; k < 10; k++) { const a = k / 10 * PI * 2 - PI / 2, r = k % 2 ? 10 : 24; c.lineTo(X + Math.cos(a) * r, Y + Math.sin(a) * r); } c.fill(); }
+    else if (S_[1] === 'bolt') { c.fillStyle = ink; c.beginPath(); c.moveTo(X + 6, Y - 26); c.lineTo(X - 14, Y + 4); c.lineTo(X - 1, Y + 4); c.lineTo(X - 8, Y + 26); c.lineTo(X + 14, Y - 6); c.lineTo(X + 1, Y - 6); c.closePath(); c.fill(); }
+  }) }));
+}
+const pplFlat = (hex) => ppl.mats[hex] || (ppl.mats[hex] = lam({ color: hex }));
+function makePerson(parent, o) {
+  const G_ = ppl.geo || (ppl.geo = { leg: new THREE.CylinderGeometry(.055, .05, .8, 10), shin: new THREE.CylinderGeometry(.05, .045, .45, 10), thigh: new THREE.BoxGeometry(.11, .11, .42), torso: new THREE.CylinderGeometry(.17, .15, .55, 14), sh: new THREE.SphereGeometry(.17, 14, 10), arm: new THREE.CylinderGeometry(.045, .038, .3, 10), fore: new THREE.CylinderGeometry(.036, .032, .28, 10), hand: new THREE.SphereGeometry(.04, 10, 8), neck: new THREE.CylinderGeometry(.045, .05, .08, 10), head: new THREE.SphereGeometry(.1, 18, 12), hair: new THREE.SphereGeometry(.107, 16, 10, 0, PI * 2, 0, PI * .45), cap: new THREE.CylinderGeometry(.106, .108, .06, 14), brim: new THREE.BoxGeometry(.12, .012, .1), pack: new THREE.BoxGeometry(.26, .34, .12), box: new THREE.BoxGeometry(.1, .14, .03), fan: new THREE.BoxGeometry(.13, .09, .006), shoe: new THREE.BoxGeometry(.09, .05, .2) });
+  const r = seed('person' + o.k), pick = (a) => a[Math.floor(r() * a.length)], g = new THREE.Group(); g.position.set(o.x, 0, o.z); g.rotation.y = o.ry || 0; const sc = o.kid ? .8 : .94 + r() * .1; g.scale.setScalar(sc); parent.add(g);
+  const skin = pick(['#e8b88a', '#d8a47c', '#b97a4e', '#8a5a3a', '#f0c9a4']), skinM = pplFlat(skin), hairM = pplFlat(pick(['#3a2618', '#16100c', '#7a4a22', '#c9a24a', '#5a5a5e'])), jeans = pplFlat(pick(['#2c3a52', '#1c1b1d', '#5a4a36', '#3a4a3a'])), shirt = pplShirt(Math.floor(r() * 8)), sleeve = pplFlat(shirt.map ? '#' + shirt.map.image.getContext('2d').getImageData(4, 124, 1, 1).data.slice(0, 3).reduce((s_, v) => s_ + v.toString(16).padStart(2, '0'), '') : '#333');
+  const add = (geo, mat, x, y, z, rx, rz, par) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (rx) m.rotation.x = rx; if (rz) m.rotation.z = rz; (par || g).add(m); return m; };
+  const sit = !!o.sit, hip = sit ? .5 : .8;
+  if (sit) { [-.08, .08].forEach((x) => { add(G_.thigh, jeans, x, .52, .19); add(G_.shin, jeans, x, .25, .38); add(G_.shoe, pplFlat('#111111'), x, .03, .42); }); }
+  else { const st = o.walk ? .1 : 0; [-.08, .08].forEach((x, i) => { add(G_.leg, jeans, x, .4, 0, (i ? 1 : -1) * st); add(G_.shoe, pplFlat('#111111'), x, .03, .04 + (i ? -1 : 1) * st * .5); }); }
+  const tor = add(G_.torso, shirt, 0, hip + .3, 0); tor.rotation.y = PI; tor.scale.z = .66; const sh = add(G_.sh, sleeve, 0, hip + .56, 0); sh.scale.set(1, .32, .66);
+  const fwd = sit || o.hold;   // arms forward: on the table, or holding something to look at
+  [-1, 1].forEach((sd) => { const a = new THREE.Group(); a.position.set(sd * .2, hip + .54, 0); a.rotation.set(sit ? -.55 : o.hold ? -.25 : (o.walk ? sd * .25 : 0), 0, sd * .08); g.add(a); add(G_.arm, sleeve, 0, -.14, 0, 0, 0, a); const f = new THREE.Group(); f.position.set(0, -.29, 0); f.rotation.x = sit ? -1.0 : o.hold ? -1.15 : -.1; a.add(f); add(G_.fore, skinM, 0, -.13, 0, 0, 0, f); add(G_.hand, skinM, 0, -.28, 0, 0, 0, f); });
+  add(G_.neck, skinM, 0, hip + .64, 0); const hd = add(G_.head, pplFace(skin, r() < .45, !o.kid && r() < .35, o.k), 0, hip + .76, 0); hd.scale.y = 1.12; if (fwd) hd.rotation.x = .22;
+  const hy = hip + .775; if (r() < .4) { add(G_.cap, pplFlat(pick(['#d62c28', '#1f2a6b', '#141414', '#f2c230'])), 0, hy + .075, 0); add(G_.brim, pplFlat('#141414'), 0, hy + .05, r() < .5 ? .14 : -.14); } else { const h_ = add(G_.hair, hairM, 0, hy - .005, -.008); h_.scale.y = 1.15; h_.rotation.x = -.35; }
+  if (!sit && r() < .55) add(G_.pack, pplFlat(pick(['#2a2a30', '#7a3fc4', '#19b5a5', '#8a2a22'])), 0, hip + .32, -.17);
+  if (sit) { const f = add(G_.fan, pplFlat('#d7dfe2'), 0, hip + .27, .36); f.rotation.x = -.5; }   // a hand of cards
+  else if (o.hold) add(G_.box, pplFlat(pick(['#f2c230', '#d62c28', '#2f6fd0', '#141414'])), 0, hip + .2, .3, -.5);
+  const p = { g, x: o.x, z: o.z, aisle: o.aisle == null ? -1 : o.aisle }; ppl.list.push(p); return p;
+}
+// a browser steps aside when you are at the shelf they are standing at
+function pplTick() { if (!ppl.list.length) return; const inA = S.mode === 'aisle'; ppl.list.forEach((p) => { if (p.aisle < 0) return; p.g.visible = !(inA && p.aisle === S.aisle && Math.abs(view.pos.z - p.z) < 1.5); }); }
+
 /* ---------- the hall of aisles (owner, 2026-11-10) ----------
    "make the store much larger so we can display all our product on the shelves for gunpla, figures, board
    games, etc.. where you have headers above the aisles and ... scroll through all the products we have in
@@ -2200,6 +2255,8 @@ function buildHall(list) {
     const put = (m, k, x, y, z, ry) => { d2.position.set(x, y, z); d2.rotation.set(0, ry || 0, 0); d2.scale.set(1, 1, 1); d2.updateMatrix(); m.setMatrixAt(k, d2.matrix); };
     tabs.forEach((t, k) => {
       const x = t[0] + (q3() - .5) * .2, z = t[1], ry = (q3() - .5) * .12;
+      // players at some of the tables: two across from each other, sometimes a third
+      if (ppl.list.length < 16 && k % 3 !== 2) (k % 3 ? [1, 3, 0] : [0, 2]).forEach((j, n) => { const c = [[-.36, -.62, 0], [.36, -.62, 0], [-.36, .62, PI], [.36, .62, PI]][j]; makePerson(G, { x: x + c[0], z: z + c[1] * .92, ry: c[2], sit: true, k: k * 7 + j, kid: (k + n) % 4 === 3 }); });
       put(top, k, x, .72, z, ry); [[-.68, -.3], [.68, -.3], [-.68, .3], [.68, .3]].forEach((l, j) => put(legs, k * 4 + j, x + l[0], .35, z + l[1], 0));
       [[-.36, -.62, 0], [.36, -.62, 0], [-.36, .62, PI], [.36, .62, PI]].forEach((c, j) => { const cz = z + c[1] + (q3() - .5) * .12, cr = c[2] + (q3() - .5) * .5; put(seat, k * 4 + j, x + c[0], .45, cz, cr); put(back, k * 4 + j, x + c[0] - Math.sin(cr) * .19, .62, cz - Math.cos(cr) * .19, cr); });
       [-.36, .36].forEach((dx, j) => { put(mat, k * 2 + j, x + dx, .74, z, ry); col.setHSL(q3(), .55, .42); mat.setColorAt(k * 2 + j, col); });
@@ -2220,6 +2277,10 @@ function buildHall(list) {
     put('vallejo', aCx(iG) + 1.45); put('citadel', iW > 0 ? aCx(iW) - 1.45 : aCx(iW) + 1.45); put('army', aCx(iW) + 1.22 + (iW > 0 ? 0 : .9));
     hobbyHits.forEach((m) => { const k = hot.indexOf(m); if (k > -1) hot.splice(k, 1); kill(m); }); hobbyHits = []; hall.paints = true; hall.iW = iW; }
   buildStandee(G, 2.55, 1.7); loadEvents();
+  // browsers down the aisles: one or two an aisle, at a shelf that has stock, looking at it
+  hall.list.forEach((a) => { const q4 = seed('browse' + a.key), n = a.flip ? 1 : 2;
+    for (let j = 0; j < n; j++) { const sd = a.flip ? 1 : j ? 1 : -1, cols = sd < 0 ? a.nl : a.flip ? a.nl : a.nr; if (cols < 8) continue; const d = hall.d0 + (2 + q4() * (cols - 5)) * hall.colW;
+      makePerson(G, { x: aCx(a.i) + sd * .52, z: hall.zf - d, ry: sd * PI / 2 + (q4() - .5) * .5, hold: q4() < .6, walk: q4() < .3, k: 100 + a.i * 3 + j, kid: q4() < .25, aisle: a.i }); } });
   // the flickering boxes: every so often one stutters for a moment; frames are only drawn while one does, and only in the aisles
   if (hall.flick.length && !reduce) setInterval(() => {
     if (S.mode !== 'aisle' && S.mode !== 'aisles') return; const now = performance.now(); let any = false;
@@ -2642,4 +2703,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, lin, linTap, linDraw, linStepT: linStep, dnk, dnkTap, dnkThrow, dnkDraw, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, evPosters, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, lin, linTap, linDraw, linStepT: linStep, dnk, dnkTap, dnkThrow, dnkDraw, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, ppl, evPosters, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
