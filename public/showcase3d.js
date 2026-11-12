@@ -908,29 +908,9 @@ function buildNineties() {
   bx(.3, .06, .22, lam({ color: 0x55555c }), 3.12, .03, -2.3, G); bx(.12, .02, .07, lam({ color: 0xb9b9bf }), 2.9, .012, -2.12, G); bx(.12, .02, .07, lam({ color: 0xb9b9bf }), 2.86, .012, -2.5, G);
   [[2.62, -2.78, 0x19b5a5], [2.55, -1.85, 0x7a3fc4]].forEach((b) => { const m = new THREE.Mesh(new THREE.SphereGeometry(.34, 18, 12), lam({ color: b[2] })); m.scale.set(1, .55, 1); m.position.set(b[0], .17, b[1]); G.add(m); });
 
-  // the games table in the middle of the floor: folding table and chairs, a game half played, pizza
-  const P = grp(2.3, 0, 1.85, .12), tblM = lam({ color: 0xb9ad98 }), leg = lam({ color: 0x55555c });
-  bx(1.5, .035, .75, tblM, 0, .72, 0, P); [[-.68, -.3], [.68, -.3], [-.68, .3], [.68, .3]].forEach((l) => bx(.03, .7, .03, leg, l[0], .35, l[1], P));
-  const flat = (w, d, mat, x, z, ry) => { const m = pl(w, d, mat, x, .739 + flat.n++ * .0006, z, 0, P); m.rotation.set(-PI / 2, 0, ry || 0); return m; }; flat.n = 0;
-  flat(.6, .35, lam({ map: ctex(300, 175, (g, w, h) => { memphis(g, w, h, '#16324a', 14, 'mat'); g.strokeStyle = '#ffffff55'; g.lineWidth = 3; g.strokeRect(8, 8, w - 16, h - 16); }) }), -.3, .12, 0);
-  const backM = lam({ map: ctex(126, 176, drawBack) }), r = seed('table');
-  for (let i = 0; i < 9; i++) flat(CW, CH, backM, -.52 + (i % 5) * .095 + r() * .02, .06 + Math.floor(i / 5) * .12 + r() * .02, (r() - .5) * .5);
-  bx(CW, .022, CH, backM, -.02, .749, .2, P).rotation.y = .2; bx(CW, .03, CH, backM, .1, .753, -.22, P).rotation.y = -.4;
-  const d20 = new THREE.Mesh(new THREE.IcosahedronGeometry(.016), lam({ color: 0xd62c28 })); d20.position.set(-.1, .752, .02); P.add(d20);
-  const d20b = new THREE.Mesh(new THREE.IcosahedronGeometry(.016), lam({ color: 0x19b5a5 })); d20b.position.set(-.42, .752, -.12); P.add(d20b);
-  const pz = bx(.36, .045, .36, lam({ color: 0xe9e2d0 }), .42, .76, -.05, P); pz.rotation.y = .3;
-  const pzT = flat(.34, .34, lam({ map: ctex(256, 256, (g, w, h) => { g.fillStyle = '#efe7d2'; g.fillRect(0, 0, w, h); g.strokeStyle = '#c0392b'; g.lineWidth = 8; g.strokeRect(14, 14, w - 28, h - 28); g.fillStyle = '#c0392b'; g.font = '900 54px Inter, sans-serif'; g.textAlign = 'center'; g.fillText('HOT', w / 2, 104); g.fillText('PIZZA', w / 2, 160); g.font = '700 20px Inter, sans-serif'; g.fillStyle = '#2f7a3a'; g.fillText('fresh · fast · 2 for 1 tuesdays', w / 2, 204); }) }), .42, -.05, -.3); pzT.position.y = .784;
-  [[.2, .2, 0x2f7fd0], [.62, .26, 0xd62c28], [-.6, -.26, 0x3fae4a]].forEach((c) => { cyl(.028, .028, .105, lam({ color: c[2] }), c[0], .79, c[1], P); cyl(.026, .026, .004, chrome, c[0], .8445, c[1], P); });
-  const hh = bx(.075, .02, .125, lam({ color: 0xbfbfc4 }), .16, .748, -.02, P); hh.rotation.y = .5;   // a handheld someone left
-  const hs = flat(.045, .04, basic({ color: 0x7c9a4a }), .1505, -.0375, -.5); hs.position.y = .7585;
-  const chair = (x, z, ry) => { const c = new THREE.Group(); c.position.set(x, 0, z); c.rotation.y = ry; P.add(c); bx(.4, .025, .4, leg, 0, .45, 0, c); bx(.4, .3, .02, leg, 0, .78, -.19, c); [[-.18, -.18], [.18, -.18], [-.18, .18], [.18, .18]].forEach((l) => bx(.022, .45, .022, tvM, l[0], .225, l[1], c)); bx(.022, .36, .022, tvM, -.18, .62, -.19, c); bx(.022, .36, .022, tvM, .18, .62, -.19, c); };
-  chair(-.3, -.62, .2); chair(.35, .68, PI - .3); chair(1.02, .0, -PI / 2 + .5);
-  const bag = new THREE.Mesh(new THREE.SphereGeometry(.2, 14, 10), lam({ color: 0x7a3fc4 })); bag.scale.set(1, 1.15, .6); bag.position.set(-.82, .22, .42); P.add(bag); bx(.24, .14, .06, lam({ color: 0x19b5a5 }), -.82, .17, .55, P);
-  // long boxes of commons under the table and by the door
+  // (the games table, its chairs, the backpack and the long boxes on the floor stood here: removed - owner, 2026-11-12:
+  // "Remove this old clutter from the first iteration and move the Warhammer standee there")
   const card = lam({ color: 0xe6e0cf });
-  bx(.2, .16, .7, card, .3, .08, 0, P).rotation.y = .1; bx(.2, .16, .7, card, 0, .08, .05, P);
-  bx(.7, .16, .2, card, 2.75, .08, 3.3, G); bx(.7, .16, .2, card, 2.78, .24, 3.3, G); bx(.2, .16, .7, card, 3.3, .08, 3.1, G).rotation.y = .3;
-
   // on the floor inside the door: a rug of the decade, and a skateboard left by the counter
   const rug = pl(1.7, 1.05, lam({ map: ctex(512, 316, (g, w, h) => { memphis(g, w, h, '#101018', 30, 'rug'); g.strokeStyle = TEAL; g.lineWidth = 14; g.strokeRect(7, 7, w - 14, h - 14); g.strokeStyle = PINK; g.lineWidth = 5; g.strokeRect(22, 22, w - 44, h - 44); }) }), .15, .006, .75, 0, G); rug.rotation.set(-PI / 2, 0, .06);
   const sk = grp(-.75, 0, 1.45, 1.0); bx(.2, .012, .74, lam({ map: ctex(64, 256, (g, w, h) => memphis(g, w, h, '#ff4f9a', 16, 'deck')) }), 0, .085, 0, sk);
@@ -2108,10 +2088,16 @@ function loadEvents() {
 // the picture as given, 1.83 m tall, its own shape kept, on a cardboard foot with a strut behind.
 const STANDEE = 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/E64BF8B4-AB03-4DD5-81FD-DC964759CFAF.png?v=1794449977';
 function buildStandee(G, x, z) {
-  const H_ = 1.83, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -.3; G.add(g);
+  const H_ = 1.83, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -.62; G.add(g);   // turned to the door
   const card = lam({ color: 0xb08a5a }); bx(.5, .02, .34, card, 0, .01, -.12, g); const st = bx(.06, 1.2, .02, card, 0, .6, -.2, g); st.rotation.x = .28;
   loadImg(STANDEE + '&width=900').then((im) => { const w = H_ * im.width / im.height, t = new THREE.Texture(im); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, H_), new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: .3, side: THREE.DoubleSide, color: cardTint })); m.position.set(0, H_ / 2 + .01, 0); g.add(m); hall.standee = m; kick(); }).catch(() => {});
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, H_), new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: .3, side: THREE.DoubleSide, color: cardTint })); m.position.set(0, H_ / 2 + .01, 0); g.add(m); hall.standee = m;
+    // a handwritten star burst on its top right corner, with an arrow (owner: "Warhammer stuff this way")
+    const bt = ctex(420, 420, (c, cw, ch) => { c.clearRect(0, 0, cw, ch); c.translate(cw / 2, ch / 2); c.rotate(-.1); c.fillStyle = '#f7e23a'; c.strokeStyle = '#14100e'; c.lineWidth = 7; c.lineJoin = 'round'; c.beginPath(); for (let i = 0; i < 28; i++) { const a = i / 28 * PI * 2, r = i % 2 ? 200 : 158; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill(); c.stroke();
+      c.fillStyle = '#c0261e'; c.textAlign = 'center'; c.font = '50px "Permanent Marker", cursive'; c.fillText('Warhammer', 0, -52); c.fillText('stuff', 0, -2); c.fillText('this way', 0, 48);
+      c.strokeStyle = '#14100e'; c.lineWidth = 12; c.lineCap = 'round'; c.beginPath(); c.moveTo(-74, 96); c.quadraticCurveTo(-10, 112, 62, 94); c.stroke(); c.beginPath(); c.moveTo(34, 70); c.lineTo(72, 92); c.lineTo(40, 122); c.stroke(); });
+    const bm = new THREE.Mesh(new THREE.PlaneGeometry(.62, .62), new THREE.MeshBasicMaterial({ map: bt, transparent: true, alphaTest: .3, side: THREE.DoubleSide, color: cardTint })); bm.position.set(w / 2 - .12, H_ - .2, .012); g.add(bm);
+    kick(); }).catch(() => {});
 }
 function buildHall(list) {
   if (hall.built || !list.length) return; hall.built = true;
@@ -2128,7 +2114,7 @@ function buildHall(list) {
     o.secs.forEach((s, j) => { if (left && j >= best && o.nr) { left = false; c = 0; } s.left = left; s.c0 = c; s.s0 = left ? c * hall.colW : o.U + hall.T + (o.U - (o.nr - 1) * hall.colW) + c * hall.colW; s.off = off; c += s.cols; off += s.count; });
     o.slots = off; return o;
   });
-  const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35 + 1.2,   /* + room at the end of the hall for the standee */ Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
+  const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35, Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
   hall.xMax = xMax; hall.zBack = zBack;
   // (owner, 2026-11-11: "remove the red wall as it ... makes it hard to know unless you turn to look, that there is more store that way")
   rwFull.visible = false; rwShort.visible = false; rwUp.visible = false;
@@ -2230,7 +2216,7 @@ function buildHall(list) {
     const put = (key, x) => { const r = racks.find((q) => q.key === key); if (!r) return; r.at = [x, hall.zf + .03]; r.ry = 0; fillRack(r); rackHit(r); };
     put('vallejo', aCx(iG) + 1.45); put('citadel', iW > 0 ? aCx(iW) - 1.45 : aCx(iW) + 1.45); put('army', aCx(iW) + 1.22 + (iW > 0 ? 0 : .9));
     hobbyHits.forEach((m) => { const k = hot.indexOf(m); if (k > -1) hot.splice(k, 1); kill(m); }); hobbyHits = []; hall.paints = true; hall.iW = iW; }
-  buildStandee(G, xMax - .75, hall.zf + .55); loadEvents();
+  buildStandee(G, 2.55, 1.7); loadEvents();
   // the flickering boxes: every so often one stutters for a moment; frames are only drawn while one does, and only in the aisles
   if (hall.flick.length && !reduce) setInterval(() => {
     if (S.mode !== 'aisle' && S.mode !== 'aisles') return; const now = performance.now(); let any = false;
@@ -2287,14 +2273,11 @@ function aisleStock(now) {
 // come in, looking along the row of headers; 0..n-1 = standing square at the mouth of that aisle, looking down
 // it. A swipe steps one stop; a tap on the aisle walks in.
 function aislesView() {
-  const n = hall.list.length || 1, ph = cam.aspect < 1; S.hs = clamp(S.hs == null ? -1 : S.hs, -1, n);
-  // one stop past the last aisle: the end of the hall, square on to the standee, all six feet of it in view (owner,
-  // 2026-11-12: "you can't really see the warhammer standee unless you look right toward the wall ... and it snaps back")
-  if (S.hs >= n) { const fov = ph ? 70 : 55, sx = hall.xMax - .75, sz = hall.zf + .55, d = Math.max(1.2 / Math.tan(rad(fov / 2)), .8 / hTan(fov)); return lookView(new V3(sx - Math.sin(.3) * d, 1.05, sz + Math.cos(.3) * d), new V3(sx, .95, sz), fov); }
+  const n = hall.list.length || 1, ph = cam.aspect < 1; S.hs = clamp(S.hs == null ? -1 : S.hs, -1, n - 1);
   if (S.hs < 0) return lookView(new V3(hall.x0 + .5, 1.7, ph ? 3.3 : 3.05), new V3(hall.x0 + .5 + (ph ? 2.1 : 2.4), ph ? 1.4 : 1.62, hall.zf - (ph ? .5 : 1.0)), ph ? 82 : 62);
   const cx = aCx(S.hs); return lookView(new V3(cx, 1.62, 3.3), new V3(cx, 1.25, hall.zf - 6), ph ? 80 : 58);
 }
-function hallStep(d) { const n = hall.list.length, to = clamp((S.hs == null ? -1 : S.hs) + d, -1, n); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
+function hallStep(d) { const n = hall.list.length, to = clamp((S.hs == null ? -1 : S.hs) + d, -1, n - 1); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
 function hallTo(i) { S.hs = i; setView(aislesView()); }
 // In an aisle you stand S.as metres along its ribbon: down the left shelf, round at the far end, back up the right.
 function aisleView() {
@@ -2381,7 +2364,7 @@ function ui() {
   document.body.dataset.mode = S.mode;
   const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode === 'ask' ? 'till' : S.mode;
   if (S.mode === 'arcades') $('#ctxArcades').innerHTML = '<button type="button" data-go="door">‹ Back</button>' + CABS.map((c) => '<button type="button" data-go="' + c[0] + '">' + c[1] + '</button>').join('');
-  if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '"' + (a.i === S.hs ? ' class="on"' : '') + '>' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('') + '<button type="button" data-hstop="' + hall.list.length + '"' + (S.hs === hall.list.length ? ' class="on"' : '') + '>End of the hall</button>';
+  if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '"' + (a.i === S.hs ? ' class="on"' : '') + '>' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
   if (S.mode === 'aisle') { const a = hall.list[S.aisle];   // the aisle's sections to jump to, and the turn to the shelf behind
     if (hall.secsFor !== a.i) { hall.secsFor = a.i; hall.secOn = -1; $('#aiSecs').innerHTML = a.secs.length > 1 ? a.secs.map((s) => '<button type="button" data-sec="' + s.j + '">' + esc(s.label) + '</button>').join('') : ''; $('#aiTurn').hidden = !a.nr; }
     aisleBar(); }
