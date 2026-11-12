@@ -2,7 +2,7 @@
   "_what": "AUTO-GENERATED daily by binderpos-portal-sync.yml from the BinderPOS portal's Buylist Rules (staff login) - do not hand-edit. One ladder per game and condition on the portal's own price bands, per-rarity exceptions per tier (a rule that does not buy a rarity yields to the next matching rule); set-specific rules under sets; rules named test are skipped.",
   "_portal": true,
   "enabled": true,
-  "updated": "2026-11-11",
+  "updated": "2026-11-12",
   "disclaimer": "Based on our current buylist rules and today's sell price. The final offer is confirmed when we check your cards - condition and demand can change it. Rules and prices update daily.",
   "defaults": null,
   "games": [
@@ -737,8 +737,8 @@
         "MTG SINGLES $100+"
       ],
       "sets": {
-        "star trek commander": {
-          "name": "Star trek commander delete nov 20th",
+        "edge of eternities art series": {
+          "name": "Edge of Eternities Art Cards",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -787,33 +787,8 @@
             }
           }
         },
-        "secrets of strixhaven art series": {
-          "name": "STRIXHAVEN ART CARDS",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "edge of eternities art series": {
-          "name": "Edge of Eternities Art Cards",
+        "marvel super heroes art series": {
+          "name": "marvel superheros art cards never delete",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -928,31 +903,6 @@
             }
           }
         },
-        "marvel super heroes art series": {
-          "name": "marvel superheros art cards never delete",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
         "star trek": {
           "name": "Star trek squash delete nov 20th",
           "conds": {
@@ -990,6 +940,56 @@
         },
         "lorwyn eclipsed art series": {
           "name": "Lorwyn art cards",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "star trek commander": {
+          "name": "Star trek commander delete nov 20th",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "secrets of strixhaven art series": {
+          "name": "STRIXHAVEN ART CARDS",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -1317,8 +1317,8 @@
       "_rules": [
         "One Piece (Under $3.00)",
         "One Piece (Over $3.01)",
-        "One Piece $3 - $10",
-        "One Piece (Over $10)"
+        "One Piece (Over $10)",
+        "One Piece $3 - $10"
       ],
       "rarities": {
         "treasure rare": {
@@ -2449,8 +2449,108 @@
         }
       },
       "sets": {
+        "prize pack series six": {
+          "name": "Pokemon Prize pack 6",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "world championships 2022": {
+          "name": "World Championship Pokemon",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
         "world championships 2018": {
           "name": "World Champs Pokemon",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series seven": {
+          "name": "Pokemon prize pack 7",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series nine": {
+          "name": "Pokemon Prize Pack Series 9",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2577,6 +2677,56 @@
             }
           }
         },
+        "mega evolution: delta reign": {
+          "name": "Delta Reign Squash - Delete Nov.20",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "prize pack series eight": {
+          "name": "Pokemon Prize Pack Series 8",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
         "prize pack series one": {
           "name": "Prizepack",
           "conds": {
@@ -2680,33 +2830,8 @@
             }
           }
         },
-        "prize pack series six": {
-          "name": "Pokemon Prize pack 6",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "prize pack series seven": {
-          "name": "Pokemon prize pack 7",
+        "prize pack series three": {
+          "name": "prize pack 3 (pokemon)",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -2755,56 +2880,6 @@
             }
           }
         },
-        "prize pack series eight": {
-          "name": "Prize Pack Series 8",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "world championships 2019": {
-          "name": "World Champs Pokemon",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
         "prize pack series four": {
           "name": "prize pack 4 (pokemon)",
           "conds": {
@@ -2830,83 +2905,8 @@
             }
           }
         },
-        "prize pack series three": {
-          "name": "prize pack 3 (pokemon)",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "mega evolution: delta reign": {
-          "name": "Delta Reign Squash - Delete Nov.20",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "prize pack series nine": {
-          "name": "Pokemon Prize Pack Series 9",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "world championships 2022": {
-          "name": "World Championship Pokemon",
+        "world championships 2019": {
+          "name": "World Champs Pokemon",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -3748,8 +3748,8 @@
             }
           }
         },
-        "ots tournament pack 29": {
-          "name": "YGO Pack 29 (Delete when 33 releases)",
+        "ots tournament pack 27": {
+          "name": "Ygo OTS 27",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -3775,6 +3775,31 @@
         },
         "winner's pack 2026-2027": {
           "name": "YUgiOH winners pack 26/27. Do not delete.",
+          "conds": {
+            "NM": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "LP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "MP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "HP": {
+              "cash": 0.0,
+              "credit": 0.0
+            },
+            "DM": {
+              "cash": 0.0,
+              "credit": 0.0
+            }
+          }
+        },
+        "ots tournament pack 29": {
+          "name": "YGO Pack 29 (Delete when 33 releases)",
           "conds": {
             "NM": {
               "cash": 0.0,
@@ -3825,31 +3850,6 @@
         },
         "ots tournament pack 28": {
           "name": "YGO OTS 28",
-          "conds": {
-            "NM": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "LP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "MP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "HP": {
-              "cash": 0.0,
-              "credit": 0.0
-            },
-            "DM": {
-              "cash": 0.0,
-              "credit": 0.0
-            }
-          }
-        },
-        "ots tournament pack 27": {
-          "name": "Ygo OTS 27",
           "conds": {
             "NM": {
               "cash": 0.0,
