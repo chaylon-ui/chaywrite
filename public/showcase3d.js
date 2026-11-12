@@ -1620,7 +1620,7 @@ function lift(c, src) {
   if (c.sealed && !c.slab && handleOf(c)) return openProduct(c);   // a boxed product opens as its own page
   if (S.handSrc) S.handSrc.visible = true;
   S.hand = c; S.handSrc = src || null; if (src) src.visible = false;
-  document.body.dataset.hand = '1'; hand.g.visible = true; hand.dim.visible = true; hand.rx = hand.ry = hand.tx = hand.ty = 0; hand.t0 = performance.now();
+  document.body.dataset.hand = '1'; if (c.slab) document.body.dataset.slab = '1'; else delete document.body.dataset.slab; hand.g.visible = true; hand.dim.visible = true; hand.rx = hand.ry = hand.tx = hand.ty = 0; hand.t0 = performance.now();
   hand.front.material.map = phTex; wear(hand.front, c.slab ? Object.assign({}, c, { plain: true }) : c, c.slab ? 900 : c.sealed ? 640 : 720); hand.foil.visible = !!c.foil;
   const two = !c.sealed || !!c.back;   // a card in its sleeve, or a slab with a photo of its back: two faces; a cut-out box: one, seen from both sides
   hand.back.visible = two; hand.front.material.side = two ? THREE.FrontSide : THREE.DoubleSide; hand.glare.visible = !c.sealed;
@@ -1630,7 +1630,7 @@ function lift(c, src) {
   fillPanel(c); sheet(false); hint(''); askOrientation(); kick();
 }
 function putBack() {
-  if (!S.hand) return; delete document.body.dataset.hand; hand.g.visible = false; hand.dim.visible = false; bare(hand.front);
+  if (!S.hand) return; delete document.body.dataset.hand; delete document.body.dataset.slab; hand.g.visible = false; hand.dim.visible = false; bare(hand.front);
   if (S.handSrc) S.handSrc.visible = true; S.hand = null; S.handSrc = null; orientBase = null; kick();
 }
 let orientBase = null, askedOrient = false;
@@ -1859,10 +1859,16 @@ function prodBuy(b) {
 }
 // the zoom: the photo two and a half times the screen, the spot you tapped under your finger; drag to move, tap to close
 function zoomOn(i, ex, ey, box) {
-  const ph = (prod.photos || [])[i]; if (!ph) return; const z = $('#zoomv'), im = $('#zoomImg'), sc = $('#zoomIn');
+  const ph = typeof i === 'object' ? i : (prod.photos || [])[i]; if (!ph) return; const z = $('#zoomv'), im = $('#zoomImg'), sc = $('#zoomIn');
   const fx = box ? clamp((ex - box.left) / Math.max(1, box.width), 0, 1) : .5, fy = box ? clamp((ey - box.top) / Math.max(1, box.height), 0, 1) : .5;
   z.classList.add('on'); im.src = img(ph.url, 2000); const vw = sc.clientWidth, vh = sc.clientHeight, fit = Math.min(vw / ph.ar, vh), h = fit * 2.6, w = h * ph.ar;
   im.style.width = w + 'px'; im.style.height = h + 'px'; sc.scrollLeft = fx * w - vw / 2; sc.scrollTop = fy * h - vh / 2;
+}
+// A slab in the hand can be looked at close (owner, 2026-11-12: "I should be able to zoom in on the slab"): the
+// Zoom button or a pinch opens the photo of the face you are looking at, large, to drag about.
+function slabZoom() {
+  const c = S.hand; if (!c || !c.slab) return false; const back = c.back && Math.abs(Math.round(hand.ty / PI)) % 2 === 1;
+  zoomOn({ url: back ? c.back : c.image, ar: c.ar || .75 }, 0, 0, null); return true;
 }
 function zoomOff() { const z = $('#zoomv'); if (!z.classList.contains('on')) return false; z.classList.remove('on'); $('#zoomImg').removeAttribute('src'); return true; }
 // a mouse has no finger to pan with: dragging moves the zoomed photo, and a drag is not the tap that closes it
@@ -2193,6 +2199,7 @@ function go(mode) {
   ui();
 }
 function back() {
+  if ($('#zoomv').classList.contains('on')) { zoomOff(); return; }
   if ($('#prodv').classList.contains('on')) return closeProduct();
   if (S.mode === 'ask' && !S.hand) return askLeave();
   if (S.hand) return putBack();
@@ -2319,6 +2326,7 @@ let drag = null;
 canvas.addEventListener('touchstart', (e) => { const t = e.touches[0]; if (t && (t.clientX < 28 || t.clientX > innerWidth - 28)) e.preventDefault(); }, { passive: false });
 canvas.addEventListener('pointerdown', (e) => {
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pts.size === 2 && !pinch && S.hand && S.hand.slab) { if (drag) clearTimeout(drag.holdT); drag = null; pts.clear(); slabZoom(); return; }
   if (pts.size === 2 && !pinch) {
     const a = Array.from(pts.values());
     if (leanStart((a[0].x + a[1].x) / 2, (a[0].y + a[1].y) / 2)) { pinch = { d0: Math.max(30, Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y)), k0: lean.k }; if (drag) clearTimeout(drag.holdT); drag = null; try { canvas.setPointerCapture(e.pointerId); } catch (x) {} return; }
@@ -2445,6 +2453,7 @@ document.addEventListener('click', (e) => {
   else if (b.hasAttribute('data-sec')) goSec(Number(b.getAttribute('data-sec')));
   else if (b.id === 'aiTurn') aisleTurn();
   else if (b.hasAttribute('data-drop')) { S.pile.splice(Number(b.getAttribute('data-drop')), 1); pile(); showTill(); }
+  else if (b.id === 'hz') slabZoom();
   else if (b.id === 'buy') buy(b);
   else if (b.id === 'capBuy') capBuy(b);
   else if (b.id === 'x') putBack();

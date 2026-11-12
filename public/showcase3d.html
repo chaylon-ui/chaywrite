@@ -79,6 +79,8 @@ body[data-mode=case] .hint,body[data-mode=boxes] .hint,body[data-mode=crate] .hi
 /* the card in the hand: the 3D card fills the stage; this is the details panel */
 .x{position:fixed;right:10px;top:calc(10px + env(safe-area-inset-top));z-index:9;width:40px;height:40px;border-radius:50%;border:1px solid #ffffff40;background:#000a;font-size:22px;line-height:1;display:none}
 body[data-hand] .x{display:block}
+#hz{position:fixed;left:10px;top:calc(10px + env(safe-area-inset-top));z-index:9;height:40px;padding:0 14px;border-radius:20px;border:1px solid #ffffff40;background:#000a;font-size:14px;display:none}
+body[data-hand][data-slab] #hz{display:block}
 body[data-hand] .top,body[data-hand] .bot,body[data-hand] .hint{display:none}
 .panel{position:fixed;z-index:8;background:var(--panel);border-top:1px solid #ffffff22;display:none;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;padding:0 16px calc(16px + env(safe-area-inset-bottom))}
 body[data-hand] .panel{display:block}
@@ -198,6 +200,7 @@ body[data-hand] .panel{display:block}
   <div class="nav" id="nav"><button type="button" data-go="door">Door</button><button type="button" data-go="case">Glass case</button><button type="button" data-go="graded">Graded<i id="gradedN" hidden>0</i></button><button type="button" data-go="boxes">Boxes</button><button type="button" data-go="sealed">Sealed</button><button type="button" data-go="bin">Bargain bin</button><button type="button" data-go="hobby">Paints</button><button type="button" data-go="aisles">Aisles<i id="aislesN" hidden>0</i></button><button type="button" data-go="till">Till<i id="pileN" hidden>0</i></button></div>
 </div>
 <button type="button" class="x" id="x" aria-label="Put it back">×</button>
+<button type="button" id="hz">Zoom in</button>
 <div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div id="liftCopies"></div><div class="acts" id="liftActs"></div><div id="liftCond"></div><div id="liftAlike"></div><div id="liftMore"></div></div>
 <div class="sheet" id="setsv"><div class="sh"><button type="button" id="setsBack">‹ Back to the boxes</button><span class="ttl" id="setsTitle"></span><input id="setsFind" type="search" placeholder="Jump to a set…" autocomplete="off"></div><div class="list" id="setsList"></div></div>
 <div class="sheet" id="paintv"><div class="sh"><button type="button" id="paintX">‹ Back to the rack</button></div><div class="list" id="paintBody" style="display:block"></div></div>
