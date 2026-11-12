@@ -2229,11 +2229,14 @@ function aisleStock(now) {
 // come in, looking along the row of headers; 0..n-1 = standing square at the mouth of that aisle, looking down
 // it. A swipe steps one stop; a tap on the aisle walks in.
 function aislesView() {
-  const n = hall.list.length || 1, ph = cam.aspect < 1; S.hs = clamp(S.hs == null ? -1 : S.hs, -1, n - 1);
+  const n = hall.list.length || 1, ph = cam.aspect < 1; S.hs = clamp(S.hs == null ? -1 : S.hs, -1, n);
+  // one stop past the last aisle: the end of the hall, square on to the standee, all six feet of it in view (owner,
+  // 2026-11-12: "you can't really see the warhammer standee unless you look right toward the wall ... and it snaps back")
+  if (S.hs >= n) { const fov = ph ? 70 : 55, sx = hall.xMax - .75, sz = hall.zf + .55, d = Math.max(1.2 / Math.tan(rad(fov / 2)), .8 / hTan(fov)); return lookView(new V3(sx - Math.sin(.3) * d, 1.05, sz + Math.cos(.3) * d), new V3(sx, .95, sz), fov); }
   if (S.hs < 0) return lookView(new V3(hall.x0 + .5, 1.7, ph ? 3.3 : 3.05), new V3(hall.x0 + .5 + (ph ? 2.1 : 2.4), ph ? 1.4 : 1.62, hall.zf - (ph ? .5 : 1.0)), ph ? 82 : 62);
   const cx = aCx(S.hs); return lookView(new V3(cx, 1.62, 3.3), new V3(cx, 1.25, hall.zf - 6), ph ? 80 : 58);
 }
-function hallStep(d) { const n = hall.list.length, to = clamp((S.hs == null ? -1 : S.hs) + d, -1, n - 1); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
+function hallStep(d) { const n = hall.list.length, to = clamp((S.hs == null ? -1 : S.hs) + d, -1, n); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
 function hallTo(i) { S.hs = i; setView(aislesView()); }
 // In an aisle you stand S.as metres along its ribbon: down the left shelf, round at the far end, back up the right.
 function aisleView() {
@@ -2320,7 +2323,7 @@ function ui() {
   document.body.dataset.mode = S.mode;
   const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode === 'ask' ? 'till' : S.mode;
   if (S.mode === 'arcades') $('#ctxArcades').innerHTML = '<button type="button" data-go="door">‹ Back</button>' + CABS.map((c) => '<button type="button" data-go="' + c[0] + '">' + c[1] + '</button>').join('');
-  if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '"' + (a.i === S.hs ? ' class="on"' : '') + '>' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
+  if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '"' + (a.i === S.hs ? ' class="on"' : '') + '>' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('') + '<button type="button" data-hstop="' + hall.list.length + '"' + (S.hs === hall.list.length ? ' class="on"' : '') + '>End of the hall</button>';
   if (S.mode === 'aisle') { const a = hall.list[S.aisle];   // the aisle's sections to jump to, and the turn to the shelf behind
     if (hall.secsFor !== a.i) { hall.secsFor = a.i; hall.secOn = -1; $('#aiSecs').innerHTML = a.secs.length > 1 ? a.secs.map((s) => '<button type="button" data-sec="' + s.j + '">' + esc(s.label) + '</button>').join('') : ''; $('#aiTurn').hidden = !a.nr; }
     aisleBar(); }
@@ -2535,7 +2538,7 @@ document.addEventListener('keydown', (e) => {
   if (S.hand) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { hand.ty = Math.abs(hand.ty) > PI / 2 ? 0 : PI; kick(); e.preventDefault(); } return; }
   const k = e.key;
   if (S.mode === 'ask') { if (k === 'ArrowRight' || k === 'ArrowLeft') fanTo(Math.round(fan.p) + (k === 'ArrowRight' ? 1 : -1)); else if (k === 'Enter' && fan.rows.length) lift(fan.rows[clamp(Math.round(fan.p), 0, fan.rows.length - 1)], null); else return; e.preventDefault(); return; }
-  if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallStep(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter' && S.hs >= 0) goAisle(S.hs); else return; e.preventDefault(); return; }
+  if (S.mode === 'aisles') { if (k === 'ArrowRight' || k === 'ArrowLeft') hallStep(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter' && S.hs >= 0 && S.hs < hall.list.length) goAisle(S.hs); else return; e.preventDefault(); return; }
   if (S.mode === 'aisle') { if (k === 'ArrowRight' || k === 'ArrowLeft') aisleTo((S.as || 0) + (k === 'ArrowRight' ? 1.2 : -1.2) * (hall.list[S.aisle].flip ? -1 : 1), 300); else if (k === 'ArrowDown' || k === 'ArrowUp') goSec(clamp(aisleSec().j + (k === 'ArrowDown' ? 1 : -1), 0, hall.list[S.aisle].secs.length - 1)); else if (k === 't' || k === 'T') aisleTurn(); else return; e.preventDefault(); hint(''); return; }
   if (S.mode === 'case') { if (k === 'ArrowRight' || k === 'ArrowLeft') { S.walk = clamp(S.walk + (k === 'ArrowRight' ? .2 : -.2), 0, S.maxWalk || 0); glide(caseView(), 260); } else if (k === 'ArrowDown') goShelf(S.shelf + 1); else if (k === 'ArrowUp') goShelf(S.shelf - 1); else return; }
   else if (S.mode === 'crate' && cr) { if (k === 'ArrowDown' || k === 'ArrowUp') flickTo(Math.round(cr.ps[cr.lane]) + (k === 'ArrowDown' ? 1 : -1)); else if (k === 'ArrowRight' || k === 'ArrowLeft') crateLane(k === 'ArrowRight' ? 1 : -1); else if (k === 'Enter') { const cd = cr.lanes[cr.lane][Math.round(cr.ps[cr.lane])]; if (cd) lift(cd, null); else endGo(); } else return; }
@@ -2559,6 +2562,7 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'pbuy') buyPaint(b);
   else if (b.id === 'paintX') closePaint();
   else if (b.id === 'rackBack') back();
+  else if (b.hasAttribute('data-hstop')) { S.hs = Number(b.getAttribute('data-hstop')); glide(aislesView(), 700); hint(''); ui(); }
   else if (b.hasAttribute('data-aisle')) goAisle(Number(b.getAttribute('data-aisle')));
   else if (b.id === 'aiBack') go('aisles');
   else if (b.hasAttribute('data-sec')) goSec(Number(b.getAttribute('data-sec')));
