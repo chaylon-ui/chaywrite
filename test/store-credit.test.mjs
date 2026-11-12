@@ -20,8 +20,8 @@ function portal(o) {
       if (w.fail[body.typeOfAdjustment]) throw new Error("BinderPOS /api/customers/adjustStoreCredit answered 500: nope");
       const delta = body.typeOfAdjustment === "increase" ? body.amountToAdjust : -body.amountToAdjust;
       w.balance = Math.round((w.balance + delta) * 100) / 100;
-      w.history.push({ id: w.history.length + 1, amount: body.amountToAdjust, typeOfAdjustment: body.typeOfAdjustment, publicNotes: body.publicNotes, privateNotes: body.privateNotes, dateCreated: "2026-11-12T10:00:00Z" });
-      return { ...me, storeCredit: w.balance };
+      w.history.push({ id: w.history.length + 1, amountChanged: delta, amountBeforeChange: w.balance - delta, amountAfterChange: w.balance, publicNotes: body.publicNotes, privateNotes: body.privateNotes, updatedDate: "2026-11-12T10:00:00Z", actionedBy: "api" });
+      return { actionPass: true, messageType: "success", message: "", data: null };   // as BinderPOS answers (dry run 2026-11-12)
     },
   };
   return w;
@@ -52,12 +52,12 @@ test("find: the row whose email matches, as a view without name or email; none -
 test("adjust: the portal's payload, increase or decrease, never zero", async () => {
   const w = portal();
   const r = await adjustCredit({}, { customerId: "4242", amount: 0.05, type: "increase", publicNotes: "test", privateNotes: "by me" }, w.deps);
-  assert.deepEqual([r.ok, r.type, r.amount, r.reply.storeCredit], [true, "increase", 0.05, 12.55]);
+  assert.deepEqual([r.ok, r.type, r.amount, r.reply.keys], [true, "increase", 0.05, ["actionPass", "messageType", "message", "data"]]);
   assert.deepEqual(w.calls[0], ["POST", CUSTOMERS + "/adjustStoreCredit", { customerId: 4242, amountToAdjust: 0.05, typeOfAdjustment: "increase", publicNotes: "test", privateNotes: "by me" }]);
   assert.equal((await adjustCredit({}, { customerId: "4242", amount: 0, type: "increase" }, w.deps)).ok, false);
   assert.equal((await adjustCredit({}, { customerId: "", amount: 1 }, w.deps)).ok, false);
   const h = await creditHistory({}, "4242", 3, w.deps);
-  assert.deepEqual([h.length, h[0].amount, h[0].type, h[0].publicNotes], [1, 0.05, "increase", "test"]);
+  assert.deepEqual([h.length, h[0].amount, h[0].before, h[0].after, h[0].publicNotes, h[0].by], [1, 0.05, 12.5, 12.55, "test", "api"]);
 });
 
 test("the dry run: find, balance, a few cents on, the history, the cents off, balance again - unchanged; never more than the cap", async () => {

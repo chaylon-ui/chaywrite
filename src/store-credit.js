@@ -57,7 +57,8 @@ export async function creditHistory(env, id, limit, deps) {
   const d = deps || DEPS;
   const j = await d.get(env, CUSTOMERS + "/byId/" + encodeURIComponent(str(id)) + "/creditHistory?offset=0&limit=" + (limit || 5));
   const rows = customerRows(j);
-  return rows.map((h) => ({ amount: num(h.amount != null ? h.amount : h.amountToAdjust != null ? h.amountToAdjust : h.storeCreditAmount), type: str(h.typeOfAdjustment || h.type), publicNotes: str(h.publicNotes || h.notes).slice(0, 120), at: str(h.dateCreated || h.dateAdded || h.date || h.createdAt), keys: Object.keys(h).slice(0, 16) }));
+  // A history row as BinderPOS sends it (dry run 2026-11-12): amountChanged (signed), amountBeforeChange, amountAfterChange, updatedDate, actionedBy, publicNotes, privateNotes, actionNotes, invoiceNumber, cart, shopifyCustomerBuylist.
+  return rows.map((h) => ({ amount: num(h.amountChanged != null ? h.amountChanged : h.amount), before: num(h.amountBeforeChange), after: num(h.amountAfterChange), publicNotes: str(h.publicNotes).slice(0, 120), at: str(h.updatedDate || h.dateCreated || ""), by: str(h.actionedBy).slice(0, 80), keys: Object.keys(h).slice(0, 16) }));
 }
 // The adjustment itself. type is "increase" or "decrease"; amount is positive dollars.
 export async function adjustCredit(env, a, deps) {
