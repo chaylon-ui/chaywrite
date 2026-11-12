@@ -2042,16 +2042,30 @@ function pplTick() { if (!ppl.list.length) return; const inA = S.mode === 'aisle
    swipe walks you along it; at the far end you turn and come back up the other side, so the whole aisle is one
    ribbon read left to right. Every slot holds a plain box from the start; the ones in front of you become the
    products themselves (photo cut out, price sticker), read a page at a time (/showcase/aisle.json). */
-const hall = { list: [], built: false, x0: 4, zf: -.5,   /* the shelving starts well back from the front of the hall (owner, 2026-11-11: "they need to be back further so we can see them" - the paint racks on its ends) */ pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .55 };
+const hall = { list: [], built: false, x0: 4, zf: -.5,   /* the shelving starts well back from the front of the hall (owner, 2026-11-11: "they need to be back further so we can see them" - the paint racks on its ends) */ pitch: 2.9, lv: [1.71, 1.40, 1.09, .78, .47, .16], colW: .3, T: 1.5, d0: .3 };
 // (owner, 2026-11-11: "I don't want the shelving to be right at the opening I want an aisle First", then, of the
 // dressed shelf that stood there, "There should be no fake product aisle like this one it should be product right
 // away"): the FIRST AISLE is the walkway along the shop's open side. It has one shelf, the one facing the shop,
 // holding all of its products (a.flip: its ribbon runs the other way across the screen).
 const aCx = (i) => hall.x0 + 1.0 + i * hall.pitch;
 // where product k of a section stands: columns of six, top shelf down, running along the ribbon
-function slotPos(a, sec, k) {
-  const right = a.flip || !sec.left, col = sec.c0 + Math.floor(k / 6), d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + (a.nr - 1 - col) * hall.colW;   // the right side ends at the entrance, so a shorter side is bare at the far end, not at the mouth (owner's screenshot, 2026-11-10)
-  return { x: aCx(a.i) + (right ? 1.14 : -1.14), y: hall.lv[k % 6] + .012, z: hall.zf - d, ry: right ? -PI / 2 : PI / 2, left: !right, s: sec.s0 + (col - sec.c0) * hall.colW };
+// (owner, 2026-11-12: "I don't like half empty shelves on the front of the aisles"): the right-hand shelf ENDS at the
+// aisle mouth, so its sections fill from the mouth back - the part-filled column (and any empty ones) is each
+// section's first, the far one. colKs: which products stand in column c of a section, [first k, how many].
+function colKs(a, sec, c) {
+  if (a.flip || sec.left) { const k0 = c * 6; return [k0, Math.max(0, Math.min(6, sec.count - k0))]; }
+  const pad = sec.cols * 6 - sec.count, e = Math.floor(pad / 6), f = (6 - pad % 6) % 6;
+  if (c < e) return [0, 0]; if (f && c === e) return [0, f];
+  return [f + (c - e - (f ? 1 : 0)) * 6, 6];
+}
+function slotCR(a, sec, k) {
+  if (a.flip || sec.left) return [Math.floor(k / 6), k % 6];
+  const pad = sec.cols * 6 - sec.count, e = Math.floor(pad / 6), f = (6 - pad % 6) % 6;
+  if (k < f) return [e, k]; return [e + (f ? 1 : 0) + Math.floor((k - f) / 6), (k - f) % 6];
+}
+function slotPos(a, sec, k, raw) {
+  const cr = raw ? [0, 0] : slotCR(a, sec, k), right = a.flip || !sec.left, col = sec.c0 + cr[0], d = sec.left ? hall.d0 + col * hall.colW : hall.d0 + (a.nr - 1 - col) * hall.colW;   // the right side ends at the entrance, so a shorter side is bare at the far end, not at the mouth (owner's screenshot, 2026-11-10)
+  return { x: aCx(a.i) + (right ? 1.14 : -1.14), y: hall.lv[cr[1]] + .012, z: hall.zf - d, ry: right ? -PI / 2 : PI / 2, left: !right, s: sec.s0 + (col - sec.c0) * hall.colW };
 }
 function drawAisleSign(g, w, h, a) {
   g.fillStyle = '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, w, 46); g.fillStyle = '#f2c230'; g.fillRect(0, 46, w, 6); g.fillRect(0, h - 12, w, 12);
@@ -2170,7 +2184,7 @@ function buildHall(list) {
     o.secs.forEach((s, j) => { run += s.cols; const v = Math.max(run, N - run); if (v < bestV) { bestV = v; best = j + 1; } });   // turn at the section break nearest half way
     if (!i) { best = o.secs.length; o.flip = true; }   // the first aisle: one shelf, facing the shop
     o.nl = o.secs.slice(0, best).reduce((n, s) => n + s.cols, 0); o.nr = N - o.nl;
-    o.U = (Math.max(o.nl, o.nr) - 1) * hall.colW; o.L = o.U + 1.1; o.smax = o.nr ? 2 * o.U + hall.T : o.U;
+    o.U = (Math.max(o.nl, o.nr) - 1) * hall.colW; o.L = o.U + .85; o.smax = o.nr ? 2 * o.U + hall.T : o.U;
     let c = 0, off = 0, left = true;
     o.secs.forEach((s, j) => { if (left && j >= best && o.nr) { left = false; c = 0; } s.left = left; s.c0 = c; s.s0 = left ? c * hall.colW : o.U + hall.T + (o.U - (o.nr - 1) * hall.colW) + c * hall.colW; s.off = off; c += s.cols; off += s.count; });
     o.slots = off; return o;
@@ -2217,7 +2231,7 @@ function buildHall(list) {
     a.secs.forEach((sec) => {
       for (let k = 0; k < sec.count; k++) { const p = slotPos(a, sec, k); d2.position.set(p.x, p.y, p.z + (q() - .5) * .03); d2.rotation.set(0, p.ry, 0); d2.scale.set(.8 + q() * .4, .7 + q() * .45, 1); d2.updateMatrix(); inst.setMatrixAt(sec.off + k, d2.matrix); col.setHSL(q(), .25 + q() * .35, .3 + q() * .3); inst.setColorAt(sec.off + k, col); }
       // its sign on top of the shelving where it starts, and a divider down the shelves
-      const fw = sec.left ? -1 : 1, p0 = slotPos(a, sec, 0), sd = p0.left ? -1 : 1, w = Math.min(1.1, sec.cols * hall.colW - .04), zs = p0.z + fw * (w / 2 - hall.colW / 2 + .02);
+      const fw = sec.left ? -1 : 1, p0 = slotPos(a, sec, 0, true), sd = p0.left ? -1 : 1, w = Math.min(1.1, sec.cols * hall.colW - .04), zs = p0.z + fw * (w / 2 - hall.colW / 2 + .02);
       // The light box repeats over every bay of the section, so what you are looking at is always named above it
       // (owner, 2026-11-12: "Keep these shelving headers going above the products below if it's still the same
       // product"). The odd one flickers like a tube on its way out.
@@ -2323,7 +2337,7 @@ function aisleStock(now) {
       for (let c = 0; c < sec.cols; c++) {
         const s = sec.s0 + c * hall.colW;
         if (a === cur ? Math.abs(s - sNow) > hw : !(s < (a.flip ? 4.9 : .7) || (a.nr && s > a.smax - .7))) continue;   // from the hall: just the ends of the shelves by the entrance; the first aisle's shelf faces the shop, so the run of it the shop can see
-        for (let w = 0; w < 6; w++) { const k = c * 6 + w; if (k >= n) break; want.set(sec.off + k, [sec, k]); far = k; }
+        const ck = colKs(a, sec, c); for (let w = 0; w < ck[1]; w++) { const k = ck[0] + w; want.set(sec.off + k, [sec, k]); far = Math.max(far, k); }
       }
       if (far >= 0 && !sec.done && sec.rows.length < Math.min(sec.count, far + (a === cur ? 36 : 1))) { const dist = Math.max(0, sec.s0 - sNow, sNow - sec.s0 - sec.cols * hall.colW); if (!ask || dist < askD) { ask = sec; askD = dist; } }   // the section you are standing at first
     });
