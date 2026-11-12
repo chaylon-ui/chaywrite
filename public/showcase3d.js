@@ -2029,6 +2029,35 @@ function drawSecSign(g, w, h, sec, im) {
   if (im && im.width > 0) { const k = Math.min((room - 6) / im.width, (h - 22) / im.height), iw = im.width * k, ih = im.height * k; g.drawImage(im, 28, (h - 8 - ih) / 2, iw, ih); return; }
   const tw_ = g.measureText(t).width, sc = tw_ > room ? room / tw_ : 1; g.save(); g.translate(30, h / 2 - 2); g.scale(sc, 1); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillText(t, 0, 0); g.restore();
 }
+// The posters on the bare runs: two for Mallow Games (the logo the owner sent, public/mallow-games.jpg: sell
+// your video games, get Exor store credit) and two of the shop's own. Four materials, shared.
+const adMats = [];
+function adPoster(k) {
+  if (adMats[k]) return adMats[k];
+  const draw = (im) => (g, w, h) => {
+    const mal = k % 2 === 0, big = (t, y, px, col) => { g.font = '900 ' + px + 'px Inter, sans-serif'; g.textAlign = 'center'; g.fillStyle = col; let sc = Math.min(1, (w - 40) / g.measureText(t).width); g.save(); g.translate(w / 2, y); g.scale(sc, 1); g.fillText(t, 0, 0); g.restore(); };
+    if (mal) {
+      g.fillStyle = '#fbe3b5'; g.fillRect(0, 0, w, h); g.fillStyle = '#f6cfa0'; for (let y = 0; y < 12; y++) for (let x = 0; x < 9; x++) { g.beginPath(); g.arc(x * 52 + (y % 2) * 26, y * 52 + 10, 8, 0, PI * 2); g.fill(); }
+      g.fillStyle = '#fff'; rr(g, 60, 34, w - 120, 210, 18); g.fill(); if (im) { const sc = Math.min((w - 140) / im.width, 190 / im.height); g.drawImage(im, (w - im.width * sc) / 2, 44 + (190 - im.height * sc) / 2, im.width * sc, im.height * sc); } else { big('MALLOW', 130, 54, '#d0588f'); big('GAMES', 190, 54, '#4fb0d8'); }
+      if (k === 0) { big('SELL US YOUR', 310, 50, '#d0588f'); big('VIDEO GAMES', 370, 56, '#2e1f1c'); g.fillStyle = '#d62c28'; g.fillRect(30, 400, w - 60, 86); big('GET EXOR STORE CREDIT', 458, 40, '#fff'); big('then buy cards with it', 528, 28, '#2e1f1c'); }
+      else { big('OLD GAMES IN.', 312, 52, '#2e1f1c'); big('NEW CARDS OUT.', 376, 52, '#d0588f'); g.fillStyle = '#4fb0d8'; g.fillRect(30, 404, w - 60, 86); big('CASH OR EXOR STORE CREDIT', 462, 36, '#fff'); big('physical video games · sister site of Exor Games', 528, 20, '#2e1f1c'); }
+    } else if (k === 1) { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#14100e'; g.fillRect(0, 0, w, 40); g.fillRect(0, h - 40, w, 40); big('WE BUY', 190, 110, '#14100e'); big('CARDS', 300, 110, '#14100e'); g.font = '54px "Permanent Marker", cursive'; g.fillStyle = '#c0392b'; g.fillText('cash or store credit', w / 2, 400); big('ask at the counter', 480, 34, '#14100e'); }
+    else { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 170 : 130; g.lineTo(w / 2 + Math.cos(a) * r, 210 + Math.sin(a) * r); } g.fill(); g.font = '44px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillStyle = '#c0392b'; g.fillText('FRIDAY', w / 2, 200); g.fillText('NIGHT', w / 2, 248); big('TOURNAMENT', 440, 62, '#fff'); big('7 PM · sign up at the counter', 500, 28, '#fff'); g.fillStyle = '#2fd0c5'; g.fillRect(40, 530, w - 80, 10); }
+  };
+  const t = ctex(480, 672, draw(null)); adMats[k] = new THREE.MeshBasicMaterial({ map: t, color: cardTint });
+  if (k % 2 === 0) loadImg(W + '/mallow-games.jpg').then((im) => { draw(im)(t.image.getContext('2d'), 480, 672); t.needsUpdate = true; kick(); }).catch(() => {});
+  return adMats[k];
+}
+// A free-standing cardboard standee (owner, 2026-11-12, with the picture's link: "at the end of the hallway by the
+// warhammer aisle as a free standing cardboard standee at a slight angle about 6' tall for comparison of the height"):
+// the picture as given, 1.83 m tall, its own shape kept, on a cardboard foot with a strut behind.
+const STANDEE = 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/E64BF8B4-AB03-4DD5-81FD-DC964759CFAF.png?v=1794449977';
+function buildStandee(G, x, z) {
+  const H_ = 1.83, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -.3; G.add(g);
+  const card = lam({ color: 0xb08a5a }); bx(.5, .02, .34, card, 0, .01, -.12, g); const st = bx(.06, 1.2, .02, card, 0, .6, -.2, g); st.rotation.x = .28;
+  loadImg(STANDEE + '&width=900').then((im) => { const w = H_ * im.width / im.height, t = new THREE.Texture(im); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, H_), new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: .3, side: THREE.DoubleSide, color: cardTint })); m.position.set(0, H_ / 2 + .01, 0); g.add(m); hall.standee = m; kick(); }).catch(() => {});
+}
 function buildHall(list) {
   if (hall.built || !list.length) return; hall.built = true;
   hall.list = list.map((a, i) => {
@@ -2044,7 +2073,7 @@ function buildHall(list) {
     o.secs.forEach((s, j) => { if (left && j >= best && o.nr) { left = false; c = 0; } s.left = left; s.c0 = c; s.s0 = left ? c * hall.colW : o.U + hall.T + (o.U - (o.nr - 1) * hall.colW) + c * hall.colW; s.off = off; c += s.cols; off += s.count; });
     o.slots = off; return o;
   });
-  const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35, Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
+  const n = hall.list.length, xMax = aCx(n - 1) + 1.0 + .45 + .35 + 1.2,   /* + room at the end of the hall for the standee */ Lmax = Math.max.apply(null, hall.list.map((a) => a.L)), zBack = Math.min(-3.5, hall.zf - Lmax - 1.6), W_ = xMax - hall.x0, D_ = 3.5 - zBack, zc = (3.5 + zBack) / 2, xc = (hall.x0 + xMax) / 2;
   hall.xMax = xMax; hall.zBack = zBack;
   // (owner, 2026-11-11: "remove the red wall as it ... makes it hard to know unless you turn to look, that there is more store that way")
   rwFull.visible = false; rwShort.visible = false; rwUp.visible = false;
@@ -2063,11 +2092,23 @@ function buildHall(list) {
     [-1, 1].forEach((sd) => {
       const xf = cx + sd * 1.0;   // the shelf's front edge; it runs back from there
       if (a.flip && sd < 0) return;   // the first aisle is open to the shop on that side
-      bx(.03, 1.98, a.L, cream, xf + sd * .44, .99, zm, G);
-      bx(.45, .15, a.L, red, xf + sd * .225, .075, zm, G); bx(.46, .05, a.L, red, xf + sd * .225, 2.0, zm, G);
-      hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, a.L, steel, xf + sd * .22, y - .009, zm, G); bx(.012, .034, a.L, yellow, xf + sd * .004, y - .017, zm, G); });
-      for (let z = hall.zf; z > hall.zf - a.L - .01; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
-      bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - a.L, G);
+      // Shelving only as far as this side has stock; the rest of the run is a wall of posters (owner, 2026-11-12:
+      // "Any spots like this with empty shelving please remove the shelving and have posters instead and ads from
+      // mallow games to sell video games for store credit").
+      const nc = a.flip ? a.nl : sd < 0 ? a.nl : a.nr, Ls = nc ? Math.min(a.L, hall.d0 + (nc - 1) * hall.colW + .3) : 0, zs = hall.zf - Ls / 2;
+      if (Ls) {
+        bx(.03, 1.98, Ls, cream, xf + sd * .44, .99, zs, G);
+        bx(.45, .15, Ls, red, xf + sd * .225, .075, zs, G); bx(.46, .05, Ls, red, xf + sd * .225, 2.0, zs, G);
+        hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, Ls, steel, xf + sd * .22, y - .009, zs, G); bx(.012, .034, Ls, yellow, xf + sd * .004, y - .017, zs, G); });
+        for (let z = hall.zf; z > hall.zf - Ls + .3; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
+        bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - Ls, G);
+      }
+      const gap = a.L - Ls;
+      if (gap > .9) {
+        const z0 = hall.zf - Ls, zm2 = z0 - gap / 2; bx(.05, 2.3, gap, lam({ color: 0x2a2320 }), xf + sd * .44, 1.15, zm2, G); bx(.07, .1, gap, red, xf + sd * .43, .05, zm2, G);
+        const np = Math.max(1, Math.floor(gap / 1.35)), step = gap / np;
+        for (let k = 0; k < np; k++) pl(.92, 1.29, adPoster((k + a.i + (sd > 0 ? 1 : 0)) % 4), xf + sd * .41, 1.22, z0 - step * (k + .5), sd < 0 ? PI / 2 : -PI / 2, G);
+      }
     });
     // every slot stocked with a plain box from the start
     const inst = a.inst = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, .23, .07).translate(0, .115, 0), lam({ color: 0xffffff }), a.slots); const q = seed('aisle' + a.key);
@@ -2127,6 +2168,7 @@ function buildHall(list) {
     const put = (key, x) => { const r = racks.find((q) => q.key === key); if (!r) return; r.at = [x, hall.zf + .03]; r.ry = 0; fillRack(r); rackHit(r); };
     put('vallejo', aCx(iG) + 1.45); put('citadel', iW > 0 ? aCx(iW) - 1.45 : aCx(iW) + 1.45); put('army', aCx(iW) + 1.22 + (iW > 0 ? 0 : .9));
     hobbyHits.forEach((m) => { const k = hot.indexOf(m); if (k > -1) hot.splice(k, 1); kill(m); }); hobbyHits = []; hall.paints = true; hall.iW = iW; }
+  buildStandee(G, xMax - .75, hall.zf + .55);
   $('#aislesN').textContent = n; $('#aislesN').hidden = false; lights(S.eve); ui(); kick();
 }
 function loadAisles() {
