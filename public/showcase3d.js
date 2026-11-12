@@ -1182,7 +1182,7 @@ function drawPaint() {
 function closePaint(quiet) { const was = !!psel.g; psel.g = null; psel.k = -1; if (ringM) ringM.visible = false; $('#paintv').classList.remove('on'); if (was && !quiet && S.mode === 'rack') glide(rackView(racks[S.rack]), 520); }
 function buyPaint(b) {
   const g = psel.g, it = psel.it; if (!g || !it || b.disabled) return; b.disabled = true;
-  const done = () => { S.pile.push({ name: g.n, set: [g.b, it.r, it.s].filter(Boolean).join(' '), price: it.p, url: 'https://exorgames.com/products/' + it.u, variantId: it.v, cond: '', foil: false }); pile(); drawPaint(); };
+  const done = () => { S.pile.push({ name: g.n, set: [g.b, it.r, it.s].filter(Boolean).join(' '), price: it.p, url: 'https://exorgames.com/products/' + it.u, variantId: it.v, cond: '', foil: false, qty: 1, max: null }); pile(); drawPaint(); };
   if (!ON_STORE) { done(); return; }
   b.textContent = 'Adding…';
   fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(it.v), quantity: 1, properties: { _xg: 'showcase' } }] }) })
@@ -1574,7 +1574,7 @@ function caption() {
 let capCard = null;
 function capBuy(b) {
   const c = capCard; if (!c || b.disabled) return; b.disabled = true;
-  const done = () => { S.pile.push({ name: c.name, set: c.set, price: c.price, url: c.url, variantId: c.variantId, cond: c.sealed ? 'sealed' : cond(c), foil: c.foil }); if (capCard === c) b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
+  const done = () => { S.pile.push({ name: c.name, set: c.set, price: c.price, url: c.url, variantId: c.variantId, cond: c.sealed ? 'sealed' : cond(c), foil: c.foil, qty: 1, max: c.sealed && c.qty > 0 ? c.qty : null }); if (capCard === c) b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
   if (!ON_STORE) { done(); return; }
   b.textContent = 'Adding…';
   fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(c.variantId), quantity: 1, properties: { _xg: 'showcase' } }] }) })
@@ -1723,7 +1723,7 @@ function pickCopy(i) {
 }
 function buy(b) {
   const c = S.hand; if (!c || b.disabled) return; b.disabled = true;
-  const done = () => { S.pile.push({ name: c.name, set: c.set, price: c.price, url: c.url, variantId: c.variantId, cond: c.sealed ? 'sealed' : cond(c), foil: c.foil }); b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
+  const done = () => { S.pile.push({ name: c.name, set: c.set, price: c.price, url: c.url, variantId: c.variantId, cond: c.sealed ? 'sealed' : cond(c), foil: c.foil, qty: 1, max: c.sealed && c.qty > 0 ? c.qty : null }); b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
   if (!ON_STORE) { done(); return; }
   b.textContent = 'Adding…';
   fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(c.variantId), quantity: 1, properties: { _xg: 'showcase' } }] }) })
@@ -1738,18 +1738,37 @@ function buy(b) {
    adds. An order shipped to another province is taxed at that province's rate at checkout - the sheet says so. */
 const TAX = { rate: .15, name: 'HST', where: 'PEI' };
 let tillT = null;
-const pileSum = () => S.pile.reduce((a, p) => a + (Number(p.price) || 0), 0), withTax = (n) => Math.round(n * (1 + TAX.rate) * 100) / 100;
+/* More than one of a thing (owner, 2026-11-12: "Should be able to add in stock quantity to 'by the til' as well"):
+   each line by the till has a count, raised with + up to what is in stock. What is in stock is known for boxed
+   products from the shelf; for a card or a paint it is asked for the first time + is pressed (card.json: that
+   copy's own quantity). On the store itself + puts one more in the cart; taking one off is done in the cart. */
+const pileCount = () => S.pile.reduce((a, p) => a + (p.qty || 1), 0);
+function pileMax(p) {
+  if (p.max != null) return Promise.resolve(p.max); const m = /\/products\/([a-z0-9_-]+)/i.exec(String(p.url || '')); if (!m) return Promise.resolve((p.max = 1));
+  return fetch(W + '/showcase/card.json?handle=' + encodeURIComponent(m[1]), { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => { const k = d && d.ok && (d.copies || []).find((x) => String(x.variantId) === String(p.variantId)); return (p.max = k && k.qty > 0 ? k.qty : 1); }).catch(() => (p.max = 1));
+}
+function pileQty(i, d) {
+  const p = S.pile[i]; if (!p) return; p.qty = p.qty || 1;
+  if (d < 0) { if (ON_STORE) return; if (p.qty > 1) p.qty--; else S.pile.splice(i, 1); pile(); showTill(); return; }
+  pileMax(p).then((max) => {
+    if (p.qty >= max) { hint(max === 1 ? 'That is the only one in stock' : 'Only ' + max + ' in stock'); showTill(); return; }
+    const more = () => { p.qty++; pile(); showTill(); };
+    if (!ON_STORE) return more();
+    fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(p.variantId), quantity: 1, properties: { _xg: 'showcase' } }] }) }).then((r) => { if (!r.ok) throw new Error('cart'); more(); }).catch(() => hint('Could not add another one'));
+  });
+}
+const pileSum = () => S.pile.reduce((a, p) => a + (Number(p.price) || 0) * (p.qty || 1), 0), withTax = (n) => Math.round(n * (1 + TAX.rate) * 100) / 100;
 function drawTill(g, total) { g.fillStyle = '#0d1a0d'; g.fillRect(0, 0, 140, 35); g.fillStyle = '#5dff7a'; const t = total.toFixed(2); g.font = '700 ' + (t.length > 7 ? 19 : 26) + 'px "Cutive Mono", monospace'; g.textAlign = 'right'; g.textBaseline = 'alphabetic'; g.fillText(t, 132, 27); }
 function pile() {
   if (tillT) { drawTill(tillT.image.getContext('2d'), withTax(pileSum())); tillT.needsUpdate = true; }
   while (pileG.children.length) pileG.remove(pileG.children[0]);
   S.pile.slice(0, 14).forEach((p, i) => { const q = seed(p.name + i), m = new THREE.Mesh(geoSlab, lam({ color: 0xd7dfe2 })); m.rotation.set(-PI / 2, 0, (q() - .5) * .7); m.position.set((q() - .5) * .012, .001 + i * .0022, CH / 2 + (q() - .5) * .012); m.scale.z = 3; pileG.add(m); });
-  const n = $('#pileN'); n.hidden = !S.pile.length; n.textContent = S.pile.length; kick();
+  const n = $('#pileN'); n.hidden = !S.pile.length; n.textContent = pileCount(); kick();
 }
 function showTill() {
   const sum = pileSum(), total = withTax(sum), cash = (n) => '$' + n.toFixed(2);
-  $('#tillList').innerHTML = S.pile.length ? S.pile.map((p, i) => '<div class="trow"><span>' + esc(p.name) + '<small>' + esc([p.set, p.cond, p.foil ? 'foil' : ''].filter(Boolean).join(' · ')) + '</small></span><b>' + money(p.price) + '</b>' + (ON_STORE ? '' : '<a href="' + esc(p.url) + '" target="_blank" rel="noopener">open ↗</a><button type="button" data-drop="' + i + '" aria-label="Take it off the pile">×</button>') + '</div>').join('') : '<div class="empty">Nothing by the till yet. Pick a card up from the case, a box or the bin and set it here.</div>';
-  $('#tillFoot').innerHTML = S.pile.length ? '<div class="tsum"><span>' + S.pile.length + ' item' + (S.pile.length === 1 ? '' : 's') + ' · subtotal</span><b>' + cash(sum) + '</b><span>' + TAX.name + ' ' + Math.round(TAX.rate * 100) + '% (' + TAX.where + ')</span><b>' + cash(total - sum) + '</b><span class="tot">Total after tax</span><b class="tot">' + cash(total) + '</b></div><span class="tnote">Tax as charged at the counter in Charlottetown. Orders shipped to another province are taxed at that province’s rate at checkout.</span>' + (ON_STORE ? '<a href="/cart">Go to your cart</a>' : '<span style="color:var(--muted)">This is the preview: on exorgames.com these go into the cart.</span>') : '';
+  $('#tillList').innerHTML = S.pile.length ? S.pile.map((p, i) => '<div class="trow"><span>' + esc(p.name) + '<small>' + esc([p.set, p.cond, p.foil ? 'foil' : ''].filter(Boolean).join(' · ')) + '</small></span><span class="tq">' + (ON_STORE ? '' : '<button type="button" data-less="' + i + '" aria-label="One fewer">−</button>') + '<i>' + (p.qty || 1) + '</i><button type="button" data-more="' + i + '" aria-label="One more"' + (p.max != null && (p.qty || 1) >= p.max ? ' disabled' : '') + '>+</button></span><b>' + money((Number(p.price) || 0) * (p.qty || 1)) + '</b>' + (ON_STORE ? '' : '<a href="' + esc(p.url) + '" target="_blank" rel="noopener">open ↗</a><button type="button" data-drop="' + i + '" aria-label="Take it off the pile">×</button>') + '</div>').join('') : '<div class="empty">Nothing by the till yet. Pick a card up from the case, a box or the bin and set it here.</div>';
+  $('#tillFoot').innerHTML = S.pile.length ? '<div class="tsum"><span>' + pileCount() + ' item' + (pileCount() === 1 ? '' : 's') + ' · subtotal</span><b>' + cash(sum) + '</b><span>' + TAX.name + ' ' + Math.round(TAX.rate * 100) + '% (' + TAX.where + ')</span><b>' + cash(total - sum) + '</b><span class="tot">Total after tax</span><b class="tot">' + cash(total) + '</b></div><span class="tnote">Tax as charged at the counter in Charlottetown. Orders shipped to another province are taxed at that province’s rate at checkout.</span>' + (ON_STORE ? '<a href="/cart">Go to your cart</a>' : '<span style="color:var(--muted)">This is the preview: on exorgames.com these go into the cart.</span>') : '';
   $('#tillv').classList.add('on');
 }
 
@@ -1850,7 +1869,7 @@ function prodShot(i) { const gal = $('#pgal'); if (gal) gal.scrollTo({ left: cla
 function prodBuy(b) {
   const c = prod.c, d = prod.d, v = prod.v; if (!c || b.disabled) return; b.disabled = true;
   const vid = v ? v.id : c.variantId, name = (d ? d.title : c.name) + (v && v.title ? ' - ' + v.title : '');
-  const done = () => { S.pile.push({ name, set: c.set, price: v ? v.price : c.price, url: c.url, variantId: vid, cond: 'sealed', foil: false }); b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
+  const done = () => { S.pile.push({ name, set: c.set, price: v ? v.price : c.price, url: c.url, variantId: vid, cond: 'sealed', foil: false, qty: 1, max: (v ? v.qty : c.qty) > 0 ? (v ? v.qty : c.qty) : null }); b.textContent = ON_STORE ? 'In your cart ✓' : 'By the till ✓'; pile(); };
   if (!ON_STORE) { done(); return; }
   b.textContent = 'Adding…';
   fetch('/cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ items: [{ id: Number(vid), quantity: 1, properties: { _xg: 'showcase' } }] }) })
@@ -2464,6 +2483,8 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'aiBack') go('aisles');
   else if (b.hasAttribute('data-sec')) goSec(Number(b.getAttribute('data-sec')));
   else if (b.id === 'aiTurn') aisleTurn();
+  else if (b.hasAttribute('data-more')) pileQty(Number(b.getAttribute('data-more')), 1);
+  else if (b.hasAttribute('data-less')) pileQty(Number(b.getAttribute('data-less')), -1);
   else if (b.hasAttribute('data-drop')) { S.pile.splice(Number(b.getAttribute('data-drop')), 1); pile(); showTill(); }
   else if (b.id === 'hz') slabZoom();
   else if (b.id === 'buy') buy(b);
