@@ -2268,8 +2268,11 @@ function tap(x, y) {
     return;
   }
   else if (S.mode === 'crate' && cr) { const h = pick(cr.faces.filter((f) => f.visible), x, y); if (h) { const i = h.object.userData.idx, at = Math.round(cr.ps[cr.lane]); if (i === at) lift(cr.lanes[cr.lane][i], null); else flickTo(i); return; }
-    if (cr.endSign && cr.endSign.visible && pick([cr.endSign], x, y)) { if (Math.round(cr.ps[cr.lane]) >= cr.lanes[cr.lane].length) endGo(); else flickTo(cr.lanes[cr.lane].length, 420); return; }
-    const dv = pick(cr.divs || [], x, y); if (dv) { const u = dv.object.userData; if (u.lane !== cr.lane) { cr.lane = u.lane; ui(); } flickTo(u.idx, 420); hint(u.ch === '#' ? 'Numbers' : 'The ' + u.ch + 's'); return; } }
+    // whichever is nearer under the finger: a letter tab, or the end-of-row sign standing behind the tabs (a tap on a
+    // tab went through to the sign and thumbed to the back of the row - owner, 2026-11-12)
+    const dv = pick((cr.divs || []).filter((m) => m.visible), x, y), es = cr.endSign && cr.endSign.visible ? pick([cr.endSign], x, y) : null;
+    if (es && (!dv || es.distance < dv.distance)) { if (Math.round(cr.ps[cr.lane]) >= cr.lanes[cr.lane].length) endGo(); else flickTo(cr.lanes[cr.lane].length, 420); return; }
+    if (dv) { const u = dv.object.userData; if (u.lane !== cr.lane) { cr.lane = u.lane; ui(); } flickTo(u.idx, 420); hint(u.ch === '#' ? 'Numbers' : 'The ' + u.ch + 's'); return; } }
   const h = pick(hot, x, y); if (h && !(S.mode === 'crate' && cr && cr.kind === h.object.userData.act)) act(h.object.userData.act);
 }
 /* ---------- leaning in (owner, 2026-11-09): "an elastic pinch to zoom ... without picking up the card
