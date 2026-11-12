@@ -2,7 +2,7 @@ import { BinderRoom } from "./room.js";
 import { serveCards, serveSearch, serveExact, serveInstock, serveDeck, serveDeckGate, serveBuyPrice, serveSimilar, serveSisters, serveSisterCheck, serveSisterNew, serveQty, servePickups, servePickupDone, serveSetSuggest } from "./cards.js";
 import { serveReviews } from "./reviews.js";
 import { serveStores } from "./stores.js";
-import { serveEvents } from "./events.js";
+import { serveEvents, serveShopEvents } from "./events.js";
 import { serveBinderSearch, serveBinderSearchStatus, warmBinderSearch, CACHE_DO } from "./binder-search.js";
 import { serveIcs } from "./ics.js";
 import { servePriceHistory, adminGql, PRICE_DO } from "./price-history.js";
@@ -462,6 +462,7 @@ async function route(request, env, ctx) {
     // Store-hours band: every Exor store's live opening hours from its
     // Google Business Profile, proxied the same way so the key stays private.
     // Store pages: a sister store's events, asked of BinderPOS as that store (events.js).
+    if (url.pathname === "/showcase/events.json") return serveShopEvents(request, ctx);
     if (url.pathname === "/events.json") {
       return serveEvents(request, ctx);
     }

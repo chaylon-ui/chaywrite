@@ -2040,23 +2040,56 @@ function drawSecSign(g, w, h, sec, im) {
   const tw_ = g.measureText(t).width, sc = tw_ > room ? room / tw_ : 1; g.save(); g.translate(30, h / 2 - 2); g.scale(sc, 1); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillText(t, 0, 0); g.restore();
 }
 // The posters on the bare runs: two for Mallow Games (the logo the owner sent, public/mallow-games.jpg: sell
-// your video games, get Exor store credit) and two of the shop's own. Four materials, shared.
-const adMats = [];
+// your video games, get Exor store credit), the shop's "we buy cards", and between them the shop's own coming
+// events, one poster each, from the site's events feed with the feed's picture (owner, 2026-11-12: "The posters
+// are cut off.. the tournament posters should actually pull from our website events and use those images etc").
+// Every line of lettering is fitted to the poster's width.
+const adMats = {}, evPosters = [];
+const posterText = (g, w) => (t, y, px, col, font, maxW) => { g.font = (font || '900 ' + px + 'px Inter, sans-serif').replace('PX', px); g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = col; const sc = Math.min(1, ((maxW || w) - 44) / g.measureText(t).width); g.save(); g.translate(w / 2, y); g.scale(sc, sc); g.fillText(t, 0, 0); g.restore(); };
 function adPoster(k) {
-  if (adMats[k]) return adMats[k];
+  const kind = ['m0', 'ev', 'buy', 'ev', 'm1', 'ev'][k % 6];
+  if (kind === 'ev') return eventPoster();
+  if (adMats[kind]) return adMats[kind];
   const draw = (im) => (g, w, h) => {
-    const mal = k % 2 === 0, big = (t, y, px, col) => { g.font = '900 ' + px + 'px Inter, sans-serif'; g.textAlign = 'center'; g.fillStyle = col; let sc = Math.min(1, (w - 40) / g.measureText(t).width); g.save(); g.translate(w / 2, y); g.scale(sc, 1); g.fillText(t, 0, 0); g.restore(); };
-    if (mal) {
-      g.fillStyle = '#fbe3b5'; g.fillRect(0, 0, w, h); g.fillStyle = '#f6cfa0'; for (let y = 0; y < 12; y++) for (let x = 0; x < 9; x++) { g.beginPath(); g.arc(x * 52 + (y % 2) * 26, y * 52 + 10, 8, 0, PI * 2); g.fill(); }
-      g.fillStyle = '#fff'; rr(g, 60, 34, w - 120, 210, 18); g.fill(); if (im) { const sc = Math.min((w - 140) / im.width, 190 / im.height); g.drawImage(im, (w - im.width * sc) / 2, 44 + (190 - im.height * sc) / 2, im.width * sc, im.height * sc); } else { big('MALLOW', 130, 54, '#d0588f'); big('GAMES', 190, 54, '#4fb0d8'); }
-      if (k === 0) { big('SELL US YOUR', 310, 50, '#d0588f'); big('VIDEO GAMES', 370, 56, '#2e1f1c'); g.fillStyle = '#d62c28'; g.fillRect(30, 400, w - 60, 86); big('GET EXOR STORE CREDIT', 458, 40, '#fff'); big('then buy cards with it', 528, 28, '#2e1f1c'); }
-      else { big('OLD GAMES IN.', 312, 52, '#2e1f1c'); big('NEW CARDS OUT.', 376, 52, '#d0588f'); g.fillStyle = '#4fb0d8'; g.fillRect(30, 404, w - 60, 86); big('CASH OR EXOR STORE CREDIT', 462, 36, '#fff'); big('physical video games · sister site of Exor Games', 528, 20, '#2e1f1c'); }
-    } else if (k === 1) { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#14100e'; g.fillRect(0, 0, w, 40); g.fillRect(0, h - 40, w, 40); big('WE BUY', 190, 110, '#14100e'); big('CARDS', 300, 110, '#14100e'); g.font = '54px "Permanent Marker", cursive'; g.fillStyle = '#c0392b'; g.fillText('cash or store credit', w / 2, 400); big('ask at the counter', 480, 34, '#14100e'); }
-    else { g.fillStyle = '#1f2a6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 170 : 130; g.lineTo(w / 2 + Math.cos(a) * r, 210 + Math.sin(a) * r); } g.fill(); g.font = '44px "Permanent Marker", cursive'; g.textAlign = 'center'; g.fillStyle = '#c0392b'; g.fillText('FRIDAY', w / 2, 200); g.fillText('NIGHT', w / 2, 248); big('TOURNAMENT', 440, 62, '#fff'); big('7 PM · sign up at the counter', 500, 28, '#fff'); g.fillStyle = '#2fd0c5'; g.fillRect(40, 530, w - 80, 10); }
+    const big = posterText(g, w);
+    if (kind === 'buy') { g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, h); g.fillStyle = '#14100e'; g.fillRect(0, 0, w, 40); g.fillRect(0, h - 40, w, 40); big('WE BUY', 200, 120, '#14100e'); big('CARDS', 320, 120, '#14100e'); big('cash or store credit', 420, 54, '#c0392b', 'PXpx "Permanent Marker", cursive'); big('ask at the counter', 500, 36, '#14100e'); return; }
+    g.fillStyle = '#fbe3b5'; g.fillRect(0, 0, w, h); g.fillStyle = '#f6cfa0'; for (let y = 0; y < 14; y++) for (let x = 0; x < 10; x++) { g.beginPath(); g.arc(x * 52 + (y % 2) * 26, y * 52 + 10, 8, 0, PI * 2); g.fill(); }
+    g.fillStyle = '#fff'; rr(g, 60, 34, w - 120, 210, 18); g.fill(); if (im) { const sc = Math.min((w - 140) / im.width, 190 / im.height); g.drawImage(im, (w - im.width * sc) / 2, 44 + (190 - im.height * sc) / 2, im.width * sc, im.height * sc); } else { big('MALLOW', 130, 54, '#d0588f'); big('GAMES', 190, 54, '#4fb0d8'); }
+    if (kind === 'm0') { big('SELL US YOUR', 316, 50, '#d0588f'); big('VIDEO GAMES', 378, 58, '#2e1f1c'); g.fillStyle = '#d62c28'; g.fillRect(30, 410, w - 60, 86); big('GET EXOR STORE CREDIT', 467, 40, '#fff', null, w - 60); big('then buy cards with it', 550, 30, '#2e1f1c'); }
+    else { big('OLD GAMES IN.', 318, 52, '#2e1f1c'); big('NEW CARDS OUT.', 382, 52, '#d0588f'); g.fillStyle = '#4fb0d8'; g.fillRect(30, 414, w - 60, 86); big('CASH OR EXOR STORE CREDIT', 470, 36, '#fff', null, w - 60); big('physical video games', 548, 28, '#2e1f1c'); big('sister site of Exor Games', 586, 24, '#2e1f1c'); }
   };
-  const t = ctex(480, 672, draw(null)); adMats[k] = new THREE.MeshBasicMaterial({ map: t, color: cardTint });
-  if (k % 2 === 0) loadImg(W + '/mallow-games.jpg').then((im) => { draw(im)(t.image.getContext('2d'), 480, 672); t.needsUpdate = true; kick(); }).catch(() => {});
-  return adMats[k];
+  const t = ctex(480, 672, draw(null)); adMats[kind] = new THREE.MeshBasicMaterial({ map: t, color: cardTint });
+  if (kind !== 'buy') loadImg(W + '/mallow-games.jpg').then((im) => { draw(im)(t.image.getContext('2d'), 480, 672); t.needsUpdate = true; kick(); }).catch(() => {});
+  return adMats[kind];
+}
+// one poster per coming event, handed out in turn (they repeat when the walls have more places than events)
+const EV_BG = ['#1f2a6b', '#6b1d22', '#14532d', '#3b1f6b', '#0e3b46', '#5a3a12'];
+function drawEvent(g, w, h, ev, im, n) {
+  const big = posterText(g, w); g.fillStyle = EV_BG[n % EV_BG.length]; g.fillRect(0, 0, w, h); g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14);
+  if (!ev) { big('EVENTS', 300, 96, '#f2c230'); big('see the calendar on exorgames.com', 370, 30, '#fff'); return; }
+  const d = new Date(ev.date.slice(0, 10) + 'T12:00:00Z'), day = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][d.getUTCDay()], mon = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getUTCMonth()];
+  const tm = /^(\d{1,2}):(\d{2})/.exec(ev.time || ''), when = tm ? ((+tm[1] % 12) || 12) + (tm[2] === '00' ? '' : ':' + tm[2]) + (+tm[1] < 12 ? ' AM' : ' PM') : '';
+  let y = 60;
+  if (im && im.width > 0) { const mw = w - 80, mh = 230, sc = Math.min(mw / im.width, mh / im.height), iw = im.width * sc, ih = im.height * sc; g.fillStyle = '#ffffff18'; rr(g, (w - iw) / 2 - 12, y - 12, iw + 24, ih + 24, 14); g.fill(); g.drawImage(im, (w - iw) / 2, y, iw, ih); y += ih + 50; }
+  else { g.fillStyle = '#f2c230'; g.beginPath(); for (let i = 0; i < 24; i++) { const a = i / 24 * PI * 2, r = i % 2 ? 110 : 84; g.lineTo(w / 2 + Math.cos(a) * r, 170 + Math.sin(a) * r); } g.fill(); big(mon, 160, 40, '#c0392b'); big(String(d.getUTCDate()), 214, 64, '#14100e'); y = 330; }
+  big(day, y, 30, '#f2c230'); y += 14;
+  g.font = '900 46px Inter, sans-serif'; const words = String(ev.title).toUpperCase().split(/\s+/), lines = []; let ln = '';
+  words.forEach((wd) => { if (ln && g.measureText(ln + ' ' + wd).width > w - 60) { lines.push(ln); ln = wd; } else ln = ln ? ln + ' ' + wd : wd; }); if (ln) lines.push(ln);
+  lines.slice(0, 4).forEach((l) => { y += 50; big(l, y, 46, '#fff'); });
+  y = Math.max(y + 56, h - 150); big(mon + ' ' + d.getUTCDate() + (when ? '  ·  ' + when : ''), y, 44, '#f2c230');
+  if (y + 44 < h - 62) { if (ev.price > 0) big('$' + ev.price + ' entry', y + 44, 28, '#fff'); else if (ev.game) big(String(ev.game), y + 44, 28, '#ffffffc0'); }
+  big('sign up at the counter or on exorgames.com', h - 34, 20, '#ffffffc0');
+}
+function eventPoster() {
+  const n = evPosters.length, t = ctex(480, 672, (g, w, h) => drawEvent(g, w, h, null, null, n)), m = new THREE.MeshBasicMaterial({ map: t, color: cardTint });
+  evPosters.push({ t, n }); if (hall.events) dressEvent(evPosters[n]); return m;
+}
+function dressEvent(p) {
+  const list = hall.events || [], ev = list.length ? list[p.n % list.length] : null, g = p.t.image.getContext('2d'); drawEvent(g, 480, 672, ev, null, p.n); p.t.needsUpdate = true; kick();
+  if (ev && ev.image) loadImg(ev.image).then((im) => { drawEvent(g, 480, 672, ev, im, p.n); p.t.needsUpdate = true; kick(); }).catch(() => {});
+}
+function loadEvents() {
+  return fetch(W + '/showcase/events.json', { headers: { accept: 'application/json' } }).then((r) => r.json()).then((d) => { if (!d || !d.ok) return; hall.events = d.events || []; evPosters.forEach(dressEvent); }).catch(() => {});
 }
 // A free-standing cardboard standee (owner, 2026-11-12, with the picture's link: "at the end of the hallway by the
 // warhammer aisle as a free standing cardboard standee at a slight angle about 6' tall for comparison of the height"):
@@ -2117,7 +2150,7 @@ function buildHall(list) {
       if (gap > .9) {
         const z0 = hall.zf - Ls, zm2 = z0 - gap / 2; bx(.05, 2.3, gap, lam({ color: 0x2a2320 }), xf + sd * .44, 1.15, zm2, G); bx(.07, .1, gap, red, xf + sd * .43, .05, zm2, G);
         const np = Math.max(1, Math.floor(gap / 1.35)), step = gap / np;
-        for (let k = 0; k < np; k++) pl(.92, 1.29, adPoster((k + a.i + (sd > 0 ? 1 : 0)) % 4), xf + sd * .41, 1.22, z0 - step * (k + .5), sd < 0 ? PI / 2 : -PI / 2, G);
+        for (let k = 0; k < np; k++) pl(.92, 1.29, adPoster(hall.adN = (hall.adN || 0) + 1), xf + sd * .41, 1.22, z0 - step * (k + .5), sd < 0 ? PI / 2 : -PI / 2, G);
       }
     });
     // every slot stocked with a plain box from the start
@@ -2178,7 +2211,7 @@ function buildHall(list) {
     const put = (key, x) => { const r = racks.find((q) => q.key === key); if (!r) return; r.at = [x, hall.zf + .03]; r.ry = 0; fillRack(r); rackHit(r); };
     put('vallejo', aCx(iG) + 1.45); put('citadel', iW > 0 ? aCx(iW) - 1.45 : aCx(iW) + 1.45); put('army', aCx(iW) + 1.22 + (iW > 0 ? 0 : .9));
     hobbyHits.forEach((m) => { const k = hot.indexOf(m); if (k > -1) hot.splice(k, 1); kill(m); }); hobbyHits = []; hall.paints = true; hall.iW = iW; }
-  buildStandee(G, xMax - .75, hall.zf + .55);
+  buildStandee(G, xMax - .75, hall.zf + .55); loadEvents();
   $('#aislesN').textContent = n; $('#aislesN').hidden = false; lights(S.eve); ui(); kick();
 }
 function loadAisles() {
@@ -2598,4 +2631,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, lin, linTap, linDraw, linStepT: linStep, dnk, dnkTap, dnkThrow, dnkDraw, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { gcab, hall, lin, linTap, linDraw, linStepT: linStep, dnk, dnkTap, dnkThrow, dnkDraw, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, evPosters, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };

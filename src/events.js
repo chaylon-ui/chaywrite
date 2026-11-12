@@ -83,3 +83,33 @@ export async function serveEvents(request, ctx) {
   if (!error) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }
+
+
+/* GET /showcase/events.json  the home store's coming events for the 3D shop's posters (owner, 2026-11-12: "the
+   tournament posters should actually pull from our website events and use those images etc"): the same BinderPOS
+   feed the site's events strip reads, the next 45 days, soonest first, each with whatever picture the feed
+   carries (its calendar icon, or an image / banner field when there is one). keys: the field names of the
+   feed's first event, so a picture field we do not know yet can be found. */
+const PIC_FIELDS = ["image", "imageUrl", "imageURL", "img", "banner", "bannerImage", "bannerUrl", "picture", "thumbnail", "calendarIcon"];
+export function posterEvents(arr, origin) {
+  return (arr || []).filter((e) => e && e.title && e.date && !e.isDisabled && !e.disabled).map((e) => {
+    const m = mapEvent(e, origin); let pic = null;
+    for (const k of PIC_FIELDS) { const v = e[k]; if (typeof v === "string" && /^https:\/\//.test(v)) { pic = v.slice(0, 400); break; } }
+    return { title: m.title, date: m.date, time: m.time, game: m.game, price: m.ticketPrice, url: m.url, image: pic };
+  }).sort((a, b) => (a.date + " " + (a.time || "99") < b.date + " " + (b.time || "99") ? -1 : 1)).slice(0, 24);
+}
+export async function serveShopEvents(request, ctx, opts) {
+  const o = opts || {}, cors = { "access-control-allow-origin": "*" }, iso = (d) => d.toISOString().slice(0, 10), now = new Date(o.now || Date.now());
+  const cache = o.fetchFn ? null : caches.default, key = new Request(new URL("/showcase/events.json?from=" + iso(now), request.url).toString());
+  const hit = cache && await cache.match(key); if (hit) return hit;
+  let out;
+  try {
+    const r = await (o.fetchFn || fetch)(`https://portal.binderpos.com/api/events/forStore?startDate=${iso(now)}&endDate=${iso(new Date(now.getTime() + 45 * 864e5))}`, { headers: { accept: "application/json", "content-type": "application/json", origin: HOME_ORIGIN, referer: HOME_ORIGIN + "/", "user-agent": "ExorStorePages/1.0 (+workers.dev)" }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error("events " + r.status);
+    const arr = await r.json(); if (!Array.isArray(arr)) throw new Error("events: not a list");
+    out = { ok: true, events: posterEvents(arr, HOME_ORIGIN), keys: arr[0] ? Object.keys(arr[0]).slice(0, 60) : [] };
+  } catch (e) { out = { ok: false, error: String((e && e.message) || e).slice(0, 120) }; }
+  const res = Response.json(out, { headers: { ...cors, "cache-control": "public, max-age=" + (out.ok ? TTL_S : 30) } });
+  if (out.ok && cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
