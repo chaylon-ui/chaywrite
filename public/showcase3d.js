@@ -2064,7 +2064,9 @@ function drawAisleSign(g, w, h, a) {
 // arrives, and if it never does.
 const SEC_LOGOS = {
   wargames: { '40k': 'Warhammer-logo.png', aos: 'warhammeraos.png', kt: 'killteam-logo.png', hh: 'warhammer_thehorusheresy.png', tow: 'ToW_Logo.png', necro: 'necromunda-logo.png', me: 'Middle-Earth_Strategy_Battle_Game_logo.webp', btech: 'BattleTech_2018.webp', paint: 'DgX8B69wOApRYTQ2-300x130.png' },
-  gunpla: { hg: 'HG_Logo.webp', rg: 'RGlogonew.webp', mg: 'MGlogo.webp' } };
+  gunpla: { hg: 'HG_Logo.webp', rg: 'RGlogonew.webp', mg: 'MGlogo.webp' },
+  // the site's own Pokemon logo over the Pokemon sections (owner, 2026-11-12: "Pokémon kits please use the Pokemon logo used on the site")
+  models: { pokemon: 'International_Pokemon_logo_svg.webp' }, blind: { pokemon: 'International_Pokemon_logo_svg.webp' } };
 const secLogo = (a, sec) => { const f = (SEC_LOGOS[a.key] || {})[sec.key]; return f ? 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/' + f + '?width=600' : ''; };
 // A section's sign is a light box (owner, 2026-11-12: "make the logos larger and centered in the shelf and lit up
 // like a light box"): a dark lit face in a glowing frame, the logo (or the name) large in the middle with a glow
