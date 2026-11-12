@@ -128,14 +128,27 @@ const fonts = Promise.race([Promise.all(['700 20px "Cutive Mono"', '20px "Perman
 
 /* ---------- card images: straight from the shop's CDN, through the worker when a host refuses ---------- */
 const badHost = new Set(['images.binderpos.com', 'images.ygoprodeck.com']);   // sends no CORS header (live probe 42694107805, 2026-11-09), so its pictures go through the worker from the start
-function loadImg(url) {
-  return new Promise((res, rej) => {
+// Pictures are kept for a while once fetched, a fetch that hangs is given up on after 12 s, and one that fails is
+// tried once more (owner, 2026-11-12, thumbing a box on a phone connection: "It was loading images it seemed to
+// have stopped after some scrolling" - every card passed had its picture asked for, and the one in front waited
+// behind hundreds of them).
+const imgKept = new Map();
+function loadImg(url, again) {
+  if (imgKept.has(url)) { const p = imgKept.get(url); imgKept.delete(url); imgKept.set(url, p); return p; }
+  const p = new Promise((res, rej) => {
     let host = ''; try { host = new URL(url, location.href).host; } catch (x) {}
     const direct = !badHost.has(host), im = new Image(); im.crossOrigin = 'anonymous'; im.decoding = 'async';
-    im.onload = () => res(im);
-    im.onerror = () => { if (direct && host !== location.host) { badHost.add(host); loadImg(url).then(res, rej); } else rej(new Error('image')); };
+    const fail = (why) => { clearTimeout(to); imgKept.delete(url); im.onload = im.onerror = null;
+      if (why !== 'slow' && direct && host !== location.host) { badHost.add(host); loadImg(url, again).then(res, rej); }
+      else if (!again) { if (why === 'slow') im.src = ''; setTimeout(() => loadImg(url, true).then(res, rej), 700); }
+      else rej(new Error('image')); };
+    const to = setTimeout(() => fail('slow'), 12000);
+    im.onload = () => { clearTimeout(to); res(im); };
+    im.onerror = () => fail('error');
     im.src = direct ? url : W + '/showcase/img?u=' + encodeURIComponent(url);
   });
+  imgKept.set(url, p); if (imgKept.size > 140) imgKept.delete(imgKept.keys().next().value);
+  return p;
 }
 // One texture per card: the toploader, the card inside it and the kiosk's
 // three labels (price-gun sticker, Holo/foil in blue ink, condition in red).
@@ -1544,7 +1557,10 @@ function updateCrate(c) {
   c.faces.forEach((f) => {
     const i = f.userData.want; if (i < 0) { f.visible = false; return; }
     const ps = pose(p - i), a = ps[0]; f.visible = true; f.position.set(x, .004 + ps[1] - Math.sin(a) * .0006, baseZ(c, i) + ps[2] + Math.cos(a) * .0006); f.rotation.set(a, 0, 0);
-    if (f.userData.idx !== i || f.userData.lane !== c.lane) { f.userData.idx = i; f.userData.lane = c.lane; bare(f); wear(f, ln[i], 256); }
+    if (f.userData.idx !== i || f.userData.lane !== c.lane) {   // its picture is asked for once the thumbing has paused on it a moment, not for every card flicked past
+      f.userData.idx = i; f.userData.lane = c.lane; bare(f); const tk0 = f.userData.tk, lane = c.lane, cd = ln[i];
+      setTimeout(() => { if (f.userData.tk === tk0 && f.userData.idx === i && f.userData.lane === lane && f.parent) wear(f, cd, 256); }, 110);
+    }
   });
   if (c === cr) caption();
 }
