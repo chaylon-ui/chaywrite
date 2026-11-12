@@ -2012,11 +2012,21 @@ function drawAisleSign(g, w, h, a) {
   g.save(); g.translate(164, 154); g.scale(sc, 1); g.fillStyle = '#8f1a17'; g.fillText(t, 4, 5); g.fillStyle = '#f2c230'; g.fillText(t, 0, 0); g.restore();
 }
 // the sign on top of the shelving where a section starts: the shop's black, red and yellow; the new arrivals' one is yellow
-function drawSecSign(g, w, h, sec) {
+// The section signs of the Warhammer aisle carry each game's own logo (owner, 2026-11-12: "Please use logos from
+// the site sections for Warhammer and its sub brands like age of sigmar etc for the aisles above the product"):
+// the same files, in the shop's Shopify Files, that the site's collection headers show on a dark backdrop
+// (theme snippets/breadcrumb.liquid). The Gunpla grades have theirs there too. The name stays until the logo
+// arrives, and if it never does.
+const SEC_LOGOS = {
+  wargames: { '40k': 'Warhammer-logo.png', aos: 'warhammeraos.png', kt: 'killteam-logo.png', hh: 'warhammer_thehorusheresy.png', tow: 'ToW_Logo.png', necro: 'necromunda-logo.png', me: 'Middle-Earth_Strategy_Battle_Game_logo.webp', btech: 'BattleTech_2018.webp', paint: 'DgX8B69wOApRYTQ2-300x130.png' },
+  gunpla: { hg: 'HG_Logo.webp', rg: 'RGlogonew.webp', mg: 'MGlogo.webp' } };
+const secLogo = (a, sec) => { const f = (SEC_LOGOS[a.key] || {})[sec.key]; return f ? 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/' + f + '?width=600' : ''; };
+function drawSecSign(g, w, h, sec, im) {
   const nw = sec.key === 'new';
   g.fillStyle = nw ? '#f2c230' : '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, 14, h); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillRect(14, h - 8, w - 14, 8);
   const n = sec.count.toLocaleString('en-CA'); g.textBaseline = 'middle'; g.font = '800 24px Inter, sans-serif'; g.textAlign = 'right'; g.fillStyle = nw ? '#14100e' : '#ffffffb0'; g.fillText(n, w - 14, h / 2 - 3);
   const room = w - 44 - g.measureText(n).width - 14, t = (nw ? '★ ' : '') + sec.label.toUpperCase(); g.font = '900 54px Inter, sans-serif'; g.textAlign = 'left';
+  if (im && im.width > 0) { const k = Math.min((room - 6) / im.width, (h - 22) / im.height), iw = im.width * k, ih = im.height * k; g.drawImage(im, 28, (h - 8 - ih) / 2, iw, ih); return; }
   const tw_ = g.measureText(t).width, sc = tw_ > room ? room / tw_ : 1; g.save(); g.translate(30, h / 2 - 2); g.scale(sc, 1); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillText(t, 0, 0); g.restore();
 }
 function buildHall(list) {
@@ -2065,7 +2075,9 @@ function buildHall(list) {
       for (let k = 0; k < sec.count; k++) { const p = slotPos(a, sec, k); d2.position.set(p.x, p.y, p.z + (q() - .5) * .03); d2.rotation.set(0, p.ry, 0); d2.scale.set(.8 + q() * .4, .7 + q() * .45, 1); d2.updateMatrix(); inst.setMatrixAt(sec.off + k, d2.matrix); col.setHSL(q(), .25 + q() * .35, .3 + q() * .3); inst.setColorAt(sec.off + k, col); }
       // its sign on top of the shelving where it starts, and a divider down the shelves
       const fw = sec.left ? -1 : 1, p0 = slotPos(a, sec, 0), sd = p0.left ? -1 : 1, w = Math.min(1.1, sec.cols * hall.colW - .04), zs = p0.z + fw * (w / 2 - hall.colW / 2 + .02);
-      pl(w, .19, new THREE.MeshBasicMaterial({ map: ctex(560, 96, (g, cw, ch) => drawSecSign(g, cw, ch, sec)) }), cx + sd * .985, 2.135, zs, p0.left ? PI / 2 : -PI / 2, G);
+      const st = ctex(560, 96, (g, cw, ch) => drawSecSign(g, cw, ch, sec)), lu = secLogo(a, sec);
+      pl(w, .19, new THREE.MeshBasicMaterial({ map: st }), cx + sd * .985, 2.135, zs, p0.left ? PI / 2 : -PI / 2, G);
+      if (lu) loadImg(lu).then((im) => { drawSecSign(st.image.getContext('2d'), 560, 96, sec, im); st.needsUpdate = true; kick(); }).catch(() => {});
       bx(.44, 1.84, .012, cream, cx + sd * 1.22, 1.07, p0.z - fw * hall.colW / 2, G);
     });
     G.add(inst);
