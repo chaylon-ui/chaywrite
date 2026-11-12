@@ -1362,6 +1362,19 @@ async function serveStageInner(request, env, url, staffOk, sopts, seen) {
     const out = await dryRunPlan(env, g.record);
     return Response.json(out, { status: out.ok ? 200 : 400, headers: noStore });
   }
+  // BinderPOS store credit, the dry run (owner, 2026-11-12: "Do small dry run on my account"; src/store-credit.js):
+  // admin account or the staff key, POST only; the customer by Shopify id (its email is looked up here, never logged) or by email.
+  if (p === BASE + "/credit/dry-run.json") {
+    if (request.method !== "POST") return Response.json({ error: "POST" }, { status: 405, headers: noStore });
+    if (!(user && user.role === "admin") && !pinOk) return Response.json({ error: "admin sign-in or staff key required" }, { status: 403, headers: noStore });
+    const { creditDryRun } = await import("./store-credit.js");
+    let email = normEmail(url.searchParams.get("email") || (form && form.email) || "");
+    const cid = digits(url.searchParams.get("customer") || (form && form.customer) || "");
+    if (!email && cid) { try { email = normEmail((await lookupCustomer(env, cid)).email); } catch {} }
+    if (!email) return Response.json({ ok: false, error: cid ? "that Shopify customer has no email on record" : "customer (Shopify id) or email required" }, { status: 400, headers: noStore });
+    const out = await creditDryRun(env, { email, amount: url.searchParams.get("amount") || (form && form.amount) || 0.05, by: user ? user.email : "staff key" });
+    return Response.json(out, { status: out.ok ? 200 : 400, headers: noStore });
+  }
   const sv = p.match(new RegExp("^" + BASE + "/b/([A-Za-z0-9-]{1,40})/bp-save\\.json$"));
   if (sv) {
     // The real save (src/stage-sync.js pushBuylistPrices): admin account or
