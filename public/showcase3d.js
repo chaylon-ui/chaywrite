@@ -2178,7 +2178,7 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => (hall.paints ? lookView(new V3(aCx(hall.iW) - 2.9, 1.6, 3.25), new V3(aCx(hall.iW) + .5, 1.05, hall.zf + .2), cam.aspect < 1 ? 82 : 62)   // from the hall, across the two racks at the Warhammer end
   : lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58));
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'dunk' ? cabView(CAB_Z.dunk) : S.mode === 'line' ? cabView(CAB_Z.line) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? wallView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcades' ? arcadesView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'dunk' ? cabView(CAB_Z.dunk) : S.mode === 'line' ? cabView(CAB_Z.line) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? wallView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
   leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'dunk') dnkStop(); if (S.mode === 'line') linStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
@@ -2191,6 +2191,7 @@ function go(mode) {
   else if (mode === 'graded') { S.mode = 'graded'; gcab.gx = cam.aspect < 1 ? -1e9 : 0; gcab.gy = 1e9; glide(gradedView()); stockCabinet(); hint(gcab.rows.length ? (matchMedia('(pointer:coarse)').matches ? 'Graded cards · pinch to lean in · tap one to take it out · drag it to turn it over' : 'Graded cards · hold the mouse down to lean in · click one to take it out · drag it to turn it over') : 'The graded cabinet is being stocked'); }
   else if (mode === 'aisles') { if (!hall.built) { hint('The aisles are still being stocked - try again in a moment'); return; } if (S.mode === 'aisle') S.hs = S.aisle; else if (S.mode !== 'aisles') S.hs = -1; S.mode = 'aisles'; glide(aislesView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to the next aisle · tap an aisle to walk in' : 'Drag, scroll or arrow keys for the next aisle · click an aisle to walk in'); }
   else if (mode === 'arcade') { S.mode = 'arcade'; glide(arcadeView(), 800); arcRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move Mallow · it sprays by itself' : 'Click to start · drag or arrow keys move Mallow · space sprays'); }
+  else if (mode === 'arcades') { S.mode = 'arcades'; glide(arcadesView(), 800); hint(matchMedia('(pointer:coarse)').matches ? 'Tap the game you want to play' : 'Click the game you want to play'); }
   else if (mode === 'line') { S.mode = 'line'; glide(cabView(CAB_Z.line), 800); linRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · hold right or left to walk · tap to shove' : 'Click to start · arrow keys walk · space shoves'); }
   else if (mode === 'dunk') { S.mode = 'dunk'; glide(cabView(CAB_Z.dunk), 800); dnkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · tap where to throw - lead the target' : 'Click to start · click where to throw - lead the target'); }
   else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(CAB_Z.stack), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
@@ -2203,6 +2204,7 @@ function back() {
   if ($('#prodv').classList.contains('on')) return closeProduct();
   if (S.mode === 'ask' && !S.hand) return askLeave();
   if (S.hand) return putBack();
+  if (isCab(S.mode)) return go('arcades');
   if (S.mode === 'aisle') return go('aisles');
   if (psel.g) return closePaint();
   // back from a paint rack: to the hall stop you tapped it from, still able to swipe along (owner, 2026-11-12:
@@ -2218,6 +2220,7 @@ function hint(t) { const el = $('#hint'); clearTimeout(hintT); if (!t) { el.clas
 function ui() {
   document.body.dataset.mode = S.mode;
   const st = S.mode === 'crate' ? (cr && cr.kind === 'bin' ? 'bin' : 'boxes') : S.mode === 'boxes' && S.focus === 'sealed' ? 'sealed' : S.mode === 'rack' || S.mode === 'hobby' ? 'hobby' : S.mode === 'aisle' ? 'aisles' : S.mode === 'ask' ? 'till' : S.mode;
+  if (S.mode === 'arcades') $('#ctxArcades').innerHTML = '<button type="button" data-go="door">‹ Back</button>' + CABS.map((c) => '<button type="button" data-go="' + c[0] + '">' + c[1] + '</button>').join('');
   if (S.mode === 'aisles') $('#ctxAisles').innerHTML = hall.list.map((a) => '<button type="button" data-aisle="' + a.i + '"' + (a.i === S.hs ? ' class="on"' : '') + '>' + (a.i + 1) + ' · ' + esc(a.label) + '</button>').join('');
   if (S.mode === 'aisle') { const a = hall.list[S.aisle];   // the aisle's sections to jump to, and the turn to the shelf behind
     if (hall.secsFor !== a.i) { hall.secsFor = a.i; hall.secOn = -1; $('#aiSecs').innerHTML = a.secs.length > 1 ? a.secs.map((s) => '<button type="button" data-sec="' + s.j + '">' + esc(s.label) + '</button>').join('') : ''; $('#aiTurn').hidden = !a.nr; }
@@ -2248,7 +2251,16 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pick(list, x, y) { const r = canvas.getBoundingClientRect(); ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam); const h = ray.intersectObjects(list, false); return h.length ? h[0] : null; }
 const HELLO = ['Hi! Ask us to pull any card out for a closer look.', 'Looking for something? The boxes at the back have every set.', 'Got cards to sell? We buy - cash or store credit.', 'Ring the bell if you need a hand!'];
 let helloN = 0;
-function act(a) { if (a === 'bell') ding(); else if (a === 'lights') toggleLights(); else if (a === 'staff') hint(HELLO[helloN++ % HELLO.length]); else go(a); }
+// The arcade corner (owner, 2026-11-12: "When clicking on the arcade games, it should first go to the front
+// showing all in a way that lets you click the game you want front on"): a tap on any cabinet from elsewhere
+// stands you square in front of the row of them; a tap on one there walks up to it; Back from a game returns here.
+const CABS = [['arcade', 'Mallow Shooter'], ['stack', 'Box Stack'], ['dunk', 'Scalper Dunk'], ['line', 'Line Rush']];
+const isCab = (m) => CABS.some((c) => c[0] === m);
+function arcadesView() {
+  const zs = CABS.map((c) => CAB_Z[c[0]]), zc = (Math.min.apply(null, zs) + Math.max.apply(null, zs)) / 2, half = (Math.max.apply(null, zs) - Math.min.apply(null, zs)) / 2 + .45, fov = cam.aspect < 1 ? 84 : 58;
+  const d = Math.max(half / hTan(fov), 1.25 / Math.tan(rad(fov / 2))); return lookView(new V3(-3.27 + d, 1.5, zc), new V3(-3.27, 1.12, zc), fov);
+}
+function act(a) { if (isCab(a) && S.mode !== 'arcades') return go('arcades'); if (a === 'bell') ding(); else if (a === 'lights') toggleLights(); else if (a === 'staff') hint(HELLO[helloN++ % HELLO.length]); else go(a); }
 function tap(x, y) {
   if (S.hand) return putBack();
   if (tw) return;
