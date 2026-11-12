@@ -41,12 +41,21 @@ export const AISLES = [
     ["pokemon", "Pokémon", 'tag:"fig:Pokemon"'], ["mini", "Miniverse", "title:MINIVERSE"],
     ["sanrio", "Sanrio, Kirby & friends", '(title:SANRIO OR title:"HELLO KITTY" OR title:CINNAMOROLL OR title:HANGYODON OR title:KUROMI OR title:KIRBY* OR title:TAMAGOTCHI)'],
     ["anime", "Anime", '(title:GUNDAM OR title:"ONE PIECE" OR title:"DEMON SLAYER" OR title:JUJUTSU OR title:FRIEREN OR title:EVANGELION OR title:"CHAINSAW MAN" OR title:MIKU OR title:JOJO* OR title:GINTAMA OR title:"BLACK BUTLER" OR title:SAKAMOTO OR title:NARUTO OR title:"DRAGON BALL" OR title:"SPY X FAMILY" OR title:"MY HERO" OR title:GHIBLI OR title:"SPIRITED AWAY" OR title:KIKI* OR title:TOTORO)']] },
+  // Board games: the site's own bg: tags first (src/bgtype.js), and for the third of the stock that carries none
+  // (owner, 2026-11-12: "More board games... why aren't they categorized") the title names the shelf where it can:
+  // accessories, playing cards, role-playing books, the household classics, the best-known party games, mysteries.
   { key: "board", label: "Board Games", q: 'product_type:"Board Games"', rest: "More board games", secs: [
-    ["chess", "Chess & classics", 'tag:"bg:Chess & Classics"'], ["puzzles", "Puzzles & escape rooms", 'tag:"bg:Puzzles & Escape Rooms"'], ["exp", "Expansions", 'tag:"bg:Expansions"'],
-    ["party", "Party games", 'tag:"bg:Party Games"'], ["family", "Family & kids", 'tag:"bg:Family & Kids"'], ["trivia", "Trivia & word", 'tag:"bg:Trivia & Word"'],
+    ["acc", "Sleeves, mats & inserts", '(title:SLEEVES OR title:PLAYMAT OR title:"PLAY MAT" OR title:INSERT OR title:ORGANIZER OR title:"ARCANE TINMEN" OR title:"DICE TRAY" OR title:"DICE TOWER")'],
+    ["cards", "Playing cards", '(title:BICYCLE OR title:"PLAYING CARDS" OR title:"POKER CARDS" OR title:"THEORY-11" OR title:THEORY11)'],
+    ["rpg", "Role-playing games", '(title:DAGGERHEART OR title:"CASTLES AND CRUSADES" OR title:RPG OR title:ROLEPLAYING OR title:"ROLE PLAYING" OR title:SOURCEBOOK OR title:"CORE RULES" OR title:"GAME MASTER")'],
+    ["chess", "Chess & classics", '(tag:"bg:Chess & Classics" OR title:CLUE OR title:BATTLESHIP OR title:MONOPOLY OR title:SCRABBLE OR title:YAHTZEE OR title:RISK OR title:SORRY OR title:TROUBLE OR title:OPERATION OR title:"CONNECT 4" OR title:JENGA OR title:UNO OR title:ROULETTE OR title:CRIBBAGE OR title:BACKGAMMON OR title:CHECKERS OR title:DOMINOES OR title:MAHJONG)'],
+    ["puzzles", "Puzzles, mysteries & escape rooms", '(tag:"bg:Puzzles & Escape Rooms" OR title:"CRYPTIC KILLERS" OR title:MURDER OR title:MYSTERY OR title:"ESCAPE ROOM" OR title:UNLOCK OR title:DETECTIVE)'],
+    ["exp", "Expansions", 'tag:"bg:Expansions"'],
+    ["party", "Party games", '(tag:"bg:Party Games" OR title:"CARDS AGAINST HUMANITY" OR title:"EXPLODING KITTENS" OR title:"WHAT DO YOU MEME" OR title:"JOKING HAZARD" OR title:"UNSTABLE UNICORNS")'],
+    ["family", "Family & kids", 'tag:"bg:Family & Kids"'], ["trivia", "Trivia & word", '(tag:"bg:Trivia & Word" OR title:BANANAGRAMS)'],
     ["bluff", "Deduction & bluffing", 'tag:"bg:Deduction & Bluffing"'], ["coop", "Co-op", 'tag:"bg:Co-op"'], ["two", "2-player", 'tag:"bg:2-Player"'],
-    ["card", "Card games", 'tag:"bg:Card Games"'], ["strategy", "Strategy", 'tag:"bg:Strategy"']],
-    order: ["family", "party", "strategy", "coop", "card", "two", "bluff", "trivia", "chess", "puzzles", "exp", "rest"] },
+    ["card", "Card games", 'tag:"bg:Card Games"'], ["strategy", "Strategy", 'tag:"bg:Strategy"'], ["dice", "Dice games", 'tag:"bg:Dice Games"'], ["solo", "Solo friendly", 'tag:"bg:Solo Friendly"']],
+    order: ["family", "party", "strategy", "coop", "card", "two", "bluff", "trivia", "dice", "solo", "chess", "puzzles", "exp", "rpg", "cards", "acc", "rest"] },
   { key: "wargames", label: "Warhammer", q: 'product_type:"Tabletop Wargames"', rest: "More miniatures games", secs: [
     ["paint", "Paint & hobby", '(title:COLOUR OR title:CITADEL OR title:"AK INTERACTIVE" OR title:WARPAINTS OR vendor:"LSG Hobby")'],
     ["hist", "Historical", '(vendor:"Warlord Games" OR vendor:"Fox Crest")'],
@@ -89,7 +98,7 @@ export function countsQuery(a, now) { return "query{" + secKeys(a).map((k, j) =>
 export async function serveAisles(request, env, ctx, url, opts) {
   const o = opts || {}, now = o.now || Date.now();
   if (!o.gqlFn && (!env || !env.SHOPIFY_ADMIN_TOKEN)) return json({ ok: false, error: "not configured" }, 503);
-  return cached(o, ctx, new URL("/showcase/aisles.json?v=2", url).toString(), async () => {
+  return cached(o, ctx, new URL("/showcase/aisles.json?v=3", url).toString(), async () => {
     const aisles = [];
     for (const a of AISLES) {   // one aisle at a time: Shopify throttles a burst
       const r = await run(env, o, countsQuery(a, now), {}), d = r.data || {};
