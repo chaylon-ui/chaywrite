@@ -126,3 +126,8 @@ test("the picture proxy serves the feed's tcgplayer pictures too", () => {
   assert.equal(imgTarget("https://product-images.tcgplayer.com/559998.jpg"), "https://product-images.tcgplayer.com/559998.jpg");
   assert.equal(imgTarget("https://evil.example/559998.jpg"), null);
 });
+
+test("the picture proxy serves the event pictures' bucket and nothing else on that host", () => {
+  assert.equal(imgTarget("https://storage.googleapis.com/binderpos-event-images/a-1.jpg"), "https://storage.googleapis.com/binderpos-event-images/a-1.jpg");
+  assert.equal(imgTarget("https://storage.googleapis.com/some-other-bucket/a.jpg"), null);
+});

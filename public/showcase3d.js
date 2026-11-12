@@ -127,7 +127,7 @@ function tape(g, w, h, text, font, rot) {  // a strip of masking tape with marke
 const fonts = Promise.race([Promise.all(['700 20px "Cutive Mono"', '20px "Permanent Marker"', '700 20px Caveat', '20px "Special Elite"'].map((f) => document.fonts.load(f))), new Promise((r) => setTimeout(r, 2500))]).catch(() => {});
 
 /* ---------- card images: straight from the shop's CDN, through the worker when a host refuses ---------- */
-const badHost = new Set(['images.binderpos.com', 'images.ygoprodeck.com', 'product-images.tcgplayer.com']);   // sends no CORS header (live probe 42694107805, 2026-11-09), so its pictures go through the worker from the start
+const badHost = new Set(['images.binderpos.com', 'images.ygoprodeck.com', 'product-images.tcgplayer.com', 'storage.googleapis.com']);   // sends no CORS header (live probe 42694107805, 2026-11-09), so its pictures go through the worker from the start
 // Pictures are kept for a while once fetched, a fetch that hangs is given up on after 12 s, and one that fails is
 // tried once more (owner, 2026-11-12, thumbing a box on a phone connection: "It was loading images it seemed to
 // have stopped after some scrolling" - every card passed had its picture asked for, and the one in front waited
@@ -2077,7 +2077,7 @@ function drawEvent(g, w, h, ev, im, n) {
   words.forEach((wd) => { if (ln && g.measureText(ln + ' ' + wd).width > w - 60) { lines.push(ln); ln = wd; } else ln = ln ? ln + ' ' + wd : wd; }); if (ln) lines.push(ln);
   lines.slice(0, 4).forEach((l) => { y += 50; big(l, y, 46, '#fff'); });
   y = Math.max(y + 56, h - 150); big(mon + ' ' + d.getUTCDate() + (when ? '  ·  ' + when : ''), y, 44, '#f2c230');
-  if (y + 44 < h - 62) { if (ev.price > 0) big('$' + ev.price + ' entry', y + 44, 28, '#fff'); else if (ev.game) big(String(ev.game), y + 44, 28, '#ffffffc0'); }
+  if (y + 44 < h - 62) { if (ev.price > 0) big('$' + (Math.round(ev.price * 100) % 100 ? ev.price.toFixed(2) : Math.round(ev.price)) + ' entry', y + 44, 28, '#fff'); else if (ev.game) big(String(ev.game), y + 44, 28, '#ffffffc0'); }
   big('sign up at the counter or on exorgames.com', h - 34, 20, '#ffffffc0');
 }
 function eventPoster() {

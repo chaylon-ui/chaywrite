@@ -80,7 +80,8 @@ const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods
 // for them was refused here with 400, so they stayed blank (owner, 2026-11-12: "Still seems to be happening"; live probe 43140347312)
 const IMG_HOSTS = new Set(["cdn.shopify.com", "images.binderpos.com", "product-images.tcgplayer.com", "svgs.scryfall.io", "images.pokemontcg.io", "images.ygoprodeck.com"]);   // the last three: set logos (src/setlogos.js)
 export function imgTarget(u) {
-  try { const x = new URL(String(u || "")); return x.protocol === "https:" && IMG_HOSTS.has(x.hostname) && !x.username && !x.password && !x.port ? x.toString() : null; } catch { return null; }
+  // the shop's event pictures live in one public bucket: that bucket only, nothing else on the host
+  try { const x = new URL(String(u || "")); const ok = IMG_HOSTS.has(x.hostname) || (x.hostname === "storage.googleapis.com" && x.pathname.indexOf("/binderpos-event-images/") === 0); return x.protocol === "https:" && ok && !x.username && !x.password && !x.port ? x.toString() : null; } catch { return null; }
 }
 export async function serveShowcaseImg(request, env, ctx, opts) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
