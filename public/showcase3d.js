@@ -246,6 +246,16 @@ function cutWhite(g, w, h, photo) {
   for (let x = 0; x < w; x++) { push(x, -1); push((h - 1) * w + x, -1); } for (let y = 0; y < h; y++) { push(y * w, -1); push(y * w + w - 1, -1); }
   while (st.length) { const i = st.pop(), x = i % w; if (x > 0) push(i - 1, i); if (x < w - 1) push(i + 1, i); if (i >= w) push(i - w, i); if (i < w * (h - 1)) push(i + w, i); }
   if (photo) { let n = 0; for (let i = 0; i < w * h; i++) n += seen[i]; if (n < w * h * .12 || n > w * h * .8) return null; }   // too little or nearly everything gone: not a slab on a plain sheet, leave the photo whole
+  if (!photo) {   // A white box on a white background (owner, 2026-11-12: "Some of the products with white boxes in the store look like this"):
+    // the fill runs on into the box and leaves only its printing. When what is left fills under three quarters of
+    // its own outline, the product is white itself: keep the whole of that outline, the box as a white rectangle.
+    let bx0 = w, by0 = h, bx1 = -1, by1 = -1, kept = 0;
+    for (let i = 0; i < w * h; i++) { if (seen[i]) continue; kept++; const x = i % w, y = (i - x) / w; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+    if (bx1 > bx0 && by1 > by0 && kept < (bx1 - bx0 + 1) * (by1 - by0 + 1) * .74) {
+      const m = Math.round(Math.min(w, h) * .012); bx0 = Math.max(0, bx0 - m); by0 = Math.max(0, by0 - m); bx1 = Math.min(w - 1, bx1 + m); by1 = Math.min(h - 1, by1 + m);
+      for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) { const i = y * w + x; seen[i] = 0; if (px[i * 4 + 3] < 16) { px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = 255; px[i * 4 + 3] = 255; } }
+    }
+  }
   for (let i = 0; i < w * h; i++) if (seen[i]) px[i * 4 + 3] = 0;
   // soften the cut: a kept pixel beside a cleared one goes half see-through
   for (let i = 0; i < w * h; i++) { if (seen[i]) continue; const x = i % w; if ((x > 0 && seen[i - 1]) || (x < w - 1 && seen[i + 1]) || (i >= w && seen[i - w]) || (i < w * (h - 1) && seen[i + w])) px[i * 4 + 3] = Math.min(px[i * 4 + 3], 150); }
