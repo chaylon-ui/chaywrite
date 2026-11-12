@@ -2034,6 +2034,13 @@ const secLogo = (a, sec) => { const f = (SEC_LOGOS[a.key] || {})[sec.key]; retur
 // A section's sign is a light box (owner, 2026-11-12: "make the logos larger and centered in the shelf and lit up
 // like a light box"): a dark lit face in a glowing frame, the logo (or the name) large in the middle with a glow
 // of its own, the count small in a corner. The new arrivals' box is lit yellow.
+// a logo file with empty margin round it (the 40,000 one) is cut to what is drawn, so it fills its box like the others
+function trimLogo(im) {
+  try { const w = Math.min(600, im.width), h = Math.round(w * im.height / im.width), c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data; let x0 = w, y0 = h, x1 = -1, y1 = -1; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 <= x0 || y1 <= y0 || (x1 - x0 > w * .92 && y1 - y0 > h * .92)) return im;
+    const o = document.createElement('canvas'); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1; o.getContext('2d').drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height); return o; } catch (x) { return im; }
+}
 function drawSecSign(g, w, h, sec, im) {
   const nw = sec.key === 'new'; g.clearRect(0, 0, w, h);
   const bg = g.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w * .62); if (nw) { bg.addColorStop(0, '#fff3b0'); bg.addColorStop(1, '#f2b81c'); } else { bg.addColorStop(0, '#3a3348'); bg.addColorStop(1, '#0e0c12'); }
@@ -2173,7 +2180,7 @@ function buildHall(list) {
         let mat = sm0; if (seed('flick' + a.key + sec.key + c)() < .09) { mat = new THREE.MeshBasicMaterial({ map: st }); hall.flick.push(mat); }
         pl(sw, .3, mat, cx + sd * .985, 2.19, pz, p0.left ? PI / 2 : -PI / 2, G); bx(.03, .32, sw + .02, steel, cx + sd * 1.003, 2.19, pz, G);
       }
-      if (lu) loadImg(lu).then((im) => { drawSecSign(st.image.getContext('2d'), 640, 168, sec, im); st.needsUpdate = true; kick(); }).catch(() => {});
+      if (lu) loadImg(lu).then((im) => { drawSecSign(st.image.getContext('2d'), 640, 168, sec, trimLogo(im)); st.needsUpdate = true; kick(); }).catch(() => {});
       bx(.44, 1.84, .012, cream, cx + sd * 1.22, 1.07, p0.z - fw * hall.colW / 2, G);
     });
     G.add(inst);
