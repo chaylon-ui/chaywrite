@@ -251,7 +251,11 @@ function cutWhite(g, w, h, photo) {
     // its own outline, the product is white itself: keep the whole of that outline, the box as a white rectangle.
     let bx0 = w, by0 = h, bx1 = -1, by1 = -1, kept = 0;
     for (let i = 0; i < w * h; i++) { if (seen[i]) continue; kept++; const x = i % w, y = (i - x) / w; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
-    if (bx1 > bx0 && by1 > by0 && kept < (bx1 - bx0 + 1) * (by1 - by0 + 1) * .74) {
+    // ... and only then: a figure on white also fills little of its outline (live probe 43312644745: the Pokemon kits
+    // became white rectangles), but it is one solid shape, while a white box's printing is scattered - many crossings
+    // from kept to cleared along each row.
+    let cross = 0, rowsN = 0; if (bx1 > bx0) for (let y = by0; y <= by1; y += 3) { rowsN++; let was = 1; for (let x = bx0; x <= bx1; x++) { const sn = seen[y * w + x]; if (sn !== was) { cross++; was = sn; } } }
+    if (bx1 > bx0 && by1 > by0 && kept < (bx1 - bx0 + 1) * (by1 - by0 + 1) * .6 && cross / Math.max(1, rowsN) > 9) {
       const m = Math.round(Math.min(w, h) * .012); bx0 = Math.max(0, bx0 - m); by0 = Math.max(0, by0 - m); bx1 = Math.min(w - 1, bx1 + m); by1 = Math.min(h - 1, by1 + m);
       for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) { const i = y * w + x; seen[i] = 0; if (px[i * 4 + 3] < 16) { px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = 255; px[i * 4 + 3] = 255; } }
     }
