@@ -2161,8 +2161,11 @@ function buildHall(list) {
       // (owner, 2026-11-12: "Keep these shelving headers going above the products below if it's still the same
       // product"). The odd one flickers like a tube on its way out.
       const st = ctex(640, 168, (g, cw, ch) => drawSecSign(g, cw, ch, sec)), lu = secLogo(a, sec), sm0 = new THREE.MeshBasicMaterial({ map: st });
-      for (let c = 0; c < sec.cols; c += 4) {
-        const left = sec.cols - c; if (c && left < 3) break; const sw = Math.min(1.16, left * hall.colW - .04), pz = slotPos(a, sec, c * 6).z + fw * (sw / 2 - hall.colW / 2 + .02);
+      // the section's run is shared out evenly between its boxes, each centred over its share (owner, 2026-11-12:
+      // "Signs should be centred in each section") - a short section has one box in its middle
+      const run = sec.cols * hall.colW, nb = Math.max(1, Math.round(run / 1.3)), share = run / nb, sw = Math.min(1.16, share - .06), zA = p0.z - fw * hall.colW / 2;   // zA: where the section starts
+      for (let c = 0; c < nb; c++) {
+        const pz = zA + fw * share * (c + .5);
         let mat = sm0; if (seed('flick' + a.key + sec.key + c)() < .09) { mat = new THREE.MeshBasicMaterial({ map: st }); hall.flick.push(mat); }
         pl(sw, .3, mat, cx + sd * .985, 2.19, pz, p0.left ? PI / 2 : -PI / 2, G); bx(.03, .32, sw + .02, steel, cx + sd * 1.003, 2.19, pz, G);
       }
