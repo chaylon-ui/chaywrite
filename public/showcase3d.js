@@ -2031,13 +2031,18 @@ const SEC_LOGOS = {
   wargames: { '40k': 'Warhammer-logo.png', aos: 'warhammeraos.png', kt: 'killteam-logo.png', hh: 'warhammer_thehorusheresy.png', tow: 'ToW_Logo.png', necro: 'necromunda-logo.png', me: 'Middle-Earth_Strategy_Battle_Game_logo.webp', btech: 'BattleTech_2018.webp', paint: 'DgX8B69wOApRYTQ2-300x130.png' },
   gunpla: { hg: 'HG_Logo.webp', rg: 'RGlogonew.webp', mg: 'MGlogo.webp' } };
 const secLogo = (a, sec) => { const f = (SEC_LOGOS[a.key] || {})[sec.key]; return f ? 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/' + f + '?width=600' : ''; };
+// A section's sign is a light box (owner, 2026-11-12: "make the logos larger and centered in the shelf and lit up
+// like a light box"): a dark lit face in a glowing frame, the logo (or the name) large in the middle with a glow
+// of its own, the count small in a corner. The new arrivals' box is lit yellow.
 function drawSecSign(g, w, h, sec, im) {
-  const nw = sec.key === 'new';
-  g.fillStyle = nw ? '#f2c230' : '#14100e'; g.fillRect(0, 0, w, h); g.fillStyle = '#d62c28'; g.fillRect(0, 0, 14, h); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillRect(14, h - 8, w - 14, 8);
-  const n = sec.count.toLocaleString('en-CA'); g.textBaseline = 'middle'; g.font = '800 24px Inter, sans-serif'; g.textAlign = 'right'; g.fillStyle = nw ? '#14100e' : '#ffffffb0'; g.fillText(n, w - 14, h / 2 - 3);
-  const room = w - 44 - g.measureText(n).width - 14, t = (nw ? '★ ' : '') + sec.label.toUpperCase(); g.font = '900 54px Inter, sans-serif'; g.textAlign = 'left';
-  if (im && im.width > 0) { const k = Math.min((room - 6) / im.width, (h - 22) / im.height), iw = im.width * k, ih = im.height * k; g.drawImage(im, 28, (h - 8 - ih) / 2, iw, ih); return; }
-  const tw_ = g.measureText(t).width, sc = tw_ > room ? room / tw_ : 1; g.save(); g.translate(30, h / 2 - 2); g.scale(sc, 1); g.fillStyle = nw ? '#14100e' : '#f2c230'; g.fillText(t, 0, 0); g.restore();
+  const nw = sec.key === 'new'; g.clearRect(0, 0, w, h);
+  const bg = g.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w * .62); if (nw) { bg.addColorStop(0, '#fff3b0'); bg.addColorStop(1, '#f2b81c'); } else { bg.addColorStop(0, '#3a3348'); bg.addColorStop(1, '#0e0c12'); }
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  g.save(); g.shadowColor = nw ? '#fff8d0' : '#bfe6ff'; g.shadowBlur = 16; g.strokeStyle = nw ? '#fffbe6' : '#eaf6ff'; g.lineWidth = 7; g.strokeRect(7, 7, w - 14, h - 14); g.restore();
+  const n = sec.count.toLocaleString('en-CA'); g.textBaseline = 'alphabetic'; g.font = '800 20px Inter, sans-serif'; g.textAlign = 'right'; g.fillStyle = nw ? '#14100e' : '#ffffffa0'; g.fillText(n, w - 22, h - 20);
+  if (im && im.width > 0) { const k = Math.min((w - 110) / im.width, (h - 44) / im.height), iw = im.width * k, ih = im.height * k; g.save(); g.shadowColor = '#ffffff'; g.shadowBlur = 22; g.drawImage(im, (w - iw) / 2, (h - ih) / 2, iw, ih); g.shadowBlur = 8; g.drawImage(im, (w - iw) / 2, (h - ih) / 2, iw, ih); g.restore(); return; }
+  const t = (nw ? '★ ' : '') + sec.label.toUpperCase(); g.font = '900 78px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const sc = Math.min(1, (w - 120) / g.measureText(t).width); g.save(); g.translate(w / 2, h / 2 + 2); g.scale(sc, sc); if (!nw) { g.shadowColor = '#ffd76a'; g.shadowBlur = 20; } g.fillStyle = nw ? '#14100e' : '#ffe9a8'; g.fillText(t, 0, 0); g.restore();
 }
 // The posters on the bare runs: two for Mallow Games (the logo the owner sent, public/mallow-games.jpg: sell
 // your video games, get Exor store credit), the shop's "we buy cards", and between them the shop's own coming
@@ -2120,7 +2125,7 @@ function buildHall(list) {
   hall.xMax = xMax; hall.zBack = zBack;
   // (owner, 2026-11-11: "remove the red wall as it ... makes it hard to know unless you turn to look, that there is more store that way")
   rwFull.visible = false; rwShort.visible = false; rwUp.visible = false;
-  const G = hall.g = new THREE.Group(); scene.add(G);
+  const G = hall.g = new THREE.Group(); scene.add(G); hall.flick = [];
   const fl = pl(W_, D_, lam({ map: ctex(256, 256, drawCarpet, [W_ * 1.1, D_ * 1.1]) }), xc, 0, zc, 0, G); fl.rotation.x = -PI / 2;
   const ce = pl(W_, D_, lam({ map: ctex(128, 128, drawCeil, [W_ * 1.65, D_ * 1.65]) }), xc, CEIL, zc, 0, G); ce.rotation.x = PI / 2;
   const wall = (len) => lam({ map: ctex(512, 1024, drawWall, [Math.max(1, Math.round(len)), 1]) });
@@ -2159,9 +2164,16 @@ function buildHall(list) {
       for (let k = 0; k < sec.count; k++) { const p = slotPos(a, sec, k); d2.position.set(p.x, p.y, p.z + (q() - .5) * .03); d2.rotation.set(0, p.ry, 0); d2.scale.set(.8 + q() * .4, .7 + q() * .45, 1); d2.updateMatrix(); inst.setMatrixAt(sec.off + k, d2.matrix); col.setHSL(q(), .25 + q() * .35, .3 + q() * .3); inst.setColorAt(sec.off + k, col); }
       // its sign on top of the shelving where it starts, and a divider down the shelves
       const fw = sec.left ? -1 : 1, p0 = slotPos(a, sec, 0), sd = p0.left ? -1 : 1, w = Math.min(1.1, sec.cols * hall.colW - .04), zs = p0.z + fw * (w / 2 - hall.colW / 2 + .02);
-      const st = ctex(560, 96, (g, cw, ch) => drawSecSign(g, cw, ch, sec)), lu = secLogo(a, sec);
-      pl(w, .19, new THREE.MeshBasicMaterial({ map: st }), cx + sd * .985, 2.135, zs, p0.left ? PI / 2 : -PI / 2, G);
-      if (lu) loadImg(lu).then((im) => { drawSecSign(st.image.getContext('2d'), 560, 96, sec, im); st.needsUpdate = true; kick(); }).catch(() => {});
+      // The light box repeats over every bay of the section, so what you are looking at is always named above it
+      // (owner, 2026-11-12: "Keep these shelving headers going above the products below if it's still the same
+      // product"). The odd one flickers like a tube on its way out.
+      const st = ctex(640, 168, (g, cw, ch) => drawSecSign(g, cw, ch, sec)), lu = secLogo(a, sec), sm0 = new THREE.MeshBasicMaterial({ map: st });
+      for (let c = 0; c < sec.cols; c += 4) {
+        const left = sec.cols - c; if (c && left < 3) break; const sw = Math.min(1.16, left * hall.colW - .04), pz = slotPos(a, sec, c * 6).z + fw * (sw / 2 - hall.colW / 2 + .02);
+        let mat = sm0; if (seed('flick' + a.key + sec.key + c)() < .09) { mat = new THREE.MeshBasicMaterial({ map: st }); hall.flick.push(mat); }
+        pl(sw, .3, mat, cx + sd * .985, 2.19, pz, p0.left ? PI / 2 : -PI / 2, G); bx(.03, .32, sw + .02, steel, cx + sd * 1.003, 2.19, pz, G);
+      }
+      if (lu) loadImg(lu).then((im) => { drawSecSign(st.image.getContext('2d'), 640, 168, sec, im); st.needsUpdate = true; kick(); }).catch(() => {});
       bx(.44, 1.84, .012, cream, cx + sd * 1.22, 1.07, p0.z - fw * hall.colW / 2, G);
     });
     G.add(inst);
@@ -2212,6 +2224,12 @@ function buildHall(list) {
     put('vallejo', aCx(iG) + 1.45); put('citadel', iW > 0 ? aCx(iW) - 1.45 : aCx(iW) + 1.45); put('army', aCx(iW) + 1.22 + (iW > 0 ? 0 : .9));
     hobbyHits.forEach((m) => { const k = hot.indexOf(m); if (k > -1) hot.splice(k, 1); kill(m); }); hobbyHits = []; hall.paints = true; hall.iW = iW; }
   buildStandee(G, xMax - .75, hall.zf + .55); loadEvents();
+  // the flickering boxes: every so often one stutters for a moment; frames are only drawn while one does, and only in the aisles
+  if (hall.flick.length && !reduce) setInterval(() => {
+    if (S.mode !== 'aisle' && S.mode !== 'aisles') return; const now = performance.now(); let any = false;
+    hall.flick.forEach((m, i) => { const u = m.userData; if (!u.until && Math.random() < .035) u.until = now + 350 + Math.random() * 900; if (u.until) { any = true; if (now > u.until) { u.until = 0; m.color.setScalar(1); } else m.color.setScalar(Math.random() < .45 ? .18 + Math.random() * .25 : 1); } });
+    if (any) kick();
+  }, 80);
   $('#aislesN').textContent = n; $('#aislesN').hidden = false; lights(S.eve); ui(); kick();
 }
 function loadAisles() {
