@@ -127,7 +127,7 @@ function tape(g, w, h, text, font, rot) {  // a strip of masking tape with marke
 const fonts = Promise.race([Promise.all(['700 20px "Cutive Mono"', '20px "Permanent Marker"', '700 20px Caveat', '20px "Special Elite"'].map((f) => document.fonts.load(f))), new Promise((r) => setTimeout(r, 2500))]).catch(() => {});
 
 /* ---------- card images: straight from the shop's CDN, through the worker when a host refuses ---------- */
-const badHost = new Set(['images.binderpos.com', 'images.ygoprodeck.com']);   // sends no CORS header (live probe 42694107805, 2026-11-09), so its pictures go through the worker from the start
+const badHost = new Set(['images.binderpos.com', 'images.ygoprodeck.com', 'product-images.tcgplayer.com']);   // sends no CORS header (live probe 42694107805, 2026-11-09), so its pictures go through the worker from the start
 // Pictures are kept for a while once fetched, a fetch that hangs is given up on after 12 s, and one that fails is
 // tried once more (owner, 2026-11-12, thumbing a box on a phone connection: "It was loading images it seemed to
 // have stopped after some scrolling" - every card passed had its picture asked for, and the one in front waited

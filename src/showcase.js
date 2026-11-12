@@ -76,7 +76,9 @@ const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods
 // first and comes here when that fails: GET /showcase/img?u=<https url on the
 // shop's CDN or BinderPOS's image host>. Nothing else is fetched, redirects are
 // not followed, and only an image comes back.
-const IMG_HOSTS = new Set(["cdn.shopify.com", "images.binderpos.com", "svgs.scryfall.io", "images.pokemontcg.io", "images.ygoprodeck.com"]);   // the last three: set logos (src/setlogos.js)
+// product-images.tcgplayer.com: about two in five of a set's cards carry their picture there, and the page's request
+// for them was refused here with 400, so they stayed blank (owner, 2026-11-12: "Still seems to be happening"; live probe 43140347312)
+const IMG_HOSTS = new Set(["cdn.shopify.com", "images.binderpos.com", "product-images.tcgplayer.com", "svgs.scryfall.io", "images.pokemontcg.io", "images.ygoprodeck.com"]);   // the last three: set logos (src/setlogos.js)
 export function imgTarget(u) {
   try { const x = new URL(String(u || "")); return x.protocol === "https:" && IMG_HOSTS.has(x.hostname) && !x.username && !x.password && !x.port ? x.toString() : null; } catch { return null; }
 }

@@ -121,3 +121,8 @@ test("serveShowcaseImg: only https pictures from the shop's CDN and BinderPOS's 
   r = await serveShowcaseImg(new Request("https://w.example/showcase/img?u=" + encodeURIComponent("https://cdn.shopify.com/a.png")), {}, {}, { fetchFn: async () => { throw new Error("down"); } }); assert.equal(r.status, 502);
   assert.equal((await serveShowcaseImg(new Request("https://w.example/showcase/img", { method: "OPTIONS" }), {}, {}, {})).status, 204);
 });
+
+test("the picture proxy serves the feed's tcgplayer pictures too", () => {
+  assert.equal(imgTarget("https://product-images.tcgplayer.com/559998.jpg"), "https://product-images.tcgplayer.com/559998.jpg");
+  assert.equal(imgTarget("https://evil.example/559998.jpg"), null);
+});
