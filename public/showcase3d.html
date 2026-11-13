@@ -119,6 +119,14 @@ body[data-hand] .panel{display:block}
   .nav{gap:5px 4px;flex-wrap:wrap;overflow:visible;justify-content:center}.nav button{font-size:12.5px;padding:5px 7px 4px;white-space:nowrap}
   .cap{bottom:calc(176px + env(safe-area-inset-bottom));width:92vw}.cap strong{font-size:15px}
 }
+/* a phone on its side: the caption stands beside the card, not on it, and the place tabs make way */
+@media (orientation:landscape) and (max-height:520px){
+  body[data-mode=crate] #nav{display:none}
+  body[data-mode=crate] .cap{left:auto;right:max(10px,env(safe-area-inset-right));transform:none;bottom:auto;top:calc(64px + env(safe-area-inset-top));width:min(250px,30vw);max-width:none;text-align:left}
+  body[data-mode=crate] .cap strong{display:block;font-size:15px}body[data-mode=crate] .cap span{display:block;font-size:12.5px}
+  body[data-mode=crate] #capBuy{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));left:max(10px,env(safe-area-inset-left))}
+  body[data-mode=crate] .bot{padding-top:6px}
+}
 #liftCond h3{font-family:"Special Elite",monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--tape);margin:14px 0 6px}#liftCond p{font-size:13px;line-height:1.5;color:var(--muted)}#liftCond em{color:var(--ink);font-style:normal}#liftCond a{color:var(--ember)}
 /* sheets: the set list of a box, the pile by the till */
 .sheet{position:fixed;inset:0;z-index:10;background:#0a0809f0;display:none;flex-direction:column;padding:calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom))}

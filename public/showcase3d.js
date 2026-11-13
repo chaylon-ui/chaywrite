@@ -1577,8 +1577,9 @@ function updateCrate(c) {
   if (c === cr) caption();
 }
 function crateView(c) {
-  const p = c.ps[c.lane], fov = baseFov(), tv = Math.tan(rad(fov / 2)), d = Math.max(CW / (.62 * 2 * tv * cam.aspect), CH / (.46 * 2 * tv)), el = .84;
-  const T = new V3(c.at.x + laneX(c, c.lane), c.at.y + .034 + CH * .38, c.at.z + baseZ(c, p) - .012);
+  const p = c.ps[c.lane], fov = baseFov(), tv = Math.tan(rad(fov / 2)), wide = canvas.clientHeight < 520 && cam.aspect > 1.3,   /* a phone on its side (owner, 2026-11-13: "Widescreen mobile the boxes are almost impossible to look through") : the card fills the height, with the caption beside it */
+    d = Math.max(CW / (.62 * 2 * tv * cam.aspect), CH / ((wide ? .74 : .46) * 2 * tv)), el = .84;
+  const T = new V3(c.at.x + laneX(c, c.lane), c.at.y + .034 + CH * (wide ? .46 : .38), c.at.z + baseZ(c, p) - .012);
   return lookView(new V3(T.x, T.y + d * Math.sin(el), T.z + d * Math.cos(el)), T, fov);
 }
 function enterCrate(c, drop) {
