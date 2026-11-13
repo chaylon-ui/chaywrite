@@ -44,7 +44,7 @@ a{color:inherit}
 .ctx button:disabled{opacity:.35}
 .ctx .ttl img{height:20px;max-width:60px;object-fit:contain;vertical-align:-5px;margin-right:7px;background:#fbf7ec;border-radius:4px;padding:2px 4px}
 .ctx .ttl{font-family:"Special Elite",monospace;font-size:13px;color:var(--tape);padding:0 4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body[data-mode=ask] #ctxAsk,body[data-mode=arcade] #ctxArcade,body[data-mode=stack] #ctxStack,body[data-mode=dunk] #ctxDunk,body[data-mode=line] #ctxLine,body[data-mode=arcades] #ctxArcades,body[data-mode=tv] #ctxTv,body[data-mode=aisles] #ctxAisles,body[data-mode=aisle] #ctxAisle,body[data-mode=hobby] #ctxHobby,body[data-mode=rack] #ctxHobby,body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
+body[data-mode=ask] #ctxAsk,body[data-mode=arcade] #ctxArcade,body[data-mode=stack] #ctxStack,body[data-mode=dunk] #ctxDunk,body[data-mode=catch] #ctxCatch,body[data-mode=line] #ctxLine,body[data-mode=arcades] #ctxArcades,body[data-mode=tv] #ctxTv,body[data-mode=aisles] #ctxAisles,body[data-mode=aisle] #ctxAisle,body[data-mode=hobby] #ctxHobby,body[data-mode=rack] #ctxHobby,body[data-mode=case] #ctxCase,body[data-mode=crate] #ctxCrate,body[data-mode=boxes] #ctxBoxes{display:flex}
 .nav{display:flex;gap:6px;justify-content:safe center;overflow-x:auto;scrollbar-width:none;padding:5px 4px 3px}
 .nav::-webkit-scrollbar{display:none}
 .nav button{flex:0 0 auto;white-space:nowrap}
@@ -201,6 +201,7 @@ body[data-hand] .panel{display:block}
   <div class="ctx" id="ctxAisles"></div>
   <div class="ctx" id="ctxArcades"></div>
   <div class="ctx" id="ctxLine"><button type="button" id="linBack">‹ Back</button><span class="ttl">LINE RUSH · hold a side to walk · tap to shove</span></div>
+  <div class="ctx" id="ctxCatch"><button type="button" id="cthBack">‹ Back</button><span class="ttl">CARD CATCH · tap a card to throw</span></div>
   <div class="ctx" id="ctxDunk"><button type="button" id="dnkBack">‹ Back</button><span class="ttl">SCALPER DUNK · tap where to throw</span></div>
   <div class="ctx" id="ctxStack"><button type="button" id="stkBack">‹ Back</button><span class="ttl">BOX STACK · drag · tap turns · swipe down drops</span></div>
   <div class="ctx" id="ctxTv"><button type="button" id="tvBack">‹ Back</button><a href="https://exorgames.com/pages/sell-to-exor-games-bulk-or-create-a-list" target="_blank" rel="noopener">Sell us your cards ↗</a></div>

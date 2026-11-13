@@ -683,6 +683,81 @@ function flagHang(parent, n, x, y, z, ry, w, hung) {
   return m;
 }
 
+/* ---------- the little TV by the counter: CARD CATCH (owner, 2026-11-13) ----------
+   "Could you make this into a duck hunt game but instead of ducks it is pokemon and you are throwing pokeballs
+   at them". An original shooting gallery, not a copy of that game: the shop's own Pokemon CARDS (their photos,
+   from the showcase feed) flutter up out of tall grass and you throw catch-balls at them. Ten cards a round,
+   three balls a card; catch six to go on to a faster round. Tap where to throw - the ball takes a moment. */
+const cth = { state: 'attract', t: 0, round: 1, n: 0, got: 0, score: 0, hi: 0, balls: 3, tg: null, shot: null, marks: [], wait: 0, msg: '', msgT: 0 };
+cth.cv = document.createElement('canvas'); cth.cv.width = 480; cth.cv.height = 384; cth.g = cth.cv.getContext('2d');
+cth.tex = keep(new THREE.CanvasTexture(cth.cv)); cth.tex.colorSpace = THREE.SRGBColorSpace; cth.tex.magFilter = THREE.NearestFilter;
+try { cth.hi = Number(localStorage.getItem('xgCardCatchHi')) || 0; } catch (x) {}
+const CTH = { x: 3.468, y: .67, z: -2.3, w: .42, h: .32 };   // the screen: faces the shop (-x), its right-hand side towards +z
+const cthIms = () => flagList.poke.filter((f) => f && f.im).map((f) => f.im);
+function cthNew() { cth.state = 'play'; cth.round = 1; cth.n = 0; cth.got = 0; cth.score = 0; cth.marks = []; cth.tg = null; cth.shot = null; cth.wait = .6; cth.msg = 'ROUND 1'; cth.msgT = 1.2; }
+function cthSpawn() {
+  const ims = cthIms(), sp = 42 + cth.round * 12, dir = Math.random() < .5 ? -1 : 1;
+  cth.tg = { x: 40 + Math.random() * 160, y: 138, vx: dir * sp * (.6 + Math.random() * .5), vy: -sp * (.55 + Math.random() * .4), age: 0, life: Math.max(3.2, 6.2 - cth.round * .5), im: ims.length ? ims[Math.floor(Math.random() * ims.length)] : null, hue: Math.floor(Math.random() * 360), caught: 0, gone: 0, turn: .5 + Math.random() };
+  cth.balls = 3;
+}
+function cthThrow(gx, gy) { if (cth.state !== 'play' || cth.shot || !cth.tg || cth.tg.caught || cth.tg.gone || cth.balls < 1) return; cth.balls--; cth.shot = { x: clamp(gx, 6, 234), y: clamp(gy, 20, 150), t: 0 }; arcBlip(520, .1, .02); }
+function cthEnd(ok) { cth.marks.push(ok ? 1 : 0); cth.n++; if (ok) cth.got++; cth.tg = null; cth.shot = null; cth.wait = .7;
+  if (cth.n >= 10) { if (cth.got >= 6) { cth.round++; cth.n = 0; cth.got = 0; cth.marks = []; cth.msg = 'ROUND ' + cth.round; cth.msgT = 1.6; cth.wait = 1.6; arcBlip(990, .3, .04); }
+    else { cth.state = 'over'; cth.overAt = cth.t; if (cth.score > cth.hi) { cth.hi = cth.score; try { localStorage.setItem('xgCardCatchHi', String(cth.hi)); } catch (x) {} } } } }
+function cthStep(dt) {
+  cth.t += dt; cth.msgT = Math.max(0, cth.msgT - dt); if (cth.state !== 'play') return;
+  const tg = cth.tg;
+  if (!tg) { cth.wait -= dt; if (cth.wait <= 0) cthSpawn(); return; }
+  if (tg.caught) { tg.caught += dt; if (tg.caught > .9) cthEnd(true); return; }
+  tg.age += dt;
+  if (tg.gone || (tg.age > tg.life && !cth.shot) || (!cth.balls && !cth.shot)) { if (!tg.gone) { tg.gone = .001; arcBlip(150, .25, .03); } tg.gone += dt; tg.y -= 150 * dt; if (tg.y < -30) cthEnd(false); return; }
+  tg.turn -= dt; if (tg.turn <= 0) { tg.turn = .5 + Math.random() * .9; if (Math.random() < .6) tg.vx = -tg.vx; tg.vy = -tg.vy * (.7 + Math.random() * .6); }
+  tg.x += tg.vx * dt; tg.y += tg.vy * dt;
+  if (tg.x < 16) { tg.x = 16; tg.vx = Math.abs(tg.vx); } if (tg.x > 224) { tg.x = 224; tg.vx = -Math.abs(tg.vx); }
+  if (tg.y < 30) { tg.y = 30; tg.vy = Math.abs(tg.vy); } if (tg.y > 122) { tg.y = 122; tg.vy = -Math.abs(tg.vy); }
+  if (cth.shot) { cth.shot.t += dt / .38; if (cth.shot.t >= 1) { const ok = Math.abs(cth.shot.x - tg.x) < 15 && Math.abs(cth.shot.y - tg.y) < 19; cth.shot = null;
+    if (ok) { tg.caught = .001; cth.score += 100 * cth.round + cth.balls * 50; arcBlip(880, .14, .04); } else arcBlip(200, .08, .02); } }
+}
+function cthBall(g, x, y, r) {   // the catch-ball: a yellow ball with the shop's red star on it - a design of its own
+  g.fillStyle = '#14100e'; g.beginPath(); g.arc(x, y, r + .8, 0, PI * 2); g.fill(); g.fillStyle = '#f2c230'; g.beginPath(); g.arc(x, y, r, 0, PI * 2); g.fill();
+  g.fillStyle = '#d62c28'; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -PI / 2 + i * PI / 5, q = (i % 2 ? .3 : .68) * r; g.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } g.closePath(); g.fill();
+}
+function cthDraw() {
+  const g = cth.g, W_ = 240, H_ = 192, f = Math.floor(cth.t * 2.5) % 2, tg = cth.tg; g.setTransform(2, 0, 0, 2, 0, 0); g.imageSmoothingEnabled = true; g.textBaseline = 'top';
+  g.fillStyle = '#58b8f8'; g.fillRect(0, 0, W_, H_); g.fillStyle = '#fff'; [[30, 34], [128, 50], [196, 28]].forEach((c) => { const x = (c[0] + cth.t * 3) % 280 - 30; g.fillRect(x, c[1], 40, 10); g.fillRect(x + 8, c[1] - 7, 22, 7); });
+  g.fillStyle = '#2f8f3e'; g.beginPath(); g.moveTo(0, 150); for (let x = 0; x <= W_; x += 30) g.quadraticCurveTo(x + 15, 118 + (x % 60 ? 8 : 0), x + 30, 150); g.fill();   // far bushes
+  g.fillStyle = '#6b4a2a'; g.fillRect(26, 84, 9, 60); g.fillStyle = '#2f8f3e'; g.beginPath(); g.arc(30, 78, 24, 0, PI * 2); g.fill();
+  if (tg && !tg.caught) {   // the card, flapping
+    const w = 22, h = 30, fl = Math.sin(cth.t * 16) * .18; g.save(); g.translate(tg.x, tg.y); g.rotate(tg.gone ? 0 : fl * (tg.vx < 0 ? -1 : 1)); g.scale(tg.gone ? 1 : .86 + Math.abs(Math.cos(cth.t * 9)) * .14, 1);
+    g.fillStyle = '#fff'; g.fillRect(-w / 2 - 1.5, -h / 2 - 1.5, w + 3, h + 3);
+    if (tg.im) g.drawImage(tg.im, -w / 2, -h / 2, w, h); else { g.fillStyle = 'hsl(' + tg.hue + ' 70% 55%)'; g.fillRect(-w / 2, -h / 2, w, h); g.fillStyle = '#ffffffc0'; g.beginPath(); g.arc(0, -3, 6, 0, PI * 2); g.fill(); }
+    g.restore();
+  }
+  if (tg && tg.caught) { const k = Math.min(1, tg.caught / .25), y = tg.y + Math.max(0, tg.caught - .25) * 150 * Math.max(0, tg.caught - .25) * 4; if (k < 1) { g.globalAlpha = 1 - k; g.fillStyle = '#fff'; g.beginPath(); g.arc(tg.x, tg.y, 20 * (1 - k) + 4, 0, PI * 2); g.fill(); g.globalAlpha = 1; } cthBall(g, tg.x, Math.min(150, y), 6); if (f) { g.fillStyle = '#ffd23a'; [[-11, -8], [11, -6], [0, -13]].forEach((s) => g.fillRect(tg.x + s[0], Math.min(150, y) + s[1], 2, 2)); } }
+  g.fillStyle = '#3fae4a'; g.fillRect(0, 146, W_, 46); g.fillStyle = '#2f8f3e'; for (let x = 0; x < W_; x += 6) { const hh = 10 + ((x * 37) % 9); g.beginPath(); g.moveTo(x, 150); g.lineTo(x + 3, 150 - hh); g.lineTo(x + 6, 150); g.fill(); }   // tall grass
+  g.fillStyle = '#226b2e'; g.fillRect(0, 160, W_, 32);
+  if (cth.shot) { const k = cth.shot.t, ax = lerp(120, cth.shot.x, k), ay = lerp(186, cth.shot.y, k) - Math.sin(k * PI) * 30; cthBall(g, ax, ay, lerp(9, 4, k)); }
+  g.fillStyle = '#000000b0'; g.fillRect(0, 0, W_, 14); g.font = '700 9px "Cutive Mono", monospace'; g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText('SCORE ' + cth.score, 6, 3); g.textAlign = 'center'; g.fillText(cth.state === 'attract' ? '' : 'ROUND ' + cth.round, 120, 3); g.textAlign = 'right'; g.fillText('BEST ' + Math.max(cth.hi, cth.score), W_ - 6, 3);
+  if (cth.state !== 'attract') {
+    for (let i = 0; i < 10; i++) { const m = cth.marks[i]; g.fillStyle = m === 1 ? '#ffd23a' : m === 0 ? '#7a2a26' : '#ffffff40'; g.fillRect(70 + i * 10, 178, 7, 9); }
+    for (let i = 0; i < cth.balls; i++) cthBall(g, 12 + i * 12, 182, 4.5);
+  }
+  g.textAlign = 'center';
+  if (cth.msgT && cth.state === 'play') { g.font = '900 18px Inter, sans-serif'; g.fillStyle = '#111'; g.fillText(cth.msg, 121, 71); g.fillStyle = '#ffd23a'; g.fillText(cth.msg, 120, 70); }
+  if (cth.state === 'attract') { g.font = '900 26px Inter, sans-serif'; g.fillStyle = '#111'; g.fillText('CARD CATCH', 121, 43); g.fillStyle = '#ffd23a'; g.fillText('CARD CATCH', 120, 42); g.font = '700 10px "Cutive Mono", monospace'; g.fillStyle = f ? '#14100e' : '#fff'; g.fillText(S.mode === 'catch' ? 'TAP TO START' : 'TAP TO PLAY', 120, 78); cthBall(g, 120, 108, 9); }
+  if (cth.state === 'over') { g.fillStyle = '#000000c0'; g.fillRect(40, 58, 160, 58); g.font = '900 18px Inter, sans-serif'; g.fillStyle = '#ff4f9a'; g.fillText('THEY GOT AWAY', 120, 64); g.font = '700 9px "Cutive Mono", monospace'; g.fillStyle = '#fff'; g.fillText('SCORE ' + cth.score + ' · ROUND ' + cth.round, 120, 88); g.fillStyle = f ? '#7dfff0' : '#fff'; g.fillText('TAP TO PLAY AGAIN', 120, 102); }
+  g.fillStyle = '#00000022'; for (let y = 0; y < H_; y += 3) g.fillRect(0, y, W_, 1);
+  cth.tex.needsUpdate = true;
+}
+const cthView = () => { const fov = 50, d = Math.max(.5, .25 / hTan(fov)); return lookView(new V3(CTH.x - d, CTH.y, CTH.z), new V3(CTH.x, CTH.y, CTH.z), fov); };
+function cthTap(x, y) {
+  if (cth.state === 'attract' || (cth.state === 'over' && cth.t - cth.overAt > .6)) { cthNew(); arcBlip(660, .2, .03); hint(''); return; }
+  const rc = canvas.getBoundingClientRect(), a = new V3(CTH.x, CTH.y + CTH.h / 2, CTH.z - CTH.w / 2).project(cam), b = new V3(CTH.x, CTH.y - CTH.h / 2, CTH.z + CTH.w / 2).project(cam), px = (v) => [(v.x + 1) / 2 * rc.width + rc.left, (1 - v.y) / 2 * rc.height + rc.top], A = px(a), B = px(b);
+  cthThrow((x - A[0]) / (B[0] - A[0]) * 240, (y - A[1]) / (B[1] - A[1]) * 192);
+}
+function cthRun() { cth.state = 'attract'; cth.last = 0; cth.tg = null; cth.shot = null; const id = cth.id = (cth.id || 0) + 1; anims.push((now) => { if (S.mode !== 'catch' || cth.id !== id) return false; const dt = cth.last ? Math.min(.05, (now - cth.last) / 1000) : 0; cth.last = now; cthStep(dt); cthDraw(); return true; }); kick(); }
+function cthStop() { cth.id = (cth.id || 0) + 1; cth.state = 'attract'; cth.tg = null; cth.shot = null; cthDraw(); kick(); }
+
 /* ---------- the third cabinet: SCALPER DUNK (owner, 2026-11-12) ----------
    "Add another arcade game called 'Scalper Dunk' where you throw apples to dunk scalpers in shark infested
    water. When you throw the apple and miss they taunt you with how much they are going to resell product for
@@ -921,12 +996,7 @@ function buildNineties() {
   // a console on the floor in front of its own TV, and two bean bags
   bx(.5, .42, .8, darkWoodM, 3.72, .21, -2.3, G); const tv2 = grp(3.7, .42, -2.3, -PI / 2);
   bx(.56, .46, .46, lam({ color: 0x8a8a86 }), 0, .23, 0, tv2);
-  pl(.42, .32, basic({ map: ctex(256, 196, (g, w, h) => {   // a made-up platform game
-    g.fillStyle = '#58b8f8'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; [[40, 40], [150, 60], [210, 30]].forEach((c) => { g.fillRect(c[0], c[1], 44, 12); g.fillRect(c[0] + 8, c[1] - 8, 26, 8); });
-    g.fillStyle = '#3fae4a'; g.fillRect(0, 156, w, 12); g.fillStyle = '#9a5a2c'; g.fillRect(0, 168, w, 28); g.fillStyle = '#c87a3a'; for (let i = 0; i < 3; i++) g.fillRect(96 + i * 20, 104, 18, 18);
-    g.fillStyle = PURP; g.fillRect(60, 132, 14, 24); g.fillStyle = '#ffd9b0'; g.fillRect(62, 124, 10, 10); g.fillStyle = YEL; g.beginPath(); g.arc(170, 96, 7, 0, PI * 2); g.fill(); g.beginPath(); g.arc(196, 96, 7, 0, PI * 2); g.fill();
-    g.fillStyle = '#fff'; g.font = '700 14px "Cutive Mono", monospace'; g.fillText('WORLD 1-2', 10, 16); scan(g, w, h);
-  }) }), 0, .25, .232, 0, tv2);
+  pl(.42, .32, basic({ map: cth.tex }), 0, .25, .232, 0, tv2); cthDraw(); hit(bx(.5, .5, .6, hitM, 3.66, .67, -2.3), 'catch');   // CARD CATCH plays on it
   bx(.3, .06, .22, lam({ color: 0x55555c }), 3.12, .03, -2.3, G); bx(.12, .02, .07, lam({ color: 0xb9b9bf }), 2.9, .012, -2.12, G); bx(.12, .02, .07, lam({ color: 0xb9b9bf }), 2.86, .012, -2.5, G);
   [[2.62, -2.78, 0x19b5a5], [2.55, -1.85, 0x7a3fc4]].forEach((b) => { const m = new THREE.Mesh(new THREE.SphereGeometry(.34, 18, 12), lam({ color: b[2] })); m.scale.set(1, .55, 1); m.position.set(b[0], .17, b[1]); G.add(m); });
 
@@ -2435,9 +2505,9 @@ const doorView = () => { const x = (S.x0 + 2.3) / 2, ph = cam.aspect < 1, v = lo
 const tillView = () => { const dx = cam.aspect < 1 ? 0 : .32; return lookView(new V3(1.95 + dx, 1.56, cam.aspect < 1 ? .5 : .25), new V3(2.02 + dx, 1.28, -1.2)); };
 const hobbyView = () => (hall.paints ? lookView(new V3(aCx(hall.iW) - 2.9, 1.6, 3.25), new V3(aCx(hall.iW) + .5, 1.05, hall.zf + .2), cam.aspect < 1 ? 82 : 62)   // from the hall, across the two racks at the Warhammer end
   : lookView(new V3(-1.4, 1.5, cam.aspect < 1 ? 1.9 : 1.4), new V3(-3.3, 1.05, -2.0), cam.aspect < 1 ? 80 : 58));
-function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcades' ? arcadesView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'dunk' ? cabView(CAB_Z.dunk) : S.mode === 'line' ? cabView(CAB_Z.line) : S.mode === 'tv' ? tvView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? wallView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
+function viewFor() { return S.mode === 'rack' && racks[S.rack] ? (psel.g && psel.r === racks[S.rack] && psel.k > -1 ? paintView(psel.r, psel.k) : rackView(racks[S.rack])) : S.mode === 'hobby' ? hobbyView() : S.mode === 'graded' ? gradedView() : S.mode === 'arcades' ? arcadesView() : S.mode === 'ask' ? tillView() : S.mode === 'arcade' ? arcadeView() : S.mode === 'stack' ? cabView(CAB_Z.stack) : S.mode === 'dunk' ? cabView(CAB_Z.dunk) : S.mode === 'line' ? cabView(CAB_Z.line) : S.mode === 'tv' ? tvView() : S.mode === 'catch' ? cthView() : S.mode === 'aisles' ? aislesView() : S.mode === 'aisle' ? aisleView() : S.mode === 'case' && S.lay.length ? caseView() : S.mode === 'boxes' ? wallView() : S.mode === 'crate' && cr ? crateView(cr) : S.mode === 'till' ? tillView() : doorView(); }
 function go(mode) {
-  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'dunk') dnkStop(); if (S.mode === 'line') linStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
+  leanOff(); closePaint(true); cabinetDoors(mode === 'graded'); if (S.mode === 'arcade') arcStop(); if (S.mode === 'stack') stkStop(); if (S.mode === 'dunk') dnkStop(); if (S.mode === 'line') linStop(); if (S.mode === 'tv') tvStop(); if (S.mode === 'catch') cthStop(); if (S.mode === 'ask') { askClear(); document.body.dataset.fan = ''; }
   if (S.hand) putBack(); $('#setsv').classList.remove('on'); $('#tillv').classList.remove('on');
   if (mode === 'case') { if (!S.shelves.length) return; S.mode = 'case'; glide(caseView()); hint(matchMedia('(pointer:coarse)').matches ? 'Swipe to walk the case · swipe up to crouch · pinch to lean in · tap a card' : 'Drag to walk the case · scroll to crouch · hold the mouse down to lean in · click a card'); }
   else if (mode === 'hobby') { S.mode = 'hobby'; S.side = 'left'; glide(hobbyView()); hint(hall.paints ? 'The paints are at the ends of the aisles · tap a rack, or pick one below' : 'Paints · tap a rack to look straight at it'); }
@@ -2452,6 +2522,7 @@ function go(mode) {
   else if (mode === 'line') { S.mode = 'line'; glide(cabView(CAB_Z.line), 800); linRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · hold right or left to walk · tap to shove' : 'Click to start · arrow keys walk · space shoves'); }
   else if (mode === 'dunk') { S.mode = 'dunk'; glide(cabView(CAB_Z.dunk), 800); dnkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · tap where to throw - lead the target' : 'Click to start · click where to throw - lead the target'); }
   else if (mode === 'stack') { S.mode = 'stack'; glide(cabView(CAB_Z.stack), 800); stkRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · drag to move · tap to turn · swipe down to drop' : 'Click to start · arrows move, up turns, space drops'); }
+  else if (mode === 'catch') { S.mode = 'catch'; flagLoad(); glide(cthView(), 800); cthRun(); hint(matchMedia('(pointer:coarse)').matches ? 'Tap to start · tap a card to throw at it' : 'Click to start · click a card to throw at it'); }
   else if (mode === 'tv') { S.mode = 'tv'; glide(tvView(), 900); tvRun(); hint(''); }
   else { S.mode = 'door'; S.look.yaw = S.look.pitch = 0; glide(doorView()); hint('Tap the glass case, the boxes, the bin or the till · drag to look around'); }
   ui();
@@ -2530,6 +2601,7 @@ function tap(x, y) {
   else if (S.mode === 'stack') return stkTap();
   else if (S.mode === 'dunk') return dnkTap(x, y);
   else if (S.mode === 'line') return linTap();
+  else if (S.mode === 'catch') return cthTap(x, y);
   else if (S.mode === 'tv') return;
   else if (S.mode === 'aisles') { const rk = hall.paints && pick(racks.map((r) => r.hitM).filter(Boolean), x, y); if (rk) return goRack(rk.object.userData.rack); const h = pick(hall.list.map((a) => a.hit), x, y); if (h) return goAisle(h.object.userData.aisle); }
   else if (S.mode === 'aisle') { const a = hall.list[S.aisle], h = pick(Array.from(a.live.values()).filter((m) => m.visible), x, y); if (h) return lift(h.object.userData.card, null); pick([a.hit], x, y);   // (sets the tap's ray; a tap that misses the products no longer jumps to the aisle behind the shelf)
@@ -2730,7 +2802,7 @@ document.addEventListener('click', (e) => {
   else if (b.id === 'capBuy') capBuy(b);
   else if (b.id === 'x') putBack();
   else if (b.id === 'pull') sheet(!$('#panel').classList.contains('open'));
-  else if (b.id === 'linBack' || b.id === 'dnkBack' || b.id === 'askBack' || b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
+  else if (b.id === 'linBack' || b.id === 'dnkBack' || b.id === 'cthBack' || b.id === 'askBack' || b.id === 'arcBack' || b.id === 'stkBack' || b.id === 'tvBack' || b.id === 'crBack' || b.id === 'setsBack' || b.id === 'tillBack') back();
   else if (b.id === 'crPrevSet') openSet(boxes.setIdx - 1);
   else if (b.id === 'crNextSet') openSet(boxes.setIdx + 1);
   else if (b.id === 'crLaneL') crateLane(-1);
@@ -2753,4 +2825,4 @@ function load(game) {
   }).catch(() => { S.busy = false; st.classList.remove('off'); st.textContent = 'Could not reach the shop. Try again in a minute.'; });
 }
 fonts.then(() => { buildRoom(); buildCabinet(); buildNineties(); loadKits(); loadPaints(); resize(); load(new URLSearchParams(location.search).get('game') || ''); });
-window.xgShop = { gcab, hall, lin, linTap, linDraw, linStepT: linStep, dnk, dnkTap, dnkThrow, dnkDraw, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, ppl, evPosters, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
+window.xgShop = { cth, cthTap, cthThrow, cthDraw, gcab, hall, lin, linTap, linDraw, linStepT: linStep, dnk, dnkTap, dnkThrow, dnkDraw, askFor, fan, fanTo, openProduct, prod, arc, arcTap, stk, stkTap, stkMove, stkDown, tv, tvDraw, flagList, ppl, evPosters, hallTo, hallStep, goAisle, goSec, aisleTurn, aisleTo, aisleWalk, aisleSec, racks, paints, psel, goRack, openPaint, closePaint, potAt, lean, leanStart, leanTo, leanAnim, pick, tap, hot, S, go, goShelf, lift, putBack, flickTo, crateLane, openBox, openSet, toggleLights, ding, view, get crate() { return cr; }, get cards() { return caseCards; }, get boxMeshes() { return boxMeshes; }, get sealMeshes() { return sealMeshes; }, cam, kick };
