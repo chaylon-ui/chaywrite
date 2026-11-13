@@ -153,7 +153,7 @@ function loadImg(url, again) {
 // One texture per card: the toploader, the card inside it and the kiosk's
 // three labels (price-gun sticker, Holo/foil in blue ink, condition in red).
 function sticker(g, w, text, o) {
-  g.save(); g.font = o.font; const tw_ = g.measureText(text).width, bw = tw_ + w * .06, bh = w * .145;
+  g.save(); g.font = o.font; const tw_ = g.measureText(text).width, bw = tw_ + w * .06, bh = o.bh || w * .145;
   g.translate(Math.max(bw / 2, (o.right != null ? o.right : w - w * .025) - bw / 2), o.y + bh / 2); g.rotate(o.rot);
   g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = w * .02; g.shadowOffsetY = w * .006; g.fillStyle = '#fbf7ec'; rr(g, -bw / 2, -bh / 2, bw, bh, w * .014); g.fill();
   g.shadowColor = 'transparent'; g.fillStyle = o.ink; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 0, bh * .07); g.restore();
@@ -220,7 +220,9 @@ function drawWear(g, x, y, cw, ch, lvl, key, foil, light) {
 function drawCard(g, w, h, c, im) {
   const q = seed(keyOf(c) + '|st');
   g.clearRect(0, 0, w, h); rr(g, 0, 0, w, h, w * .03); g.fillStyle = '#d7dfe2'; g.fill();
-  const m = w * .05, x = m, y = m * 1.6, cw = w - 2 * m, chh = h - y - m;
+  // (owner, 2026-11-13: "Prices are covering mana cost"): the stickers sit in a strip of the toploader ABOVE the card,
+  // side by side, so nothing printed on the card is under them; the card is a touch smaller to make the room.
+  const m = w * .05, y = w * .15, chh = h - y - m, cw = chh * (w - 2 * m) / (h - m * 2.6), x = (w - cw) / 2;
   g.save(); rr(g, x, y, cw, chh, w * .035); g.clip();
   if (im) { const s = Math.max(cw / im.width, chh / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, x + (cw - iw) / 2, y + (chh - ih) / 2, iw, ih); }
   else { g.fillStyle = '#241a1c'; g.fillRect(x, y, cw, chh); g.fillStyle = '#e8dcb8'; g.font = Math.round(w * .1) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; wrapText(g, c.name, x + cw / 2, y + chh * .42, cw * .86, w * .125, 5); }
@@ -234,14 +236,14 @@ function drawCard(g, w, h, c, im) {
   if (!c.sealed) { const lv = wearLevel(c); if (lv) drawWear(g, x, y, cw, chh, lv, String(c.name) + '|' + String(c.set) + (c.foil ? '|foil' : ''), !!c.foil, !!im && lightBorder(g, x, y, cw, chh)); }
   g.restore();
   const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, 'rgba(255,255,255,.18)'); gr.addColorStop(.35, 'rgba(255,255,255,0)'); gr.addColorStop(.62, 'rgba(255,255,255,.07)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  let sy = h * .03;
-  sy = sticker(g, w, gunPrice(c.price), { font: '700 ' + Math.round(w * .105) + 'px "Cutive Mono", monospace', ink: '#1b2a55', y: sy, rot: (q() - .5) * .16 });
-  if (c.foil) sy = sticker(g, w, c.game === 'pokemon' ? 'Holo' : 'foil', { font: '700 ' + Math.round(w * .13) + 'px Caveat, cursive', ink: '#1d4fc4', y: sy, rot: (q() - .5) * .2 });
-  const cd = cond(c); if (cd) sticker(g, w, cd, { font: '700 ' + Math.round(w * .115) + 'px Caveat, cursive', ink: '#b3261e', y: sy, rot: (q() - .5) * .2 });
+  let rx = w - x; const bh = w * .118, row = (text, font, ink, rot) => { g.font = font; const bw = g.measureText(text).width + w * .06; sticker(g, w, text, { font, ink, y: w * .017, rot, right: rx, bh }); rx -= bw + w * .018; };
+  row(gunPrice(c.price), '700 ' + Math.round(w * .088) + 'px "Cutive Mono", monospace', '#1b2a55', (q() - .5) * .05);
+  const cd = cond(c); if (cd) row(cd, '700 ' + Math.round(w * .1) + 'px Caveat, cursive', '#b3261e', (q() - .5) * .08);
+  if (c.foil) row(c.game === 'pokemon' ? 'Holo' : 'foil', '700 ' + Math.round(w * .108) + 'px Caveat, cursive', '#1d4fc4', (q() - .5) * .08);
 }
 function drawBack(g, w, h) {
   rr(g, 0, 0, w, h, w * .03); g.fillStyle = '#d7dfe2'; g.fill(); const m = w * .05;
-  rr(g, m, m * 1.6, w - 2 * m, h - m * 2.6, w * .035); g.fillStyle = '#2b1a20'; g.fill(); noise(g, w, h, 1500, ['#3a252c', '#20131a'], .25);
+  { const y = w * .15, chh = h - y - m, cw = chh * (w - 2 * m) / (h - m * 2.6); rr(g, (w - cw) / 2, y, cw, chh, w * .035); } g.fillStyle = '#2b1a20'; g.fill(); noise(g, w, h, 1500, ['#3a252c', '#20131a'], .25);
   g.save(); g.translate(w / 2, h * .48); g.rotate(-.06); g.fillStyle = '#e8dcb8'; g.fillRect(-w * .36, -h * .05, w * .72, h * .1); g.fillStyle = '#2a1c0e'; g.font = Math.round(w * .085) + 'px "Permanent Marker", cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('EXOR GAMES', 0, 0); g.restore();
 }
 // A sealed booster box is its product photo cut out of the photo's white
