@@ -2390,7 +2390,8 @@ function aislesView() {
   if (S.hs < 0) return lookView(new V3(hall.x0 + .5, 1.7, ph ? 3.3 : 3.05), new V3(hall.x0 + .5 + (ph ? 2.1 : 2.4), ph ? 1.4 : 1.62, hall.zf - (ph ? .5 : 1.0)), ph ? 82 : 62);
   const cx = aCx(S.hs); return lookView(new V3(cx, 1.62, 3.3), new V3(cx, 1.25, hall.zf - 6), ph ? 80 : 58);
 }
-function hallStep(d) { const n = hall.list.length, to = clamp((S.hs == null ? -1 : S.hs) + d, -1, n - 1); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
+// (owner, 2026-11-13: "Swiping should bring back to door view"): a swipe back past the first stop walks out to the door
+function hallStep(d) { const n = hall.list.length, cur = S.hs == null ? -1 : S.hs; if (d < 0 && cur <= -1) { hint(''); go('door'); return; } const to = clamp(cur + d, -1, n - 1); S.hs = to; glide(aislesView(), 520); hint(''); ui(); }
 function hallTo(i) { S.hs = i; setView(aislesView()); }
 // In an aisle you stand S.as metres along its ribbon: down the left shelf, round at the far end, back up the right.
 function aisleView() {
