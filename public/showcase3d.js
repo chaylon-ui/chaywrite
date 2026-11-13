@@ -2218,6 +2218,7 @@ function buildHall(list) {
         hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, Ls, steel, xf + sd * .22, y - .009, zs, G); bx(.012, .034, Ls, yellow, xf + sd * .004, y - .017, zs, G); });
         for (let z = hall.zf; z > hall.zf - Ls + .3; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
         bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - Ls, G);
+        bx(.47, 2.02, .03, red, xf + sd * .225, 1.01, hall.zf + .015, G);   /* an end panel at the mouth: from the hall you saw along the bare shelf boards past the first column (owner, 2026-11-12: "half empty shelves on the front of the aisles") */
       }
       const gap = a.L - Ls;
       if (gap > .9) {
