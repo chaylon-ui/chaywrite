@@ -172,6 +172,10 @@ const COND_GUIDE = [
   ['Moderately Played', 'Moderate wear, still suitable for sleeve play: moderate edge wear or whitening, corners with moderate wear or minor creases, noticeable scuffing or light scratches.'],
   ['Heavily Played', 'Significant wear, but intact and lying flat: significant edge wear and whitening, worn corners, scuffing or scratches; major creases, fading or minor staining may be present.', 'Foils show significant clouding or wear.'],
   ['Damaged', 'Major flaws: heavy scratches, staining or indents, frayed edges or tears, heavy corner wear, major creases or bends, possibly water damage or writing.', 'Foils in this condition are typically not tournament-legal.']];
+// (owner, 2026-11-13: "When a card shows up with the condition issues put a line at bottom that the card condition is
+// simulated and can vary from the actual condition of the card")
+const SIM_NOTE = 'Condition shown is simulated - the actual card\u2019s wear can vary.';
+function simNote(sel, c) { const el = $(sel); if (!el) return; const on = !!c && !c.sealed && wearLevel(c) > 0; el.hidden = !on; el.textContent = on ? SIM_NOTE : ''; }
 function wearLevel(c) { const t = String((c && c.condition) || '').toLowerCase(); return /damaged|\bdmg\b/.test(t) ? 4 : /heav/.test(t) ? 3 : /moder/.test(t) ? 2 : /light/.test(t) ? 1 : 0; }
 function drawWear(g, x, y, cw, ch, lvl, key, foil) {
   if (!lvl) return; const q = seed(key + '|wear'), u = cw / 340, rnd = (a, b) => a + q() * (b - a);
@@ -1575,8 +1579,9 @@ function flickTo(p, ms) {
 function crateLane(d) { const c = cr; if (!c) return; const l = clamp(c.lane + d, 0, c.n - 1); if (l === c.lane) return; c.lane = l; c.anim = (c.anim || 0) + 1; updateCrate(c); glide(crateView(c), 380); ui(); }
 function caption() {
   const c = cr; if (!c) return; const ln = c.lanes[c.lane];
-  if (Math.round(c.ps[c.lane]) >= ln.length) { const w = endWhat(c); $('#capName').textContent = 'End of row ' + (c.lane + 1) + (c.n > 1 ? ' of ' + c.n : ''); $('#capSet').textContent = w === 'row' ? 'tap the sign for the next row' : w === 'set' ? 'that is the whole set · tap the sign for the next set' : w === 'first' ? 'that is the whole set · tap the sign for the first row' : 'that is the whole set'; $('#capBuy').hidden = true; $('#capTip').hidden = true; capCard = null; return; }
+  if (Math.round(c.ps[c.lane]) >= ln.length) { const w = endWhat(c); $('#capName').textContent = 'End of row ' + (c.lane + 1) + (c.n > 1 ? ' of ' + c.n : ''); simNote('#capSim', null); $('#capSet').textContent = w === 'row' ? 'tap the sign for the next row' : w === 'set' ? 'that is the whole set · tap the sign for the next set' : w === 'first' ? 'that is the whole set · tap the sign for the first row' : 'that is the whole set'; $('#capBuy').hidden = true; $('#capTip').hidden = true; capCard = null; return; }
   $('#capTip').hidden = false; const i = clamp(Math.round(c.ps[c.lane]), 0, ln.length - 1), k = ln[i];
+  simNote('#capSim', k);
   $('#capName').textContent = k.name; $('#capSet').textContent = [k.set, condText(k), money(k.price), (i + 1) + ' of ' + ln.length + (c.n > 1 ? ' · row ' + (c.lane + 1) + ' of ' + c.n : '')].filter(Boolean).join(' · ');
   // the quick button (owner, 2026-11-11: "Add an 'set it by the til' quick button here"): the card in front goes to the pile without picking it up
   const b = $('#capBuy'), done = inPile(k); capCard = k; b.hidden = !k.variantId; b.disabled = done; b.textContent = done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till');
@@ -1685,7 +1690,7 @@ const strip = (title, list) => (list.length ? '<h3>' + title + '</h3><div class=
 let liftSeq = 0, copiesSeq = 0;
 function fillPanel(c) {
   $('#liftName').textContent = c.name; $('#liftSet').textContent = [c.set, condText(c), c.foil ? (c.game === 'pokemon' ? 'Holo' : 'Foil') : '', money(c.price)].filter(Boolean).join(' · ');
-  acts(c); minis = [];
+  acts(c); minis = []; simNote('#liftSim', c); simNote('#handSim', c);
   if (c.sealed) { ++liftSeq; ++copiesSeq; $('#liftSet').textContent = (c.slab ? ['Graded card', c.grade, c.ask ? 'price on request' : money(c.price), c.back ? 'drag to turn it over' : ''] : [c.set || 'Sealed', c.qty ? c.qty + ' in stock' : '', money(c.price)]).filter(Boolean).join(' · '); $('#liftCopies').innerHTML = $('#liftCond').innerHTML = $('#liftAlike').innerHTML = $('#liftMore').innerHTML = ''; return; }
   { const lv = wearLevel(c), gd = /near mint|\bnm\b/i.test(String(c.condition || '')) || lv ? COND_GUIDE[lv] : null;
     $('#liftCond').innerHTML = gd ? '<h3>' + esc(gd[0]) + (c.foil ? ' · foil' : '') + '</h3><p>' + esc(gd[1]) + (c.foil && gd[2] ? ' ' + esc(gd[2]) : '') + (lv ? ' <em>The marks drawn on this card illustrate the grade; they are not a picture of this copy.</em>' : '') + ' <a href="https://exorgames.com/pages/grading-guide"' + (ON_STORE ? '' : ' target="_blank" rel="noopener"') + '>Grading guide' + (ON_STORE ? '' : ' ↗') + '</a></p>' : ''; }
@@ -1818,6 +1823,7 @@ function askClear() { fan.seq++; fan.live.forEach((m) => { const t = m.material.
 function askBar() {
   const n = fan.rows.length, i = clamp(Math.round(fan.p), 0, Math.max(0, n - 1)), k = fan.rows[i];
   $('#askTtl').textContent = n ? '“' + fan.q + '” · ' + n + (n === 1 ? ' copy' : ' copies') + ' in stock' : '“' + fan.q + '”';
+  simNote('#capSim', k);
   if (!k) { $('#capName').textContent = ''; $('#capSet').textContent = ''; $('#capBuy').hidden = true; document.body.dataset.fan = ''; return; }
   document.body.dataset.fan = '1'; $('#capName').textContent = k.name; $('#capSet').textContent = [k.set, condText(k), k.foil ? 'Foil' : '', money(k.price), (i + 1) + ' of ' + n].filter(Boolean).join(' · ');
   const b = $('#capBuy'), done = inPile(k); capCard = k; b.hidden = !k.variantId; b.disabled = done; b.textContent = done ? (ON_STORE ? 'In your cart ✓' : 'By the till ✓') : (ON_STORE ? 'Add to cart' : 'Set it by the till');
@@ -2084,8 +2090,11 @@ const SEC_LOGOS = {
   wargames: { '40k': 'Warhammer-logo.png', aos: 'warhammeraos.png', kt: 'killteam-logo.png', hh: 'warhammer_thehorusheresy.png', tow: 'ToW_Logo.png', necro: 'necromunda-logo.png', me: 'Middle-Earth_Strategy_Battle_Game_logo.webp', btech: 'BattleTech_2018.webp', paint: 'DgX8B69wOApRYTQ2-300x130.png' },
   gunpla: { hg: 'HG_Logo.webp', rg: 'RGlogonew.webp', mg: 'MGlogo.webp' },
   // the site's own Pokemon logo over the Pokemon sections (owner, 2026-11-12: "Pokémon kits please use the Pokemon logo used on the site")
+  // (owner, 2026-11-13: "Use the real funko pop logo"): the store's files hold no Funko logo, so this is Funko's own
+  // wordmark as Wikipedia carries it, loaded by the shopper's browser; if it will not load the sign keeps its lettering
+  figures: { funko: 'https://thumb.wikimedia.org/wikipedia/en/thumb/c/cc/Funko.svg/500px-Funko.svg.png' },
   models: { pokemon: 'International_Pokemon_logo_svg.webp' }, blind: { pokemon: 'International_Pokemon_logo_svg.webp' } };
-const secLogo = (a, sec) => { const f = (SEC_LOGOS[a.key] || {})[sec.key]; return f ? 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/' + f + '?width=600' : ''; };
+const secLogo = (a, sec) => { const f = (SEC_LOGOS[a.key] || {})[sec.key]; return !f ? '' : /^https:/.test(f) ? f : 'https://cdn.shopify.com/s/files/1/0467/3083/8169/files/' + f + '?width=600'; };
 // A section's sign is a light box (owner, 2026-11-12: "make the logos larger and centered in the shelf and lit up
 // like a light box"): a dark lit face in a glowing frame, the logo (or the name) large in the middle with a glow
 // of its own, the count small in a corner. The new arrivals' box is lit yellow.

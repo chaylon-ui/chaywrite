@@ -85,7 +85,7 @@ body[data-hand] .top,body[data-hand] .bot,body[data-hand] .hint{display:none}
 .panel{position:fixed;z-index:8;background:var(--panel);border-top:1px solid #ffffff22;display:none;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;padding:0 16px calc(16px + env(safe-area-inset-bottom))}
 body[data-hand] .panel{display:block}
 .panel h2{font-size:19px;line-height:1.2;margin-top:4px}
-.panel .set{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.panel .set{color:var(--muted);font-size:13px;margin:4px 0 10px}.sim{display:block;font-size:11.5px;line-height:1.35;color:#f2c230;margin:2px 0 6px}.sim[hidden]{display:none}.panel .sim{margin:-4px 0 10px}#handSim{display:none;position:fixed;z-index:7;left:50%;transform:translateX(-50%);bottom:calc(66px + env(safe-area-inset-bottom));width:max-content;max-width:92vw;margin:0;text-align:center;background:#0a0809c9;border-radius:8px;padding:4px 10px;pointer-events:none}
 .panel .acts{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
 .panel .acts button,.panel .acts a{border:1px solid #ffffff33;border-radius:8px;padding:10px 14px;font-size:14px;text-decoration:none;background:none}
 .panel .acts .buy{background:var(--ember);border-color:var(--ember);color:#1a0f06;font-weight:600}
@@ -104,6 +104,7 @@ body[data-hand] .panel{display:block}
   .panel{right:0;top:0;bottom:0;width:360px;border-top:0;border-left:1px solid #ffffff22;padding-top:64px}
 }
 @media (max-width:720px){
+  body[data-hand] #handSim:not([hidden]){display:block}
   .panel{left:0;right:0;bottom:0;max-height:78dvh;transform:translateY(calc(100% - 60px - env(safe-area-inset-bottom)));transition:transform .28s ease;border-radius:14px 14px 0 0}
   .panel.open{transform:none}
   .pull{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;height:60px;border:0;background:none;padding-top:8px;position:sticky;top:0;background:var(--panel);z-index:1}
@@ -182,7 +183,7 @@ body[data-hand] .panel{display:block}
 <canvas id="gl" tabindex="0" aria-label="A 1990s card shop. Use the buttons below to move between the glass case, the boxes, the booster boxes, the bargain bin, the paints and the till."></canvas>
 <div class="top"><img class="hlogo" src="https://cdn.shopify.com/s/files/1/0467/3083/8169/files/exor-games-logo-transparent.png?v=1790375946" alt="Exor Games" draggable="false"><a class="flat" id="flat" href="/showcase">flat view</a><div class="tabs" id="tabs"></div></div>
 <div class="hint gone" id="hint"></div>
-<div class="cap" id="cap"><strong id="capName"></strong><span id="capSet"></span><em id="capTip">tap the card to pick it up</em></div>
+<div class="cap" id="cap"><strong id="capName"></strong><span id="capSet"></span><small class="sim" id="capSim" hidden></small><em id="capTip">tap the card to pick it up</em></div>
 <button type="button" id="capBuy" hidden>Set it by the till</button>
 <form id="askBar" autocomplete="off"><label for="askQ">Looking for a card?</label><input id="askQ" type="search" placeholder="Ask at the counter…" enterkeyhint="search" autocapitalize="words"><button type="submit">Ask</button></form>
 <div class="bot">
@@ -203,7 +204,7 @@ body[data-hand] .panel{display:block}
 </div>
 <button type="button" class="x" id="x" aria-label="Put it back">×</button>
 <button type="button" id="hz">Zoom in</button>
-<div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div id="liftCopies"></div><div class="acts" id="liftActs"></div><div id="liftCond"></div><div id="liftAlike"></div><div id="liftMore"></div></div>
+<div class="sim" id="handSim" hidden></div><div class="panel" id="panel"><button type="button" class="pull" id="pull" aria-label="Show the details"><span class="bar"></span><span class="row"><span class="chev"></span><span class="note">more info</span></span></button><h2 id="liftName"></h2><div class="set" id="liftSet"></div><div class="sim" id="liftSim" hidden></div><div id="liftCopies"></div><div class="acts" id="liftActs"></div><div id="liftCond"></div><div id="liftAlike"></div><div id="liftMore"></div></div>
 <div class="sheet" id="setsv"><div class="sh"><button type="button" id="setsBack">‹ Back to the boxes</button><span class="ttl" id="setsTitle"></span><input id="setsFind" type="search" placeholder="Jump to a set…" autocomplete="off"></div><div class="list" id="setsList"></div></div>
 <div class="sheet" id="paintv"><div class="sh"><button type="button" id="paintX">‹ Back to the rack</button></div><div class="list" id="paintBody" style="display:block"></div></div>
 <div class="sheet" id="prodv"><div class="pbar"><button type="button" id="prodX">‹ Back to the shelf</button><span id="prodCrumb"></span></div><div class="pscroll" id="prodBody"></div></div>
