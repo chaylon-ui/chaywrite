@@ -177,14 +177,26 @@ const COND_GUIDE = [
 const SIM_NOTE = 'Condition shown is simulated - the actual card\u2019s wear can vary.';
 function simNote(sel, c) { const el = $(sel); if (!el) return; const on = !!c && !c.sealed && wearLevel(c) > 0; el.hidden = !on; el.textContent = on ? SIM_NOTE : ''; }
 function wearLevel(c) { const t = String((c && c.condition) || '').toLowerCase(); return /damaged|\bdmg\b/.test(t) ? 4 : /heav/.test(t) ? 3 : /moder/.test(t) ? 2 : /light/.test(t) ? 1 : 0; }
-function drawWear(g, x, y, cw, ch, lvl, key, foil) {
+// (owner, 2026-11-13: "Some cards have white border which doesn't show the damage as well as black border"): white
+// wear vanishes on a white border, so a light-bordered card wears DARK - grubby edges, grey nicks and scratches.
+function lightBorder(g, x, y, cw, ch) {
+  try { let s = 0, n = 0; [[x + cw * .018, y + ch * .2, 3, ch * .6], [x + cw * .982 - 3, y + ch * .2, 3, ch * .6], [x + cw * .2, y + ch * .013, cw * .6, 3], [x + cw * .2, y + ch * .987 - 3, cw * .6, 3]].forEach((r) => {
+    const d = g.getImageData(Math.round(r[0]), Math.round(r[1]), Math.max(1, Math.round(r[2])), Math.max(1, Math.round(r[3]))).data; for (let i = 0; i < d.length; i += 16) { s += (d[i] * 3 + d[i + 1] * 6 + d[i + 2]) / 10; n++; } });
+    return n > 0 && s / n > 165; } catch (e) { return false; }
+}
+function drawWear(g, x, y, cw, ch, lvl, key, foil, light) {
   if (!lvl) return; const q = seed(key + '|wear'), u = cw / 340, rnd = (a, b) => a + q() * (b - a);
+  if (light) {   /* handling grime: the border greys in from the edge, more so at the corners */
+    const bw = cw * .06, a = [0, .22, .34, .48, .6][lvl], band = (x0, y0, x1, y1, rx, ry, rw, rh) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, 'rgba(84,70,52,' + a + ')'); gr.addColorStop(1, 'rgba(84,70,52,0)'); g.fillStyle = gr; g.fillRect(rx, ry, rw, rh); };
+    band(x, 0, x + bw, 0, x, y, bw, ch); band(x + cw, 0, x + cw - bw, 0, x + cw - bw, y, bw, ch); band(0, y, 0, y + bw, x, y, cw, bw); band(0, y + ch, 0, y + ch - bw, x, y + ch - bw, cw, bw);
+    [[x, y], [x + cw, y], [x, y + ch], [x + cw, y + ch]].forEach((k) => { const r = cw * rnd(.08, .15), gr = g.createRadialGradient(k[0], k[1], 0, k[0], k[1], r); gr.addColorStop(0, 'rgba(70,58,44,' + Math.min(.85, a + .22) + ')'); gr.addColorStop(1, 'rgba(70,58,44,0)'); g.fillStyle = gr; g.fillRect(k[0] - r, k[1] - r, r * 2, r * 2); });
+  }
   // a foil clouds as it wears (the guide: LP foils "light scuffing/minor clouding", HP "significant clouding or wear"; owner, 2026-11-11: "Same if there is foil")
   if (foil) for (let i = 0, n = [0, 2, 4, 7, 9][lvl]; i < n; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), r = rnd(.16, .34) * cw, gr = g.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, 'rgba(236,240,244,' + [0, .12, .18, .26, .32][lvl] + ')'); gr.addColorStop(1, 'rgba(236,240,244,0)'); g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2); }
   if (lvl >= 3) { g.fillStyle = 'rgba(255,255,255,' + (lvl > 3 ? .13 : .08) + ')'; g.fillRect(x, y, cw, ch); }                       // fading
   if (lvl >= 2) for (let i = 0; i < lvl * 2; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), r = rnd(18, 46) * u, gr = g.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, 'rgba(255,255,255,' + (.05 + lvl * .02) + ')'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2); }   // scuffing
   g.lineCap = 'round';
-  for (let i = 0, n = [0, 3, 8, 14, 26][lvl]; i < n; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), a = rnd(0, PI), l = rnd(.05, lvl > 2 ? .3 : .16) * cw; g.strokeStyle = 'rgba(255,255,255,' + rnd(.1, lvl > 3 ? .42 : .26) + ')'; g.lineWidth = (lvl > 3 ? rnd(.6, 1.8) : .7) * u; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); g.stroke(); }   // scratches
+  for (let i = 0, n = [0, 3, 8, 14, 26][lvl]; i < n; i++) { const cx = rnd(x, x + cw), cy = rnd(y, y + ch), a = rnd(0, PI), l = rnd(.05, lvl > 2 ? .3 : .16) * cw; g.strokeStyle = (light && i % 2 ? 'rgba(40,34,28,' : 'rgba(255,255,255,') + rnd(.1, lvl > 3 ? .42 : .26) + ')'; g.lineWidth = (lvl > 3 ? rnd(.6, 1.8) : .7) * u; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); g.stroke(); }   // scratches
   if (lvl >= 3) {   // staining; water damage on a damaged card
     const cx = rnd(x + cw * .2, x + cw * .8), cy = rnd(y + ch * .25, y + ch * .85), r = rnd(.14, .22) * cw * (lvl > 3 ? 1.5 : 1), gr = g.createRadialGradient(cx, cy, r * .2, cx, cy, r); gr.addColorStop(0, 'rgba(120,84,40,' + (lvl > 3 ? .2 : .1) + ')'); gr.addColorStop(.85, 'rgba(120,84,40,' + (lvl > 3 ? .16 : .07) + ')'); gr.addColorStop(.93, 'rgba(90,60,25,' + (lvl > 3 ? .3 : .1) + ')'); gr.addColorStop(1, 'rgba(120,84,40,0)'); g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2);
     for (let i = 0; i < lvl - 2; i++) {   // a crease: a dark fold with a lit edge
@@ -193,7 +205,7 @@ function drawWear(g, x, y, cw, ch, lvl, key, foil) {
     }
   }
   // edge wear: white nicks along the border, and the corners rubbed white
-  g.fillStyle = '#f4f1ea';
+  g.fillStyle = light ? '#4f4436' : '#f4f1ea';
   for (let i = 0, n = [0, 12, 40, 80, 140][lvl]; i < n; i++) { const side = Math.floor(q() * 4), t = q(), len = rnd(2, lvl > 2 ? 14 : 8) * u, th = rnd(.8, [0, 1.6, 2.2, 3, 4.4][lvl]) * u; g.globalAlpha = rnd(.55, .95);
     if (side === 0) g.fillRect(x + t * cw, y, len, th); else if (side === 1) g.fillRect(x + t * cw, y + ch - th, len, th); else if (side === 2) g.fillRect(x, y + t * ch, th, len); else g.fillRect(x + cw - th, y + t * ch, th, len); }
   g.globalAlpha = [0, .5, .75, .9, .95][lvl]; const cr = [0, 5, 9, 15, 22][lvl] * u;
@@ -202,7 +214,7 @@ function drawWear(g, x, y, cw, ch, lvl, key, foil) {
   if (lvl > 3) {   // a tear in from an edge: the sleeve shows through
     const t = rnd(.2, .8), dp = rnd(.07, .12) * cw, wd = rnd(.03, .05) * cw, top = q() < .5; g.fillStyle = '#d7dfe2'; g.beginPath();
     if (top) { g.moveTo(x + t * cw - wd, y); g.lineTo(x + t * cw + wd * .4, y + dp); g.lineTo(x + t * cw + wd, y); } else { g.moveTo(x + cw, y + t * ch - wd); g.lineTo(x + cw - dp, y + t * ch + wd * .4); g.lineTo(x + cw, y + t * ch + wd); }
-    g.closePath(); g.fill(); g.strokeStyle = '#f4f1ea'; g.lineWidth = 1.4 * u; g.stroke();
+    g.closePath(); g.fill(); g.strokeStyle = light ? '#6b5f50' : '#f4f1ea'; g.lineWidth = 1.4 * u; g.stroke();
   }
 }
 function drawCard(g, w, h, c, im) {
@@ -219,7 +231,7 @@ function drawCard(g, w, h, c, im) {
     g.globalCompositeOperation = 'screen'; g.globalAlpha = 1; [.18 + q2() * .2, .62 + q2() * .2].forEach((t, i) => { const b = g.createLinearGradient(x + cw * (t - .16), y, x + cw * (t + .16), y + chh * .5); b.addColorStop(0, 'rgba(255,255,255,0)'); b.addColorStop(.5, 'rgba(255,255,255,' + (i ? .2 : .32) + ')'); b.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = b; g.beginPath(); g.moveTo(x + cw * (t - .1), y); g.lineTo(x + cw * (t + .14), y); g.lineTo(x + cw * (t - .2), y + chh); g.lineTo(x + cw * (t - .44), y + chh); g.closePath(); g.fill(); });
     g.restore();
   }
-  if (!c.sealed) drawWear(g, x, y, cw, chh, wearLevel(c), String(c.name) + '|' + String(c.set) + (c.foil ? '|foil' : ''), !!c.foil);
+  if (!c.sealed) { const lv = wearLevel(c); if (lv) drawWear(g, x, y, cw, chh, lv, String(c.name) + '|' + String(c.set) + (c.foil ? '|foil' : ''), !!c.foil, !!im && lightBorder(g, x, y, cw, chh)); }
   g.restore();
   const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, 'rgba(255,255,255,.18)'); gr.addColorStop(.35, 'rgba(255,255,255,0)'); gr.addColorStop(.62, 'rgba(255,255,255,.07)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
   let sy = h * .03;
