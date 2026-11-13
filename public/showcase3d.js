@@ -2101,8 +2101,12 @@ const secLogo = (a, sec) => { const f = (SEC_LOGOS[a.key] || {})[sec.key]; retur
 // a logo file with empty margin round it (the 40,000 one) is cut to what is drawn, so it fills its box like the others
 function trimLogo(im) {
   try { const w = Math.min(600, im.width), h = Math.round(w * im.height / im.width), c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0, w, h);
-    const d = g.getImageData(0, 0, w, h).data; let x0 = w, y0 = h, x1 = -1, y1 = -1; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    if (x1 <= x0 || y1 <= y0 || (x1 - x0 > w * .92 && y1 - y0 > h * .92)) return im;
+    const id = g.getImageData(0, 0, w, h), d = id.data;
+    /* a logo drawn in black would vanish on the dark sign: light it up white (Funko's wordmark, 2026-11-13) */
+    let lum = 0, np = 0, lit = false; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 24) { lum += (d[i] * 3 + d[i + 1] * 6 + d[i + 2]) / 10; np++; }
+    if (np && lum / np < 60) { for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = 255; g.putImageData(id, 0, 0); lit = true; }
+    let x0 = w, y0 = h, x1 = -1, y1 = -1; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 <= x0 || y1 <= y0 || (x1 - x0 > w * .92 && y1 - y0 > h * .92)) return lit ? c : im;
     const o = document.createElement('canvas'); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1; o.getContext('2d').drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height); return o; } catch (x) { return im; }
 }
 function drawSecSign(g, w, h, sec, im) {
