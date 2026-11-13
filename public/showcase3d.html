@@ -122,6 +122,10 @@ body[data-hand] .panel{display:block}
 /* a phone on its side: the caption stands beside the card, not on it, and the place tabs make way */
 @media (orientation:landscape) and (max-height:520px){
   body[data-mode=crate] #nav{display:none}
+  /* the ask note goes up beside the logo, clear of the shelves (owner, 2026-11-13: "Widescreen mobile should move red to blue") */
+  #askBar,body[data-mode=crate] #askBar:not(.open){top:calc(10px + env(safe-area-inset-top));left:calc(138px + env(safe-area-inset-left));transform:rotate(-.6deg);padding:3px 6px}
+  #askBar{width:clamp(190px,calc(100vw - 630px),330px)}
+  #askBar label{display:none}#askBar input{font-size:16px;padding:3px 4px}#askBar button{padding:6px 10px}
   body[data-mode=crate] .cap{left:auto;right:max(10px,env(safe-area-inset-right));transform:none;bottom:auto;top:calc(64px + env(safe-area-inset-top));width:min(250px,30vw);max-width:none;text-align:left}
   body[data-mode=crate] .cap strong{display:block;font-size:15px}body[data-mode=crate] .cap span{display:block;font-size:12.5px}
   body[data-mode=crate] #capBuy{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));left:max(10px,env(safe-area-inset-left))}
