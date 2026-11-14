@@ -2299,7 +2299,8 @@ function buildHall(list) {
   const upM = lam({ color: 0xc4b693 }), uh = CEIL - 2.9, uy = 2.9 + uh / 2; pl(W_, uh, upM, xc, uy, 3.5, PI, G); pl(W_, uh, upM, xc, uy, zBack, 0, G); pl(D_, uh, upM, xMax, uy, zc, -PI / 2, G); if (zBack < -3.51) pl(-3.5 - zBack, uh, upM, hall.x0 + .02, uy, (-3.5 + zBack) / 2, PI / 2, G);
   if (zBack < -3.51) pl(-3.5 - zBack, 2.9, wall(-3.5 - zBack), hall.x0 + .02, 1.45, (-3.5 + zBack) / 2, PI / 2, G);   // the hall runs on behind the shop: a wall there, none between the two rooms
   // shelving in the shop's colours: charcoal steel, a red kick plate, a yellow edge on every shelf
-  const steel = lam({ color: 0x1c1b1d }), cream = lam({ color: 0xe9e2d0 }), red = lam({ color: 0xd62c28 }), yellow = lam({ color: 0xf2c230 });
+  const steel = lam({ color: 0x1c1b1d }), cream = new THREE.MeshBasicMaterial({ color: 0xffffff }), shelfW = new THREE.MeshBasicMaterial({ color: 0xeceae6 }),   /* (owner, 2026-11-14: "make shelves white and pair it with current method") white, unlit shelf backs and boards: where a photo's white box is cut away with its background, what shows through is white again */
+    red = lam({ color: 0xd62c28 }), yellow = lam({ color: 0xf2c230 });
   const tubes = [], col = new THREE.Color(), d2 = new THREE.Object3D();
   hall.list.forEach((a) => {
     const cx = aCx(a.i), zm = hall.zf - a.L / 2;
@@ -2313,7 +2314,7 @@ function buildHall(list) {
       if (Ls) {
         bx(.03, 1.98, Ls, cream, xf + sd * .44, .99, zs, G);
         bx(.45, .15, Ls, red, xf + sd * .225, .075, zs, G); bx(.46, .05, Ls, red, xf + sd * .225, 2.0, zs, G);
-        hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, Ls, steel, xf + sd * .22, y - .009, zs, G); bx(.012, .034, Ls, yellow, xf + sd * .004, y - .017, zs, G); });
+        hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, Ls, shelfW, xf + sd * .22, y - .009, zs, G); bx(.012, .034, Ls, yellow, xf + sd * .004, y - .017, zs, G); });
         for (let z = hall.zf; z > hall.zf - Ls + .3; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
         bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - Ls, G);
         bx(.47, 2.02, .03, red, xf + sd * .225, 1.01, hall.zf + .015, G);   /* an end panel at the mouth: from the hall you saw along the bare shelf boards past the first column (owner, 2026-11-12: "half empty shelves on the front of the aisles") */
