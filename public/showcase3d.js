@@ -2314,6 +2314,7 @@ function buildHall(list) {
       if (Ls) {
         bx(.03, 1.98, Ls, cream, xf + sd * .44, .99, zs, G);
         bx(.45, .15, Ls, red, xf + sd * .225, .075, zs, G); bx(.46, .05, Ls, red, xf + sd * .225, 2.0, zs, G);
+        bx(.43, .006, Ls, shelfW, xf + sd * .225, .153, zs, G); bx(.44, .006, Ls, shelfW, xf + sd * .225, 1.972, zs, G);   /* white on top of the red base and under the red header too: the bottom and top rows sit against those */
         hall.lv.forEach((y, r) => { if (r < 5) bx(.42, .018, Ls, shelfW, xf + sd * .22, y - .009, zs, G); bx(.012, .034, Ls, yellow, xf + sd * .004, y - .017, zs, G); });
         for (let z = hall.zf; z > hall.zf - Ls + .3; z -= 1.2) bx(.035, 1.98, .035, steel, xf + sd * .02, .99, z, G);
         bx(.035, 1.98, .035, steel, xf + sd * .02, .99, hall.zf - Ls, G);
